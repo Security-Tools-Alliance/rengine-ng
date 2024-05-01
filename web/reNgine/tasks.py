@@ -36,6 +36,8 @@ from scanEngine.models import (EngineType, InstalledExternalTool, Notification, 
 from startScan.models import *
 from startScan.models import EndPoint, Subdomain, Vulnerability
 from targetApp.models import Domain
+if REMOTE_DEBUG:
+	import debugpy
 
 """
 Celery tasks.
@@ -71,6 +73,9 @@ def initiate_scan(
 		out_of_scope_subdomains (list): Out-of-scope subdomains.
 		url_filter (str): URL path. Default: ''
 	"""
+
+	if REMOTE_DEBUG:
+		debug()
 
 	# Get scan history
 	scan = ScanHistory.objects.get(pk=scan_history_id)
@@ -220,6 +225,9 @@ def initiate_subscan(
 		results_dir (str): Results directory.
 		url_filter (str): URL path. Default: ''
 	"""
+
+	if REMOTE_DEBUG:
+		debug()
 
 	# Get Subdomain, Domain and ScanHistory
 	subdomain = Subdomain.objects.get(pk=subdomain_id)
@@ -4814,3 +4822,18 @@ def gpt_vulnerability_description(vulnerability_id):
 			vuln.save()
 
 	return response
+
+#----------------------#
+#     Remote debug     #
+#----------------------#
+
+def debug():
+	try:
+		# Activate remote debug for scan worker
+		if REMOTE_DEBUG:
+			logger.info(f"\n⚡ Debugger started on port "+ str(REMOTE_DEBUG_PORT) +", task is waiting IDE (VSCode ...) to be attached to continue ⚡\n")
+			os.environ['GEVENT_SUPPORT'] = 'True'
+			debugpy.listen(('0.0.0.0',REMOTE_DEBUG_PORT))
+			debugpy.wait_for_client()
+	except Exception as e:
+		logger.error(e)
