@@ -55,23 +55,23 @@ RUN apt install -y --no-install-recommends \
 RUN add-apt-repository ppa:mozillateam/ppa
 
 # Download and install go
-RUN  ARCH=$(dpkg --print-architecture) \
-    && if [ "${ARCH}" = "arm64" ]; then \
-        wget https://go.dev/dl/${go_arm} && \
-        tar -xvf ${go_arm} -C /usr/local/ && \
-        rm ${go_arm}; \
-      elif [ "${ARCH}" = "amd64" ]; then \
-        wget https://go.dev/dl/${go_amd} && \
-        tar -xvf ${go_amd} -C /usr/local/ && \
-        rm ${go_amd}; \
-      else \
-        echo "Unknown architecture: $ARCH" ; \
-        exit 1; \
-      fi
+RUN ARCH=$(dpkg --print-architecture) && \
+    if [ "${ARCH}" = "arm64" ]; then \
+      wget https://go.dev/dl/${go_arm} && \
+      tar -xvf ${go_arm} -C /usr/local/ && \
+      rm ${go_arm}; \
+    elif [ "${ARCH}" = "amd64" ]; then \
+      wget https://go.dev/dl/${go_amd} && \
+      tar -xvf ${go_amd} -C /usr/local/ && \
+      rm ${go_amd}; \
+    else \
+      echo "Unknown architecture: $ARCH" ; \
+      exit 1; \
+    fi
 
 # Download and install geckodriver
-RUN ARCH=$(dpkg --print-architecture) \
-    && if [ "${ARCH}" = "arm64" ]; then \
+RUN ARCH=$(dpkg --print-architecture) && \
+    if [ "${ARCH}" = "arm64" ]; then \
       wget https://github.com/mozilla/geckodriver/releases/download/v${version}/${geckodriver_arm} && \
       tar -xvf ${geckodriver_arm} -C /usr/bin/ && \
       rm ${geckodriver_arm}; \
@@ -81,8 +81,8 @@ RUN ARCH=$(dpkg --print-architecture) \
       rm ${geckodriver_amd}; \
     else \
       echo "Unknown architecture: $ARCH" ; \
-    exit 1; \
-  fi
+      exit 1; \
+    fi
 
 # Make directory for app
 WORKDIR /usr/src/app
@@ -92,31 +92,31 @@ ENV PYTHONDONTWRITEBYTECODE 1
 ENV PYTHONUNBUFFERED 1
 
 # Download Go packages
-ENV GO111MODULE=on 
+ENV GO111MODULE=on
 RUN ARCH=$(dpkg --print-architecture) \
-&& if [[ "$ARCH" = "arm64" || "$ARCH" = "amd64" ]]; then \
-    export GOARCH=$ARCH && \
-    printf "\
-    github.com/jaeles-project/gospider@latest\n\
-    github.com/tomnomnom/gf@latest\n\
-    github.com/tomnomnom/unfurl@latest\n\
-    github.com/tomnomnom/waybackurls@latest\n\
-    github.com/projectdiscovery/httpx/cmd/httpx@latest\n\
-    github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest\n\
-    github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest\n\
-    github.com/projectdiscovery/naabu/v2/cmd/naabu@latest\n\
-    github.com/hakluke/hakrawler@latest\n\
-    github.com/lc/gau/v2/cmd/gau@latest\n\
-    github.com/jaeles-project/gospider@latest\n\
-    github.com/owasp-amass/amass/v3/...@latest\n\
-    github.com/ffuf/ffuf@latest\n\
-    github.com/projectdiscovery/tlsx/cmd/tlsx@latest\n\
-    github.com/hahwul/dalfox/v2@latest\n\
-    github.com/projectdiscovery/katana/cmd/katana@latest\n\
-    github.com/dwisiswant0/crlfuzz/cmd/crlfuzz@latest\n\
-    github.com/sa7mon/s3scanner@latest\n" | \
-    xargs -L1 go install -ldflags="-s -w" -v && \
-    rm -rf /go/pkg/* && rm -rf /root/.cache/go-build
+    && if [ "$ARCH" = "arm64" ] || [ "$ARCH" = "amd64" ]; then \
+        GOARCH=$ARCH go install -v github.com/jaeles-project/gospider@latest \
+        && GOARCH=$ARCH go install -v github.com/tomnomnom/gf@latest \
+        && GOARCH=$ARCH go install -v github.com/tomnomnom/unfurl@latest \
+        && GOARCH=$ARCH go install -v github.com/tomnomnom/waybackurls@latest \
+        && GOARCH=$ARCH go install -v github.com/projectdiscovery/httpx/cmd/httpx@latest \
+        && GOARCH=$ARCH go install -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest \
+        && GOARCH=$ARCH go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest \
+        && GOARCH=$ARCH go install -v github.com/projectdiscovery/naabu/v2/cmd/naabu@latest \
+        && GOARCH=$ARCH go install -v github.com/lc/gau/v2/cmd/gau@latest \
+        && GOARCH=$ARCH go install -v github.com/jaeles-project/gospider@latest \
+        && GOARCH=$ARCH go install -v github.com/owasp-amass/amass/v3/...@latest \
+        && GOARCH=$ARCH go install -v github.com/ffuf/ffuf@latest \
+        && GOARCH=$ARCH go install -v github.com/projectdiscovery/tlsx/cmd/tlsx@latest \
+        && GOARCH=$ARCH go install -v github.com/hahwul/dalfox/v2@latest \
+        && GOARCH=$ARCH go install -v github.com/projectdiscovery/katana/cmd/katana@latest \
+        && GOARCH=$ARCH go install -v github.com/dwisiswant0/crlfuzz/cmd/crlfuzz@latest \
+        && GOARCH=$ARCH go install -v github.com/sa7mon/s3scanner@latest \
+        && rm -rf /go/pkg/* && rm -rf /root/.cache/go-build; \
+    else \
+        echo "Unknown architecture: $ARCH" ; \
+        exit 1; \
+    fi
 
 # Update Nuclei-Templates
 RUN nuclei -update-templates
