@@ -44,11 +44,16 @@ API Vault
               <div class="mb-3">
                 <label for="key_netlas" class="form-label">Netlas</label>
                 <p class="text-muted">Netlas keys will be used to get whois information and other OSINT data.</p>
+                <div class="input-group input-group-merge">
                 {% if netlas_key %}
-                  <input class="form-control" type="text" id="key_netlas" name="key_netlas" placeholder="Enter Netlas Key" value="{{netlas_key}}">
+                  <input class="form-control" type="password" id="key_netlas" name="key_netlas" placeholder="Enter Netlas Key" value="{{netlas_key}}" >
                 {% else %}
-                  <input class="form-control" type="text" id="key_netlas" name="key_netlas" placeholder="Enter Netlas Key">
+                  <input class="form-control" type="password" id="key_netlas" name="key_netlas" placeholder="Enter Netlas Key">
                 {% endif %}
+                  <div class="input-group-text" data-password="false">
+                    <span class="password-eye"></span>
+                  </div>
+                </div>
                 <span class="text-muted float-end">This is optional</span>
               </div>
               <div class="mb-0">
