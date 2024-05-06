@@ -29,11 +29,16 @@ API Vault
               <div class="mb-3">
                 <label for="key_openai" class="form-label">OpenAI <span class="ms-1 badge bg-soft-danger text-danger">🔥 Recommended</span><span class="ms-1 badge bg-soft-primary text-primary">Experimental</span></label>
                 <p class="text-muted">OpenAI keys will be used to generate vulnerability description, remediation, impact and vulnerability report writing using ChatGPT.</p>
+                <div class="input-group input-group-merge">
                 {% if openai_key %}
-                  <input class="form-control" type="text" id="key_openai" name="key_openai" placeholder="Enter OpenAI Key" value="{{openai_key}}">
+                  <input class="form-control" type="password" id="key_openai" name="key_openai" placeholder="Enter OpenAI Key" value="{{openai_key}}">
                 {% else %}
-                  <input class="form-control" type="text" id="key_openai" name="key_openai" placeholder="Enter OpenAI Key">
+                  <input class="form-control" type="password" id="key_openai" name="key_openai" placeholder="Enter OpenAI Key" >
                 {% endif %}
+                  <div class="input-group-text" data-password="false">
+                    <span class="password-eye"></span>
+                  </div>
+                </div>
                 <span class="text-muted float-end">This is optional but recommended.</span>
               </div>
               <div class="mb-3">
