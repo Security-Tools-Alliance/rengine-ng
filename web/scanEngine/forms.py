@@ -367,7 +367,7 @@ class HackeroneForm(forms.ModelForm):
 
     username = forms.CharField(
         required=True,
-        widget=forms.TextInput(
+        widget=forms.PasswordInput(
             attrs={
                 "class": "form-control form-control-lg",
                 "id": "username",
@@ -376,7 +376,7 @@ class HackeroneForm(forms.ModelForm):
 
     api_key = forms.CharField(
         required=True,
-        widget=forms.TextInput(
+        widget=forms.PasswordInput(
             attrs={
                 "class": "form-control form-control-lg",
                 "id": "api_key",
