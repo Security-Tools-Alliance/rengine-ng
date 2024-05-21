@@ -8,7 +8,7 @@ os.environ['CELERY_ALWAYS_EAGER'] = 'True'
 
 import yaml
 from celery.utils.log import get_task_logger
-from reNgine.settings import DEBUG
+from reNgine.settings import CELERY_DEBUG
 from reNgine.tasks import parse_nmap_results, parse_nmap_vuln_output, parse_nmap_vulscan_output
 import pathlib
 
@@ -16,7 +16,7 @@ logger = get_task_logger(__name__)
 DOMAIN_NAME = os.environ['DOMAIN_NAME']
 FIXTURES_DIR = pathlib.Path().absolute() / 'fixtures' / 'nmap_xml'
 
-if not DEBUG:
+if not CELERY_DEBUG:
     logging.disable(logging.CRITICAL)
 
 

@@ -36,7 +36,7 @@ from scanEngine.models import (EngineType, InstalledExternalTool, Notification, 
 from startScan.models import *
 from startScan.models import EndPoint, Subdomain, Vulnerability
 from targetApp.models import Domain
-if REMOTE_DEBUG:
+if CELERY_REMOTE_DEBUG:
 	import debugpy
 
 """
@@ -74,7 +74,7 @@ def initiate_scan(
 		url_filter (str): URL path. Default: ''
 	"""
 
-	if REMOTE_DEBUG:
+	if CELERY_REMOTE_DEBUG:
 		debug()
 
 	# Get scan history
@@ -226,7 +226,7 @@ def initiate_subscan(
 		url_filter (str): URL path. Default: ''
 	"""
 
-	if REMOTE_DEBUG:
+	if CELERY_REMOTE_DEBUG:
 		debug()
 
 	# Get Subdomain, Domain and ScanHistory
@@ -1728,7 +1728,7 @@ def dir_file_fuzz(self, ctx={}, description=None):
 				http_status=status)
 
 			# Log newly created file or directory if debug activated
-			if created and DEBUG:
+			if created and CELERY_DEBUG:
 				logger.warning(f'Found new directory or file {url}')
 
 			# Add file to current dirscan
@@ -4830,10 +4830,10 @@ def gpt_vulnerability_description(vulnerability_id):
 def debug():
 	try:
 		# Activate remote debug for scan worker
-		if REMOTE_DEBUG:
-			logger.info(f"\n⚡ Debugger started on port "+ str(REMOTE_DEBUG_PORT) +", task is waiting IDE (VSCode ...) to be attached to continue ⚡\n")
+		if CELERY_REMOTE_DEBUG:
+			logger.info(f"\n⚡ Debugger started on port "+ str(CELERY_REMOTE_DEBUG_PORT) +", task is waiting IDE (VSCode ...) to be attached to continue ⚡\n")
 			os.environ['GEVENT_SUPPORT'] = 'True'
-			debugpy.listen(('0.0.0.0',REMOTE_DEBUG_PORT))
+			debugpy.listen(('0.0.0.0',CELERY_REMOTE_DEBUG_PORT))
 			debugpy.wait_for_client()
 	except Exception as e:
 		logger.error(e)

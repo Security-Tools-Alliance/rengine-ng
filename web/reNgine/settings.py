@@ -19,9 +19,12 @@ RENGINE_RECORD_ENABLED = bool(int(os.environ.get('RENGINE_RECORD_ENABLED', '1'))
 RENGINE_RAISE_ON_ERROR = bool(int(os.environ.get('RENGINE_RAISE_ON_ERROR', '0')))
 
 # Debug env vars
-DEBUG = bool(int(os.environ.get('DEBUG', '0')))
-REMOTE_DEBUG = bool(int(os.environ.get('REMOTE_DEBUG', '0')))
-REMOTE_DEBUG_PORT = int(os.environ.get('REMOTE_DEBUG_PORT', 5678))
+UI_DEBUG = bool(int(os.environ.get('UI_DEBUG', '0')))
+UI_REMOTE_DEBUG = bool(int(os.environ.get('UI_REMOTE_DEBUG', '0')))
+UI_REMOTE_DEBUG_PORT = int(os.environ.get('UI_REMOTE_DEBUG_PORT', 5678))
+CELERY_DEBUG = bool(int(os.environ.get('UI_DEBUG', '0')))
+CELERY_REMOTE_DEBUG = bool(int(os.environ.get('CELERY_REMOTE_DEBUG', '0')))
+CELERY_REMOTE_DEBUG_PORT = int(os.environ.get('CELERY_REMOTE_DEBUG_PORT', 5679))
 
 # Common env vars
 DOMAIN_NAME = os.environ.get('DOMAIN_NAME', 'localhost:8000')
@@ -254,12 +257,12 @@ LOGGING = {
     'loggers': {
         'django': {
             'handlers': ['file'],
-            'level': 'ERROR' if DEBUG else 'CRITICAL',
+            'level': 'ERROR' if UI_DEBUG else 'CRITICAL',
             'propagate': True,
         },
         '': {
             'handlers': ['brief'],
-            'level': 'DEBUG' if DEBUG else 'INFO',
+            'level': 'DEBUG' if UI_DEBUG else 'INFO',
             'propagate': False
         },
         'celery.app.trace': {
@@ -285,7 +288,7 @@ LOGGING = {
         },
         'reNgine.tasks': {
             'handlers': ['task'],
-            'level': 'DEBUG' if DEBUG else 'INFO',
+            'level': 'DEBUG' if CELERY_DEBUG else 'INFO',
             'propagate': False
         }
     },
@@ -293,11 +296,11 @@ LOGGING = {
 
 # debug
 def show_toolbar(request):
-    if DEBUG:
+    if UI_DEBUG:
         return True
     return False
 
-if DEBUG:
+if UI_DEBUG:
     DEBUG_TOOLBAR_CONFIG = {
         'SHOW_TOOLBAR_CALLBACK': 'reNgine.settings.show_toolbar',
     }
