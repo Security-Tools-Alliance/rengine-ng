@@ -3,10 +3,21 @@
 tput setaf 2;
 cat web/art/reNgine.txt
 
+echo " "
 tput setaf 1; echo "Before running this script, please make sure Docker is running and you have made changes to .env file."
-tput setaf 2; echo "Changing the postgres username & password from .env is highly recommended."
+echo " "
+tput setaf 1; echo "Changing the postgres username & password from .env is highly recommended."
+
+echo " "
+tput setaf 3;
+echo "#########################################################################"
+echo "Please note that, this installation script is only intended for Linux"
+echo "x86_64 and arm64 platform (Apple Mx series) are supported"
+echo "Raspbery Pi is not recommended, all install tests have failed"
+echo "#########################################################################"
 
 tput setaf 4;
+echo " "
 read -p "Are you sure, you made changes to .env file (y/n)? " answer
 case ${answer:0:1} in
     y|Y|yes|YES|Yes )
@@ -22,13 +33,6 @@ case ${answer:0:1} in
     nano .env
     ;;
 esac
-
-echo " "
-tput setaf 3;
-echo "#########################################################################"
-echo "Please note that, this installation script is only intended for Linux"
-echo "For Mac and Windows, refer to the official guide https://rengine.wiki"
-echo "#########################################################################"
 
 echo " "
 tput setaf 4;
@@ -97,7 +101,7 @@ echo "#########################################################################"
 echo "Checking Docker status"
 echo "#########################################################################"
 if docker info >/dev/null 2>&1; then
-  tput setaf 4;
+  tput setaf 2;
   echo "Docker is running."
 else
   tput setaf 1;
@@ -109,9 +113,23 @@ fi
 echo " "
 tput setaf 4;
 echo "#########################################################################"
-echo "Installing reNgine"
+echo "Installing reNgine, please be patient it could take a while"
 echo "#########################################################################"
-make certs && make build && make up && tput setaf 2 && echo "reNgine is installed!!!" && failed=0 || failed=1
+
+
+echo " "
+tput setaf 5;
+echo "========================================================================="
+echo "Generating certificates and building docker images"
+echo "========================================================================="
+make certs && make build && failed=0 || failed=1
+
+echo " "
+tput setaf 5;
+echo "========================================================================="
+echo "Docker containers starting, please wait celery container could be long"
+echo "========================================================================="
+make up && tput setaf 2 && echo "reNgine is installed!!!" && failed=0 || failed=1
 
 if [ "${failed}" -eq 0 ]; then
   sleep 3
