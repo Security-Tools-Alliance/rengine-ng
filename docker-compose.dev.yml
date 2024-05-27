@@ -49,7 +49,7 @@ services:
       - static_volume:/usr/src/app/staticfiles/
     environment:
       - CELERY_DEBUG=1
-      - CELERY_REMOTE_DEBUG=1
+      - CELERY_REMOTE_DEBUG=0
       - CELERY_REMOTE_DEBUG_PORT=5679
       - CELERY_BROKER=redis://redis:6379/0
       - CELERY_BACKEND=redis://redis:6379/0
@@ -111,7 +111,7 @@ services:
     image: docker.pkg.github.com/yogeshojha/rengine/rengine:latest
     environment:
       - UI_DEBUG=1
-      - UI_REMOTE_DEBUG=1
+      - UI_REMOTE_DEBUG=0
       - UI_REMOTE_DEBUG_PORT=5678
       - CELERY_BROKER=redis://redis:6379/0
       - CELERY_BACKEND=redis://redis:6379/0
