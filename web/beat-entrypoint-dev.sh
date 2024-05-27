@@ -2,7 +2,8 @@
 
 if [ "$CELERY_DEBUG" == "1" ]; then
     # Django debug toolbar
-    pip install django-debug-toolbar
+    pip install django-debug-toolbar==4.3.0
+    python3 manage.py collectstatic --noinput
 fi
 
 # Check if remote debugging is enabled and set concurrency to 1 for easier debug
