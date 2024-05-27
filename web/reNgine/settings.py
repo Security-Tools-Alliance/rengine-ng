@@ -22,7 +22,7 @@ RENGINE_RAISE_ON_ERROR = bool(int(os.environ.get('RENGINE_RAISE_ON_ERROR', '0'))
 UI_DEBUG = bool(int(os.environ.get('UI_DEBUG', '0')))
 UI_REMOTE_DEBUG = bool(int(os.environ.get('UI_REMOTE_DEBUG', '0')))
 UI_REMOTE_DEBUG_PORT = int(os.environ.get('UI_REMOTE_DEBUG_PORT', 5678))
-CELERY_DEBUG = bool(int(os.environ.get('UI_DEBUG', '0')))
+CELERY_DEBUG = bool(int(os.environ.get('CELERY_DEBUG', '0')))
 CELERY_REMOTE_DEBUG = bool(int(os.environ.get('CELERY_REMOTE_DEBUG', '0')))
 CELERY_REMOTE_DEBUG_PORT = int(os.environ.get('CELERY_REMOTE_DEBUG_PORT', 5679))
 
