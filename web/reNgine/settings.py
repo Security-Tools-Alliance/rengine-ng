@@ -4,6 +4,7 @@ env = environ.FileAwareEnv()
 
 import mimetypes
 import os
+from pathlib import Path
 
 from reNgine.init import first_run
 from reNgine.utilities import RengineTaskFormatter
@@ -26,6 +27,9 @@ RENGINE_RESULTS = env('RENGINE_RESULTS', default=f'{RENGINE_HOME}/scan_results')
 RENGINE_CACHE_ENABLED = env.bool('RENGINE_CACHE_ENABLED', default=False)
 RENGINE_RECORD_ENABLED = env.bool('RENGINE_RECORD_ENABLED', default=True)
 RENGINE_RAISE_ON_ERROR = env.bool('RENGINE_RAISE_ON_ERROR', default=False)
+
+with open(Path(RENGINE_HOME) / 'reNgine' / 'version.txt', 'r', encoding="utf-8") as f:
+    RENGINE_CURRENT_VERSION = f.read().strip()
 
 # Common env vars
 DEBUG = env.bool('DEBUG', default=False)
@@ -103,7 +107,8 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'reNgine.context_processors.projects',
-                'reNgine.context_processors.misc'
+                'reNgine.context_processors.misc',
+                'reNgine.context_processors.version'
             ],
     },
 }]
