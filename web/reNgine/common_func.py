@@ -1001,6 +1001,7 @@ def generate_header_param(custom_header, tool_name=None):
     # Define format mapping for each tool
     format_mapping = {
         'common': ' '.join([f' -H "{header}"' for header in common_headers]),
+        'dalfox': ' '.join([f' -H "{header}"' for header in colon_headers]),
         'hakrawler': f' -h "{semi_colon_headers}"',
         'katana': f' -H "{semi_colon_headers}"',
         'gospider': ' '.join([f' -H "{header}"' for header in colon_headers]),

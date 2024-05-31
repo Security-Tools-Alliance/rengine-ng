@@ -2435,7 +2435,7 @@ def dalfox_xss_scan(self, urls=[], ctx={}, description=None):
 	dalfox_config = vuln_config.get(DALFOX) or {}
 	custom_header = dalfox_config.get(CUSTOM_HEADER) or self.yaml_configuration.get(CUSTOM_HEADER)
 	if custom_header:
-		custom_header = generate_header_param(custom_header, 'common')
+		custom_header = generate_header_param(custom_header, 'dalfox')
 	proxy = get_random_proxy()
 	is_waf_evasion = dalfox_config.get(WAF_EVASION, False)
 	blind_xss_server = dalfox_config.get(BLIND_XSS_SERVER)
