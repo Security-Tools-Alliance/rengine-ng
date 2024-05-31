@@ -1004,8 +1004,28 @@ def generate_header_param(custom_header, tool_name=None):
         'dalfox': ' '.join([f' -H "{header}"' for header in colon_headers]),
         'hakrawler': f' -h "{semi_colon_headers}"',
         'katana': f' -H "{semi_colon_headers}"',
-        'gospider': ' '.join([f' -H "{header}"' for header in colon_headers]),
+        'gospider': generate_gospider_params(custom_header),
     }
 
     # Return the corresponding parameter for the specified tool or default to common_headers format
     return format_mapping.get(tool_name, format_mapping.get('common'))
+
+def generate_gospider_params(custom_header):
+    """
+    Generate command-line parameters for gospider based on the custom header.
+
+    Args:
+        custom_header (dict): Dictionary containing the custom headers.
+
+    Returns:
+        str: Command-line parameters for gospider.
+    """
+    params = []
+    for key, value in custom_header.items():
+        if key.lower() == 'user-agent':
+            params.append(f' -u "{value}"')
+        elif key.lower() == 'cookie':
+            params.append(f' --cookie "{value}"')
+        else:
+            params.append(f' -H "{key}:{value}"')
+    return ' '.join(params)

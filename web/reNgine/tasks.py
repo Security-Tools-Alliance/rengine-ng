@@ -1796,8 +1796,8 @@ def fetch_url(self, urls=[], ctx={}, description=None):
 		'gau': f'gau',
 		'hakrawler': 'hakrawler -subs -u',
 		'waybackurls': 'waybackurls',
-		'gospider': f'gospider -S {input_path} --js -d 2 --sitemap --robots -w -r',
-		'katana': f'katana -list {input_path} -silent -jc -kf all -d 3 -fs rdn',
+		'gospider': f'gospider --js -d 2 --sitemap --robots -w -r',
+		'katana': f'katana -silent -jc -kf all -d 3 -fs rdn',
 	}
 	if proxy:
 		cmd_map['gau'] += f' --proxy "{proxy}"'
@@ -1811,7 +1811,7 @@ def fetch_url(self, urls=[], ctx={}, description=None):
 	if custom_header:
 		cmd_map['gospider'] += generate_header_param(custom_header, 'gospider')
 		cmd_map['hakrawler'] += generate_header_param(custom_header, 'hakrawler')
-		cmd_map['katana'] += generate_header_param(custom_header, 'katana')
+		cmd_map['katana'] += generate_header_param(custom_header, 'common')
 	cat_input = f'cat {input_path}'
 	grep_output = f'grep -Eo {host_regex}'
 	cmd_map = {
