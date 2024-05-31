@@ -1003,7 +1003,6 @@ def generate_header_param(custom_header, tool_name=None):
         'common': ' '.join([f' -H "{header}"' for header in common_headers]),
         'dalfox': ' '.join([f' -H "{header}"' for header in colon_headers]),
         'hakrawler': f' -h "{semi_colon_headers}"',
-        'katana': f' -H "{semi_colon_headers}"',
         'gospider': generate_gospider_params(custom_header),
     }
 
