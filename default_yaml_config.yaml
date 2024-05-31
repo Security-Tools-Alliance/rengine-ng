@@ -3,7 +3,8 @@
 # Custom header - FFUF, Nuclei, Dalfox, CRL Fuzz, HTTPx, Fetch URL (Hakrawler, Katana, Gospider)
 # custom_header: {
 #   'Cookie':'Test',
-#   'User-Agent': 'Mozilla/5.0'
+#   'User-Agent': 'Mozilla/5.0',
+#   'Custom-Header': 'My custom header'
 # }
 # 'user_agent': ''                    # Dalfox only
 # 'enable_http_crawl': true           # All tools
@@ -74,7 +75,8 @@ osint: {
 dir_file_fuzz: {
   # 'custom_header': {
   #   'Cookie':'Test',
-  #   'User-Agent': 'Mozilla/5.0'
+  #   'User-Agent': 'Mozilla/5.0',
+  #   'Custom-Header': 'My custom header'
   # },
   'auto_calibration': true,
   'enable_http_crawl': true,
@@ -92,7 +94,8 @@ dir_file_fuzz: {
 fetch_url: {
   # 'custom_header': {
   #   'Cookie':'Test',
-  #   'User-Agent': 'Mozilla/5.0'
+  #   'User-Agent': 'Mozilla/5.0',
+  #   'Custom-Header': 'My custom header'
   # },
   'uses_tools': ['gospider', 'hakrawler', 'waybackurls', 'katana', 'gau'],
   'remove_duplicate_endpoints': true,
@@ -106,7 +109,8 @@ fetch_url: {
 vulnerability_scan: {
   # 'custom_header': {
   #   'Cookie':'Test',
-  #   'User-Agent': 'Mozilla/5.0'
+  #   'User-Agent': 'Mozilla/5.0',
+  #   'Custom-Header': 'My custom header'
   # },
   'run_nuclei': true,
   'run_dalfox': false,
