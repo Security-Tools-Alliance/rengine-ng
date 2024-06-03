@@ -11,9 +11,9 @@ ARG go_arm=go${go_version}.linux-arm64.tar.gz
 
 # Labels and Credits
 LABEL \
-    name="reNgine NG" \
+    name="reNgine-ng" \
     author="Security-Tools-Alliance (https://github.com/Security-Tools-Alliance) & Yogesh Ojha <yogesh.ojha11@gmail.com>" \
-    description="reNGine NG is a automated pipeline of recon process, useful for information gathering during web application penetration testing."
+    description="reNgine-ng is a automated pipeline of recon process, useful for information gathering during web application penetration testing."
 
 # Environment Variables
 ENV DEBIAN_FRONTEND="noninteractive" \
