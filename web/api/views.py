@@ -20,6 +20,7 @@ from recon_note.models import *
 from reNgine.celery import app
 from reNgine.common_func import *
 from reNgine.definitions import ABORTED_TASK
+from reNgine.settings import RENGINE_CURRENT_VERSION
 from reNgine.tasks import *
 from reNgine.gpt import GPTAttackSuggestionGenerator
 from reNgine.utilities import is_safe_path
@@ -891,10 +892,7 @@ class RengineUpdateCheck(APIView):
 
 		# get current version_number
 		# remove quotes from current_version
-		current_version = ((os.environ['RENGINE_CURRENT_VERSION'
-							])[1:] if os.environ['RENGINE_CURRENT_VERSION'
-							][0] == 'v'
-							else os.environ['RENGINE_CURRENT_VERSION']).replace("'", "")
+		current_version = (RENGINE_CURRENT_VERSION[1:] if RENGINE_CURRENT_VERSION[0] == 'v' else RENGINE_CURRENT_VERSION).replace("'", "")
 
 		# for consistency remove v from both if exists
 		latest_version = re.search(r'v(\d+\.)?(\d+\.)?(\*|\d+)',

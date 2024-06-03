@@ -1,4 +1,5 @@
 from dashboard.models import *
+from . import settings
 import requests
 
 def projects(request):
@@ -12,6 +13,9 @@ def projects(request):
         'projects': projects,
         'current_project': project
     }
+
+def version(request):
+    return {"RENGINE_CURRENT_VERSION": settings.RENGINE_CURRENT_VERSION}
 
 def misc(request):
     externalIp = requests.get('https://checkip.amazonaws.com').text.strip()
