@@ -29,8 +29,9 @@ log "\r\nBefore running this script, please make sure Docker is running and you 
 log "Changing the postgres username & password from .env is highly recommended.\r\n" 1
 
 log "#########################################################################" 4
-log "Please note that this installation script is only intended for Linux" 3
-log "Only x86_64 platform are supported" 3
+log "Please note that, this installation script is only intended for Linux" 3
+log "x86_64 and arm64 platform (Apple Mx series) are supported" 3
+log "Raspbery Pi is not recommended, all install tests have failed" 3
 log "#########################################################################\r\n" 4
 
 tput setaf 1;
