@@ -250,7 +250,8 @@ def list_target(request, slug):
 def delete_target(request, id):
     obj = get_object_or_404(Domain, id=id)
     if request.method == "POST":
-        run_command(f'rm -rf {settings.RENGINE_RESULTS}/scan_results/{obj.name}*')
+        run_command(f'rm -rf {settings.RENGINE_RESULTS}/{obj.name}')
+        run_command(f'rm -rf {settings.RENGINE_RESULTS}/{obj.name}*') # for backward compatibility
         obj.delete()
         responseData = {'status': 'true'}
         messages.add_message(
