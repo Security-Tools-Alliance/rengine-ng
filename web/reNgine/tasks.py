@@ -11,6 +11,7 @@ import yaml
 import tldextract
 import concurrent.futures
 import base64
+import uuid
 
 from datetime import datetime
 from urllib.parse import urlparse
@@ -104,7 +105,8 @@ def initiate_scan(
 	scan.domain = domain
 	scan.start_scan_date = timezone.now()
 	scan.tasks = engine.tasks
-	scan.results_dir = f'{results_dir}/{domain.name}_{scan.id}'
+	uuid_scan = uuid.uuid1()
+	scan.results_dir = f'{results_dir}/{domain.name}/scans/{uuid_scan}'
 	add_gf_patterns = gf_patterns and 'fetch_url' in engine.tasks
 	if add_gf_patterns:
 		scan.used_gf_patterns = ','.join(gf_patterns)
@@ -249,7 +251,8 @@ def initiate_subscan(
 	config = yaml.safe_load(engine.yaml_configuration)
 
 	# Create results directory
-	results_dir = f'{scan.results_dir}/subscans/{subscan.id}'
+	uuid_scan = uuid.uuid1()
+	results_dir = f'{scan.results_dir}/{domain.name}/subscans/{uuid_scan}'
 	os.makedirs(results_dir, exist_ok=True)
 
 	# Run task
