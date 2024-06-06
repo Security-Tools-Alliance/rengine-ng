@@ -252,7 +252,7 @@ def initiate_subscan(
 
 	# Create results directory
 	uuid_scan = uuid.uuid1()
-	results_dir = f'{scan.results_dir}/{domain.name}/subscans/{uuid_scan}'
+	results_dir = f'{results_dir}/{domain.name}/subscans/{uuid_scan}'
 	os.makedirs(results_dir, exist_ok=True)
 
 	# Run task
