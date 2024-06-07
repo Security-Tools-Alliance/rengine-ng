@@ -70,7 +70,7 @@ log "\r\n#######################################################################
 log "Installing Docker Compose" 4
 
 if ! command -v docker compose 2> /dev/null; then
-  curl -L "https://github.com/docker/compose/releases/download/v2.5.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+  curl -L "https://github.com/docker/compose/releases/download/v2.27.1/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
   chmod +x /usr/local/bin/docker-compose
   ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose
   log "Docker Compose installed!" 2
