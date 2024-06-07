@@ -407,9 +407,9 @@ For that, you need to add as much valuable information as possible.
 You can have this valuable information by following these steps:
 
 - Go to the root of the git cloned project
-- Shutdown you current production instance by launching `make down`
-- Launch the dev environment by launching `make dev_up`
-- Then you can start `make logs` and run into your issue, you should have more detailed log (stack trace ...)
+- Shutdown your current production instance by typing `make down`
+- Launch the dev environment by typing `make dev_up`
+- Then you can start `make logs` and run into your issue, you should now have a more detailed log (stack trace ...)
 - To deactivate the dev environment, run `make dev_down`, then restart the prod with `make up`
 
 Example with the tool arsenal version check API bug.
