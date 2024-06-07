@@ -17,7 +17,7 @@ fi
 tput setaf 2;
 cat web/art/reNgine.txt
 
-log "\r\nBefore running this script, please make sure Docker is running and you have made changes to the `.env` file." 1
+log "\r\nBefore running this script, please make sure Docker is running and you have made changes to the .env file." 1
 log "Changing the postgres username & password from .env is highly recommended.\r\n" 1
 
 log "#########################################################################" 4
@@ -26,7 +26,7 @@ log "Only x86_64 platform are supported" 3
 log "#########################################################################\r\n" 4
 
 tput setaf 1;
-read -p "Are you sure you made changes to the `.env` file (y/n)? " answer
+read -p "Are you sure you made changes to the .env file (y/n)? " answer
 case ${answer:0:1} in
     y|Y|yes|YES|Yes )
       log "Continuing Installation!" 2
@@ -99,7 +99,8 @@ else
 fi
 
 log "\r\n#########################################################################" 4
-log "Installing reNgine, please be patient it could take a while" 4
+log "Installing reNgine-ng, please be patient as it could take a while" 1
+sleep 5
 
 log "\r\n=========================================================================" 5
 log "Generating certificates and building docker images" 5
@@ -107,7 +108,8 @@ log "=========================================================================" 
 make certs && make build && log "reNgine is built" 2 || { log "reNgine installation failed!!" 1; exit 1; }
 
 log "\r\n=========================================================================" 5
-log "Docker containers starting, please wait celery container could be long" 5
+log "Docker containers starting, please wait as Celery container could take a while" 1
+sleep 5
 log "=========================================================================" 5
 make up && log "reNgine is installed!!!" 2 || { log "reNgine installation failed!!" 1; exit 1; }
 
