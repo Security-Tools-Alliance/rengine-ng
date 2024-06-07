@@ -9,7 +9,7 @@ log() {
 
 # Check for root privileges
 if [ "$(id -u)" -ne 0 ]; then
-  log "Error: Please run this script as root!" 1
+  log "Error: please run this script as root!" 1
   log "Example: sudo $0" 1
   exit 1
 fi
@@ -36,13 +36,13 @@ case ${answer:0:1} in
         log "nano already installed, skipping." 2
       else
         sudo apt update && sudo apt install nano -y
-        log "nano installed!!!" 2
+        log "nano installed!" 2
       fi
     nano .env
     ;;
 esac
 
-log "\r\nInstalling reNgine and its dependencies" 4
+log "\r\nInstalling reNgine-ng and its dependencies" 4
 log "=========================================================================" 4
 
 log "\r\n#########################################################################" 4
@@ -50,7 +50,7 @@ log "Installing curl..." 4
 
 if ! command -v curl 2> /dev/null; then
   apt update && apt install curl -y
-  log "CURL installed!!!" 2
+  log "CURL installed!" 2
 else
   log "CURL already installed, skipping." 2
 fi
@@ -61,7 +61,7 @@ log "Installing Docker..." 4
 
 if ! command -v docker 2> /dev/null; then
   curl -fsSL https://get.docker.com -o get-docker.sh && sh get-docker.sh
-  log "Docker installed!!!" 2
+  log "Docker installed!" 2
 else
   log "Docker already installed, skipping." 2
 fi
@@ -73,7 +73,7 @@ if ! command -v docker-compose 2> /dev/null; then
   curl -L "https://github.com/docker/compose/releases/download/v2.5.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
   chmod +x /usr/local/bin/docker-compose
   ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose
-  log "docker-compose installed!!!" 2
+  log "docker-compose installed!" 2
 else
   log "docker-compose already installed, skipping." 2
 fi
@@ -83,7 +83,7 @@ log "Installing make" 4
 
 if ! command -v make 2> /dev/null; then
   apt install make -y
-  log "make installed!!!" 2
+  log "make installed!" 2
 else
   log "make already installed, skipping." 2
 fi
@@ -105,13 +105,13 @@ sleep 5
 log "\r\n=========================================================================" 5
 log "Generating certificates and building docker images" 5
 log "=========================================================================" 5
-make certs && make build && log "reNgine is built" 2 || { log "reNgine installation failed!!" 1; exit 1; }
+make certs && make build && log "reNgine-ng is built" 2 || { log "reNgine-ng installation failed!" 1; exit 1; }
 
 log "\r\n=========================================================================" 5
 log "Docker containers starting, please wait as Celery container could take a while" 1
 sleep 5
 log "=========================================================================" 5
-make up && log "reNgine is installed!!!" 2 || { log "reNgine installation failed!!" 1; exit 1; }
+make up && log "reNgine-ng is installed!" 2 || { log "reNgine-ng installation failed!" 1; exit 1; }
 
 
 log "\r\n#########################################################################" 4
@@ -119,4 +119,4 @@ log "Creating an account" 4
 log "#########################################################################" 4
 make username
 
-log "\r\nThank you for installing reNgine, happy recon!!" 2
+log "\r\nThank you for installing reNgine-ng, happy recon!" 2
