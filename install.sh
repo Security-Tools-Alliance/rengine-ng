@@ -26,7 +26,7 @@ log "Only x86_64 platform are supported" 3
 log "#########################################################################\r\n" 4
 
 tput setaf 1;
-read -p "Are you sure you made changes to the `.env` file (y/n)? " answer
+read -p "Are you sure you made changes to the '.env' file (y/n)? " answer
 case ${answer:0:1} in
     y|Y|yes|YES|Yes )
       log "Continuing Installation!" 2
