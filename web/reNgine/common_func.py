@@ -951,3 +951,80 @@ def extract_between(text, pattern):
 	if match:
 		return match.group(1).strip()
 	return ""
+
+def parse_custom_header(custom_header):
+    """
+    Parse the custom_header input to ensure it is a dictionary.
+
+    Args:
+        custom_header (dict or str): Dictionary or string containing the custom headers.
+
+    Returns:
+        dict: Parsed dictionary of custom headers.
+    """
+
+    if isinstance(custom_header, str):
+        header_dict = {}
+        headers = custom_header.split(',')
+        for header in headers:
+            parts = header.split(':', 1)
+            if len(parts) == 2:
+                key, value = parts
+                header_dict[key.strip()] = value.strip()
+            else:
+                raise ValueError(f"Invalid header format: '{header}'")
+        return header_dict
+    elif isinstance(custom_header, dict):
+        return custom_header
+    else:
+        raise ValueError("custom_header must be a dictionary or a string")
+
+def generate_header_param(custom_header, tool_name=None):
+    """
+    Generate command-line parameters for a specific tool based on the custom header.
+
+    Args:
+        custom_header (dict or str): Dictionary or string containing the custom headers.
+        tool_name (str, optional): Name of the tool. Defaults to None.
+
+    Returns:
+        str: Command-line parameter for the specified tool.
+    """
+    # Ensure the custom_header is a dictionary
+    custom_header = parse_custom_header(custom_header)
+
+    # Common formats
+    common_headers = [f"{key}: {value}" for key, value in custom_header.items()]
+    semi_colon_headers = ';;'.join(common_headers)
+    colon_headers = [f"{key}:{value}" for key, value in custom_header.items()]
+
+    # Define format mapping for each tool
+    format_mapping = {
+        'common': ' '.join([f' -H "{header}"' for header in common_headers]),
+        'dalfox': ' '.join([f' -H "{header}"' for header in colon_headers]),
+        'hakrawler': f' -h "{semi_colon_headers}"',
+        'gospider': generate_gospider_params(custom_header),
+    }
+
+    # Return the corresponding parameter for the specified tool or default to common_headers format
+    return format_mapping.get(tool_name, format_mapping.get('common'))
+
+def generate_gospider_params(custom_header):
+    """
+    Generate command-line parameters for gospider based on the custom header.
+
+    Args:
+        custom_header (dict): Dictionary containing the custom headers.
+
+    Returns:
+        str: Command-line parameters for gospider.
+    """
+    params = []
+    for key, value in custom_header.items():
+        if key.lower() == 'user-agent':
+            params.append(f' -u "{value}"')
+        elif key.lower() == 'cookie':
+            params.append(f' --cookie "{value}"')
+        else:
+            params.append(f' -H "{key}:{value}"')
+    return ' '.join(params)

@@ -11,6 +11,7 @@ import yaml
 import tldextract
 import concurrent.futures
 import base64
+import uuid
 
 from datetime import datetime
 from urllib.parse import urlparse
@@ -109,7 +110,8 @@ def initiate_scan(
 	scan.domain = domain
 	scan.start_scan_date = timezone.now()
 	scan.tasks = engine.tasks
-	scan.results_dir = f'{results_dir}/{domain.name}_{scan.id}'
+	uuid_scan = uuid.uuid1()
+	scan.results_dir = f'{results_dir}/{domain.name}/scans/{uuid_scan}'
 	add_gf_patterns = gf_patterns and 'fetch_url' in engine.tasks
 	if add_gf_patterns:
 		scan.used_gf_patterns = ','.join(gf_patterns)
@@ -257,7 +259,8 @@ def initiate_subscan(
 	config = yaml.safe_load(engine.yaml_configuration)
 
 	# Create results directory
-	results_dir = f'{scan.results_dir}/subscans/{subscan.id}'
+	uuid_scan = uuid.uuid1()
+	results_dir = f'{results_dir}/{domain.name}/subscans/{uuid_scan}'
 	os.makedirs(results_dir, exist_ok=True)
 
 	# Run task
@@ -1591,7 +1594,9 @@ def dir_file_fuzz(self, ctx={}, description=None):
 	# Config
 	cmd = 'ffuf'
 	config = self.yaml_configuration.get(DIR_FILE_FUZZ) or {}
-	custom_header = self.yaml_configuration.get(CUSTOM_HEADER)
+	custom_header = config.get(CUSTOM_HEADER) or self.yaml_configuration.get(CUSTOM_HEADER)
+	if custom_header:
+		custom_header = generate_header_param(custom_header,'common')
 	auto_calibration = config.get(AUTO_CALIBRATION, True)
 	enable_http_crawl = config.get(ENABLE_HTTP_CRAWL, DEFAULT_ENABLE_HTTP_CRAWL)
 	rate_limit = config.get(RATE_LIMIT) or self.yaml_configuration.get(RATE_LIMIT, DEFAULT_RATE_LIMIT)
@@ -1627,7 +1632,7 @@ def dir_file_fuzz(self, ctx={}, description=None):
 	cmd += ' -fr' if follow_redirect else ''
 	cmd += ' -ac' if auto_calibration else ''
 	cmd += f' -mc {mc}' if mc else ''
-	cmd += f' -H "{custom_header}"' if custom_header else ''
+	cmd += f' {custom_header}' if custom_header else ''
 
 	# Grab URLs to fuzz
 	urls = get_http_urls(
@@ -1738,7 +1743,7 @@ def dir_file_fuzz(self, ctx={}, description=None):
 			dirscan.save()
 
 			# Get subdomain and add dirscan
-			if ctx['subdomain_id'] > 0:
+			if ctx.get('subdomain_id') and ctx['subdomain_id'] > 0:
 				subdomain = Subdomain.objects.get(id=ctx['subdomain_id'])
 			else:
 				subdomain_name = get_subdomain_from_url(endpoint.http_url)
@@ -1775,7 +1780,9 @@ def fetch_url(self, urls=[], ctx={}, description=None):
 	tools = config.get(USES_TOOLS, ENDPOINT_SCAN_DEFAULT_TOOLS)
 	threads = config.get(THREADS) or self.yaml_configuration.get(THREADS, DEFAULT_THREADS)
 	domain_request_headers = self.domain.request_headers if self.domain else None
-	custom_header = domain_request_headers or self.yaml_configuration.get(CUSTOM_HEADER)
+	custom_header = config.get(CUSTOM_HEADER) or self.yaml_configuration.get(CUSTOM_HEADER)
+	if domain_request_headers or custom_header:
+		custom_header = domain_request_headers or custom_header
 	exclude_subdomains = config.get(EXCLUDED_SUBDOMAINS, False)
 
 	# Get URLs to scan and save to input file
@@ -1800,8 +1807,8 @@ def fetch_url(self, urls=[], ctx={}, description=None):
 		'gau': f'gau',
 		'hakrawler': 'hakrawler -subs -u',
 		'waybackurls': 'waybackurls',
-		'gospider': f'gospider -S {input_path} --js -d 2 --sitemap --robots -w -r',
-		'katana': f'katana -list {input_path} -silent -jc -kf all -d 3 -fs rdn',
+		'gospider': f'gospider --js -d 2 --sitemap --robots -w -r',
+		'katana': f'katana -silent -jc -kf all -d 3 -fs rdn',
 	}
 	if proxy:
 		cmd_map['gau'] += f' --proxy "{proxy}"'
@@ -1813,14 +1820,9 @@ def fetch_url(self, urls=[], ctx={}, description=None):
 		cmd_map['gospider'] += f' -t {threads}'
 		cmd_map['katana'] += f' -c {threads}'
 	if custom_header:
-		header_string = ';;'.join([
-			f'{key}: {value}' for key, value in custom_header.items()
-		])
-		cmd_map['hakrawler'] += f' -h {header_string}'
-		cmd_map['katana'] += f' -H {header_string}'
-		header_flags = [':'.join(h) for h in header_string.split(';;')]
-		for flag in header_flags:
-			cmd_map['gospider'] += f' -H {flag}'
+		cmd_map['gospider'] += generate_header_param(custom_header, 'gospider')
+		cmd_map['hakrawler'] += generate_header_param(custom_header, 'hakrawler')
+		cmd_map['katana'] += generate_header_param(custom_header, 'common')
 	cat_input = f'cat {input_path}'
 	grep_output = f'grep -Eo {host_regex}'
 	cmd_map = {
@@ -2324,6 +2326,8 @@ def nuclei_scan(self, urls=[], ctx={}, description=None):
 	retries = config.get(RETRIES) or self.yaml_configuration.get(RETRIES, DEFAULT_RETRIES)
 	timeout = config.get(TIMEOUT) or self.yaml_configuration.get(TIMEOUT, DEFAULT_HTTP_TIMEOUT)
 	custom_header = config.get(CUSTOM_HEADER) or self.yaml_configuration.get(CUSTOM_HEADER)
+	if custom_header:
+		custom_header = generate_header_param(custom_header, 'common')
 	should_fetch_gpt_report = config.get(FETCH_GPT_REPORT, DEFAULT_GET_GPT_REPORT)
 	proxy = get_random_proxy()
 	nuclei_specific_config = config.get('nuclei', {})
@@ -2390,7 +2394,7 @@ def nuclei_scan(self, urls=[], ctx={}, description=None):
 	cmd = 'nuclei -j'
 	cmd += ' -config /root/.config/nuclei/config.yaml' if use_nuclei_conf else ''
 	cmd += f' -irr'
-	cmd += f' -H "{custom_header}"' if custom_header else ''
+	cmd += f' {custom_header}' if custom_header else ''
 	cmd += f' -l {input_path}'
 	cmd += f' -c {str(concurrency)}' if concurrency > 0 else ''
 	cmd += f' -proxy {proxy} ' if proxy else ''
@@ -2441,6 +2445,8 @@ def dalfox_xss_scan(self, urls=[], ctx={}, description=None):
 	should_fetch_gpt_report = vuln_config.get(FETCH_GPT_REPORT, DEFAULT_GET_GPT_REPORT)
 	dalfox_config = vuln_config.get(DALFOX) or {}
 	custom_header = dalfox_config.get(CUSTOM_HEADER) or self.yaml_configuration.get(CUSTOM_HEADER)
+	if custom_header:
+		custom_header = generate_header_param(custom_header, 'dalfox')
 	proxy = get_random_proxy()
 	is_waf_evasion = dalfox_config.get(WAF_EVASION, False)
 	blind_xss_server = dalfox_config.get(BLIND_XSS_SERVER)
@@ -2476,7 +2482,7 @@ def dalfox_xss_scan(self, urls=[], ctx={}, description=None):
 	cmd += f' --delay {delay}' if delay else ''
 	cmd += f' --timeout {timeout}' if timeout else ''
 	cmd += f' --user-agent {user_agent}' if user_agent else ''
-	cmd += f' --header {custom_header}' if custom_header else ''
+	cmd += f' {custom_header}' if custom_header else ''
 	cmd += f' --worker {threads}' if threads else ''
 	cmd += f' --format json'
 
@@ -2566,6 +2572,8 @@ def crlfuzz_scan(self, urls=[], ctx={}, description=None):
 	vuln_config = self.yaml_configuration.get(VULNERABILITY_SCAN) or {}
 	should_fetch_gpt_report = vuln_config.get(FETCH_GPT_REPORT, DEFAULT_GET_GPT_REPORT)
 	custom_header = vuln_config.get(CUSTOM_HEADER) or self.yaml_configuration.get(CUSTOM_HEADER)
+	if custom_header:
+		custom_header = generate_header_param(custom_header, 'common')
 	proxy = get_random_proxy()
 	user_agent = vuln_config.get(USER_AGENT) or self.yaml_configuration.get(USER_AGENT)
 	threads = vuln_config.get(THREADS) or self.yaml_configuration.get(THREADS, DEFAULT_THREADS)
@@ -2590,7 +2598,7 @@ def crlfuzz_scan(self, urls=[], ctx={}, description=None):
 	cmd = 'crlfuzz -s'
 	cmd += f' -l {input_path}'
 	cmd += f' -x {proxy}' if proxy else ''
-	cmd += f' --H {custom_header}' if custom_header else ''
+	cmd += f' {custom_header}' if custom_header else ''
 	cmd += f' -o {output_path}'
 
 	run_command(
@@ -2739,10 +2747,12 @@ def http_crawl(
 	if is_ran_from_subdomain_scan:
 		logger.info('Running From Subdomain Scan...')
 	cmd = '/go/bin/httpx'
-	cfg = self.yaml_configuration.get(HTTP_CRAWL) or {}
-	custom_header = cfg.get(CUSTOM_HEADER, '')
-	threads = cfg.get(THREADS, DEFAULT_THREADS)
-	follow_redirect = cfg.get(FOLLOW_REDIRECT, True)
+	config = self.yaml_configuration.get(HTTP_CRAWL) or {}
+	custom_header = config.get(CUSTOM_HEADER) or self.yaml_configuration.get(CUSTOM_HEADER)
+	if custom_header:
+		custom_header = generate_header_param(custom_header, 'common')
+	threads = config.get(THREADS, DEFAULT_THREADS)
+	follow_redirect = config.get(FOLLOW_REDIRECT, True)
 	self.output_path = None
 	input_path = f'{self.results_dir}/httpx_input.txt'
 	history_file = f'{self.results_dir}/commands.txt'
@@ -2775,7 +2785,7 @@ def http_crawl(
 	cmd += f' -cl -ct -rt -location -td -websocket -cname -asn -cdn -probe -random-agent'
 	cmd += f' -t {threads}' if threads > 0 else ''
 	cmd += f' --http-proxy {proxy}' if proxy else ''
-	cmd += f' -H "{custom_header}"' if custom_header else ''
+	cmd += f' {custom_header}' if custom_header else ''
 	cmd += f' -json'
 	cmd += f' -u {urls[0]}' if len(urls) == 1 else f' -l {input_path}'
 	cmd += f' -x {method}' if method else ''

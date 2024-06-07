@@ -13,7 +13,7 @@ mimetypes.add_type("text/css", ".css", True)
 
 # Root env vars
 RENGINE_HOME = os.environ.get('RENGINE_HOME', '/usr/src/app')
-RENGINE_RESULTS = os.environ.get('RENGINE_RESULTS', f'{RENGINE_HOME}/scan_results')
+RENGINE_RESULTS = os.environ.get('RENGINE_RESULTS', f'/usr/src/scan_results')
 RENGINE_CACHE_ENABLED = bool(int(os.environ.get('RENGINE_CACHE_ENABLED', '0')))
 RENGINE_RECORD_ENABLED = bool(int(os.environ.get('RENGINE_RECORD_ENABLED', '1')))
 RENGINE_RAISE_ON_ERROR = bool(int(os.environ.get('RENGINE_RAISE_ON_ERROR', '0')))

@@ -1,13 +1,18 @@
 # Global vars for all tools
 #
-# custom_header: 'Cookie: Test'     # FFUF, Nuclei, Dalfox, CRL Fuzz, HTTP Crawl, Fetch URL
-# user_agent: ''                    # Dalfox only
-# enable_http_crawl: true           # All tools
-# timeout: 10                       # Subdomain discovery, Screenshot, Port scan, FFUF, Nuclei                       
-# threads: 30                       # All tools
-# rate_limit: 150                   # Port scan, FFUF, Nuclei
-# intensity: 'normal'               # Screenshot (grab only the root endpoints of each subdomain), Nuclei (reduce number of endpoints to scan), OSINT (not implemented yet)
-# retries: 1                        # Nuclei
+# Custom header - FFUF, Nuclei, Dalfox, CRL Fuzz, HTTPx, Fetch URL (Hakrawler, Katana, Gospider)
+# custom_header: {
+#   'Cookie':'Test',
+#   'User-Agent': 'Mozilla/5.0',
+#   'Custom-Header': 'My custom header'
+# }
+# 'user_agent': ''                    # Dalfox only
+# 'enable_http_crawl': true           # All tools
+# 'timeout': 10                       # Subdomain discovery, Screenshot, Port scan, FFUF, Nuclei                       
+# 'threads': 30                       # All tools
+# 'rate_limit': 150                   # Port scan, FFUF, Nuclei
+# 'intensity': 'normal'               # Screenshot (grab only the root endpoints of each subdomain), Nuclei (reduce number of endpoints to scan), OSINT (not implemented yet)
+# 'retries': 1                        # Nuclei
 
 subdomain_discovery: {
   'uses_tools': ['subfinder', 'ctfr', 'sublist3r', 'tlsx', 'oneforall', 'netlas'],  # amass-passive, amass-active, All
@@ -19,7 +24,10 @@ subdomain_discovery: {
   # 'amass_wordlist': 'deepmagic.com-prefixes-top50000'
 }
 http_crawl: {
-  # 'custom_header': 'Cookie: Test',
+  # 'custom_header': {
+  #   'Cookie':'Test',
+  #   'User-Agent': 'Mozilla/5.0'
+  # },
   # 'threads': 30,
   # 'follow_redirect': true
 }
@@ -65,6 +73,11 @@ osint: {
   'documents_limit': 50
 }
 dir_file_fuzz: {
+  # 'custom_header': {
+  #   'Cookie':'Test',
+  #   'User-Agent': 'Mozilla/5.0',
+  #   'Custom-Header': 'My custom header'
+  # },
   'auto_calibration': true,
   'enable_http_crawl': true,
   'rate_limit': 150,
@@ -76,9 +89,14 @@ dir_file_fuzz: {
   'stop_on_error': false,
   'timeout': 5,
   'threads': 30,
-  'wordlist_name': 'dicc'
+  'wordlist_name': 'dicc',
 }
 fetch_url: {
+  # 'custom_header': {
+  #   'Cookie':'Test',
+  #   'User-Agent': 'Mozilla/5.0',
+  #   'Custom-Header': 'My custom header'
+  # },
   'uses_tools': ['gospider', 'hakrawler', 'waybackurls', 'katana', 'gau'],
   'remove_duplicate_endpoints': true,
   'duplicate_fields': ['content_length', 'page_title'],
@@ -89,6 +107,11 @@ fetch_url: {
   # 'exclude_subdomains': false
 }
 vulnerability_scan: {
+  # 'custom_header': {
+  #   'Cookie':'Test',
+  #   'User-Agent': 'Mozilla/5.0',
+  #   'Custom-Header': 'My custom header'
+  # },
   'run_nuclei': true,
   'run_dalfox': false,
   'run_crlfuzz': false,
