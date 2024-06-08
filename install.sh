@@ -20,16 +20,16 @@ cat web/art/reNgine.txt
 log "\r\nBefore running this script, please make sure Docker is running and you have made changes to the .env file." 1
 log "Changing the postgres username & password from .env is highly recommended.\r\n" 1
 
-log "#########################################################################" 4
-log "Please note that this installation script is only intended for Linux" 3
-log "Only x86_64 platform are supported" 3
-log "#########################################################################\r\n" 4
+log "#########################################################################" 6
+log "Please note that this installation script is only intended for Linux" 6
+log "Only x86_64 platform are supported" 6
+log "#########################################################################\r\n" 6
 
 tput setaf 1;
 read -p "Are you sure you made changes to the .env file (y/n)? " answer
 case ${answer:0:1} in
     y|Y|yes|YES|Yes )
-      log "Continuing Installation!" 2
+      log "Continuing installation!\n" 2
     ;;
     * )
       if [ -x "$(command -v nano)" ]; then
@@ -42,11 +42,12 @@ case ${answer:0:1} in
     ;;
 esac
 
-log "\r\nInstalling reNgine-ng and its dependencies" 4
-log "=========================================================================" 4
+log "=========================================================================" 6
+log "Installing reNgine-ng and its dependencies..." 6
+log "=========================================================================" 6
 
-log "\r\n#########################################################################" 4
-log "Installing curl..." 4
+log "\r\n#########################################################################" 6
+log "Installing curl..." 6
 
 if ! command -v curl 2> /dev/null; then
   apt update && apt install curl -y
@@ -56,8 +57,8 @@ else
 fi
 
 
-log "\r\n#########################################################################" 4
-log "Installing Docker..." 4
+log "\r\n#########################################################################" 6
+log "Installing Docker..." 6
 
 if ! command -v docker 2> /dev/null; then
   curl -fsSL https://get.docker.com -o get-docker.sh && sh get-docker.sh
@@ -66,8 +67,8 @@ else
   log "Docker already installed, skipping." 2
 fi
 
-log "\r\n#########################################################################" 4
-log "Installing Docker Compose" 4
+log "\r\n#########################################################################" 6
+log "Installing Docker Compose..." 6
 
 if ! command -v docker compose 2> /dev/null; then
   curl -L "https://github.com/docker/compose/releases/download/v2.27.1/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
@@ -78,8 +79,8 @@ else
   log "Docker Compose already installed, skipping." 2
 fi
 
-log "\r\n#########################################################################" 4
-log "Installing make" 4
+log "\r\n#########################################################################" 6
+log "Installing make..." 6
 
 if ! command -v make 2> /dev/null; then
   apt install make -y
@@ -88,8 +89,8 @@ else
   log "make already installed, skipping." 2
 fi
 
-log "\r\n#########################################################################" 4
-log "Checking Docker status" 4
+log "\r\n#########################################################################" 6
+log "Checking Docker status..." 6
 if docker info >/dev/null 2>&1; then
   log "Docker is running." 2
 else
@@ -98,25 +99,25 @@ else
   exit 1
 fi
 
-log "\r\n#########################################################################" 4
-log "Installing reNgine-ng, please be patient as it could take a while" 1
+log "\r\n#########################################################################" 6
+log "Installing reNgine-ng, please be patient as it could take a while..." 6
 sleep 5
 
-log "\r\n=========================================================================" 5
-log "Generating certificates and building docker images" 5
-log "=========================================================================" 5
+log "\r\n=========================================================================" 6
+log "Generating certificates and building Docker images..." 6
+log "=========================================================================" 6
 make certs && make build && log "reNgine-ng is built" 2 || { log "reNgine-ng installation failed!" 1; exit 1; }
 
-log "\r\n=========================================================================" 5
-log "Docker containers starting, please wait as Celery container could take a while" 1
+log "\r\n=========================================================================" 6
+log "Docker containers starting, please wait as Celery container could take a while..." 6
 sleep 5
-log "=========================================================================" 5
+log "=========================================================================" 6
 make up && log "reNgine-ng is installed!" 2 || { log "reNgine-ng installation failed!" 1; exit 1; }
 
 
-log "\r\n#########################################################################" 4
-log "Creating an account" 4
-log "#########################################################################" 4
+log "\r\n#########################################################################" 6
+log "Creating an account..." 6
+log "#########################################################################" 6
 make username
 
 log "\r\nThank you for installing reNgine-ng, happy recon!" 2
