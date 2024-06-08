@@ -17,7 +17,7 @@ fi
 tput setaf 2;
 cat web/art/reNgine.txt
 
-log "\r\nBefore running this script, please make sure Docker is running and you have made changes to the `.env` file." 1
+log "\r\nBefore running this script, please make sure Docker is running and you have made changes to the '.env' file." 1
 log "Changing the postgres username & password from .env is highly recommended.\r\n" 1
 
 log "#########################################################################" 4
@@ -26,7 +26,7 @@ log "Only x86_64 platform are supported" 3
 log "#########################################################################\r\n" 4
 
 tput setaf 1;
-read -p "Are you sure you made changes to the `.env` file (y/n)? " answer
+read -p "Are you sure you made changes to the '.env' file (y/n)? " answer
 case ${answer:0:1} in
     y|Y|yes|YES|Yes )
       log "Continuing Installation!" 2
@@ -67,15 +67,15 @@ else
 fi
 
 log "\r\n#########################################################################" 4
-log "Installing docker-compose" 4
+log "Installing Docker Compose" 4
 
-if ! command -v docker-compose 2> /dev/null; then
-  curl -L "https://github.com/docker/compose/releases/download/v2.5.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+if ! command -v docker compose 2> /dev/null; then
+  curl -L "https://github.com/docker/compose/releases/download/v2.23.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
   chmod +x /usr/local/bin/docker-compose
   ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose
-  log "docker-compose installed!!!" 2
+  log "Docker Compose installed!!!" 2
 else
-  log "docker-compose already installed, skipping." 2
+  log "Docker Compose already installed, skipping." 2
 fi
 
 log "\r\n#########################################################################" 4
