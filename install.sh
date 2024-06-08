@@ -27,8 +27,8 @@ log() {
 if [ "$(whoami)" != "root" ]
   then
   log ""
-  log "Error uninstalling reNgine-ng: please run this script as root!" $COLOR_RED
-  log "Example: sudo ./uninstall.sh" $COLOR_RED
+  log "Error installing reNgine-ng: please run this script as root!" $COLOR_RED
+  log "Example: sudo ./install.sh" $COLOR_RED
   exit
 fi
 
