@@ -1,42 +1,59 @@
 #!/bin/bash
 
-#log messages in different colors
+# Define color codes.
+# Using `tput setaf` at some places because the variable only works with log/echo
+
+COLOR_BLACK=0
+COLOR_RED=1
+COLOR_GREEN=2
+COLOR_YELLOW=3
+COLOR_BLUE=4
+COLOR_MAGENTA=5
+COLOR_CYAN=6
+COLOR_WHITE=7
+COLOR_DEFAULT=$COLOR_WHITE # Use white as default for clarity
+
+# Log messages in different colors
 log() {
-  tput setaf "$2"
+  local color=${2:-$COLOR_DEFAULT}  # Use default color if $2 is not set
+  if [ "$color" -ne $COLOR_DEFAULT ]; then
+    tput setaf "$color"
+  fi
   printf "$1\r\n"
   tput sgr0  # Reset text color
 }
 
 # Check for root privileges
-if [ "$(id -u)" -ne 0 ]; then
-  log "Error: please run this script as root!" 1
-  log "Example: sudo $0" 1
-  exit 1
+if [ "$(whoami)" != "root" ]
+  then
+  log ""
+  log "Error installing reNgine-ng: please run this script as root!" $COLOR_RED
+  log "Example: sudo ./install.sh" $COLOR_RED
+  exit
 fi
 
-tput setaf 2;
-cat web/art/reNgine.txt
+log ""
 
-log "\r\nBefore running this script, please make sure Docker is running and you have made changes to the .env file." 1
-log "Changing the postgres username & password from .env is highly recommended.\r\n" 1
+log "\r\nBefore running this script, please make sure Docker is running and you have made changes to the .env file." $COLOR_RED
+log "Changing the postgres username & password from .env is highly recommended.\r\n" $COLOR_RED
 
-log "#########################################################################" 6
-log "Please note that this installation script is only intended for Linux" 6
-log "Only x86_64 platform are supported" 6
-log "#########################################################################\r\n" 6
+log "#########################################################################" $COLOR_CYAN
+log "Please note that this installation script is only intended for Linux" $COLOR_CYAN
+log "Only x86_64 platform are supported" $COLOR_CYAN
+log "#########################################################################\r\n" $COLOR_CYAN
 
 tput setaf 1;
 read -p "Are you sure you made changes to the .env file (y/n)? " answer
 case ${answer:0:1} in
     y|Y|yes|YES|Yes )
-      log "Continuing installation!\n" 2
+      log "Continuing installation...\n" $COLOR_CYAN
     ;;
     * )
       if [ -x "$(command -v nano)" ]; then
-        log "nano already installed, skipping." 2
+        log "nano already installed, skipping." $COLOR_CYAN
       else
         sudo apt update && sudo apt install nano -y
-        log "nano installed!" 2
+        log "nano installed!" $COLOR_GREEN
       fi
     nano .env
     ;;
