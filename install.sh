@@ -17,7 +17,7 @@ fi
 tput setaf 2;
 cat web/art/reNgine.txt
 
-log "\r\nBefore running this script, please make sure Docker is running and you have made changes to the `.env` file." 1
+log "\r\nBefore running this script, please make sure Docker is running and you have made changes to the '.env' file." 1
 log "Changing the postgres username & password from .env is highly recommended.\r\n" 1
 
 log "#########################################################################" 4
