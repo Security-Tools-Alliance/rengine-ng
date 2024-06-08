@@ -29,7 +29,7 @@ http_crawl: {
   #   'User-Agent': 'Mozilla/5.0'
   # },
   # 'threads': 30,
-  # 'follow_redirect': true
+  # 'follow_redirect': false
 }
 port_scan: {
   'enable_http_crawl': true,

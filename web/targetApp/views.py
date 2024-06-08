@@ -341,7 +341,7 @@ def target_summary(request, slug, id):
         .distinct()
     )
     context['subdomain_count'] = subdomains.count()
-    context['alive_count'] = subdomains.filter(http_status__exact=200).count()
+    context['alive_count'] = subdomains.filter(http_status__gt=0).count()
 
     # Endpoints
     endpoints = (
@@ -351,7 +351,7 @@ def target_summary(request, slug, id):
         .distinct()
     )
     context['endpoint_count'] = endpoints.count()
-    context['endpoint_alive_count'] = endpoints.filter(http_status__exact=200).count()
+    context['endpoint_alive_count'] = endpoints.filter(http_status__gt=0).count()
 
     # Vulnerabilities
     vulnerabilities = Vulnerability.objects.filter(target_domain__id=id)
