@@ -32,7 +32,7 @@ log "Uninstalling reNgine-ng..." $COLOR_CYAN
 if [ "$(whoami)" != "root" ]
   then
   log ""
-  log "Error uninstalling reNgine-ng, Please run this script as root!" $COLOR_RED
+  log "Error uninstalling reNgine-ng: please run this script as root!" $COLOR_RED
   log "Example: sudo ./uninstall.sh" $COLOR_RED
   exit
 fi
