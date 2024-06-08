@@ -158,20 +158,7 @@ def initiate_scan(
 		is_default=True,
 		subdomain=subdomain
 	)
-	if endpoint and endpoint.is_alive:
-		# TODO: add `root_endpoint` property to subdomain and simply do
-		# subdomain.root_endpoint = endpoint instead
-		logger.warning(f'Found subdomain root HTTP URL {endpoint.http_url}')
-		subdomain.http_url = endpoint.http_url
-		subdomain.http_status = endpoint.http_status
-		subdomain.response_time = endpoint.response_time
-		subdomain.page_title = endpoint.page_title
-		subdomain.content_type = endpoint.content_type
-		subdomain.content_length = endpoint.content_length
-		for tech in endpoint.techs.all():
-			subdomain.technologies.add(tech)
-		subdomain.save()
-
+	save_subdomain_metadata(subdomain, endpoint)
 
 	# Build Celery tasks, crafted according to the dependency graph below:
 	# subdomain_discovery --> port_scan --> fetch_url --> dir_file_fuzz
@@ -289,28 +276,6 @@ def initiate_subscan(
 		'results_dir': results_dir,
 		'url_filter': url_filter
 	}
-
-	# Create initial endpoints in DB: find domain HTTP endpoint so that HTTP
-	# crawling can start somewhere
-	base_url = f'{subdomain.name}{url_filter}' if url_filter else subdomain.name
-	endpoint, _ = save_endpoint(
-		base_url,
-		crawl=enable_http_crawl,
-		ctx=ctx,
-		subdomain=subdomain)
-	if endpoint and endpoint.is_alive:
-		# TODO: add `root_endpoint` property to subdomain and simply do
-		# subdomain.root_endpoint = endpoint instead
-		logger.warning(f'Found subdomain root HTTP URL {endpoint.http_url}')
-		subdomain.http_url = endpoint.http_url
-		subdomain.http_status = endpoint.http_status
-		subdomain.response_time = endpoint.response_time
-		subdomain.page_title = endpoint.page_title
-		subdomain.content_type = endpoint.content_type
-		subdomain.content_length = endpoint.content_length
-		for tech in endpoint.techs.all():
-			subdomain.technologies.add(tech)
-		subdomain.save()
 
 	# Build header + callback
 	workflow = method.si(ctx=ctx)
@@ -567,10 +532,21 @@ def subdomain_discovery(
 	if enable_http_crawl:
 		ctx['track'] = True
 		http_crawl(urls, ctx=ctx, is_ran_from_subdomain_scan=True)
-
-	# Find root subdomain endpoints
-	for subdomain in subdomains:
-		pass
+	else:
+		url_filter = ctx.get('url_filter')
+		enable_http_crawl = config.get(ENABLE_HTTP_CRAWL, DEFAULT_ENABLE_HTTP_CRAWL)
+		# Find root subdomain endpoints
+		for subdomain in subdomains:
+			subdomain_name = subdomain.strip()
+			# Create base endpoint (for scan)
+			http_url = f'{subdomain.name}{url_filter}' if url_filter else subdomain.name
+			endpoint, _ = save_endpoint(
+				http_url,
+				ctx=ctx,
+				is_default=True,
+				subdomain=subdomain
+			)
+			save_subdomain_metadata(subdomain, endpoint)
 
 	# Send notifications
 	subdomains_str = '\n'.join([f'• `{subdomain.name}`' for subdomain in subdomains])
@@ -2083,12 +2059,15 @@ def nuclei_individual_severity_module(self, cmd, severity, enable_http_crawl, sh
 		http_url = sanitize_url(line.get('matched-at'))
 		subdomain_name = get_subdomain_from_url(http_url)
 
-		# TODO: this should be get only
-		subdomain, _ = Subdomain.objects.get_or_create(
-			name=subdomain_name,
-			scan_history=self.scan,
-			target_domain=self.domain
-		)
+		try:
+			subdomain = Subdomain.objects.get(
+				name=subdomain_name,
+				scan_history=self.scan,
+				target_domain=self.domain
+			)
+		except:
+			logger.warning(f'Subdomain {subdomain_name} was not found in the db, skipping vulnerability scan.')
+			continue
 
 		# Look for duplicate vulnerabilities by excluding records that might change but are irrelevant.
 		object_comparison_exclude = ['response', 'curl_command', 'tags', 'references', 'cve_ids', 'cwe_ids']
@@ -2752,7 +2731,7 @@ def http_crawl(
 	if custom_header:
 		custom_header = generate_header_param(custom_header, 'common')
 	threads = config.get(THREADS, DEFAULT_THREADS)
-	follow_redirect = config.get(FOLLOW_REDIRECT, True)
+	follow_redirect = config.get(FOLLOW_REDIRECT, False)
 	self.output_path = None
 	input_path = f'{self.results_dir}/httpx_input.txt'
 	history_file = f'{self.results_dir}/commands.txt'
@@ -2813,7 +2792,7 @@ def http_crawl(
 		host = line.get('host', '')
 		content_length = line.get('content_length', 0)
 		http_status = line.get('status_code')
-		http_url, is_redirect = extract_httpx_url(line)
+		http_url, is_redirect = extract_httpx_url(line, follow_redirect)
 		page_title = line.get('title')
 		webserver = line.get('webserver')
 		cdn = line.get('cdn', False)
@@ -4243,9 +4222,8 @@ def process_httpx_response(line):
 	"""TODO: implement this"""
 
 
-def extract_httpx_url(line):
-	"""Extract final URL from httpx results. Always follow redirects to find
-	the last URL.
+def extract_httpx_url(line, follow_redirect):
+	"""Extract final URL from httpx results.
 
 	Args:
 		line (dict): URL data output by httpx.
@@ -4257,24 +4235,27 @@ def extract_httpx_url(line):
 	final_url = line.get('final_url')
 	location = line.get('location')
 	chain_status_codes = line.get('chain_status_codes', [])
+	http_url = line.get('url')
 
-	# Final URL is already looking nice, if it exists return it
-	if final_url:
+	# Final URL is already looking nice, if it exists and follow redirect is enabled, return it
+	if final_url and follow_redirect:
 		return final_url, False
-	http_url = line['url'] # fallback to url field
 
-	# Handle redirects manually
-	REDIRECT_STATUS_CODES = [301, 302]
-	is_redirect = (
-		status_code in REDIRECT_STATUS_CODES
-		or
-		any(x in REDIRECT_STATUS_CODES for x in chain_status_codes)
-	)
-	if is_redirect and location:
-		if location.startswith(('http', 'https')):
-			http_url = location
-		else:
-			http_url = f'{http_url}/{location.lstrip("/")}'
+	# Handle redirects manually if follow redirect is enabled
+	if follow_redirect:
+		REDIRECT_STATUS_CODES = [301, 302]
+		is_redirect = (
+			status_code in REDIRECT_STATUS_CODES
+			or
+			any(x in REDIRECT_STATUS_CODES for x in chain_status_codes)
+		)
+		if is_redirect and location:
+			if location.startswith(('http', 'https')):
+				http_url = location
+			else:
+				http_url = f'{http_url}/{location.lstrip("/")}'
+	else:
+		is_redirect = False
 
 	# Sanitize URL
 	http_url = sanitize_url(http_url)
@@ -4502,7 +4483,6 @@ def save_endpoint(
 		ctx['track'] = False
 		results = http_crawl(
 			urls=[http_url],
-			method='HEAD',
 			ctx=ctx)
 		if results:
 			endpoint_data = results[0]
@@ -4598,6 +4578,18 @@ def save_subdomain(subdomain_name, ctx={}):
 		subdomain.save()
 	return subdomain, created
 
+def save_subdomain_metadata(subdomain, endpoint):
+	if endpoint and endpoint.is_alive:
+		logger.info(f'Saving HTTP metadatas from {endpoint.http_url}')
+		subdomain.http_url = endpoint.http_url
+		subdomain.http_status = endpoint.http_status
+		subdomain.response_time = endpoint.response_time
+		subdomain.page_title = endpoint.page_title
+		subdomain.content_type = endpoint.content_type
+		subdomain.content_length = endpoint.content_length
+		for tech in endpoint.techs.all():
+			subdomain.technologies.add(tech)
+		subdomain.save()	
 
 def save_email(email_address, scan_history=None):
 	if not validators.email(email_address):
@@ -4682,12 +4674,26 @@ def save_imported_subdomains(subdomains, ctx={}):
 
 	logger.warning(f'Found {len(subdomains)} imported subdomains.')
 	with open(f'{results_dir}/from_imported.txt', 'w+') as output_file:
-		for name in subdomains:
-			subdomain_name = name.strip()
+		url_filter = ctx.get('url_filter')
+		enable_http_crawl = ctx.get('yaml_configuration').get(ENABLE_HTTP_CRAWL, DEFAULT_ENABLE_HTTP_CRAWL)
+		for subdomain in subdomains:
+			# Save valid imported subdomains
+			subdomain_name = subdomain.strip()
 			subdomain, _ = save_subdomain(subdomain_name, ctx=ctx)
 			subdomain.is_imported_subdomain = True
 			subdomain.save()
 			output_file.write(f'{subdomain}\n')
+
+			# Create base endpoint (for scan)
+			http_url = f'{subdomain.name}{url_filter}' if url_filter else subdomain.name
+			endpoint, _ = save_endpoint(
+				http_url,
+				ctx=ctx,
+				crawl=enable_http_crawl,
+				is_default=True,
+				subdomain=subdomain
+			)
+			save_subdomain_metadata(subdomain, endpoint)
 
 
 @app.task(name='query_reverse_whois', bind=False, queue='query_reverse_whois_queue')

@@ -81,7 +81,7 @@ reNgine-ng is not an ordinary reconnaissance suite; it's a game-changer! We've t
 
 🦾&nbsp;&nbsp; reNgine-ng has advanced reconnaissance capabilities, harnessing a range of open-source tools to deliver a comprehensive web application reconnaissance experience. With it's intuitive User Interface, it excels in subdomain discovery, pinpointing IP addresses and open ports, collecting endpoints, conducting directory and file fuzzing, capturing screenshots, and performing vulnerability scans. To summarize, it does end-to-end reconnaissance. With WHOIS identification and WAF detection, it offers deep insights into target domains. Additionally, reNgine-ng also identifies misconfigured S3 buckets and find interesting subdomains and URLS, based on specific keywords to helps you identify your next target, making it an go to tool for efficient reconnaissance.
 
-🗃️&nbsp; &nbsp; Say goodbye to recon data chaos! reNgine-ng seamlessly integrates with a database, providing you with unmatched data correlation and organization. Forgot the hassle of grepping through json, txt or csv files. Plus, our custom query language lets you filter reconnaissance data effortlessly using natural language like operators such as filtering all alive subdomains with `http_status=200` and also filter all subdomains that are alive and has admin in name `http_status=200&name=admin`
+🗃️&nbsp; &nbsp; Say goodbye to recon data chaos! reNgine-ng seamlessly integrates with a database, providing you with unmatched data correlation and organization. Forgot the hassle of grepping through json, txt or csv files. Plus, our custom query language lets you filter reconnaissance data effortlessly using natural language like operators such as filtering all alive subdomains with `http_status>0` and also filter all subdomains that are alive and has admin in name `http_status>0&name=admin`
 
 🔧&nbsp;&nbsp; reNgine-ng offers unparalleled flexibility through its highly configurable scan engines, based on a YAML-based configuration. It offers the freedom to create and customize recon scan engines based on any kind of requirement, users can tailor them to their specific objectives and preferences, from thread management to timeout settings and rate-limit configurations, everything is customizable. Additionally, reNgine-ng offers a range of pre-configured scan engines right out of the box, including Full Scan, Passive Scan, Screenshot Gathering, and the OSINT Scan Engine. These ready-to-use engines eliminate the need for extensive manual setup, aligning perfectly with reNgine-ng's core mission of simplifying the reconnaissance process and enabling users to effortlessly access the right reconnaissance data with minimal effort.
 
@@ -190,7 +190,7 @@ subdomain_discovery: {
 http_crawl: {
   # 'custom_header': 'Cookie: Test',
   # 'threads': 30,
-  # 'follow_redirect': true
+  # 'follow_redirect': false
 }
 port_scan: {
   'enable_http_crawl': true,
