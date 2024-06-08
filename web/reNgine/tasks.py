@@ -1549,11 +1549,20 @@ def waf_detection(self, ctx={}, description=None):
 		)
 
 		# Add waf info to Subdomain in DB
-		subdomain = get_subdomain_from_url(http_url)
-		logger.info(f'Wafw00f Subdomain : {subdomain}')
-		subdomain_query, _ = Subdomain.objects.get_or_create(scan_history=self.scan, name=subdomain)
-		subdomain_query.waf.add(waf)
-		subdomain_query.save()
+		subdomain_name = get_subdomain_from_url(http_url)
+		logger.info(f'Wafw00f Subdomain : {subdomain_name}')
+
+		try:
+			subdomain = Subdomain.objects.get(
+				name=subdomain_name,
+				scan_history=self.scan,
+			)
+		except:
+			logger.warning(f'Subdomain {subdomain_name} was not found in the db, skipping waf detection for this domain.')
+			continue
+
+		subdomain.waf.add(waf)
+		subdomain.save()
 	return wafs
 
 
@@ -2066,7 +2075,7 @@ def nuclei_individual_severity_module(self, cmd, severity, enable_http_crawl, sh
 				target_domain=self.domain
 			)
 		except:
-			logger.warning(f'Subdomain {subdomain_name} was not found in the db, skipping vulnerability scan.')
+			logger.warning(f'Subdomain {subdomain_name} was not found in the db, skipping vulnerability scan for this subdomain.')
 			continue
 
 		# Look for duplicate vulnerabilities by excluding records that might change but are irrelevant.
@@ -2483,12 +2492,16 @@ def dalfox_xss_scan(self, urls=[], ctx={}, description=None):
 		http_url = sanitize_url(line.get('data'))
 		subdomain_name = get_subdomain_from_url(http_url)
 
-		# TODO: this should be get only
-		subdomain, _ = Subdomain.objects.get_or_create(
-			name=subdomain_name,
-			scan_history=self.scan,
-			target_domain=self.domain
-		)
+		try:
+			subdomain = Subdomain.objects.get(
+				name=subdomain_name,
+				scan_history=self.scan,
+				target_domain=self.domain
+			)
+		except:
+			logger.warning(f'Subdomain {subdomain_name} was not found in the db, skipping dalfox scan for this subdomain.')
+			continue
+
 		endpoint, _ = save_endpoint(
 			http_url,
 			crawl=True,
@@ -2605,11 +2618,15 @@ def crlfuzz_scan(self, urls=[], ctx={}, description=None):
 		http_url = sanitize_url(url)
 		subdomain_name = get_subdomain_from_url(http_url)
 
-		subdomain, _ = Subdomain.objects.get_or_create(
-			name=subdomain_name,
-			scan_history=self.scan,
-			target_domain=self.domain
-		)
+		try:
+			subdomain = Subdomain.objects.get(
+				name=subdomain_name,
+				scan_history=self.scan,
+				target_domain=self.domain
+			)
+		except:
+			logger.warning(f'Subdomain {subdomain_name} was not found in the db, skipping crlfuzz scan for this subdomain.')
+			continue
 
 		endpoint, _ = save_endpoint(
 			http_url,
@@ -4545,13 +4562,14 @@ def save_subdomain(subdomain_name, ctx={}):
 	scan_id = ctx.get('scan_history_id')
 	subscan_id = ctx.get('subscan_id')
 	out_of_scope_subdomains = ctx.get('out_of_scope_subdomains', [])
+	subdomain_name = subdomain_name.lower()
 	valid_domain = (
 		validators.domain(subdomain_name) or
 		validators.ipv4(subdomain_name) or
 		validators.ipv6(subdomain_name)
 	)
 	if not valid_domain:
-		logger.error(f'{subdomain_name} is not an invalid domain. Skipping.')
+		logger.error(f'{subdomain_name} is not a valid domain. Skipping.')
 		return None, False
 
 	if subdomain_name in out_of_scope_subdomains:
@@ -4571,7 +4589,7 @@ def save_subdomain(subdomain_name, ctx={}):
 		target_domain=domain,
 		name=subdomain_name)
 	if created:
-		# logger.warning(f'Found new subdomain {subdomain_name}')
+		logger.info(f'Found new subdomain {subdomain_name}')
 		subdomain.discovered_date = timezone.now()
 		if subscan_id:
 			subdomain.subdomain_subscan_ids.add(subscan_id)
@@ -4596,8 +4614,8 @@ def save_email(email_address, scan_history=None):
 		logger.info(f'Email {email_address} is invalid. Skipping.')
 		return None, False
 	email, created = Email.objects.get_or_create(address=email_address)
-	# if created:
-	# 	logger.warning(f'Found new email address {email_address}')
+	if created:
+		logger.info(f'Found new email address {email_address}')
 
 	# Add email to ScanHistory
 	if scan_history:
@@ -4611,8 +4629,8 @@ def save_employee(name, designation, scan_history=None):
 	employee, created = Employee.objects.get_or_create(
 		name=name,
 		designation=designation)
-	# if created:
-	# 	logger.warning(f'Found new employee {name}')
+	if created:
+		logger.warning(f'Found new employee {name}')
 
 	# Add employee to ScanHistory
 	if scan_history:
@@ -4627,8 +4645,8 @@ def save_ip_address(ip_address, subdomain=None, subscan=None, **kwargs):
 		logger.info(f'IP {ip_address} is not a valid IP. Skipping.')
 		return None, False
 	ip, created = IpAddress.objects.get_or_create(address=ip_address)
-	# if created:
-	# 	logger.warning(f'Found new IP {ip_address}')
+	if created:
+		logger.warning(f'Found new IP {ip_address}')
 
 	# Set extra attributes
 	for key, value in kwargs.items():
