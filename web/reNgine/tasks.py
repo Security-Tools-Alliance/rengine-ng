@@ -594,8 +594,8 @@ def osint(self, host=None, ctx={}, description=None):
 	grouped_tasks = []
 
 	if 'discover' in config:
+		logger.info('Starting OSINT Discovery')
 		ctx['track'] = False
-		# results = osint_discovery(host=host, ctx=ctx)
 		_task = osint_discovery.si(
 			config=config,
 			host=self.scan.domain.name,
@@ -607,6 +607,7 @@ def osint(self, host=None, ctx={}, description=None):
 		grouped_tasks.append(_task)
 
 	if OSINT_DORK in config or OSINT_CUSTOM_DORK in config:
+		logger.info('Starting OSINT Dorking')
 		_task = dorking.si(
 			config=config,
 			host=self.scan.domain.name,
@@ -622,12 +623,6 @@ def osint(self, host=None, ctx={}, description=None):
 		time.sleep(5)
 
 	logger.info('OSINT Tasks finished...')
-
-	# with open(self.output_path, 'w') as f:
-	# 	json.dump(results, f, indent=4)
-	#
-	# return results
-
 
 @app.task(name='osint_discovery', queue='osint_discovery_queue', bind=False)
 def osint_discovery(config, host, scan_history_id, activity_id, results_dir, ctx={}):
@@ -653,6 +648,7 @@ def osint_discovery(config, host, scan_history_id, activity_id, results_dir, ctx
 
 	# Get and save meta info
 	if 'metainfo' in osint_lookup:
+		logger.info('Saving Metainfo')
 		if osint_intensity == 'normal':
 			meta_dict = DottedDict({
 				'osint_target': host,
@@ -679,6 +675,7 @@ def osint_discovery(config, host, scan_history_id, activity_id, results_dir, ctx
 	grouped_tasks = []
 
 	if 'emails' in osint_lookup:
+		logger.info('Lookup for emails')
 		_task = h8mail.si(
 			config=config,
 			host=host,
@@ -690,6 +687,7 @@ def osint_discovery(config, host, scan_history_id, activity_id, results_dir, ctx
 		grouped_tasks.append(_task)
 
 	if 'employees' in osint_lookup:
+		logger.info('Lookup for employees')
 		ctx['track'] = False
 		_task = theHarvester.si(
 			config=config,
