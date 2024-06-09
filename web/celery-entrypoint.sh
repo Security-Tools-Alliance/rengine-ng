@@ -154,6 +154,7 @@ else
   echo "Updating CMSeeK"
   git -C /usr/src/github/CMSeeK/ pull --quiet
 fi
+echo "Installing dependencies..."
 python3 -m pip -q install -r /usr/src/github/CMSeeK/requirements.txt
 
 # clone ctfr
