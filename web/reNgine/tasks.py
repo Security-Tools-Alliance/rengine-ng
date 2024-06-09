@@ -534,7 +534,7 @@ def subdomain_discovery(
 	# Bulk crawl subdomains
 	if enable_http_crawl:
 		ctx['track'] = True
-		http_crawl(urls, ctx=ctx, is_ran_from_subdomain_scan=True)
+		http_crawl(urls, ctx=ctx, update_subdomain_metadatas=True)
 	else:
 		url_filter = ctx.get('url_filter')
 		enable_http_crawl = config.get(ENABLE_HTTP_CRAWL, DEFAULT_ENABLE_HTTP_CRAWL)
@@ -2709,7 +2709,7 @@ def http_crawl(
 		ctx={},
 		track=True,
 		description=None,
-		is_ran_from_subdomain_scan=False,
+		update_subdomain_metadatas=False,
 		should_remove_duplicate_endpoints=True,
 		duplicate_removal_fields=[]):
 	"""Use httpx to query HTTP URLs for important info like page titles, http
@@ -2728,8 +2728,6 @@ def http_crawl(
 		list: httpx results.
 	"""
 	logger.info('Initiating HTTP Crawl')
-	if is_ran_from_subdomain_scan:
-		logger.info('Running From Subdomain Scan...')
 	cmd = '/go/bin/httpx'
 	config = self.yaml_configuration.get(HTTP_CRAWL) or {}
 	custom_header = config.get(CUSTOM_HEADER) or self.yaml_configuration.get(CUSTOM_HEADER)
@@ -2746,12 +2744,27 @@ def http_crawl(
 		with open(input_path, 'w') as f:
 			f.write('\n'.join(urls))
 	else:
-		urls = get_http_urls(
+		# No url provided, so it's a subscan launched from subdomain list
+		update_subdomain_metadatas = True
+
+		# Append the base subdomain to get subdomain info if task is launched directly from subscan
+		subdomain_id = ctx.get('subdomain_id')
+		if subdomain_id:
+			subdomain = Subdomain.objects.filter(id=ctx.get('subdomain_id')).first()
+			urls.append(subdomain.name)
+
+		# Get subdomain endpoints to crawl the entire list
+		http_urls = get_http_urls(
 			is_uncrawled=not recrawl,
 			write_filepath=input_path,
 			ctx=ctx
 		)
-		# logger.debug(urls)
+
+		# Append endpoints
+		if http_urls:
+			urls.append()
+
+		logger.debug(urls)
 
 	# If no URLs found, skip it
 	if not urls:
@@ -2811,7 +2824,7 @@ def http_crawl(
 			if rt[-2:] == 'ms':
 				response_time = response_time / 1000
 
-		# Create Subdomain object in DB
+		# Create/get Subdomain object in DB
 		subdomain_name = get_subdomain_from_url(http_url)
 		subdomain, _ = save_subdomain(subdomain_name, ctx=ctx)
 		if not isinstance(subdomain, Subdomain):
@@ -2824,7 +2837,7 @@ def http_crawl(
 			crawl=False,
 			ctx=ctx,
 			subdomain=subdomain,
-			is_default=is_ran_from_subdomain_scan
+			is_default=update_subdomain_metadatas
 		)
 		if not endpoint:
 			continue
@@ -2854,9 +2867,6 @@ def http_crawl(
 		for technology in techs:
 			tech, _ = Technology.objects.get_or_create(name=technology)
 			endpoint.techs.add(tech)
-			if is_ran_from_subdomain_scan:
-				subdomain.technologies.add(tech)
-				subdomain.save()
 			endpoint.save()
 		techs_str = ', '.join([f'`{tech}`' for tech in techs])
 		self.notify(
@@ -2887,22 +2897,10 @@ def http_crawl(
 				fields={'IPs': f'• `{ip.address}`'},
 				add_meta_info=False)
 
-		# Save subdomain and endpoint
-		if is_ran_from_subdomain_scan:
-			# save subdomain stuffs
-			subdomain.http_url = http_url
-			subdomain.http_status = http_status
-			subdomain.page_title = page_title
-			subdomain.content_length = content_length
-			subdomain.webserver = webserver
-			subdomain.response_time = response_time
-			subdomain.content_type = content_type
-			subdomain.cname = ','.join(cname)
-			subdomain.is_cdn = cdn
-			if cdn:
-				subdomain.cdn_name = line.get('cdn_name')
-			subdomain.save()
-		endpoint.save()
+		# Save subdomain metadatas
+		if update_subdomain_metadatas:
+			save_subdomain_metadata(subdomain, endpoint, line)
+
 		endpoint_ids.append(endpoint.id)
 
 	if should_remove_duplicate_endpoints:
@@ -4583,7 +4581,7 @@ def save_subdomain(subdomain_name, ctx={}):
 		subdomain.save()
 	return subdomain, created
 
-def save_subdomain_metadata(subdomain, endpoint):
+def save_subdomain_metadata(subdomain, endpoint, extra_datas={}):
 	if endpoint and endpoint.is_alive:
 		logger.info(f'Saving HTTP metadatas from {endpoint.http_url}')
 		subdomain.http_url = endpoint.http_url
@@ -4592,6 +4590,14 @@ def save_subdomain_metadata(subdomain, endpoint):
 		subdomain.page_title = endpoint.page_title
 		subdomain.content_type = endpoint.content_type
 		subdomain.content_length = endpoint.content_length
+		subdomain.webserver = endpoint.webserver
+		cname = extra_datas.get('cname')
+		if cname:
+			subdomain.cname = ','.join(cname)
+		cdn = extra_datas.get('cdn')
+		if cdn:
+			subdomain.is_cdn = ','.join(cdn)
+			subdomain.cdn_name = extra_datas.get('cdn_name')
 		for tech in endpoint.techs.all():
 			subdomain.technologies.add(tech)
 		subdomain.save()	
