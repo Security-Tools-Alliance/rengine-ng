@@ -805,6 +805,8 @@ function get_dorks(scan_id){
 			return
 		}
 		// unhide div
+		$("#dork_type_vertical_tablist").empty();
+		$("#dork_tab_content").empty();
 		$("#dorking_result_card").show();
 		var is_first = true;
 		for (var val in data['dorks']){
