@@ -524,6 +524,9 @@ def subdomain_discovery(
 
 		# Add subdomain
 		subdomain, _ = save_subdomain(subdomain_name, ctx=ctx)
+		if not isinstance(subdomain, Subdomain):
+			logger.error(f"Invalid subdomain encountered: {subdomain}")
+			continue
 		subdomain_count += 1
 		subdomains.append(subdomain)
 		urls.append(subdomain.name)
@@ -591,8 +594,8 @@ def osint(self, host=None, ctx={}, description=None):
 	grouped_tasks = []
 
 	if 'discover' in config:
+		logger.info('Starting OSINT Discovery')
 		ctx['track'] = False
-		# results = osint_discovery(host=host, ctx=ctx)
 		_task = osint_discovery.si(
 			config=config,
 			host=self.scan.domain.name,
@@ -604,6 +607,7 @@ def osint(self, host=None, ctx={}, description=None):
 		grouped_tasks.append(_task)
 
 	if OSINT_DORK in config or OSINT_CUSTOM_DORK in config:
+		logger.info('Starting OSINT Dorking')
 		_task = dorking.si(
 			config=config,
 			host=self.scan.domain.name,
@@ -619,12 +623,6 @@ def osint(self, host=None, ctx={}, description=None):
 		time.sleep(5)
 
 	logger.info('OSINT Tasks finished...')
-
-	# with open(self.output_path, 'w') as f:
-	# 	json.dump(results, f, indent=4)
-	#
-	# return results
-
 
 @app.task(name='osint_discovery', queue='osint_discovery_queue', bind=False)
 def osint_discovery(config, host, scan_history_id, activity_id, results_dir, ctx={}):
@@ -650,6 +648,7 @@ def osint_discovery(config, host, scan_history_id, activity_id, results_dir, ctx
 
 	# Get and save meta info
 	if 'metainfo' in osint_lookup:
+		logger.info('Saving Metainfo')
 		if osint_intensity == 'normal':
 			meta_dict = DottedDict({
 				'osint_target': host,
@@ -676,6 +675,7 @@ def osint_discovery(config, host, scan_history_id, activity_id, results_dir, ctx
 	grouped_tasks = []
 
 	if 'emails' in osint_lookup:
+		logger.info('Lookup for emails')
 		_task = h8mail.si(
 			config=config,
 			host=host,
@@ -687,6 +687,7 @@ def osint_discovery(config, host, scan_history_id, activity_id, results_dir, ctx
 		grouped_tasks.append(_task)
 
 	if 'employees' in osint_lookup:
+		logger.info('Lookup for employees')
 		ctx['track'] = False
 		_task = theHarvester.si(
 			config=config,
@@ -1064,6 +1065,9 @@ def theHarvester(config, host, scan_history_id, activity_id, results_dir, ctx={}
 		http_url = split[0]
 		subdomain_name = get_subdomain_from_url(http_url)
 		subdomain, _ = save_subdomain(subdomain_name, ctx=ctx)
+		if not isinstance(subdomain, Subdomain):
+			logger.error(f"Invalid subdomain encountered: {subdomain}")
+			continue
 		endpoint, _ = save_endpoint(
 			http_url,
 			crawl=False,
@@ -1936,7 +1940,8 @@ def fetch_url(self, urls=[], ctx={}, description=None):
 			http_url = sanitize_url(url)
 			subdomain_name = get_subdomain_from_url(http_url)
 			subdomain, _ = save_subdomain(subdomain_name, ctx=ctx)
-			if not subdomain:
+			if not isinstance(subdomain, Subdomain):
+				logger.error(f"Invalid subdomain encountered: {subdomain}")
 				continue
 			endpoint, created = save_endpoint(
 				http_url,
@@ -2809,8 +2814,8 @@ def http_crawl(
 		# Create Subdomain object in DB
 		subdomain_name = get_subdomain_from_url(http_url)
 		subdomain, _ = save_subdomain(subdomain_name, ctx=ctx)
-
-		if not subdomain:
+		if not isinstance(subdomain, Subdomain):
+			logger.error(f"Invalid subdomain encountered: {subdomain}")
 			continue
 
 		# Save default HTTP URL to endpoint object in DB
@@ -4680,6 +4685,9 @@ def save_imported_subdomains(subdomains, ctx={}):
 			# Save valid imported subdomains
 			subdomain_name = subdomain.strip()
 			subdomain, _ = save_subdomain(subdomain_name, ctx=ctx)
+			if not isinstance(subdomain, Subdomain):
+				logger.error(f"Invalid subdomain encountered: {subdomain}")
+				continue
 			subdomain.is_imported_subdomain = True
 			subdomain.save()
 			output_file.write(f'{subdomain}\n')
