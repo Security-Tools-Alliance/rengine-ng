@@ -19,8 +19,8 @@ Package: firefox
 Pin: version 1:1snap1-0ubuntu2
 Pin-Priority: -1
 ' | tee /etc/apt/preferences.d/mozilla-firefox
-apt-get update
-apt-get install firefox -y
+apt update
+apt install firefox -y
 
 # Temporary fix for whatportis bug - See https://github.com/yogeshojha/rengine/issues/984
 sed -i 's/purge()/truncate()/g' /usr/local/lib/python3.10/dist-packages/whatportis/cli.py
