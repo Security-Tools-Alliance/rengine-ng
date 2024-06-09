@@ -524,6 +524,9 @@ def subdomain_discovery(
 
 		# Add subdomain
 		subdomain, _ = save_subdomain(subdomain_name, ctx=ctx)
+		if not isinstance(subdomain, Subdomain):
+			logger.error(f"Invalid subdomain encountered: {subdomain}")
+			continue
 		subdomain_count += 1
 		subdomains.append(subdomain)
 		urls.append(subdomain.name)
@@ -1064,6 +1067,9 @@ def theHarvester(config, host, scan_history_id, activity_id, results_dir, ctx={}
 		http_url = split[0]
 		subdomain_name = get_subdomain_from_url(http_url)
 		subdomain, _ = save_subdomain(subdomain_name, ctx=ctx)
+		if not isinstance(subdomain, Subdomain):
+			logger.error(f"Invalid subdomain encountered: {subdomain}")
+			continue
 		endpoint, _ = save_endpoint(
 			http_url,
 			crawl=False,
@@ -1936,7 +1942,8 @@ def fetch_url(self, urls=[], ctx={}, description=None):
 			http_url = sanitize_url(url)
 			subdomain_name = get_subdomain_from_url(http_url)
 			subdomain, _ = save_subdomain(subdomain_name, ctx=ctx)
-			if not subdomain:
+			if not isinstance(subdomain, Subdomain):
+				logger.error(f"Invalid subdomain encountered: {subdomain}")
 				continue
 			endpoint, created = save_endpoint(
 				http_url,
@@ -2809,8 +2816,8 @@ def http_crawl(
 		# Create Subdomain object in DB
 		subdomain_name = get_subdomain_from_url(http_url)
 		subdomain, _ = save_subdomain(subdomain_name, ctx=ctx)
-
-		if not subdomain:
+		if not isinstance(subdomain, Subdomain):
+			logger.error(f"Invalid subdomain encountered: {subdomain}")
 			continue
 
 		# Save default HTTP URL to endpoint object in DB
@@ -4680,6 +4687,9 @@ def save_imported_subdomains(subdomains, ctx={}):
 			# Save valid imported subdomains
 			subdomain_name = subdomain.strip()
 			subdomain, _ = save_subdomain(subdomain_name, ctx=ctx)
+			if not isinstance(subdomain, Subdomain):
+				logger.error(f"Invalid subdomain encountered: {subdomain}")
+				continue
 			subdomain.is_imported_subdomain = True
 			subdomain.save()
 			output_file.write(f'{subdomain}\n')
