@@ -48,11 +48,19 @@ case ${answer:0:1} in
       log "\nContinuing installation!\n" $COLOR_GREEN
     ;;
     * )
-      if [ -x "$(command -v nano)" ]; then
-        log "nano already installed, skipping." $COLOR_GREEN
+      if ! command -v nano &> /dev/null; then
+        . /etc/os-release
+        case "$ID" in
+          ubuntu|debian) sudo apt update && sudo apt install -y nano ;;
+          fedora) sudo dnf install -y nano ;;
+          centos|rhel) sudo yum install -y nano ;;
+          arch) sudo pacman -Sy nano ;;
+          opensuse|suse) sudo zypper install -y nano ;;
+          *) log "Unsupported Linux distribution. Please install nano manually." $COLOR_RED; exit 1 ;;
+        esac
+        [ $? -eq 0 ] && log "nano installed!" $COLOR_GREEN || { log "Failed to install nano." $COLOR_RED; exit 1; }
       else
-        sudo apt update && sudo apt install nano -y
-        log "nano installed!" $COLOR_GREEN
+        log "nano already installed, skipping." $COLOR_GREEN
       fi
     nano .env
     ;;
@@ -61,9 +69,18 @@ esac
 log "Installing reNgine-ng and its dependencies..." $COLOR_CYAN
 
 log "Installing curl..." $COLOR_CYAN
-if ! command -v curl 2> /dev/null; then
-  apt update && apt install curl -y
-  log "CURL installed!" $COLOR_GREEN
+
+if ! command -v curl &> /dev/null; then
+  . /etc/os-release
+  case "$ID" in
+    ubuntu|debian) sudo apt update && sudo apt install -y curl ;;
+    fedora) sudo dnf install -y curl ;;
+    centos|rhel) sudo yum install -y curl ;;
+    arch) sudo pacman -Sy curl ;;
+    opensuse|suse) sudo zypper install -y curl ;;
+    *) log "Unsupported Linux distribution. Please install curl manually." $COLOR_RED; exit 1 ;;
+  esac
+  [ $? -eq 0 ] && log "CURL installed!" $COLOR_GREEN || { log "Failed to install CURL." $COLOR_RED; exit 1; }
 else
   log "CURL already installed, skipping." $COLOR_GREEN
 fi
@@ -86,10 +103,17 @@ else
   log "Docker Compose already installed, skipping." $COLOR_GREEN
 fi
 
-log "Installing make..." $COLOR_CYAN
-if ! command -v make 2> /dev/null; then
-  apt install make -y
-  log "make installed!" $COLOR_GREEN
+if ! command -v make &> /dev/null; then
+  . /etc/os-release
+  case "$ID" in
+    ubuntu|debian) sudo apt update && sudo apt install -y make ;;
+    fedora) sudo dnf install -y make ;;
+    centos|rhel) sudo yum install -y make ;;
+    arch) sudo pacman -Sy make ;;
+    opensuse|suse) sudo zypper install -y make ;;
+    *) log "Unsupported Linux distribution. Please install make manually." $COLOR_RED; exit 1 ;;
+  esac
+  [ $? -eq 0 ] && log "make installed!" $COLOR_GREEN || { log "Failed to install make." $COLOR_RED; exit 1; }
 else
   log "make already installed, skipping." $COLOR_GREEN
 fi
