@@ -25,9 +25,6 @@ log() {
 
 cat ../web/art/reNgine.txt
 
-log ""
-log "Uninstalling reNgine-ng..." $COLOR_CYAN
-
 # Check for root privileges
 if [ "$(whoami)" != "root" ]
   then
@@ -37,6 +34,8 @@ if [ "$(whoami)" != "root" ]
   exit
 fi
 
+log ""
+log "Uninstalling reNgine-ng..." $COLOR_CYAN
 log ""
 
 tput setaf 1
