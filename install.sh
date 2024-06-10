@@ -45,7 +45,7 @@ tput setaf 1;
 read -p "Are you sure you made changes to the .env file (y/n)? " answer
 case ${answer:0:1} in
     y|Y|yes|YES|Yes )
-      log "Continuing installation!\n" $COLOR_GREEN
+      log "\nContinuing installation!\n" $COLOR_GREEN
     ;;
     * )
       if [ -x "$(command -v nano)" ]; then
@@ -81,7 +81,7 @@ fi
 log "Installing Docker Compose..." $COLOR_CYAN
 
 if ! command -v docker compose 2> /dev/null; then
-  curl -L "https://github.com/docker/compose/releases/download/v2.27.1/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+  curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
   chmod +x /usr/local/bin/docker-compose
   ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose
   log "Docker Compose installed!" $COLOR_GREEN
