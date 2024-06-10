@@ -61,7 +61,6 @@ esac
 log "Installing reNgine-ng and its dependencies..." $COLOR_CYAN
 
 log "Installing curl..." $COLOR_CYAN
-
 if ! command -v curl 2> /dev/null; then
   apt update && apt install curl -y
   log "CURL installed!" $COLOR_GREEN
@@ -70,7 +69,6 @@ else
 fi
 
 log "Installing Docker..." $COLOR_CYAN
-
 if ! command -v docker 2> /dev/null; then
   curl -fsSL https://get.docker.com -o get-docker.sh && sh get-docker.sh
   log "Docker installed!" $COLOR_GREEN
@@ -79,7 +77,6 @@ else
 fi
 
 log "Installing Docker Compose..." $COLOR_CYAN
-
 if ! command -v docker compose 2> /dev/null; then
   curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
   chmod +x /usr/local/bin/docker-compose
@@ -90,7 +87,6 @@ else
 fi
 
 log "Installing make..." $COLOR_CYAN
-
 if ! command -v make 2> /dev/null; then
   apt install make -y
   log "make installed!" $COLOR_GREEN
@@ -102,7 +98,7 @@ log "Checking Docker status..." $COLOR_CYAN
 if docker info >/dev/null 2>&1; then
   log "Docker is running." $COLOR_GREEN
 else
-  log "Docker is not running. Please run docker and try again." $COLOR_RED
+  log "Docker is not running. Please run Docker and try again." $COLOR_RED
   log "You can run Docker service using: sudo systemctl start docker" $COLOR_RED
   exit 1
 fi
@@ -111,12 +107,11 @@ log "Installing reNgine-ng, please be patient as it could take a while..." $COLO
 sleep 5
 
 log "Generating certificates and building Docker images..." $COLOR_CYAN
-make certs && make build && log "reNgine-ng is built" $COLOR_GREEN || { log "reNgine-ng installation failed!" 1; exit 1; }
+make certs && make build && log "reNgine-ng is built" $COLOR_GREEN || { log "reNgine-ng installation failed!" $COLOR_RED; exit 1; }
 
 log "Docker containers starting, please wait as Celery container could take a while..." $COLOR_CYAN
 sleep 5
 make up && log "reNgine-ng is installed!" $COLOR_GREEN || { log "reNgine-ng installation failed!" $COLOR_RED; exit 1; }
-
 
 log "Creating an account..." $COLOR_CYAN
 make username

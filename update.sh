@@ -23,7 +23,6 @@ log() {
   tput sgr0  # Reset text color
 }
 
-log
 read -p "Do you want to apply your local changes after updating? (y/n) " answer
 
 if [[ $answer == "y" ]]; then
