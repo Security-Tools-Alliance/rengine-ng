@@ -1,5 +1,7 @@
 import logging
 import re
+import os.path
+from pathlib import Path
 import socket
 import subprocess
 
@@ -20,6 +22,7 @@ from recon_note.models import *
 from reNgine.celery import app
 from reNgine.common_func import *
 from reNgine.definitions import ABORTED_TASK
+from reNgine.settings import RENGINE_TOOL_PATH
 from reNgine.tasks import *
 from reNgine.gpt import GPTAttackSuggestionGenerator
 from reNgine.utilities import is_safe_path
@@ -981,7 +984,7 @@ class UpdateTool(APIView):
 		elif update_command == 'git pull':
 			tool_name = tool.install_command[:-1] if tool.install_command[-1] == '/' else tool.install_command
 			tool_name = tool_name.split('/')[-1]
-			update_command = 'cd /usr/src/github/' + tool_name + ' && git pull && cd -'
+			update_command = 'cd ' + str(Path(RENGINE_TOOL_GITHUB_PATH) / tool_name) + ' && git pull && cd -'
 
 		run_command(update_command)
 		run_command.apply_async(args=(update_command,))
@@ -1160,7 +1163,7 @@ class CMSDetector(APIView):
 		response = {'status': False}
 		try:
 			response = {}
-			cms_detector_command = f'python3 /usr/src/github/CMSeeK/cmseek.py'
+			cms_detector_command = f'cmseek'
 			cms_detector_command += ' --random-agent --batch --follow-redirect'
 			cms_detector_command += f' -u {url}'
 
@@ -1255,7 +1258,7 @@ class GetFileContents(APIView):
 		response['status'] = False
 
 		if 'nuclei_config' in req.query_params:
-			path = "/root/.config/nuclei/config.yaml"
+			path = str(Path.home() / ".config" / "nuclei" / "config.yaml")
 			if not os.path.exists(path):
 				run_command(f'touch {path}')
 				response['message'] = 'File Created!'
@@ -1265,7 +1268,7 @@ class GetFileContents(APIView):
 			return Response(response)
 
 		if 'subfinder_config' in req.query_params:
-			path = "/root/.config/subfinder/config.yaml"
+			path = str(Path.home() / ".config" / "subfinder" /" config.yaml")
 			if not os.path.exists(path):
 				run_command(f'touch {path}')
 				response['message'] = 'File Created!'
@@ -1275,7 +1278,7 @@ class GetFileContents(APIView):
 			return Response(response)
 
 		if 'naabu_config' in req.query_params:
-			path = "/root/.config/naabu/config.yaml"
+			path = str(Path.home() / ".config" / "naabu" / "config.yaml")
 			if not os.path.exists(path):
 				run_command(f'touch {path}')
 				response['message'] = 'File Created!'
@@ -1285,7 +1288,7 @@ class GetFileContents(APIView):
 			return Response(response)
 
 		if 'theharvester_config' in req.query_params:
-			path = "/usr/src/github/theHarvester/api-keys.yaml"
+			path = str(Path(RENGINE_TOOL_PATH) / 'theHarvester' / 'api-keys.yaml')
 			if not os.path.exists(path):
 				run_command(f'touch {path}')
 				response['message'] = 'File Created!'
@@ -1295,7 +1298,7 @@ class GetFileContents(APIView):
 			return Response(response)
 
 		if 'amass_config' in req.query_params:
-			path = "/root/.config/amass.ini"
+			path = str(Path.home() / ".config" / "amass.ini")
 			if not os.path.exists(path):
 				run_command(f'touch {path}')
 				response['message'] = 'File Created!'
@@ -1305,8 +1308,8 @@ class GetFileContents(APIView):
 			return Response(response)
 
 		if 'gf_pattern' in req.query_params:
-			basedir = '/root/.gf'
-			path = f'/root/.gf/{name}.json'
+			basedir = str(Path.home() / '.gf')
+			path = str(Path.home() / '.gf' / f'{name}.json')
 			if is_safe_path(basedir, path) and os.path.exists(path):
 				content = open(path, "r").read()
 				response['status'] = True
@@ -1318,8 +1321,8 @@ class GetFileContents(APIView):
 
 
 		if 'nuclei_template' in req.query_params:
-			safe_dir = '/root/nuclei-templates'
-			path = f'/root/nuclei-templates/{name}'
+			safe_dir = str(Path.home() / 'nuclei-templates')
+			path = str(Path.home() / 'nuclei-templates' / f'{name}')
 			if is_safe_path(safe_dir, path) and os.path.exists(path):
 				content = open(path.format(name), "r").read()
 				response['status'] = True
