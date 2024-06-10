@@ -81,7 +81,7 @@ reNgine-ng is not an ordinary reconnaissance suite; it's a game-changer! We've t
 
 🦾&nbsp;&nbsp; reNgine-ng has advanced reconnaissance capabilities, harnessing a range of open-source tools to deliver a comprehensive web application reconnaissance experience. With it's intuitive User Interface, it excels in subdomain discovery, pinpointing IP addresses and open ports, collecting endpoints, conducting directory and file fuzzing, capturing screenshots, and performing vulnerability scans. To summarize, it does end-to-end reconnaissance. With WHOIS identification and WAF detection, it offers deep insights into target domains. Additionally, reNgine-ng also identifies misconfigured S3 buckets and find interesting subdomains and URLS, based on specific keywords to helps you identify your next target, making it an go to tool for efficient reconnaissance.
 
-🗃️&nbsp; &nbsp; Say goodbye to recon data chaos! reNgine-ng seamlessly integrates with a database, providing you with unmatched data correlation and organization. Forgot the hassle of grepping through json, txt or csv files. Plus, our custom query language lets you filter reconnaissance data effortlessly using natural language like operators such as filtering all alive subdomains with `http_status=200` and also filter all subdomains that are alive and has admin in name `http_status=200&name=admin`
+🗃️&nbsp; &nbsp; Say goodbye to recon data chaos! reNgine-ng seamlessly integrates with a database, providing you with unmatched data correlation and organization. Forgot the hassle of grepping through json, txt or csv files. Plus, our custom query language lets you filter reconnaissance data effortlessly using natural language like operators such as filtering all alive subdomains with `http_status>0` and also filter all subdomains that are alive and has admin in name `http_status>0&name=admin`
 
 🔧&nbsp;&nbsp; reNgine-ng offers unparalleled flexibility through its highly configurable scan engines, based on a YAML-based configuration. It offers the freedom to create and customize recon scan engines based on any kind of requirement, users can tailor them to their specific objectives and preferences, from thread management to timeout settings and rate-limit configurations, everything is customizable. Additionally, reNgine-ng offers a range of pre-configured scan engines right out of the box, including Full Scan, Passive Scan, Screenshot Gathering, and the OSINT Scan Engine. These ready-to-use engines eliminate the need for extensive manual setup, aligning perfectly with reNgine-ng's core mission of simplifying the reconnaissance process and enabling users to effortlessly access the right reconnaissance data with minimal effort.
 
@@ -190,7 +190,7 @@ subdomain_discovery: {
 http_crawl: {
   # 'custom_header': 'Cookie: Test',
   # 'threads': 30,
-  # 'follow_redirect': true
+  # 'follow_redirect': false
 }
 port_scan: {
   'enable_http_crawl': true,
@@ -397,6 +397,39 @@ Contributions are what make the open-source community such an amazing place to l
 See the [Contributing Guide](.github/CONTRIBUTING.md) to get started.
 
 You can also [join our Discord channel #development](https://discord.gg/VUS8P9zF) for any development related questions.
+
+### Submitting issues
+
+You can submit issues related to this project, but you should do it in a way that helps developers to resolve it as quickly as possible.
+
+For that, you need to add as much valuable information as possible.
+
+You can have this valuable information by following these steps:
+
+- Go to the root of the git cloned project
+- Shutdown your current production instance by typing `make down`
+- Launch the dev environment by typing `make dev_up`
+- Then you can start `make logs` and run into your issue, you should now have a more detailed log (stack trace ...)
+- To deactivate the dev environment, run `make dev_down`, then restart the prod with `make up`
+
+Example with the tool arsenal version check API bug.
+
+```
+web_1          |   File "/usr/local/lib/python3.10/dist-packages/celery/app/task.py", line 411, in __call__
+web_1          |     return self.run(*args, **kwargs)
+web_1          | TypeError: run_command() got an unexpected keyword argument 'echo'
+```
+Now you know the real error is `TypeError: run_command() got an unexpected keyword argument 'echo'`
+
+And you can post the full stack trace to your newly created issue to help developers to track the root cause of the bug and correct the bug easily
+
+**Activating debug like this also give you the Django Debug Toolbar on the left side & full stack trace in the browser** instead of an error 500 without any details.
+So don't forget to open the developer console and check for any XHR request with error 500.
+If there's any, check the response of this request to get your detailed error.
+
+<img src="https://user-images.githubusercontent.com/1230954/276260955-ed1e1168-7c8f-43a3-b54d-b6285d52b771.png">
+
+Happy issuing ;)
 
 ![-----------------------------------------------------](https://raw.githubusercontent.com/andreasbm/readme/master/assets/lines/aqua.png)
 

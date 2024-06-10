@@ -8,7 +8,7 @@ os.environ['CELERY_ALWAYS_EAGER'] = 'True'
 
 import yaml
 from celery.utils.log import get_task_logger
-from reNgine.settings import DEBUG
+from reNgine.settings import CELERY_DEBUG
 from reNgine.tasks import (dir_file_fuzz, fetch_url, http_crawl, initiate_scan,
                            osint, port_scan, subdomain_discovery,
                            vulnerability_scan)
@@ -16,7 +16,7 @@ from startScan.models import *
 
 logger = get_task_logger(__name__)
 DOMAIN_NAME = os.environ['DOMAIN_NAME']
-# if not DEBUG:
+# if not CELERY_DEBUG:
 #     logging.disable(logging.CRITICAL)
 
 
@@ -72,20 +72,20 @@ class TestOnlineScan(unittest.TestCase):
         self.assertGreater(len(results), 0)
         self.assertIn('final_url', results[0])
         url = results[0]['final_url']
-        if DEBUG:
+        if CELERY_DEBUG:
             print(url)
 
     def test_subdomain_discovery(self):
         domain = DOMAIN_NAME.lstrip('rengine.')
         subdomains = subdomain_discovery(domain, ctx=self.ctx)
-        if DEBUG:
+        if CELERY_DEBUG:
             print(json.dumps(subdomains, indent=4))
         self.assertTrue(subdomains is not None)
         self.assertGreater(len(subdomains), 0)
 
     def test_fetch_url(self):
         urls = fetch_url(urls=[self.url], ctx=self.ctx)
-        if DEBUG:
+        if CELERY_DEBUG:
             print(urls)
         self.assertGreater(len(urls), 0)
 
@@ -95,7 +95,7 @@ class TestOnlineScan(unittest.TestCase):
 
     def test_vulnerability_scan(self):
         vulns = vulnerability_scan(urls=[self.url], ctx=self.ctx)
-        if DEBUG:
+        if CELERY_DEBUG:
             print(json.dumps(vulns, indent=4))
         self.assertTrue(vulns is not None)
 

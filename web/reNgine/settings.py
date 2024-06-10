@@ -18,8 +18,15 @@ RENGINE_CACHE_ENABLED = bool(int(os.environ.get('RENGINE_CACHE_ENABLED', '0')))
 RENGINE_RECORD_ENABLED = bool(int(os.environ.get('RENGINE_RECORD_ENABLED', '1')))
 RENGINE_RAISE_ON_ERROR = bool(int(os.environ.get('RENGINE_RAISE_ON_ERROR', '0')))
 
+# Debug env vars
+UI_DEBUG = bool(int(os.environ.get('UI_DEBUG', '0')))
+UI_REMOTE_DEBUG = bool(int(os.environ.get('UI_REMOTE_DEBUG', '0')))
+UI_REMOTE_DEBUG_PORT = int(os.environ.get('UI_REMOTE_DEBUG_PORT', 5678))
+CELERY_DEBUG = bool(int(os.environ.get('CELERY_DEBUG', '0')))
+CELERY_REMOTE_DEBUG = bool(int(os.environ.get('CELERY_REMOTE_DEBUG', '0')))
+CELERY_REMOTE_DEBUG_PORT = int(os.environ.get('CELERY_REMOTE_DEBUG_PORT', 5679))
+
 # Common env vars
-DEBUG = bool(int(os.environ.get('DEBUG', '0')))
 DOMAIN_NAME = os.environ.get('DOMAIN_NAME', 'localhost:8000')
 TEMPLATE_DEBUG = bool(int(os.environ.get('TEMPLATE_DEBUG', '0')))
 SECRET_FILE = os.path.join(RENGINE_HOME, 'secret')
@@ -204,6 +211,11 @@ LOGGING = {
     'version': 1,
     'disable_existing_loggers': True,
     'handlers': {
+        'file': {
+            'level': 'ERROR',
+            'class': 'logging.FileHandler',
+            'filename': 'errors.log',
+        },
         'null': {
             'class': 'logging.NullHandler'
         },
@@ -243,9 +255,14 @@ LOGGING = {
         }
     },
     'loggers': {
+        'django': {
+            'handlers': ['file'],
+            'level': 'ERROR' if UI_DEBUG else 'CRITICAL',
+            'propagate': True,
+        },
         '': {
             'handlers': ['brief'],
-            'level': 'DEBUG' if DEBUG else 'INFO',
+            'level': 'DEBUG' if UI_DEBUG else 'INFO',
             'propagate': False
         },
         'celery.app.trace': {
@@ -271,8 +288,22 @@ LOGGING = {
         },
         'reNgine.tasks': {
             'handlers': ['task'],
-            'level': 'DEBUG' if DEBUG else 'INFO',
+            'level': 'DEBUG' if CELERY_DEBUG else 'INFO',
             'propagate': False
         }
     },
 }
+
+# debug
+def show_toolbar(request):
+    if UI_DEBUG:
+        return True
+    return False
+
+if UI_DEBUG:
+    DEBUG_TOOLBAR_CONFIG = {
+        'SHOW_TOOLBAR_CALLBACK': 'reNgine.settings.show_toolbar',
+    }
+
+    INSTALLED_APPS.append('debug_toolbar')
+    MIDDLEWARE.append('debug_toolbar.middleware.DebugToolbarMiddleware')

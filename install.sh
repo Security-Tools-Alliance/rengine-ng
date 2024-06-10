@@ -34,15 +34,15 @@ fi
 
 cat web/art/reNgine.txt
 
-log "\r\nBefore running this script, please make sure Docker is running and you have made changes to the .env file." $COLOR_RED
-log "Changing the PostgreSQL username & password from .env is highly recommended.\r\n" $COLOR_RED
+log "\r\nBefore running this script, please make sure Docker is running and you have made changes to the '.env' file." $COLOR_RED
+log "Changing the PostgreSQL username & password in the '.env' is highly recommended.\r\n" $COLOR_RED
 
 log "Please note that this installation script is only intended for Linux" $COLOR_RED
 log "Only x86_64 platform are supported" $COLOR_RED
 
 log ""
 tput setaf 1;
-read -p "Are you sure you made changes to the .env file (y/n)? " answer
+read -p "Are you sure you made changes to the '.env' file (y/n)? " answer
 case ${answer:0:1} in
     y|Y|yes|YES|Yes )
       log "\nContinuing installation!\n" $COLOR_GREEN
