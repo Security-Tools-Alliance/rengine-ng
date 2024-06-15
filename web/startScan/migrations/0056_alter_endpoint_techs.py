@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('startScan', '0056_auto_20231201_2354'),
+        ('startScan', '0055_remove_dork_description'),
     ]
 
     operations = [

@@ -275,8 +275,8 @@ def list_target(request, slug):
 def delete_target(request, id):
     obj = get_object_or_404(Domain, id=id)
     if request.method == "POST":
-        # Why removing the tools ?
-        run_command(f'rm -rf {settings.TOOL_LOCATION} scan_results/{obj.name}*')
+        run_command(f'rm -rf {settings.RENGINE_RESULTS}/{obj.name}')
+        run_command(f'rm -rf {settings.RENGINE_RESULTS}/{obj.name}*') # for backward compatibility
         obj.delete()
         responseData = {'status': 'true'}
         messages.add_message(
@@ -366,7 +366,7 @@ def target_summary(request, slug, id):
         .distinct()
     )
     context['subdomain_count'] = subdomains.count()
-    context['alive_count'] = subdomains.filter(http_status__exact=200).count()
+    context['alive_count'] = subdomains.filter(http_status__gt=0).count()
 
     # Endpoints
     endpoints = (
@@ -376,7 +376,7 @@ def target_summary(request, slug, id):
         .distinct()
     )
     context['endpoint_count'] = endpoints.count()
-    context['endpoint_alive_count'] = endpoints.filter(http_status__exact=200).count()
+    context['endpoint_alive_count'] = endpoints.filter(http_status__gt=0).count()
 
     # Vulnerabilities
     vulnerabilities = Vulnerability.objects.filter(target_domain__id=id)

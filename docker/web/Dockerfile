@@ -2,9 +2,9 @@ FROM --platform=$BUILDPLATFORM python:3.10-alpine
 
 # Labels and Credits
 LABEL \
-    name="reNgine" \
-    author="Yogesh Ojha <yogesh.ojha11@gmail.com>" \
-    description="reNgine is a automated pipeline of recon process, useful for information gathering during web application penetration testing."
+    name="reNgine-ng" \
+    author="Yogesh Ojha <yogesh.ojha11@gmail.com>, Security Tools Alliance Team" \
+    description="reNgine-ng is a automated pipeline of recon process, useful for information gathering during web application penetration testing."
 
 # Environment Variables
 ENV DEBIAN_FRONTEND="noninteractive" \

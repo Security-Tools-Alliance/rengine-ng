@@ -33,9 +33,7 @@ services:
   celery:
     image: docker.io/talanor/rengine-celery:v0.5
     restart: unless-stopped
-    volumes:
-      - ./web:/home/rengine/rengine
-      - scan_results:/home/rengine/scan_results
+    entrypoint: /entrypoint.sh
     environment:
       - DEBUG=0
       - CELERY_BROKER=redis://redis:6379/0
@@ -48,6 +46,9 @@ services:
       - POSTGRES_HOST=${POSTGRES_HOST}
       - MAX_CONCURRENCY=${MAX_CONCURRENCY}
       - MIN_CONCURRENCY=${MIN_CONCURRENCY}
+    volumes:
+      - ./web:/home/rengine/rengine
+      - scan_results:/home/rengine/scan_results
     healthcheck:
       test: ["CMD", "poetry", "-C", "/home/rengine", "run", "celery","-A","reNgine","status"]
       interval: 10s
@@ -102,7 +103,7 @@ services:
       # MASTER, UPDATE THIS!!! MAJOR.MINOR.PATCH https://semver.org/
       - RENGINE_CURRENT_VERSION='2.1.0'
     volumes:
-      - web:/home/rengine/app
+      - ./web:/home/rengine/app
     healthcheck:
       test: ["CMD", "curl", "-f", "-k", "http://localhost:8000"]
       interval: 10s
@@ -143,6 +144,9 @@ services:
       - scan_results:/usr/src/scan_results
     networks:
       - rengine_network
+    ports:
+      - 8082:8082/tcp
+      - 443:443/tcp
 
   ollama:
     image: ollama/ollama

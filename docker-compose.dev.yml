@@ -5,6 +5,7 @@ services:
     environment:
       - POSTGRES_DB=${POSTGRES_DB}
       - POSTGRES_USER=${POSTGRES_USER}
+      - PGUSER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_PORT=${POSTGRES_PORT}
     volumes:
@@ -17,7 +18,7 @@ services:
     networks:
       - rengine_network
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
 
   redis:
     image: "redis:alpine"
@@ -36,11 +37,15 @@ services:
       context: docker
       dockerfile: celery/Dockerfile
     restart: unless-stopped
+    entrypoint: /entrypoint-dev.sh
     volumes:
       - ./web:/home/rengine/rengine
+      - ./docker/celery/entrypoint-dev.sh:/entrypoint-dev.sh:ro
       - scan_results:/home/rengine/scan_results
     environment:
-      - DEBUG=1
+      - CELERY_DEBUG=1
+      - CELERY_REMOTE_DEBUG=0
+      - CELERY_REMOTE_DEBUG_PORT=5679
       - CELERY_BROKER=redis://redis:6379/0
       - CELERY_BACKEND=redis://redis:6379/0
       - DOMAIN_NAME=${DOMAIN_NAME}
@@ -63,17 +68,21 @@ services:
         condition: service_healthy
     networks:
       - rengine_network
+    ports:
+      - "127.0.0.1:5679:5679"
 
   celery-beat:
     build:
       context: docker
       dockerfile: celery/Dockerfile
     restart: unless-stopped
+    entrypoint: /entrypoint-dev.sh
     volumes:
       - ./web:/home/rengine/rengine
+      - ./docker/beat/entrypoint-dev.sh:/entrypoint-dev.sh:ro
       - scan_results:/home/rengine/scan_results
     environment:
-      - DEBUG=1
+      - CELERY_DEBUG=1
       - CELERY_BROKER=redis://redis:6379/0
       - CELERY_BACKEND=redis://redis:6379/0
       - DOMAIN_NAME=${DOMAIN_NAME}
@@ -95,8 +104,15 @@ services:
       context: docker
       dockerfile: web/Dockerfile
     restart: unless-stopped
+    entrypoint: /entrypoint-dev.sh
+    volumes:
+      - ./web:/home/rengine/app
+      - ./docker/web/entrypoint-dev.sh:/entrypoint-dev.sh:ro
+      - scan_results:/home/rengine/scan_results
     environment:
-      - DEBUG=1
+      - UI_DEBUG=1
+      - UI_REMOTE_DEBUG=0
+      - UI_REMOTE_DEBUG_PORT=5678
       - CELERY_BROKER=redis://redis:6379/0
       - CELERY_BACKEND=redis://redis:6379/0
       - DOMAIN_NAME=${DOMAIN_NAME}
@@ -108,11 +124,6 @@ services:
       # THIS IS A MUST FOR CHECKING UPDATE, EVERYTIME A COMMIT IS MERGED INTO
       # MASTER, UPDATE THIS!!! MAJOR.MINOR.PATCH https://semver.org/
       - RENGINE_CURRENT_VERSION='2.1.0'
-    volumes:
-      - ./web:/home/rengine/app
-      - scan_results:/home/rengine/scan_results
-    ports:
-      - "8000:8000"
     healthcheck:
       test: ["CMD", "curl", "-f", "-k", "http://localhost:8000"]
       interval: 10s
@@ -129,6 +140,34 @@ services:
       rengine_network:
         aliases:
           - rengine
+    ports:
+      - "8000:8000"
+      - "127.0.0.1:5678:5678"
+
+  proxy:
+    restart: always
+    image: nginx:alpine
+    volumes:
+      - ./config/nginx/rengine.conf:/etc/nginx/conf.d/rengine.conf:ro
+      - static_volume:/usr/src/app/staticfiles
+      - scan_results:/usr/src/scan_results
+    depends_on:
+      web:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    secrets:
+      - source: proxy.ca
+        target: /etc/nginx/certs/rengine_chain.pem
+      - source: proxy.cert
+        target: /etc/nginx/certs/rengine.pem
+      - source: proxy.key
+        target: /etc/nginx/certs/rengine_rsa.key
+    ports:
+      - 8082:8082/tcp
+      - 443:443/tcp
 
   ollama:
     image: ollama/ollama
@@ -140,7 +179,6 @@ services:
       - "11434:11434"
     networks:
       - rengine_network
-    restart: always
     # command: ["ollama", "run", "llama2-uncensored"]
 
 networks:
@@ -154,4 +192,12 @@ volumes:
   github_repos:
   wordlist:
   scan_results:
-  ollama_data:
+  static_volume:
+
+secrets:
+  proxy.ca:
+    file: ./secrets/certs/rengine_chain.pem
+  proxy.key:
+    file: ./secrets/certs/rengine_rsa.key
+  proxy.cert:
+    file: ./secrets/certs/rengine.pem

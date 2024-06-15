@@ -30,6 +30,14 @@ RENGINE_CACHE_ENABLED = env.bool('RENGINE_CACHE_ENABLED', default=False)
 RENGINE_RECORD_ENABLED = env.bool('RENGINE_RECORD_ENABLED', default=True)
 RENGINE_RAISE_ON_ERROR = env.bool('RENGINE_RAISE_ON_ERROR', default=False)
 
+# Debug env vars
+UI_DEBUG = bool(int(os.environ.get('UI_DEBUG', '0')))
+UI_REMOTE_DEBUG = bool(int(os.environ.get('UI_REMOTE_DEBUG', '0')))
+UI_REMOTE_DEBUG_PORT = int(os.environ.get('UI_REMOTE_DEBUG_PORT', 5678))
+CELERY_DEBUG = bool(int(os.environ.get('CELERY_DEBUG', '0')))
+CELERY_REMOTE_DEBUG = bool(int(os.environ.get('CELERY_REMOTE_DEBUG', '0')))
+CELERY_REMOTE_DEBUG_PORT = int(os.environ.get('CELERY_REMOTE_DEBUG_PORT', 5679))
+
 # Common env vars
 DEBUG = env.bool('DEBUG', default=False)
 DOMAIN_NAME = env('DOMAIN_NAME', default='localhost:8000')
@@ -272,17 +280,17 @@ LOGGING = {
     'loggers': {
         'django': {
             'handlers': ['file'],
-            'level': 'ERROR' if DEBUG else 'CRITICAL',
+            'level': 'ERROR' if UI_DEBUG else 'CRITICAL',
             'propagate': True,
         },
         '': {
             'handlers': ['brief'],
-            'level': 'DEBUG' if DEBUG else 'INFO',
+            'level': 'DEBUG' if UI_DEBUG else 'INFO',
             'propagate': False
         },
         'celery': {
             'handlers': ['celery'],
-            'level': 'DEBUG' if DEBUG else 'ERROR',
+            'level': 'DEBUG' if CELERY_DEBUG else 'ERROR',
         },
         'celery.app.trace': {
             'handlers': ['null'],
@@ -307,8 +315,22 @@ LOGGING = {
         },
         'reNgine.tasks': {
             'handlers': ['task'],
-            'level': 'DEBUG' if DEBUG else 'INFO',
+            'level': 'DEBUG' if CELERY_DEBUG else 'INFO',
             'propagate': False
         }
     },
 }
+
+# debug
+def show_toolbar(request):
+    if UI_DEBUG:
+        return True
+    return False
+
+if UI_DEBUG:
+    DEBUG_TOOLBAR_CONFIG = {
+        'SHOW_TOOLBAR_CALLBACK': 'reNgine.settings.show_toolbar',
+    }
+
+    INSTALLED_APPS.append('debug_toolbar')
+    MIDDLEWARE.append('debug_toolbar.middleware.DebugToolbarMiddleware')
