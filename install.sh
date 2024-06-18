@@ -13,6 +13,9 @@ COLOR_CYAN=6
 COLOR_WHITE=7
 COLOR_DEFAULT=$COLOR_WHITE # Use white as default for clarity
 
+# Fetch the external IP address so that it can be printed later when the script has finished installing reNgine-ng
+external_ip=$(curl -s https://ipecho.net/plain)
+
 # Log messages in different colors
 log() {
   local color=${2:-$COLOR_DEFAULT}  # Use default color if $2 is not set
@@ -141,3 +144,6 @@ log "Creating an account..." $COLOR_CYAN
 make username
 
 log "\r\nThank you for installing reNgine-ng, happy recon!" $COLOR_GREEN
+
+log "\r\nIn case you're running this locally, reNgine-ng should be available at: https://127.0.0.1/" $COLOR_GREEN
+log "In case you're running this on a server, reNgine-ng should be available at: https://$external_ip/" $COLOR_GREEN
