@@ -1195,9 +1195,10 @@ def screenshot(self, ctx={}, description=None):
 	screenshot_paths = []
 	with open(output_path, 'r') as file:
 		reader = csv.reader(file)
+		header = next(reader)  # Skip header row
+		indices = [header.index(col) for col in ["Protocol", "Port", "Domain", "Request Status", "Screenshot Path", " Source Path"]]
 		for row in reader:
-			"Protocol,Port,Domain,Request Status,Screenshot Path, Source Path"
-			protocol, port, subdomain_name, status, screenshot_path, source_path = tuple(row)
+			protocol, port, subdomain_name, status, screenshot_path, source_path = extract_columns(row, indices)
 			logger.info(f'{protocol}:{port}:{subdomain_name}:{status}')
 			subdomain_query = Subdomain.objects.filter(name=subdomain_name)
 			if self.scan:

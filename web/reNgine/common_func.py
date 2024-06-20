@@ -1035,3 +1035,16 @@ def is_iterable(variable):
         return True
     except TypeError:
         return False
+
+def extract_columns(row, columns):
+    """
+    Extract specific columns from a row based on column indices.
+    
+    Args:
+        row (list): The CSV row as a list of values.
+        columns (list): List of column indices to extract.
+    
+    Returns:
+        list: Extracted values from the specified columns.
+    """
+    return [row[i] for i in columns]
