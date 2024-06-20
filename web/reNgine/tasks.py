@@ -113,7 +113,7 @@ def initiate_scan(
 	uuid_scan = uuid.uuid1()
 	scan.results_dir = f'{results_dir}/{domain.name}/scans/{uuid_scan}'
 	add_gf_patterns = gf_patterns and 'fetch_url' in engine.tasks
-	if add_gf_patterns:
+	if add_gf_patterns and is_iterable(gf_patterns):
 		scan.used_gf_patterns = ','.join(gf_patterns)
 	scan.save()
 
@@ -1776,7 +1776,7 @@ def fetch_url(self, urls=[], ctx={}, description=None):
 	exclude_subdomains = config.get(EXCLUDED_SUBDOMAINS, False)
 
 	# Get URLs to scan and save to input file
-	if urls:
+	if urls and is_iterable(urls):
 		with open(input_path, 'w') as f:
 			f.write('\n'.join(urls))
 	else:
@@ -1835,7 +1835,7 @@ def fetch_url(self, urls=[], ctx={}, description=None):
 		f'cat {input_path} >> {self.output_path}',
 		f'sort -u {self.output_path} -o {self.output_path}',
 	]
-	if ignore_file_extension:
+	if ignore_file_extension and is_iterable(ignore_file_extension):
 		ignore_exts = '|'.join(ignore_file_extension)
 		grep_ext_filtered_output = [
 			f'cat {self.output_path} | grep -Eiv "\\.({ignore_exts}).*" > {self.results_dir}/urls_filtered.txt',
@@ -1913,7 +1913,7 @@ def fetch_url(self, urls=[], ctx={}, description=None):
 	#-------------------#
 
 	# Combine old gf patterns with new ones
-	if gf_patterns:
+	if gf_patterns and is_iterable(gf_patterns):
 		self.scan.used_gf_patterns = ','.join(gf_patterns)
 		self.scan.save()
 
@@ -2334,7 +2334,7 @@ def nuclei_scan(self, urls=[], ctx={}, description=None):
 	# severities_str = ','.join(severities)
 
 	# Get alive endpoints
-	if urls:
+	if urls and is_iterable(urls):
 		with open(input_path, 'w') as f:
 			f.write('\n'.join(urls))
 	else:
@@ -2450,7 +2450,7 @@ def dalfox_xss_scan(self, urls=[], ctx={}, description=None):
 	threads = dalfox_config.get(THREADS) or self.yaml_configuration.get(THREADS, DEFAULT_THREADS)
 	input_path = f'{self.results_dir}/input_endpoints_dalfox_xss.txt'
 
-	if urls:
+	if urls and is_iterable(urls):
 		with open(input_path, 'w') as f:
 			f.write('\n'.join(urls))
 	else:
@@ -2578,7 +2578,7 @@ def crlfuzz_scan(self, urls=[], ctx={}, description=None):
 	input_path = f'{self.results_dir}/input_endpoints_crlf.txt'
 	output_path = f'{self.results_dir}/{self.filename}'
 
-	if urls:
+	if urls and is_iterable(urls):
 		with open(input_path, 'w') as f:
 			f.write('\n'.join(urls))
 	else:
@@ -2756,7 +2756,7 @@ def http_crawl(
 	self.output_path = None
 	input_path = f'{self.results_dir}/httpx_input.txt'
 	history_file = f'{self.results_dir}/commands.txt'
-	if urls: # direct passing URLs to check
+	if urls and is_iterable(urls): # direct passing URLs to check
 		if self.url_filter:
 			urls = [u for u in urls if self.url_filter in u]
 		with open(input_path, 'w') as f:
@@ -2817,9 +2817,14 @@ def http_crawl(
 
 		if not line or not isinstance(line, dict):
 			continue
+		
+		# Check if the http request has an error
+		if 'error' in line:
+			logger.error(line)
+			continue
 
 		logger.debug(line)
-
+		
 		# No response from endpoint
 		if line.get('failed', False):
 			continue
@@ -4611,10 +4616,10 @@ def save_subdomain_metadata(subdomain, endpoint, extra_datas={}):
 		subdomain.content_length = endpoint.content_length
 		subdomain.webserver = endpoint.webserver
 		cname = extra_datas.get('cname')
-		if cname:
+		if cname and is_iterable(cname):
 			subdomain.cname = ','.join(cname)
 		cdn = extra_datas.get('cdn')
-		if cdn:
+		if cdn and is_iterable(cdn):
 			subdomain.is_cdn = ','.join(cdn)
 			subdomain.cdn_name = extra_datas.get('cdn_name')
 		for tech in endpoint.techs.all():

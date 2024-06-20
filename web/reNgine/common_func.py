@@ -1029,6 +1029,13 @@ def generate_gospider_params(custom_header):
             params.append(f' -H "{key}:{value}"')
     return ' '.join(params)
 
+def is_iterable(variable):
+    try:
+        iter(variable)
+        return True
+    except TypeError:
+        return False
+
 def extract_columns(row, columns):
     """
     Extract specific columns from a row based on column indices.
