@@ -1028,3 +1028,10 @@ def generate_gospider_params(custom_header):
         else:
             params.append(f' -H "{key}:{value}"')
     return ' '.join(params)
+
+def is_iterable(variable):
+    try:
+        iter(variable)
+        return True
+    except TypeError:
+        return False
