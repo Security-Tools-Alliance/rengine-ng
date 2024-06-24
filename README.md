@@ -20,7 +20,7 @@
 </p>
 
 <p align="center">
-<a href="https://discord.gg/Yxq8DR9X" target="_blank"><img src="https://img.shields.io/discord/1227920361564143766" alt="" /></a>&nbsp;
+<a href="https://discord.gg/KE5QGTqJpS" target="_blank"><img src="https://img.shields.io/discord/1227920361564143766" alt="" /></a>&nbsp;
 </p>
 
 <p align="center">
@@ -396,7 +396,8 @@ Contributions are what make the open-source community such an amazing place to l
 
 See the [Contributing Guide](.github/CONTRIBUTING.md) to get started.
 
-You can also [join our Discord channel #development](https://discord.gg/VUS8P9zF) for any development related questions.
+You can also [join our Discord channel #development](https://discord.gg/KE5QGTqJpS) for any development related questions.
+Channel is restricted, so please ask an admin to give you the correct role.
 
 ### Submitting issues
 
@@ -443,7 +444,7 @@ You can start by resolving any [open issues](https://github.com/Security-Tools-A
 
 ### reNgine-ng Support
 
-Please do not use GitHub for support requests. Instead, [join our Discord channel #support](https://discord.gg/Mh7GKz4x).
+Please do not use GitHub for support requests. Instead, [join our Discord channel #support](https://discord.gg/xm9CeJuF8Y).
 
 ![-----------------------------------------------------](https://raw.githubusercontent.com/andreasbm/readme/master/assets/lines/aqua.png)
 
