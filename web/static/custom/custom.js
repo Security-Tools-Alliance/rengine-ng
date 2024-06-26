@@ -3250,9 +3250,3 @@ function convertToCamelCase(inputString) {
 
 	return camelCaseString;
 }
-
-// Function to unescape HTML special characters
-function unescapeHtml(escapedString) {
-    var doc = new DOMParser().parseFromString(escapedString, "text/html");
-    return doc.documentElement.textContent;
-}
