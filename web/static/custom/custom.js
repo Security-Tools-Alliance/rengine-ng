@@ -3002,11 +3002,6 @@ function render_vuln_offcanvas(vuln){
 	var http_request = vuln.request ? vuln.request : '';
 	var http_response = vuln.response ? vuln.response : '';
 
-	http_request = http_request.replace(new RegExp('\r?\n','g'), '<br />');
-	http_response = htmlEncode(http_response);
-
-	http_response = http_response.replace(new RegExp('&#13;&#10;','g'), '<br />');
-
 	body += `<div class="accordion custom-accordion mt-2">
 	<h5 class="m-0 position-relative">
 	<a class="custom-accordion-title text-reset d-block"
@@ -3017,7 +3012,7 @@ function render_vuln_offcanvas(vuln){
 	</a>
 	</h5>
 	<div id="request" class="collapse mt-2">
-	<code>${http_request}</code>
+	<pre>${http_request}</pre>
 	</div>
 	</div>`;
 
@@ -3031,7 +3026,7 @@ function render_vuln_offcanvas(vuln){
 	</a>
 	</h5>
 	<div id="response" class="collapse mt-2">
-	<code>${http_response}</code>
+	<pre>${http_response}</pre>
 	</div>
 	</div>`;
 
@@ -3254,4 +3249,10 @@ function convertToCamelCase(inputString) {
 	const camelCaseString = words.map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
 
 	return camelCaseString;
+}
+
+// Function to unescape HTML special characters
+function unescapeHtml(escapedString) {
+    var doc = new DOMParser().parseFromString(escapedString, "text/html");
+    return doc.documentElement.textContent;
 }
