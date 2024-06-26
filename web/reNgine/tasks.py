@@ -21,7 +21,7 @@ from celery.result import allow_join_result
 from celery.utils.log import get_task_logger
 from django.db.models import Count
 from dotted_dict import DottedDict
-from django.utils import timezone
+from django.utils import timezone, html
 from pycvesearch import CVESearch
 from metafinder.extractor import extract_metadata_from_google_search
 
@@ -3502,8 +3502,8 @@ def parse_nuclei_result(line):
 		'description': line['info'].get('description', ''),
 		'matcher_name': line.get('matcher-name', ''),
 		'curl_command': line.get('curl-command'),
-		'request': line.get('request'),
-		'response': line.get('response'),
+		'request': html.escape(line.get('request')),
+		'response': html.escape(line.get('response')),
 		'extracted_results': line.get('extracted-results', []),
 		'cvss_metrics': line['info'].get('classification', {}).get('cvss-metrics', ''),
 		'cvss_score': line['info'].get('classification', {}).get('cvss-score'),
