@@ -15,7 +15,7 @@ COLOR_DEFAULT=$COLOR_WHITE # Use white as default for clarity
 
 # Fetch the internal and external IP address so that it can be printed later when the script has finished installing reNgine-ng
 external_ip=$(curl -s https://ipecho.net/plain)
-internal_ips=$(ip -4 -br addr | awk '$2 == "UP" {print $3} /^lo/ {print $3}')
+internal_ips=$(ip -4 -br addr | awk '$2 == "UP" {print $3} /^lo/ {print $3}' | cut -d'/' -f1)
 formatted_ips=""
 for ip in $internal_ips; do
     formatted_ips="${formatted_ips}https://$ip\n"
