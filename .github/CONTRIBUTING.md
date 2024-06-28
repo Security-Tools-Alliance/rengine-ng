@@ -6,13 +6,14 @@ Your contributions are highly appreciated and we welcome any kind of contributio
 
 If you are new to open source community, reNgine is beginner-friendly. Please create pull requests for any new features, bug fixes, improvements on documentation, or anything!
 
-Join our developer chat on [Discord Developer Room](https://discord.gg/JuhHdHTtwd) if you would like to contribute to reNgine.
+You can also [join our Discord channel #development](https://discord.gg/KE5QGTqJpS) for any development related questions.
+Channel is restricted, so please ask an admin to give you the correct role.
 
 ## Bug reporting
 
 We appreciate your effort to improve reNgine by submitting a bug report. But, Before doing so, please check the following things:
 
-1. Please **do not** use the issue tracker for personal support requests, instead use [reNgine Support Discord channel](https://discord.gg/azv6fzhNCE) for any personal support request.
+1. Please **do not** use the issue tracker for personal support requests, instead use [reNgine Support Discord channel](https://discord.gg/xm9CeJuF8Y) for any personal support request.
 2. Check whether the bug **hasn't been already reported**. Duplicate reports take us time, that we could be used to fix other bugs or make improvements.
 3. If you get an error while using reNgine, please **describe what happened** and add a verbose error message. Reports like "I got an error when I started scanning some random website." are not worth anybody's time. Please be as descriptive as you can.
 4. Provide easy steps to reproduce. This will help us solve your issues easily and quickly.
