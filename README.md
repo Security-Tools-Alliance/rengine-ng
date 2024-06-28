@@ -28,7 +28,7 @@
 <img style="width: 282px; height: 56px" src="https://opensourcesecurityindex.io/badge.svg" alt="Open Source Security Index - Fastest Growing Open Source Security Projects" width="282" height="56" /> </a>
 </p>
 
-# reNgine-ng
+# reNgine-ng (Next Generation)
 
 
 ## Why reNgine-ng?
