@@ -25,14 +25,14 @@ Interesting Lookup
       <div class="card-body">
         <h4 class="header-title">Interesting Lookup</h4>
         <p>
-          reNgine supports lookup for interesting keyword in recon data. This could be either looking up in subdomains, URLs or in page title.
-          You can enter the keywords to lookup and reNgine will highlight the matched entries.<br>
+          reNgine-ng supports lookup for interesting keyword in recon data. This could be either looking up in subdomains, URLs or in page title.
+          You can enter the keywords to lookup and reNgine-ng will highlight the matched entries.<br>
         </p>
         <div class="alert alert-primary border-0 mb-4" role="alert">
           Keywords are case insensitive.
         </div>
         <h4 class="header-title">Default Keywords</h4>
-        <p>reNgine will use these default keywords to find the interesting subdomains or URLs from recon data.</p>
+        <p>reNgine-ng will use these default keywords to find the interesting subdomains or URLs from recon data.</p>
         <span class="lead">
           {% for keyword in default_lookup %}
           {% for key in keyword.keywords|split:","  %}
@@ -58,7 +58,7 @@ Interesting Lookup
             <label class="form-check-label" for="title_lookup">Page Title</label>
           </div>
           <h4 class="header-title mt-3">Lookup Conditions</h6>
-            <span class="text-primary">reNgine will lookup the keywords only when below conditions are met.</span>
+            <span class="text-primary">reNgine-ng will lookup the keywords only when below conditions are met.</span>
             <br>
             <b>Lookup only when</b>
             <div class="form-check mt-2 mb-2 form-check-primary">
