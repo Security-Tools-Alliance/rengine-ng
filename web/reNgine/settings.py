@@ -1,5 +1,10 @@
+import environ
+
+env = environ.FileAwareEnv()
+
 import mimetypes
 import os
+from pathlib import Path
 
 from reNgine.init import first_run
 from reNgine.utilities import RengineTaskFormatter
@@ -11,12 +16,19 @@ mimetypes.add_type("text/css", ".css", True)
 #       RENGINE CONFIGURATIONS
 # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 # Root env vars
-RENGINE_HOME = os.environ.get('RENGINE_HOME', '/usr/src/app')
-RENGINE_RESULTS = os.environ.get('RENGINE_RESULTS', f'/usr/src/scan_results')
-RENGINE_CACHE_ENABLED = bool(int(os.environ.get('RENGINE_CACHE_ENABLED', '0')))
-RENGINE_RECORD_ENABLED = bool(int(os.environ.get('RENGINE_RECORD_ENABLED', '1')))
-RENGINE_RAISE_ON_ERROR = bool(int(os.environ.get('RENGINE_RAISE_ON_ERROR', '0')))
+RENGINE_HOME = env('RENGINE_HOME', default=str(Path.home() / 'rengine'))
+RENGINE_RESULTS = env('RENGINE_RESULTS', default=str(Path.home() / 'scan_results'))
+RENGINE_CUSTOM_ENGINES = env('RENGINE_CUSTOM_ENGINES', default=str(Path.home() / 'custom_engines'))
+RENGINE_WORDLISTS = env('RENGINE_WORDLISTS', default=str(Path.home() / 'wordlists'))
+RENGINE_TOOL_PATH = env('RENGINE_TOOL_PATH', default=str(Path.home() / 'tools'))
+RENGINE_TOOL_GITHUB_PATH = env('RENGINE_TOOL_GITHUB_PATH', default=str(Path(RENGINE_TOOL_PATH) / '.github.com'))
+
+RENGINE_CACHE_ENABLED = env.bool('RENGINE_CACHE_ENABLED', default=False)
+RENGINE_RECORD_ENABLED = env.bool('RENGINE_RECORD_ENABLED', default=True)
+RENGINE_RAISE_ON_ERROR = env.bool('RENGINE_RAISE_ON_ERROR', default=False)
 
 # Debug env vars
 UI_DEBUG = bool(int(os.environ.get('UI_DEBUG', '0')))
@@ -27,30 +39,30 @@ CELERY_REMOTE_DEBUG = bool(int(os.environ.get('CELERY_REMOTE_DEBUG', '0')))
 CELERY_REMOTE_DEBUG_PORT = int(os.environ.get('CELERY_REMOTE_DEBUG_PORT', 5679))
 
 # Common env vars
-DOMAIN_NAME = os.environ.get('DOMAIN_NAME', 'localhost:8000')
-TEMPLATE_DEBUG = bool(int(os.environ.get('TEMPLATE_DEBUG', '0')))
+DEBUG = env.bool('DEBUG', default=False)
+DOMAIN_NAME = env('DOMAIN_NAME', default='localhost:8000')
+TEMPLATE_DEBUG = env.bool('TEMPLATE_DEBUG', default=False)
 SECRET_FILE = os.path.join(RENGINE_HOME, 'secret')
-DEFAULT_ENABLE_HTTP_CRAWL = bool(int(os.environ.get('DEFAULT_ENABLE_HTTP_CRAWL', '1')))
-DEFAULT_RATE_LIMIT = int(os.environ.get('DEFAULT_RATE_LIMIT', '150')) # requests / second
-DEFAULT_HTTP_TIMEOUT = int(os.environ.get('DEFAULT_HTTP_TIMEOUT', '5')) # seconds
-DEFAULT_RETRIES = int(os.environ.get('DEFAULT_RETRIES', '1'))
-DEFAULT_THREADS = int(os.environ.get('DEFAULT_THREADS', '30'))
-DEFAULT_GET_GPT_REPORT = bool(int(os.environ.get('DEFAULT_GET_GPT_REPORT', '1')))
+DEFAULT_ENABLE_HTTP_CRAWL = env.bool('DEFAULT_ENABLE_HTTP_CRAWL', default=True)
+DEFAULT_RATE_LIMIT = env.int('DEFAULT_RATE_LIMIT', default=150) # requests / second
+DEFAULT_HTTP_TIMEOUT = env.int('DEFAULT_HTTP_TIMEOUT', default=5) # seconds
+DEFAULT_RETRIES = env.int('DEFAULT_RETRIES', default=1)
+DEFAULT_THREADS = env.int('DEFAULT_THREADS', default=30)
+DEFAULT_GET_GPT_REPORT = env.bool('DEFAULT_GET_GPT_REPORT', default=True)
 
 # Globals
 ALLOWED_HOSTS = ['*']
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SECRET_KEY = first_run(SECRET_FILE, BASE_DIR)
 
 # Databases
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.environ.get('POSTGRES_DB'),
-        'USER': os.environ.get('POSTGRES_USER'),
-        'PASSWORD': os.environ.get('POSTGRES_PASSWORD'),
-        'HOST': os.environ.get('POSTGRES_HOST'),
-        'PORT': os.environ.get('POSTGRES_PORT'),
+        'NAME': env('POSTGRES_DB'),
+        'USER': env('POSTGRES_USER'),
+        'PASSWORD': env('POSTGRES_PASSWORD'),
+        'HOST': env('POSTGRES_HOST'),
+        'PORT': env('POSTGRES_PORT'),
         # 'OPTIONS':{
         #     'sslmode':'verify-full',
         #     'sslrootcert': os.path.join(BASE_DIR, 'ca-certificate.crt')
@@ -101,7 +113,8 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
-                'reNgine.context_processors.projects'
+                'reNgine.context_processors.projects',
+                'reNgine.context_processors.misc'
             ],
     },
 }]
@@ -182,8 +195,8 @@ DELETE_DUPLICATES_THRESHOLD = 10
 '''
 CELERY settings
 '''
-CELERY_BROKER_URL = os.environ.get("CELERY_BROKER", "redis://redis:6379/0")
-CELERY_RESULT_BACKEND = os.environ.get("CELERY_BROKER", "redis://redis:6379/0")
+CELERY_BROKER_URL = env("CELERY_BROKER", default="redis://redis:6379/0")
+CELERY_RESULT_BACKEND = env("CELERY_BROKER", default="redis://redis:6379/0")
 CELERY_ENABLE_UTC = False
 CELERY_TIMEZONE = 'UTC'
 CELERY_IGNORE_RESULTS = False
@@ -238,10 +251,16 @@ LOGGING = {
         'db': {
             'class': 'logging.handlers.RotatingFileHandler',
             'formatter': 'brief',
-            'filename': 'db.log',
+            'filename': str(Path.home() / 'db.log'),
             'maxBytes': 1024,
             'backupCount': 3
-        }
+        },
+        'celery': {
+            'class': 'logging.handlers.RotatingFileHandler',
+            'formatter': 'simple',
+            'filename': 'celery.log',
+            'maxBytes': 1024 * 1024 * 100,  # 100 mb
+        },
     },
     'formatters': {
         'default': {
@@ -252,6 +271,10 @@ LOGGING = {
         },
         'task': {
             '()': lambda : RengineTaskFormatter('%(task_name)-34s | %(levelname)s | %(message)s')
+        },
+        'simple': {
+            'format': '%(levelname)s %(message)s',
+            'datefmt': '%y %b %d, %H:%M:%S',
         }
     },
     'loggers': {
@@ -264,6 +287,10 @@ LOGGING = {
             'handlers': ['brief'],
             'level': 'DEBUG' if UI_DEBUG else 'INFO',
             'propagate': False
+        },
+        'celery': {
+            'handlers': ['celery'],
+            'level': 'DEBUG' if CELERY_DEBUG else 'ERROR',
         },
         'celery.app.trace': {
             'handlers': ['null'],

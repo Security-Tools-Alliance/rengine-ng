@@ -1,6 +1,9 @@
 #!/usr/bin/python
 import logging
 import re
+import os.path
+from pathlib import Path
+from .settings import RENGINE_WORDLISTS
 
 ###############################################################################
 # TOOLS DEFINITIONS
@@ -128,7 +131,7 @@ DORKS_DEFAULT_NAMES = [
 ]
 
 # ffuf
-FFUF_DEFAULT_WORDLIST_PATH = '/usr/src/wordlist/dicc.txt'
+FFUF_DEFAULT_WORDLIST_PATH = str(Path(RENGINE_WORDLISTS) / 'dicc.txt')
 FFUF_DEFAULT_MATCH_HTTP_STATUS = [200, 204]
 FFUF_DEFAULT_RECURSIVE_LEVEL = 2
 FFUF_DEFAULT_FOLLOW_REDIRECT = False
@@ -137,7 +140,7 @@ FFUF_DEFAULT_FOLLOW_REDIRECT = False
 NAABU_DEFAULT_PORTS = ['top-100']
 
 # nuclei
-NUCLEI_DEFAULT_TEMPLATES_PATH = '/root/nuclei-templates'
+NUCLEI_DEFAULT_TEMPLATES_PATH = str(Path.home() / 'nuclei-templates')
 NUCLEI_SEVERITY_MAP = {
     'info': 0,
     'low': 1,
@@ -436,6 +439,52 @@ PERM_INITATE_SCANS_SUBSCANS = 'initiate_scans_subscans'
 FOUR_OH_FOUR_URL = '/404/'
 
 
+###############################################################################
+# OLLAMA DEFINITIONS
+###############################################################################
+OLLAMA_INSTANCE = 'http://ollama:11434'
+
+DEFAULT_GPT_MODELS = [
+    {
+        'name': 'gpt-3',
+        'model': 'gpt-3',
+        'modified_at': '',
+        'details': {
+            'family': 'GPT',
+            'parameter_size': '~175B',
+        }
+    },
+    {
+        'name': 'gpt-3.5-turbo',
+        'model': 'gpt-3.5-turbo',
+        'modified_at': '',
+        'details': {
+            'family': 'GPT',
+            'parameter_size': '~7B',
+        }
+    },
+    {
+        'name': 'gpt-4',
+        'model': 'gpt-4',
+        'modified_at': '',
+        'details': {
+            'family': 'GPT',
+            'parameter_size': '~1.7T',
+        }
+    },
+	{
+        'name': 'gpt-4-turbo',
+        'model': 'gpt-4',
+        'modified_at': '',
+        'details': {
+            'family': 'GPT',
+            'parameter_size': '~1.7T',
+        }
+    }
+]
+
+
+
 # GPT Vulnerability Report Generator
 VULNERABILITY_DESCRIPTION_SYSTEM_MESSAGE = """
     You are a highly skilled penetration tester who has recently completed a penetration testing.
@@ -480,4 +529,4 @@ ATTACK_SUGGESTION_GPT_SYSTEM_PROMPT = """
 
 
 # OSINT GooFuzz Path
-GOFUZZ_EXEC_PATH = '/usr/src/github/goofuzz/GooFuzz'
+GOFUZZ_EXEC_PATH = 'GooFuzz'

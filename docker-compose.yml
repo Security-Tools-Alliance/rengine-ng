@@ -1,9 +1,7 @@
-version: '3.8'
-
 services:
   db:
-    restart: always
     image: "postgres:12.3-alpine"
+    restart: unless-stopped
     environment:
       - POSTGRES_DB=${POSTGRES_DB}
       - POSTGRES_USER=${POSTGRES_USER}
@@ -22,6 +20,7 @@ services:
 
   redis:
     image: "redis:alpine"
+    restart: unless-stopped
     hostname: redis
     healthcheck:
       test: ["CMD", "redis-cli","ping"]
@@ -32,21 +31,11 @@ services:
       - rengine_network
 
   celery:
-    build:
-      context: ./web
-    restart: always
-    entrypoint: /usr/src/app/celery-entrypoint.sh
-    # command: celery -A reNgine worker --autoscale=${MAX_CONCURRENCY},${MIN_CONCURRENCY} -l INFO
-    volumes:
-      - ./web:/usr/src/app
-      - github_repos:/usr/src/github
-      - wordlist:/usr/src/wordlist
-      - scan_results:/usr/src/scan_results
-      - gf_patterns:/root/.gf
-      - nuclei_templates:/root/nuclei-templates
-      - tool_config:/root/.config
-      - static_volume:/usr/src/app/staticfiles/
+    image: docker.io/talanor/rengine-celery:v0.5
+    restart: unless-stopped
+    entrypoint: /entrypoint.sh
     environment:
+      - DEBUG=0
       - CELERY_BROKER=redis://redis:6379/0
       - CELERY_BACKEND=redis://redis:6379/0
       - DOMAIN_NAME=${DOMAIN_NAME}
@@ -57,8 +46,11 @@ services:
       - POSTGRES_HOST=${POSTGRES_HOST}
       - MAX_CONCURRENCY=${MAX_CONCURRENCY}
       - MIN_CONCURRENCY=${MIN_CONCURRENCY}
+    volumes:
+      - ./web:/home/rengine/rengine
+      - scan_results:/home/rengine/scan_results
     healthcheck:
-      test: ["CMD", "celery","-A","reNgine","status"]
+      test: ["CMD", "poetry", "-C", "/home/rengine", "run", "celery","-A","reNgine","status"]
       interval: 10s
       timeout: 10s
       retries: 60
@@ -71,10 +63,10 @@ services:
       - rengine_network
 
   celery-beat:
-    build: ./web
-    entrypoint: /usr/src/app/beat-entrypoint.sh
-    command: celery -A reNgine beat -l INFO --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    image: docker.io/talanor/rengine-celery:v0.5
+    entrypoint: /entrypoint.sh
     environment:
+      - DEBUG=0
       - CELERY_BROKER=redis://redis:6379/0
       - CELERY_BACKEND=redis://redis:6379/0
       - POSTGRES_DB=${POSTGRES_DB}
@@ -86,23 +78,18 @@ services:
       celery:
         condition: service_healthy
     volumes:
-      - ./web:/usr/src/app
-      - github_repos:/usr/src/github
-      - wordlist:/usr/src/wordlist
+      - ./web:/home/rengine/rengine
+      - ./docker/beat/entrypoint.sh:/entrypoint.sh:ro
       - scan_results:/usr/src/scan_results
-      - gf_patterns:/root/.gf
-      - nuclei_templates:/root/nuclei-templates
-      - tool_config:/root/.config
     networks:
       - rengine_network
 
   web:
-    build:
-      context: ./web
-    entrypoint: /usr/src/app/entrypoint.sh
-    restart: always
-    image: docker.pkg.github.com/yogeshojha/rengine/rengine:latest
+    image: docker.io/talanor/rengine-web:v0.5
+    restart: unless-stopped
     environment:
+      - DEBUG=0
+      - RENGINE_HOME=/home/rengine/app
       - CELERY_BROKER=redis://redis:6379/0
       - CELERY_BACKEND=redis://redis:6379/0
       - DOMAIN_NAME=${DOMAIN_NAME}
@@ -111,20 +98,12 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_PORT=${POSTGRES_PORT}
       - POSTGRES_HOST=${POSTGRES_HOST}
+      - DJANGO_SUPERUSER_PASSWORD=${DJANGO_SUPERUSER_PASSWORD}
       # THIS IS A MUST FOR CHECKING UPDATE, EVERYTIME A COMMIT IS MERGED INTO
       # MASTER, UPDATE THIS!!! MAJOR.MINOR.PATCH https://semver.org/
-      - RENGINE_CURRENT_VERSION='2.0.6'
+      - RENGINE_CURRENT_VERSION='2.1.0'
     volumes:
-      - ./web:/usr/src/app
-      - github_repos:/usr/src/github
-      - wordlist:/usr/src/wordlist
-      - scan_results:/usr/src/scan_results
-      - gf_patterns:/root/.gf
-      - nuclei_templates:/root/nuclei-templates
-      - tool_config:/root/.config
-      - static_volume:/usr/src/app/staticfiles/
-    ports:
-      - "8000:8000"
+      - ./web:/home/rengine/app
     healthcheck:
       test: ["CMD", "curl", "-f", "-k", "http://localhost:8000"]
       interval: 10s
@@ -143,11 +122,8 @@ services:
           - rengine
 
   proxy:
-    restart: always
     image: nginx:alpine
-    ports:
-      - 8082:8082/tcp
-      - 443:443/tcp
+    restart: unless-stopped
     depends_on:
       web:
         condition: service_healthy
@@ -164,11 +140,21 @@ services:
         target: /etc/nginx/certs/rengine_rsa.key
     volumes:
       - ./config/nginx/rengine.conf:/etc/nginx/conf.d/rengine.conf:ro
-      - static_volume:/usr/src/app/staticfiles/
+      - ./web/staticfiles:/usr/src/app/staticfiles/
       - scan_results:/usr/src/scan_results
     networks:
       - rengine_network
+    ports:
+      - 8082:8082/tcp
+      - 443:443/tcp
 
+  ollama:
+    image: ollama/ollama
+    container_name: ollama
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - rengine_network
 
 networks:
   rengine_network:
@@ -182,6 +168,7 @@ volumes:
   wordlist:
   scan_results:
   static_volume:
+  ollama_data:
 
 secrets:
   proxy.ca:

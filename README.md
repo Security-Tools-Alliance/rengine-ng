@@ -93,7 +93,8 @@ reNgine-ng is not an ordinary reconnaissance suite; it's a game-changer! We've t
 
 ⚙️&nbsp; &nbsp; Roles and Permissions! Begining reNgine-ng 2.0, we've taken your web application reconnaissance to a whole new level of control and security. Now, you can assign distinct roles to your team members—Sys Admin, Penetration Tester, and Auditor—each with precisely defined permissions to tailor their access and actions within the reNgine-ng ecosystem.
 
-  - 🔐 Sys Admin: Sys Admin is a super user that has permission to modify system and scan related configurations, scan engines, create new users, add new tools etc. Super user can initiate scans and subscans effortlessly.
+  - 🔐 Sys Admin: Sys Admin is a superuser that has permission to modify system and scan related configurations, scan engines, create new users, add new tools etc. Superuser can initiate scans and subscans effortlessly.
+  - 🔐 Sys Admin: Sys Admin is a superuser that has permission to modify system and scan related configurations, scan engines, create new users, add new tools etc. Superuser can initiate scans and subscans effortlessly.
   - 🔍 Penetration Tester: Penetration Tester will be allowed to modify and initiate scans and subscans, add or update targets, etc. A penetration tester will not be allowed to modify system configurations.
   - 📊 Auditor: Auditor can only view and download the report. An auditor can not change any system or scan related configurations nor can initiate any scans or subscans.
 
@@ -154,7 +155,7 @@ reNgine-ng is not an ordinary reconnaissance suite; it's a game-changer! We've t
 * Identify Interesting Subdomains
 * Custom GF patterns and custom Nuclei Templates
 * Edit tool-related configuration files (Nuclei, Subfinder, Naabu, amass)
-* Add external tools from Github/Go
+* Add external tools from GitHub/Go
 * Interoperable with other tools, Import/Export Subdomains/Endpoints
 * Import Targets via IP and/or CIDRs
 * Report Generation
@@ -305,11 +306,26 @@ screenshot: {
     git clone https://github.com/Security-Tools-Alliance/rengine-ng && cd rengine
     ```
 
-1. Edit the dotenv file, **please make sure to change the password for postgresql `POSTGRES_PASSWORD`!**
+1. Edit the `.env` file, **please make sure to change the password for postgresql `POSTGRES_PASSWORD`!**
 
     ```bash
     nano .env
     ```
+
+1. **Optional, only for non-interactive install**: In the `.env` file, **please make sure to change the super admin values!**
+
+    ```bash
+    DJANGO_SUPERUSER_USERNAME=yourUsername
+    DJANGO_SUPERUSER_EMAIL=YourMail@example.com
+    DJANGO_SUPERUSER_PASSWORD=yourStrongPassword
+    ```
+    If you need to carry out a non-interactive installation, you can setup the login, email and password of the web interface admin directly from the .env file (instead of manually setting them from prompts during the installation process). This option can be interesting for automated installation (via ansible, vagrant, etc.).
+
+    `DJANGO_SUPERUSER_USERNAME`: web interface admin username (used to login to the web interface).
+
+    `DJANGO_SUPERUSER_EMAIL`: web interface admin email.
+
+    `DJANGO_SUPERUSER_PASSWORD`: web interface admin password (used to login to the web interface).
 
 1. In the dotenv file, you may also modify the Scaling Configurations
 
@@ -318,16 +334,31 @@ screenshot: {
     MIN_CONCURRENCY=10
     ```
 
-    MAX_CONCURRENCY: This parameter specifies the maximum number of reNgine-ng's concurrent Celery worker processes that can be spawned. In this case, it's set to 80, meaning that the application can utilize up to 80 concurrent worker processes to execute tasks concurrently. This is useful for handling a high volume of scans or when you want to scale up processing power during periods of high demand. If you have more CPU cores, you will need to increase this for maximised performance.
+    `MAX_CONCURRENCY`: This parameter specifies the maximum number of reNgine's concurrent Celery worker processes that can be spawned. In this case, it's set to 80, meaning that the application can utilize up to 80 concurrent worker processes to execute tasks concurrently. This is useful for handling a high volume of scans or when you want to scale up processing power during periods of high demand. If you have more CPU cores, you will need to increase this for maximised performance.
 
-    MIN_CONCURRENCY: On the other hand, MIN_CONCURRENCY specifies the minimum number of concurrent worker processes that should be maintained, even during periods of lower demand. In this example, it's set to 10, which means that even when there are fewer tasks to process, at least 10 worker processes will be kept running. This helps ensure that the application can respond promptly to incoming tasks without the overhead of repeatedly starting and stopping worker processes.
+    `MIN_CONCURRENCY`: On the other hand, MIN_CONCURRENCY specifies the minimum number of concurrent worker processes that should be maintained, even during periods of lower demand. In this example, it's set to 10, which means that even when there are fewer tasks to process, at least 10 worker processes will be kept running. This helps ensure that the application can respond promptly to incoming tasks without the overhead of repeatedly starting and stopping worker processes.
 
-    These settings allow for dynamic scaling of Celery workers, ensuring that the application efficiently manages its workload by adjusting the number of concurrent workers based on the workload's size and complexity
+    These settings allow for dynamic scaling of Celery workers, ensuring that the application efficiently manages its workload by adjusting the number of concurrent workers based on the workload's size and complexity.
+
+    Here is the ideal value for `MIN_CONCURRENCY` and `MAX_CONCURRENCY` depending on the number of RAM your machine has:
+
+    * 4GB: `MAX_CONCURRENCY=10`
+    * 8GB: `MAX_CONCURRENCY=30`
+    * 16GB: `MAX_CONCURRENCY=50`
+
+    This is just an ideal value which developers have tested and tried out and works! But feel free to play around with the values.
+    Maximum number of scans is determined by various factors, your network bandwidth, RAM, number of CPUs available. etc
 
 1. Run the installation script, Please keep an eye for any prompt, you will also be asked for username and password for reNgine-ng.
 
     ```bash
     sudo ./install.sh
+    ```
+
+    Or for a non-interactive installation, use `-n` argument (make sure you've modified the `.env` file before launching the installation).
+
+    ```bash
+    sudo ./install.sh -n
     ```
 
     If `install.sh` does not have install permission, please change it, `chmod +x install.sh`
@@ -349,8 +380,8 @@ Installation instructions can be found at [https://github.com/Security-Tools-All
     ```
 
     If `update.sh` does not have execution permissions, please change it, `sudo chmod +x update.sh`
-  
-    **NOTE:** if you're updating from 1.3.6 and you're getting a 'password authentication failed' error, consider uninstalling 1.3.6 first, then install 2.x.x as you'd normally do.
+
+    **NOTE:** if you're updating from 1.3.6, and you're getting a 'password authentication failed' error, consider uninstalling 1.3.6 first, then install 2.x.x as you'd normally do.
 
 ### Changelog
 
@@ -392,7 +423,7 @@ Installation instructions can be found at [https://github.com/Security-Tools-All
 
 ### Contributing
 
-Contributions are what make the open-source community such an amazing place to learn, inspire and create. Every contributions you make is **greatly appreciated**. Your contributions can be as simple as fixing the indentation or UI, or as complex as adding new modules and features.
+Contributions are what make the open-source community such an amazing place to learn, inspire and create. Every contribution you make is **greatly appreciated**. Your contributions can be as simple as fixing the indentation or UI, or as complex as adding new modules and features.
 
 See the [Contributing Guide](.github/CONTRIBUTING.md) to get started.
 
@@ -424,6 +455,54 @@ Now you know the real error is `TypeError: run_command() got an unexpected keywo
 And you can post the full stack trace to your newly created issue to help developers to track the root cause of the bug and correct the bug easily
 
 **Activating debug like this also give you the Django Debug Toolbar on the left side & full stack trace in the browser** instead of an error 500 without any details.
+So don't forget to open the developer console and check for any XHR request with error 500.
+If there's any, check the response of this request to get your detailed error.
+
+<img src="https://user-images.githubusercontent.com/1230954/276260955-ed1e1168-7c8f-43a3-b54d-b6285d52b771.png">
+
+Happy issuing ;)
+
+![-----------------------------------------------------](https://raw.githubusercontent.com/andreasbm/readme/master/assets/lines/aqua.png)
+
+### Submitting issues
+
+You can submit issues related to this project, but you should do it in a way that helps developers to resolve it as quickly as possible.
+
+For that, you need to add as much valuable information as possible.
+
+You can have this valuable information by following these steps:
+
+- Go to the root of the git cloned project
+- Edit `web/entrypoint.sh` and add `export DEBUG=1` at the top
+This should give you this result
+
+  ```python
+  #!/bin/bash
+
+  export DEBUG=1
+
+  python3 manage.py migrate
+  python3 manage.py runserver 0.0.0.0:8000
+
+  exec "$@"
+  ```
+- Restart the web container: `docker-compose restart web`
+- To deactivate, set **DEBUG** to **0** and restart the web container again
+
+Then, with **DEBUG** set to **1**, in the `make logs` output you could see the full stack trace to debug reNgine.
+
+Example with the tool arsenal version check API bug.
+
+```
+web_1          |   File "/usr/local/lib/python3.10/dist-packages/celery/app/task.py", line 411, in __call__
+web_1          |     return self.run(*args, **kwargs)
+web_1          | TypeError: run_command() got an unexpected keyword argument 'echo'
+```
+Now you know the real error is `TypeError: run_command() got an unexpected keyword argument 'echo'`
+
+And you can post the full stack trace to your newly created issue to help developers to track the root cause of the bug and correct the bug easily
+
+**Activating debug like this also give you the full stack trace in the browser** instead of an error 500 without any details.
 So don't forget to open the developer console and check for any XHR request with error 500.
 If there's any, check the response of this request to get your detailed error.
 

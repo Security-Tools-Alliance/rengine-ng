@@ -12,6 +12,7 @@ import tldextract
 import concurrent.futures
 import base64
 import uuid
+from pathlib import Path
 
 from datetime import datetime
 from urllib.parse import urlparse
@@ -117,8 +118,13 @@ def initiate_scan(
 		scan.used_gf_patterns = ','.join(gf_patterns)
 	scan.save()
 
-	# Create scan results dir
-	os.makedirs(scan.results_dir)
+	try:
+		os.makedirs(scan.results_dir, exist_ok=True)
+	except:
+		import traceback
+
+		traceback.print_exc()
+		raise
 
 	# Build task context
 	ctx = {
@@ -394,49 +400,49 @@ def subdomain_discovery(
 		if tool in default_subdomain_tools:
 			if tool == 'amass-passive':
 				use_amass_config = config.get(USE_AMASS_CONFIG, False)
-				cmd = f'amass enum -passive -d {host} -o {self.results_dir}/subdomains_amass.txt'
-				cmd += ' -config /root/.config/amass.ini' if use_amass_config else ''
+				cmd = f'amass enum -passive -d {host} -o ' + str(Path(self.results_dir) / 'subdomains_amass.txt')
+				cmd += (' -config ' + str(Path.home() / '.config' / 'amass.ini')) if use_amass_config else ''
 
 			elif tool == 'amass-active':
 				use_amass_config = config.get(USE_AMASS_CONFIG, False)
 				amass_wordlist_name = config.get(AMASS_WORDLIST, 'deepmagic.com-prefixes-top50000')
-				wordlist_path = f'/usr/src/wordlist/{amass_wordlist_name}.txt'
-				cmd = f'amass enum -active -d {host} -o {self.results_dir}/subdomains_amass_active.txt'
-				cmd += ' -config /root/.config/amass.ini' if use_amass_config else ''
+				wordlist_path = str(Path(RENGINE_WORDLISTS) / f'{amass_wordlist_name}.txt')
+				cmd = f'amass enum -active -d {host} -o ' + str(Path(self.results_dir) / 'subdomains_amass_active.txt')
+				cmd += (' -config ' + str(Path.home() / '.config' / 'amass.ini')) if use_amass_config else ''
 				cmd += f' -brute -w {wordlist_path}'
 
 			elif tool == 'sublist3r':
-				cmd = f'python3 /usr/src/github/Sublist3r/sublist3r.py -d {host} -t {threads} -o {self.results_dir}/subdomains_sublister.txt'
+				cmd = f'sublist3r -d {host} -t {threads} -o ' + str(Path(self.results_dir) / 'subdomains_sublister.txt')
 
 			elif tool == 'subfinder':
-				cmd = f'subfinder -d {host} -o {self.results_dir}/subdomains_subfinder.txt'
+				cmd = f'subfinder -d {host} -o ' + str(Path(self.results_dir) / 'subdomains_subfinder.txt')
 				use_subfinder_config = config.get(USE_SUBFINDER_CONFIG, False)
-				cmd += ' -config /root/.config/subfinder/config.yaml' if use_subfinder_config else ''
+				cmd += (' -config ' + str(Path.home() / '.config' / 'subfinder' / 'config.yaml')) if use_subfinder_config else ''
 				cmd += f' -proxy {proxy}' if proxy else ''
 				cmd += f' -timeout {timeout}' if timeout else ''
 				cmd += f' -t {threads}' if threads else ''
 				cmd += f' -silent'
 
 			elif tool == 'oneforall':
-				cmd = f'python3 /usr/src/github/OneForAll/oneforall.py --target {host} run'
-				cmd_extract = f'cut -d\',\' -f6 /usr/src/github/OneForAll/results/{host}.csv | tail -n +2 > {self.results_dir}/subdomains_oneforall.txt'
-				cmd_rm = f'rm -rf /usr/src/github/OneForAll/results/{host}.csv'
+				cmd = f'oneforall --target {host} run'
+				cmd_extract = f'cut -d\',\' -f6 ' + str(Path(RENGINE_TOOL_GITHUB_PATH) / 'OneForAll' / 'results' / f'{host}.csv') + ' > ' + str(Path(self.results_dir) / 'subdomains_oneforall.txt')
+				cmd_rm = f'rm -rf ' + str(Path(RENGINE_TOOL_GITHUB_PATH) / 'OneForAll' / 'results'/ f'{host}.csv')
 				cmd += f' && {cmd_extract} && {cmd_rm}'
 
 			elif tool == 'ctfr':
-				results_file = self.results_dir + '/subdomains_ctfr.txt'
-				cmd = f'python3 /usr/src/github/ctfr/ctfr.py -d {host} -o {results_file}'
+				results_file = str(Path(self.results_dir) / 'subdomains_ctfr.txt')
+				cmd = f'ctfr -d {host} -o {results_file}'
 				cmd_extract = f"cat {results_file} | sed 's/\*.//g' | tail -n +12 | uniq | sort > {results_file}"
 				cmd += f' && {cmd_extract}'
 
 			elif tool == 'tlsx':
-				results_file = self.results_dir + '/subdomains_tlsx.txt'
+				results_file = str(Path(self.results_dir) / 'subdomains_tlsx.txt')
 				cmd = f'tlsx -san -cn -silent -ro -host {host}'
 				cmd += f" | sed -n '/^\([a-zA-Z0-9]\([-a-zA-Z0-9]*[a-zA-Z0-9]\)\?\.\)\+{host}$/p' | uniq | sort"
 				cmd += f' > {results_file}'
 
 			elif tool == 'netlas':
-				results_file = self.results_dir + '/subdomains_netlas.txt'
+				results_file = str(Path(self.results_dir) / 'subdomains_netlas.txt')
 				cmd = f'netlas search -d domain -i domain domain:"*.{host}" -f json'
 				netlas_key = get_netlas_key()
 				cmd += f' -a {netlas_key}' if netlas_key else ''
@@ -459,7 +465,7 @@ def subdomain_discovery(
 
 			
 			cmd = cmd.replace('{TARGET}', host)
-			cmd = cmd.replace('{OUTPUT}', f'{self.results_dir}/subdomains_{tool}.txt')
+			cmd = cmd.replace('{OUTPUT}', str(Path(self.results_dir) / f'subdomains_{tool}.txt'))
 			cmd = cmd.replace('{PATH}', custom_tool.github_clone_path) if '{PATH}' in cmd else cmd
 		else:
 			logger.warning(
@@ -482,7 +488,7 @@ def subdomain_discovery(
 	# Gather all the tools' results in one single file. Write subdomains into
 	# separate files, and sort all subdomains.
 	run_command(
-		f'cat {self.results_dir}/subdomains_*.txt > {self.output_path}',
+		f'cat ' + str(Path(self.results_dir) / 'subdomains_*.txt') + f' > {self.output_path}',
 		shell=True,
 		history_file=self.history_file,
 		scan_id=self.scan_id,
@@ -997,10 +1003,10 @@ def theHarvester(config, host, scan_history_id, activity_id, results_dir, ctx={}
 	"""
 	scan_history = ScanHistory.objects.get(pk=scan_history_id)
 	enable_http_crawl = config.get(ENABLE_HTTP_CRAWL, DEFAULT_ENABLE_HTTP_CRAWL)
-	output_path_json = f'{results_dir}/theHarvester.json'
-	theHarvester_dir = '/usr/src/github/theHarvester'
-	history_file = f'{results_dir}/commands.txt'
-	cmd  = f'python3 {theHarvester_dir}/theHarvester.py -d {host} -b all -f {output_path_json}'
+	output_path_json = str(Path(results_dir) / 'theHarvester.json')
+	theHarvester_dir = str(Path(RENGINE_TOOL_GITHUB_PATH) / 'theHarvester')
+	history_file = str(Path(results_dir) / 'commands.txt')
+	cmd  = f'theHarvester -d {host} -b all -f {output_path_json}'
 
 	# Update proxies.yaml
 	proxy_query = Proxy.objects.all()
@@ -1009,7 +1015,7 @@ def theHarvester(config, host, scan_history_id, activity_id, results_dir, ctx={}
 		if proxy.use_proxy:
 			proxy_list = proxy.proxies.splitlines()
 			yaml_data = {'http' : proxy_list}
-			with open(f'{theHarvester_dir}/proxies.yaml', 'w') as file:
+			with open(Path(theHarvester_dir) / 'proxies.yaml', 'w') as file:
 				yaml.dump(yaml_data, file)
 
 	# Run cmd
@@ -1115,11 +1121,11 @@ def h8mail(config, host, scan_history_id, activity_id, results_dir, ctx={}):
 	"""
 	logger.warning('Getting leaked credentials')
 	scan_history = ScanHistory.objects.get(pk=scan_history_id)
-	input_path = f'{results_dir}/emails.txt'
-	output_file = f'{results_dir}/h8mail.json'
+	input_path = str(Path(results_dir) / 'emails.txt')
+	output_file = str(Path(results_dir) / 'h8mail.json')
 
 	cmd = f'h8mail -t {input_path} --json {output_file}'
-	history_file = f'{results_dir}/commands.txt'
+	history_file = str(Path(results_dir) / 'commands.txt')
 
 	run_command(
 		cmd,
@@ -1152,9 +1158,9 @@ def screenshot(self, ctx={}, description=None):
 	"""
 
 	# Config
-	screenshots_path = f'{self.results_dir}/screenshots'
-	output_path = f'{self.results_dir}/screenshots/{self.filename}'
-	alive_endpoints_file = f'{self.results_dir}/endpoints_alive.txt'
+	screenshots_path = str(Path(self.results_dir) / 'screenshots')
+	output_path = str(Path(self.results_dir) / 'screenshots' / self.filename)
+	alive_endpoints_file = str(Path(self.results_dir) / 'endpoints_alive.txt')
 	config = self.yaml_configuration.get(SCREENSHOT) or {}
 	enable_http_crawl = config.get(ENABLE_HTTP_CRAWL, DEFAULT_ENABLE_HTTP_CRAWL)
 	intensity = config.get(INTENSITY) or self.yaml_configuration.get(INTENSITY, DEFAULT_SCAN_INTENSITY)
@@ -1178,7 +1184,7 @@ def screenshot(self, ctx={}, description=None):
 	send_output_file = notification.send_scan_output_file if notification else False
 
 	# Run cmd
-	cmd = f'python3 /usr/src/github/EyeWitness/Python/EyeWitness.py -f {alive_endpoints_file} -d {screenshots_path} --no-prompt'
+	cmd = f'EyeWitness -f {alive_endpoints_file} -d {screenshots_path} --no-prompt'
 	cmd += f' --timeout {timeout}' if timeout > 0 else ''
 	cmd += f' --threads {threads}' if threads > 0 else ''
 	run_command(
@@ -1205,19 +1211,19 @@ def screenshot(self, ctx={}, description=None):
 			if status == 'Successful' and subdomain_query.exists():
 				subdomain = subdomain_query.first()
 				screenshot_paths.append(screenshot_path)
-				subdomain.screenshot_path = screenshot_path.replace('/usr/src/scan_results/', '')
+				subdomain.screenshot_path = screenshot_path.replace(RENGINE_RESULTS, '')
 				subdomain.save()
 				logger.warning(f'Added screenshot for {subdomain.name} to DB')
 
 	# Remove all db, html extra files in screenshot results
 	run_command(
-		'rm -rf {0}/*.csv {0}/*.db {0}/*.js {0}/*.html {0}/*.css'.format(screenshots_path),
+		f'rm -rf {screenshots_path}/*.csv {screenshots_path}/*.db {screenshots_path}/*.js {screenshots_path}/*.html {screenshots_path}/*.css',
 		shell=True,
 		history_file=self.history_file,
 		scan_id=self.scan_id,
 		activity_id=self.activity_id)
 	run_command(
-		f'rm -rf {screenshots_path}/source',
+		f'rm -rf ' + str(Path(screenshots_path) / 'source'),
 		shell=True,
 		history_file=self.history_file,
 		scan_id=self.scan_id,
@@ -1246,7 +1252,7 @@ def port_scan(self, hosts=[], ctx={}, description=None):
 	Returns:
 		list: List of open ports (dict).
 	"""
-	input_file = f'{self.results_dir}/input_subdomains_port_scan.txt'
+	input_file = str(Path(self.results_dir) / 'input_subdomains_port_scan.txt')
 	proxy = get_random_proxy()
 
 	# Config
@@ -1291,7 +1297,7 @@ def port_scan(self, hosts=[], ctx={}, description=None):
 		ports_str = ','.join(ports)
 		ports_str = f' -p {ports_str}'
 	cmd += ports_str
-	cmd += ' -config /root/.config/naabu/config.yaml' if use_naabu_config else ''
+	cmd += (' -config ' + str(Path.home() / '.config' / 'naabu' / 'config.yaml')) if use_naabu_config else ''
 	cmd += f' -proxy "{proxy}"' if proxy else ''
 	cmd += f' -c {threads}' if threads else ''
 	cmd += f' -rate {rate_limit}' if rate_limit > 0 else ''
@@ -1511,7 +1517,7 @@ def waf_detection(self, ctx={}, description=None):
 	Returns:
 		list: List of startScan.models.Waf objects.
 	"""
-	input_path = f'{self.results_dir}/input_endpoints_waf_detection.txt'
+	input_path = str(Path(self.results_dir) / 'input_endpoints_waf_detection.txt')
 	config = self.yaml_configuration.get(WAF_DETECTION) or {}
 	enable_http_crawl = config.get(ENABLE_HTTP_CRAWL, DEFAULT_ENABLE_HTTP_CRAWL)
 
@@ -1603,11 +1609,11 @@ def dir_file_fuzz(self, ctx={}, description=None):
 	threads = config.get(THREADS) or self.yaml_configuration.get(THREADS, DEFAULT_THREADS)
 	wordlist_name = config.get(WORDLIST, 'dicc')
 	delay = rate_limit / (threads * 100) # calculate request pause delay from rate_limit and number of threads
-	input_path = f'{self.results_dir}/input_dir_file_fuzz.txt'
+	input_path = str(Path(self.results_dir) / 'input_dir_file_fuzz.txt')
 
 	# Get wordlist
 	wordlist_name = 'dicc' if wordlist_name == 'default' else wordlist_name
-	wordlist_path = f'/usr/src/wordlist/{wordlist_name}.txt'
+	wordlist_path = str(Path(RENGINE_WORDLISTS) / f'{wordlist_name}.txt')
 
 	# Build command
 	cmd += f' -w {wordlist_path}'
@@ -1756,7 +1762,7 @@ def fetch_url(self, urls=[], ctx={}, description=None):
 		urls (list): List of URLs to start from.
 		description (str, optional): Task description shown in UI.
 	"""
-	input_path = f'{self.results_dir}/input_endpoints_fetch_url.txt'
+	input_path = str(Path(self.results_dir) / 'input_endpoints_fetch_url.txt')
 	proxy = get_random_proxy()
 
 	# Config
@@ -1830,15 +1836,15 @@ def fetch_url(self, urls=[], ctx={}, description=None):
 
 	# Cleanup task
 	sort_output = [
-		f'cat {self.results_dir}/urls_* > {self.output_path}',
+		f'cat ' + str(Path(self.results_dir) / 'urls_*') + f' > {self.output_path}',
 		f'cat {input_path} >> {self.output_path}',
 		f'sort -u {self.output_path} -o {self.output_path}',
 	]
 	if ignore_file_extension:
 		ignore_exts = '|'.join(ignore_file_extension)
 		grep_ext_filtered_output = [
-			f'cat {self.output_path} | grep -Eiv "\\.({ignore_exts}).*" > {self.results_dir}/urls_filtered.txt',
-			f'mv {self.results_dir}/urls_filtered.txt {self.output_path}'
+			f'cat {self.output_path} | grep -Eiv "\\.({ignore_exts}).*" > ' + str(Path(self.results_dir) / 'urls_filtered.txt'),
+			f'mv ' + str(Path(self.results_dir) / 'urls_filtered.txt') + f' {self.output_path}'
 		]
 		sort_output.extend(grep_ext_filtered_output)
 	cleanup = chain(
@@ -1926,7 +1932,7 @@ def fetch_url(self, urls=[], ctx={}, description=None):
 
 		# Run gf on current pattern
 		logger.warning(f'Running gf on pattern "{gf_pattern}"')
-		gf_output_file = f'{self.results_dir}/gf_patterns_{gf_pattern}.txt'
+		gf_output_file = str(Path(self.results_dir) / f'gf_patterns_{gf_pattern}.txt')
 		cmd = f'cat {self.output_path} | gf {gf_pattern} | grep -Eo {host_regex} >> {gf_output_file}'
 		run_command(
 			cmd,
@@ -2311,7 +2317,7 @@ def nuclei_scan(self, urls=[], ctx={}, description=None):
 	"""
 	# Config
 	config = self.yaml_configuration.get(VULNERABILITY_SCAN) or {}
-	input_path = f'{self.results_dir}/input_endpoints_vulnerability_scan.txt'
+	input_path = str(Path(self.results_dir) / 'input_endpoints_vulnerability_scan.txt')
 	enable_http_crawl = config.get(ENABLE_HTTP_CRAWL, DEFAULT_ENABLE_HTTP_CRAWL)
 	concurrency = config.get(NUCLEI_CONCURRENCY) or self.yaml_configuration.get(THREADS, DEFAULT_THREADS)
 	intensity = config.get(INTENSITY) or self.yaml_configuration.get(INTENSITY, DEFAULT_SCAN_INTENSITY)
@@ -2345,7 +2351,7 @@ def nuclei_scan(self, urls=[], ctx={}, description=None):
 		)
 
 	if intensity == 'normal': # reduce number of endpoints to scan
-		unfurl_filter = f'{self.results_dir}/urls_unfurled.txt'
+		unfurl_filter = str(Path(self.results_dir) / 'urls_unfurled.txt')
 		run_command(
 			f"cat {input_path} | unfurl -u format %s://%d%p |uro > {unfurl_filter}",
 			shell=True,
@@ -2385,7 +2391,7 @@ def nuclei_scan(self, urls=[], ctx={}, description=None):
 
 	# Build CMD
 	cmd = 'nuclei -j'
-	cmd += ' -config /root/.config/nuclei/config.yaml' if use_nuclei_conf else ''
+	cmd += (' -config ' + str(Path.home() / '.config' / 'nuclei' / 'config.yaml')) if use_nuclei_conf else ''
 	cmd += f' -irr'
 	cmd += f' {custom_header}' if custom_header else ''
 	cmd += f' -l {input_path}'
@@ -2447,7 +2453,7 @@ def dalfox_xss_scan(self, urls=[], ctx={}, description=None):
 	timeout = dalfox_config.get(TIMEOUT)
 	delay = dalfox_config.get(DELAY)
 	threads = dalfox_config.get(THREADS) or self.yaml_configuration.get(THREADS, DEFAULT_THREADS)
-	input_path = f'{self.results_dir}/input_endpoints_dalfox_xss.txt'
+	input_path = str(Path(self.results_dir) / 'input_endpoints_dalfox_xss.txt')
 
 	if urls:
 		with open(input_path, 'w') as f:
@@ -2574,8 +2580,8 @@ def crlfuzz_scan(self, urls=[], ctx={}, description=None):
 	proxy = get_random_proxy()
 	user_agent = vuln_config.get(USER_AGENT) or self.yaml_configuration.get(USER_AGENT)
 	threads = vuln_config.get(THREADS) or self.yaml_configuration.get(THREADS, DEFAULT_THREADS)
-	input_path = f'{self.results_dir}/input_endpoints_crlf.txt'
-	output_path = f'{self.results_dir}/{self.filename}'
+	input_path = str(Path(self.results_dir) / 'input_endpoints_crlf.txt')
+	output_path = str(Path(self.results_dir) / f'{self.filename}')
 
 	if urls:
 		with open(input_path, 'w') as f:
@@ -2693,7 +2699,7 @@ def s3scanner(self, ctx={}, description=None):
 		ctx (dict): Context
 		description (str, optional): Task description shown in UI.
 	"""
-	input_path = f'{self.results_dir}/#{self.scan_id}_subdomain_discovery.txt'
+	input_path = str(Path(self.results_dir) / f'#{self.scan_id}_subdomain_discovery.txt')
 	vuln_config = self.yaml_configuration.get(VULNERABILITY_SCAN) or {}
 	s3_config = vuln_config.get(S3SCANNER) or {}
 	threads = s3_config.get(THREADS) or self.yaml_configuration.get(THREADS, DEFAULT_THREADS)
@@ -2745,7 +2751,7 @@ def http_crawl(
 		list: httpx results.
 	"""
 	logger.info('Initiating HTTP Crawl')
-	cmd = '/go/bin/httpx'
+	cmd = 'httpx'
 	config = self.yaml_configuration.get(HTTP_CRAWL) or {}
 	custom_header = config.get(CUSTOM_HEADER) or self.yaml_configuration.get(CUSTOM_HEADER)
 	if custom_header:
@@ -2753,8 +2759,8 @@ def http_crawl(
 	threads = config.get(THREADS, DEFAULT_THREADS)
 	follow_redirect = config.get(FOLLOW_REDIRECT, False)
 	self.output_path = None
-	input_path = f'{self.results_dir}/httpx_input.txt'
-	history_file = f'{self.results_dir}/commands.txt'
+	input_path = str(Path(self.results_dir) / 'httpx_input.txt')
+	history_file = str(Path(self.results_dir) / 'commands.txt')
 	if urls: # direct passing URLs to check
 		if self.url_filter:
 			urls = [u for u in urls if self.url_filter in u]
@@ -2954,6 +2960,7 @@ def send_notif(
 		message = enrich_notification(message, scan_history_id, subscan_id)
 	send_discord_message(message, **options)
 	send_slack_message(message)
+	send_lark_message(message)
 	send_telegram_message(message)
 
 
@@ -3158,7 +3165,7 @@ def send_hackerone_report(vulnerability_id):
 				"type": "report",
 				"attributes": {
 				  "team_handle": vulnerability.target_domain.h1_team_handle,
-				  "title": '{} found in {}'.format(vulnerability.name, vulnerability.http_url),
+				  "title": f'{vulnerability.name} found in {vulnerability.http_url}',
 				  "vulnerability_information": tpl,
 				  "severity_rating": severity_value,
 				  "impact": "More information about the impact and vulnerability can be found here: \n" + vulnerability.reference if vulnerability.reference else "NA",
@@ -4309,9 +4316,9 @@ def get_and_save_dork_results(lookup_target, results_dir, type, lookup_keywords=
 	elif lookup_keywords:
 		gofuzz_command += f' -w {lookup_keywords}'
 
-	output_file = f'{results_dir}/gofuzz.txt'
+	output_file = str(Path(results_dir) / 'gofuzz.txt')
 	gofuzz_command += f' -o {output_file}'
-	history_file = f'{results_dir}/commands.txt'
+	history_file = str(Path(results_dir) / 'commands.txt')
 
 	try:
 		run_command(
@@ -4343,6 +4350,56 @@ def get_and_save_dork_results(lookup_target, results_dir, type, lookup_keywords=
 		logger.exception(e)
 
 	return results
+
+
+def get_and_save_emails(scan_history, activity_id, results_dir):
+	"""Get and save emails from Google, Bing and Baidu.
+
+	Args:
+		scan_history (startScan.ScanHistory): Scan history object.
+		activity_id: ScanActivity Object
+		results_dir (str): Results directory.
+
+	Returns:
+		list: List of emails found.
+	"""
+	emails = []
+
+	# Proxy settings
+	# get_random_proxy()
+
+	# Gather emails from Google, Bing and Baidu
+	output_file = str(Path(results_dir) / 'emails_tmp.txt')
+	history_file = str(Path(results_dir) / 'commands.txt')
+	command = f'infoga --domain {scan_history.domain.name} --source all --report {output_file}'
+	try:
+		run_command(
+			command,
+			shell=False,
+			history_file=history_file,
+			scan_id=scan_history.id,
+			activity_id=activity_id)
+
+		if not os.path.isfile(output_file):
+			logger.info('No Email results')
+			return []
+
+		with open(output_file) as f:
+			for line in f.readlines():
+				if 'Email' in line:
+					split_email = line.split(' ')[2]
+					emails.append(split_email)
+
+		output_path = str(Path(results_dir) / 'emails.txt')
+		with open(output_path, 'w') as output_file:
+			for email_address in emails:
+				save_email(email_address, scan_history)
+				output_file.write(f'{email_address}\n')
+
+	except Exception as e:
+		logger.exception(e)
+	return emails
+
 
 def save_metadata_info(meta_dict):
 	"""Extract metadata from Google Search.
