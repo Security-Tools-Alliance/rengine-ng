@@ -2,6 +2,7 @@ import logging
 import re
 import socket
 import subprocess
+import ipaddress
 
 import requests
 import validators
@@ -1112,40 +1113,59 @@ class CMSDetector(APIView):
 
 
 class IPToDomain(APIView):
-	def get(self, request):
-		req = self.request
-		ip_address = req.query_params.get('ip_address')
-		if not ip_address:
-			return Response({
-				'status': False,
-				'message': 'IP Address Required'
-			})
-		try:
-			logger.info(f'Resolving IP address {ip_address} ...')
-			domain, domains, ips = socket.gethostbyaddr(ip_address)
-			response = {
-				'status': True,
-				'ip_address': ip_address,
-				'domains': domains or [domain],
-				'resolves_to': domain
-			}
-		except socket.herror: # ip does not have a PTR record
-			logger.info(f'No PTR record for {ip_address}')
-			response = {
-				'status': True,
-				'ip_address': ip_address,
-				'domains': [ip_address],
-				'resolves_to': ip_address
-			}
-		except Exception as e:
-			logger.exception(e)
-			response = {
-				'status': False,
-				'ip_address': ip_address,
-				'message': 'Exception {}'.format(e)
-			}
-		finally:
-			return Response(response)
+	#Specters Fix for IP to Domain
+	# The fix was to add a way for cidr blocks to be resolved to domains and not just single IP addresses
+	# This is done by iterating over all the hosts in the network and resolving them to domains
+	# if they cant be resolved to a domain, they are added to the list of domains
+    def get(self, request):
+        ip_address = request.query_params.get('ip_address')
+        if not ip_address:
+            return Response({
+                'status': False,
+                'message': 'IP Address Required'
+            })
+
+        response_data = {
+            'status': True,
+            'ip_address': ip_address,
+            'domains': [],
+        }
+
+        def resolve_ip(ip):
+            try:
+                domain, domains, ips = socket.gethostbyaddr(ip)
+                return domains or [domain]
+            except socket.herror:  # IP does not have a PTR record
+                logger.info(f'No PTR record for {ip}')
+                return [ip]
+            except Exception as e:
+                logger.exception(e)
+                return []
+
+        try:
+            # Check if it's a CIDR block
+            if '/' in ip_address:
+                network = ipaddress.ip_network(ip_address, strict=False)
+                for ip in network.hosts():
+                    resolved_domains = resolve_ip(str(ip))
+                    response_data['domains'].extend(resolved_domains)
+            else:  # It's a single IP address
+                resolved_domains = resolve_ip(ip_address)
+                response_data['domains'].extend(resolved_domains)
+        except ValueError:
+            return Response({
+                'status': False,
+                'message': 'Invalid IP address or CIDR block'
+            })
+        except Exception as e:
+            logger.exception(e)
+            return Response({
+                'status': False,
+                'message': 'Exception {}'.format(e)
+            })
+
+        response_data['domains'] = list(set(response_data['domains']))  # Remove duplicates
+        return Response(response_data)
 
 
 class VulnerabilityReport(APIView):
