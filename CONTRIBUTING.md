@@ -4,7 +4,7 @@
 
 This guide is meant for users who want to contribute to the codebase of reNgine-ng, whether that is the application code or the JSON-file for adding packages. To keep all processes streamlined and consistent, we're asking you to stick to this guide whenever contributing.
 
-Even though the guide is made for contributors, it's also strongly recommended that the UAD-ng team sticks to these guidelines. After all, we're a prime example.
+Even though the guide is made for contributors, it's also strongly recommended that the reNgine-ng team sticks to these guidelines. After all, we're a prime example.
 
 ## What are the guidelines?
 
