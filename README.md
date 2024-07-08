@@ -32,7 +32,7 @@
 
 ## Why reNgine-ng?
 
-reNgine-ng is a fork of [reNgine](https://github.com/yogeshojha/rengine).
+reNgine-ng is a (detached) fork of [reNgine](https://github.com/yogeshojha/rengine).
 
 ## What is reNgine-ng?
 
