@@ -256,6 +256,7 @@ fetch_url: {
   ],
   'remove_duplicate_endpoints': true,
   'duplicate_fields': ['content_length', 'page_title'],
+  'follow_redirect': false,
   'enable_http_crawl': true,
   'gf_patterns': ['debug_logic', 'idor', 'interestingEXT', 'interestingparams', 'interestingsubs', 'lfi', 'rce', 'redirect', 'sqli', 'ssrf', 'ssti', 'xss'],
   'ignore_file_extensions': ['png', 'jpg', 'jpeg', 'gif', 'mp4', 'mpeg', 'mp3'],
