@@ -400,6 +400,16 @@ function vuln_status_change(checkbox, id) {
 	change_vuln_status(id);
 }
 
+//Selecting and unselecting all vulnerabilities in vulnerabilities page via Select All button 
+$('#select_all_checkbox').on('click',function(){
+	if($(this).is(':checked')){
+		$(".table-success").children().find(".vulnerability_checkbox").trigger("click")
+		$(".vulnerability_checkbox").trigger("click");
+	}else{
+		$(".table-success").children().find(".vulnerability_checkbox").trigger("click")	
+	}
+});
+
 $("#vulnerability_results").on('click', '.btn-delete-vulnerability', function () {
 	var vulnerability_id = $(this).attr('id');
 	var data = {'vulnerability_ids': [vulnerability_id]};
@@ -498,9 +508,8 @@ $("#bulk_delete_vulnerabilities").on('click', function () {
 				}
 			});
 		}
-	});;
-	$('a[data-toggle="tooltip').tooltip("hide")
-	
+	});
+	$('a[data-toggle="tooltip').tooltip("hide");
 });
 
 function report_hackerone(vulnerability_id, severity) {
