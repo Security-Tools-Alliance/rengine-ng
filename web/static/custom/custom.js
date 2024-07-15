@@ -400,6 +400,15 @@ function vuln_status_change(checkbox, id) {
 	change_vuln_status(id);
 }
 
+$('#select_all_checkbox').on('click',function(){
+	if($(this).is(':checked')){
+		$(".table-success").children().find(".vulnerability_checkbox").trigger("click")
+		$(".vulnerability_checkbox").trigger("click");
+	}else{
+		$(".table-success").children().find(".vulnerability_checkbox").trigger("click")	
+	}
+});
+
 $("#vulnerability_results").on('click', '.btn-delete-vulnerability', function () {
 	var vulnerability_id = $(this).attr('id');
 	var data = {'vulnerability_ids': [vulnerability_id]};
@@ -449,6 +458,58 @@ $("#vulnerability_results").on('click', '.btn-delete-vulnerability', function ()
 	$('a[data-toggle="tooltip"]').tooltip("hide")
 });
 
+$("#bulk_delete_vulnerabilities").on('click', function () {
+	//btn-delete-vulnerability contains vuln id to delete
+	var vulnerabilities = $('.table-success .btn-delete-vulnerability');
+	var vulnerabilities_ids = Array();
+	Array.from(vulnerabilities).forEach(vuln => {
+		vulnerabilities_ids.push($(vuln).attr('id'));
+	});		
+	var data = {'vulnerability_ids': vulnerabilities_ids};
+	Swal.fire({
+		showCancelButton: true,
+		title: 'Bulk Delete Vulnerabilities!',
+		text: 'Do you really want to delete all those Vulnerabilities? This action cannot be undone.',
+		icon: 'error',
+		confirmButtonText: 'Delete',
+	}).then((result) => {
+		if (result.isConfirmed) {
+			Swal.fire({
+				title: 'Deleting Vulnerabilities...',
+				allowOutsideClick: false
+			});
+			swal.showLoading();
+			fetch('/api/action/vulnerability/delete/', {
+				method: 'POST',
+				credentials: "same-origin",
+				headers: {
+					"X-CSRFToken": getCookie("csrftoken"),
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify(data)
+			})
+			.then(response => response.json())
+			.then(function (response) {
+				swal.close();
+				if (response['status']) {
+					$('.table-success').remove();
+					Snackbar.show({
+						text: 'Vulnerabilities successfully deleted!',
+						pos: 'top-right',
+						duration: 2500
+					});
+				}
+				else{
+					Swal.fire({
+						title:  'Could not delete Vulnerabilities!',
+						icon: 'fail',
+					});
+				}
+			});
+		}
+	});;
+	$('a[data-toggle="tooltip').tooltip("hide")
+});
 
 function report_hackerone(vulnerability_id, severity) {
 	message = ""
