@@ -449,6 +449,11 @@ $("#vulnerability_results").on('click', '.btn-delete-vulnerability', function ()
 	$('a[data-toggle="tooltip"]').tooltip("hide")
 });
 
+$("#bulk_delete_vulnerabilities").on('click', function () {
+	//btn-delete-vulnerability contains vuln id to delete
+	var vulnerabilities = $('.table-success .btn-delete-vulnerability');
+	console.log(vulnerabilities)
+});
 
 function report_hackerone(vulnerability_id, severity) {
 	message = ""
