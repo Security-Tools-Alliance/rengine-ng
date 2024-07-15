@@ -400,6 +400,15 @@ function vuln_status_change(checkbox, id) {
 	change_vuln_status(id);
 }
 
+$('#select_all_checkbox').on('click',function(){
+	if($(this).is(':checked')){
+		$(".table-success").children().find(".vulnerability_checkbox").trigger("click")
+		$(".vulnerability_checkbox").trigger("click");
+	}else{
+		$(".table-success").children().find(".vulnerability_checkbox").trigger("click")	
+	}
+});
+
 $("#vulnerability_results").on('click', '.btn-delete-vulnerability', function () {
 	var vulnerability_id = $(this).attr('id');
 	var data = {'vulnerability_ids': [vulnerability_id]};
