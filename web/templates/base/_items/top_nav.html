@@ -88,7 +88,7 @@
               <a href="{% url 'report_settings' current_project.slug %}" class="dropdown-item">Report Settings</a>
               {% endif %}
               {% if user|can:'modify_system_configurations' %}
-              <a href="{% url 'rengine_settings' current_project.slug %}" class="dropdown-item">reNgine Settings</a>
+              <a href="{% url 'rengine_settings' current_project.slug %}" class="dropdown-item">reNgine-ng Settings</a>
               {% endif %}
               {% if user|can:'modify_scan_configurations' %}
               <a href="{% url 'hackerone_settings' current_project.slug %}" class="dropdown-item">Hackerone Settings</a>
