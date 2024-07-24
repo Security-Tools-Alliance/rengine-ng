@@ -1,5 +1,6 @@
 import mimetypes
 import os
+from pathlib import Path
 
 from reNgine.init import first_run
 from reNgine.utilities import RengineTaskFormatter
@@ -17,6 +18,9 @@ RENGINE_RESULTS = os.environ.get('RENGINE_RESULTS', f'/usr/src/scan_results')
 RENGINE_CACHE_ENABLED = bool(int(os.environ.get('RENGINE_CACHE_ENABLED', '0')))
 RENGINE_RECORD_ENABLED = bool(int(os.environ.get('RENGINE_RECORD_ENABLED', '1')))
 RENGINE_RAISE_ON_ERROR = bool(int(os.environ.get('RENGINE_RAISE_ON_ERROR', '0')))
+
+with open(Path(RENGINE_HOME) / 'reNgine' / 'version.txt', 'r', encoding="utf-8") as f:
+    RENGINE_CURRENT_VERSION = f.read().strip()
 
 # Debug env vars
 UI_DEBUG = bool(int(os.environ.get('UI_DEBUG', '0')))
@@ -101,7 +105,8 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
-                'reNgine.context_processors.projects'
+                'reNgine.context_processors.projects',
+                'reNgine.context_processors.version'
             ],
     },
 }]
