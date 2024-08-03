@@ -265,11 +265,6 @@ LOGGING = {
             'level': 'ERROR' if UI_DEBUG else 'CRITICAL',
             'propagate': True,
         },
-        '': {
-            'handlers': ['brief'],
-            'level': 'DEBUG' if UI_DEBUG else 'INFO',
-            'propagate': False
-        },
         'celery.app.trace': {
             'handlers': ['null'],
             'propagate': False,
@@ -291,12 +286,32 @@ LOGGING = {
             'level': 'INFO',
             'propagate': False
         },
-        'reNgine.tasks': {
+        'reNgine': {
             'handlers': ['task'],
             'level': 'DEBUG' if CELERY_DEBUG else 'INFO',
-            'propagate': False
-        }
+            'propagate': True  # Allow log messages to propagate to root logger
+        },
+        'kombu.pidbox': {
+            'handlers': ['null'],
+            'propagate': False,
+        },
+        'celery.pool': {
+            'handlers': ['null'],
+            'propagate': False,
+        },
+        'celery.bootsteps': {
+            'handlers': ['null'],
+            'propagate': False,
+        },
+        'celery.utils.functional': {
+            'handlers': ['null'],
+            'propagate': False,
+        },
     },
+    'root': {
+        'handlers': ['console'],
+        'level': 'DEBUG' if CELERY_DEBUG else 'INFO',
+    }
 }
 
 # debug
