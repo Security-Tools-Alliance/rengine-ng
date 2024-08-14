@@ -1,13 +1,12 @@
 import environ
-
-env = environ.FileAwareEnv()
-
 import mimetypes
 import os
 from pathlib import Path
 
 from reNgine.init import first_run
 from reNgine.utilities import RengineTaskFormatter
+
+env = environ.FileAwareEnv()
 
 mimetypes.add_type("text/javascript", ".js", True)
 mimetypes.add_type("text/css", ".css", True)
@@ -29,6 +28,12 @@ RENGINE_TOOL_GITHUB_PATH = env('RENGINE_TOOL_GITHUB_PATH', default=str(Path(RENG
 RENGINE_CACHE_ENABLED = env.bool('RENGINE_CACHE_ENABLED', default=False)
 RENGINE_RECORD_ENABLED = env.bool('RENGINE_RECORD_ENABLED', default=True)
 RENGINE_RAISE_ON_ERROR = env.bool('RENGINE_RAISE_ON_ERROR', default=False)
+
+with open(Path(RENGINE_HOME) / 'reNgine' / 'version.txt', 'r', encoding="utf-8") as f:
+    RENGINE_CURRENT_VERSION = f.read().strip()
+
+with open(Path(RENGINE_HOME) / 'reNgine' / 'version.txt', 'r', encoding="utf-8") as f:
+    RENGINE_CURRENT_VERSION = f.read().strip()
 
 # Debug env vars
 UI_DEBUG = bool(int(os.environ.get('UI_DEBUG', '0')))
@@ -114,6 +119,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'reNgine.context_processors.projects',
+                'reNgine.context_processors.version',
                 'reNgine.context_processors.misc'
             ],
     },
@@ -283,15 +289,6 @@ LOGGING = {
             'level': 'ERROR' if UI_DEBUG else 'CRITICAL',
             'propagate': True,
         },
-        '': {
-            'handlers': ['brief'],
-            'level': 'DEBUG' if UI_DEBUG else 'INFO',
-            'propagate': False
-        },
-        'celery': {
-            'handlers': ['celery'],
-            'level': 'DEBUG' if CELERY_DEBUG else 'ERROR',
-        },
         'celery.app.trace': {
             'handlers': ['null'],
             'propagate': False,
@@ -313,12 +310,32 @@ LOGGING = {
             'level': 'INFO',
             'propagate': False
         },
-        'reNgine.tasks': {
+        'reNgine': {
             'handlers': ['task'],
             'level': 'DEBUG' if CELERY_DEBUG else 'INFO',
-            'propagate': False
-        }
+            'propagate': True  # Allow log messages to propagate to root logger
+        },
+        'kombu.pidbox': {
+            'handlers': ['null'],
+            'propagate': False,
+        },
+        'celery.pool': {
+            'handlers': ['null'],
+            'propagate': False,
+        },
+        'celery.bootsteps': {
+            'handlers': ['null'],
+            'propagate': False,
+        },
+        'celery.utils.functional': {
+            'handlers': ['null'],
+            'propagate': False,
+        },
     },
+    'root': {
+        'handlers': ['console'],
+        'level': 'DEBUG' if CELERY_DEBUG else 'INFO',
+    }
 }
 
 # debug

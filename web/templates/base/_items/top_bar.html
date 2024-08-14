@@ -135,7 +135,7 @@
           <div class="dropdown-divider"></div>
           <a href="javascript: check_rengine_update()" class="dropdown-item notify-item">
             <i class="fe-refresh-cw"></i>
-            <span>Check reNgine Update <small class="text-danger rengine_update_available"></br>Update available!</small></span>
+            <span>Check reNgine-ng Update <small class="text-danger rengine_update_available"></br>Update available!</small></span>
           </a>
           {% endif %}
           <div class="dropdown-divider"></div>
@@ -170,18 +170,18 @@
     <div class="logo-box">
       <a href="{% url 'dashboardIndex' current_project.slug %}" class="logo logo-dark text-center">
         <span class="logo-sm">
-          <h3 class="text-logo vertical-center">reNgine&nbsp;<small>2.1.0</small></h3>
+          <h3 class="text-logo vertical-center">reNgine-ng&nbsp;<small>{{ RENGINE_CURRENT_VERSION }}</small></h3>
         </span>
         <span class="logo-lg">
-          <h3 class="text-logo vertical-center">reNgine&nbsp;<small>2.1.0</small></h3>
+          <h3 class="text-logo vertical-center">reNgine-ng&nbsp;<small>{{ RENGINE_CURRENT_VERSION }}</small></h3>
         </span>
       </a>
       <a href="{% url 'dashboardIndex' current_project.slug %}" class="logo logo-light text-center">
         <span class="logo-sm">
-          <h3 class="text-sm-logo vertical-center">reNgine&nbsp;<small>2.1.0</small></h3>
+          <h3 class="text-sm-logo vertical-center">reNgine-ng&nbsp;<small>{{ RENGINE_CURRENT_VERSION }}</small></h3>
         </span>
         <span class="logo-lg">
-          <h3 class="text-lg-logo vertical-center">reNgine&nbsp;<small>2.1.0</small></h3>
+          <h3 class="text-lg-logo vertical-center">reNgine-ng&nbsp;<small>{{ RENGINE_CURRENT_VERSION }}</small></h3>
         </span>
       </a>
     </div>

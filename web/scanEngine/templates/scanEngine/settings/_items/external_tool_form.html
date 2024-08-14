@@ -103,14 +103,14 @@
   <div class="mb-3">
     <label for="tool_update" class="form-label">How do you check the version in this tool? (Optional)</label>
     <p>
-      reNgine will use this command to check the version of the tool and let you know if there is any update available. Most tools will display the version either of these ways
+      reNgine-ng will use this command to check the version of the tool and let you know if there is any update available. Most tools will display the version either of these ways
       <ul>
         <li>toolname -v</li>
         <li>toolname -V</li>
         <li>toolname --version</li>
         <li>python tool_name.py -v</li>
       </ul>
-      You can provide these commands depending on your tool, and reNgine will identify the version number.
+      You can provide these commands depending on your tool, and reNgine-ng will identify the version number.
     </p>
     <label for="version_lookup_command" class="form-label">Version Lookup Command</label>
     <span class="text-muted">(We have auto generated this for you based on your installation steps)</span>
@@ -126,9 +126,9 @@
   <div class="mb-3">
     <label for="tool_update" class="form-label">Version match regex (Optional)</label>
     <p>
-      reNgine needs version match regex to find out if there is any update available or not. You can check how the tool displays the version number and we can generate the regex for you, or you can do that manually as well.
+      reNgine-ng needs version match regex to find out if there is any update available or not. You can check how the tool displays the version number and we can generate the regex for you, or you can do that manually as well.
       <br>
-      <strong>If version regex is not given, reNgine will not be able to check the updates automatically. However, you can still force update the tools.</strong>
+      <strong>If version regex is not given, reNgine-ng will not be able to check the updates automatically. However, you can still force update the tools.</strong>
       <br>
       <strong>Additionally, we can also generate the version regext for you. You can select how this tool displays the version number. <br>See, how the tool names the release version. https://github.com/user/tool/releases</strong>
     </p>
@@ -152,7 +152,7 @@
     <p>Since you have chosen this tool as subdomain gathering tool, we require additional information on how this tool runs.</p>
     <div class="">
       <span class="font-16">
-        reNgine needs to know how this tool accepts target and output the subdomain results.<br>
+        reNgine-ng needs to know how this tool accepts target and output the subdomain results.<br>
         <strong>Use the below syntax wherever required, but remember that <code>{TARGET}</code> and <code>{OUTPUT}</code> <strong>are mandatory placeholders</strong>.</strong>
         <ul>
           <li><code>{TARGET}</code> (mandatory), Use this for the command-line arg that takes in domain as input target. Example. <code>subfinder -d {TARGET}</code></li>

@@ -303,19 +303,26 @@ def get_http_urls(
 
 	query = EndPoint.objects
 	if domain:
+		logger.debug(f'Searching URLs by domain {domain}')
 		query = query.filter(target_domain=domain)
 	if scan:
+		logger.debug(f'Searching URLs by scan {scan}')
 		query = query.filter(scan_history=scan)
 	if subdomain_id:
+		subdomain = Subdomain.objects.filter(pk=subdomain_id).first()
+		logger.debug(f'Searching URLs by subdomain {subdomain}')
 		query = query.filter(subdomain__id=subdomain_id)
 	elif exclude_subdomains and domain:
+		logger.debug(f'Excluding subdomains')
 		query = query.filter(http_url=domain.http_url)
 	if get_only_default_urls:
+		logger.debug(f'Searching only for default URL')
 		query = query.filter(is_default=True)
 
 	# If is_uncrawled is True, select only endpoints that have not been crawled
 	# yet (no status)
 	if is_uncrawled:
+		logger.debug(f'Searching for uncrawled endpoints only')
 		query = query.filter(http_status__isnull=True)
 
 	# If a path is passed, select only endpoints that contains it
@@ -1087,3 +1094,23 @@ def generate_gospider_params(custom_header):
         else:
             params.append(f' -H "{key}:{value}"')
     return ' '.join(params)
+
+def is_iterable(variable):
+    try:
+        iter(variable)
+        return True
+    except TypeError:
+        return False
+
+def extract_columns(row, columns):
+    """
+    Extract specific columns from a row based on column indices.
+    
+    Args:
+        row (list): The CSV row as a list of values.
+        columns (list): List of column indices to extract.
+    
+    Returns:
+        list: Extracted values from the specified columns.
+    """
+    return [row[i] for i in columns]

@@ -31,6 +31,8 @@ services:
       retries: 5
     networks:
       - rengine_network
+    ports:
+      - "127.0.0.1:6379:6379"
 
   celery:
     build:
@@ -38,10 +40,6 @@ services:
       dockerfile: celery/Dockerfile
     restart: unless-stopped
     entrypoint: /entrypoint-dev.sh
-    volumes:
-      - ./web:/home/rengine/rengine
-      - ./docker/celery/entrypoint-dev.sh:/entrypoint-dev.sh:ro
-      - scan_results:/home/rengine/scan_results
     environment:
       - CELERY_DEBUG=1
       - CELERY_REMOTE_DEBUG=0
@@ -56,6 +54,10 @@ services:
       - POSTGRES_HOST=${POSTGRES_HOST}
       - MAX_CONCURRENCY=${MAX_CONCURRENCY}
       - MIN_CONCURRENCY=${MIN_CONCURRENCY}
+    volumes:
+      - ./web:/home/rengine/rengine
+      - ./docker/celery/entrypoint-dev.sh:/entrypoint-dev.sh:ro
+      - scan_results:/home/rengine/scan_results
     healthcheck:
       test: ["CMD", "poetry", "-C", "/home/rengine", "run", "celery","-A","reNgine","status"]
       interval: 10s
@@ -77,25 +79,22 @@ services:
       dockerfile: celery/Dockerfile
     restart: unless-stopped
     entrypoint: /entrypoint-dev.sh
-    volumes:
-      - ./web:/home/rengine/rengine
-      - ./docker/beat/entrypoint-dev.sh:/entrypoint-dev.sh:ro
-      - scan_results:/home/rengine/scan_results
     environment:
       - CELERY_DEBUG=1
       - CELERY_BROKER=redis://redis:6379/0
       - CELERY_BACKEND=redis://redis:6379/0
-      - DOMAIN_NAME=${DOMAIN_NAME}
       - POSTGRES_DB=${POSTGRES_DB}
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_PORT=${POSTGRES_PORT}
       - POSTGRES_HOST=${POSTGRES_HOST}
-      - MAX_CONCURRENCY=${MAX_CONCURRENCY}
-      - MIN_CONCURRENCY=${MIN_CONCURRENCY}
     depends_on:
       celery:
         condition: service_healthy
+    volumes:
+      - ./web:/home/rengine/rengine
+      - ./docker/beat/entrypoint-dev.sh:/entrypoint-dev.sh:ro
+      - scan_results:/home/rengine/scan_results
     networks:
       - rengine_network
 
@@ -105,11 +104,8 @@ services:
       dockerfile: web/Dockerfile
     restart: unless-stopped
     entrypoint: /entrypoint-dev.sh
-    volumes:
-      - ./web:/home/rengine/app
-      - ./docker/web/entrypoint-dev.sh:/entrypoint-dev.sh:ro
-      - scan_results:/home/rengine/scan_results
     environment:
+      - RENGINE_HOME=/home/rengine/app
       - UI_DEBUG=1
       - UI_REMOTE_DEBUG=0
       - UI_REMOTE_DEBUG_PORT=5678
@@ -121,9 +117,9 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_PORT=${POSTGRES_PORT}
       - POSTGRES_HOST=${POSTGRES_HOST}
-      # THIS IS A MUST FOR CHECKING UPDATE, EVERYTIME A COMMIT IS MERGED INTO
-      # MASTER, UPDATE THIS!!! MAJOR.MINOR.PATCH https://semver.org/
-      - RENGINE_CURRENT_VERSION='2.1.0'
+      - DJANGO_SUPERUSER_PASSWORD=${DJANGO_SUPERUSER_PASSWORD}
+    volumes:
+      - ./web:/home/rengine/app
     healthcheck:
       test: ["CMD", "curl", "-f", "-k", "http://localhost:8000"]
       interval: 10s
@@ -141,16 +137,12 @@ services:
         aliases:
           - rengine
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
       - "127.0.0.1:5678:5678"
 
   proxy:
-    restart: always
     image: nginx:alpine
-    volumes:
-      - ./config/nginx/rengine.conf:/etc/nginx/conf.d/rengine.conf:ro
-      - static_volume:/usr/src/app/staticfiles
-      - scan_results:/usr/src/scan_results
+    restart: unless-stopped
     depends_on:
       web:
         condition: service_healthy
@@ -165,6 +157,12 @@ services:
         target: /etc/nginx/certs/rengine.pem
       - source: proxy.key
         target: /etc/nginx/certs/rengine_rsa.key
+    volumes:
+      - ./config/nginx/rengine.conf:/etc/nginx/conf.d/rengine.conf:ro
+      - ./web/staticfiles:/home/rengine/app/staticfiles/
+      - scan_results:/home/rengine/scan_results
+    networks:
+      - rengine_network
     ports:
       - 8082:8082/tcp
       - 443:443/tcp
@@ -174,9 +172,9 @@ services:
     restart: unless-stopped
     container_name: ollama
     volumes:
-      - ollama_data:/root/.ollama
+      - ollama_data:/home/rengine/.ollama
     ports:
-      - "11434:11434"
+      - "127.0.0.1:11434:11434"
     networks:
       - rengine_network
     # command: ["ollama", "run", "llama2-uncensored"]
@@ -193,6 +191,7 @@ volumes:
   wordlist:
   scan_results:
   static_volume:
+  ollama_data:
 
 secrets:
   proxy.ca:

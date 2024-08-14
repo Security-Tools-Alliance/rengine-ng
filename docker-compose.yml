@@ -35,7 +35,6 @@ services:
     restart: unless-stopped
     entrypoint: /entrypoint.sh
     environment:
-      - DEBUG=0
       - CELERY_BROKER=redis://redis:6379/0
       - CELERY_BACKEND=redis://redis:6379/0
       - DOMAIN_NAME=${DOMAIN_NAME}
@@ -48,6 +47,7 @@ services:
       - MIN_CONCURRENCY=${MIN_CONCURRENCY}
     volumes:
       - ./web:/home/rengine/rengine
+      - ./docker/celery/entrypoint.sh:/entrypoint.sh:ro
       - scan_results:/home/rengine/scan_results
     healthcheck:
       test: ["CMD", "poetry", "-C", "/home/rengine", "run", "celery","-A","reNgine","status"]
@@ -64,9 +64,9 @@ services:
 
   celery-beat:
     image: docker.io/talanor/rengine-celery:v0.5
+    restart: unless-stopped
     entrypoint: /entrypoint.sh
     environment:
-      - DEBUG=0
       - CELERY_BROKER=redis://redis:6379/0
       - CELERY_BACKEND=redis://redis:6379/0
       - POSTGRES_DB=${POSTGRES_DB}
@@ -80,7 +80,7 @@ services:
     volumes:
       - ./web:/home/rengine/rengine
       - ./docker/beat/entrypoint.sh:/entrypoint.sh:ro
-      - scan_results:/usr/src/scan_results
+      - scan_results:/home/rengine/scan_results
     networks:
       - rengine_network
 
@@ -88,7 +88,6 @@ services:
     image: docker.io/talanor/rengine-web:v0.5
     restart: unless-stopped
     environment:
-      - DEBUG=0
       - RENGINE_HOME=/home/rengine/app
       - CELERY_BROKER=redis://redis:6379/0
       - CELERY_BACKEND=redis://redis:6379/0
@@ -99,9 +98,6 @@ services:
       - POSTGRES_PORT=${POSTGRES_PORT}
       - POSTGRES_HOST=${POSTGRES_HOST}
       - DJANGO_SUPERUSER_PASSWORD=${DJANGO_SUPERUSER_PASSWORD}
-      # THIS IS A MUST FOR CHECKING UPDATE, EVERYTIME A COMMIT IS MERGED INTO
-      # MASTER, UPDATE THIS!!! MAJOR.MINOR.PATCH https://semver.org/
-      - RENGINE_CURRENT_VERSION='2.1.0'
     volumes:
       - ./web:/home/rengine/app
     healthcheck:
@@ -140,8 +136,8 @@ services:
         target: /etc/nginx/certs/rengine_rsa.key
     volumes:
       - ./config/nginx/rengine.conf:/etc/nginx/conf.d/rengine.conf:ro
-      - ./web/staticfiles:/usr/src/app/staticfiles/
-      - scan_results:/usr/src/scan_results
+      - ./web/staticfiles:/home/rengine/app/staticfiles/
+      - scan_results:/home/rengine/scan_results
     networks:
       - rengine_network
     ports:
@@ -150,9 +146,10 @@ services:
 
   ollama:
     image: ollama/ollama
+    restart: unless-stopped
     container_name: ollama
     volumes:
-      - ollama_data:/root/.ollama
+      - ollama_data:/home/rengine/.ollama
     networks:
       - rengine_network
 

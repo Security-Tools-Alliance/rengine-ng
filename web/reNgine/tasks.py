@@ -22,7 +22,7 @@ from celery.result import allow_join_result
 from celery.utils.log import get_task_logger
 from django.db.models import Count
 from dotted_dict import DottedDict
-from django.utils import timezone
+from django.utils import timezone, html
 from pycvesearch import CVESearch
 from metafinder.extractor import extract_metadata_from_google_search
 
@@ -114,7 +114,7 @@ def initiate_scan(
 	uuid_scan = uuid.uuid1()
 	scan.results_dir = f'{results_dir}/{domain.name}/scans/{uuid_scan}'
 	add_gf_patterns = gf_patterns and 'fetch_url' in engine.tasks
-	if add_gf_patterns:
+	if add_gf_patterns and is_iterable(gf_patterns):
 		scan.used_gf_patterns = ','.join(gf_patterns)
 	scan.save()
 
@@ -1201,9 +1201,10 @@ def screenshot(self, ctx={}, description=None):
 	screenshot_paths = []
 	with open(output_path, 'r') as file:
 		reader = csv.reader(file)
+		header = next(reader)  # Skip header row
+		indices = [header.index(col) for col in ["Protocol", "Port", "Domain", "Request Status", "Screenshot Path", " Source Path"]]
 		for row in reader:
-			"Protocol,Port,Domain,Request Status,Screenshot Path, Source Path"
-			protocol, port, subdomain_name, status, screenshot_path, source_path = tuple(row)
+			protocol, port, subdomain_name, status, screenshot_path, source_path = extract_columns(row, indices)
 			logger.info(f'{protocol}:{port}:{subdomain_name}:{status}')
 			subdomain_query = Subdomain.objects.filter(name=subdomain_name)
 			if self.scan:
@@ -1776,12 +1777,13 @@ def fetch_url(self, urls=[], ctx={}, description=None):
 	threads = config.get(THREADS) or self.yaml_configuration.get(THREADS, DEFAULT_THREADS)
 	domain_request_headers = self.domain.request_headers if self.domain else None
 	custom_header = config.get(CUSTOM_HEADER) or self.yaml_configuration.get(CUSTOM_HEADER)
+	follow_redirect = config.get(FOLLOW_REDIRECT, False)  # Get follow redirect setting
 	if domain_request_headers or custom_header:
 		custom_header = domain_request_headers or custom_header
 	exclude_subdomains = config.get(EXCLUDED_SUBDOMAINS, False)
 
-	# Get URLs to scan and save to input file
-	if urls:
+	# Initialize the URLs
+	if urls and is_iterable(urls):
 		with open(input_path, 'w') as f:
 			f.write('\n'.join(urls))
 	else:
@@ -1793,16 +1795,15 @@ def fetch_url(self, urls=[], ctx={}, description=None):
 			ctx=ctx
 		)
 
-	# Domain regex
-	host = self.domain.name if self.domain else urlparse(urls[0]).netloc
-	host_regex = f"\'https?://([a-z0-9]+[.])*{host}.*\'"
+	# Log initial URLs
+	logger.debug(f'Initial URLs: {urls}')
 
-	# Tools cmds
+	# Initialize command map for tools
 	cmd_map = {
 		'gau': f'gau',
 		'hakrawler': 'hakrawler -subs -u',
 		'waybackurls': 'waybackurls',
-		'gospider': f'gospider --js -d 2 --sitemap --robots -w -r',
+		'gospider': f'gospider --js -d 2 --sitemap --robots -w -r -a',
 		'katana': f'katana -silent -jc -kf all -d 3 -fs rdn',
 	}
 	if proxy:
@@ -1813,26 +1814,47 @@ def fetch_url(self, urls=[], ctx={}, description=None):
 	if threads > 0:
 		cmd_map['gau'] += f' --threads {threads}'
 		cmd_map['gospider'] += f' -t {threads}'
+		cmd_map['hakrawler'] += f' -t {threads}'
 		cmd_map['katana'] += f' -c {threads}'
 	if custom_header:
 		cmd_map['gospider'] += generate_header_param(custom_header, 'gospider')
 		cmd_map['hakrawler'] += generate_header_param(custom_header, 'hakrawler')
 		cmd_map['katana'] += generate_header_param(custom_header, 'common')
-	cat_input = f'cat {input_path}'
-	grep_output = f'grep -Eo {host_regex}'
-	cmd_map = {
-		tool: f'{cat_input} | {cmd} | {grep_output} > {self.results_dir}/urls_{tool}.txt'
-		for tool, cmd in cmd_map.items()
-	}
-	tasks = group(
-		run_command.si(
-			cmd,
-			shell=True,
-			scan_id=self.scan_id,
-			activity_id=self.activity_id)
-		for tool, cmd in cmd_map.items()
-		if tool in tools
-	)
+
+	# Add follow_redirect option to tools that support it
+	if follow_redirect is False:
+		cmd_map['gospider'] += f' --no-redirect'
+		cmd_map['hakrawler'] += f' -dr'
+		cmd_map['katana'] += f' -dr'
+
+	tasks = []
+
+	# Iterate over each URL and generate commands for each tool
+	for url in urls:
+		parsed_url = urlparse(url)
+		base_domain = parsed_url.netloc.split(':')[0]  # Remove port if present
+		host_regex = f"'https?://{re.escape(base_domain)}(:[0-9]+)?(/.*)?$'"
+
+		# Log the generated regex for the current URL
+		logger.debug(f'Generated regex for domain {base_domain}: {host_regex}')
+
+		cat_input = f'echo "{url}"'
+
+		# Generate commands for each tool for the current URL
+		for tool in tools:  # Only use tools specified in the config
+			if tool in cmd_map:
+				cmd = cmd_map[tool]
+				tool_cmd = f'{cat_input} | {cmd} | grep -Eo {host_regex} > {self.results_dir}/urls_{tool}_{base_domain}.txt'
+				tasks.append(run_command.si(
+					tool_cmd,
+					shell=True,
+					scan_id=self.scan_id,
+					activity_id=self.activity_id)
+				)
+				logger.debug(f'Generated command for tool {tool}: {tool_cmd}')
+
+	# Group the tasks
+	task_group = group(tasks)
 
 	# Cleanup task
 	sort_output = [
@@ -1840,7 +1862,7 @@ def fetch_url(self, urls=[], ctx={}, description=None):
 		f'cat {input_path} >> {self.output_path}',
 		f'sort -u {self.output_path} -o {self.output_path}',
 	]
-	if ignore_file_extension:
+	if ignore_file_extension and is_iterable(ignore_file_extension):
 		ignore_exts = '|'.join(ignore_file_extension)
 		grep_ext_filtered_output = [
 			f'cat {self.output_path} | grep -Eiv "\\.({ignore_exts}).*" > ' + str(Path(self.results_dir) / 'urls_filtered.txt'),
@@ -1857,41 +1879,51 @@ def fetch_url(self, urls=[], ctx={}, description=None):
 	)
 
 	# Run all commands
-	task = chord(tasks)(cleanup)
+	task = chord(task_group)(cleanup)
 	with allow_join_result():
 		task.get()
 
 	# Store all the endpoints and run httpx
-	with open(self.output_path) as f:
-		discovered_urls = f.readlines()
-		self.notify(fields={'Discovered URLs': len(discovered_urls)})
-
-	# Some tools can have an URL in the format <URL>] - <PATH> or <URL> - <PATH>, add them
-	# to the final URL list
 	all_urls = []
-	for url in discovered_urls:
-		url = url.strip()
-		urlpath = None
-		base_url = None
-		if '] ' in url: # found JS scraped endpoint e.g from gospider
-			split = tuple(url.split('] '))
-			if not len(split) == 2:
-				logger.warning(f'URL format not recognized for "{url}". Skipping.')
-				continue
-			base_url, urlpath = split
-			urlpath = urlpath.lstrip('- ')
-		elif ' - ' in url: # found JS scraped endpoint e.g from gospider
-			base_url, urlpath = tuple(url.split(' - '))
+	tool_mapping = {}  # New dictionary to map URLs to tools
+	for tool in tools:
+		for url in urls:
+			parsed_url = urlparse(url)
+			base_domain = parsed_url.netloc.split(':')[0]  # Remove port if present
+			tool_output_file = f'{self.results_dir}/urls_{tool}_{base_domain}.txt'
+			if os.path.exists(tool_output_file):
+				with open(tool_output_file, 'r') as f:
+					discovered_urls = f.readlines()
+					for url in discovered_urls:
+						url = url.strip()
+						urlpath = None
+						base_url = None
+						if '] ' in url:  # found JS scraped endpoint e.g from gospider
+							split = tuple(url.split('] '))
+							if not len(split) == 2:
+								logger.warning(f'URL format not recognized for "{url}". Skipping.')
+								continue
+							base_url, urlpath = split
+							urlpath = urlpath.lstrip('- ')
+						elif ' - ' in url:  # found JS scraped endpoint e.g from gospider
+							base_url, urlpath = tuple(url.split(' - '))
 
-		if base_url and urlpath:
-			subdomain = urlparse(base_url)
-			url = f'{subdomain.scheme}://{subdomain.netloc}{self.url_filter}'
+						if base_url and urlpath:
+							subdomain = urlparse(base_url)
+							url = f'{subdomain.scheme}://{subdomain.netloc}{urlpath}'
 
-		if not validators.url(url):
-			logger.warning(f'Invalid URL "{url}". Skipping.')
+						if not validators.url(url):
+							logger.warning(f'Invalid URL "{url}". Skipping.')
+							continue
 
-		if url not in all_urls:
-			all_urls.append(url)
+						if url not in tool_mapping:
+							tool_mapping[url] = set()
+						tool_mapping[url].add(tool)  # Use a set to ensure uniqueness
+
+	all_urls = list(tool_mapping.keys())
+	for url, found_tools in tool_mapping.items():
+		unique_tools = ', '.join(found_tools)
+		logger.info(f'URL {url} found by tools: {unique_tools}')
 
 	# Filter out URLs if a path filter was passed
 	if self.url_filter:
@@ -1912,13 +1944,12 @@ def fetch_url(self, urls=[], ctx={}, description=None):
 			duplicate_removal_fields=duplicate_removal_fields
 		)
 
-
 	#-------------------#
 	# GF PATTERNS MATCH #
 	#-------------------#
 
 	# Combine old gf patterns with new ones
-	if gf_patterns:
+	if gf_patterns and is_iterable(gf_patterns):
 		self.scan.used_gf_patterns = ','.join(gf_patterns)
 		self.scan.save()
 
@@ -1970,10 +2001,11 @@ def fetch_url(self, urls=[], ctx={}, description=None):
 				earlier_pattern = endpoint.matched_gf_patterns
 			pattern = f'{earlier_pattern},{gf_pattern}' if earlier_pattern else gf_pattern
 			endpoint.matched_gf_patterns = pattern
+			# TODO Add tool that found the URL to the db (need to update db model)
+			# endpoint.found_by_tools = ','.join(tool_mapping.get(url, []))  # Save tools in the endpoint
 			endpoint.save()
 
 	return all_urls
-
 
 def parse_curl_output(response):
 	# TODO: Enrich from other cURL fields.
@@ -1989,7 +2021,6 @@ def parse_curl_output(response):
 	return {
 		'http_status': http_status,
 	}
-
 
 @app.task(name='vulnerability_scan', queue='main_scan_queue', bind=True, base=RengineTask)
 def vulnerability_scan(self, urls=[], ctx={}, description=None):
@@ -2339,7 +2370,7 @@ def nuclei_scan(self, urls=[], ctx={}, description=None):
 	# severities_str = ','.join(severities)
 
 	# Get alive endpoints
-	if urls:
+	if urls and is_iterable(urls):
 		with open(input_path, 'w') as f:
 			f.write('\n'.join(urls))
 	else:
@@ -2455,7 +2486,7 @@ def dalfox_xss_scan(self, urls=[], ctx={}, description=None):
 	threads = dalfox_config.get(THREADS) or self.yaml_configuration.get(THREADS, DEFAULT_THREADS)
 	input_path = str(Path(self.results_dir) / 'input_endpoints_dalfox_xss.txt')
 
-	if urls:
+	if urls and is_iterable(urls):
 		with open(input_path, 'w') as f:
 			f.write('\n'.join(urls))
 	else:
@@ -2583,7 +2614,7 @@ def crlfuzz_scan(self, urls=[], ctx={}, description=None):
 	input_path = str(Path(self.results_dir) / 'input_endpoints_crlf.txt')
 	output_path = str(Path(self.results_dir) / f'{self.filename}')
 
-	if urls:
+	if urls and is_iterable(urls):
 		with open(input_path, 'w') as f:
 			f.write('\n'.join(urls))
 	else:
@@ -2759,9 +2790,9 @@ def http_crawl(
 	threads = config.get(THREADS, DEFAULT_THREADS)
 	follow_redirect = config.get(FOLLOW_REDIRECT, False)
 	self.output_path = None
-	input_path = str(Path(self.results_dir) / 'httpx_input.txt')
-	history_file = str(Path(self.results_dir) / 'commands.txt')
-	if urls: # direct passing URLs to check
+	input_path = f'{self.results_dir}/httpx_input.txt'
+	history_file = f'{self.results_dir}/commands.txt'
+	if urls and is_iterable(urls): # direct passing URLs to check
 		if self.url_filter:
 			urls = [u for u in urls if self.url_filter in u]
 		with open(input_path, 'w') as f:
@@ -2822,9 +2853,14 @@ def http_crawl(
 
 		if not line or not isinstance(line, dict):
 			continue
+		
+		# Check if the http request has an error
+		if 'error' in line:
+			logger.error(line)
+			continue
 
 		logger.debug(line)
-
+		
 		# No response from endpoint
 		if line.get('failed', False):
 			continue
@@ -3503,8 +3539,8 @@ def parse_nuclei_result(line):
 		'description': line['info'].get('description', ''),
 		'matcher_name': line.get('matcher-name', ''),
 		'curl_command': line.get('curl-command'),
-		'request': line.get('request'),
-		'response': line.get('response'),
+		'request': html.escape(line.get('request')),
+		'response': html.escape(line.get('response')),
 		'extracted_results': line.get('extracted-results', []),
 		'cvss_metrics': line['info'].get('classification', {}).get('cvss-metrics', ''),
 		'cvss_score': line['info'].get('classification', {}).get('cvss-score'),
@@ -4053,7 +4089,8 @@ def remove_duplicate_endpoints(
 		domain_id,
 		subdomain_id=None,
 		filter_ids=[],
-		filter_status=[200, 301, 404],
+		# TODO Check if the status code could be set as parameters of the scan engine instead of hardcoded values
+		filter_status=[200, 301, 302, 303, 307, 404, 410],  # Extended status codes
 		duplicate_removal_fields=ENDPOINT_SCAN_DEFAULT_DUPLICATE_FIELDS
 	):
 	"""Remove duplicate endpoints.
@@ -4072,6 +4109,8 @@ def remove_duplicate_endpoints(
 		duplicate_removal_fields (list): List of Endpoint model fields to check for duplicates
 	"""
 	logger.info(f'Removing duplicate endpoints based on {duplicate_removal_fields}')
+	
+	# Filter endpoints based on scan history and domain
 	endpoints = (
 		EndPoint.objects
 		.filter(scan_history__id=scan_history_id)
@@ -4086,29 +4125,35 @@ def remove_duplicate_endpoints(
 	if filter_ids:
 		endpoints = endpoints.filter(id__in=filter_ids)
 
-	for field_name in duplicate_removal_fields:
-		cl_query = (
-			endpoints
-			.values_list(field_name)
-			.annotate(mc=Count(field_name))
-			.order_by('-mc')
-		)
-		for (field_value, count) in cl_query:
-			if count > DELETE_DUPLICATES_THRESHOLD:
-				eps_to_delete = (
-					endpoints
-					.filter(**{field_name: field_value})
-					.order_by('discovered_date')
-					.all()[1:]
-				)
-				msg = f'Deleting {len(eps_to_delete)} endpoints [reason: same {field_name} {field_value}]'
-				for ep in eps_to_delete:
-					url = urlparse(ep.http_url)
-					if url.path in ['', '/', '/login']: # try do not delete the original page that other pages redirect to
-						continue
-					msg += f'\n\t {ep.http_url} [{ep.http_status}] [{field_name}={field_value}]'
-					ep.delete()
-				logger.warning(msg)
+	# Group by all duplicate removal fields combined
+	fields_combined = duplicate_removal_fields[:]
+	fields_combined.append('id')  # Add ID to ensure unique identification
+
+	cl_query = (
+		endpoints
+		.values(*duplicate_removal_fields)
+		.annotate(mc=Count('id'))
+		.order_by('-mc')
+	)
+
+	for field_values in cl_query:
+		if field_values['mc'] > DELETE_DUPLICATES_THRESHOLD:
+			filter_criteria = {field: field_values[field] for field in duplicate_removal_fields}
+			eps_to_delete = (
+				endpoints
+				.filter(**filter_criteria)
+				.order_by('discovered_date')
+				.all()[1:]
+			)
+			msg = f'Deleting {len(eps_to_delete)} endpoints [reason: same {filter_criteria}]'
+			for ep in eps_to_delete:
+				url = urlparse(ep.http_url)
+				if url.path in ['', '/', '/login']:  # Ensure not to delete the original page that other pages redirect to
+					continue
+				msg += f'\n\t {ep.http_url} [{ep.http_status}] {filter_criteria}'
+				ep.delete()
+			logger.warning(msg)
+
 
 @app.task(name='run_command', bind=False, queue='run_command_queue')
 def run_command(
@@ -4667,10 +4712,10 @@ def save_subdomain_metadata(subdomain, endpoint, extra_datas={}):
 		subdomain.content_length = endpoint.content_length
 		subdomain.webserver = endpoint.webserver
 		cname = extra_datas.get('cname')
-		if cname:
+		if cname and is_iterable(cname):
 			subdomain.cname = ','.join(cname)
 		cdn = extra_datas.get('cdn')
-		if cdn:
+		if cdn and is_iterable(cdn):
 			subdomain.is_cdn = ','.join(cdn)
 			subdomain.cdn_name = extra_datas.get('cdn_name')
 		for tech in endpoint.techs.all():

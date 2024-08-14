@@ -22,6 +22,7 @@ from recon_note.models import *
 from reNgine.celery import app
 from reNgine.common_func import *
 from reNgine.definitions import ABORTED_TASK
+from reNgine.settings import RENGINE_CURRENT_VERSION
 from reNgine.settings import RENGINE_TOOL_PATH
 from reNgine.tasks import *
 from reNgine.gpt import GPTAttackSuggestionGenerator
@@ -885,7 +886,7 @@ class RengineUpdateCheck(APIView):
 	def get(self, request):
 		req = self.request
 		github_api = \
-			'https://api.github.com/repos/yogeshojha/rengine/releases'
+			'https://api.github.com/repos/Security-Tools-Alliance/rengine-ng/releases'
 		response = requests.get(github_api).json()
 		if 'message' in response:
 			return Response({'status': False, 'message': 'RateLimited'})
@@ -894,11 +895,8 @@ class RengineUpdateCheck(APIView):
 
 		# get current version_number
 		# remove quotes from current_version
-		current_version = ((os.environ['RENGINE_CURRENT_VERSION'
-							])[1:] if os.environ['RENGINE_CURRENT_VERSION'
-							][0] == 'v'
-							else os.environ['RENGINE_CURRENT_VERSION']).replace("'", "")
-
+		current_version = (RENGINE_CURRENT_VERSION[1:] if RENGINE_CURRENT_VERSION[0] == 'v' else RENGINE_CURRENT_VERSION).replace("'", "")
+		
 		# for consistency remove v from both if exists
 		latest_version = re.search(r'v(\d+\.)?(\d+\.)?(\*|\d+)',
 								   ((response[0]['name'

@@ -1,0 +1,13 @@
+changelog:
+  categories:
+    - title: Added
+      labels:
+        - enhancement
+    - title: Fixed
+      labels:
+        - bug
+    - title: Miscellaneous
+      labels:
+        - refactor
+        - dependencies
+        - documentation
