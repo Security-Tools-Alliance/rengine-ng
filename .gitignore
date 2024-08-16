@@ -57,7 +57,7 @@ docs/_build/
 staticfiles/
 
 secret
-/secrets
+docker/secrets
 
 get-docker.sh
 

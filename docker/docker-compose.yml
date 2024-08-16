@@ -1,13 +1,12 @@
+name: rengine
+
 services:
   db:
-    image: "postgres:12.3-alpine"
+    image: ghcr.io/security-tools-alliance/rengine-ng:rengine-postgres-v${RENGINE_VERSION}
+    env_file:
+      - ../.env
     restart: unless-stopped
-    environment:
-      - POSTGRES_DB=${POSTGRES_DB}
-      - POSTGRES_USER=${POSTGRES_USER}
-      - PGUSER=${POSTGRES_USER}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_PORT=${POSTGRES_PORT}
+    container_name: rengine-db-1
     volumes:
       - postgres_data:/var/lib/postgresql/data/
     healthcheck:
@@ -19,8 +18,11 @@ services:
       - rengine_network
 
   redis:
-    image: "redis:alpine"
+    image: ghcr.io/security-tools-alliance/rengine-ng:rengine-redis-v${RENGINE_VERSION}
+    env_file:
+      - ../.env
     restart: unless-stopped
+    container_name: rengine-redis-1
     hostname: redis
     healthcheck:
       test: ["CMD", "redis-cli","ping"]
@@ -31,23 +33,23 @@ services:
       - rengine_network
 
   celery:
-    image: docker.io/talanor/rengine-celery:v0.5
+    image: ghcr.io/security-tools-alliance/rengine-ng:rengine-celery-v${RENGINE_VERSION}
+    env_file:
+      - ../.env
+    user: rengine
     restart: unless-stopped
+    container_name: rengine-celery-1
     entrypoint: /entrypoint.sh
     environment:
       - CELERY_BROKER=redis://redis:6379/0
       - CELERY_BACKEND=redis://redis:6379/0
-      - DOMAIN_NAME=${DOMAIN_NAME}
-      - POSTGRES_DB=${POSTGRES_DB}
-      - POSTGRES_USER=${POSTGRES_USER}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_PORT=${POSTGRES_PORT}
-      - POSTGRES_HOST=${POSTGRES_HOST}
-      - MAX_CONCURRENCY=${MAX_CONCURRENCY}
-      - MIN_CONCURRENCY=${MIN_CONCURRENCY}
     volumes:
-      - ./web:/home/rengine/rengine
-      - ./docker/celery/entrypoint.sh:/entrypoint.sh:ro
+      - type: bind
+        source: ../web
+        target: /home/rengine/rengine
+        bind:
+          create_host_path: true
+      - ./celery/entrypoint.sh:/entrypoint.sh:ro
       - scan_results:/home/rengine/scan_results
     healthcheck:
       test: ["CMD", "poetry", "-C", "/home/rengine", "run", "celery","-A","reNgine","status"]
@@ -63,43 +65,42 @@ services:
       - rengine_network
 
   celery-beat:
-    image: docker.io/talanor/rengine-celery:v0.5
+    image: ghcr.io/security-tools-alliance/rengine-ng:rengine-celery-v${RENGINE_VERSION}
+    env_file:
+      - ../.env
+    user: rengine
     restart: unless-stopped
+    container_name: rengine-celery-beat-1
     entrypoint: /entrypoint.sh
     environment:
       - CELERY_BROKER=redis://redis:6379/0
       - CELERY_BACKEND=redis://redis:6379/0
-      - POSTGRES_DB=${POSTGRES_DB}
-      - POSTGRES_USER=${POSTGRES_USER}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_PORT=${POSTGRES_PORT}
-      - POSTGRES_HOST=${POSTGRES_HOST}
     depends_on:
       celery:
         condition: service_healthy
     volumes:
-      - ./web:/home/rengine/rengine
-      - ./docker/beat/entrypoint.sh:/entrypoint.sh:ro
+      - ../web:/home/rengine/rengine:rw,z
+      - ./beat/entrypoint.sh:/entrypoint.sh:ro
       - scan_results:/home/rengine/scan_results
     networks:
       - rengine_network
 
   web:
-    image: docker.io/talanor/rengine-web:v0.5
+    image: ghcr.io/security-tools-alliance/rengine-ng:rengine-web-v${RENGINE_VERSION}
+    env_file:
+      - ../.env
+    user: rengine
     restart: unless-stopped
+    container_name: rengine-web-1
+    entrypoint: /entrypoint.sh
     environment:
-      - RENGINE_HOME=/home/rengine/app
+      - RENGINE_HOME=/home/rengine/rengine
       - CELERY_BROKER=redis://redis:6379/0
       - CELERY_BACKEND=redis://redis:6379/0
-      - DOMAIN_NAME=${DOMAIN_NAME}
-      - POSTGRES_DB=${POSTGRES_DB}
-      - POSTGRES_USER=${POSTGRES_USER}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_PORT=${POSTGRES_PORT}
-      - POSTGRES_HOST=${POSTGRES_HOST}
-      - DJANGO_SUPERUSER_PASSWORD=${DJANGO_SUPERUSER_PASSWORD}
     volumes:
-      - ./web:/home/rengine/app
+      - ../web:/home/rengine/rengine:rw,z
+      - ./web/entrypoint.sh:/entrypoint.sh:ro
+      
     healthcheck:
       test: ["CMD", "curl", "-f", "-k", "http://localhost:8000"]
       interval: 10s
@@ -118,8 +119,11 @@ services:
           - rengine
 
   proxy:
-    image: nginx:alpine
+    image: ghcr.io/security-tools-alliance/rengine-ng:rengine-proxy-v${RENGINE_VERSION}
+    env_file:
+      - ../.env
     restart: unless-stopped
+    container_name: rengine-proxy-1
     depends_on:
       web:
         condition: service_healthy
@@ -135,8 +139,8 @@ services:
       - source: proxy.key
         target: /etc/nginx/certs/rengine_rsa.key
     volumes:
-      - ./config/nginx/rengine.conf:/etc/nginx/conf.d/rengine.conf:ro
-      - ./web/staticfiles:/home/rengine/app/staticfiles/
+      - ./proxy/config/rengine.conf:/etc/nginx/conf.d/rengine.conf:ro
+      - ../web/staticfiles:/home/rengine/rengine/staticfiles/
       - scan_results:/home/rengine/scan_results
     networks:
       - rengine_network
@@ -145,27 +149,40 @@ services:
       - 443:443/tcp
 
   ollama:
-    image: ollama/ollama
+    image: ghcr.io/security-tools-alliance/rengine-ng:rengine-ollama-v${RENGINE_VERSION}
+    env_file:
+      - ../.env
     restart: unless-stopped
-    container_name: ollama
+    container_name: rengine-ollama-1
     volumes:
-      - ollama_data:/home/rengine/.ollama
+      - ollama_data:/home/rengine/.ollama:rw,z
     networks:
       - rengine_network
 
 networks:
   rengine_network:
+    name: rengine_network
 
 volumes:
   tool_config:
+    name: rengine_tool_config
   postgres_data:
+    name: rengine_postgres_data
   gf_patterns:
+    name: rengine_gf_patterns
   nuclei_templates:
+    name: rengine_nuclei_templates
   github_repos:
+    name: rengine_github_repos
   wordlist:
+    name: rengine_wordlist
   scan_results:
+    name: rengine_scan_results
   static_volume:
+    name: rengine_static_volume
   ollama_data:
+    name: rengine_ollama_data
+
 
 secrets:
   proxy.ca:
