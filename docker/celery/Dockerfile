@@ -2,9 +2,9 @@ FROM --platform=$TARGETPLATFORM debian:12
 
 # Labels and Credits
 LABEL \
-    name="reNgine" \
-    author="Yogesh Ojha <yogesh.ojha11@gmail.com>" \
-    description="reNgine is a automated pipeline of recon process, useful for information gathering during web application penetration testing."
+    name="reNgine-ng" \
+    author="Security-Tools-Alliance (https://github.com/Security-Tools-Alliance) & Yogesh Ojha <yogesh.ojha11@gmail.com>" \
+    description="reNgine-ng is an automated pipeline of recon process, useful for information gathering during web application penetration testing."
 
 # Environment Variables
 ENV DEBIAN_FRONTEND="noninteractive" \
@@ -31,7 +31,13 @@ RUN apt update -y && apt install -y      \
     unzip               \
     curl                \
     gettext             \
-    nmap
+    nmap                \
+    net-tools           \
+    htop                \
+    fontconfig fonts-freefont-ttf fonts-noto fonts-terminus
+
+RUN fc-cache -f && \ 
+    fc-list | sort
 
 ENV USERNAME="rengine"
 RUN addgroup --gid 1000 --system $USERNAME && \
@@ -121,12 +127,14 @@ RUN wget https://github.com/mozilla/geckodriver/releases/download/v0.32.0/geckod
     cd $TOOLPATH/.github && git clone https://github.com/1ndianl33t/Gf-Patterns && mkdir -p /home/$USERNAME/.gf/ && cp -r Gf-Patterns/*.json /home/$USERNAME/.gf/ && \
     cd $TOOLPATH/.github && git clone https://github.com/tomnomnom/gf.git && cp -r $TOOLPATH/.github/gf/examples/*.json /home/$USERNAME/.gf/ && \ 
     mkdir -p /home/$USERNAME/.nmap/ && cd /home/$USERNAME/.nmap/ && git clone https://github.com/scipag/vulscan.git && cd vulscan && git reset --hard 0c793c490455e7907a7c5cbaf3f7210e80d2ee57 && ln -s $TOOLPATH/.github/vulscan /home/$USERNAME/.nmap/vulscan && \
-    mkdir -p $WORDLISTPATH && wget https://raw.githubusercontent.com/maurosoria/dirsearch/master/db/dicc.txt -O $WORDLISTPATH/dicc.txt && \
+    mkdir -p $WORDLISTPATH && \
+    wget https://raw.githubusercontent.com/maurosoria/dirsearch/master/db/dicc.txt -O $WORDLISTPATH/dicc.txt && \
+    wget https://raw.githubusercontent.com/danielmiessler/SecLists/master/Fuzzing/fuzz-Bo0oM.txt -O $WORDLISTPATH/fuzz-Bo0oM.txt && \
     wget https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/DNS/deepmagic.com-prefixes-top50000.txt -O $WORDLISTPATH/deepmagic.com-prefixes-top50000.txt && \
     mkdir -p /home/$USERNAME/nuclei-templates && wget https://raw.githubusercontent.com/NagliNagli/Shockwave-OSS/bd7445cd320a174d3073f0a61867a40849d28436/ssrf.yaml -O ~/nuclei-templates/ssrf_nagli.yaml && \
     mkdir -p /home/$USERNAME/results
 
-COPY ./celery/*.toml /home/$USERNAME
+COPY --chown=$USERNAME:$USERNAME ./*.toml /home/$USERNAME
 
 # Install aliases for tools needing a pyproject.toml
 RUN cd $TOOLPATH/.github/OneForAll && mv /home/$USERNAME/oneforall-pyproject.toml pyproject.toml && poetry env use python3.10 && poetry install --no-cache && echo "#!/bin/bash\n\npoetry -C $TOOLPATH/.github/OneForAll/ run python $TOOLPATH/.github/OneForAll/oneforall.py \"\$@\"" > /home/$USERNAME/.local/bin/oneforall && chmod +x /home/$USERNAME/.local/bin/oneforall && \
@@ -136,7 +144,11 @@ RUN cd $TOOLPATH/.github/OneForAll && mv /home/$USERNAME/oneforall-pyproject.tom
     cd $TOOLPATH/.github/Infoga && mv /home/$USERNAME/infoga-pyproject.toml pyproject.toml && poetry env use python3.10 && poetry install --no-cache && echo "#!/bin/bash\n\npoetry -C $TOOLPATH/.github/Infoga/ run python $TOOLPATH/.github/Infoga/infoga.py \"\$@\"" > /home/$USERNAME/.local/bin/infoga && chmod +x /home/$USERNAME/.local/bin/infoga && \
     cd /home/$USERNAME && poetry install
 
-COPY ./celery/entrypoint.sh /entrypoint.sh
+COPY ./entrypoint.sh /entrypoint.sh
+USER $USERNAME
+RUN mkdir -p /home/$USERNAME/rengine /home/$USERNAME/scan_results \
+    && chown -R $USERNAME:$USERNAME /home/$USERNAME/rengine \
+    && chown -R $USERNAME:$USERNAME /home/$USERNAME/scan_results
 VOLUME /home/$USERNAME/rengine
 VOLUME /home/$USERNAME/scan_results
 WORKDIR /home/$USERNAME/rengine

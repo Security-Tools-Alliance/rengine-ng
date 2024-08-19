@@ -2,38 +2,50 @@
 
 :: Credits: https://github.com/ninjhacks
 
-set COMPOSE_ALL_FILES  = -f docker-compose.yml
+set COMPOSE_FILE       = -f docker/docker-compose.yml
+set COMPOSE_DEV_FILE   = -f docker/docker-compose.dev.yml
+set COMPOSE_BUILD_FILE = -f docker/docker-compose.build.yml
 set SERVICES           = db web proxy redis celery celery-beat
 
 :: Generate certificates.
-if "%1" == "certs" docker compose -f docker-compose.setup.yml run --rm certs
+if "%1" == "certs" docker compose -f docker/docker-compose.setup.yml run --rm certs
 :: Generate certificates.
-if "%1" == "setup" docker compose -f docker-compose.setup.yml run --rm certs
+if "%1" == "setup" docker compose -f docker/docker-compose.setup.yml run --rm certs
 :: Build and start all services.
-if "%1" == "up" docker compose %COMPOSE_ALL_FILES% up -d --build %SERVICES%
+if "%1" == "up" docker compose %COMPOSE_FILE% up -d %SERVICES%
 :: Build all services.
-if "%1" == "build" docker compose %COMPOSE_ALL_FILES% build %SERVICES%
+if "%1" == "build" docker compose %COMPOSE_FILE% %COMPOSE_BUILD_FILE% build %SERVICES%
+:: Build and start all services.
+if "%1" == "build_up" (
+    docker compose %COMPOSE_FILE% %COMPOSE_BUILD_FILE% build %SERVICES%
+    docker compose %COMPOSE_FILE% up -d %SERVICES%
+)
+:: Pull and start all services.
+if "%1" == "pull_up" (
+    docker compose %COMPOSE_FILE% pull %SERVICES%
+    docker compose %COMPOSE_FILE% up -d %SERVICES%
+)
 :: Generate Username (use only after make up).
-if "%1" == "username" docker compose %COMPOSE_ALL_FILES% exec web python3 manage.py createsuperuser
+if "%1" == "username" docker compose %COMPOSE_FILE% exec web python3 manage.py createsuperuser
 :: Change password for user
-if "%1" == "changepassword" docker compose %COMPOSE_ALL_FILES% exec web python3 manage.py changepassword
+if "%1" == "changepassword" docker compose %COMPOSE_FILE% exec web python3 manage.py changepassword
 :: Apply migrations
-if "%1" == "migrate" docker compose %COMPOSE_ALL_FILES% exec web python3 manage.py migrate
+if "%1" == "migrate" docker compose %COMPOSE_FILE% exec web python3 manage.py migrate
 :: Pull Docker images.
-if "%1" == "pull" docker login docker.pkg.github.com & docker compose %COMPOSE_ALL_FILES% pull
+if "%1" == "pull" docker login docker.pkg.github.com & docker compose %COMPOSE_FILE% pull
 :: Down all services.
-if "%1" == "down" docker compose %COMPOSE_ALL_FILES% down
+if "%1" == "down" docker compose %COMPOSE_FILE% down
 :: Stop all services.
-if "%1" == "stop" docker compose %COMPOSE_ALL_FILES% stop %SERVICES%
+if "%1" == "stop" docker compose %COMPOSE_FILE% stop %SERVICES%
 :: Restart all services.
-if "%1" == "restart" docker compose %COMPOSE_ALL_FILES% restart %SERVICES%
+if "%1" == "restart" docker compose %COMPOSE_FILE% restart %SERVICES%
 :: Remove all services containers.
-if "%1" == "rm" docker compose %COMPOSE_ALL_FILES% rm -f %SERVICES%
+if "%1" == "rm" docker compose %COMPOSE_FILE% rm -f %SERVICES%
 :: Tail all logs with -n 1000.
-if "%1" == "logs" docker compose %COMPOSE_ALL_FILES% logs --follow --tail=1000 %SERVICES%
+if "%1" == "logs" docker compose %COMPOSE_FILE% logs --follow --tail=1000 %SERVICES%
 :: Show all Docker images.
-if "%1" == "images" docker compose %COMPOSE_ALL_FILES% images %SERVICES%
+if "%1" == "images" docker compose %COMPOSE_FILE% images %SERVICES%
 :: Remove containers and delete volume data.
-if "%1" == "prune" docker compose %COMPOSE_ALL_FILES% stop %SERVICES% & docker compose %COMPOSE_ALL_FILES% rm -f %SERVICES% & docker volume prune -f
+if "%1" == "prune" docker compose %COMPOSE_FILE% stop %SERVICES% & docker compose %COMPOSE_FILE% rm -f %SERVICES% & docker volume prune -f
 :: Show this help.
 if "%1" == "help" @echo Make application Docker images and manage containers using Docker Compose files only for Windows.

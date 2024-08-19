@@ -3,7 +3,7 @@ FROM --platform=$BUILDPLATFORM python:3.10-alpine
 # Labels and Credits
 LABEL \
     name="reNgine-ng" \
-    author="Yogesh Ojha <yogesh.ojha11@gmail.com>, Security Tools Alliance Team" \
+    author="Security-Tools-Alliance (https://github.com/Security-Tools-Alliance) & Yogesh Ojha <yogesh.ojha11@gmail.com>" \
     description="reNgine-ng is a automated pipeline of recon process, useful for information gathering during web application penetration testing."
 
 # Environment Variables
@@ -11,22 +11,25 @@ ENV DEBIAN_FRONTEND="noninteractive" \
     DATABASE="postgres"
 ENV USERNAME="rengine"
 
-RUN apk add --no-cache bash postgresql-libs curl && \
+RUN apk add --no-cache bash postgresql-libs curl fontconfig ttf-freefont font-noto terminus-font net-tools htop vim && \
     apk add --no-cache py3-pip gcc musl-dev python3-dev pango zlib-dev jpeg-dev openjpeg-dev g++ libffi-dev && \
     apk add --no-cache --virtual .build-deps gcc python3-dev musl-dev postgresql-dev && \
+    fc-cache -f && \ 
+    fc-list | sort && \
     addgroup --gid 1000 -S $USERNAME && \
     adduser -g 1000 -u 1000 -S --shell /bin/bash --ingroup $USERNAME $USERNAME
 
 USER $USERNAME
 ENV PATH=/home/$USERNAME/.local/bin:${PATH}
 
-COPY ./web/pyproject.toml /home/$USERNAME/pyproject.toml
+COPY --chown=$USERNAME:$USERNAME ./pyproject.toml /home/$USERNAME/pyproject.toml
 WORKDIR /home/$USERNAME
 RUN echo 'PATH="$HOME/.local/bin:${PATH}"' >> $HOME/.bashrc && \
     pip install pipx && pipx install poetry && poetry install
 
 EXPOSE 8000
-VOLUME /home/$USERNAME/app
-WORKDIR /home/$USERNAME/app
-COPY ./web/entrypoint.sh /entrypoint.sh
+USER $USERNAME
+RUN mkdir -p /home/$USERNAME/rengine
+VOLUME /home/$USERNAME/rengine
+WORKDIR /home/$USERNAME/rengine
 ENTRYPOINT ["/entrypoint.sh"]

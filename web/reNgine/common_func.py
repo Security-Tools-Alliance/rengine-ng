@@ -518,7 +518,7 @@ def get_cms_details(url):
 	"""
 	# this function will fetch cms details using cms_detector
 	response = {}
-	cms_detector_command = f'python3 /usr/src/github/CMSeeK/cmseek.py --random-agent --batch --follow-redirect -u {url}'
+	cms_detector_command = f'python3 /home/rengine/tools/.github/CMSeeK/cmseek.py --random-agent --batch --follow-redirect -u {url}'
 	os.system(cms_detector_command)
 
 	response['status'] = False
@@ -536,7 +536,7 @@ def get_cms_details(url):
 
 	# subdomain may also have port number, and is stored in dir as _port
 
-	cms_dir_path =  f'/usr/src/github/CMSeeK/Result/{find_dir}'
+	cms_dir_path =  f'/home/rengine/tools/.github/CMSeeK/Result/{find_dir}'
 	cms_json_path =  cms_dir_path + '/cms.json'
 
 	if os.path.isfile(cms_json_path):

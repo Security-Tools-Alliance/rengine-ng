@@ -193,7 +193,7 @@ LOGIN_REDIRECT_URL = 'onboarding'
 LOGOUT_REDIRECT_URL = 'login'
 
 # Tool Location
-TOOL_LOCATION = '/usr/src/app/tools/'
+TOOL_LOCATION = '/home/rengine/tools/'
 
 # Number of endpoints that have the same content_length
 DELETE_DUPLICATES_THRESHOLD = 10

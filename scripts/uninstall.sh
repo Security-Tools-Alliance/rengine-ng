@@ -47,22 +47,22 @@ then
   log ""
 
   log "Stopping reNgine-ng..." $COLOR_CYAN
-  docker stop rengine-web-1 rengine-db-1 rengine-celery-1 rengine-celery-beat-1 rengine-redis-1 rengine-proxy-1
+  docker stop rengine-web-1 rengine-db-1 rengine-celery-1 rengine-celery-beat-1 rengine-redis-1 rengine-proxy-1 rengine-ollama-1
   log "Stopped reNgine-ng" $COLOR_GREEN
   log ""
 
   log "Removing all containers related to reNgine-ng..." $COLOR_CYAN
-  docker rm rengine-web-1 rengine-db-1 rengine-celery-1 rengine-celery-beat-1 rengine-redis-1 rengine-proxy-1
+  docker rm rengine-web-1 rengine-db-1 rengine-celery-1 rengine-celery-beat-1 rengine-redis-1 rengine-proxy-1 rengine-ollama-1
   log "Removed all containers related to reNgine-ng" $COLOR_GREEN
   log ""
 
   log "Removing all volumes related to reNgine-ng..." $COLOR_CYAN
-  docker volume rm rengine_gf_patterns rengine_github_repos rengine_nuclei_templates rengine_postgres_data rengine_scan_results rengine_tool_config rengine_static_volume rengine_wordlist
+  docker volume rm rengine_gf_patterns rengine_github_repos rengine_ollama_data rengine_nuclei_templates rengine_postgres_data rengine_scan_results rengine_tool_config rengine_static_volume rengine_wordlist
   log "Removed all volumes related to reNgine-ng" $COLOR_GREEN
   log ""
 
   log "Removing all networks related to reNgine-ng..." $COLOR_CYAN
-  docker network rm rengine_rengine_network rengine_default
+  docker network rm rengine_network
   log "Removed all networks related to reNgine-ng" $COLOR_GREEN
   log ""
 else
@@ -70,6 +70,9 @@ else
   log "Exiting!" $COLOR_DEFAULT
   exit 1
 fi
+
+# Read the version from version.txt file
+RENGINE_VERSION=$(cat ../web/reNgine/version.txt)
 
 tput setaf 1;
 read -p "Do you want to remove Docker images related to reNgine-ng? [y/n] " -n 1 -r
@@ -79,7 +82,13 @@ if [[ $REPLY =~ ^[Yy]$ ]]
 then
   log ""
   log "Removing all Docker images related to reNgine-ng..." $COLOR_CYAN
-  docker image rm rengine-celery rengine-celery-beat rengine-certs docker.pkg.github.com/yogeshojha/rengine/rengine nginx:alpine redis:alpine postgres:12.3-alpine
+  docker image rm ghcr.io/security-tools-alliance/rengine-ng:rengine-celery-v${RENGINE_VERSION} \
+                  ghcr.io/security-tools-alliance/rengine-ng:rengine-web-v${RENGINE_VERSION} \
+                  ghcr.io/security-tools-alliance/rengine-ng:rengine-postgres-v${RENGINE_VERSION} \
+                  ghcr.io/security-tools-alliance/rengine-ng:rengine-redis-v${RENGINE_VERSION} \
+                  ghcr.io/security-tools-alliance/rengine-ng:rengine-ollama-v${RENGINE_VERSION} \
+                  ghcr.io/security-tools-alliance/rengine-ng:rengine-certs-v${RENGINE_VERSION} \
+                  ghcr.io/security-tools-alliance/rengine-ng:rengine-proxy-v${RENGINE_VERSION}
   log "Removed all Docker images" $COLOR_GREEN
   log ""
 else
