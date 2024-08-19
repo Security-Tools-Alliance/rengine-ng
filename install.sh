@@ -199,7 +199,7 @@ elif [ "$INSTALL_TYPE" != "prebuilt" ] && [ "$INSTALL_TYPE" != "source" ]; then
   exit 1
 fi
 
-log "Installing reNgine-ng from $INSTALL_TYPE, please be patient as it could take a while..." $COLOR_CYAN
+log "Installing reNgine-ng from $INSTALL_TYPE, please be patient as the installation could take a while..." $COLOR_CYAN
 sleep 5
 
 log "Generating certificates..." $COLOR_CYAN
@@ -215,7 +215,7 @@ if [ "$INSTALL_TYPE" = "prebuilt" ]; then
   make pull && log "Docker images have been pulled" $COLOR_GREEN || { log "Docker images pull failed!" $COLOR_RED; exit 1; }
 fi
 
-log "Docker containers starting, please wait as Celery container could take a while..." $COLOR_CYAN
+log "Docker containers starting, please wait as starting the Celery container could take a while..." $COLOR_CYAN
 sleep 5
 make up && log "reNgine-ng is started!" $COLOR_GREEN || { log "reNgine-ng start failed!" $COLOR_RED; exit 1; }
 
