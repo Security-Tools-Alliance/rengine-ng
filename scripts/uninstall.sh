@@ -71,7 +71,7 @@ else
   exit 1
 fi
 
-# Lire la version depuis le fichier version.txt
+# Read the version from version.txt file
 RENGINE_VERSION=$(cat ../web/reNgine/version.txt)
 
 tput setaf 1;

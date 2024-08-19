@@ -48,14 +48,6 @@ usageFunction()
   exit 1
 }
 
-# Check if .env file exists and load vars from env file
-if [ -f .env ]; then
-    export $(grep -v '^#' .env | xargs)
-else
-    log "Error: .env file not found, copy/paste the .env-dist file to .env and edit it" $COLOR_RED
-    exit 1
-fi
-
 cat web/art/reNgine.txt
 
 log "\r\nBefore running this script, please make sure Docker is running and you have made changes to the '.env' file." $COLOR_RED
@@ -103,7 +95,7 @@ if [ $isNonInteractive = false ]; then
       ;;
   esac
   # Select install type
-  log "Do you want to build Docker images from source or use pre-built images (recommended)? This saves significant build time but requires good download speeds for it to complete fast." $COLOR_RED
+  log "Do you want to build Docker images from source or use pre-built images (recommended)?" $COLOR_RED
   select choice in "From source" "Use pre-built images"; do
     case $choice in
       "From source" )
@@ -118,6 +110,14 @@ fi
 
 # Non interactive install
 if [ $isNonInteractive = true ]; then
+  # Check if .env file exists and load vars from env file
+  if [ -f .env ]; then
+      export $(grep -v '^#' .env | xargs)
+  else
+      log "Error: .env file not found, copy/paste the .env-dist file to .env and edit it" $COLOR_RED
+      exit 1
+  fi
+
   if [ -z "$DJANGO_SUPERUSER_USERNAME" ] || [ -z "$DJANGO_SUPERUSER_EMAIL" ] || [ -z "$DJANGO_SUPERUSER_PASSWORD" ]; then
     log "Error: DJANGO_SUPERUSER_USERNAME, DJANGO_SUPERUSER_EMAIL, and DJANGO_SUPERUSER_PASSWORD must be set in .env for non-interactive installation" $COLOR_RED
     exit 1
@@ -199,7 +199,7 @@ elif [ "$INSTALL_TYPE" != "prebuilt" ] && [ "$INSTALL_TYPE" != "source" ]; then
   exit 1
 fi
 
-log "Installing reNgine-ng from $INSTALL_TYPE, please be patient as this could take a while..." $COLOR_CYAN
+log "Installing reNgine-ng from $INSTALL_TYPE, please be patient as it could take a while..." $COLOR_CYAN
 sleep 5
 
 log "Generating certificates..." $COLOR_CYAN
