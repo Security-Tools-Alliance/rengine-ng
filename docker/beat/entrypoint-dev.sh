@@ -15,4 +15,4 @@ if [ "$CELERY_REMOTE_DEBUG" == "1" ]; then
     apt install net-tools -y
 fi
 
-./beat-entrypoint.sh
+/entrypoint.sh

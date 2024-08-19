@@ -1,0 +1,93 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Build and Push Docker Image",
+            "type": "shell",
+            "command": "cd ./docker; docker buildx build -t ghcr.io/security-tools-alliance/rengine-ng:rengine-${image}-${version} -f ./${image}/Dockerfile ./${image} && docker push ghcr.io/security-tools-alliance/rengine-ng:rengine-${image}-${version}",
+            "problemMatcher": [],
+            "options": {
+              "env": {
+                "version": "${input:version}",
+                "image": "${input:image}"
+              }
+            }
+        },
+        {
+            "label": "Build All Docker Images",
+            "type": "shell",
+            "command": "echo Building all images with version ${input:globalVersion}",
+            "dependsOn": [
+                "Build CELERY",
+                "Build WEB",
+                "Build POSTGRES",
+                "Build REDIS",
+                "Build OLLAMA",
+                "Build CERTS",
+                "Build PROXY"
+            ],
+            "dependsOrder": "sequence",
+            "problemMatcher": []
+        },
+        {
+            "label": "Build CELERY",
+            "type": "shell",
+            "command": "cd ./docker; docker buildx build -t ghcr.io/security-tools-alliance/rengine-ng:rengine-celery-${input:globalVersion} -f ./celery/Dockerfile ./celery && docker push ghcr.io/security-tools-alliance/rengine-ng:rengine-celery-${input:globalVersion}",
+            "problemMatcher": []
+        },
+        {
+            "label": "Build WEB",
+            "type": "shell",
+            "command": "cd ./docker; docker buildx build -t ghcr.io/security-tools-alliance/rengine-ng:rengine-web-${input:globalVersion} -f ./web/Dockerfile ./web && docker push ghcr.io/security-tools-alliance/rengine-ng:rengine-web-${input:globalVersion}",
+            "problemMatcher": []
+        },
+        {
+            "label": "Build POSTGRES",
+            "type": "shell",
+            "command": "cd ./docker; docker buildx build -t ghcr.io/security-tools-alliance/rengine-ng:rengine-postgres-${input:globalVersion} -f ./postgres/Dockerfile ./postgres && docker push ghcr.io/security-tools-alliance/rengine-ng:rengine-postgres-${input:globalVersion}",
+            "problemMatcher": []
+        },
+        {
+            "label": "Build REDIS",
+            "type": "shell",
+            "command": "cd ./docker; docker buildx build -t ghcr.io/security-tools-alliance/rengine-ng:rengine-redis-${input:globalVersion} -f ./redis/Dockerfile ./redis && docker push ghcr.io/security-tools-alliance/rengine-ng:rengine-redis-${input:globalVersion}",
+            "problemMatcher": []
+        },
+        {
+            "label": "Build OLLAMA",
+            "type": "shell",
+            "command": "cd ./docker; docker buildx build -t ghcr.io/security-tools-alliance/rengine-ng:rengine-ollama-${input:globalVersion} -f ./ollama/Dockerfile ./ollama && docker push ghcr.io/security-tools-alliance/rengine-ng:rengine-ollama-${input:globalVersion}",
+            "problemMatcher": []
+        },
+        {
+            "label": "Build CERTS",
+            "type": "shell",
+            "command": "cd ./docker; docker buildx build -t ghcr.io/security-tools-alliance/rengine-ng:rengine-certs-${input:globalVersion} -f ./certs/Dockerfile ./certs && docker push ghcr.io/security-tools-alliance/rengine-ng:rengine-certs-${input:globalVersion}",
+            "problemMatcher": []
+        },
+        {
+            "label": "Build PROXY",
+            "type": "shell",
+            "command": "cd ./docker; docker buildx build -t ghcr.io/security-tools-alliance/rengine-ng:rengine-proxy-${input:globalVersion} -f ./proxy/Dockerfile ./proxy && docker push ghcr.io/security-tools-alliance/rengine-ng:rengine-proxy-${input:globalVersion}",
+            "problemMatcher": []
+        }
+    ],
+    "inputs": [
+        {
+          "id": "version",
+          "type": "promptString",
+          "description": "Enter the version tag for the Docker image (e.g., v2.1.0)"
+        },
+        {
+          "id": "globalVersion",
+          "type": "promptString",
+          "description": "Enter the version tag for all Docker images (e.g., v2.1.0)"
+        },
+        {
+          "id": "image",
+          "type": "pickString",
+          "description": "Select the image to build",
+          "options": ["celery", "web", "postgres", "redis", "ollama", "certs", "proxy"]
+        }
+    ]
+}

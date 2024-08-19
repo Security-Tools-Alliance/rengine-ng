@@ -8,10 +8,6 @@ poetry run -C $HOME/ python3 manage.py loaddata fixtures/default_scan_engines.ya
 poetry run -C $HOME/ python3 manage.py loaddata fixtures/default_keywords.yaml --app scanEngine.InterestingLookupModel
 poetry run -C $HOME/ python3 manage.py loaddata fixtures/external_tools.yaml --app scanEngine.InstalledExternalTool
 
-# Compile messages translations
-find . -type f -name "*.po" -exec sed -i 's/^#~ //g' {} +
-poetry run -C $HOME/ python3 manage.py compilemessages
-
 if [ ! "$CELERY_LOGLEVEL" ]; then
   export CELERY_LOGLEVEL='info'
 fi

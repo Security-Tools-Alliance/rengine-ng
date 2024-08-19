@@ -1,0 +1,18 @@
+services:
+  db:
+    build: ./postgres
+
+  redis:
+    build: ./redis
+
+  celery:
+    build: ./celery
+
+  web:
+    build: ./web
+
+  proxy:
+    build: ./proxy
+
+  ollama:
+    build: ./ollama

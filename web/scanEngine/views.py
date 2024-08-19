@@ -565,10 +565,10 @@ def add_tool(request, slug):
             github_clone_path = None
             if 'git clone' in install_command:
                 project_name = install_command.split('/')[-1]
-                install_command = install_command + ' /usr/src/github/' + project_name + ' && pip install -r /usr/src/github/' + project_name + '/requirements.txt'
-                github_clone_path = '/usr/src/github/' + project_name
+                install_command = install_command + ' /home/rengine/tools/.github/' + project_name + ' && pip install -r /home/rengine/tools/.github/' + project_name + '/requirements.txt'
+                github_clone_path = '/home/rengine/tools/.github/' + project_name
                 # if github cloned we also need to install requirements, atleast found in the main dir
-                install_command = 'pip3 install -r /usr/src/github/' + project_name + '/requirements.txt'
+                install_command = 'pip3 install -r /home/rengine/tools/.github/' + project_name + '/requirements.txt'
 
             run_command(install_command)
             run_command.apply_async(args=(install_command,))

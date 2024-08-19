@@ -34,7 +34,7 @@ function cms_detector(){
 			<label for="cms_detector_input_url" class="form-label">HTTP URL/Domain Name</label>
 			<input class="form-control" type="text" id="cms_detector_input_url" required="" placeholder="https://yourdomain.com">
 		</div>
-		<small class="mb-3 float-end text-muted">(reNgine uses <a href="https://github.com/Tuhinshubhra/CMSeeK" target="_blank">CMSeeK</a> to detect CMS.)</span>
+		<small class="mb-3 float-end text-muted">(reNgine-ng uses <a href="https://github.com/Tuhinshubhra/CMSeeK" target="_blank">CMSeeK</a> to detect CMS.)</span>
 		<div class="mt-3 mb-3 text-center">
 			<button class="btn btn-primary float-end" type="submit" id="detect_cms_submit_btn">Detect CMS</button>
 		</div>
@@ -260,7 +260,7 @@ function toolbox_waf_detector(){
 			<label for="cms_detector_input_url" class="form-label">HTTP URL/Domain Name</label>
 			<input class="form-control" type="text" id="waf_detector_input_url" required="" placeholder="https://yourdomain.com">
 		</div>
-		<small class="mb-3 float-end text-muted">(reNgine uses <a href="https://github.com/EnableSecurity/wafw00f" target="_blank">wafw00f</a> to detect WAF.)</span>
+		<small class="mb-3 float-end text-muted">(reNgine-ng uses <a href="https://github.com/EnableSecurity/wafw00f" target="_blank">wafw00f</a> to detect WAF.)</span>
 		<div class="mt-3 mb-3 text-center">
 			<button class="btn btn-primary float-end" type="submit" id="detect_waf_submit_btn">Detect WAF</button>
 		</div>

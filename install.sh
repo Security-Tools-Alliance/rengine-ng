@@ -42,9 +42,9 @@ fi
 
 usageFunction()
 {
-  log "Usage: $0 (-n) (-h)" 2
-  log "\t-n Non-interactive installation (Optional)" 2
-  log "\t-h Show usage" 2
+  log "Usage: $0 (-n) (-h)" $COLOR_GREEN
+  log "\t-n Non-interactive installation (Optional)" $COLOR_GREEN
+  log "\t-h Show usage" $COLOR_GREEN
   exit 1
 }
 
@@ -69,6 +69,7 @@ while getopts nh opt; do
    esac
 done
 
+# Interactive install
 if [ $isNonInteractive = false ]; then
   read -p "Are you sure you made changes to the '.env' file (y/n)? " answer
   case ${answer:0:1} in
@@ -93,7 +94,39 @@ if [ $isNonInteractive = false ]; then
       nano .env
       ;;
   esac
-else
+  # Select install type
+  log "Do you want to build Docker images from source or use pre-built images (recommended)? This saves significant build time but requires good download speeds for it to complete fast." $COLOR_RED  
+  select choice in "From source" "Use pre-built images"; do
+    case $choice in
+      "From source" )
+        INSTALL_TYPE="source"
+        break;;
+      "Use pre-built images" )
+        INSTALL_TYPE="prebuilt"
+        break;;
+    esac
+  done
+fi
+
+# Non interactive install
+if [ $isNonInteractive = true ]; then
+  # Check if .env file exists and load vars from env file
+  if [ -f .env ]; then
+      export $(grep -v '^#' .env | xargs)
+  else
+      log "Error: .env file not found, copy/paste the .env-dist file to .env and edit it" $COLOR_RED
+      exit 1
+  fi
+
+  if [ -z "$DJANGO_SUPERUSER_USERNAME" ] || [ -z "$DJANGO_SUPERUSER_EMAIL" ] || [ -z "$DJANGO_SUPERUSER_PASSWORD" ]; then
+    log "Error: DJANGO_SUPERUSER_USERNAME, DJANGO_SUPERUSER_EMAIL, and DJANGO_SUPERUSER_PASSWORD must be set in .env for non-interactive installation" $COLOR_RED
+    exit 1
+  fi
+  # Define INSTALL_TYPE from .env or use a default value
+  if [ -z "$INSTALL_TYPE" ]; then
+    log "Warning: INSTALL_TYPE is not set in .env for non-interactive installation, fallback to prebuilt install" $COLOR_YELLOW
+  fi
+  INSTALL_TYPE=${INSTALL_TYPE:-prebuilt}
   log "Non-interactive installation parameter set. Installation begins." $COLOR_GREEN
 fi
 
@@ -158,19 +191,38 @@ else
   exit 1
 fi
 
-log "Installing reNgine-ng, please be patient as it could take a while..." $COLOR_CYAN
+if [ -z "$INSTALL_TYPE" ]; then
+  log "Error: INSTALL_TYPE is not set" $COLOR_RED
+  exit 1
+elif [ "$INSTALL_TYPE" != "prebuilt" ] && [ "$INSTALL_TYPE" != "source" ]; then
+  log "Error: INSTALL_TYPE must be either 'prebuilt' or 'source'" $COLOR_RED
+  exit 1
+fi
+
+log "Installing reNgine-ng from $INSTALL_TYPE, please be patient as the installation could take a while..." $COLOR_CYAN
 sleep 5
 
-log "Generating certificates and building Docker images..." $COLOR_CYAN
-make certs && make build && log "reNgine-ng is built" $COLOR_GREEN || { log "reNgine-ng installation failed!" $COLOR_RED; exit 1; }
+log "Generating certificates..." $COLOR_CYAN
+make certs && log "Certificates have been generated" $COLOR_GREEN || { log "Certificate generation failed!" $COLOR_RED; exit 1; }
 
-log "Docker containers starting, please wait as Celery container could take a while..." $COLOR_CYAN
+if [ "$INSTALL_TYPE" = "source" ]; then
+  log "Building Docker images..." $COLOR_CYAN
+  make build && log "Docker images have been built" $COLOR_GREEN || { log "Docker images build failed!" $COLOR_RED; exit 1; }
+fi
+
+if [ "$INSTALL_TYPE" = "prebuilt" ]; then
+  log "Pulling pre-built Docker images..." $COLOR_CYAN
+  make pull && log "Docker images have been pulled" $COLOR_GREEN || { log "Docker images pull failed!" $COLOR_RED; exit 1; }
+fi
+
+log "Docker containers starting, please wait as starting the Celery container could take a while..." $COLOR_CYAN
 sleep 5
-make up && log "reNgine-ng is installed!" $COLOR_GREEN || { log "reNgine-ng installation failed!" $COLOR_RED; exit 1; }
+make up && log "reNgine-ng is started!" $COLOR_GREEN || { log "reNgine-ng start failed!" $COLOR_RED; exit 1; }
 
 log "Creating an account..." $COLOR_CYAN
 make username isNonInteractive=$isNonInteractive
 
+log "reNgine-ng is successfully installed and started!" $COLOR_GREEN
 log "\r\nThank you for installing reNgine-ng, happy recon!" $COLOR_GREEN
 
 log "\r\nIn case you're running this locally, reNgine-ng should be available at one of the following IPs:\n$formatted_ips" $COLOR_GREEN
