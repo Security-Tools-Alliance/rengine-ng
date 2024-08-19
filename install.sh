@@ -95,7 +95,7 @@ if [ $isNonInteractive = false ]; then
       ;;
   esac
   # Select install type
-  log "Do you want to build Docker images from source or use pre-built images (recommended)?" $COLOR_RED
+  log "Do you want to build Docker images from source or use pre-built images (recommended)? This saves significant build time but requires good download speeds for it to complete fast." $COLOR_RED  
   select choice in "From source" "Use pre-built images"; do
     case $choice in
       "From source" )
