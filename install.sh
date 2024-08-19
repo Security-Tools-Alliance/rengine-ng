@@ -103,7 +103,7 @@ if [ $isNonInteractive = false ]; then
       ;;
   esac
   # Select install type
-  log "Do you want to build Docker images from source or use pre-built images (recommended)?" $COLOR_RED
+  log "Do you want to build Docker images from source or use pre-built images (recommended)? This saves significant build time but requires good download speeds for it to complete fast." $COLOR_RED
   select choice in "From source" "Use pre-built images"; do
     case $choice in
       "From source" )
@@ -199,7 +199,7 @@ elif [ "$INSTALL_TYPE" != "prebuilt" ] && [ "$INSTALL_TYPE" != "source" ]; then
   exit 1
 fi
 
-log "Installing reNgine-ng from $INSTALL_TYPE, please be patient as it could take a while..." $COLOR_CYAN
+log "Installing reNgine-ng from $INSTALL_TYPE, please be patient as this could take a while..." $COLOR_CYAN
 sleep 5
 
 log "Generating certificates..." $COLOR_CYAN
