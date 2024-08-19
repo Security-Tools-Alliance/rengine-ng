@@ -26,6 +26,7 @@ from dashboard.models import *
 from startScan.models import *
 from targetApp.models import *
 
+
 logger = get_task_logger(__name__)
 DISCORD_WEBHOOKS_CACHE = redis.Redis.from_url(CELERY_BROKER_URL)
 
@@ -33,38 +34,38 @@ DISCORD_WEBHOOKS_CACHE = redis.Redis.from_url(CELERY_BROKER_URL)
 # EngineType utils #
 #------------------#
 def dump_custom_scan_engines(results_dir):
-	"""Dump custom scan engines to YAML files.
+    """Dump custom scan engines to YAML files.
 
-	Args:
-		results_dir (str): Results directory (will be created if non-existent).
-	"""
-	custom_engines = EngineType.objects.filter(default_engine=False)
-	if not os.path.exists(results_dir):
-		os.makedirs(results_dir, exist_ok=True)
-	for engine in custom_engines:
-		with open(f'{results_dir}/{engine.engine_name}.yaml', 'w') as f:
-			config = yaml.safe_load(engine.yaml_configuration)
-			yaml.dump(config, f, indent=4)
+    Args:
+        results_dir (str): Results directory (will be created if non-existent).
+    """
+    custom_engines = EngineType.objects.filter(default_engine=False)
+    if not os.path.exists(results_dir):
+        os.makedirs(results_dir, exist_ok=True)
+    for engine in custom_engines:
+        with open(os.path.join(results_dir, f"{engine.engine_name}.yaml"), 'w') as f:
+            f.write(engine.yaml_configuration)
 
 def load_custom_scan_engines(results_dir):
-	"""Load custom scan engines from YAML files. The filename without .yaml will
-	be used as the engine name.
+    """Load custom scan engines from YAML files. The filename without .yaml will
+    be used as the engine name.
 
-	Args:
-		results_dir (str): Results directory containing engines configs.
-	"""
-	config_paths = [
-		f for f in os.listdir(results_dir)
-		if os.path.isfile(os.path.join(results_dir, f))
-	]
-	for path in config_paths:
-		engine_name = path.replace('.yaml', '').split('/')[-1]
-		full_path = os.path.join(results_dir, path)
-		with open(full_path, 'r') as f:
-			yaml_configuration = yaml.safe_load(f)
-		engine, _ = EngineType.objects.get_or_create(engine_name=engine_name)
-		engine.yaml_configuration = yaml.dump(yaml_configuration)
-		engine.save()
+    Args:
+        results_dir (str): Results directory containing engines configs.
+    """
+    config_paths = [
+        f for f in os.listdir(results_dir)
+        if os.path.isfile(os.path.join(results_dir, f)) and f.endswith('.yaml')
+    ]
+    for path in config_paths:
+        engine_name = os.path.splitext(os.path.basename(path))[0]
+        full_path = os.path.join(results_dir, path)
+        with open(full_path, 'r') as f:
+            yaml_configuration = f.read()
+
+        engine, _ = EngineType.objects.get_or_create(engine_name=engine_name)
+        engine.yaml_configuration = yaml_configuration
+        engine.save()
 
 
 #--------------------------------#
@@ -302,19 +303,26 @@ def get_http_urls(
 
 	query = EndPoint.objects
 	if domain:
+		logger.debug(f'Searching URLs by domain {domain}')
 		query = query.filter(target_domain=domain)
 	if scan:
+		logger.debug(f'Searching URLs by scan {scan}')
 		query = query.filter(scan_history=scan)
 	if subdomain_id:
+		subdomain = Subdomain.objects.filter(pk=subdomain_id).first()
+		logger.debug(f'Searching URLs by subdomain {subdomain}')
 		query = query.filter(subdomain__id=subdomain_id)
 	elif exclude_subdomains and domain:
+		logger.debug(f'Excluding subdomains')
 		query = query.filter(http_url=domain.http_url)
 	if get_only_default_urls:
+		logger.debug(f'Searching only for default URL')
 		query = query.filter(is_default=True)
 
 	# If is_uncrawled is True, select only endpoints that have not been crawled
 	# yet (no status)
 	if is_uncrawled:
+		logger.debug(f'Searching for uncrawled endpoints only')
 		query = query.filter(http_status__isnull=True)
 
 	# If a path is passed, select only endpoints that contains it
@@ -491,6 +499,13 @@ def get_random_proxy():
 	# os.environ['HTTPS_PROXY'] = proxy_name
 	return proxy_name
 
+def remove_ansi_escape_sequences(text):
+	# Regular expression to match ANSI escape sequences
+	ansi_escape_pattern = r'\x1b\[.*?m'
+
+	# Use re.sub() to replace the ANSI escape sequences with an empty string
+	plain_text = re.sub(ansi_escape_pattern, '', text)
+	return plain_text
 
 def get_cms_details(url):
 	"""Get CMS details using cmseek.py.
@@ -582,6 +597,23 @@ def send_slack_message(message):
 	hook_url = notif.slack_hook_url
 	requests.post(url=hook_url, data=json.dumps(message), headers=headers)
 
+def send_lark_message(message):
+	"""Send lark message.
+
+	Args:
+		message (str): Message.
+	"""
+	headers = {'content-type': 'application/json'}
+	message = {"msg_type":"interactive","card":{"elements":[{"tag":"div","text":{"content":message,"tag":"lark_md"}}]}}
+	notif = Notification.objects.first()
+	do_send = (
+		notif and
+		notif.send_to_lark and
+		notif.lark_hook_url)
+	if not do_send:
+		return
+	hook_url = notif.lark_hook_url
+	requests.post(url=hook_url, data=json.dumps(message), headers=headers)
 
 def send_discord_message(
 		message,
@@ -985,3 +1017,100 @@ def extract_between(text, pattern):
 	if match:
 		return match.group(1).strip()
 	return ""
+
+def parse_custom_header(custom_header):
+    """
+    Parse the custom_header input to ensure it is a dictionary.
+
+    Args:
+        custom_header (dict or str): Dictionary or string containing the custom headers.
+
+    Returns:
+        dict: Parsed dictionary of custom headers.
+    """
+
+    if isinstance(custom_header, str):
+        header_dict = {}
+        headers = custom_header.split(',')
+        for header in headers:
+            parts = header.split(':', 1)
+            if len(parts) == 2:
+                key, value = parts
+                header_dict[key.strip()] = value.strip()
+            else:
+                raise ValueError(f"Invalid header format: '{header}'")
+        return header_dict
+    elif isinstance(custom_header, dict):
+        return custom_header
+    else:
+        raise ValueError("custom_header must be a dictionary or a string")
+
+def generate_header_param(custom_header, tool_name=None):
+    """
+    Generate command-line parameters for a specific tool based on the custom header.
+
+    Args:
+        custom_header (dict or str): Dictionary or string containing the custom headers.
+        tool_name (str, optional): Name of the tool. Defaults to None.
+
+    Returns:
+        str: Command-line parameter for the specified tool.
+    """
+    # Ensure the custom_header is a dictionary
+    custom_header = parse_custom_header(custom_header)
+
+    # Common formats
+    common_headers = [f"{key}: {value}" for key, value in custom_header.items()]
+    semi_colon_headers = ';;'.join(common_headers)
+    colon_headers = [f"{key}:{value}" for key, value in custom_header.items()]
+
+    # Define format mapping for each tool
+    format_mapping = {
+        'common': ' '.join([f' -H "{header}"' for header in common_headers]),
+        'dalfox': ' '.join([f' -H "{header}"' for header in colon_headers]),
+        'hakrawler': f' -h "{semi_colon_headers}"',
+        'gospider': generate_gospider_params(custom_header),
+    }
+
+    # Return the corresponding parameter for the specified tool or default to common_headers format
+    return format_mapping.get(tool_name, format_mapping.get('common'))
+
+def generate_gospider_params(custom_header):
+    """
+    Generate command-line parameters for gospider based on the custom header.
+
+    Args:
+        custom_header (dict): Dictionary containing the custom headers.
+
+    Returns:
+        str: Command-line parameters for gospider.
+    """
+    params = []
+    for key, value in custom_header.items():
+        if key.lower() == 'user-agent':
+            params.append(f' -u "{value}"')
+        elif key.lower() == 'cookie':
+            params.append(f' --cookie "{value}"')
+        else:
+            params.append(f' -H "{key}:{value}"')
+    return ' '.join(params)
+
+def is_iterable(variable):
+    try:
+        iter(variable)
+        return True
+    except TypeError:
+        return False
+
+def extract_columns(row, columns):
+    """
+    Extract specific columns from a row based on column indices.
+    
+    Args:
+        row (list): The CSV row as a list of values.
+        columns (list): List of column indices to extract.
+    
+    Returns:
+        list: Extracted values from the specified columns.
+    """
+    return [row[i] for i in columns]

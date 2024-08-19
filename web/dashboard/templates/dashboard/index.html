@@ -17,7 +17,7 @@ Dashboard
 {% endblock custom_js_css_link %}
 
 {% block breadcrumb_title %}
-<span class="badge badge-soft-info">reNgine 2.0.3</span>
+<span class="badge badge-soft-info">reNgine-ng {{ RENGINE_CURRENT_VERSION }}</span>
 {% endblock breadcrumb_title %}
 
 {% block main_content %}
@@ -39,7 +39,7 @@ Dashboard
 	<div class="col-xl-3 col-lg-3 col-md-6 col-sm-12 col-12">
 		<div class="card" id="tooltip-container1">
 			<div class="card-body">
-				<i class="fa fa-info-circle text-muted float-end" data-bs-container="#tooltip-container1" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Total Number of Subdomains discovered by reNgine across all targets."></i>
+				<i class="fa fa-info-circle text-muted float-end" data-bs-container="#tooltip-container1" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Total Number of Subdomains discovered by reNgine-ng across all targets."></i>
 				<h4 class="mt-0 font-16">Total Subdomains</h4>
 				<h2 class="text-primary my-3 text-center"><span data-plugin="counterup">{{subdomain_count|intcomma}}</span></h2>
 				<div id="subdomains_chart"></div>
@@ -53,7 +53,7 @@ Dashboard
 	<div class="col-xl-3 col-lg-3 col-md-6 col-sm-12 col-12">
 		<div class="card" id="tooltip-container2">
 			<div class="card-body">
-				<i class="fa fa-info-circle text-muted float-end" data-bs-container="#tooltip-container2" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Total Endpoints/URLs discovered by reNgine across all targets & subdomains."></i>
+				<i class="fa fa-info-circle text-muted float-end" data-bs-container="#tooltip-container2" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Total Endpoints/URLs discovered by reNgine-ng across all targets & subdomains."></i>
 				<h4 class="mt-0 font-16">Total Endpoints</h4>
 				<h2 class="text-primary my-3 text-center">{{endpoint_count|intcomma}}</h2>
 				<div id="endpoint_chart"></div>
@@ -67,7 +67,7 @@ Dashboard
 	<div class="col-xl-3 col-lg-3 col-md-6 col-sm-12 col-12">
 		<div class="card" id="tooltip-container3">
 			<div class="card-body">
-				<i class="fa fa-info-circle text-muted float-end" data-bs-container="#tooltip-container3" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Total Vulnerabilities discovered by reNgine across all targets, subdomains & endpoints."></i>
+				<i class="fa fa-info-circle text-muted float-end" data-bs-container="#tooltip-container3" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Total Vulnerabilities discovered by reNgine-ng across all targets, subdomains & endpoints."></i>
 				<h4 class="mt-0 font-16 text-danger">Total Vulnerabilities</h4>
 				<h2 class="text-danger my-3 text-center"><span data-plugin="counterup">{{total_vul_count|intcomma}}</span></h2>
 				<div id="vuln_chart"></div>

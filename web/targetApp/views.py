@@ -93,8 +93,8 @@ def add_target(request, slug):
                         domains.append(target)
 
                     elif is_range:
-                        ips = get_ips_from_cidr_range(target)
-                        for ip_address in ips:
+                        _ips = get_ips_from_cidr_range(target)
+                        for ip_address in _ips:
                             ips.append(ip_address)
                             domains.append(ip_address)
                     else:
@@ -180,10 +180,11 @@ def add_target(request, slug):
                     io_string = io.StringIO(txt_content)
                     for target in io_string:
                         target_domain = target.rstrip("\n").rstrip("\r")
+                        domain = None
                         domain_query = Domain.objects.filter(name=target_domain)
                         if not domain_query.exists():
-                            if not validators.domain(domain):
-                                messages.add_message(request, messages.ERROR, f'Domain {domain} is not a valid domain name. Skipping.')
+                            if not validators.domain(target_domain):
+                                messages.add_message(request, messages.ERROR, f'Domain {target_domain} is not a valid domain name. Skipping.')
                                 continue
                             Domain.objects.create(
                                 name=target_domain,
@@ -229,6 +230,35 @@ def add_target(request, slug):
                                         project=project,
                                         insert_date=timezone.now())
                                 organization.domains.add(domain_obj)
+            elif ip_target:
+                # add ip's from "resolve and add ip address" tab
+                resolved_ips = [ip.rstrip() for ip in request.POST.getlist('resolved_ip_domains') if ip]
+                for ip in resolved_ips:
+                    is_domain = bool(validators.domain(ip))
+                    is_ip = bool(validators.ipv4(ip)) or bool(validators.ipv6(ip))
+                    description = request.POST.get('targetDescription', '')
+                    h1_team_handle = request.POST.get('targetH1TeamHandle')
+                    if not Domain.objects.filter(name=ip).exists():
+                        domain, created = Domain.objects.get_or_create(
+                            name=ip,
+                            description=description,
+                            h1_team_handle=h1_team_handle,
+                            project=project,
+                            ip_address_cidr=ip if is_ip else None)
+                        domain.insert_date = timezone.now()
+                        domain.save()
+                        added_target_count += 1
+                        if created:
+                            logger.info(f'Added new domain {domain.name}')
+                        if is_ip:
+                            ip_data = get_ip_info(ip)
+                            ip, created = IpAddress.objects.get_or_create(address=ip)
+                            ip.reverse_pointer = ip_data.reverse_pointer
+                            ip.is_private = ip_data.is_private
+                            ip.version = ip_data.version
+                            ip.save()
+                            if created:
+                                logger.info(f'Added new IP {ip}')
 
         except Exception as e:
             logger.exception(e)
@@ -274,7 +304,8 @@ def list_target(request, slug):
 def delete_target(request, id):
     obj = get_object_or_404(Domain, id=id)
     if request.method == "POST":
-        run_command(f'rm -rf {settings.TOOL_LOCATION} scan_results/{obj.name}*')
+        run_command(f'rm -rf {settings.RENGINE_RESULTS}/{obj.name}')
+        run_command(f'rm -rf {settings.RENGINE_RESULTS}/{obj.name}*') # for backward compatibility
         obj.delete()
         responseData = {'status': 'true'}
         messages.add_message(
@@ -364,7 +395,7 @@ def target_summary(request, slug, id):
         .distinct()
     )
     context['subdomain_count'] = subdomains.count()
-    context['alive_count'] = subdomains.filter(http_status__exact=200).count()
+    context['alive_count'] = subdomains.filter(http_status__gt=0).count()
 
     # Endpoints
     endpoints = (
@@ -374,7 +405,7 @@ def target_summary(request, slug, id):
         .distinct()
     )
     context['endpoint_count'] = endpoints.count()
-    context['endpoint_alive_count'] = endpoints.filter(http_status__exact=200).count()
+    context['endpoint_alive_count'] = endpoints.filter(http_status__gt=0).count()
 
     # Vulnerabilities
     vulnerabilities = Vulnerability.objects.filter(target_domain__id=id)

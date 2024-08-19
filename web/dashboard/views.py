@@ -49,7 +49,7 @@ def index(request, slug):
     subdomain_count = subdomains.count()
     subdomain_with_ip_count = subdomains.filter(ip_addresses__isnull=False).count()
     alive_count = subdomains.exclude(http_status__exact=0).count()
-    endpoint_alive_count = endpoints.filter(http_status__exact=200).count()
+    endpoint_alive_count = endpoints.filter(http_status__gt=0).count()
 
     info_count = vulnerabilities.filter(severity=0).count()
     low_count = vulnerabilities.filter(severity=1).count()

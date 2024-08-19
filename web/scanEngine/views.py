@@ -1,9 +1,11 @@
 import glob
+import json
 import os
 import re
 import shutil
 import subprocess
 
+from datetime import datetime
 from django import http
 from django.contrib import messages
 from django.shortcuts import get_object_or_404, render
@@ -11,7 +13,7 @@ from django.urls import reverse
 from rolepermissions.decorators import has_permission_decorator
 
 from reNgine.common_func import *
-from reNgine.tasks import (run_command, send_discord_message, send_slack_message, send_telegram_message)
+from reNgine.tasks import (run_command, send_discord_message, send_slack_message,send_lark_message, send_telegram_message)
 from scanEngine.forms import *
 from scanEngine.forms import ConfigurationForm
 from scanEngine.models import *
@@ -110,10 +112,9 @@ def add_wordlist(request, slug):
             if txt_file.content_type == 'text/plain':
                 wordlist_content = txt_file.read().decode('UTF-8', "ignore")
                 wordlist_file = open(
-                    '/usr/src/' +
-                    'wordlist/' +
-                    form.cleaned_data['short_name'] + '.txt',
-                    'w')
+                    Path(RENGINE_WORDLISTS) / f"{form.cleaned_data['short_name']}.txt",
+                    'w'
+                )
                 wordlist_file.write(wordlist_content)
                 Wordlist.objects.create(
                     name=form.cleaned_data['name'],
@@ -135,11 +136,7 @@ def delete_wordlist(request, slug, id):
     if request.method == "POST":
         obj.delete()
         try:
-            os.remove(
-            '/usr/src/' +
-            'wordlist/' +
-            obj.short_name +
-            '.txt')
+            os.remove(Path(RENGINE_WORDLISTS) / f'{obj.short_name}.txt')
             responseData = {'status': True}
         except Exception as e:
             responseData = {'status': False}
@@ -206,7 +203,7 @@ def tool_specific_settings(request, slug):
             else:
                 # remove special chars from filename, that could possibly do directory traversal or XSS
                 filename = re.sub(r'[\\/*?:"<>|]',"", gf_file.name)
-                file_path = '/root/.gf/' + filename
+                file_path = Path.home() / '.gf/' + filename
                 file = open(file_path, "w")
                 file.write(gf_file.read().decode("utf-8"))
                 file.close()
@@ -220,7 +217,7 @@ def tool_specific_settings(request, slug):
                 messages.add_message(request, messages.ERROR, 'Invalid Nuclei Pattern, upload only *.yaml extension')
             else:
                 filename = re.sub(r'[\\/*?:"<>|]',"", nuclei_file.name)
-                file_path = '/root/nuclei-templates/' + filename
+                file_path = Path.home() / 'nuclei-templates/' + filename
                 file = open(file_path, "w")
                 file.write(nuclei_file.read().decode("utf-8"))
                 file.close()
@@ -228,31 +225,31 @@ def tool_specific_settings(request, slug):
             return http.HttpResponseRedirect(reverse('tool_settings', kwargs={'slug': slug}))
 
         elif 'nuclei_config_text_area' in request.POST:
-            with open('/root/.config/nuclei/config.yaml', "w") as fhandle:
+            with open(Path.home() / '.config' / 'nuclei' / 'config.yaml', "w") as fhandle:
                 fhandle.write(request.POST.get('nuclei_config_text_area'))
             messages.add_message(request, messages.INFO, 'Nuclei config updated!')
             return http.HttpResponseRedirect(reverse('tool_settings', kwargs={'slug': slug}))
 
         elif 'subfinder_config_text_area' in request.POST:
-            with open('/root/.config/subfinder/config.yaml', "w") as fhandle:
+            with open(Path.home() / '.config' / 'subfinder' / 'config.yaml', "w") as fhandle:
                 fhandle.write(request.POST.get('subfinder_config_text_area'))
             messages.add_message(request, messages.INFO, 'Subfinder config updated!')
             return http.HttpResponseRedirect(reverse('tool_settings', kwargs={'slug': slug}))
 
         elif 'naabu_config_text_area' in request.POST:
-            with open('/root/.config/naabu/config.yaml', "w") as fhandle:
+            with open(Path.home() / '.config' / 'naabu' / 'config.yaml', "w") as fhandle:
                 fhandle.write(request.POST.get('naabu_config_text_area'))
             messages.add_message(request, messages.INFO, 'Naabu config updated!')
             return http.HttpResponseRedirect(reverse('tool_settings', kwargs={'slug': slug}))
 
         elif 'amass_config_text_area' in request.POST:
-            with open('/root/.config/amass.ini', "w") as fhandle:
+            with open(Path.home() / '.config' / 'amass.ini', "w") as fhandle:
                 fhandle.write(request.POST.get('amass_config_text_area'))
             messages.add_message(request, messages.INFO, 'Amass config updated!')
             return http.HttpResponseRedirect(reverse('tool_settings', kwargs={'slug': slug}))
 
         elif 'theharvester_config_text_area' in request.POST:
-            with open('/usr/src/github/theHarvester/api-keys.yaml', "w") as fhandle:
+            with open(Path(RENGINE_TOOL_GITHUB_PATH) / 'theHarvester' / 'api-keys.yaml', "w") as fhandle:
                 fhandle.write(request.POST.get('theharvester_config_text_area'))
             messages.add_message(request, messages.INFO, 'theHarvester config updated!')
             return http.HttpResponseRedirect(reverse('tool_settings', kwargs={'slug': slug}))
@@ -261,7 +258,7 @@ def tool_specific_settings(request, slug):
     context['tool_settings_li'] = 'active'
     context['settings_ul_show'] = 'show'
     gf_list = (subprocess.check_output(['gf', '-list'])).decode("utf-8")
-    nuclei_custom_pattern = [f for f in glob.glob("/root/nuclei-templates/*.yaml")]
+    nuclei_custom_pattern = [f for f in glob.glob(Path.home() / "nuclei-templates" / "*.yaml")]
     context['nuclei_templates'] = nuclei_custom_pattern
     context['gf_patterns'] = sorted(gf_list.split('\n'))
     return render(request, 'scanEngine/settings/tool.html', context)
@@ -306,6 +303,7 @@ def notification_settings(request, slug):
         if form.is_valid():
             form.save()
             send_slack_message('*reNgine*\nCongratulations! your notification services are working.')
+            send_lark_message('*reNgine*\nCongratulations! your notification services are working.')
             send_telegram_message('*reNgine*\nCongratulations! your notification services are working.')
             send_discord_message('**reNgine**\nCongratulations! your notification services are working.')
             messages.add_message(
@@ -457,6 +455,60 @@ def tool_arsenal_section(request, slug):
 
 
 @has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
+def api_vault_delete(request, slug):
+    response = {}
+    response["status"] = "error"
+    if request.method == "POST":
+        handler = {"key_openai": OpenAiAPIKey, "key_netlas": NetlasAPIKey}
+        response["deleted"] = []
+        j = json.loads(request.body.decode("utf-8"))
+        for key in j["keys"]:
+            try:
+                handler[key].objects.first().delete()
+                response["deleted"].append(key)
+            except KeyError:
+                pass
+        response["status"] = "OK"
+    else:
+        response["message"] = "Method not allowed"
+
+    return http.JsonResponse(response)
+    
+def llm_toolkit_section(request, slug):
+    context = {}
+    list_all_models_url = f'{OLLAMA_INSTANCE}/api/tags'
+    response = requests.get(list_all_models_url)
+    all_models = []
+    selected_model = None
+    all_models = DEFAULT_GPT_MODELS.copy()
+    if response.status_code == 200:
+        models = response.json()
+        ollama_models = models.get('models')
+        date_format = "%Y-%m-%dT%H:%M:%S"
+        for model in ollama_models:
+           all_models.append({**model, 
+                'modified_at': datetime.strptime(model['modified_at'].split('.')[0], date_format),
+                'is_local': True,
+            })
+    # find selected model name from db
+    selected_model = OllamaSettings.objects.first()
+    if selected_model:
+        selected_model = {'selected_model': selected_model.selected_model}
+    else:
+        # use gpt3.5-turbo as default
+        selected_model = {'selected_model': 'gpt-3.5-turbo'}
+    for model in all_models:
+        if model['name'] == selected_model['selected_model']:
+            model['selected'] = True
+    context['installed_models'] = all_models
+    # show error message for openai key, if any gpt is selected
+    openai_key = get_open_ai_key()
+    if not openai_key and 'gpt' in selected_model['selected_model']:
+        context['openai_key_error'] = True
+    return render(request, 'scanEngine/settings/llm_toolkit.html', context)
+
+
+@has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
 def api_vault(request, slug):
     context = {}
     if request.method == "POST":
@@ -464,7 +516,7 @@ def api_vault(request, slug):
         key_netlas = request.POST.get('key_netlas')
 
 
-        if key_openai:
+        if key_openai and len(key_openai) > 0:
             openai_api_key = OpenAiAPIKey.objects.first()
             if openai_api_key:
                 openai_api_key.key = key_openai
@@ -472,7 +524,7 @@ def api_vault(request, slug):
             else:
                 OpenAiAPIKey.objects.create(key=key_openai)
 
-        if key_netlas:
+        if key_netlas and len(key_netlas) > 0:
             netlas_api_key = NetlasAPIKey.objects.first()
             if netlas_api_key:
                 netlas_api_key.key = key_netlas
@@ -480,10 +532,24 @@ def api_vault(request, slug):
             else:
                 NetlasAPIKey.objects.create(key=key_netlas)
 
-    openai_key = OpenAiAPIKey.objects.first()
-    netlas_key = NetlasAPIKey.objects.first()
-    context['openai_key'] = openai_key
-    context['netlas_key'] = netlas_key
+# FIXME: This should be better handled via forms, formviews & formsets
+    context["apiKeys"] = [
+        {
+            "recommended": True,
+            "optional": True,
+            "experimental": True,
+            "name": "OpenAI",
+            "text": "OpenAI keys will be used to generate vulnerability description, remediation, impact and vulnerability report writing using ChatGPT.",
+            "hasKey": True if OpenAiAPIKey.objects.first() else False
+        },
+        {
+            "name": "Netlas",
+            "text": "Netlas keys will be used to get whois information and other OSINT data.",
+            "optional": True,
+            "hasKey": True if NetlasAPIKey.objects.first() else False
+        }
+    ]
+    context["slug"] = slug
     return render(request, 'scanEngine/settings/api.html', context)
 
 

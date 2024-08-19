@@ -38,7 +38,7 @@ Add Scan Engine
   <div class="card-body">
   <h4 class="header-title">Scan Engines</h4>
   <p>
-  <code>Scan Engines</code> are the most crucial part of reNgine. They define how a <code>scan</code> is performed against a target. <code>Scan Engines</code> allow you to define the configuration and use it against multiple targets.
+  <code>Scan Engines</code> are the most crucial part of reNgine-ng. They define how a <code>scan</code> is performed against a target. <code>Scan Engines</code> allow you to define the configuration and use it against multiple targets.
   <br>
   YAML configuration allows you fine tuning the engines such as rate, templates to be used, or configurations to be used.
   </p>
@@ -140,7 +140,6 @@ fetch_url: {
     'gospider',
     'hakrawler',
     'waybackurls',
-    'gospider',
     'katana',
     'gau'
   ],
@@ -149,6 +148,7 @@ fetch_url: {
     'content_length',
     'page_title'
   ],
+  'follow_redirect': false,
   'enable_http_crawl': true,
   'gf_patterns': ['debug_logic', 'idor', 'interestingEXT', 'interestingparams', 'interestingsubs', 'lfi', 'rce', 'redirect', 'sqli', 'ssrf', 'ssti', 'xss'],
   'ignore_file_extensions': ['png', 'jpg', 'jpeg', 'gif', 'mp4', 'mpeg', 'mp3'],

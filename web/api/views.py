@@ -1,7 +1,10 @@
 import logging
 import re
+import os.path
+from pathlib import Path
 import socket
 import subprocess
+from ipaddress import IPv4Network
 
 import requests
 import validators
@@ -20,6 +23,8 @@ from recon_note.models import *
 from reNgine.celery import app
 from reNgine.common_func import *
 from reNgine.definitions import ABORTED_TASK
+from reNgine.settings import RENGINE_CURRENT_VERSION
+from reNgine.settings import RENGINE_TOOL_PATH
 from reNgine.tasks import *
 from reNgine.gpt import GPTAttackSuggestionGenerator
 from reNgine.utilities import is_safe_path
@@ -31,6 +36,82 @@ from targetApp.models import *
 from .serializers import *
 
 logger = logging.getLogger(__name__)
+
+
+class OllamaManager(APIView):
+	def get(self, request):
+		"""
+		API to download Ollama Models
+		sends a POST request to download the model
+		"""
+		req = self.request
+		model_name = req.query_params.get('model')
+		response = {
+			'status': False
+		}
+		try:
+			pull_model_api = f'{OLLAMA_INSTANCE}/api/pull'
+			_response = requests.post(
+				pull_model_api, 
+				json={
+					'name': model_name,
+					'stream': False
+				}
+			).json()
+			if _response.get('error'):
+				response['status'] = False
+				response['error'] = _response.get('error')
+			else:
+				response['status'] = True
+		except Exception as e:
+			response['error'] = str(e)		
+		return Response(response)
+	
+	def delete(self, request):
+		req = self.request
+		model_name = req.query_params.get('model')
+		delete_model_api = f'{OLLAMA_INSTANCE}/api/delete'
+		response = {
+			'status': False
+		}
+		try:
+			_response = requests.delete(
+				delete_model_api, 
+				json={
+					'name': model_name
+				}
+			).json()
+			if _response.get('error'):
+				response['status'] = False
+				response['error'] = _response.get('error')
+			else:
+				response['status'] = True
+		except Exception as e:
+			response['error'] = str(e)
+		return Response(response)
+	
+	def put(self, request):
+		req = self.request
+		model_name = req.query_params.get('model')
+		# check if model_name is in DEFAULT_GPT_MODELS
+		response = {
+			'status': False
+		}
+		use_ollama = True
+		if any(model['name'] == model_name for model in DEFAULT_GPT_MODELS):
+			use_ollama = False
+		try:
+			OllamaSettings.objects.update_or_create(
+				defaults={
+					'selected_model': model_name,
+					'use_ollama': use_ollama
+				},
+				id=1
+			)
+			response['status'] = True
+		except Exception as e:
+			response['error'] = str(e)
+		return Response(response)
 
 
 class GPTAttackSuggestion(APIView):
@@ -806,7 +887,7 @@ class RengineUpdateCheck(APIView):
 	def get(self, request):
 		req = self.request
 		github_api = \
-			'https://api.github.com/repos/yogeshojha/rengine/releases'
+			'https://api.github.com/repos/Security-Tools-Alliance/rengine-ng/releases'
 		response = requests.get(github_api).json()
 		if 'message' in response:
 			return Response({'status': False, 'message': 'RateLimited'})
@@ -815,11 +896,8 @@ class RengineUpdateCheck(APIView):
 
 		# get current version_number
 		# remove quotes from current_version
-		current_version = ((os.environ['RENGINE_CURRENT_VERSION'
-							])[1:] if os.environ['RENGINE_CURRENT_VERSION'
-							][0] == 'v'
-							else os.environ['RENGINE_CURRENT_VERSION']).replace("'", "")
-
+		current_version = (RENGINE_CURRENT_VERSION[1:] if RENGINE_CURRENT_VERSION[0] == 'v' else RENGINE_CURRENT_VERSION).replace("'", "")
+		
 		# for consistency remove v from both if exists
 		latest_version = re.search(r'v(\d+\.)?(\d+\.)?(\*|\d+)',
 								   ((response[0]['name'
@@ -905,7 +983,7 @@ class UpdateTool(APIView):
 		elif update_command == 'git pull':
 			tool_name = tool.install_command[:-1] if tool.install_command[-1] == '/' else tool.install_command
 			tool_name = tool_name.split('/')[-1]
-			update_command = 'cd /usr/src/github/' + tool_name + ' && git pull && cd -'
+			update_command = 'cd ' + str(Path(RENGINE_TOOL_GITHUB_PATH) / tool_name) + ' && git pull && cd -'
 
 		run_command(update_command)
 		run_command.apply_async(args=(update_command,))
@@ -1083,10 +1161,47 @@ class CMSDetector(APIView):
 		#save_db = True if 'save_db' in req.query_params else False
 		response = {'status': False}
 		try:
-			response = get_cms_details(url)
+			response = {}
+			cms_detector_command = f'cmseek'
+			cms_detector_command += ' --random-agent --batch --follow-redirect'
+			cms_detector_command += f' -u {url}'
+
+			_, output = run_command(cms_detector_command, remove_ansi_sequence=True)
+
+			response['message'] = 'Could not detect CMS!'
+
+			parsed_url = urlparse(url)
+
+			domain_name = parsed_url.hostname
+			port = parsed_url.port
+
+			find_dir = domain_name
+
+			if port:
+				find_dir += '_{}'.format(port)
+			# look for result path in output
+			path_regex = r"Result: (\/usr\/src[^\"\s]*)"
+			match = re.search(path_regex, output)
+			if match:
+				cms_json_path = match.group(1)
+				if os.path.isfile(cms_json_path):
+					cms_file_content = json.loads(open(cms_json_path, 'r').read())
+					if not cms_file_content.get('cms_id'):
+						return response
+					response = {}
+					response = cms_file_content
+					response['status'] = True
+					try:
+						# remove results
+						cms_dir_path = os.path.dirname(cms_json_path)
+						shutil.rmtree(cms_dir_path)
+					except Exception as e:
+						logger.error(e)
+					return Response(response)
+			return Response(response)
 		except Exception as e:
 			response = {'status': False, 'message': str(e)}
-		return Response(response)
+			return Response(response)
 
 
 class IPToDomain(APIView):
@@ -1100,20 +1215,22 @@ class IPToDomain(APIView):
 			})
 		try:
 			logger.info(f'Resolving IP address {ip_address} ...')
-			domain, domains, ips = socket.gethostbyaddr(ip_address)
+			resolved_ips = []
+			for ip in IPv4Network(ip_address, False):
+				domains = []
+				ips = []
+				try:
+					(domain, domains, ips) = socket.gethostbyaddr(str(ip))
+				except socket.herror:
+					logger.info(f'No PTR record for {ip_address}')
+					domain = str(ip)
+				if domain not in domains:
+					domains.append(domain)
+				resolved_ips.append({'ip': str(ip),'domain': domain, 'domains': domains, 'ips': ips})
 			response = {
 				'status': True,
-				'ip_address': ip_address,
-				'domains': domains or [domain],
-				'resolves_to': domain
-			}
-		except socket.herror: # ip does not have a PTR record
-			logger.info(f'No PTR record for {ip_address}')
-			response = {
-				'status': True,
-				'ip_address': ip_address,
-				'domains': [ip_address],
-				'resolves_to': ip_address
+				'orig': ip_address,
+				'ip_address': resolved_ips,
 			}
 		except Exception as e:
 			logger.exception(e)
@@ -1142,7 +1259,7 @@ class GetFileContents(APIView):
 		response['status'] = False
 
 		if 'nuclei_config' in req.query_params:
-			path = "/root/.config/nuclei/config.yaml"
+			path = str(Path.home() / ".config" / "nuclei" / "config.yaml")
 			if not os.path.exists(path):
 				run_command(f'touch {path}')
 				response['message'] = 'File Created!'
@@ -1152,7 +1269,7 @@ class GetFileContents(APIView):
 			return Response(response)
 
 		if 'subfinder_config' in req.query_params:
-			path = "/root/.config/subfinder/config.yaml"
+			path = str(Path.home() / ".config" / "subfinder" /" config.yaml")
 			if not os.path.exists(path):
 				run_command(f'touch {path}')
 				response['message'] = 'File Created!'
@@ -1162,7 +1279,7 @@ class GetFileContents(APIView):
 			return Response(response)
 
 		if 'naabu_config' in req.query_params:
-			path = "/root/.config/naabu/config.yaml"
+			path = str(Path.home() / ".config" / "naabu" / "config.yaml")
 			if not os.path.exists(path):
 				run_command(f'touch {path}')
 				response['message'] = 'File Created!'
@@ -1172,7 +1289,7 @@ class GetFileContents(APIView):
 			return Response(response)
 
 		if 'theharvester_config' in req.query_params:
-			path = "/usr/src/github/theHarvester/api-keys.yaml"
+			path = str(Path(RENGINE_TOOL_PATH) / 'theHarvester' / 'api-keys.yaml')
 			if not os.path.exists(path):
 				run_command(f'touch {path}')
 				response['message'] = 'File Created!'
@@ -1182,7 +1299,7 @@ class GetFileContents(APIView):
 			return Response(response)
 
 		if 'amass_config' in req.query_params:
-			path = "/root/.config/amass.ini"
+			path = str(Path.home() / ".config" / "amass.ini")
 			if not os.path.exists(path):
 				run_command(f'touch {path}')
 				response['message'] = 'File Created!'
@@ -1192,8 +1309,8 @@ class GetFileContents(APIView):
 			return Response(response)
 
 		if 'gf_pattern' in req.query_params:
-			basedir = '/root/.gf'
-			path = f'/root/.gf/{name}.json'
+			basedir = str(Path.home() / '.gf')
+			path = str(Path.home() / '.gf' / f'{name}.json')
 			if is_safe_path(basedir, path) and os.path.exists(path):
 				content = open(path, "r").read()
 				response['status'] = True
@@ -1205,8 +1322,8 @@ class GetFileContents(APIView):
 
 
 		if 'nuclei_template' in req.query_params:
-			safe_dir = '/root/nuclei-templates'
-			path = f'/root/nuclei-templates/{name}'
+			safe_dir = str(Path.home() / 'nuclei-templates')
+			path = str(Path.home() / 'nuclei-templates' / f'{name}')
 			if is_safe_path(safe_dir, path) and os.path.exists(path):
 				content = open(path.format(name), "r").read()
 				response['status'] = True

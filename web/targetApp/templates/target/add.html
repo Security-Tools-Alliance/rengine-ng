@@ -88,7 +88,7 @@ Add or Import Targets
                       <input type="checkbox" class="form-check-input" id="fetch_whois_checkbox" name="fetch_whois_checkbox" checked>
                       <label class="form-check-label" for="fetch_whois_checkbox">Fetch WHOIS and domain related information</label>
                       <br>
-                      <span class="text-muted">(reNgine will automatically fetch whois and domain related information if selected.)</span>
+                      <span class="text-muted">(reNgine-ng will automatically fetch whois and domain related information if selected.)</span>
                     </div>
                   </div>
                 </div>
@@ -103,7 +103,7 @@ Add or Import Targets
             <div class="row">
               <div class="col-12">
                 <div class="alert alert-primary border-0 mb-4" role="alert">
-                  Please enter your Target IP address, reNgine will look for the <b>A</b> records and resolve them to the domains.
+                  Please enter your Target IP address, reNgine-ng will look for the <b>A</b> records and resolve them to the domains.
                 </div>
                 <label for="ip_address" class="text-dark">IP Address or CIDR</br><span class="text-muted">Example: 192.168.1.1 or 192.168.1.1/24, both are supported</span></label>
                 <input type="text" name="ip_address" class="form-control form-control-lg" id="ip_address" placeholder="X.X.X.X">
@@ -261,18 +261,22 @@ Add or Import Targets
             if (json_data['status']) {
               // #resolved_domains_div
               $("#all_domains_checkbox").show();
-              $('#resolved_domains_div').append(`<b class='text-info'>${json_data['domains'].length} domains associated with IP Address ${ip_address.value}</b></br>`);
-              $('#resolved_domains_div').append(`<b>Please select the domains to import.</b>`);
-              $('#resolved_domains_div').append(`<div id='domains_checkbox' class='mt-2 row'></div>`);
-              for (var domain in json_data['domains']) {
-                $('#domains_checkbox').append(`
-                <div class="col-xl-2 col-md-4 col-sm-6 col-12">
-                  <div class="form-check">
-                    <input type="checkbox" class="form-check-input resolved_ip_domains" name="resolved_ip_domains" id="${json_data['domains'][domain]}" value="${json_data['domains'][domain]}">
-                    <label class="form-check-label" for="${json_data['domains'][domain]}">${json_data['domains'][domain]}</label>
-                  </div>
-                </div>`
-                );
+              if(Array.isArray(json_data['ip_address'])) {
+                $('#resolved_domains_div').append(`<b class='text-info'>${json_data['ip_address'].length} domains associated with IP Address ${json_data['orig']}</b></br>`);
+                $('#resolved_domains_div').append(`<b>Please select the domains to import.</b>`);
+                $('#resolved_domains_div').append(`<div id='domains_checkbox' class='mt-2 row'></div>`);
+                json_data['ip_address'].forEach((ip_info, index, array) => {
+                  for (var domain in ip_info['domains']) {
+                    $('#domains_checkbox').append(`
+                    <div class="col-xl-2 col-md-4 col-sm-6 col-12">
+                      <div class="form-check">
+                        <input type="checkbox" class="form-check-input resolved_ip_domains" name="resolved_ip_domains" id="${ip_info['domains'][domain]}" value="${ip_info['domains'][domain]}">
+                        <label class="form-check-label" for="${ip_info['domains'][domain]}">${ip_info['domains'][domain]}</label>
+                      </div>
+                    </div>`
+                    );
+                  }
+                })
               }
               swal.close();
               // resolved_ip_domains if any is checked, then only enable add button

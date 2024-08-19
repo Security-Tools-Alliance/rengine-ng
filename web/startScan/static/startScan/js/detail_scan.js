@@ -7,7 +7,6 @@ function get_ips_from_port(port_number, history_id){
 }
 
 function get_ports_for_ip(ip, history_id){
-	console.log(ip, history_id);
 	document.getElementById("detailScanModalLabel").innerHTML='Open Ports identified for ' + ip;
 	var port_badge = '';
 	fetch('../ip/ports/'+ip+'/'+history_id+'/')
@@ -694,10 +693,8 @@ function get_screenshot(scan_id){
 		var gridzyInstance = document.querySelector('.gridzySkinBlank').gridzy;
 		$('#http_select_filter, #ips_select_filter, #services_select_filter, #ports_select_filter, #tech_select_filter').on('change', function() {
 			values = $(this).val();
-			console.log(values);
 			if(values.length && this.id == 'ips_select_filter'){
 				var replaces_str = values.map(function(values){return values.replace(/(?<=\..*)\./g, '_');});
-				console.log(replaces_str);
 				gridzyInstance.setOptions({
 					filter: replaces_str
 				});
@@ -808,6 +805,8 @@ function get_dorks(scan_id){
 			return
 		}
 		// unhide div
+		$("#dork_type_vertical_tablist").empty();
+		$("#dork_tab_content").empty();
 		$("#dorking_result_card").show();
 		var is_first = true;
 		for (var val in data['dorks']){
@@ -920,7 +919,6 @@ function get_vulnerability_modal(scan_id=null, severity=null, subdomain_id=null,
 			'Content-Type': 'application/json'
 		},
 	}).then(response => response.json()).then(function(response) {
-		console.log(response);
 		swal.close();
 		$('#xl-modal_title').html(`${subdomain_name}`);
 		render_vulnerability_in_xl_modal(response['count'], subdomain_name, response['results'])
@@ -960,7 +958,6 @@ function get_endpoint_modal(project, scan_id, subdomain_id, subdomain_name){
 			'Content-Type': 'application/json'
 		},
 	}).then(response => response.json()).then(function(response) {
-		console.log(response);
 		swal.close();
 		$('#xl-modal_title').html(`${subdomain_name}`);
 		render_endpoint_in_xlmodal(response['count'], subdomain_name, response['results'])
@@ -999,7 +996,6 @@ function get_directory_modal(scan_id=null, subdomain_id=null, subdomain_name=nul
 			'Content-Type': 'application/json'
 		},
 	}).then(response => response.json()).then(function(response) {
-		console.log(response);
 		swal.close();
 		$('#xl-modal_title').html(`${subdomain_name}`);
 		render_directories_in_xl_modal(response['count'], subdomain_name, response['results'])
@@ -1052,7 +1048,6 @@ function get_logs_modal(scan_id=null, activity_id=null) {
 	fetch(url)
 	.then(response => response.json())
 	.then(data => {
-		console.log(data);
 		swal.close();
 		$('#xl-modal_title').html(`Logs for scan #${scan_history_id}`);
 		data.results.forEach(log => {
@@ -1112,7 +1107,6 @@ $(".add-scan-history-todo").click(function(){
 		body: JSON.stringify(data)
 	}).then(res => res.json())
 	.then(function (response) {
-		console.log(response);
 		if (response.status) {
 			Snackbar.show({
 				text: 'Todo Added.',
@@ -1132,7 +1126,6 @@ $(".add-scan-history-todo").click(function(){
 
 
 function add_note_for_subdomain(subdomain_id, subdomain_name){
-	console.log(subdomain_name);
 	$('#todo-modal-subdomain-name').html(subdomain_name);
 	$("#subdomainTodoTitle").val('');
 	$("#subdomainTodoDescription").val('');
@@ -1452,7 +1445,6 @@ function initiate_subscan(subdomain_ids){
 			tasks.push(this.id)
 		}
 	})
-	console.log(tasks)
 	if (tasks.length === 0) {
 		Swal.fire({
 			title: 'Oops!',
@@ -1526,17 +1518,11 @@ function load_engine_tasks(engine_name){
 	var tasks = []
 	var html = ''
 	var url = `/api/listEngines/?format=json`;
-	console.log(url);
 	$.getJSON(url, function(data) {
-		console.log(data);
 		var engines = data.engines
-		console.log(engines);
-		console.log(engine_name);
 		$.each(engines, function(i, engine){
-			console.log(`${engine.engine_name} == ${engine_name}`)
 			if (engine.engine_name === engine_name){
 				tasks = engine.tasks
-				console.log(tasks)
 			}
 		})
 		$.each(tasks, function(i, task){
@@ -1548,7 +1534,6 @@ function load_engine_tasks(engine_name){
 				</div>
 			</div>`
 		});
-		console.log(html)
 		$('#engineTasks').html(html);
 	})
 }

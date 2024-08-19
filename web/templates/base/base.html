@@ -111,7 +111,7 @@
       $(document).ready(function(){
         render_search_history('{{current_project.slug}}');
 
-        // rengine will also check everyday if update exists for rengine
+        // reNgine-ng will also check everyday if update exists for reNgine-ng
         checkDailyUpdate();
 
         getScanStatusSidebar(project='{{current_project.slug}}', reload=false);
@@ -161,7 +161,7 @@
         }
         else{
           Swal.fire({
-            title: 'Checking reNgine latest version...',
+            title: 'Checking reNgine-ng latest version...',
             allowOutsideClick: false
           });
           swal.showLoading();
@@ -189,7 +189,7 @@
               $('.rengine_update_available').hide();
               Swal.fire({
                 title: 'Update not available',
-                text: 'You are running the latest version of reNgine!',
+                text: 'You are running the latest version of reNgine-ng!',
                 icon: 'info'
               });
             }
@@ -200,7 +200,7 @@
       function update_available(latest_version_number, changelog){
         Swal.fire({
           title: 'Update Available!',
-          html: `<h5>reNgine's new update ${latest_version_number} is available, please follow the update instructions.</h5><pre>${changelog}</pre>`,
+          html: `<h5>reNgine-ng's new update ${latest_version_number} is available, please follow the update instructions.</h5><pre>${changelog}</pre>`,
           icon: 'info',
           confirmButtonText: 'Update Instructions',
           showCancelButton: true,
@@ -208,7 +208,7 @@
           width: '60%',
         }).then((result) => {
           if (result.isConfirmed) {
-            window.open("https://www.rengine.wiki/update","_blank")
+            window.open("https://github.com/Security-Tools-Alliance/rengine-ng/wiki/Installation#updating-rengine-ng","_blank")
           }
         });
       }
