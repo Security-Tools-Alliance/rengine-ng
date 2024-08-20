@@ -15,6 +15,7 @@ env:
   REGISTRY: ghcr.io
   OWNER: security-tools-alliance
   PROJECT: rengine-ng
+  BOT_NAME: rengine-ci-bot
 
 jobs:
   build-and-push:
@@ -51,8 +52,8 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: ${{ env.BOT_NAME }}
+          password: ${{ secrets.ORG_GHCR_PAT }}
       
       - name: Build and push
         uses: docker/build-push-action@v6
