@@ -443,7 +443,7 @@ def get_domain_from_subdomain(subdomain):
 		str: Domain name.
 	"""
 
-	if not is_valid_domain_or_subdomain:
+	if not is_valid_domain_or_subdomain(subdomain):
 		return None
 
 	# Use tldextract to parse the subdomain
@@ -461,7 +461,7 @@ def get_domain_from_subdomain(subdomain):
 			return None
 
 	# Validate the domain before returning
-	return domain if is_valid_domain_or_subdomain else None
+	return domain if is_valid_domain_or_subdomain(subdomain) else None
 
 def sanitize_url(http_url):
 	"""Removes HTTP ports 80 and 443 from HTTP URL because it's ugly.
