@@ -17,6 +17,8 @@ from urllib.parse import urlparse
 from celery.utils.log import get_task_logger
 from discord_webhook import DiscordEmbed, DiscordWebhook
 from django.db.models import Q
+from django.core.validators import URLValidator
+from django.core.exceptions import ValidationError
 
 from reNgine.common_serializers import *
 from reNgine.definitions import *
@@ -424,6 +426,12 @@ def get_subdomain_from_url(url):
 	url_obj = urlparse(url.strip())
 	return url_obj.netloc.split(':')[0]
 
+def is_valid_domain_or_subdomain(domain):
+    try:
+        URLValidator(schemes=['http', 'https'])('http://' + domain)
+        return True
+    except ValidationError:
+        return False
 
 def get_domain_from_subdomain(subdomain):
 	"""Get domain from subdomain.
@@ -434,9 +442,26 @@ def get_domain_from_subdomain(subdomain):
 	Returns:
 		str: Domain name.
 	"""
-	ext = tldextract.extract(subdomain)
-	return '.'.join(ext[1:3])
 
+	if not is_valid_domain_or_subdomain:
+		return None
+
+	# Use tldextract to parse the subdomain
+	extracted = tldextract.extract(subdomain)
+
+	# if tldextract recognized the tld then its the final result
+	if extracted.suffix:
+		domain = f"{extracted.domain}.{extracted.suffix}"
+	else:
+		# Fallback method for unknown TLDs, like .clouds or .local etc
+		parts = subdomain.split('.')
+		if len(parts) >= 2:
+			domain = '.'.join(parts[-2:])
+		else:
+			return None
+
+	# Validate the domain before returning
+	return domain if is_valid_domain_or_subdomain else None
 
 def sanitize_url(http_url):
 	"""Removes HTTP ports 80 and 443 from HTTP URL because it's ugly.
