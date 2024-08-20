@@ -1,23 +1,93 @@
 name: Docker Image CI
 
 on:
+  pull_request:
   push:
     branches:
-      - master
+      - "master"
+      - "release/**"
+    tags:
+      - "v*.*.*"
+  release:
+    types: [published]
+
+env:
+  REGISTRY: ghcr.io
+  OWNER: security-tools-alliance
+  PROJECT: rengine-ng
 
 jobs:
-  build:
+  build-and-push:
     runs-on: ubuntu-latest
-
+    strategy:
+      matrix:
+        image: [celery, web, postgres, redis, ollama, certs, proxy]
     steps:
-      - name: Checkout the repo
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Log in to GitHub's Container Registry
-        run: echo "${{ secrets.CONTAINER_REGISTRY_SECRET }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ env.PROJECT }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha
+            type=raw,value=latest,enable={{is_default_branch}}
 
-      - name: Build the Docker image
-        run: docker build . -t ghcr.io/Security-Tools-Alliance/rengine-ng:latest
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Login to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ./docker/${{ matrix.image }}
+          file: ./docker/${{ matrix.image }}/Dockerfile
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
 
-      - name: Push the Docker image
-        run: docker push ghcr.io/Security-Tools-Alliance/rengine-ng:latest
+  update-release:
+    needs: build-and-push
+    if: github.event_name == 'release' && github.event.action == 'published'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Update release description
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          release_id=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/latest" | \
+            jq -r .id)
+          
+          images="celery web postgres redis ollama certs proxy"
+          image_list=""
+          for image in $images; do
+            image_list="${image_list}- ghcr.io/${{ env.OWNER }}/${{ env.PROJECT }}:rengine-${image}-${{ github.ref_name }}\n"
+          done
+          
+          body="Docker images for this release:\n${image_list}"
+          
+          curl -X PATCH -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/${release_id}" \
+            -d "{\"body\": \"$body\"}"
