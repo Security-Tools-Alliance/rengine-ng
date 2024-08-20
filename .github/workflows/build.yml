@@ -1,35 +1,23 @@
-name: Build Docker image
+name: Docker Image CI
 
 on:
   push:
-    branches: [ master ]
-  schedule:
-    - cron: '0 18 * * 5'
+    branches:
+      - master
 
 jobs:
   build:
-    name: Build Docker image
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout the git repo
+      - name: Checkout the repo
         uses: actions/checkout@v4
 
-      - name: Log in to Docker Hub
-        uses: docker/login-action@f054a8b539a109f9f41c372932f1ae047eff08c9
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
+      - name: Log in to GitHub's Container Registry
+        run: echo "${{ secrets.CONTAINER_REGISTRY_SECRET }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-      - name: Extract metadata (tags, labels) for Docker
-        id: meta
-        uses: docker/metadata-action@98669ae865ea3cffbcbaa878cf57c20bbf1c6c38
-        with:
-          images: yogeshojha/rengine
+      - name: Build the Docker image
+        run: docker build . -t ghcr.io/Security-Tools-Alliance/rengine-ng:latest
 
-      - name: Build Docker image
-        uses: docker/build-push-action@ad44023a93711e3deb337508980b4b5e9bcdc5dc
-        with:
-          context: web/
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+      - name: Push the Docker image
+        run: docker push ghcr.io/Security-Tools-Alliance/rengine-ng:latest
