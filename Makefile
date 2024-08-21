@@ -10,91 +10,107 @@ export RENGINE_VERSION
 # This for future release of Compose that will use Docker Buildkit, which is much efficient.
 COMPOSE_PREFIX_CMD	  := COMPOSE_DOCKER_CLI_BUILD=1
 COMPOSE_CMD 		  := docker compose
-COMPOSE_FILE	      := -f docker/docker-compose.yml
-COMPOSE_FILE_BUILD	  := -f docker/docker-compose.yml -f docker/docker-compose.build.yml
-COMPOSE_DEV_FILE      := -f docker/docker-compose.yml -f docker/docker-compose.dev.yml
+COMPOSE_FILE	      := docker/docker-compose.yml
+COMPOSE_FILE_BUILD	  := docker/docker-compose.build.yml
+COMPOSE_FILE_DEV      := docker/docker-compose.dev.yml
+COMPOSE_FILE_SETUP    := docker/docker-compose.setup.yml
 SERVICES              := db web proxy redis celery celery-beat ollama
 
 # Check if 'docker compose' command is available, otherwise use 'docker-compose'
 DOCKER_COMPOSE := $(shell if command -v docker > /dev/null && docker compose version > /dev/null 2>&1; then echo "docker compose"; else echo "docker-compose"; fi)
 $(info Using: $(shell echo "$(DOCKER_COMPOSE)"))
 
+# Define common commands
+DOCKER_COMPOSE_CMD      := ${COMPOSE_PREFIX_CMD} ${DOCKER_COMPOSE}
+DOCKER_COMPOSE_FILE_CMD := ${DOCKER_COMPOSE_CMD} -f ${COMPOSE_FILE}
+
 # --------------------------
 
 .PHONY: setup certs up build username pull down stop restart rm logs
 
 certs:		    ## Generate certificates.
-	@${COMPOSE_PREFIX_CMD} ${DOCKER_COMPOSE} -f docker/docker-compose.setup.yml run --rm certs
+	@${DOCKER_COMPOSE_CMD} -f ${COMPOSE_FILE_SETUP} run --rm certs
 
-setup:			## Generate certificates.
-	@make certs
+up:				## Pull and start all services.
+	${DOCKER_COMPOSE_FILE_CMD} up -d ${SERVICES}
 
-up:				## Build and start all services.
-	${COMPOSE_PREFIX_CMD} ${DOCKER_COMPOSE} ${COMPOSE_FILE} up -d ${SERVICES}
-
-pull_up:			## Pull Docker images.
-	@make pull
-	@make up
+dev_up:			## Pull and start all services with development configuration (more debug logs and Django Toolbar in UI).
+	${DOCKER_COMPOSE_FILE_CMD} -f ${COMPOSE_FILE_DEV} up -d ${SERVICES}
 
 build_up:		## Build and start all services.
 	@make build
 	@make up
 
-build:			## Build all services.
-	${COMPOSE_PREFIX_CMD} ${DOCKER_COMPOSE} ${COMPOSE_FILE_BUILD} build ${SERVICES}
+build:			## Build all Docker images locally.
+	${DOCKER_COMPOSE_FILE_CMD} -f ${COMPOSE_FILE_BUILD} build ${SERVICES}
+
+pull:			## Pull prebuilt Docker images from repository.
+	${DOCKER_COMPOSE_FILE_CMD} pull
 
 username:		## Generate Username (Use only after make up).
 ifeq ($(isNonInteractive), true)
-	${COMPOSE_PREFIX_CMD} ${DOCKER_COMPOSE} ${COMPOSE_FILE} exec web poetry -C /home/rengine run python3 manage.py createsuperuser --username ${DJANGO_SUPERUSER_USERNAME} --email ${DJANGO_SUPERUSER_EMAIL} --noinput
+	${DOCKER_COMPOSE_FILE_CMD} exec web poetry -C /home/rengine run python3 manage.py createsuperuser --username ${DJANGO_SUPERUSER_USERNAME} --email ${DJANGO_SUPERUSER_EMAIL} --noinput
 else
-	${COMPOSE_PREFIX_CMD} ${DOCKER_COMPOSE} ${COMPOSE_FILE} exec web poetry -C /home/rengine run python3 manage.py createsuperuser
+	${DOCKER_COMPOSE_FILE_CMD} exec web poetry -C /home/rengine run python3 manage.py createsuperuser
 endif
 
-changepassword:	## Change password for user
-	${COMPOSE_PREFIX_CMD} ${DOCKER_COMPOSE} ${COMPOSE_FILE} exec web poetry -C /home/rengine run python3 manage.py changepassword
+changepassword:	## Change password for user (Use only after make up & make username).
+	${DOCKER_COMPOSE_FILE_CMD} exec web poetry -C /home/rengine run python3 manage.py changepassword
 
-migrate:		## Apply migrations
-	${COMPOSE_PREFIX_CMD} ${DOCKER_COMPOSE} ${COMPOSE_FILE} exec web poetry -C /home/rengine run python3 manage.py migrate
+migrate:		## Apply Django migrations
+	${DOCKER_COMPOSE_FILE_CMD} exec web poetry -C /home/rengine run python3 manage.py migrate
 
-pull:			## Pull Docker images.
-	${COMPOSE_PREFIX_CMD} ${DOCKER_COMPOSE} ${COMPOSE_FILE} pull
-
-down:			## Down all services.
-	${COMPOSE_PREFIX_CMD} ${DOCKER_COMPOSE} ${COMPOSE_FILE} down
+down:			## Down all services and remove containers.
+	${DOCKER_COMPOSE_FILE_CMD} down
 
 stop:			## Stop all services.
-	${COMPOSE_PREFIX_CMD} ${DOCKER_COMPOSE} ${COMPOSE_FILE} stop ${SERVICES}
+	${DOCKER_COMPOSE_FILE_CMD} stop ${SERVICES}
 
-restart:		## Restart all services.
-	${COMPOSE_PREFIX_CMD} ${DOCKER_COMPOSE} ${COMPOSE_FILE} restart ${SERVICES}
+restart:		## Restart specified services or all if not specified. Use DEV=1 for development mode.
+ifneq ($(filter-out $@,$(MAKECMDGOALS)),)
+	@if [ "$(DEV)" = "1" ]; then \
+		${DOCKER_COMPOSE_FILE_CMD} -f ${COMPOSE_FILE_DEV} restart $(filter-out $@,$(MAKECMDGOALS)); \
+	else \
+		${DOCKER_COMPOSE_FILE_CMD} restart $(filter-out $@,$(MAKECMDGOALS)); \
+	fi
+else
+	@if [ "$(DEV)" = "1" ]; then \
+		${DOCKER_COMPOSE_FILE_CMD} -f ${COMPOSE_FILE_DEV} restart ${SERVICES}; \
+	else \
+		${DOCKER_COMPOSE_FILE_CMD} restart ${SERVICES}; \
+	fi
+endif
 
 rm:				## Remove all services containers.
-	${COMPOSE_PREFIX_CMD} ${DOCKER_COMPOSE} $(COMPOSE_FILE) rm -f ${SERVICES}
+	${DOCKER_COMPOSE_FILE_CMD} rm -f ${SERVICES}
 
 test:
-	${COMPOSE_PREFIX_CMD} ${DOCKER_COMPOSE} $(COMPOSE_FILE) exec celery poetry -C /home/rengine run python3 -m unittest tests/test_scan.py
+	${DOCKER_COMPOSE_FILE_CMD} exec celery poetry -C /home/rengine run python3 -m unittest tests/test_scan.py
 
-logs:			## Tail all logs with -n 1000.
-	${COMPOSE_PREFIX_CMD} ${DOCKER_COMPOSE} $(COMPOSE_FILE) logs --follow --tail=1000 ${SERVICES}
+logs:			## Tail all containers logs with -n 1000 (useful for debug).
+	${DOCKER_COMPOSE_FILE_CMD} logs --follow --tail=1000 ${SERVICES}
 
 images:			## Show all Docker images.
-	${COMPOSE_PREFIX_CMD} ${DOCKER_COMPOSE} $(COMPOSE_FILE) images ${SERVICES}
+	${DOCKER_COMPOSE_FILE_CMD} images ${SERVICES}
 
 prune:			## Remove containers and delete volume data.
 	@make stop && make rm && docker volume prune -f
 
 help:			## Show this help.
-	@echo "Make application Docker images and manage containers using Docker Compose files."
-	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m (default: help)\n\nTargets:\n"} /^[a-zA-Z_-]+:.*?##/ { printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
+	@echo "Manage Docker images, containers and Django commands using Docker Compose files."
+	@echo ""
+	@echo "Usage:"
+	@echo "  make <target> (default: help)"
+	@echo ""
+	@echo "Targets:"
+	@awk 'BEGIN {FS = ":.*##"; printf "  \033[36m%-15s\033[0m %s\n", "Target", "Description"}' $(MAKEFILE_LIST)
+	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z_-]+:.*?##/ { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
+	@echo ""
+	@echo "Special commands:"
+	@echo "  make restart [service1] [service2] ...  Restart specific services in production mode"
+	@echo "  make restart DEV=1 [service1] [service2] ...  Restart specific services in development mode"
+	@echo "  make restart                            Restart all services in production mode"
+	@echo "  make restart DEV=1                      Restart all services in development mode"
 
-dev_build:			## Build all services.
-	${COMPOSE_PREFIX_CMD} ${DOCKER_COMPOSE} ${COMPOSE_DEV_FILE} build ${SERVICES_DEV}
-
-dev_up:				## Build and start all services.
-	${COMPOSE_PREFIX_CMD} ${DOCKER_COMPOSE} ${COMPOSE_DEV_FILE} up -d ${SERVICES_DEV}
-
-dev_down:			## Down all services.
-	${COMPOSE_PREFIX_CMD} ${DOCKER_COMPOSE} ${COMPOSE_DEV_FILE} down
-
-dev_logs:			## Tail all logs with -n 1000.
-	${COMPOSE_PREFIX_CMD} ${DOCKER_COMPOSE} $(COMPOSE_DEV_FILE) logs --follow --tail=1000 ${SERVICES_DEV}
+%:
+	@:
