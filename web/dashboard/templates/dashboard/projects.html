@@ -36,7 +36,7 @@ All Projects
                 {% for project in projects %}
                   <tr>
                     <td>
-                      <h5 class="m-0 fw-normal">{{project.name}}</h5>
+                      <h5 class="m-0 fw-normal"><a href="{% url 'edit_project' project.slug %}">{{project.name}}</a></h5>
                       {% if current_project.slug == project.slug %}
                           <span class="badge bg-soft-primary text-primary mt-1">Current Project</span>
                       {% endif %}

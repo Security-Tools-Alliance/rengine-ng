@@ -1,5 +1,5 @@
 from django.db import models
-
+from django.contrib.auth.models import User
 
 class SearchHistory(models.Model):
 	query = models.CharField(max_length=1000)
@@ -9,13 +9,17 @@ class SearchHistory(models.Model):
 
 
 class Project(models.Model):
-	id = models.AutoField(primary_key=True)
-	name = models.CharField(max_length=500)
-	slug = models.SlugField(unique=True)
-	insert_date = models.DateTimeField()
+    id = models.AutoField(primary_key=True)
+    name = models.CharField(max_length=500)
+    slug = models.SlugField(unique=True)
+    insert_date = models.DateTimeField()
+    users = models.ManyToManyField(User, related_name='projects')
 
-	def __str__(self):
-		return self.slug
+    def __str__(self):
+        return self.slug
+
+    def is_user_authorized(self, user):
+        return user.is_superuser or self.users.filter(id=user.id).exists()
 
 
 class OpenAiAPIKey(models.Model):

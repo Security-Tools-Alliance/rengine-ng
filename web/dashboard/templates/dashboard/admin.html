@@ -106,7 +106,7 @@ Admin Settings
                   {% else %}
                   &nbsp;
                   {% endif %}
-                  <a href="#" onclick="update_user_modal({{muser.id}}, '{% if muser|has_role:'sys_admin' %}admin{% elif muser|has_role:'auditor'%}auditor{% elif muser|has_role:'penetration_tester'%}penetration_tester{%endif%}')" class="action-icon" id="change_user_details_btn" title="Update User Detail" data-bs-toggle="tooltip" data-bs-placement="bottom"> <i class="mdi mdi-account-edit"></i></a>
+                  <a href="#" onclick="update_user_modal({{muser.id}}, '{% if muser|has_role:'sys_admin' %}admin{% elif muser|has_role:'auditor'%}auditor{% elif muser|has_role:'penetration_tester'%}penetration_tester{%endif%}', [{% for project in muser.projects.all %}{{ project.id }}{% if not forloop.last %},{% endif %}{% endfor %}])" class="action-icon" id="change_user_details_btn" title="Update User Detail" data-bs-toggle="tooltip" data-bs-placement="bottom"> <i class="mdi mdi-account-edit"></i></a>
                   {% if user != muser %}
                     <a href="#" onclick="delete_user({{muser.id}}, '{{muser.username}}')" class="action-icon" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Delete Account"> <i class="mdi mdi-trash-can"></i></a>
                   {% endif %}
@@ -159,7 +159,7 @@ function delete_user(id, username) {
   }])
 }
 
-function update_user_modal(user_id, permission){
+function update_user_modal(user_id, permission, user_projects){
   var html_content = '';
 
   html_content += `
@@ -169,6 +169,14 @@ function update_user_modal(user_id, permission){
     <option ${permission == 'sys_admin' ? 'selected': ''} value='sys_admin'>Sys Admin</option>
     <option ${permission == 'penetration_tester' ? 'selected': ''} value='penetration_tester'>Penetration Tester</option>
     <option ${permission == 'auditor' ? 'selected': ''} value='auditor'>Auditor</option>
+    </select>
+  </div>
+  <div class="form mb-3">
+    <label for="user_projects" class="form-label float-start">Projects</label>
+    <select class="form-select" id="user_projects" multiple>
+      {% for project in projects %}
+        <option value="{{ project.id }}" ${user_projects.includes({{ project.id }}) ? 'selected' : ''}>{{ project.name }}</option>
+      {% endfor %}
     </select>
   </div>
   <div class="form mb-3">
@@ -195,9 +203,11 @@ function update_user_modal(user_id, permission){
         return new Promise(function (resolve) {
           var role_selected = document.getElementById('user_role').value;
           var change_password = document.getElementById('password').value;
+          var selected_projects = Array.from(document.getElementById('user_projects').selectedOptions).map(option => option.value);
           const data = {
             'role': role_selected,
-            'change_password': change_password
+            'change_password': change_password,
+            'projects': selected_projects
           };
           fetch('./update?mode=update&user=' + user_id, {
             method: 'POST',
@@ -244,7 +254,7 @@ function create_user_modal(){
   html_content += `
   <div class="form mb-3">
     <label for="create_username" class="form-label float-start">Username</label>
-    <input id="create_username" class="form-control" placeholder="Username" autocomplete="off">
+    <input type="text" id="create_username" class="form-control" placeholder="Username" required>
   </div>
   <i class="fa fa-info-circle text-muted float-end" data-bs-container="#tooltip-container" data-bs-toggle="tooltip" data-bs-placement="bottom" title="- Sys Admin: Sys Admin is a super user that has permission to modify system and scan related configurations, scan engines, create new users, add new tools etc. Super user can initiate scans and subscans effortlessly.
 - Penetration Tester: Penetration Tester will be allowed to modify and initiate scans and subscans, add or update targets, etc. A penetration tester will not be allowed to modify system configurations.
@@ -252,9 +262,17 @@ function create_user_modal(){
   <div class="form mb-3">
     <label for="create_user_role" class="form-label float-start">Role</label>
     <select class="form-select" id="create_user_role">
-    <option value='sys_admin'>Sys Admin</option>
-    <option value='penetration_tester'>Penetration Tester</option>
-    <option value='auditor'>Auditor</option>
+      <option value='sys_admin'>Sys Admin</option>
+      <option value='penetration_tester'>Penetration Tester</option>
+      <option value='auditor'>Auditor</option>
+    </select>
+  </div>
+  <div class="form mb-3">
+    <label for="create_user_projects" class="form-label float-start">Projects</label>
+    <select class="form-select" id="create_user_projects" multiple>
+      {% for project in projects %}
+        <option value="{{ project.id }}">{{ project.name }}</option>
+      {% endfor %}
     </select>
   </div>
   <div class="form mb-3">
@@ -267,71 +285,70 @@ function create_user_modal(){
       <label class="form-check-label text-small" for="show-password" style="font-size: 12px;">Show Password</label>
     </div>
   </div>
-
   `;
 
   Swal.fire({
-      title: 'Create User',
-      html: html_content,
-      showCloseButton: true,
-      showCancelButton: false,
-      confirmButtonText: 'Create User',
-      showLoaderOnConfirm: true,
-      preConfirm: function () {
-        return new Promise(function (resolve) {
-          var create_username = document.getElementById('create_username').value;
-          var role_selected = document.getElementById('create_user_role').value;
-          var create_password = document.getElementById('create_password').value;
-          if (!create_password) {
-            Swal.fire({
-              title: "Oops! Passwords can't be empty!",
-              icon: 'error',
-            })
-            return
-          }
-          const data = {
-            'username': create_username,
-            'role': role_selected,
-            'password': create_password
-          };
-          fetch('./update?mode=create', {
-            method: 'POST',
-            credentials: "same-origin",
-            headers: {
-              "X-CSRFToken": getCookie("csrftoken")
-            },
-            body: JSON.stringify(data)
+    title: 'Create User',
+    html: html_content,
+    showCloseButton: true,
+    showCancelButton: false,
+    confirmButtonText: 'Create User',
+    showLoaderOnConfirm: true,
+    preConfirm: function () {
+      return new Promise(function (resolve) {
+        var create_username = document.getElementById('create_username').value;
+        var role_selected = document.getElementById('create_user_role').value;
+        var create_password = document.getElementById('create_password').value;
+        var selected_projects = Array.from(document.getElementById('create_user_projects').selectedOptions).map(option => option.value);
+        if (!create_password) {
+          Swal.fire({
+            title: "Oops! Passwords can't be empty!",
+            icon: 'error',
           })
-          .then(function (response) {
-            return response.json();
-          })
-          .then(function(data) {
-            if (data.status) {
-              return location.reload();
-            }
-            else{
-              Swal.fire({
-                title: "Oops! Can't create user!",
-                icon: 'error',
-                text: 'Error: ' + data.error,
-              })
-            }
-
-          })
-          .catch(function() {
-            swal.insertQueueStep({
-              type: 'error',
-              title: 'Oops! Unable to update user!'
-            })
-          })
-          resolve()
+          return
+        }
+        const data = {
+          'username': create_username,
+          'role': role_selected,
+          'password': create_password,
+          'projects': selected_projects
+        };
+        fetch('./update?mode=create', {
+          method: 'POST',
+          credentials: "same-origin",
+          headers: {
+            "X-CSRFToken": getCookie("csrftoken")
+          },
+          body: JSON.stringify(data)
         })
-      }
+        .then(function (response) {
+          return response.json();
+        })
+        .then(function(data) {
+          if (data.status) {
+            return location.reload();
+          }
+          else{
+            Swal.fire({
+              title: "Oops! Can't create user!",
+              icon: 'error',
+              text: 'Error: ' + data.error,
+            })
+          }
+        })
+        .catch(function() {
+          swal.insertQueueStep({
+            type: 'error',
+            title: 'Oops! Unable to create user!'
+          })
+        })
+        resolve()
+      })
+    }
   });
 
   const passwordInput = document.getElementById('create_password');
   const showPasswordCheckbox = document.getElementById('show-password');
-
 
   showPasswordCheckbox.addEventListener('change', function() {
     if (showPasswordCheckbox.checked) {
@@ -341,6 +358,12 @@ function create_user_modal(){
     }
   });
 
+  // Initialize Select2 for projects
+  $('#create_user_projects').select2({
+    placeholder: "Select projects",
+    allowClear: true,
+    dropdownParent: $('.swal2-container')
+  });
 }
 
 </script>
