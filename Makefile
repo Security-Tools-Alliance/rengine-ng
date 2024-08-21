@@ -107,10 +107,11 @@ help:			## Show this help.
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z_-]+:.*?##/ { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
 	@echo ""
 	@echo "Special commands:"
-	@echo "  make restart [service1] [service2] ...  Restart specific services in production mode"
-	@echo "  make restart DEV=1 [service1] [service2] ...  Restart specific services in development mode"
-	@echo "  make restart                            Restart all services in production mode"
-	@echo "  make restart DEV=1                      Restart all services in development mode"
+	@echo "  make restart [service1] [service2] ...  		Restart specific services in production mode"
+	@echo "  make restart DEV=1 [service1] [service2] ...  	Restart specific services in development mode"
+	@echo "  make restart                            		Restart all services in production mode"
+	@echo "  make restart DEV=1                     		Restart all services in development mode"
 
 %:
-	@:
+	@echo "Command is not recognized."
+	@make help
