@@ -18,7 +18,7 @@ from django.template.defaultfilters import slugify
 from rolepermissions.roles import assign_role, clear_roles
 from rolepermissions.decorators import has_permission_decorator
 
-from dashboard.utils import user_has_project_access
+from dashboard.utils import get_user_projects, user_has_project_access, user_has_project_access_by_id
 from targetApp.models import Domain
 from startScan.models import (
     EndPoint, ScanHistory, Subdomain, Vulnerability, ScanActivity,
@@ -174,7 +174,7 @@ def index(request, slug):
 
     return render(request, 'dashboard/index.html', context)
 
-
+@user_has_project_access
 def profile(request, slug):
     if request.method == 'POST':
         form = PasswordChangeForm(request.user, request.POST)
@@ -194,6 +194,7 @@ def profile(request, slug):
     })
 
 
+@user_has_project_access
 @has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
 def admin_interface(request, slug):
     UserModel = get_user_model()
@@ -206,6 +207,7 @@ def admin_interface(request, slug):
         }
     )
 
+@user_has_project_access
 @has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
 def admin_interface_update(request, slug):
     mode = request.GET.get('mode')
@@ -285,7 +287,7 @@ def on_user_logged_out(sender, request, **kwargs):
         request,
         messages.INFO,
         'You have been successfully logged out. Thank you ' +
-        'for using reNgine.')
+        'for using reNgine-ng.')
 
 
 @receiver(user_logged_in)
@@ -298,6 +300,7 @@ def on_user_logged_in(sender, request, **kwargs):
         ' welcome back!')
 
 
+@user_has_project_access
 def search(request, slug):
     return render(request, 'dashboard/search.html')
 
@@ -305,14 +308,17 @@ def search(request, slug):
 def four_oh_four(request):
     return render(request, '404.html')
 
-
+@user_has_project_access
 def projects(request, slug):
     context = {}
-    context['projects'] = Project.objects.all()
+    context['projects'] = get_user_projects(request.user)
     return render(request, 'dashboard/projects.html', context)
 
 
 def delete_project(request, id):
+    if not user_has_project_access_by_id(request.user, id):
+        return JsonResponse({'status': 'false', 'error': 'You are not authorized to delete this project.'})
+
     obj = get_object_or_404(Project, id=id)
     if request.method == "POST":
         obj.delete()
@@ -399,20 +405,17 @@ def onboarding(request):
 
     return render(request, 'dashboard/onboarding.html', context)
 
-@login_required
+@user_has_project_access
 def list_projects(request):
-    if request.user.is_superuser:
-        projects = Project.objects.all()
-    else:
-        projects = Project.objects.filter(users=request.user)
+    projects = get_user_projects(request.user)
     return render(request, 'dashboard/projects.html', {'projects': projects})
 
-@login_required
+@user_has_project_access
 def edit_project(request, slug):
     project = get_object_or_404(Project, slug=slug)
     if not project.is_user_authorized(request.user):
         messages.error(request, "You don't have permission to edit this project.")
-        return redirect('project_list')
+        return redirect('list_projects', slug=project.slug)
     
     User = get_user_model()
     all_users = User.objects.all()
