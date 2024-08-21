@@ -66,20 +66,48 @@ down:			## Down all services and remove containers.
 stop:			## Stop all services.
 	${DOCKER_COMPOSE_FILE_CMD} stop ${SERVICES}
 
-restart:		## Restart specified services or all if not specified. Use DEV=1 for development mode.
-ifneq ($(filter-out $@,$(MAKECMDGOALS)),)
-	@if [ "$(DEV)" = "1" ]; then \
-		${DOCKER_COMPOSE_FILE_CMD} -f ${COMPOSE_FILE_DEV} restart $(filter-out $@,$(MAKECMDGOALS)); \
+restart:		## Restart specified services or all if not specified. Use DEV=1 for development mode, COLD=1 for down and up instead of restart.
+	@if [ "$(COLD)" = "1" ]; then \
+		if [ "$(DEV)" = "1" ]; then \
+			if [ -n "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
+				echo "Cold restart $(filter-out $@,$(MAKECMDGOALS)) in dev mode"; \
+				${DOCKER_COMPOSE_FILE_CMD} -f ${COMPOSE_FILE_DEV} down $(filter-out $@,$(MAKECMDGOALS)); \
+				${DOCKER_COMPOSE_FILE_CMD} -f ${COMPOSE_FILE_DEV} up -d $(filter-out $@,$(MAKECMDGOALS)); \
+			else \
+				echo "Cold restart ${SERVICES} in dev mode"; \
+				${DOCKER_COMPOSE_FILE_CMD} -f ${COMPOSE_FILE_DEV} down; \
+				${DOCKER_COMPOSE_FILE_CMD} -f ${COMPOSE_FILE_DEV} up -d ${SERVICES}; \
+			fi \
+		else \
+			if [ -n "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
+				echo "Cold restart $(filter-out $@,$(MAKECMDGOALS)) in production mode"; \
+				${DOCKER_COMPOSE_FILE_CMD} down $(filter-out $@,$(MAKECMDGOALS)); \
+				${DOCKER_COMPOSE_FILE_CMD} up -d $(filter-out $@,$(MAKECMDGOALS)); \
+			else \
+				echo "Cold restart ${SERVICES} in production mode"; \
+				${DOCKER_COMPOSE_FILE_CMD} down; \
+				${DOCKER_COMPOSE_FILE_CMD} up -d ${SERVICES}; \
+			fi \
+		fi \
 	else \
-		${DOCKER_COMPOSE_FILE_CMD} restart $(filter-out $@,$(MAKECMDGOALS)); \
+		if [ "$(DEV)" = "1" ]; then \
+			if [ -n "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
+				echo "Restart $(filter-out $@,$(MAKECMDGOALS)) in dev mode"; \
+				${DOCKER_COMPOSE_FILE_CMD} -f ${COMPOSE_FILE_DEV} restart $(filter-out $@,$(MAKECMDGOALS)); \
+			else \
+				echo "Restart ${SERVICES} in dev mode"; \
+				${DOCKER_COMPOSE_FILE_CMD} -f ${COMPOSE_FILE_DEV} restart ${SERVICES}; \
+			fi \
+		else \
+			if [ -n "$(filter-out $@,$(MAKECMDGOALS))" ]; then \
+				echo "Restart $(filter-out $@,$(MAKECMDGOALS)) in production mode"; \
+				${DOCKER_COMPOSE_FILE_CMD} restart $(filter-out $@,$(MAKECMDGOALS)); \
+			else \
+				echo "Restart ${SERVICES} in production mode"; \
+				${DOCKER_COMPOSE_FILE_CMD} restart ${SERVICES}; \
+			fi \
+		fi \
 	fi
-else
-	@if [ "$(DEV)" = "1" ]; then \
-		${DOCKER_COMPOSE_FILE_CMD} -f ${COMPOSE_FILE_DEV} restart ${SERVICES}; \
-	else \
-		${DOCKER_COMPOSE_FILE_CMD} restart ${SERVICES}; \
-	fi
-endif
 
 rm:				## Remove all services containers.
 	${DOCKER_COMPOSE_FILE_CMD} rm -f ${SERVICES}
@@ -107,10 +135,14 @@ help:			## Show this help.
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z_-]+:.*?##/ { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
 	@echo ""
 	@echo "Special commands:"
-	@echo "  make restart [service1] [service2] ...  		Restart specific services in production mode"
-	@echo "  make restart DEV=1 [service1] [service2] ...  	Restart specific services in development mode"
-	@echo "  make restart                            		Restart all services in production mode"
-	@echo "  make restart DEV=1                     		Restart all services in development mode"
+	@echo "  make restart [service1] [service2] ...  				Restart specific services in production mode"
+	@echo "  make restart DEV=1 [service1] [service2] ...  			Restart specific services in development mode"
+	@echo "  make restart                            				Restart all services in production mode"
+	@echo "  make restart DEV=1                     				Restart all services in development mode"
+	@echo "  make restart COLD=1 [service1] [service2] ... 			Cold restart (recreate containers) specific services in production mode"
+	@echo "  make restart DEV=1 COLD=1 [service1] [service2] ...  	Cold restart (recreate containers) specific services in development mode"
+	@echo "  make restart COLD=1                     				Cold restart (recreate containers) all services in production mode"
+	@echo "  make restart DEV=1 COLD=1               				Cold restart (recreate containers) all services in development mode"
 
 %:
 	@echo "Command is not recognized."
