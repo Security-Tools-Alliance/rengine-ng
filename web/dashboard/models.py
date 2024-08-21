@@ -11,6 +11,7 @@ class SearchHistory(models.Model):
 class Project(models.Model):
     id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=500)
+    description = models.TextField(blank=True, null=True)
     slug = models.SlugField(unique=True)
     insert_date = models.DateTimeField()
     users = models.ManyToManyField(User, related_name='projects')
