@@ -145,5 +145,3 @@ help:			## Show this help.
 	@echo "  make restart DEV=1 COLD=1               				Cold restart (recreate containers) all services in development mode"
 
 %:
-	@echo "Command is not recognized."
-	@make help
