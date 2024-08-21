@@ -1,15 +1,12 @@
 import json
 import logging
-
 from datetime import timedelta
 
-from django.contrib.auth import get_user_model
 from django.contrib import messages
-from django.contrib.auth import update_session_auth_hash
+from django.contrib.auth import get_user_model, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib.auth.signals import user_logged_in, user_logged_out
-from django.contrib import messages
 from django.db.models import Count
 from django.db.models.functions import TruncDay
 from django.dispatch import receiver
@@ -17,22 +14,23 @@ from django.shortcuts import redirect, render, get_object_or_404
 from django.utils import timezone
 from django.http import HttpResponseRedirect, JsonResponse
 from django.urls import reverse
+from django.template.defaultfilters import slugify
 from rolepermissions.roles import assign_role, clear_roles
 from rolepermissions.decorators import has_permission_decorator
-from django.template.defaultfilters import slugify
-from django.contrib.auth.decorators import login_required
-from targetApp.models import Project
-from .models import Project
-from .forms import ProjectForm
 
-from startScan.models import *
+from dashboard.utils import user_has_project_access
 from targetApp.models import Domain
-from dashboard.models import *
-from reNgine.definitions import *
-
+from startScan.models import (
+    EndPoint, ScanHistory, Subdomain, Vulnerability, ScanActivity,
+    IpAddress, Port, Technology, CveId, CweId, VulnerabilityTags, CountryISO
+)
+from dashboard.models import Project, OpenAiAPIKey, NetlasAPIKey
+from dashboard.forms import ProjectForm
+from reNgine.definitions import PERM_MODIFY_SYSTEM_CONFIGURATIONS, FOUR_OH_FOUR_URL
 
 logger = logging.getLogger(__name__)
 
+@user_has_project_access
 def index(request, slug):
     try:
         project = Project.objects.get(slug=slug)
