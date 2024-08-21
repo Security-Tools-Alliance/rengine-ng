@@ -315,10 +315,8 @@ def projects(request, slug):
     return render(request, 'dashboard/projects.html', context)
 
 
+@has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
 def delete_project(request, id):
-    if not user_has_project_access_by_id(request.user, id):
-        return JsonResponse({'status': 'false', 'error': 'You are not authorized to delete this project.'})
-
     obj = get_object_or_404(Project, id=id)
     if request.method == "POST":
         obj.delete()
@@ -411,6 +409,7 @@ def list_projects(request):
     return render(request, 'dashboard/projects.html', {'projects': projects})
 
 @user_has_project_access
+@has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
 def edit_project(request, slug):
     project = get_object_or_404(Project, slug=slug)
     if not project.is_user_authorized(request.user):
