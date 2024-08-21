@@ -3,10 +3,10 @@ import json
 from django.http import JsonResponse
 from django.shortcuts import render
 
-from recon_note.models import *
-from startScan.models import *
+from recon_note.models import TodoNote
+from dashboard.utils import user_has_project_access
 
-
+@user_has_project_access
 def list_note(request, slug):
     context = {}
     context['recon_note_active'] = 'active'

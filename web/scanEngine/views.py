@@ -12,13 +12,19 @@ from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from rolepermissions.decorators import has_permission_decorator
 
-from reNgine.common_func import *
-from reNgine.tasks import (run_command, send_discord_message, send_slack_message,send_lark_message, send_telegram_message)
-from scanEngine.forms import *
-from scanEngine.forms import ConfigurationForm
-from scanEngine.models import *
+from dashboard.utils import user_has_project_access
+from reNgine.common_func import get_open_ai_key
+from reNgine.definitions import OLLAMA_INSTANCE, DEFAULT_GPT_MODELS
+from reNgine.tasks import run_command, send_discord_message, send_slack_message, send_lark_message, send_telegram_message
+from scanEngine.forms import AddEngineForm, UpdateEngineForm, AddWordlistForm, ExternalToolForm, InterestingLookupForm, NotificationForm, ProxyForm, HackeroneForm, ReportForm
+from scanEngine.models import EngineType, Wordlist, InstalledExternalTool, InterestingLookupModel, Notification, Hackerone, Proxy, VulnerabilityReportSetting
+from dashboard.models import OpenAiAPIKey, NetlasAPIKey, OllamaSettings
+from reNgine.definitions import PERM_MODIFY_SCAN_CONFIGURATIONS, PERM_MODIFY_SCAN_REPORT, PERM_MODIFY_WORDLISTS, PERM_MODIFY_INTERESTING_LOOKUP, PERM_MODIFY_SYSTEM_CONFIGURATIONS, FOUR_OH_FOUR_URL
+from reNgine.settings import RENGINE_WORDLISTS, RENGINE_TOOL_GITHUB_PATH
+from pathlib import Path
+import requests
 
-
+@user_has_project_access
 def index(request, slug):
     engine_type = EngineType.objects.order_by('engine_name').all()
     context = {
@@ -29,7 +35,7 @@ def index(request, slug):
     }
     return render(request, 'scanEngine/index.html', context)
 
-
+@user_has_project_access
 @has_permission_decorator(PERM_MODIFY_SCAN_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
 def add_engine(request, slug):
     form = AddEngineForm()
@@ -48,7 +54,7 @@ def add_engine(request, slug):
     }
     return render(request, 'scanEngine/add_engine.html', context)
 
-
+@user_has_project_access
 @has_permission_decorator(PERM_MODIFY_SCAN_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
 def delete_engine(request, slug, id):
     obj = get_object_or_404(EngineType, id=id)
@@ -67,7 +73,7 @@ def delete_engine(request, slug, id):
             'Oops! Engine could not be deleted!')
     return http.JsonResponse(responseData)
 
-
+@user_has_project_access
 @has_permission_decorator(PERM_MODIFY_SCAN_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
 def update_engine(request, slug, id):
     engine = get_object_or_404(EngineType, id=id)
@@ -91,7 +97,7 @@ def update_engine(request, slug, id):
     }
     return render(request, 'scanEngine/update_engine.html', context)
 
-
+@user_has_project_access
 @has_permission_decorator(PERM_MODIFY_WORDLISTS, redirect_url=FOUR_OH_FOUR_URL)
 def wordlist_list(request, slug):
     wordlists = Wordlist.objects.all().order_by('id')
@@ -101,7 +107,7 @@ def wordlist_list(request, slug):
             'wordlists': wordlists}
     return render(request, 'scanEngine/wordlist/index.html', context)
 
-
+@user_has_project_access
 @has_permission_decorator(PERM_MODIFY_WORDLISTS, redirect_url=FOUR_OH_FOUR_URL)
 def add_wordlist(request, slug):
     context = {'scan_engine_nav_active': 'active', 'wordlist_li': 'active'}
@@ -129,7 +135,7 @@ def add_wordlist(request, slug):
     context['form'] = form
     return render(request, 'scanEngine/wordlist/add.html', context)
 
-
+@user_has_project_access
 @has_permission_decorator(PERM_MODIFY_WORDLISTS, redirect_url=FOUR_OH_FOUR_URL)
 def delete_wordlist(request, slug, id):
     obj = get_object_or_404(Wordlist, id=id)
@@ -152,7 +158,7 @@ def delete_wordlist(request, slug, id):
             'Oops! Wordlist could not be deleted!')
     return http.JsonResponse(responseData)
 
-
+@user_has_project_access
 @has_permission_decorator(PERM_MODIFY_INTERESTING_LOOKUP, redirect_url=FOUR_OH_FOUR_URL)
 def interesting_lookup(request, slug):
     lookup_keywords = None
@@ -187,7 +193,7 @@ def interesting_lookup(request, slug):
     context['default_lookup'] = InterestingLookupModel.objects.filter(id=1)
     return render(request, 'scanEngine/lookup.html', context)
 
-
+@user_has_project_access
 @has_permission_decorator(PERM_MODIFY_SCAN_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
 def tool_specific_settings(request, slug):
     context = {}
@@ -263,7 +269,7 @@ def tool_specific_settings(request, slug):
     context['gf_patterns'] = sorted(gf_list.split('\n'))
     return render(request, 'scanEngine/settings/tool.html', context)
 
-
+@user_has_project_access
 @has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
 def rengine_settings(request, slug):
     context = {}
@@ -282,7 +288,7 @@ def rengine_settings(request, slug):
 
     return render(request, 'scanEngine/settings/rengine.html', context)
 
-
+@user_has_project_access
 @has_permission_decorator(PERM_MODIFY_SCAN_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
 def notification_settings(request, slug):
     context = {}
@@ -319,7 +325,7 @@ def notification_settings(request, slug):
 
     return render(request, 'scanEngine/settings/notification.html', context)
 
-
+@user_has_project_access
 @has_permission_decorator(PERM_MODIFY_SCAN_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
 def proxy_settings(request, slug):
     context = {}
@@ -352,7 +358,7 @@ def proxy_settings(request, slug):
 
     return render(request, 'scanEngine/settings/proxy.html', context)
 
-
+@user_has_project_access
 @has_permission_decorator(PERM_MODIFY_SCAN_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
 def test_hackerone(request):
     context = {}
@@ -371,7 +377,7 @@ def test_hackerone(request):
 
     return http.JsonResponse({"status": 401})
 
-
+@user_has_project_access
 @has_permission_decorator(PERM_MODIFY_SCAN_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
 def hackerone_settings(request, slug):
     context = {}
@@ -404,7 +410,7 @@ def hackerone_settings(request, slug):
 
     return render(request, 'scanEngine/settings/hackerone.html', context)
 
-
+@user_has_project_access
 @has_permission_decorator(PERM_MODIFY_SCAN_REPORT, redirect_url=FOUR_OH_FOUR_URL)
 def report_settings(request, slug):
     context = {}
@@ -445,7 +451,7 @@ def report_settings(request, slug):
     context['secondary_color'] = secondary_color
     return render(request, 'scanEngine/settings/report.html', context)
 
-
+@user_has_project_access
 @has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
 def tool_arsenal_section(request, slug):
     context = {}
@@ -453,7 +459,7 @@ def tool_arsenal_section(request, slug):
     context['installed_tools'] = tools
     return render(request, 'scanEngine/settings/tool_arsenal.html', context)
 
-
+@user_has_project_access
 @has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
 def api_vault_delete(request, slug):
     response = {}
@@ -473,7 +479,8 @@ def api_vault_delete(request, slug):
         response["message"] = "Method not allowed"
 
     return http.JsonResponse(response)
-    
+
+@user_has_project_access
 def llm_toolkit_section(request, slug):
     context = {}
     list_all_models_url = f'{OLLAMA_INSTANCE}/api/tags'
@@ -507,7 +514,7 @@ def llm_toolkit_section(request, slug):
         context['openai_key_error'] = True
     return render(request, 'scanEngine/settings/llm_toolkit.html', context)
 
-
+@user_has_project_access
 @has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
 def api_vault(request, slug):
     context = {}
@@ -552,7 +559,7 @@ def api_vault(request, slug):
     context["slug"] = slug
     return render(request, 'scanEngine/settings/api.html', context)
 
-
+@user_has_project_access
 @has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
 def add_tool(request, slug):
     form = ExternalToolForm()
@@ -589,7 +596,7 @@ def add_tool(request, slug):
         }
     return render(request, 'scanEngine/settings/add_tool.html', context)
 
-
+@user_has_project_access
 @has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
 def modify_tool_in_arsenal(request, slug, id):
     external_tool = get_object_or_404(InstalledExternalTool, id=id)
