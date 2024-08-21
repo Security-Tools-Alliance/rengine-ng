@@ -27,7 +27,8 @@ All Projects
            <table class="table table-borderless table-hover table-nowrap table-centered m-0">
               <thead class="table-light">
                  <tr>
-                    <th>Project Name</th>
+                    <th>Name</th>
+                    <th>Description</th>
                     <th>Slug</th>
                     <th>Action</th>
                  </tr>
@@ -41,6 +42,9 @@ All Projects
                           <span class="badge bg-soft-primary text-primary mt-1">Current Project</span>
                       {% endif %}
                       <p class="mb-0 text-muted"><small>Created {{project.insert_date|naturaltime}}</small></p>
+                    </td>
+                    <td>
+                      <p>{% if project.description %}{{project.description|truncatechars:100}}{% else %}No description{% endif %}</p>
                     </td>
                     <td>
                       <span class="badge bg-soft-info text-info">{{project.slug}}</span>

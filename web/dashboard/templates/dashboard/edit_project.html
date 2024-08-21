@@ -12,6 +12,7 @@
 
 {% block breadcrumb_title %}
 <li class="breadcrumb-item"><a href="/{{current_project.slug}}/dashboard">Dashboard</a></li>
+<li class="breadcrumb-item"><a href="/{{current_project.slug}}/projects">Projects</a></li>
 <li class="breadcrumb-item active">Edit Project</li>
 {% endblock breadcrumb_title %}
 
@@ -29,7 +30,7 @@
           </div>
           <div class="mb-3">
             <label for="description" class="form-label">Description</label>
-            <textarea class="form-control" id="description" name="description" rows="3">{{ project.description }}</textarea>
+            <textarea class="form-control" id="description" name="description" rows="3">{% if project.description %}{{ project.description }}{% endif %}</textarea>
           </div>
           <div class="mb-3">
             <label for="users" class="form-label">Assigned Users</label>
