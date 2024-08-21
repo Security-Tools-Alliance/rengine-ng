@@ -424,7 +424,7 @@ def edit_project(request, slug):
         if form.is_valid():
             form.save()
             messages.success(request, 'Project updated successfully.')
-            return redirect('project_list', slug=project.slug)
+            return redirect('list_projects', slug=project.slug)
     else:
         form = ProjectForm(instance=project)
     
