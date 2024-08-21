@@ -32,6 +32,7 @@ from scanEngine.models import *
 from startScan.models import *
 from startScan.models import EndPoint
 from targetApp.models import *
+from .serializers import ProjectSerializer
 
 from .serializers import *
 
@@ -2509,6 +2510,13 @@ class DirectoryViewSet(viewsets.ModelViewSet):
 		self.queryset = qs
 		return self.queryset
 
+class ProjectViewSet(viewsets.ModelViewSet):
+    serializer_class = ProjectSerializer
+
+    def get_queryset(self):
+        if self.request.user.is_superuser:
+            return Project.objects.all()
+        return Project.objects.filter(users=self.request.user)
 
 class VulnerabilityViewSet(viewsets.ModelViewSet):
 	queryset = Vulnerability.objects.none()
