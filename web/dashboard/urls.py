@@ -41,6 +41,10 @@ urlpatterns = [
         'delete/project/<int:id>',
         views.delete_project,
         name='delete_project'),
+    path(
+        'project/<slug:slug>/',
+        views.edit_project,
+        name='edit_project'),
 ]
 
 if UI_DEBUG:

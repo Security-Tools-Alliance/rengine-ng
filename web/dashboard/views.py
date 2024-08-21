@@ -6,6 +6,7 @@ from datetime import timedelta
 from django.contrib.auth import get_user_model
 from django.contrib import messages
 from django.contrib.auth import update_session_auth_hash
+from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib.auth.signals import user_logged_in, user_logged_out
 from django.contrib import messages
@@ -19,7 +20,10 @@ from django.urls import reverse
 from rolepermissions.roles import assign_role, clear_roles
 from rolepermissions.decorators import has_permission_decorator
 from django.template.defaultfilters import slugify
-
+from django.contrib.auth.decorators import login_required
+from targetApp.models import Project
+from .models import Project
+from .forms import ProjectForm
 
 from startScan.models import *
 from targetApp.models import Domain
@@ -233,11 +237,19 @@ def admin_interface_update(request, slug):
                 response = json.loads(request.body)
                 role = response.get('role')
                 change_password = response.get('change_password')
+                projects = response.get('projects', [])  # Nouvelle ligne
                 clear_roles(user)
                 assign_role(user, role)
                 if change_password:
                     user.set_password(change_password)
-                    user.save()
+                
+                # Mise à jour des projets
+                user.projects.clear()  # Supprime tous les projets existants
+                for project_id in projects:
+                    project = Project.objects.get(id=project_id)
+                    user.projects.add(project)
+                
+                user.save()
                 messageData = {'status': True}
             except Exception as e:
                 logger.error(e)
@@ -254,6 +266,13 @@ def admin_interface_update(request, slug):
                     password=response.get('password')
                 )
                 assign_role(user, response.get('role'))
+                
+                # Ajout des projets
+                projects = response.get('projects', [])
+                for project_id in projects:
+                    project = Project.objects.get(id=project_id)
+                    user.projects.add(project)
+                
                 messageData = {'status': True}
             except Exception as e:
                 logger.error(e)
@@ -381,3 +400,36 @@ def onboarding(request):
         return HttpResponseRedirect(reverse('dashboardIndex', kwargs={'slug': slug}))
 
     return render(request, 'dashboard/onboarding.html', context)
+
+@login_required
+def list_projects(request):
+    if request.user.is_superuser:
+        projects = Project.objects.all()
+    else:
+        projects = Project.objects.filter(users=request.user)
+    return render(request, 'dashboard/projects.html', {'projects': projects})
+
+@login_required
+def edit_project(request, slug):
+    project = get_object_or_404(Project, slug=slug)
+    if not project.is_user_authorized(request.user):
+        messages.error(request, "You don't have permission to edit this project.")
+        return redirect('project_list')
+    
+    User = get_user_model()
+    all_users = User.objects.all()
+
+    if request.method == 'POST':
+        form = ProjectForm(request.POST, instance=project)
+        if form.is_valid():
+            form.save()
+            messages.success(request, 'Project updated successfully.')
+            return redirect('project_list', slug=project.slug)
+    else:
+        form = ProjectForm(instance=project)
+    
+    return render(request, 'dashboard/edit_project.html', {
+        'form': form,
+        'project': project,
+        'users': all_users
+    })
