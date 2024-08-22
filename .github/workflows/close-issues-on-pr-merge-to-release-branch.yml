@@ -10,8 +10,14 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event.pull_request.merged == true && startsWith(github.ref, 'refs/heads/release/')
     steps:
+      - name: Extract issue number
+        id: extract_issue_number
+        run: |
+          issue_number=$(echo "${{ github.event.pull_request.body }}" | grep -oE '#[0-9]+' | head -n 1 | tr -d '#')
+          echo "ISSUE_NUMBER=$issue_number" >> $GITHUB_ENV
+
       - name: Close linked issues
         uses: peter-evans/close-issue@v3
         with:
-          issue-number: ${{ github.event.pull_request.body }}
+          issue-number: ${{ env.ISSUE_NUMBER }}
           comment: "This issue is being closed because the related PR has been merged into a release branch."
