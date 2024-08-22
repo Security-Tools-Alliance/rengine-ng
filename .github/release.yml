@@ -11,3 +11,4 @@ changelog:
         - refactor
         - dependencies
         - documentation
+        - ci
