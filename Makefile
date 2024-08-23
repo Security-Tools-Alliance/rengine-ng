@@ -26,7 +26,22 @@ DOCKER_COMPOSE_FILE_CMD := ${DOCKER_COMPOSE_CMD} -f ${COMPOSE_FILE}
 
 # --------------------------
 
-.PHONY: setup certs up build username pull down stop restart rm logs
+.PHONY: certs up dev_up build_up build pull superuser_create superuser_delete superuser_changepassword migrate down stop restart remove_images test logs images prune help
+
+pull:			## Pull prebuilt Docker images from repository.
+	${DOCKER_COMPOSE_FILE_CMD} pull
+
+images:			## Show all Docker images for reNgine services.
+	@docker images --filter=reference='ghcr.io/security-tools-alliance/rengine-ng:*' --format "table {{.Repository}}\t{{.Tag}}\t{{.ID}}\t{{.Size}}"
+
+build:			## Build all Docker images locally.
+	@make remove_images
+	${DOCKER_COMPOSE_FILE_CMD} -f ${COMPOSE_FILE_BUILD} build ${SERVICES}
+
+build_up:		## Build and start all services.
+	@make down
+	@make build
+	@make up
 
 certs:		    ## Generate certificates.
 	@${DOCKER_COMPOSE_CMD} -f ${COMPOSE_FILE_SETUP} run --rm certs
@@ -35,27 +50,25 @@ up:				## Pull and start all services.
 	${DOCKER_COMPOSE_FILE_CMD} up -d ${SERVICES}
 
 dev_up:			## Pull and start all services with development configuration (more debug logs and Django Toolbar in UI).
+	@make down
 	${DOCKER_COMPOSE_FILE_CMD} -f ${COMPOSE_FILE_DEV} up -d ${SERVICES}
 
-build_up:		## Build and start all services.
-	@make build
-	@make up
-
-build:			## Build all Docker images locally.
-	${DOCKER_COMPOSE_FILE_CMD} -f ${COMPOSE_FILE_BUILD} build ${SERVICES}
-
-pull:			## Pull prebuilt Docker images from repository.
-	${DOCKER_COMPOSE_FILE_CMD} pull
-
-username:		## Generate Username (Use only after make up).
+superuser_create:		## Generate Username (Use only after make up).
 ifeq ($(isNonInteractive), true)
 	${DOCKER_COMPOSE_FILE_CMD} exec web poetry -C /home/rengine run python3 manage.py createsuperuser --username ${DJANGO_SUPERUSER_USERNAME} --email ${DJANGO_SUPERUSER_EMAIL} --noinput
 else
 	${DOCKER_COMPOSE_FILE_CMD} exec web poetry -C /home/rengine run python3 manage.py createsuperuser
 endif
 
-changepassword:	## Change password for user (Use only after make up & make username).
+superuser_delete:		## Delete Username (Use only after make up).
+	${DOCKER_COMPOSE_FILE_CMD} exec -T web poetry -C /home/rengine run python3 manage.py shell -c "from django.contrib.auth import get_user_model; User = get_user_model(); User.objects.filter(username='${DJANGO_SUPERUSER_USERNAME}').delete()"
+
+superuser_changepassword:	## Change password for user (Use only after make up & make username).
+ifeq ($(isNonInteractive), true)
+	${DOCKER_COMPOSE_FILE_CMD} exec -T web poetry -C /home/rengine run python3 manage.py shell -c "from django.contrib.auth import get_user_model; User = get_user_model(); u = User.objects.get(username='${DJANGO_SUPERUSER_USERNAME}'); u.set_password('${DJANGO_SUPERUSER_PASSWORD}'); u.save()"
+else
 	${DOCKER_COMPOSE_FILE_CMD} exec web poetry -C /home/rengine run python3 manage.py changepassword
+endif
 
 migrate:		## Apply Django migrations
 	${DOCKER_COMPOSE_FILE_CMD} exec web poetry -C /home/rengine run python3 manage.py migrate
@@ -109,8 +122,14 @@ restart:		## Restart specified services or all if not specified. Use DEV=1 for d
 		fi \
 	fi
 
-rm:				## Remove all services containers.
-	${DOCKER_COMPOSE_FILE_CMD} rm -f ${SERVICES}
+remove_images:	## Remove all Docker images for reNgine services.
+	@images=$$(docker images --filter=reference='ghcr.io/security-tools-alliance/rengine-ng:*' --format "{{.ID}}"); \
+	if [ -n "$$images" ]; then \
+		echo "Removing images: $$images"; \
+		docker rmi -f $$images; \
+	else \
+		echo "No images found for ghcr.io/security-tools-alliance/rengine-ng"; \
+	fi
 
 test:
 	${DOCKER_COMPOSE_FILE_CMD} exec celery poetry -C /home/rengine run python3 -m unittest tests/test_scan.py
@@ -118,11 +137,11 @@ test:
 logs:			## Tail all containers logs with -n 1000 (useful for debug).
 	${DOCKER_COMPOSE_FILE_CMD} logs --follow --tail=1000 ${SERVICES}
 
-images:			## Show all Docker images.
-	${DOCKER_COMPOSE_FILE_CMD} images ${SERVICES}
-
-prune:			## Remove containers and delete volume data.
-	@make stop && make rm && docker volume prune -f
+prune:			## Remove containers, delete volume data, and prune Docker system.
+	@make down
+	@make remove_images
+	@docker volume rm $$(docker volume ls -q --filter name=rengine_) 2>/dev/null || true
+	@docker system prune -af --volumes
 
 help:			## Show this help.
 	@echo "Manage Docker images, containers and Django commands using Docker Compose files."
