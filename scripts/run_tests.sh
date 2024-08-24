@@ -6,31 +6,75 @@ set -e
 # Import common functions
 source "$(pwd)/common_functions.sh"
 
+# Function to determine host architecture
+get_host_architecture() {
+    local arch=$(uname -m)
+    case $arch in
+        x86_64)
+            echo "amd64"
+            ;;
+        aarch64)
+            echo "arm64"
+            ;;
+        *)
+            echo "Unsupported architecture: $arch" >&2
+            exit 1
+            ;;
+    esac
+}
+
 # Function to display help message
 show_help() {
-    echo "Usage: $0 [branch_name] [test_file] [test1] [test2] ..."
+    echo "Usage: $0 [--arch <amd64|arm64>] [branch_name] [test_file] [test1] [test2] ..."
     echo
     echo "Run tests for the reNgine-ng project in a VM environment."
     echo
     echo "Arguments:"
-    echo "  branch_name     The Git branch to test (default: master)"
-    echo "  test_file       The test file to run (default: makefile)"
-    echo "  test1 test2 ... Specific tests to run from the test file"
+    echo "  --arch           Specify the architecture (amd64 or arm64). If not specified, uses host architecture."
+    echo "  branch_name      The Git branch to test (default: master)"
+    echo "  test_file        The test file to run (default: makefile)"
+    echo "  test1 test2 ...  Specific tests to run from the test file"
     echo
     echo "Examples:"
-    echo "  $0                           # Run all tests in test_makefile.py on master branch"
-    echo "  $0 feature-branch            # Run all tests in test_makefile.py on feature-branch"
-    echo "  $0 master makefile certs pull # Run specific tests from test_makefile.py"
-    echo "  $0 master custom_file test1  # Run test1 from test_custom_file.py"
+    echo "  $0                                   # Run all tests on host architecture"
+    echo "  $0 --arch amd64                      # Run all tests on amd64 architecture"
+    echo "  $0 --arch arm64 feature-branch       # Run tests on arm64 for feature-branch"
+    echo "  $0 --arch amd64 master makefile certs pull # Run specific tests on amd64"
     echo
-    echo "The script will create a VM, set up the environment, and run the specified tests."
-    echo "Test results and a full log of the process will be saved in the log/tests directory."
+    echo "The script will create a VM for the specified architecture, set up the environment, and run the specified tests."
 }
 
-# Check for help flag
-if [[ "$1" == "-h" || "$1" == "--help" ]]; then
-    show_help
-    exit 0
+# Get host architecture
+HOST_ARCH=$(get_host_architecture)
+
+# Parse command line arguments
+ARCH=""
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --arch)
+            ARCH="$2"
+            shift 2
+            ;;
+        -h|--help)
+            show_help
+            exit 0
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
+
+# If architecture is not specified, use host architecture
+if [ -z "$ARCH" ]; then
+    ARCH="$HOST_ARCH"
+    log "Architecture not specified. Using host architecture: $ARCH" $COLOR_YELLOW
+fi
+
+# Validate architecture
+if [ "$ARCH" != "amd64" ] && [ "$ARCH" != "arm64" ]; then
+    echo "Error: Invalid architecture. Must be either amd64 or arm64."
+    exit 1
 fi
 
 # Function to check if a branch exists
@@ -178,18 +222,22 @@ tar -czf "$TEST_DIR/rengine-project.tar.gz" ..
 
 cd "$TEST_DIR"
 
-# Download Debian 12 cloud image
-log "Downloading Debian 12 cloud image..." $COLOR_GREEN
-wget -q https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2
+# Download appropriate Debian 12 cloud image
+log "Downloading Debian 12 cloud image for $ARCH..." $COLOR_GREEN
+if [ "$ARCH" = "amd64" ]; then
+    wget -q https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2 -O debian-12-generic.qcow2
+elif [ "$ARCH" = "arm64" ]; then
+    wget -q https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-arm64.qcow2 -O debian-12-generic.qcow2
+fi
 
 # Create a larger disk image
 qemu-img create -f qcow2 -o preallocation=metadata "$TEST_DIR/large-debian.qcow2" $VM_DISK_SIZE
 
 # Resize the downloaded image to fill the new larger disk
-qemu-img resize "$TEST_DIR/debian-12-generic-amd64.qcow2" $VM_DISK_SIZE
+qemu-img resize "$TEST_DIR/debian-12-generic.qcow2" $VM_DISK_SIZE
 
 # Combine the two images
-qemu-img convert -O qcow2 -o preallocation=metadata "$TEST_DIR/debian-12-generic-amd64.qcow2" "$TEST_DIR/large-debian.qcow2"
+qemu-img convert -O qcow2 -o preallocation=metadata "$TEST_DIR/debian-12-generic.qcow2" "$TEST_DIR/large-debian.qcow2"
 
 # Create a copy of the image for testing
 mv large-debian.qcow2 test-debian.qcow2
@@ -214,21 +262,44 @@ cloud-localds cloud-init.iso cloud-init.yml
 
 # Start the VM
 log "Starting the VM..." $COLOR_GREEN
-qemu-system-x86_64 \
-    -name $VM_NAME \
-    -m $VM_RAM \
-    -smp $VM_CPUS \
-    -enable-kvm \
-    -cpu host \
-    -nodefaults \
-    -no-fd-bootchk \
-    -drive file=$VM_IMAGE,format=qcow2 \
-    -drive file=cloud-init.iso,format=raw \
-    -device virtio-net-pci,netdev=net0 \
-    -netdev user,id=net0,hostfwd=tcp::2222-:22,hostfwd=tcp::8443-:443 \
-    -vga std \
-    -vnc :0 \
-    -display none &
+if [ "$ARCH" = "amd64" ]; then
+    qemu-system-x86_64 \
+        -name $VM_NAME \
+        -m $VM_RAM \
+        -smp $VM_CPUS \
+        -enable-kvm \
+        -cpu host \
+        -nodefaults \
+        -no-fd-bootchk \
+        -drive file=$VM_IMAGE,format=qcow2 \
+        -drive file=cloud-init.iso,format=raw \
+        -device virtio-net-pci,netdev=net0 \
+        -netdev user,id=net0,hostfwd=tcp::2222-:22,hostfwd=tcp::8443-:443 \
+        -vga std \
+        -vnc :0 \
+        -display none &
+elif [ "$ARCH" = "arm64" ]; then
+    qemu-system-aarch64 \
+        -name $VM_NAME \
+        -M virt \
+        -m $VM_RAM \
+        -smp $VM_CPUS \
+        -cpu cortex-a72 \
+        -nodefaults \
+        -drive file=$VM_IMAGE,format=qcow2 \
+        -drive file=cloud-init.iso,format=raw \
+        -device virtio-net-pci,netdev=net0 \
+        -netdev user,id=net0,hostfwd=tcp::2222-:22,hostfwd=tcp::8443-:443 \
+        -device virtio-gpu-pci \
+        -device ramfb \
+        -device qemu-xhci \
+        -device usb-kbd \
+        -device usb-tablet \
+        -vnc :0 \
+        -display none &
+fi
+
+log "VM started. You can connect via VNC on localhost:5900" $COLOR_GREEN
 
 # Wait for the VM to start
 log "Waiting for the VM to start..." $COLOR_GREEN
