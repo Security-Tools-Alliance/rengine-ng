@@ -2,8 +2,7 @@
 <img src=".github/images/banner-rengine-ng.png" alt=""/>
 </p>
 
-<p align="center"><a href="https://github.com/Security-Tools-Alliance/rengine-ng/releases" target="_blank"><img src="https://img.shields.io/github/v/release/Security-Tools-Alliance/rengine-ng
-" alt="reNgine-ng Latest Version" /></a>&nbsp;<a href="https://www.gnu.org/licenses/gpl-3.0" target="_blank"><img src="https://img.shields.io/badge/License-GPLv3-red.svg?&logo=none" alt="License" /></a>&nbsp;<a href="#" target="_blank"><img src="https://img.shields.io/badge/first--timers--only-friendly-blue.svg?&logo=none" alt="" /></a>&nbsp;</p>
+<p align="center"><a href="https://github.com/Security-Tools-Alliance/rengine-ng/releases" target="_blank"><img src="https://img.shields.io/github/v/release/Security-Tools-Alliance/rengine-ng" alt="reNgine-ng Latest Version" /></a>&nbsp;<a href="https://www.gnu.org/licenses/gpl-3.0" target="_blank"><img src="https://img.shields.io/badge/License-GPLv3-red.svg?&logo=none" alt="License" /></a>&nbsp;<a href="#" target="_blank"><img src="https://img.shields.io/badge/first--timers--only-friendly-blue.svg?&logo=none" alt="" /></a>&nbsp;</p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/Cycom-2024-blue.svg?logo=none" alt="" /></a>
