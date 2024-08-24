@@ -34,6 +34,7 @@ RUN apt update -y && apt install -y      \
     nmap                \
     net-tools           \
     htop                \
+    firefox-esr         \
     fontconfig fonts-freefont-ttf fonts-noto fonts-terminus
 
 RUN fc-cache -f && \ 
@@ -44,15 +45,6 @@ RUN addgroup --gid 1000 --system $USERNAME && \
     mkdir -p /home/$USERNAME && \
     adduser --gid 1000 --system --shell /bin/false --disabled-password --uid 1000 --home /home/$USERNAME $USERNAME && \
     chown $USERNAME:$USERNAME /home/$USERNAME
-
-RUN wget -q https://packages.mozilla.org/apt/repo-signing-key.gpg -O- | tee /etc/apt/keyrings/packages.mozilla.org.asc && \
-    gpg -n -q --import --import-options import-show /etc/apt/keyrings/packages.mozilla.org.asc | awk '/pub/{getline; gsub(/^ +| +$/,""); print "\n"$0"\n"}' && \
-    echo "deb [signed-by=/etc/apt/keyrings/packages.mozilla.org.asc] https://packages.mozilla.org/apt mozilla main" | tee -a /etc/apt/sources.list.d/mozilla.list && \
-    echo '\
-Package: *\
-Pin: origin packages.mozilla.org\
-Pin-Priority: 1000\
-' | tee /etc/apt/preferences.d/mozilla && apt update -y && apt install -y firefox
 
 RUN cd /root && wget https://www.python.org/ftp/python/3.10.0/Python-3.10.0.tgz && \
     tar -xvf Python-3.10.0.tgz && \
