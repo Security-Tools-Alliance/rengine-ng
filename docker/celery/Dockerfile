@@ -97,7 +97,7 @@ RUN ARCH=$(dpkg --print-architecture) \
         && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/hakluke/hakrawler@2.1 \
         && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/lc/gau/v2/cmd/gau@v2.2.1 \
         && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/owasp-amass/amass/v4/...@v4.2.0 \
-        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/ffuf/ffuf@v2.1.0 \
+        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/ffuf/ffuf/v2@v2.1.0 \
         && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/projectdiscovery/tlsx/cmd/tlsx@v1.1.6 \
         && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/hahwul/dalfox/v2@v2.9.2 \
         && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/projectdiscovery/katana/cmd/katana@v1.1.0 \
