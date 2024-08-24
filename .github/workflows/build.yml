@@ -23,6 +23,7 @@ jobs:
     strategy:
       matrix:
         image: [celery, web, postgres, redis, ollama, certs, proxy]
+        platform: [linux/amd64, linux/arm64]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -63,6 +64,7 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          platforms: ${{ matrix.platform }}
 
   update-release:
     needs: build-and-push
