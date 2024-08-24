@@ -62,12 +62,20 @@ RUN cd /root && wget https://www.python.org/ftp/python/3.10.0/Python-3.10.0.tgz 
     make -j4 && \
     make altinstall
 
-# Download and install go 1.21.4
-RUN wget https://golang.org/dl/go1.21.4.linux-amd64.tar.gz && \
-    tar -xvf go1.21.4.linux-amd64.tar.gz && \
-    rm go1.21.4.linux-amd64.tar.gz && \
-    mv go /usr/local
-
+# Download and install go
+RUN ARCH=$(dpkg --print-architecture) && \
+    if [ "${ARCH}" = "arm64" ]; then \
+      wget https://go.dev/dl/${go_arm} && \
+      tar -xvf ${go_arm} -C /usr/local/ && \
+      rm ${go_arm}; \
+    elif [ "${ARCH}" = "amd64" ]; then \
+      wget https://go.dev/dl/${go_amd} && \
+      tar -xvf ${go_amd} -C /usr/local/ && \
+      rm ${go_amd}; \
+    else \
+      echo "Unknown architecture: $ARCH" ; \
+      exit 1; \
+    fi
 
 USER $USERNAME
 WORKDIR /home/$USERNAME
@@ -82,23 +90,32 @@ ENV PATH="${PATH}:${GOROOT}/bin:${GOPATH}/bin:${PIPX_BIN_DIR}"
 RUN mkdir -p $TOOLPATH/.github 
 
 # Download Go packages
-RUN printf "github.com/jaeles-project/gospider@v1.1.6\n \
-    github.com/tomnomnom/gf@dcd4c361f9f5ba302294ed38b8ce278e8ba69006\n \
-    github.com/tomnomnom/unfurl@v0.4.3\n \
-    github.com/tomnomnom/waybackurls@v0.1.0\n \
-    github.com/projectdiscovery/httpx/cmd/httpx@v1.6.0\n \
-    github.com/projectdiscovery/subfinder/v2/cmd/subfinder@v2.6.6\n \
-    github.com/projectdiscovery/nuclei/v3/cmd/nuclei@v3.2.6\n \
-    github.com/projectdiscovery/naabu/v2/cmd/naabu@v2.3.0\n \
-    github.com/hakluke/hakrawler@2.1\n \
-    github.com/lc/gau/v2/cmd/gau@v2.2.1\n \
-    github.com/owasp-amass/amass/v4/...@v4.2.0\n \
-    github.com/ffuf/ffuf@v2.1.0\n \
-    github.com/projectdiscovery/tlsx/cmd/tlsx@v1.1.6\n \
-    github.com/hahwul/dalfox/v2@v2.9.2\n \
-    github.com/projectdiscovery/katana/cmd/katana@v1.1.0\n \
-    github.com/dwisiswant0/crlfuzz/cmd/crlfuzz@v1.4.1\n \
-    github.com/sa7mon/s3scanner@c544f1cf00f70cae3f2155b24d336f515b7c598b\n" | xargs -L1 go install -ldflags="-s -w" -v || true && chmod 700 -R $GOPATH/pkg/* && rm -rf $GOPATH/pkg/* && rm -rf /home/$USERNAME/.cache/go-build/*
+RUN ARCH=$(dpkg --print-architecture) \
+    && if [ "$ARCH" = "arm64" ] || [ "$ARCH" = "amd64" ]; then \
+        GOARCH=$ARCH go install -v github.com/jaeles-project/gospider@v1.1.6 \
+        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/tomnomnom/gf@dcd4c361f9f5ba302294ed38b8ce278e8ba69006 \
+        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/tomnomnom/unfurl@v0.4.3 \
+        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/tomnomnom/waybackurls@v0.1.0 \
+        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/projectdiscovery/httpx/cmd/httpx@v1.6.0 \
+        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@v2.6.6 \
+        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@v3.2.6 \
+        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/projectdiscovery/naabu/v2/cmd/naabu@v2.3.0 \
+        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/hakluke/hakrawler@2.1 \
+        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/lc/gau/v2/cmd/gau@v2.2.1 \
+        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/owasp-amass/amass/v4/...@v4.2.0 \
+        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/ffuf/ffuf@v2.1.0 \
+        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/projectdiscovery/tlsx/cmd/tlsx@v1.1.6 \
+        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/hahwul/dalfox/v2@v2.9.2 \
+        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/projectdiscovery/katana/cmd/katana@v1.1.0 \
+        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/dwisiswant0/crlfuzz/cmd/crlfuzz@v1.4.1 \
+        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/sa7mon/s3scanner@c544f1cf00f70cae3f2155b24d336f515b7c598b \
+        && chmod 700 -R $GOPATH/pkg/* \
+        && rm -rf $GOPATH/pkg/* \
+        && rm -rf /home/$USERNAME/.cache/go-build/*; \
+    else \
+        echo "Unknown architecture: $ARCH" ; \
+        exit 1; \
+    fi
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE 1
@@ -113,11 +130,23 @@ RUN python3.10 -m pip install pipx && pipx ensurepath && printf "poetry\n\
     git+https://github.com/EnableSecurity/wafw00f@ae6a67f23c7bc7fd913d5a32d9b81efefefa2da4\n\
     h8mail\n" | xargs -L1 pipx install || true
 
+# Download and install geckodriver
+RUN ARCH=$(dpkg --print-architecture) && \
+if [ "${ARCH}" = "arm64" ]; then \
+  wget https://github.com/mozilla/geckodriver/releases/download/v${version}/${geckodriver_arm} && \
+  tar -xvf ${geckodriver_arm} -C /usr/bin/ && \
+  rm ${geckodriver_arm}; \
+elif [ "${ARCH}" = "amd64" ]; then \
+  wget https://github.com/mozilla/geckodriver/releases/download/v${version}/${geckodriver_amd} && \
+  tar -xvf ${geckodriver_amd} -C /usr/bin/ && \
+  rm ${geckodriver_amd}; \
+else \
+  echo "Unknown architecture: $ARCH" ; \
+  exit 1; \
+fi
+
 # Install tools
-RUN wget https://github.com/mozilla/geckodriver/releases/download/v0.32.0/geckodriver-v0.32.0-linux64.tar.gz && \
-    tar -xvf geckodriver-v0.32.0-linux64.tar.gz && \
-    rm geckodriver-v0.32.0-linux64.tar.gz && \
-    mv geckodriver /home/$USERNAME/.local/bin && \
+RUN mv geckodriver /home/$USERNAME/.local/bin && \
     cd $TOOLPATH/.github && git clone https://github.com/shmilylty/OneForAll.git && cd OneForAll && git reset --hard 9ecfda229199ebf30d9338f4c88cbeb7c40e16c2 && \
     cd $TOOLPATH/.github && git clone https://github.com/FortyNorthSecurity/EyeWitness.git && cd EyeWitness && git reset --hard ac0c7c0e2e11ff23af0a2cca708afd26ece94096 && \
     cd $TOOLPATH/.github && git clone https://github.com/UnaPibaGeek/ctfr.git && cd ctfr && git reset --hard 6c7fecdc6346c4f5322049e38f415d5bddaa420d && \
