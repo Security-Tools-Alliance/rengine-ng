@@ -56,14 +56,15 @@ RUN cd /root && wget https://www.python.org/ftp/python/3.10.0/Python-3.10.0.tgz 
 
 # Download and install go
 RUN ARCH=$(dpkg --print-architecture) && \
+    GO_VERSION=$(curl -s https://go.dev/VERSION?m=text) && \
     if [ "${ARCH}" = "arm64" ]; then \
-      wget https://go.dev/dl/${go_arm} && \
-      tar -xvf ${go_arm} -C /usr/local/ && \
-      rm ${go_arm}; \
+      wget https://go.dev/dl/${GO_VERSION}.linux-arm64.tar.gz && \
+      tar -xvf ${GO_VERSION}.linux-arm64.tar.gz -C /usr/local/ && \
+      rm ${GO_VERSION}.linux-arm64.tar.gz; \
     elif [ "${ARCH}" = "amd64" ]; then \
-      wget https://go.dev/dl/${go_amd} && \
-      tar -xvf ${go_amd} -C /usr/local/ && \
-      rm ${go_amd}; \
+      wget https://go.dev/dl/${GO_VERSION}.linux-amd64.tar.gz && \
+      tar -xvf ${GO_VERSION}.linux-amd64.tar.gz -C /usr/local/ && \
+      rm ${GO_VERSION}.linux-amd64.tar.gz; \
     else \
       echo "Unknown architecture: $ARCH" ; \
       exit 1; \
