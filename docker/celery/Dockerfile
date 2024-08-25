@@ -44,7 +44,8 @@ ENV USERNAME="rengine"
 RUN addgroup --gid 1000 --system $USERNAME && \
     mkdir -p /home/$USERNAME && \
     adduser --gid 1000 --system --shell /bin/false --disabled-password --uid 1000 --home /home/$USERNAME $USERNAME && \
-    chown $USERNAME:$USERNAME /home/$USERNAME
+    chown $USERNAME:$USERNAME /home/$USERNAME && \
+    mkdir -p /home/$USERNAME/.local/bin
 
 # Download and install geckodriver
 RUN ARCH=$(dpkg --print-architecture) && \
@@ -52,27 +53,19 @@ RUN ARCH=$(dpkg --print-architecture) && \
     geckodriver_arm="geckodriver-v${version}-linux-aarch64.tar.gz" && \
     geckodriver_amd="geckodriver-v${version}-linux64.tar.gz" && \
     if [ "${ARCH}" = "arm64" ]; then \
-      wget "https://github.com/mozilla/geckodriver/releases/download/v${version}/${geckodriver_arm}" && \
-      tar -xvf "${geckodriver_arm}" -C /usr/local/bin/ && \
-      ln -s /usr/local/bin/geckodriver /home/$USERNAME/.local/bin/geckodriver && \
-      rm "${geckodriver_arm}"; \
+        wget "https://github.com/mozilla/geckodriver/releases/download/v${version}/${geckodriver_arm}" && \
+        tar -xvf "${geckodriver_arm}" -C /usr/local/bin/ && \
+        ln -s /usr/local/bin/geckodriver /home/$USERNAME/.local/bin/geckodriver && \
+        rm "${geckodriver_arm}"; \
     elif [ "${ARCH}" = "amd64" ]; then \
-      wget "https://github.com/mozilla/geckodriver/releases/download/v${version}/${geckodriver_amd}" && \
-      tar -xvf "${geckodriver_amd}" -C /usr/local/bin/ && \
-      ln -s /usr/local/bin/geckodriver /home/$USERNAME/.local/bin/geckodriver && \
-      rm "${geckodriver_amd}"; \
+        wget "https://github.com/mozilla/geckodriver/releases/download/v${version}/${geckodriver_amd}" && \
+        tar -xvf "${geckodriver_amd}" -C /usr/local/bin/ && \
+        ln -s /usr/local/bin/geckodriver /home/$USERNAME/.local/bin/geckodriver && \
+        rm "${geckodriver_amd}"; \
     else \
-      echo "Unknown architecture: $ARCH" ; \
-      exit 1; \
+        echo "Unknown architecture: $ARCH" && \
+        exit 1; \
     fi
-
-RUN cd /root && wget https://www.python.org/ftp/python/3.10.0/Python-3.10.0.tgz && \
-    tar -xvf Python-3.10.0.tgz && \
-    rm Python-3.10.0.tgz && \
-    cd Python-3.10.0 && \
-   ./configure --enable-optimizations && \
-    make -j4 && \
-    make altinstall
 
 # Download and install go
 RUN ARCH=$(dpkg --print-architecture) && \
@@ -90,6 +83,15 @@ RUN ARCH=$(dpkg --print-architecture) && \
       echo "Unknown architecture: $ARCH" ; \
       exit 1; \
     fi
+
+# Install python 3.10
+RUN cd /root && wget https://www.python.org/ftp/python/3.10.0/Python-3.10.0.tgz && \
+    tar -xvf Python-3.10.0.tgz && \
+    rm Python-3.10.0.tgz && \
+    cd Python-3.10.0 && \
+    ./configure --enable-optimizations && \
+    make -j4 && \
+    make altinstall
 
 USER $USERNAME
 WORKDIR /home/$USERNAME
@@ -173,7 +175,6 @@ RUN cd $TOOLPATH/.github/OneForAll && mv /home/$USERNAME/oneforall-pyproject.tom
     cd /home/$USERNAME && poetry install
 
 COPY ./entrypoint.sh /entrypoint.sh
-USER $USERNAME
 RUN mkdir -p /home/$USERNAME/rengine /home/$USERNAME/scan_results \
     && chown -R $USERNAME:$USERNAME /home/$USERNAME/rengine \
     && chown -R $USERNAME:$USERNAME /home/$USERNAME/scan_results
