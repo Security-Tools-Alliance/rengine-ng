@@ -9,6 +9,8 @@ jobs:
   close-related-issues:
     runs-on: ubuntu-latest
     if: github.event.pull_request.merged == true && startsWith(github.ref, 'refs/heads/release/')
+    permissions:
+      issues: write
     steps:
       - name: Extract issue number
         id: extract_issue_number
