@@ -46,6 +46,26 @@ RUN addgroup --gid 1000 --system $USERNAME && \
     adduser --gid 1000 --system --shell /bin/false --disabled-password --uid 1000 --home /home/$USERNAME $USERNAME && \
     chown $USERNAME:$USERNAME /home/$USERNAME
 
+# Download and install geckodriver
+RUN ARCH=$(dpkg --print-architecture) && \
+    version=0.35.0 && \
+    geckodriver_arm="geckodriver-v${version}-linux-aarch64.tar.gz" && \
+    geckodriver_amd="geckodriver-v${version}-linux64.tar.gz" && \
+    if [ "${ARCH}" = "arm64" ]; then \
+      wget "https://github.com/mozilla/geckodriver/releases/download/v${version}/${geckodriver_arm}" && \
+      tar -xvf "${geckodriver_arm}" -C /usr/local/bin/ && \
+      ln -s /usr/local/bin/geckodriver /home/$USERNAME/.local/bin/geckodriver && \
+      rm "${geckodriver_arm}"; \
+    elif [ "${ARCH}" = "amd64" ]; then \
+      wget "https://github.com/mozilla/geckodriver/releases/download/v${version}/${geckodriver_amd}" && \
+      tar -xvf "${geckodriver_amd}" -C /usr/local/bin/ && \
+      ln -s /usr/local/bin/geckodriver /home/$USERNAME/.local/bin/geckodriver && \
+      rm "${geckodriver_amd}"; \
+    else \
+      echo "Unknown architecture: $ARCH" ; \
+      exit 1; \
+    fi
+
 RUN cd /root && wget https://www.python.org/ftp/python/3.10.0/Python-3.10.0.tgz && \
     tar -xvf Python-3.10.0.tgz && \
     rm Python-3.10.0.tgz && \
@@ -114,8 +134,9 @@ RUN ARCH=$(dpkg --print-architecture) \
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE 1
 ENV PYTHONUNBUFFERED 1
-
 ENV PATH="/home/${USERNAME}/.local/bin:${PATH}"
+
+# Install python tools
 RUN python3.10 -m pip install pipx && pipx ensurepath && printf "poetry\n\
     watchdog\n\
     https://github.com/aboul3la/Sublist3r/archive/refs/tags/1.1.zip\n\
@@ -124,27 +145,8 @@ RUN python3.10 -m pip install pipx && pipx ensurepath && printf "poetry\n\
     git+https://github.com/EnableSecurity/wafw00f@5e5d8e9e5f1b1b6d9b2c1c1f9f9b9b9b9b9b9b9b\n\
     h8mail\n" | xargs -L1 pipx install || true
 
-RUN ARCH=$(dpkg --print-architecture) && \
-    version=0.35.0 && \
-    geckodriver_arm="geckodriver-v${version}-linux-aarch64.tar.gz" && \
-    geckodriver_amd="geckodriver-v${version}-linux64.tar.gz" && \
-    if [ "${ARCH}" = "arm64" ]; then \
-      wget "https://github.com/mozilla/geckodriver/releases/download/v${version}/${geckodriver_arm}" && \
-      tar -xvf "${geckodriver_arm}" -C /usr/local/bin/ && \
-      rm "${geckodriver_arm}"; \
-    elif [ "${ARCH}" = "amd64" ]; then \
-      wget "https://github.com/mozilla/geckodriver/releases/download/v${version}/${geckodriver_amd}" && \
-      tar -xvf "${geckodriver_amd}" -C /usr/local/bin/ && \
-      rm "${geckodriver_amd}"; \
-    else \
-      echo "Unknown architecture: $ARCH" ; \
-      exit 1; \
-    fi && \
-    echo "Geckodriver version: ${version}"
-
 # Install tools
-RUN mv geckodriver /home/$USERNAME/.local/bin && \
-    cd $TOOLPATH/.github && git clone https://github.com/shmilylty/OneForAll.git && cd OneForAll && git reset --hard 2c7e9c0e5f1b1b6d9b2c1c1f9f9b9b9b9b9b9b9b && \
+RUN cd $TOOLPATH/.github && git clone https://github.com/shmilylty/OneForAll.git && cd OneForAll && git reset --hard 2c7e9c0e5f1b1b6d9b2c1c1f9f9b9b9b9b9b9b9b && \
     cd $TOOLPATH/.github && git clone https://github.com/FortyNorthSecurity/EyeWitness.git && cd EyeWitness && git reset --hard 9f9c0b5e5f1b1b6d9b2c1c1f9f9b9b9b9b9b9b9b && \
     cd $TOOLPATH/.github && git clone https://github.com/UnaPibaGeek/ctfr.git && cd ctfr && git reset --hard 6c7fecdc6346c4f5322049e38f415d5bddaa420d && \
     cd $TOOLPATH/.github && git clone https://github.com/Tuhinshubhra/CMSeeK.git && cd CMSeeK && git reset --hard 5c3f2b2e5f1b1b6d9b2c1c1f9f9b9b9b9b9b9b9b && \
