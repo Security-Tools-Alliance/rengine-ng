@@ -124,23 +124,23 @@ RUN python3.10 -m pip install pipx && pipx ensurepath && printf "poetry\n\
     git+https://github.com/EnableSecurity/wafw00f@5e5d8e9e5f1b1b6d9b2c1c1f9f9b9b9b9b9b9b9b\n\
     h8mail\n" | xargs -L1 pipx install || true
 
-# Download and install geckodriver
 RUN ARCH=$(dpkg --print-architecture) && \
     version=0.35.0 && \
-    geckodriver_arm=geckodriver-v${version}-linux-aarch64.tar.gz && \
-    geckodriver_amd=geckodriver-v${version}-linux64.tar.gz && \
-if [ "${ARCH}" = "arm64" ]; then \
-  wget https://github.com/mozilla/geckodriver/releases/download/v${version}/${geckodriver_arm} && \
-  tar -xvf ${geckodriver_arm} -C /usr/bin/ && \
-  rm ${geckodriver_arm}; \
-elif [ "${ARCH}" = "amd64" ]; then \
-  wget https://github.com/mozilla/geckodriver/releases/download/v${version}/${geckodriver_amd} && \
-  tar -xvf ${geckodriver_amd} -C /usr/bin/ && \
-  rm ${geckodriver_amd}; \
-else \
-  echo "Unknown architecture: $ARCH" ; \
-  exit 1; \
-fi
+    geckodriver_arm="geckodriver-v${version}-linux-aarch64.tar.gz" && \
+    geckodriver_amd="geckodriver-v${version}-linux64.tar.gz" && \
+    if [ "${ARCH}" = "arm64" ]; then \
+      wget "https://github.com/mozilla/geckodriver/releases/download/v${version}/${geckodriver_arm}" && \
+      tar -xvf "${geckodriver_arm}" -C /usr/bin/ && \
+      rm "${geckodriver_arm}"; \
+    elif [ "${ARCH}" = "amd64" ]; then \
+      wget "https://github.com/mozilla/geckodriver/releases/download/v${version}/${geckodriver_amd}" && \
+      tar -xvf "${geckodriver_amd}" -C /usr/bin/ && \
+      rm "${geckodriver_amd}"; \
+    else \
+      echo "Unknown architecture: $ARCH" ; \
+      exit 1; \
+    fi && \
+    echo "Geckodriver version: ${version}"
 
 # Install tools
 RUN mv geckodriver /home/$USERNAME/.local/bin && \
