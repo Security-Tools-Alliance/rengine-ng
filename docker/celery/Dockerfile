@@ -44,8 +44,7 @@ ENV USERNAME="rengine"
 RUN addgroup --gid 1000 --system $USERNAME && \
     mkdir -p /home/$USERNAME && \
     adduser --gid 1000 --system --shell /bin/false --disabled-password --uid 1000 --home /home/$USERNAME $USERNAME && \
-    chown $USERNAME:$USERNAME /home/$USERNAME && \
-    mkdir -p /home/$USERNAME/.local/bin
+    chown $USERNAME:$USERNAME /home/$USERNAME
 
 # Download and install geckodriver
 RUN ARCH=$(dpkg --print-architecture) && \
@@ -55,12 +54,10 @@ RUN ARCH=$(dpkg --print-architecture) && \
     if [ "${ARCH}" = "arm64" ]; then \
         wget "https://github.com/mozilla/geckodriver/releases/download/v${version}/${geckodriver_arm}" && \
         tar -xvf "${geckodriver_arm}" -C /usr/local/bin/ && \
-        ln -s /usr/local/bin/geckodriver /home/$USERNAME/.local/bin/geckodriver && \
         rm "${geckodriver_arm}"; \
     elif [ "${ARCH}" = "amd64" ]; then \
         wget "https://github.com/mozilla/geckodriver/releases/download/v${version}/${geckodriver_amd}" && \
         tar -xvf "${geckodriver_amd}" -C /usr/local/bin/ && \
-        ln -s /usr/local/bin/geckodriver /home/$USERNAME/.local/bin/geckodriver && \
         rm "${geckodriver_amd}"; \
     else \
         echo "Unknown architecture: $ARCH" && \
@@ -97,13 +94,16 @@ USER $USERNAME
 WORKDIR /home/$USERNAME
 
 ENV TOOLPATH="/home/${USERNAME}/tools"
+ENV BINPATH="/home/${USERNAME}/.local/bin"
 ENV WORDLISTPATH="/home/${USERNAME}/wordlists"
 ENV PIPX_BIN_DIR="${TOOLPATH}/pipx"
 ENV GOROOT="/usr/local/go"
 ENV GOPATH="${TOOLPATH}/go"
 ENV PATH="${PATH}:${GOROOT}/bin:${GOPATH}/bin:${PIPX_BIN_DIR}"
 
-RUN mkdir -p $TOOLPATH/.github 
+RUN mkdir -p $TOOLPATH/.github && \
+    mkdir -p $BINPATH
+
 
 # Download Go packages
 RUN ARCH=$(dpkg --print-architecture) \
@@ -136,7 +136,7 @@ RUN ARCH=$(dpkg --print-architecture) \
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE 1
 ENV PYTHONUNBUFFERED 1
-ENV PATH="/home/${USERNAME}/.local/bin:${PATH}"
+ENV PATH="${PATH}:${BINPATH}"
 
 # Install python tools
 RUN python3.10 -m pip install pipx && pipx ensurepath && printf "poetry\n\
@@ -148,12 +148,13 @@ RUN python3.10 -m pip install pipx && pipx ensurepath && printf "poetry\n\
     h8mail\n" | xargs -L1 pipx install || true
 
 # Install tools
-RUN cd $TOOLPATH/.github && git clone https://github.com/shmilylty/OneForAll.git && cd OneForAll && git reset --hard 9ecfda229199ebf30d9338f4c88cbeb7c40e16c2 && \
+RUN ln -s /usr/local/bin/geckodriver $BINPATH/geckodriver && \
+    cd $TOOLPATH/.github && git clone https://github.com/shmilylty/OneForAll.git && cd OneForAll && git reset --hard 9ecfda229199ebf30d9338f4c88cbeb7c40e16c2 && \
     cd $TOOLPATH/.github && git clone https://github.com/FortyNorthSecurity/EyeWitness.git && cd EyeWitness && git reset --hard cb09a842f93109836219b2aa2f9f25c58a34bc8c && \
     cd $TOOLPATH/.github && git clone https://github.com/UnaPibaGeek/ctfr.git && cd ctfr && git reset --hard 6c7fecdc6346c4f5322049e38f415d5bddaa420d && \
     cd $TOOLPATH/.github && git clone https://github.com/Tuhinshubhra/CMSeeK.git && cd CMSeeK && git reset --hard 20f9780d2e682874be959cfd487045c92e3c73f4 && \
     cd $TOOLPATH/.github && git clone https://github.com/GiJ03/Infoga.git && cd Infoga && git reset --hard 6834c6f863c2bdc92cc808934bb293571d1939c1 && \
-    cd $TOOLPATH/.github && wget https://github.com/m3n0sd0n4ld/GooFuzz/releases/download/1.2.5/GooFuzz.v.1.2.5.zip && unzip GooFuzz.v.1.2.5.zip && rm GooFuzz.v.1.2.5.zip && mv GooFuzz* GooFuzz && echo "#!/bin/bash\n\nbash $TOOLPATH/.github/GooFuzz/GooFuzz \"\$@\"" > /home/$USERNAME/.local/bin/GooFuzz && chmod +x /home/$USERNAME/.local/bin/GooFuzz && \
+    cd $TOOLPATH/.github && wget https://github.com/m3n0sd0n4ld/GooFuzz/releases/download/1.2.5/GooFuzz.v.1.2.5.zip && unzip GooFuzz.v.1.2.5.zip && rm GooFuzz.v.1.2.5.zip && mv GooFuzz* GooFuzz && echo "#!/bin/bash\n\nbash $TOOLPATH/.github/GooFuzz/GooFuzz \"\$@\"" > $BINPATH/GooFuzz && chmod +x $BINPATH/GooFuzz && \
     cd $TOOLPATH/.github && git clone https://github.com/1ndianl33t/Gf-Patterns && cd Gf-Patterns && git reset --hard 565382db80f001af288b8d71c525a7ce7f17e80d && mkdir -p /home/$USERNAME/.gf/ && cp -r *.json /home/$USERNAME/.gf/ && \
     cd $TOOLPATH/.github && git clone https://github.com/tomnomnom/gf.git && cd gf && git reset --hard dcd4c361f9f5ba302294ed38b8ce278e8ba69006 && cp -r examples/*.json /home/$USERNAME/.gf/ && \ 
     mkdir -p /home/$USERNAME/.nmap/ && cd /home/$USERNAME/.nmap/ && git clone https://github.com/scipag/vulscan.git && cd vulscan && git reset --hard 2640d62400e9953fb9a33e6033dc59a9dc9606ba && ln -s $TOOLPATH/.github/vulscan /home/$USERNAME/.nmap/vulscan && \
@@ -167,11 +168,11 @@ RUN cd $TOOLPATH/.github && git clone https://github.com/shmilylty/OneForAll.git
 COPY --chown=$USERNAME:$USERNAME ./*.toml /home/$USERNAME
 
 # Install aliases for tools needing a pyproject.toml
-RUN cd $TOOLPATH/.github/OneForAll && mv /home/$USERNAME/oneforall-pyproject.toml pyproject.toml && poetry env use python3.10 && poetry install --no-cache && echo "#!/bin/bash\n\npoetry -C $TOOLPATH/.github/OneForAll/ run python $TOOLPATH/.github/OneForAll/oneforall.py \"\$@\"" > /home/$USERNAME/.local/bin/oneforall && chmod +x /home/$USERNAME/.local/bin/oneforall && \
-    cd $TOOLPATH/.github/ctfr && mv /home/$USERNAME/ctfr-pyproject.toml pyproject.toml && poetry env use python3.10 && poetry install --no-cache && echo "#!/bin/bash\n\npoetry -C $TOOLPATH/.github/ctfr/ run python $TOOLPATH/.github/ctfr/ctfr.py \"\$@\"" > /home/$USERNAME/.local/bin/ctfr && chmod +x /home/$USERNAME/.local/bin/ctfr && \
-    cd $TOOLPATH/.github/EyeWitness/Python && mv /home/$USERNAME/eyewitness-pyproject.toml pyproject.toml && poetry env use python3.10 && poetry install --no-cache && echo "#!/bin/bash\n\npoetry -C $TOOLPATH/.github/EyeWitness/Python run python $TOOLPATH/.github/EyeWitness/Python/EyeWitness.py \"\$@\"" > /home/$USERNAME/.local/bin/EyeWitness && chmod +x /home/$USERNAME/.local/bin/EyeWitness && \
-    cd $TOOLPATH/.github/CMSeeK && mv /home/$USERNAME/cmseek-pyproject.toml pyproject.toml && poetry env use python3.10 && poetry install --no-cache && echo "#!/bin/bash\n\npoetry -C $TOOLPATH/.github/CMSeeK/ run python $TOOLPATH/.github/CMSeeK/cmseek.py \"\$@\"" > /home/$USERNAME/.local/bin/cmseek && chmod +x /home/$USERNAME/.local/bin/cmseek && \
-    cd $TOOLPATH/.github/Infoga && mv /home/$USERNAME/infoga-pyproject.toml pyproject.toml && poetry env use python3.10 && poetry install --no-cache && echo "#!/bin/bash\n\npoetry -C $TOOLPATH/.github/Infoga/ run python $TOOLPATH/.github/Infoga/infoga.py \"\$@\"" > /home/$USERNAME/.local/bin/infoga && chmod +x /home/$USERNAME/.local/bin/infoga && \
+RUN cd $TOOLPATH/.github/OneForAll && mv /home/$USERNAME/oneforall-pyproject.toml pyproject.toml && poetry env use python3.10 && poetry install --no-cache && echo "#!/bin/bash\n\npoetry -C $TOOLPATH/.github/OneForAll/ run python $TOOLPATH/.github/OneForAll/oneforall.py \"\$@\"" > $BINPATH/oneforall && chmod +x $BINPATH/oneforall && \
+    cd $TOOLPATH/.github/ctfr && mv /home/$USERNAME/ctfr-pyproject.toml pyproject.toml && poetry env use python3.10 && poetry install --no-cache && echo "#!/bin/bash\n\npoetry -C $TOOLPATH/.github/ctfr/ run python $TOOLPATH/.github/ctfr/ctfr.py \"\$@\"" > $BINPATH/ctfr && chmod +x $BINPATH/ctfr && \
+    cd $TOOLPATH/.github/EyeWitness/Python && mv /home/$USERNAME/eyewitness-pyproject.toml pyproject.toml && poetry env use python3.10 && poetry install --no-cache && echo "#!/bin/bash\n\npoetry -C $TOOLPATH/.github/EyeWitness/Python run python $TOOLPATH/.github/EyeWitness/Python/EyeWitness.py \"\$@\"" > $BINPATH/EyeWitness && chmod +x $BINPATH/EyeWitness && \
+    cd $TOOLPATH/.github/CMSeeK && mv /home/$USERNAME/cmseek-pyproject.toml pyproject.toml && poetry env use python3.10 && poetry install --no-cache && echo "#!/bin/bash\n\npoetry -C $TOOLPATH/.github/CMSeeK/ run python $TOOLPATH/.github/CMSeeK/cmseek.py \"\$@\"" > $BINPATH/cmseek && chmod +x $BINPATH/cmseek && \
+    cd $TOOLPATH/.github/Infoga && mv /home/$USERNAME/infoga-pyproject.toml pyproject.toml && poetry env use python3.10 && poetry install --no-cache && echo "#!/bin/bash\n\npoetry -C $TOOLPATH/.github/Infoga/ run python $TOOLPATH/.github/Infoga/infoga.py \"\$@\"" > $BINPATH/infoga && chmod +x $BINPATH/infoga && \
     cd /home/$USERNAME && poetry install
 
 COPY ./entrypoint.sh /entrypoint.sh
