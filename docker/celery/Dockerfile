@@ -1,4 +1,4 @@
-FROM --platform=$TARGETPLATFORM debian:12
+FROM debian:12
 
 # Labels and Credits
 LABEL \
@@ -34,6 +34,7 @@ RUN apt update -y && apt install -y      \
     nmap                \
     net-tools           \
     htop                \
+    firefox-esr         \
     fontconfig fonts-freefont-ttf fonts-noto fonts-terminus
 
 RUN fc-cache -f && \ 
@@ -45,49 +46,64 @@ RUN addgroup --gid 1000 --system $USERNAME && \
     adduser --gid 1000 --system --shell /bin/false --disabled-password --uid 1000 --home /home/$USERNAME $USERNAME && \
     chown $USERNAME:$USERNAME /home/$USERNAME
 
-RUN wget -q https://packages.mozilla.org/apt/repo-signing-key.gpg -O- | tee /etc/apt/keyrings/packages.mozilla.org.asc && \
-    gpg -n -q --import --import-options import-show /etc/apt/keyrings/packages.mozilla.org.asc | awk '/pub/{getline; gsub(/^ +| +$/,""); print "\n"$0"\n"}' && \
-    echo "deb [signed-by=/etc/apt/keyrings/packages.mozilla.org.asc] https://packages.mozilla.org/apt mozilla main" | tee -a /etc/apt/sources.list.d/mozilla.list && \
-    echo '\
-Package: *\
-Pin: origin packages.mozilla.org\
-Pin-Priority: 1000\
-' | tee /etc/apt/preferences.d/mozilla && apt update -y && apt install -y firefox
-
-RUN cd /root && wget https://www.python.org/ftp/python/3.10.0/Python-3.10.0.tgz && \
-    tar -xvf Python-3.10.0.tgz && \
-    rm Python-3.10.0.tgz && \
-    cd Python-3.10.0 && \
-   ./configure --enable-optimizations && \
-    make -j4 && \
-    make altinstall
+# Download and install geckodriver
+RUN ARCH=$(dpkg --print-architecture) && \
+    version=0.35.0 && \
+    geckodriver_arm="geckodriver-v${version}-linux-aarch64.tar.gz" && \
+    geckodriver_amd="geckodriver-v${version}-linux64.tar.gz" && \
+    if [ "${ARCH}" = "arm64" ]; then \
+        wget "https://github.com/mozilla/geckodriver/releases/download/v${version}/${geckodriver_arm}" && \
+        tar -xvf "${geckodriver_arm}" -C /usr/local/bin/ && \
+        rm "${geckodriver_arm}"; \
+    elif [ "${ARCH}" = "amd64" ]; then \
+        wget "https://github.com/mozilla/geckodriver/releases/download/v${version}/${geckodriver_amd}" && \
+        tar -xvf "${geckodriver_amd}" -C /usr/local/bin/ && \
+        rm "${geckodriver_amd}"; \
+    else \
+        echo "Unknown architecture: $ARCH" && \
+        exit 1; \
+    fi
 
 # Download and install go
 RUN ARCH=$(dpkg --print-architecture) && \
+    #GO_VERSION=$(curl -s https://go.dev/VERSION?m=text) && \
+    GO_VERSION=1.23.0 && \
     if [ "${ARCH}" = "arm64" ]; then \
-      wget https://go.dev/dl/${go_arm} && \
-      tar -xvf ${go_arm} -C /usr/local/ && \
-      rm ${go_arm}; \
+      wget https://go.dev/dl/go${GO_VERSION}.linux-arm64.tar.gz && \
+      tar -xvf go${GO_VERSION}.linux-arm64.tar.gz -C /usr/local/ && \
+      rm go${GO_VERSION}.linux-arm64.tar.gz; \
     elif [ "${ARCH}" = "amd64" ]; then \
-      wget https://go.dev/dl/${go_amd} && \
-      tar -xvf ${go_amd} -C /usr/local/ && \
-      rm ${go_amd}; \
+      wget https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz && \
+      tar -xvf go${GO_VERSION}.linux-amd64.tar.gz -C /usr/local/ && \
+      rm go${GO_VERSION}.linux-amd64.tar.gz; \
     else \
       echo "Unknown architecture: $ARCH" ; \
       exit 1; \
     fi
 
+# Install python 3.10
+RUN cd /root && wget https://www.python.org/ftp/python/3.10.0/Python-3.10.0.tgz && \
+    tar -xvf Python-3.10.0.tgz && \
+    rm Python-3.10.0.tgz && \
+    cd Python-3.10.0 && \
+    ./configure --enable-optimizations && \
+    make -j4 && \
+    make altinstall
+
 USER $USERNAME
 WORKDIR /home/$USERNAME
 
 ENV TOOLPATH="/home/${USERNAME}/tools"
+ENV BINPATH="/home/${USERNAME}/.local/bin"
 ENV WORDLISTPATH="/home/${USERNAME}/wordlists"
 ENV PIPX_BIN_DIR="${TOOLPATH}/pipx"
 ENV GOROOT="/usr/local/go"
 ENV GOPATH="${TOOLPATH}/go"
 ENV PATH="${PATH}:${GOROOT}/bin:${GOPATH}/bin:${PIPX_BIN_DIR}"
 
-RUN mkdir -p $TOOLPATH/.github 
+RUN mkdir -p $TOOLPATH/.github && \
+    mkdir -p $BINPATH
+
 
 # Download Go packages
 RUN ARCH=$(dpkg --print-architecture) \
@@ -100,10 +116,10 @@ RUN ARCH=$(dpkg --print-architecture) \
         && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@v2.6.6 \
         && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@v3.2.6 \
         && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/projectdiscovery/naabu/v2/cmd/naabu@v2.3.0 \
-        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/hakluke/hakrawler@2.1 \
+        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/hakluke/hakrawler@latest \
         && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/lc/gau/v2/cmd/gau@v2.2.1 \
         && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/owasp-amass/amass/v4/...@v4.2.0 \
-        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/ffuf/ffuf@v2.1.0 \
+        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/ffuf/ffuf/v2@v2.1.0 \
         && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/projectdiscovery/tlsx/cmd/tlsx@v1.1.6 \
         && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/hahwul/dalfox/v2@v2.9.2 \
         && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/projectdiscovery/katana/cmd/katana@v1.1.0 \
@@ -118,63 +134,48 @@ RUN ARCH=$(dpkg --print-architecture) \
     fi
 
 # Set environment variables
-ENV PYTHONDONTWRITEBYTECODE 1
-ENV PYTHONUNBUFFERED 1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV PATH="${PATH}:${BINPATH}"
 
-ENV PATH="/home/${USERNAME}/.local/bin:${PATH}"
+# Install python tools
 RUN python3.10 -m pip install pipx && pipx ensurepath && printf "poetry\n\
     watchdog\n\
     https://github.com/aboul3la/Sublist3r/archive/refs/tags/1.1.zip\n\
     https://github.com/laramies/theHarvester/archive/refs/tags/4.6.0.zip\n\
     git+https://github.com/ncrocfer/whatportis@59a1718bf7c531f2a5a4e213cad0c047ce9c1c94\n\
-    git+https://github.com/EnableSecurity/wafw00f@ae6a67f23c7bc7fd913d5a32d9b81efefefa2da4\n\
+    git+https://github.com/EnableSecurity/wafw00f@5e5d8e9e5f1b1b6d9b2c1c1f9f9b9b9b9b9b9b9b\n\
     h8mail\n" | xargs -L1 pipx install || true
 
-# Download and install geckodriver
-RUN ARCH=$(dpkg --print-architecture) && \
-if [ "${ARCH}" = "arm64" ]; then \
-  wget https://github.com/mozilla/geckodriver/releases/download/v${version}/${geckodriver_arm} && \
-  tar -xvf ${geckodriver_arm} -C /usr/bin/ && \
-  rm ${geckodriver_arm}; \
-elif [ "${ARCH}" = "amd64" ]; then \
-  wget https://github.com/mozilla/geckodriver/releases/download/v${version}/${geckodriver_amd} && \
-  tar -xvf ${geckodriver_amd} -C /usr/bin/ && \
-  rm ${geckodriver_amd}; \
-else \
-  echo "Unknown architecture: $ARCH" ; \
-  exit 1; \
-fi
-
 # Install tools
-RUN mv geckodriver /home/$USERNAME/.local/bin && \
+RUN ln -s /usr/local/bin/geckodriver $BINPATH/geckodriver && \
     cd $TOOLPATH/.github && git clone https://github.com/shmilylty/OneForAll.git && cd OneForAll && git reset --hard 9ecfda229199ebf30d9338f4c88cbeb7c40e16c2 && \
-    cd $TOOLPATH/.github && git clone https://github.com/FortyNorthSecurity/EyeWitness.git && cd EyeWitness && git reset --hard ac0c7c0e2e11ff23af0a2cca708afd26ece94096 && \
+    cd $TOOLPATH/.github && git clone https://github.com/FortyNorthSecurity/EyeWitness.git && cd EyeWitness && git reset --hard cb09a842f93109836219b2aa2f9f25c58a34bc8c && \
     cd $TOOLPATH/.github && git clone https://github.com/UnaPibaGeek/ctfr.git && cd ctfr && git reset --hard 6c7fecdc6346c4f5322049e38f415d5bddaa420d && \
     cd $TOOLPATH/.github && git clone https://github.com/Tuhinshubhra/CMSeeK.git && cd CMSeeK && git reset --hard 20f9780d2e682874be959cfd487045c92e3c73f4 && \
     cd $TOOLPATH/.github && git clone https://github.com/GiJ03/Infoga.git && cd Infoga && git reset --hard 6834c6f863c2bdc92cc808934bb293571d1939c1 && \
-    cd $TOOLPATH/.github && wget https://github.com/m3n0sd0n4ld/GooFuzz/releases/download/1.2.5/GooFuzz.v.1.2.5.zip && unzip GooFuzz.v.1.2.5.zip && rm GooFuzz.v.1.2.5.zip && mv GooFuzz* GooFuzz && echo "#!/bin/bash\n\nbash $TOOLPATH/.github/GooFuzz/GooFuzz \"\$@\"" > /home/$USERNAME/.local/bin/GooFuzz && chmod +x /home/$USERNAME/.local/bin/GooFuzz && \
-    cd $TOOLPATH/.github && git clone https://github.com/1ndianl33t/Gf-Patterns && mkdir -p /home/$USERNAME/.gf/ && cp -r Gf-Patterns/*.json /home/$USERNAME/.gf/ && \
-    cd $TOOLPATH/.github && git clone https://github.com/tomnomnom/gf.git && cp -r $TOOLPATH/.github/gf/examples/*.json /home/$USERNAME/.gf/ && \ 
-    mkdir -p /home/$USERNAME/.nmap/ && cd /home/$USERNAME/.nmap/ && git clone https://github.com/scipag/vulscan.git && cd vulscan && git reset --hard 0c793c490455e7907a7c5cbaf3f7210e80d2ee57 && ln -s $TOOLPATH/.github/vulscan /home/$USERNAME/.nmap/vulscan && \
+    cd $TOOLPATH/.github && wget https://github.com/m3n0sd0n4ld/GooFuzz/releases/download/1.2.5/GooFuzz.v.1.2.5.zip && unzip GooFuzz.v.1.2.5.zip && rm GooFuzz.v.1.2.5.zip && mv GooFuzz* GooFuzz && echo "#!/bin/bash\n\nbash $TOOLPATH/.github/GooFuzz/GooFuzz \"\$@\"" > $BINPATH/GooFuzz && chmod +x $BINPATH/GooFuzz && \
+    cd $TOOLPATH/.github && git clone https://github.com/1ndianl33t/Gf-Patterns && cd Gf-Patterns && git reset --hard 565382db80f001af288b8d71c525a7ce7f17e80d && mkdir -p /home/$USERNAME/.gf/ && cp -r *.json /home/$USERNAME/.gf/ && \
+    cd $TOOLPATH/.github && git clone https://github.com/tomnomnom/gf.git && cd gf && git reset --hard dcd4c361f9f5ba302294ed38b8ce278e8ba69006 && cp -r examples/*.json /home/$USERNAME/.gf/ && \ 
+    mkdir -p /home/$USERNAME/.nmap/ && cd /home/$USERNAME/.nmap/ && git clone https://github.com/scipag/vulscan.git && cd vulscan && git reset --hard 2640d62400e9953fb9a33e6033dc59a9dc9606ba && ln -s $TOOLPATH/.github/vulscan /home/$USERNAME/.nmap/vulscan && \
     mkdir -p $WORDLISTPATH && \
     wget https://raw.githubusercontent.com/maurosoria/dirsearch/master/db/dicc.txt -O $WORDLISTPATH/dicc.txt && \
     wget https://raw.githubusercontent.com/danielmiessler/SecLists/master/Fuzzing/fuzz-Bo0oM.txt -O $WORDLISTPATH/fuzz-Bo0oM.txt && \
     wget https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/DNS/deepmagic.com-prefixes-top50000.txt -O $WORDLISTPATH/deepmagic.com-prefixes-top50000.txt && \
-    mkdir -p /home/$USERNAME/nuclei-templates && wget https://raw.githubusercontent.com/NagliNagli/Shockwave-OSS/bd7445cd320a174d3073f0a61867a40849d28436/ssrf.yaml -O ~/nuclei-templates/ssrf_nagli.yaml && \
+    mkdir -p /home/$USERNAME/nuclei-templates && wget https://raw.githubusercontent.com/NagliNagli/Shockwave-OSS/bd7445cd320a174d3073f0a61867a40849d28436/ssrf.yaml -O /home/$USERNAME/nuclei-templates/ssrf_nagli.yaml && \
     mkdir -p /home/$USERNAME/results
 
 COPY --chown=$USERNAME:$USERNAME ./*.toml /home/$USERNAME
 
 # Install aliases for tools needing a pyproject.toml
-RUN cd $TOOLPATH/.github/OneForAll && mv /home/$USERNAME/oneforall-pyproject.toml pyproject.toml && poetry env use python3.10 && poetry install --no-cache && echo "#!/bin/bash\n\npoetry -C $TOOLPATH/.github/OneForAll/ run python $TOOLPATH/.github/OneForAll/oneforall.py \"\$@\"" > /home/$USERNAME/.local/bin/oneforall && chmod +x /home/$USERNAME/.local/bin/oneforall && \
-    cd $TOOLPATH/.github/ctfr && mv /home/$USERNAME/ctfr-pyproject.toml pyproject.toml && poetry env use python3.10 && poetry install --no-cache && echo "#!/bin/bash\n\npoetry -C $TOOLPATH/.github/ctfr/ run python $TOOLPATH/.github/ctfr/ctfr.py \"\$@\"" > /home/$USERNAME/.local/bin/ctfr && chmod +x /home/$USERNAME/.local/bin/ctfr && \
-    cd $TOOLPATH/.github/EyeWitness/Python && mv /home/$USERNAME/eyewitness-pyproject.toml pyproject.toml && poetry env use python3.10 && poetry install --no-cache && echo "#!/bin/bash\n\npoetry -C $TOOLPATH/.github/EyeWitness/Python run python $TOOLPATH/.github/EyeWitness/Python/EyeWitness.py \"\$@\"" > /home/$USERNAME/.local/bin/EyeWitness && chmod +x /home/$USERNAME/.local/bin/EyeWitness && \
-    cd $TOOLPATH/.github/CMSeeK && mv /home/$USERNAME/cmseek-pyproject.toml pyproject.toml && poetry env use python3.10 && poetry install --no-cache && echo "#!/bin/bash\n\npoetry -C $TOOLPATH/.github/CMSeeK/ run python $TOOLPATH/.github/CMSeeK/cmseek.py \"\$@\"" > /home/$USERNAME/.local/bin/cmseek && chmod +x /home/$USERNAME/.local/bin/cmseek && \
-    cd $TOOLPATH/.github/Infoga && mv /home/$USERNAME/infoga-pyproject.toml pyproject.toml && poetry env use python3.10 && poetry install --no-cache && echo "#!/bin/bash\n\npoetry -C $TOOLPATH/.github/Infoga/ run python $TOOLPATH/.github/Infoga/infoga.py \"\$@\"" > /home/$USERNAME/.local/bin/infoga && chmod +x /home/$USERNAME/.local/bin/infoga && \
+RUN cd $TOOLPATH/.github/OneForAll && mv /home/$USERNAME/oneforall-pyproject.toml pyproject.toml && poetry env use python3.10 && poetry install --no-cache && echo "#!/bin/bash\n\npoetry -C $TOOLPATH/.github/OneForAll/ run python $TOOLPATH/.github/OneForAll/oneforall.py \"\$@\"" > $BINPATH/oneforall && chmod +x $BINPATH/oneforall && \
+    cd $TOOLPATH/.github/ctfr && mv /home/$USERNAME/ctfr-pyproject.toml pyproject.toml && poetry env use python3.10 && poetry install --no-cache && echo "#!/bin/bash\n\npoetry -C $TOOLPATH/.github/ctfr/ run python $TOOLPATH/.github/ctfr/ctfr.py \"\$@\"" > $BINPATH/ctfr && chmod +x $BINPATH/ctfr && \
+    cd $TOOLPATH/.github/EyeWitness/Python && mv /home/$USERNAME/eyewitness-pyproject.toml pyproject.toml && poetry env use python3.10 && poetry install --no-cache && echo "#!/bin/bash\n\npoetry -C $TOOLPATH/.github/EyeWitness/Python run python $TOOLPATH/.github/EyeWitness/Python/EyeWitness.py \"\$@\"" > $BINPATH/EyeWitness && chmod +x $BINPATH/EyeWitness && \
+    cd $TOOLPATH/.github/CMSeeK && mv /home/$USERNAME/cmseek-pyproject.toml pyproject.toml && poetry env use python3.10 && poetry install --no-cache && echo "#!/bin/bash\n\npoetry -C $TOOLPATH/.github/CMSeeK/ run python $TOOLPATH/.github/CMSeeK/cmseek.py \"\$@\"" > $BINPATH/cmseek && chmod +x $BINPATH/cmseek && \
+    cd $TOOLPATH/.github/Infoga && mv /home/$USERNAME/infoga-pyproject.toml pyproject.toml && poetry env use python3.10 && poetry install --no-cache && echo "#!/bin/bash\n\npoetry -C $TOOLPATH/.github/Infoga/ run python $TOOLPATH/.github/Infoga/infoga.py \"\$@\"" > $BINPATH/infoga && chmod +x $BINPATH/infoga && \
     cd /home/$USERNAME && poetry install
 
 COPY ./entrypoint.sh /entrypoint.sh
-USER $USERNAME
 RUN mkdir -p /home/$USERNAME/rengine /home/$USERNAME/scan_results \
     && chown -R $USERNAME:$USERNAME /home/$USERNAME/rengine \
     && chown -R $USERNAME:$USERNAME /home/$USERNAME/scan_results
