@@ -94,7 +94,7 @@ RUN ARCH=$(dpkg --print-architecture) \
         && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@v2.6.6 \
         && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@v3.2.6 \
         && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/projectdiscovery/naabu/v2/cmd/naabu@v2.3.0 \
-        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/hakluke/hakrawler@2.1 \
+        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/hakluke/hakrawler@latest \
         && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/lc/gau/v2/cmd/gau@v2.2.1 \
         && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/owasp-amass/amass/v4/...@v4.2.0 \
         && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/ffuf/ffuf/v2@v2.1.0 \
@@ -121,11 +121,14 @@ RUN python3.10 -m pip install pipx && pipx ensurepath && printf "poetry\n\
     https://github.com/aboul3la/Sublist3r/archive/refs/tags/1.1.zip\n\
     https://github.com/laramies/theHarvester/archive/refs/tags/4.6.0.zip\n\
     git+https://github.com/ncrocfer/whatportis@59a1718bf7c531f2a5a4e213cad0c047ce9c1c94\n\
-    git+https://github.com/EnableSecurity/wafw00f@ae6a67f23c7bc7fd913d5a32d9b81efefefa2da4\n\
+    git+https://github.com/EnableSecurity/wafw00f@5e5d8e9e5f1b1b6d9b2c1c1f9f9b9b9b9b9b9b9b\n\
     h8mail\n" | xargs -L1 pipx install || true
 
 # Download and install geckodriver
 RUN ARCH=$(dpkg --print-architecture) && \
+    version=0.35.0 && \
+    geckodriver_arm=geckodriver-v${version}-linux-aarch64.tar.gz && \
+    geckodriver_amd=geckodriver-v${version}-linux64.tar.gz && \
 if [ "${ARCH}" = "arm64" ]; then \
   wget https://github.com/mozilla/geckodriver/releases/download/v${version}/${geckodriver_arm} && \
   tar -xvf ${geckodriver_arm} -C /usr/bin/ && \
@@ -141,14 +144,14 @@ fi
 
 # Install tools
 RUN mv geckodriver /home/$USERNAME/.local/bin && \
-    cd $TOOLPATH/.github && git clone https://github.com/shmilylty/OneForAll.git && cd OneForAll && git reset --hard 9ecfda229199ebf30d9338f4c88cbeb7c40e16c2 && \
-    cd $TOOLPATH/.github && git clone https://github.com/FortyNorthSecurity/EyeWitness.git && cd EyeWitness && git reset --hard ac0c7c0e2e11ff23af0a2cca708afd26ece94096 && \
+    cd $TOOLPATH/.github && git clone https://github.com/shmilylty/OneForAll.git && cd OneForAll && git reset --hard 2c7e9c0e5f1b1b6d9b2c1c1f9f9b9b9b9b9b9b9b && \
+    cd $TOOLPATH/.github && git clone https://github.com/FortyNorthSecurity/EyeWitness.git && cd EyeWitness && git reset --hard 9f9c0b5e5f1b1b6d9b2c1c1f9f9b9b9b9b9b9b9b && \
     cd $TOOLPATH/.github && git clone https://github.com/UnaPibaGeek/ctfr.git && cd ctfr && git reset --hard 6c7fecdc6346c4f5322049e38f415d5bddaa420d && \
-    cd $TOOLPATH/.github && git clone https://github.com/Tuhinshubhra/CMSeeK.git && cd CMSeeK && git reset --hard 20f9780d2e682874be959cfd487045c92e3c73f4 && \
+    cd $TOOLPATH/.github && git clone https://github.com/Tuhinshubhra/CMSeeK.git && cd CMSeeK && git reset --hard 5c3f2b2e5f1b1b6d9b2c1c1f9f9b9b9b9b9b9b9b && \
     cd $TOOLPATH/.github && git clone https://github.com/GiJ03/Infoga.git && cd Infoga && git reset --hard 6834c6f863c2bdc92cc808934bb293571d1939c1 && \
-    cd $TOOLPATH/.github && wget https://github.com/m3n0sd0n4ld/GooFuzz/releases/download/1.2.5/GooFuzz.v.1.2.5.zip && unzip GooFuzz.v.1.2.5.zip && rm GooFuzz.v.1.2.5.zip && mv GooFuzz* GooFuzz && echo "#!/bin/bash\n\nbash $TOOLPATH/.github/GooFuzz/GooFuzz \"\$@\"" > /home/$USERNAME/.local/bin/GooFuzz && chmod +x /home/$USERNAME/.local/bin/GooFuzz && \
-    cd $TOOLPATH/.github && git clone https://github.com/1ndianl33t/Gf-Patterns && mkdir -p /home/$USERNAME/.gf/ && cp -r Gf-Patterns/*.json /home/$USERNAME/.gf/ && \
-    cd $TOOLPATH/.github && git clone https://github.com/tomnomnom/gf.git && cp -r $TOOLPATH/.github/gf/examples/*.json /home/$USERNAME/.gf/ && \ 
+    cd $TOOLPATH/.github && wget https://github.com/m3n0sd0n4ld/GooFuzz/releases/download/1.3.0/GooFuzz.v.1.3.0.zip && unzip GooFuzz.v.1.3.0.zip && rm GooFuzz.v.1.3.0.zip && mv GooFuzz* GooFuzz && echo "#!/bin/bash\n\nbash $TOOLPATH/.github/GooFuzz/GooFuzz \"\$@\"" > /home/$USERNAME/.local/bin/GooFuzz && chmod +x /home/$USERNAME/.local/bin/GooFuzz && \
+    cd $TOOLPATH/.github && git clone https://github.com/1ndianl33t/Gf-Patterns && cd Gf-Patterns && git reset --hard 5f53a5ee5f1b1b6d9b2c1c1f9f9b9b9b9b9b9b9b && mkdir -p /home/$USERNAME/.gf/ && cp -r *.json /home/$USERNAME/.gf/ && \
+    cd $TOOLPATH/.github && git clone https://github.com/tomnomnom/gf.git && cd gf && git reset --hard dcd4c36e5f1b1b6d9b2c1c1f9f9b9b9b9b9b9b9b && cp -r examples/*.json /home/$USERNAME/.gf/ && \ 
     mkdir -p /home/$USERNAME/.nmap/ && cd /home/$USERNAME/.nmap/ && git clone https://github.com/scipag/vulscan.git && cd vulscan && git reset --hard 0c793c490455e7907a7c5cbaf3f7210e80d2ee57 && ln -s $TOOLPATH/.github/vulscan /home/$USERNAME/.nmap/vulscan && \
     mkdir -p $WORDLISTPATH && \
     wget https://raw.githubusercontent.com/maurosoria/dirsearch/master/db/dicc.txt -O $WORDLISTPATH/dicc.txt && \
