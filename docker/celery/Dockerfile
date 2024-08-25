@@ -1,4 +1,4 @@
-FROM --platform=$TARGETPLATFORM debian:12
+FROM debian:12
 
 # Labels and Credits
 LABEL \
@@ -134,8 +134,8 @@ RUN ARCH=$(dpkg --print-architecture) \
     fi
 
 # Set environment variables
-ENV PYTHONDONTWRITEBYTECODE 1
-ENV PYTHONUNBUFFERED 1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
 ENV PATH="${PATH}:${BINPATH}"
 
 # Install python tools
