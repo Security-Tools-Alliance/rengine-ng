@@ -130,11 +130,11 @@ RUN ARCH=$(dpkg --print-architecture) && \
     geckodriver_amd="geckodriver-v${version}-linux64.tar.gz" && \
     if [ "${ARCH}" = "arm64" ]; then \
       wget "https://github.com/mozilla/geckodriver/releases/download/v${version}/${geckodriver_arm}" && \
-      tar -xvf "${geckodriver_arm}" -C /usr/bin/ && \
+      tar -xvf "${geckodriver_arm}" -C /usr/local/bin/ && \
       rm "${geckodriver_arm}"; \
     elif [ "${ARCH}" = "amd64" ]; then \
       wget "https://github.com/mozilla/geckodriver/releases/download/v${version}/${geckodriver_amd}" && \
-      tar -xvf "${geckodriver_amd}" -C /usr/bin/ && \
+      tar -xvf "${geckodriver_amd}" -C /usr/local/bin/ && \
       rm "${geckodriver_amd}"; \
     else \
       echo "Unknown architecture: $ARCH" ; \
