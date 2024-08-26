@@ -77,8 +77,6 @@ You can find detailed documentation in the repository [Wiki](https://github.com/
 
 ### Quick Installation
 
-**Note:** Only Ubuntu/VPS
-
 1. Clone this repo
 
     ```bash
@@ -98,6 +96,7 @@ You can find detailed documentation in the repository [Wiki](https://github.com/
     DJANGO_SUPERUSER_EMAIL=YourMail@example.com
     DJANGO_SUPERUSER_PASSWORD=yourStrongPassword
     ```
+
     If you need to carry out a non-interactive installation, you can setup the login, email and password of the web interface admin directly from the .env file (instead of manually setting them from prompts during the installation process). This option can be interesting for automated installation (via ansible, vagrant, etc.).
 
     `DJANGO_SUPERUSER_USERNAME`: web interface admin username (used to login to the web interface).
