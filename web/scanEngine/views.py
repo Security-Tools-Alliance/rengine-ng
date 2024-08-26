@@ -13,7 +13,7 @@ from django.urls import reverse
 from rolepermissions.decorators import has_permission_decorator
 
 from reNgine.common_func import *
-from reNgine.tasks import (run_command, send_discord_message, send_slack_message,send_lark_message, send_telegram_message)
+from reNgine.tasks import (run_command, send_discord_message, send_slack_message,send_lark_message, send_telegram_message, run_gf_list)
 from scanEngine.forms import *
 from scanEngine.forms import ConfigurationForm
 from scanEngine.models import *
@@ -257,10 +257,20 @@ def tool_specific_settings(request, slug):
     context['settings_nav_active'] = 'active'
     context['tool_settings_li'] = 'active'
     context['settings_ul_show'] = 'show'
-    gf_list = (subprocess.check_output(['gf', '-list'])).decode("utf-8")
-    nuclei_custom_pattern = [f for f in glob.glob(Path.home() / "nuclei-templates" / "*.yaml")]
+    try:
+        gf_task = run_gf_list.delay()
+        gf_result = gf_task.get(timeout=30)  # 30 seconds timeout
+        if gf_result['status']:
+            context['gf_patterns'] = sorted(gf_result['output'])
+        else:
+            context['gf_patterns'] = []
+            messages.add_message(request, messages.ERROR, f"Error fetching GF patterns: {gf_result['message']}")
+    except Exception as e:
+        context['gf_patterns'] = []
+        messages.add_message(request, messages.ERROR, f"Error fetching GF patterns: {str(e)}")
+    nuclei_custom_pattern = [f for f in glob.glob(str(Path.home() / "nuclei-templates" / "*.yaml"))]
     context['nuclei_templates'] = nuclei_custom_pattern
-    context['gf_patterns'] = sorted(gf_list.split('\n'))
+    context['gf_patterns'] = context['gf_patterns']
     return render(request, 'scanEngine/settings/tool.html', context)
 
 
