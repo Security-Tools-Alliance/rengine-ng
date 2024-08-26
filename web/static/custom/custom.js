@@ -3257,3 +3257,17 @@ function convertToCamelCase(inputString) {
 
 	return camelCaseString;
 }
+function handleHashInUrl(){
+	// this function handles hash in url used to tab navigation
+	const hash = window.location.hash;
+	if (hash) {
+		const targetId = hash.substring(1);
+		const tabLink = $(`a[href="#${targetId}"][data-bs-toggle="tab"]`);
+		if (tabLink.length) {
+			tabLink.tab('show');
+			setTimeout(() => {
+				tabLink.click();
+			}, 100);
+		}
+	}
+}
