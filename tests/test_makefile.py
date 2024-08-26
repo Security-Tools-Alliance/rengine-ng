@@ -452,37 +452,82 @@ class TestMakefile(unittest.TestCase):
         for volume in volumes:
             print(f"- {volume.name}")
 
-    def test_without_build(self):
-        """
-        Run all tests except the build test.
-        """
-        tests_to_run = [
-            self.test_certs,
-            self.test_pull,
-            self.test_images,
-            self.test_start_services_up,
-            self.test_superuser,
-            self.test_migrate,
-            self.test_logs,
-            self.test_restart_services,
-            self.test_down,
-            self.test_prune
-        ]
-
-        for test in tests_to_run:
-            with self.subTest(test=test.__name__):
-                test()
-
-def suite():
+def suite(tests_to_run=None, exclude_build=False):
     """
-    Create a test suite with all tests.
+    Create a test suite with specified or all tests.
+    
+    Args:
+    tests_to_run (list): List of test names to run. If None, all tests are run.
+    exclude_build (bool): If True, excludes the build test from the suite.
+
+    Returns:
+    unittest.TestSuite: The test suite to run.
     """
+    all_tests = [
+        "test_certs",
+        "test_pull",
+        "test_images",
+        "test_start_services_up",
+        "test_superuser",
+        "test_migrate",
+        "test_logs",
+        "test_restart_services",
+        "test_start_services_build",
+        "test_down",
+        "test_prune",
+    ]
+
+    if exclude_build:
+        all_tests.remove("test_start_services_build")
+
+    tests_to_execute = tests_to_run if tests_to_run else all_tests
+
     test_suite = unittest.TestSuite()
-    test_suite.addTest(unittest.makeSuite(TestMakefile))
-    return test_suite
+    executed_tests = []
+    skipped_tests = []
+
+    for test in tests_to_execute:
+        if test in all_tests:
+            test_method = getattr(TestMakefile, test, None)
+            if test_method and callable(test_method):
+                test_suite.addTest(TestMakefile(test))
+                executed_tests.append(test)
+            else:
+                skipped_tests.append(test)
+                print(f"Warning: Test method '{test}' not found in TestMakefile. Skipping.")
+        else:
+            skipped_tests.append(test)
+            print(f"Warning: Test '{test}' not in the list of available tests. Skipping.")
+
+    # Stockage des informations sur les tests pour un affichage ultérieur
+    test_info = {
+        'executed': executed_tests,
+        'skipped': skipped_tests
+    }
+
+    return test_suite, test_info
 
 
 if __name__ == "__main__":
-    runner = unittest.TextTestRunner(verbosity=2)
-    result = runner.run(suite())
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Run reNgine-ng Makefile tests")
+    parser.add_argument("--exclude-build", action="store_true", help="Exclude build test")
+    parser.add_argument("--tests", nargs="*", help="Specific tests to run")
+    args = parser.parse_args()
+
+    runner = unittest.TextTestRunner(verbosity=1)
+    test_suite, test_info = suite(args.tests, args.exclude_build)
+    result = runner.run(test_suite)
+
+    # Affichage du résumé après l'exécution des tests
+    print(f"\n{GREEN}Test Execution Summary:{ENDC}")
+    print(f"{YELLOW}Tests executed:{ENDC}")
+    for test in test_info['executed']:
+        print(f"- {test}")
+    if test_info['skipped']:
+        print(f"\n{RED}Tests skipped:{ENDC}")
+        for test in test_info['skipped']:
+            print(f"- {test}")
+
     sys.exit(not result.wasSuccessful())

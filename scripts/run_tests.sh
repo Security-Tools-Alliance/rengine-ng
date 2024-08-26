@@ -25,7 +25,7 @@ get_host_architecture() {
 
 # Function to display help message
 show_help() {
-    echo "Usage: $0 [--arch <amd64|arm64>] [--clean-temp] [--clean-all] [branch_name] [test_file] [test1] [test2] ..."
+    echo "Usage: $0 [--arch <amd64|arm64>] [--clean-temp] [--clean-all] [--without-build] [branch_name] [test_file] [test1] [test2] ..."
     echo
     echo "Run tests for the reNgine-ng project in a VM environment."
     echo
@@ -33,6 +33,7 @@ show_help() {
     echo "  --arch           Specify the architecture (amd64 or arm64). If not specified, uses host architecture."
     echo "  --clean-temp     Clean temporary files and VM without prompting"
     echo "  --clean-all      Clean temporary files, VM, and installed packages without prompting"
+    echo "  --without-build   Run all tests except the build test"
     echo "  branch_name      The Git branch to test (default: master)"
     echo "  test_file        The test file to run (default: makefile)"
     echo "  test1 test2 ...  Specific tests to run from the test file"
@@ -44,6 +45,7 @@ show_help() {
     echo "  $0 --arch amd64 master makefile certs pull # Run specific tests on amd64"
     echo "  $0 --clean-temp                      # Clean temporary files and VM without prompting"
     echo "  $0 --clean-all                       # Clean temporary files, VM, and installed packages without prompting"
+    echo "  $0 --without-build                    # Run all tests except the build test"
     echo
     echo "The script will create a VM for the specified architecture, set up the environment, and run the specified tests."
 }
@@ -57,6 +59,7 @@ CLEAN_ALL=false
 
 # Parse command line arguments
 ARCH=""
+WITHOUT_BUILD=false
 while [[ $# -gt 0 ]]; do
     case $1 in
         --arch)
@@ -69,6 +72,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --clean-all)
             CLEAN_ALL=true
+            shift
+            ;;
+        --without-build)
+            WITHOUT_BUILD=true
             shift
             ;;
         -h|--help)
@@ -136,7 +143,10 @@ mkdir -p "$LOG_DIR"
 
 # Generate a unique log file name
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-LOG_FILE="${LOG_DIR}/test_${TEST_FILE}_log_${TIMESTAMP}.cast"
+LOG_FILE="${LOG_DIR}/test_${TEST_FILE}_log_${TIMESTAMP}.txt"
+
+# Redirect all output to both the console and the log file
+exec > >(tee -a "$LOG_FILE") 2>&1
 
 # Check if a branch is provided as an argument
 if [ $# -gt 0 ]; then
@@ -253,7 +263,7 @@ log "Copying project files to temporary directory..." $COLOR_GREEN
 
 # Compress the project directory
 log "Compressing project files..." $COLOR_GREEN
-(cd .. && tar -czf "$TEST_DIR/rengine-project.tar.gz" --exclude='.git' --exclude='docker/secrets' .)
+(cd .. && tar -czf "$TEST_DIR/rengine-project.tar.gz" --exclude='docker/secrets' .)
 
 cd "$TEST_DIR"
 
@@ -367,8 +377,9 @@ EOF
 log "Copying compressed project files to the VM..." $COLOR_GREEN
 scp -P 2222 $SSH_OPTIONS -i ./id_rsa "$TEST_DIR/rengine-project.tar.gz" rengine@localhost:~
 
-log "Decompressing project files on the VM and git checkout branch to test..." $COLOR_GREEN
+log "Decompressing project files on the VM..." $COLOR_GREEN
 ssh -p 2222 $SSH_OPTIONS -i ./id_rsa rengine@localhost << EOF
+    sudo apt-get install git -y
     mkdir -p $RENGINE_ROOT
     tar -xzf ~/rengine-project.tar.gz -C $RENGINE_ROOT
     rm ~/rengine-project.tar.gz
@@ -387,8 +398,6 @@ ssh -p 2222 $SSH_OPTIONS -i ./id_rsa rengine@localhost << EOF
     merge = refs/heads/master
     vscode-merge-base = origin/master
 EOG
-    git fetch origin
-    git checkout "$RELEASE_VERSION" -f
     cp $RENGINE_ROOT/.env-dist $RENGINE_ROOT/.env
 EOF
 
@@ -419,7 +428,7 @@ ssh -p 2222 $SSH_OPTIONS -i ./id_rsa rengine@localhost << EOF
 
     # Run tests
     cd $RENGINE_ROOT
-    python3 tests/test_$TEST_FILE.py $FORMATTED_TEST_NAMES
+    python3 tests/test_$TEST_FILE.py ${FORMATTED_TEST_NAMES:+--tests $FORMATTED_TEST_NAMES}
 EOF
 
 # Get the test status
