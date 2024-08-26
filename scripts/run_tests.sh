@@ -25,12 +25,14 @@ get_host_architecture() {
 
 # Function to display help message
 show_help() {
-    echo "Usage: $0 [--arch <amd64|arm64>] [branch_name] [test_file] [test1] [test2] ..."
+    echo "Usage: $0 [--arch <amd64|arm64>] [--clean-temp] [--clean-all] [branch_name] [test_file] [test1] [test2] ..."
     echo
     echo "Run tests for the reNgine-ng project in a VM environment."
     echo
     echo "Arguments:"
     echo "  --arch           Specify the architecture (amd64 or arm64). If not specified, uses host architecture."
+    echo "  --clean-temp     Clean temporary files and VM without prompting"
+    echo "  --clean-all      Clean temporary files, VM, and installed packages without prompting"
     echo "  branch_name      The Git branch to test (default: master)"
     echo "  test_file        The test file to run (default: makefile)"
     echo "  test1 test2 ...  Specific tests to run from the test file"
@@ -40,12 +42,18 @@ show_help() {
     echo "  $0 --arch amd64                      # Run all tests on amd64 architecture"
     echo "  $0 --arch arm64 feature-branch       # Run tests on arm64 for feature-branch"
     echo "  $0 --arch amd64 master makefile certs pull # Run specific tests on amd64"
+    echo "  $0 --clean-temp                      # Clean temporary files and VM without prompting"
+    echo "  $0 --clean-all                       # Clean temporary files, VM, and installed packages without prompting"
     echo
     echo "The script will create a VM for the specified architecture, set up the environment, and run the specified tests."
 }
 
 # Get host architecture
 HOST_ARCH=$(get_host_architecture)
+
+# Initialize cleanup variables
+CLEAN_TEMP=false
+CLEAN_ALL=false
 
 # Parse command line arguments
 ARCH=""
@@ -54,6 +62,14 @@ while [[ $# -gt 0 ]]; do
         --arch)
             ARCH="$2"
             shift 2
+            ;;
+        --clean-temp)
+            CLEAN_TEMP=true
+            shift
+            ;;
+        --clean-all)
+            CLEAN_ALL=true
+            shift
             ;;
         -h|--help)
             show_help
@@ -122,11 +138,8 @@ mkdir -p "$LOG_DIR"
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 LOG_FILE="${LOG_DIR}/test_${TEST_FILE}_log_${TIMESTAMP}.cast"
 
-# Start asciinema recording
-#asciinema rec -c "$0 $*" "$LOG_FILE"
-
 # Check if a branch is provided as an argument
-if [ $# -eq 1 ]; then
+if [ $# -gt 0 ]; then
     RELEASE_VERSION="$1"
     log "Checking for branch: $RELEASE_VERSION" $COLOR_YELLOW
     
@@ -156,10 +169,11 @@ command_exists() {
 }
 
 # Install QEMU if not already installed
+INSTALLED_PACKAGES="qemu-system-x86-64 qemu-utils socat"
 if ! command_exists qemu-system-x86_64; then
     echo "Installing QEMU..."
     sudo apt-get update
-    sudo apt-get install -y qemu-system-x86-64 qemu-utils
+    sudo apt-get install -y $INSTALLED_PACKAGES
 fi
 
 # Create a temporary directory for the test
@@ -168,46 +182,67 @@ TEST_DIR=$(mktemp -d -p $HOME/tmp)
 
 # Function to clean up resources
 cleanup() {
-    echo -e "\n\033[1;33mCleanup Confirmation\033[0m"
-    echo "This will shut down the VM and remove the temporary directory."
-    echo "VM Name: $VM_NAME"
-    echo "Temporary Directory: $TEST_DIR"
-    echo -e "\033[1;31mWarning: This action cannot be undone.\033[0m"
-    read -p "Do you want to proceed with the cleanup? (yes/no): " user_input
+    local clean_temp=false
+    local clean_packages=false
 
-    if [[ "$user_input" != "yes" ]]; then
-        echo "Cleanup aborted by user."
-        return
+    if [ "$CLEAN_TEMP" = true ] || [ "$CLEAN_ALL" = true ]; then
+        clean_temp=true
     fi
 
-    echo "Proceeding with cleanup..."
-    echo "Shutting down & Removing VM..."
-   
-    # Send powerdown command to QEMU monitor
-    echo "system_powerdown" | socat - UNIX-CONNECT:/tmp/qemu-monitor.sock
+    if [ "$CLEAN_ALL" = true ]; then
+        clean_packages=true
+    fi
 
-    # Wait for VM to stop (with timeout)
-    for i in {1..30}; do
-        if ! pgrep -f "qemu-system-x86_64.*$VM_NAME" > /dev/null; then
-            echo "VM stopped successfully"
-            break
+    if [ "$CLEAN_TEMP" = false ] && [ "$CLEAN_ALL" = false ]; then
+        echo -e "\n\033[1;33mCleanup Confirmation\033[0m"
+        read -p "Do you want to remove temporary files and VM? (yes/no): " temp_response
+        if [[ "$temp_response" == "yes" ]]; then
+            clean_temp=true
         fi
-        sleep 1
-    done
 
-    # Force stop if VM is still running
-    if pgrep -f "qemu-system-x86_64.*$VM_NAME" > /dev/null; then
-        echo "Forcing VM to stop..."
-        pkill -f "qemu-system-x86_64.*$VM_NAME"
+        read -p "Do you want to uninstall the packages installed for testing? (yes/no): " packages_response
+        if [[ "$packages_response" == "yes" ]]; then
+            clean_packages=true
+        fi
     fi
 
-    if [[ "$TEST_DIR" == "$HOME/tmp/"* ]]; then
-        echo "Removing temporary directory..."
-        rm -r "$TEST_DIR"
-        echo "Cleanup completed."
-    else
-        echo "Error: TEST_DIR is not in $HOME/tmp. Skipping directory removal for safety."
+    if [ "$clean_temp" = true ]; then
+        echo "Cleaning up temporary files and VM..."
+        # Send powerdown command to QEMU monitor
+        echo "system_powerdown" | socat - UNIX-CONNECT:/tmp/qemu-monitor.sock 2>/dev/null || true
+
+        # Wait for VM to stop (with timeout)
+        for i in {1..15}; do
+            if ! pgrep -f "qemu-system-.*$VM_NAME" > /dev/null; then
+                echo "VM stopped successfully"
+                break
+            fi
+            sleep 1
+        done
+
+        # Force stop if VM is still running
+        if pgrep -f "qemu-system-.*$VM_NAME" > /dev/null; then
+            echo "Forcing VM to stop..."
+            pkill -f "qemu-system-.*$VM_NAME" || true
+        fi
+
+        if [[ "$TEST_DIR" == "$HOME/tmp/"* ]]; then
+            echo "Removing temporary directory..."
+            rm -rf "$TEST_DIR"
+            echo "Temporary directory removed."
+        else
+            echo "Error: TEST_DIR is not in $HOME/tmp. Skipping directory removal for safety."
+        fi
     fi
+
+    if [ "$clean_packages" = true ]; then
+        echo "Uninstalling packages..."
+        sudo apt-get remove -y $INSTALLED_PACKAGES
+        sudo apt-get autoremove -y
+        echo "Packages uninstalled."
+    fi
+
+    echo "Cleanup completed."
 }
 
 # Set trap to ensure cleanup on script exit (normal or abnormal)
@@ -218,7 +253,7 @@ log "Copying project files to temporary directory..." $COLOR_GREEN
 
 # Compress the project directory
 log "Compressing project files..." $COLOR_GREEN
-tar -czf "$TEST_DIR/rengine-project.tar.gz" ..
+(cd .. && tar -czf "$TEST_DIR/rengine-project.tar.gz" --exclude='.git' --exclude='docker/secrets' .)
 
 cd "$TEST_DIR"
 
@@ -292,10 +327,11 @@ elif [ "$ARCH" = "arm64" ]; then
         -netdev user,id=net0,hostfwd=tcp::2222-:22,hostfwd=tcp::8443-:443 \
         -device virtio-gpu-pci \
         -device ramfb \
-        -device qemu-xhci \
+        -device nec-usb-xhci,id=xhci \
         -device usb-kbd \
         -device usb-tablet \
         -vnc :0 \
+        -serial mon:stdio \
         -display none &
 fi
 
@@ -389,12 +425,8 @@ EOF
 # Get the test status
 TEST_STATUS=$?
 
-# Call cleanup explicitly
-cleanup
-
-# Stop asciinema recording
-exit
+# Log test completion
+log "Tests completed with status: $TEST_STATUS" $COLOR_GREEN
 
 # Exit with the test status
-log "Tests completed with status: $TEST_STATUS" $COLOR_GREEN
 exit $TEST_STATUS
