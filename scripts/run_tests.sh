@@ -96,7 +96,7 @@ fi
 
 # Validate architecture
 if [ "$ARCH" != "amd64" ] && [ "$ARCH" != "arm64" ]; then
-    echo "Error: Invalid architecture. Must be either amd64 or arm64."
+    log "Error: Invalid architecture. Must be either amd64 or arm64." $COLOR_RED
     exit 1
 fi
 
@@ -138,7 +138,7 @@ generate_test_names() {
 FORMATTED_TEST_NAMES=$(generate_test_names)
 
 # Create log directory if it doesn't exist
-LOG_DIR="$(pwd)/log/tests"
+LOG_DIR="$(pwd)/../logs/tests"
 mkdir -p "$LOG_DIR"
 
 # Generate a unique log file name
@@ -151,7 +151,7 @@ exec > >(tee -a "$LOG_FILE") 2>&1
 # Check if a branch is provided as an argument
 if [ $# -gt 0 ]; then
     RELEASE_VERSION="$1"
-    log "Checking for branch: $RELEASE_VERSION" $COLOR_YELLOW
+    log "Checking for branch: $RELEASE_VERSION" $COLOR_CYAN
     
     if branch_exists "$RELEASE_VERSION"; then
         log "Branch $RELEASE_VERSION exists." $COLOR_GREEN
@@ -171,7 +171,7 @@ else
 fi
 
 # When you're ready to use RELEASE_VERSION:
-log "Checking out branch: $RELEASE_VERSION" $COLOR_GREEN
+log "Checking out branch: $RELEASE_VERSION" $COLOR_CYAN
 
 # Function to check if a command exists
 command_exists() {
@@ -182,7 +182,7 @@ command_exists() {
 INSTALLED_PACKAGES_FOR_TESTS="qemu-system-x86 qemu-system-arm qemu-utils cloud-image-utils"
 INSTALLED_COMMON_PACKAGES="socat wget openssh-client tar gzip git curl gpg coreutils"
 
-echo "Installing QEMU..."
+log "Installing QEMU..." $COLOR_CYAN
 sudo apt-get update
 sudo apt-get install -y $INSTALLED_PACKAGES_FOR_TESTS $INSTALLED_COMMON_PACKAGES
 
@@ -205,8 +205,8 @@ cleanup() {
 
     if [ "$CLEAN_TEMP" = false ] && [ "$CLEAN_ALL" = false ]; then
         echo -e "\n\033[1;33mCleanup Confirmation\033[0m"
-        read -p "Do you want to remove temporary files and VM? (yes/no): " temp_response
-        if [[ "$temp_response" == "yes" ]]; then
+        read -p "Do you want to remove temporary files and VM? (y/n): " temp_response
+        if [[ "$temp_response" == "y" ]]; then
             clean_temp=true
         fi
 
@@ -215,22 +215,22 @@ Installed packages for testing: ('"$INSTALLED_PACKAGES_FOR_TESTS"$')
 Installed common packages: ('"$INSTALLED_COMMON_PACKAGES"$')
 Only installed packages for testing will be removed, common packages will be left untouched.
 You may consider removing these packages by hand.
-Type your answer (yes/no): ' packages_response
+Type your answer (y/n): ' packages_response
 
-    if [[ "$packages_response" == "yes" ]]; then
+    if [[ "$packages_response" == "y" ]]; then
             clean_packages=true
         fi
     fi
 
     if [ "$clean_temp" = true ]; then
-        echo "Cleaning up temporary files and VM..."
+        log "Cleaning up temporary files and VM..." $COLOR_CYAN
         # Send powerdown command to QEMU monitor
         echo "system_powerdown" | socat - UNIX-CONNECT:/tmp/qemu-monitor.sock 2>/dev/null || true
 
         # Wait for VM to stop (with timeout)
         for i in {1..15}; do
             if ! pgrep -f "qemu-system-.*$VM_NAME" > /dev/null; then
-                echo "VM stopped successfully"
+                log "VM stopped successfully" $COLOR_GREEN
                 break
             fi
             sleep 1
@@ -238,43 +238,43 @@ Type your answer (yes/no): ' packages_response
 
         # Force stop if VM is still running
         if pgrep -f "qemu-system-.*$VM_NAME" > /dev/null; then
-            echo "Forcing VM to stop..."
+            log "Forcing VM to stop..." $COLOR_RED
             pkill -f "qemu-system-.*$VM_NAME" || true
         fi
 
         if [[ "$TEST_DIR" == "$HOME/tmp/"* ]]; then
-            echo "Removing temporary directory..."
+            log "Removing temporary directory..." $COLOR_CYAN
             rm -rf "$TEST_DIR"
-            echo "Temporary directory removed."
+            log "Temporary directory removed." $COLOR_GREEN
         else
-            echo "Error: TEST_DIR is not in $HOME/tmp. Skipping directory removal for safety."
+            log "Error: TEST_DIR is not in $HOME/tmp. Skipping directory removal for safety." $COLOR_RED
         fi
     fi
 
     if [ "$clean_packages" = true ]; then
-        echo "Uninstalling packages..."
+        log "Uninstalling packages..." $COLOR_CYAN
         sudo apt-get remove -y $INSTALLED_PACKAGES_FOR_TESTS
         sudo apt-get autoremove -y
-        echo "Packages uninstalled."
+        log "Packages uninstalled." $COLOR_GREEN
     fi
 
-    echo "Cleanup completed."
+    log "Cleanup completed." $COLOR_GREEN
 }
 
 # Set trap to ensure cleanup on script exit (normal or abnormal)
 trap cleanup EXIT
 
 # Copy project files to the temporary directory
-log "Copying project files to temporary directory..." $COLOR_GREEN
+log "Copying project files to temporary directory..." $COLOR_CYAN
 
 # Compress the project directory
-log "Compressing project files..." $COLOR_GREEN
+log "Compressing project files..." $COLOR_CYAN
 (cd .. && tar -czf "$TEST_DIR/rengine-project.tar.gz" --exclude='docker/secrets' .)
 
 cd "$TEST_DIR"
 
 # Download appropriate Debian 12 cloud image
-log "Downloading Debian 12 cloud image for $ARCH..." $COLOR_GREEN
+log "Downloading Debian 12 cloud image for $ARCH..." $COLOR_CYAN
 if [ "$ARCH" = "amd64" ]; then
     wget -q https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2 -O debian-12-generic.qcow2
 elif [ "$ARCH" = "arm64" ]; then
@@ -294,7 +294,7 @@ qemu-img convert -O qcow2 -o preallocation=metadata "$TEST_DIR/debian-12-generic
 mv large-debian.qcow2 test-debian.qcow2
 
 # Generate SSH key pair
-log "Generating SSH key pair..." $COLOR_GREEN
+log "Generating SSH key pair..." $COLOR_CYAN
 ssh-keygen -t rsa -b 2048 -f ./id_rsa -N ""
 
 # Create a cloud-init configuration file
@@ -312,7 +312,7 @@ EOF
 cloud-localds cloud-init.iso cloud-init.yml
 
 # Start the VM
-log "Starting the VM..." $COLOR_GREEN
+log "Starting the VM..." $COLOR_CYAN
 if [ "$ARCH" = "amd64" ]; then
     qemu-system-x86_64 \
         -name $VM_NAME \
@@ -354,11 +354,11 @@ fi
 log "VM started. You can connect via VNC on localhost:5900" $COLOR_GREEN
 
 # Wait for the VM to start
-log "Waiting for the VM to start..." $COLOR_GREEN
+log "Waiting for the VM to start..." $COLOR_CYAN
 sleep 10
 
 # Wait for SSH to become available
-log "Waiting for SSH to become available..." $COLOR_GREEN
+log "Waiting for SSH to become available..." $COLOR_CYAN
 for i in {1..30}; do
     if ssh -p 2222 $SSH_OPTIONS -i ./id_rsa rengine@localhost echo "SSH is up" &>/dev/null; then
         log "SSH is now available" $COLOR_GREEN
@@ -372,7 +372,7 @@ for i in {1..30}; do
 done
 
 # Run setup commands in the VM
-log "Setting up locales in the VM..." $COLOR_GREEN
+log "Setting up locales in the VM..." $COLOR_CYAN
 ssh -p 2222 $SSH_OPTIONS -i ./id_rsa rengine@localhost << EOF
     # Update and install dependencies
     sudo apt-get update
@@ -380,10 +380,10 @@ ssh -p 2222 $SSH_OPTIONS -i ./id_rsa rengine@localhost << EOF
 EOF
 
 # Copy compressed project files to the VM
-log "Copying compressed project files to the VM..." $COLOR_GREEN
+log "Copying compressed project files to the VM..." $COLOR_CYAN
 scp -P 2222 $SSH_OPTIONS -i ./id_rsa "$TEST_DIR/rengine-project.tar.gz" rengine@localhost:~
 
-log "Decompressing project files on the VM..." $COLOR_GREEN
+log "Decompressing project files on the VM..." $COLOR_CYAN
 ssh -p 2222 $SSH_OPTIONS -i ./id_rsa rengine@localhost << EOF
     sudo apt-get install git -y
     mkdir -p $RENGINE_ROOT
@@ -408,7 +408,7 @@ EOG
 EOF
 
 # Run setup commands in the VM
-log "Setting up Docker and the application in the VM..." $COLOR_GREEN
+log "Setting up Docker and the application in the VM..." $COLOR_CYAN
 ssh -p 2222 $SSH_OPTIONS -i ./id_rsa rengine@localhost << EOF
     # Update and install dependencies
     sudo apt-get install -y ca-certificates curl gnupg make htop iftop net-tools
