@@ -179,12 +179,12 @@ command_exists() {
 }
 
 # Install QEMU if not already installed
-INSTALLED_PACKAGES="qemu-system-x86-64 qemu-utils socat"
-if ! command_exists qemu-system-x86_64; then
-    echo "Installing QEMU..."
-    sudo apt-get update
-    sudo apt-get install -y $INSTALLED_PACKAGES
-fi
+INSTALLED_PACKAGES_FOR_TESTS="qemu-system-x86 qemu-system-arm qemu-utils cloud-image-utils"
+INSTALLED_COMMON_PACKAGES="socat wget openssh-client tar gzip git curl gpg coreutils"
+
+echo "Installing QEMU..."
+sudo apt-get update
+sudo apt-get install -y $INSTALLED_PACKAGES_FOR_TESTS $INSTALLED_COMMON_PACKAGES
 
 # Create a temporary directory for the test
 mkdir -p $HOME/tmp
@@ -210,8 +210,14 @@ cleanup() {
             clean_temp=true
         fi
 
-        read -p "Do you want to uninstall the packages installed for testing? (yes/no): " packages_response
-        if [[ "$packages_response" == "yes" ]]; then
+        read -p $'Do you want to uninstall the packages installed for testing?
+Installed packages for testing: ('"$INSTALLED_PACKAGES_FOR_TESTS"$')
+Installed common packages: ('"$INSTALLED_COMMON_PACKAGES"$')
+Only installed packages for testing will be removed, common packages will be left untouched.
+You may consider removing these packages by hand.
+Type your answer (yes/no): ' packages_response
+
+    if [[ "$packages_response" == "yes" ]]; then
             clean_packages=true
         fi
     fi
@@ -247,7 +253,7 @@ cleanup() {
 
     if [ "$clean_packages" = true ]; then
         echo "Uninstalling packages..."
-        sudo apt-get remove -y $INSTALLED_PACKAGES
+        sudo apt-get remove -y $INSTALLED_PACKAGES_FOR_TESTS
         sudo apt-get autoremove -y
         echo "Packages uninstalled."
     fi
