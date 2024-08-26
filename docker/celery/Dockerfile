@@ -144,7 +144,7 @@ RUN python3.10 -m pip install pipx && pipx ensurepath && printf "poetry\n\
     https://github.com/aboul3la/Sublist3r/archive/refs/tags/1.1.zip\n\
     https://github.com/laramies/theHarvester/archive/refs/tags/4.6.0.zip\n\
     git+https://github.com/ncrocfer/whatportis@59a1718bf7c531f2a5a4e213cad0c047ce9c1c94\n\
-    git+https://github.com/EnableSecurity/wafw00f@5e5d8e9e5f1b1b6d9b2c1c1f9f9b9b9b9b9b9b9b\n\
+    git+https://github.com/EnableSecurity/wafw00f@914dbf4feab7e2529f064f4300b5fde84ea1cce3\n\
     h8mail\n" | xargs -L1 pipx install || true
 
 # Install tools
