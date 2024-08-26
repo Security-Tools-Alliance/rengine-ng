@@ -4798,7 +4798,7 @@ def save_imported_subdomains(subdomains, ctx={}):
 	# Validate each subdomain and de-duplicate entries
 	subdomains = list(set([
 		subdomain for subdomain in subdomains
-		if validators.domain(subdomain) and domain.name == get_domain_from_subdomain(subdomain)
+		if domain.name == get_domain_from_subdomain(subdomain)
 	]))
 	if not subdomains:
 		return
