@@ -50,6 +50,34 @@ then
     log "Warning: Failed to remove rengine_network" $COLOR_YELLOW
   fi
   log ""
+
+  log "Removing static files and secrets from reNgine-ng..." $COLOR_CYAN
+
+  # Remove web/staticfiles directory
+  if [ -d "../web/staticfiles" ]; then
+    log "Removing web/staticfiles directory..." $COLOR_CYAN
+    if (cd .. && rm -rf web/staticfiles); then
+      log "Removed web/staticfiles directory" $COLOR_GREEN
+    else
+      log "Warning: Failed to remove web/staticfiles directory" $COLOR_YELLOW
+    fi
+  else
+    log "web/staticfiles directory not found, skipping..." $COLOR_YELLOW
+  fi
+
+  # Remove docker/secrets directory
+  if [ -d "../docker/secrets" ]; then
+    log "Removing docker/secrets directory..." $COLOR_CYAN
+    if (cd .. && rm -rf docker/secrets); then
+      log "Removed docker/secrets directory" $COLOR_GREEN
+    else
+      log "Warning: Failed to remove docker/secrets directory" $COLOR_YELLOW
+    fi
+  else
+    log "docker/secrets directory not found, skipping..." $COLOR_YELLOW
+  fi
+
+  log ""
 else
   log ""
   log "Exiting!" $COLOR_DEFAULT
