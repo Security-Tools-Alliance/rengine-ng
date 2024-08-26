@@ -452,41 +452,37 @@ class TestMakefile(unittest.TestCase):
         for volume in volumes:
             print(f"- {volume.name}")
 
-def suite(tests_to_run=None):
-    """
-    Create a test suite with specified or all tests.
-    """
-    all_tests = [
-        "test_certs",
-        "test_pull",
-        "test_images",
-        "test_start_services_up",
-        "test_superuser",
-        "test_migrate",
-        "test_logs",
-        "test_restart_services",
-        #"test_start_services_build",
-        "test_down",
-        "test_prune",
-    ]
+    def test_without_build(self):
+        """
+        Run all tests except the build test.
+        """
+        tests_to_run = [
+            self.test_certs,
+            self.test_pull,
+            self.test_images,
+            self.test_start_services_up,
+            self.test_superuser,
+            self.test_migrate,
+            self.test_logs,
+            self.test_restart_services,
+            self.test_down,
+            self.test_prune
+        ]
 
-    test_suite = unittest.TestSuite()
-
-    if tests_to_run is None:
-        for test in all_tests:
-            test_suite.addTest(TestMakefile(test))
-    else:
         for test in tests_to_run:
-            if test in all_tests:
-                test_suite.addTest(TestMakefile(test))
-            else:
-                print(f"Warning: Test '{test}' not found. Skipping.")
+            with self.subTest(test=test.__name__):
+                test()
 
+def suite():
+    """
+    Create a test suite with all tests.
+    """
+    test_suite = unittest.TestSuite()
+    test_suite.addTest(unittest.makeSuite(TestMakefile))
     return test_suite
 
 
 if __name__ == "__main__":
-    tests_to_run = sys.argv[1:] if len(sys.argv) > 1 else None
     runner = unittest.TextTestRunner(verbosity=2)
-    result = runner.run(suite(tests_to_run))
+    result = runner.run(suite())
     sys.exit(not result.wasSuccessful())
