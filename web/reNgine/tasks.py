@@ -1795,6 +1795,11 @@ def fetch_url(self, urls=[], ctx={}, description=None):
 			ctx=ctx
 		)
 
+    # check if urls is empty
+	if not urls:
+		logger.warning("No URLs found. Exiting fetch_url.")
+		return
+
 	# Log initial URLs
 	logger.debug(f'Initial URLs: {urls}')
 
