@@ -166,9 +166,9 @@ RUN ln -s /usr/local/bin/geckodriver $BINPATH/geckodriver && \
     mkdir -p /home/$USERNAME/results
 
 # Create config files
-RUN nuclei -silent && subfinder -silent && mkdir -p /home/$USERNAME/tools/theHarvester
-COPY --chown=$USERNAME:$USERNAME ./config/amass.ini /home/$USERNAME/amass.ini
-COPY --chown=$USERNAME:$USERNAME ./config/the-harvester-api-keys.yaml /home/$USERNAME/tools/theHarvester/api-keys.yaml
+RUN nuclei -version && naabu -version && subfinder -version && mkdir -p /home/$USERNAME/.config/theHarvester
+COPY --chown=$USERNAME:$USERNAME ./config/the-harvester-api-keys.yaml /home/$USERNAME/.config/theHarvester/api-keys.yaml
+COPY --chown=$USERNAME:$USERNAME ./config/amass.ini /home/$USERNAME/.config/amass.ini
 COPY --chown=$USERNAME:$USERNAME ./*.toml /home/$USERNAME
 
 # Install aliases for tools needing a pyproject.toml

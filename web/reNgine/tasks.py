@@ -1005,7 +1005,7 @@ def theHarvester(config, host, scan_history_id, activity_id, results_dir, ctx={}
     scan_history = ScanHistory.objects.get(pk=scan_history_id)
     enable_http_crawl = config.get(ENABLE_HTTP_CRAWL, DEFAULT_ENABLE_HTTP_CRAWL)
     output_path_json = str(Path(results_dir) / 'theHarvester.json')
-    theHarvester_dir = str(Path(RENGINE_TOOL_GITHUB_PATH) / 'theHarvester')
+    theHarvester_dir = str(Path.home() / ".config"  / 'theHarvester')
     history_file = str(Path(results_dir) / 'commands.txt')
     cmd  = f'theHarvester -d {host} -b all -f {output_path_json}'
 

@@ -1267,7 +1267,7 @@ class GetFileContents(APIView):
 			return Response(response)
 
 		if 'theharvester_config' in req.query_params:
-			path = str(Path(RENGINE_TOOL_PATH) / 'theHarvester' / 'api-keys.yaml')
+			path = str(Path.home() / ".config" / 'theHarvester' / 'api-keys.yaml')
 			if not os.path.exists(path):
 				run_command(f'touch {path}')
 				response['message'] = 'File Created!'

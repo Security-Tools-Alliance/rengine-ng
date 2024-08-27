@@ -249,7 +249,7 @@ def tool_specific_settings(request, slug):
             return http.HttpResponseRedirect(reverse('tool_settings', kwargs={'slug': slug}))
 
         elif 'theharvester_config_text_area' in request.POST:
-            with open(Path(RENGINE_TOOL_GITHUB_PATH) / 'theHarvester' / 'api-keys.yaml', "w") as fhandle:
+            with open(Path.home() / '.config' / 'theHarvester' / 'api-keys.yaml', "w") as fhandle:
                 fhandle.write(request.POST.get('theharvester_config_text_area'))
             messages.add_message(request, messages.INFO, 'theHarvester config updated!')
             return http.HttpResponseRedirect(reverse('tool_settings', kwargs={'slug': slug}))
