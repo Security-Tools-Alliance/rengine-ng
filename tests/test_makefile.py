@@ -158,7 +158,7 @@ class TestMakefile(unittest.TestCase):
 
     def test_pull(self):
         """
-        Test the 'pull' make command.
+        Test the `make pull` command.
         This test verifies that all required Docker images can be pulled successfully.
         """
         returncode = self.run_make_command("pull")
@@ -172,7 +172,7 @@ class TestMakefile(unittest.TestCase):
 
     def test_images(self):
         """
-        Test the 'images' make command.
+        Test the `make images` command.
         This test verifies that all required Docker images are present and correctly tagged.
         """
         self.run_make_command("pull")
@@ -188,7 +188,7 @@ class TestMakefile(unittest.TestCase):
     @with_cleanup
     def test_start_services_up(self):
         """
-        Test the 'up' make command.
+        Test the `make up` command.
         This test verifies that the application can be started successfully with the 'up' command.
         """
         print(f"{BLUE}test_start_services_up{ENDC}")
@@ -198,7 +198,7 @@ class TestMakefile(unittest.TestCase):
     @with_cleanup
     def test_start_services_build(self):
         """
-        Test the 'build' make command.
+        Test the `make build` command.
         This test verifies that the application can be built and started successfully with the 'build' command.
         """
         print(f"{BLUE}test_start_services_build{ENDC}")
@@ -236,7 +236,7 @@ class TestMakefile(unittest.TestCase):
     @with_cleanup
     def test_restart_services(self):
         """
-        Test the 'restart' make command with various configurations.
+        Test the `make restart` command with various configurations.
         This test verifies that services can be restarted successfully in different scenarios.
         """
         print(f"{BLUE}test_restart_services (__main__.TestMakefile.test_restart_services){ENDC}")
@@ -272,7 +272,7 @@ class TestMakefile(unittest.TestCase):
     @with_cleanup
     def test_logs(self):
         """
-        Test the 'logs' make command.
+        Test the `make logs` command.
         This test verifies that logs can be retrieved and contain expected content.
         It ensures services are up before checking logs and limits the log collection time.
         """
@@ -358,7 +358,7 @@ class TestMakefile(unittest.TestCase):
     @with_cleanup
     def test_migrate(self):
         """
-        Test the 'migrate' make command.
+        Test the `make migrate` command.
         This test verifies that database migrations can be applied successfully.
         """
         # First, generate certificates and start services
@@ -375,7 +375,7 @@ class TestMakefile(unittest.TestCase):
     @with_cleanup
     def test_certs(self):
         """
-        Test the 'certs' make command.
+        Test the `make certs` command.
         This test verifies that SSL certificates can be generated successfully.
         """
         returncode = self.run_make_command("certs")
@@ -393,7 +393,7 @@ class TestMakefile(unittest.TestCase):
     @with_cleanup
     def test_down(self):
         """
-        Test the 'down' make command.
+        Test the `make down` command.
         This test verifies that all services can be stopped successfully.
         """
         # First, generate certificates and start services
@@ -429,7 +429,7 @@ class TestMakefile(unittest.TestCase):
 
     def test_prune(self):
         """
-        Test the 'prune' make command.
+        Test the `make prune` command.
         This test verifies that unused Docker volumes can be removed successfully.
         """
         # Ensure all services are down before pruning

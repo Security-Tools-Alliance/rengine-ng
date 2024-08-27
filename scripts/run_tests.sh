@@ -292,7 +292,7 @@ mv large-debian.qcow2 test-debian.qcow2
 
 # Generate SSH key pair
 log "Generating SSH key pair..." $COLOR_CYAN
-ssh-keygen -t rsa -b 2048 -f ./id_rsa -N ""
+ssh-keygen -t ssh-keygen -t ed25519 -f ./id_ed25519 -N ""
 
 # Create a cloud-init configuration file
 cat > cloud-init.yml <<EOF
@@ -302,7 +302,7 @@ users:
     sudo: ALL=(ALL) NOPASSWD:ALL
     shell: /bin/bash
     ssh_authorized_keys:
-      - $(cat ./id_rsa.pub)
+      - $(cat ./id_ed25519)
 EOF
 
 # Create a cloud-init ISO
@@ -357,7 +357,7 @@ sleep 10
 # Wait for SSH to become available
 log "Waiting for SSH to become available..." $COLOR_CYAN
 for i in {1..30}; do
-    if ssh -p 2222 $SSH_OPTIONS -i ./id_rsa rengine@localhost echo "SSH is up" &>/dev/null; then
+    if ssh -p 2222 $SSH_OPTIONS -i ./id_ed25519 rengine@localhost echo "SSH is up" &>/dev/null; then
         log "SSH is now available" $COLOR_GREEN
         break
     fi
@@ -370,7 +370,7 @@ done
 
 # Run setup commands in the VM
 log "Setting up locales in the VM..." $COLOR_CYAN
-ssh -p 2222 $SSH_OPTIONS -i ./id_rsa rengine@localhost << EOF
+ssh -p 2222 $SSH_OPTIONS -i ./id_ed25519 rengine@localhost << EOF
     # Update and install dependencies
     sudo apt-get update
     sudo apt-get install -y locales-all
@@ -378,10 +378,10 @@ EOF
 
 # Copy compressed project files to the VM
 log "Copying compressed project files to the VM..." $COLOR_CYAN
-scp -P 2222 $SSH_OPTIONS -i ./id_rsa "$TEST_DIR/rengine-project.tar.gz" rengine@localhost:~
+scp -P 2222 $SSH_OPTIONS -i ./id_ed25519 "$TEST_DIR/rengine-project.tar.gz" rengine@localhost:~
 
 log "Decompressing project files on the VM..." $COLOR_CYAN
-ssh -p 2222 $SSH_OPTIONS -i ./id_rsa rengine@localhost << EOF
+ssh -p 2222 $SSH_OPTIONS -i ./id_ed25519 rengine@localhost << EOF
     sudo apt-get install git -y
     mkdir -p $RENGINE_ROOT
     tar -xzf ~/rengine-project.tar.gz -C $RENGINE_ROOT
@@ -406,7 +406,7 @@ EOF
 
 # Run setup commands in the VM
 log "Setting up Docker and the application in the VM..." $COLOR_CYAN
-ssh -p 2222 $SSH_OPTIONS -i ./id_rsa rengine@localhost << EOF
+ssh -p 2222 $SSH_OPTIONS -i ./id_ed25519 rengine@localhost << EOF
     # Update and install dependencies
     sudo apt-get install -y ca-certificates curl gnupg make htop iftop net-tools
 
