@@ -300,40 +300,54 @@ else
     fi
 fi
 
-# Execute the tests in a subshell to capture the output and exit status
+# Create a temporary file for communication
+TEMP_FILE="$TEST_DIR/subshell_status.txt"
+
+# Create a named pipe for logging
+PIPE_FILE="$TEST_DIR/log_pipe"
+mkfifo "$PIPE_FILE"
+
+# Start tee in the background to handle logging
+tee -a "$LOG_FILE" < "$PIPE_FILE" &
+TEE_PID=$!
+
+# Execute the tests in a subshell
 (
-# Install QEMU & dependencies
-log "Installing QEMU..." $COLOR_CYAN
-sudo apt-get update
-sudo apt-get install -y $INSTALLED_PACKAGES_FOR_TESTS $INSTALLED_COMMON_PACKAGES
+    # Redirect all output to the named pipe
+    exec > "$PIPE_FILE" 2>&1
 
-# Copy project files to the temporary directory
-log "Copying project files to temporary directory..." $COLOR_CYAN
+    # Install QEMU & dependencies
+    log "Installing QEMU..." $COLOR_CYAN
+    sudo apt-get update
+    sudo apt-get install -y $INSTALLED_PACKAGES_FOR_TESTS $INSTALLED_COMMON_PACKAGES
 
-# Compress the project directory
-log "Compressing project files..." $COLOR_CYAN
-(cd .. && tar -czf "$TEST_DIR/rengine-project.tar.gz" --exclude='docker/secrets' .)
+    # Copy project files to the temporary directory
+    log "Copying project files to temporary directory..." $COLOR_CYAN
 
-cd "$TEST_DIR"
+    # Compress the project directory
+    log "Compressing project files..." $COLOR_CYAN
+    (cd .. && tar -czf "$TEST_DIR/rengine-project.tar.gz" --exclude='docker/secrets' .)
 
-# Create a larger disk image
-qemu-img create -f qcow2 -o preallocation=metadata "$TEST_DIR/large-debian.qcow2" $VM_DISK_SIZE
+    cd "$TEST_DIR"
 
-# Resize the downloaded image to fill the new larger disk
-qemu-img resize --shrink "$TEST_DIR/$IMAGE_FILENAME" $VM_DISK_SIZE
+    # Create a larger disk image
+    qemu-img create -f qcow2 -o preallocation=metadata "$TEST_DIR/large-debian.qcow2" $VM_DISK_SIZE
 
-# Combine the two images
-qemu-img convert -O qcow2 -o preallocation=metadata "$TEST_DIR/$IMAGE_FILENAME" "$TEST_DIR/large-debian.qcow2"
+    # Resize the downloaded image
+    qemu-img resize --shrink "$TEST_DIR/$IMAGE_FILENAME" $VM_DISK_SIZE
 
-# Create a copy of the image for testing
-mv large-debian.qcow2 test-debian.qcow2
+    # Combine the two images
+    qemu-img convert -O qcow2 -o preallocation=metadata "$TEST_DIR/$IMAGE_FILENAME" "$TEST_DIR/large-debian.qcow2"
 
-# Generate SSH key pair
-log "Generating SSH key pair..." $COLOR_CYAN
-ssh-keygen -t ssh-keygen -t ed25519 -f ./id_ed25519 -N ""
+    # Create a copy of the image for testing
+    mv large-debian.qcow2 test-debian.qcow2
 
-# Create a cloud-init configuration file
-cat > cloud-init.yml <<EOF
+    # Generate SSH key pair
+    log "Generating SSH key pair..." $COLOR_CYAN
+    ssh-keygen -t ssh-keygen -t ed25519 -f ./id_ed25519 -N ""
+
+    # Create a cloud-init configuration file
+    cat > cloud-init.yml <<EOF
 #cloud-config
 users:
   - name: rengine
@@ -343,89 +357,89 @@ users:
       - $(cat ./id_ed25519.pub)
 EOF
 
-# Create a cloud-init ISO
-cloud-localds cloud-init.iso cloud-init.yml
+    # Create a cloud-init ISO
+    cloud-localds cloud-init.iso cloud-init.yml
 
-# Start the VM
-log "Starting the VM..." $COLOR_CYAN
-if [ "$ARCH" = "amd64" ]; then
-    qemu-system-x86_64 \
-        -name $VM_NAME \
-        -m $VM_RAM \
-        -smp $VM_CPUS \
-        -enable-kvm \
-        -cpu host \
-        -nodefaults \
-        -no-fd-bootchk \
-        -drive file=$VM_IMAGE,format=qcow2 \
-        -drive file=cloud-init.iso,format=raw \
-        -device virtio-net-pci,netdev=net0 \
-        -netdev user,id=net0,hostfwd=tcp::2222-:22,hostfwd=tcp::8443-:443 \
-        -vga std \
-        -vnc :0 \
-        -display none &
-elif [ "$ARCH" = "arm64" ]; then
-    qemu-system-aarch64 \
-        -name $VM_NAME \
-        -M virt \
-        -m $VM_RAM \
-        -smp $VM_CPUS \
-        -cpu cortex-a72 \
-        -nodefaults \
-        -drive file=$VM_IMAGE,format=qcow2 \
-        -drive file=cloud-init.iso,format=raw \
-        -device virtio-net-pci,netdev=net0 \
-        -netdev user,id=net0,hostfwd=tcp::2222-:22,hostfwd=tcp::8443-:443 \
-        -device virtio-gpu-pci \
-        -device ramfb \
-        -device nec-usb-xhci,id=xhci \
-        -device usb-kbd \
-        -device usb-tablet \
-        -vnc :0 \
-        -serial mon:stdio \
-        -display none &
-fi
-
-log "VM started. You can connect via VNC on localhost:5900" $COLOR_GREEN
-
-# Wait for the VM to start
-log "Waiting for the VM to start..." $COLOR_CYAN
-sleep 10
-
-# Wait for SSH to become available
-log "Waiting for SSH to become available..." $COLOR_CYAN
-for i in {1..30}; do
-    if ssh -p 2222 $SSH_OPTIONS -i ./id_ed25519 rengine@localhost echo "SSH is up" &>/dev/null; then
-        log "SSH is now available" $COLOR_GREEN
-        break
+    # Start the VM
+    log "Starting the VM..." $COLOR_CYAN
+    if [ "$ARCH" = "amd64" ]; then
+        qemu-system-x86_64 \
+            -name $VM_NAME \
+            -m $VM_RAM \
+            -smp $VM_CPUS \
+            -enable-kvm \
+            -cpu host \
+            -nodefaults \
+            -no-fd-bootchk \
+            -drive file=$VM_IMAGE,format=qcow2 \
+            -drive file=cloud-init.iso,format=raw \
+            -device virtio-net-pci,netdev=net0 \
+            -netdev user,id=net0,hostfwd=tcp::2222-:22,hostfwd=tcp::8443-:443 \
+            -vga std \
+            -vnc :0 \
+            -display none &
+    elif [ "$ARCH" = "arm64" ]; then
+        qemu-system-aarch64 \
+            -name $VM_NAME \
+            -M virt \
+            -m $VM_RAM \
+            -smp $VM_CPUS \
+            -cpu cortex-a72 \
+            -nodefaults \
+            -drive file=$VM_IMAGE,format=qcow2 \
+            -drive file=cloud-init.iso,format=raw \
+            -device virtio-net-pci,netdev=net0 \
+            -netdev user,id=net0,hostfwd=tcp::2222-:22,hostfwd=tcp::8443-:443 \
+            -device virtio-gpu-pci \
+            -device ramfb \
+            -device nec-usb-xhci,id=xhci \
+            -device usb-kbd \
+            -device usb-tablet \
+            -vnc :0 \
+            -serial mon:stdio \
+            -display none &
     fi
-    if [ $i -eq 30 ]; then
-        log "Timed out waiting for SSH" $COLOR_RED
-        exit 1
-    fi
+
+    log "VM started. You can connect via VNC on localhost:5900" $COLOR_GREEN
+
+    # Wait for the VM to start
+    log "Waiting for the VM to start..." $COLOR_CYAN
     sleep 10
-done
 
-# Run setup commands in the VM
-log "Setting up locales in the VM..." $COLOR_CYAN
-ssh -p 2222 $SSH_OPTIONS -i ./id_ed25519 rengine@localhost << EOF
-    # Update and install dependencies
-    sudo apt-get update
-    sudo apt-get install -y locales-all
+    # Wait for SSH to become available
+    log "Waiting for SSH to become available..." $COLOR_CYAN
+    for i in {1..30}; do
+        if ssh -p 2222 $SSH_OPTIONS -i ./id_ed25519 rengine@localhost echo "SSH is up" &>/dev/null; then
+            log "SSH is now available" $COLOR_GREEN
+            break
+        fi
+        if [ $i -eq 30 ]; then
+            log "Timed out waiting for SSH" $COLOR_RED
+            exit 1
+        fi
+        sleep 10
+    done
+
+    # Run setup commands in the VM
+    log "Setting up locales in the VM..." $COLOR_CYAN
+    ssh -p 2222 $SSH_OPTIONS -i ./id_ed25519 rengine@localhost << EOF
+        # Update and install dependencies
+        sudo apt-get update
+        sudo apt-get install -y locales-all
 EOF
 
-# Copy compressed project files to the VM
-log "Copying compressed project files to the VM..." $COLOR_CYAN
-scp -P 2222 $SSH_OPTIONS -i ./id_ed25519 "$TEST_DIR/rengine-project.tar.gz" rengine@localhost:~
+    # Copy compressed project files to the VM
+    log "Copying compressed project files to the VM..." $COLOR_CYAN
+    scp -P 2222 $SSH_OPTIONS -i ./id_ed25519 "$TEST_DIR/rengine-project.tar.gz" rengine@localhost:~
 
-log "Decompressing project files on the VM..." $COLOR_CYAN
-ssh -p 2222 $SSH_OPTIONS -i ./id_ed25519 rengine@localhost << EOF
-    sudo apt-get install git -y
-    mkdir -p $RENGINE_ROOT
-    tar -xzf ~/rengine-project.tar.gz -C $RENGINE_ROOT
-    rm ~/rengine-project.tar.gz
-    cd $RENGINE_ROOT
-    cat > $RENGINE_ROOT/.git/config << EOG
+    log "Decompressing project files on the VM..." $COLOR_CYAN
+    ssh -p 2222 $SSH_OPTIONS -i ./id_ed25519 rengine@localhost << EOF
+        sudo apt-get install git -y
+        mkdir -p $RENGINE_ROOT
+        tar -xzf ~/rengine-project.tar.gz -C $RENGINE_ROOT
+        rm ~/rengine-project.tar.gz
+        cd $RENGINE_ROOT
+        cat > $RENGINE_ROOT/.git/config << EOG
 [core]
     repositoryformatversion = 0
     filemode = true
@@ -439,43 +453,82 @@ ssh -p 2222 $SSH_OPTIONS -i ./id_ed25519 rengine@localhost << EOF
     merge = refs/heads/master
     vscode-merge-base = origin/master
 EOG
-    cp $RENGINE_ROOT/.env-dist $RENGINE_ROOT/.env
+        cp $RENGINE_ROOT/.env-dist $RENGINE_ROOT/.env
 EOF
 
-# Run setup commands in the VM
-log "Setting up Docker and the application in the VM..." $COLOR_CYAN
-ssh -p 2222 $SSH_OPTIONS -i ./id_ed25519 rengine@localhost << EOF
-    # Update and install dependencies
-    sudo apt-get install -y ca-certificates curl gnupg make htop iftop net-tools
+    # Run setup commands in the VM
+    log "Setting up Docker and the application in the VM..." $COLOR_CYAN
+    ssh -p 2222 $SSH_OPTIONS -i ./id_ed25519 rengine@localhost << EOF
+        # Update and install dependencies
+        sudo apt-get install -y ca-certificates curl gnupg make htop iftop net-tools
 
-    # Add Docker's official GPG key
-    sudo install -m 0755 -d /etc/apt/keyrings
-    curl -fsSL https://download.docker.com/linux/debian/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-    sudo chmod a+r /etc/apt/keyrings/docker.gpg
+        # Add Docker's official GPG key
+        sudo install -m 0755 -d /etc/apt/keyrings
+        curl -fsSL https://download.docker.com/linux/debian/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+        sudo chmod a+r /etc/apt/keyrings/docker.gpg
 
-    # Set up Docker repository
-    echo \
-      "deb [arch=\$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian \
-      \$(. /etc/os-release && echo "\$VERSION_CODENAME") stable" | \
-      sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+        # Set up Docker repository
+        echo \
+          "deb [arch=\$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian \
+          \$(. /etc/os-release && echo "\$VERSION_CODENAME") stable" | \
+          sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 
-    # Install Docker Engine, Docker Compose and python libs
-    sudo apt-get update
-    sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin python3-docker python3-parameterized
+        # Install Docker Engine, Docker Compose and python libs
+        sudo apt-get update
+        sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin python3-docker python3-parameterized
 
-    # Add rengine user to docker group
-    sudo usermod -aG docker rengine
-    newgrp docker
+        # Add rengine user to docker group
+        sudo usermod -aG docker rengine
+        newgrp docker
 
-    # Run tests
-    cd $RENGINE_ROOT
-    python3 tests/test_$TEST_FILE.py ${FORMATTED_TEST_NAMES:+--tests $FORMATTED_TEST_NAMES}
+        # Run tests
+        cd $RENGINE_ROOT
+        python3 tests/test_$TEST_FILE.py ${FORMATTED_TEST_NAMES:+--tests $FORMATTED_TEST_NAMES}
 EOF
 
-# Get the test status
-TEST_STATUS=$?
+    # Get the test status
+    TEST_STATUS=$?
 
-) 2>&1 | tee -a "$LOG_FILE"
+    # Write the test status to the temporary file
+    echo $TEST_STATUS > "$TEMP_FILE"
+
+    # Signal that the subshell has finished
+    echo "DONE" >> "$TEMP_FILE"
+
+    log "Tests completed with status: $TEST_STATUS" $COLOR_GREEN
+
+) &
+
+SUBSHELL_PID=$!
+
+log "Waiting for tests to complete..." $COLOR_CYAN
+
+# Wait for the subshell to finish (with a timeout of 2 hours)
+for i in {1..7200}; do
+    if [ -f "$TEMP_FILE" ] && grep -q "DONE" "$TEMP_FILE"; then
+        log "Tests finished" $COLOR_GREEN
+        break
+    fi
+    sleep 1
+    if [ $((i % 60)) -eq 0 ]; then
+        log "Still waiting for tests to complete... (${i}s)" $COLOR_YELLOW
+    fi
+done
+
+# Check if the subshell completed
+if [ ! -f "$TEMP_FILE" ] || ! grep -q "DONE" "$TEMP_FILE"; then
+    log "Error: Tests did not complete within the allocated time" $COLOR_RED
+    TEST_STATUS=1
+else
+    # Get the test status from the temporary file
+    TEST_STATUS=$(head -n 1 "$TEMP_FILE")
+fi
+
+# Clean up
+rm -f "$TEMP_FILE"
+rm -f "$PIPE_FILE"
+kill $TEE_PID
+wait $SUBSHELL_PID
 
 # Exit with the status
 exit $TEST_STATUS
