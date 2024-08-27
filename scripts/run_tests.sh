@@ -124,7 +124,7 @@ VM_NAME="test-rengine-ng"
 VM_IMAGE="test-debian.qcow2"
 VM_RAM="8G"
 VM_CPUS="8"
-VM_DISK_SIZE="60G"  # Adjust this value as needed
+VM_DISK_SIZE="30G"  # Adjust this value as needed
 
 # SSH parameters
 SSH_OPTIONS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
@@ -186,8 +186,9 @@ INSTALLED_PACKAGES_FOR_TESTS="qemu-system-x86 qemu-system-arm qemu-utils cloud-i
 INSTALLED_COMMON_PACKAGES="socat wget openssh-client tar gzip git curl gpg coreutils"
 
 # Create a temporary directory for the test
-mkdir -p $HOME/tmp
-TEST_DIR=$(mktemp -d -p $HOME/tmp)
+TEMP_DIR=$HOME/tmp
+mkdir -p $TEMP_DIR
+TEST_DIR=$(mktemp -d -p $TEMP_DIR)
 
 # Function to clean up resources
 cleanup() {
@@ -261,9 +262,43 @@ Type your answer (y/n): ' packages_response
 }
 
 # Set trap to ensure cleanup on script exit (normal or abnormal)
-trap 'log "Interruption has been detected." $COLOR_YELLOW; cleanup; log "Exiting script." $COLOR_GREEN;' EXIT
+trap 'log "Interruption detected."; cleanup; log "Exiting script."; exit 130' INT TERM EXIT
 
-SCRIPT_FINISHED=0
+# Function to get the image filename based on architecture
+get_image_filename() {
+    if [ "$ARCH" = "amd64" ]; then
+        echo "debian-12-generic-amd64.qcow2"
+    elif [ "$ARCH" = "arm64" ]; then
+        echo "debian-12-generic-arm64.qcow2"
+    else
+        log "Unsupported architecture: $ARCH" $COLOR_RED
+        exit 1
+    fi
+}
+
+# Get the image filename
+IMAGE_FILENAME=$(get_image_filename)
+
+# Check if the image already exists in TEMP_DIR
+if [ -f "$TEMP_DIR/$IMAGE_FILENAME" ]; then
+    cp "$TEMP_DIR/$IMAGE_FILENAME" "$TEST_DIR/$IMAGE_FILENAME"
+    log "Debian 12 image for $ARCH found in $TEMP_DIR. Using existing image." $COLOR_GREEN
+else
+    # Download appropriate Debian 12 cloud image
+    log "Downloading Debian 12 cloud image for $ARCH..." $COLOR_CYAN
+    if [ "$ARCH" = "amd64" ]; then
+        wget -q https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2 -O "$TEST_DIR/$IMAGE_FILENAME"
+    elif [ "$ARCH" = "arm64" ]; then
+        wget -q https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-arm64.qcow2 -O "$TEST_DIR/$IMAGE_FILENAME"
+    fi
+
+    if [ $? -eq 0 ]; then
+        log "Debian 12 image for $ARCH downloaded successfully." $COLOR_GREEN
+    else
+        log "Failed to download Debian 12 image for $ARCH." $COLOR_RED
+        exit 1
+    fi
+fi
 
 # Execute the tests in a subshell to capture the output and exit status
 (
@@ -281,22 +316,14 @@ log "Compressing project files..." $COLOR_CYAN
 
 cd "$TEST_DIR"
 
-# Download appropriate Debian 12 cloud image
-log "Downloading Debian 12 cloud image for $ARCH..." $COLOR_CYAN
-if [ "$ARCH" = "amd64" ]; then
-    wget -q https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2 -O debian-12-generic.qcow2
-elif [ "$ARCH" = "arm64" ]; then
-    wget -q https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-arm64.qcow2 -O debian-12-generic.qcow2
-fi
-
 # Create a larger disk image
 qemu-img create -f qcow2 -o preallocation=metadata "$TEST_DIR/large-debian.qcow2" $VM_DISK_SIZE
 
 # Resize the downloaded image to fill the new larger disk
-qemu-img resize "$TEST_DIR/debian-12-generic.qcow2" $VM_DISK_SIZE
+qemu-img resize --shrink "$TEST_DIR/$IMAGE_FILENAME" $VM_DISK_SIZE
 
 # Combine the two images
-qemu-img convert -O qcow2 -o preallocation=metadata "$TEST_DIR/debian-12-generic.qcow2" "$TEST_DIR/large-debian.qcow2"
+qemu-img convert -O qcow2 -o preallocation=metadata "$TEST_DIR/$IMAGE_FILENAME" "$TEST_DIR/large-debian.qcow2"
 
 # Create a copy of the image for testing
 mv large-debian.qcow2 test-debian.qcow2
@@ -313,7 +340,7 @@ users:
     sudo: ALL=(ALL) NOPASSWD:ALL
     shell: /bin/bash
     ssh_authorized_keys:
-      - $(cat ./id_ed25519)
+      - $(cat ./id_ed25519.pub)
 EOF
 
 # Create a cloud-init ISO
@@ -448,22 +475,7 @@ EOF
 # Get the test status
 TEST_STATUS=$?
 
-# Write the test status to a temporary file
-echo $TEST_STATUS > "$TEST_DIR/test_status.txt"
-
-# Log test completion
-log "Tests completed with status: $TEST_STATUS" $COLOR_GREEN
-SCRIPT_FINISHED=1
-
 ) 2>&1 | tee -a "$LOG_FILE"
-
-# Wait for the subscript to finish
-while [ $SCRIPT_FINISHED -eq 0 ]; do
-    sleep 1
-done
-
-# Get the test status of the subshell from the temporary file
-TEST_STATUS=$(cat "$TEST_DIR/test_status.txt")
 
 # Exit with the status
 exit $TEST_STATUS
