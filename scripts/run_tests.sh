@@ -25,17 +25,19 @@ get_host_architecture() {
 
 # Function to display help message
 show_help() {
-    echo "Usage: $0 [--arch <amd64|arm64>] [--clean-temp] [--clean-all] [--without-build] [branch_name] [test_file] [test1] [test2] ..."
+    echo "Usage: $0 [--arch <amd64|arm64>] [--clean-temp] [--clean-all] [--without-build] <branch_name> <test_file> [test1] [test2] ..."
     echo
     echo "Run tests for the reNgine-ng project in a VM environment."
     echo
-    echo "Arguments:"
+    echo "Mandatory arguments:"
+    echo "  branch_name      The Git branch to test"
+    echo "  test_file        The test file to run"
+    echo
+    echo "Optional arguments:"
     echo "  --arch           Specify the architecture (amd64 or arm64). If not specified, uses host architecture."
     echo "  --clean-temp     Clean temporary files and VM without prompting"
     echo "  --clean-all      Clean temporary files, VM, and installed packages without prompting"
     echo "  --without-build   Run all tests except the build test"
-    echo "  branch_name      The Git branch to test (default: master)"
-    echo "  test_file        The test file to run (default: makefile)"
     echo "  test1 test2 ...  Specific tests to run from the test file"
     echo
     echo "Examples:"
@@ -121,9 +123,26 @@ SSH_OPTIONS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
 # Rengine root directory inside the VM
 RENGINE_ROOT='~/rengine'
 
-# Extract test file and test names from arguments
-TEST_FILE="${2:-makefile}"  # Default to 'makefile' if not provided
-TEST_NAMES="${@:3}"  # All arguments from the third onward are test names
+# Check if mandatory arguments are provided
+if [ $# -lt 2 ]; then
+    log "Error: branch_name and test_file are mandatory parameters." $COLOR_RED
+    show_help
+    exit 1
+fi
+
+# Extract branch_name and test_file from arguments
+RELEASE_VERSION="$1"
+TEST_FILE="$2"
+shift 2
+
+# Check if the branch exists
+if ! branch_exists "$RELEASE_VERSION"; then
+    log "Error: Branch $RELEASE_VERSION does not exist." $COLOR_RED
+    exit 1
+fi
+
+# Extract test names from remaining arguments
+TEST_NAMES="$@"
 
 # Function to generate test names
 generate_test_names() {
@@ -147,28 +166,6 @@ LOG_FILE="${LOG_DIR}/test_${TEST_FILE}_log_${TIMESTAMP}.txt"
 
 # Redirect all output to both the console and the log file
 exec > >(tee -a "$LOG_FILE") 2>&1
-
-# Check if a branch is provided as an argument
-if [ $# -gt 0 ]; then
-    RELEASE_VERSION="$1"
-    log "Checking for branch: $RELEASE_VERSION" $COLOR_CYAN
-    
-    if branch_exists "$RELEASE_VERSION"; then
-        log "Branch $RELEASE_VERSION exists." $COLOR_GREEN
-    else
-        log "Branch $RELEASE_VERSION does not exist. Attempting to create it." $COLOR_YELLOW
-        if git fetch origin "$RELEASE_VERSION"; then
-            git checkout -b "$RELEASE_VERSION" origin/"$RELEASE_VERSION"
-            log "Branch $RELEASE_VERSION created and checked out." $COLOR_GREEN
-        else
-            log "Failed to fetch $RELEASE_VERSION. Falling back to $DEFAULT_BRANCH." $COLOR_RED
-            RELEASE_VERSION="$DEFAULT_BRANCH"
-        fi
-    fi
-else
-    RELEASE_VERSION="$DEFAULT_BRANCH"
-    log "No branch specified. Using default branch: $RELEASE_VERSION" $COLOR_YELLOW
-fi
 
 # When you're ready to use RELEASE_VERSION:
 log "Checking out branch: $RELEASE_VERSION" $COLOR_CYAN
