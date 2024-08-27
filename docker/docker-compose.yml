@@ -52,6 +52,9 @@ services:
       - ./celery/entrypoint.sh:/entrypoint.sh:ro
       - scan_results:/home/rengine/scan_results
       - tool_config:/home/rengine/.config
+      - nuclei_templates:/home/rengine/nuclei-templates
+      - gf_patterns:/home/rengine/.gf
+      - wordlist:/home/rengine/wordlists
     healthcheck:
       test: ["CMD", "poetry", "-C", "/home/rengine", "run", "celery","-A","reNgine","status"]
       interval: 10s
@@ -84,6 +87,9 @@ services:
       - ./beat/entrypoint.sh:/entrypoint.sh:ro
       - scan_results:/home/rengine/scan_results
       - tool_config:/home/rengine/.config
+      - nuclei_templates:/home/rengine/nuclei-templates
+      - gf_patterns:/home/rengine/.gf
+      - wordlist:/home/rengine/wordlists
     networks:
       - rengine_network
 
@@ -103,7 +109,9 @@ services:
       - ../web:/home/rengine/rengine:rw,z
       - ./web/entrypoint.sh:/entrypoint.sh:ro
       - tool_config:/home/rengine/.config
-      
+      - nuclei_templates:/home/rengine/nuclei-templates
+      - gf_patterns:/home/rengine/.gf
+      - wordlist:/home/rengine/wordlists
     healthcheck:
       test: ["CMD", "curl", "-f", "-k", "http://localhost:8000"]
       interval: 10s

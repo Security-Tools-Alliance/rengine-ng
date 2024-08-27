@@ -197,30 +197,28 @@ def tool_specific_settings(request, slug):
         print(request.FILES)
         if 'gfFileUpload' in request.FILES:
             gf_file = request.FILES['gfFileUpload']
-            file_extension = gf_file.name.split('.')[len(gf_file.name.split('.'))-1]
+            file_extension = gf_file.name.split('.')[-1]
             if file_extension != 'json':
                 messages.add_message(request, messages.ERROR, 'Invalid GF Pattern, upload only *.json extension')
             else:
                 # remove special chars from filename, that could possibly do directory traversal or XSS
                 filename = re.sub(r'[\\/*?:"<>|]',"", gf_file.name)
-                file_path = Path.home() / '.gf/' + filename
-                file = open(file_path, "w")
-                file.write(gf_file.read().decode("utf-8"))
-                file.close()
+                file_path = Path.home() / '.gf/' / filename
+                with open(file_path, "w") as file:
+                    file.write(gf_file.read().decode("utf-8"))
                 messages.add_message(request, messages.INFO, f'Pattern {gf_file.name[:4]} successfully uploaded')
             return http.HttpResponseRedirect(reverse('tool_settings', kwargs={'slug': slug}))
 
         elif 'nucleiFileUpload' in request.FILES:
             nuclei_file = request.FILES['nucleiFileUpload']
-            file_extension = nuclei_file.name.split('.')[len(nuclei_file.name.split('.'))-1]
+            file_extension = nuclei_file.name.split('.')[-1]
             if file_extension != 'yaml':
                 messages.add_message(request, messages.ERROR, 'Invalid Nuclei Pattern, upload only *.yaml extension')
             else:
                 filename = re.sub(r'[\\/*?:"<>|]',"", nuclei_file.name)
-                file_path = Path.home() / 'nuclei-templates/' + filename
-                file = open(file_path, "w")
-                file.write(nuclei_file.read().decode("utf-8"))
-                file.close()
+                file_path = Path.home() / 'nuclei-templates/' / filename
+                with open(file_path, "w") as file:
+                    file.write(nuclei_file.read().decode("utf-8"))
                 messages.add_message(request, messages.INFO, f'Nuclei Pattern {nuclei_file.name[:-5]} successfully uploaded')
             return http.HttpResponseRedirect(reverse('tool_settings', kwargs={'slug': slug}))
 
