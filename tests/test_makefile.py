@@ -499,7 +499,7 @@ def suite(tests_to_run=None, exclude_build=False):
             skipped_tests.append(test)
             print(f"Warning: Test '{test}' not in the list of available tests. Skipping.")
 
-    # Stockage des informations sur les tests pour un affichage ultérieur
+    # Store test information for later display
     test_info = {
         'executed': executed_tests,
         'skipped': skipped_tests
@@ -520,7 +520,7 @@ if __name__ == "__main__":
     test_suite, test_info = suite(args.tests, args.exclude_build)
     result = runner.run(test_suite)
 
-    # Affichage du résumé après l'exécution des tests
+    # Display test summary
     print(f"\n{GREEN}Test Execution Summary:{ENDC}")
     print(f"{YELLOW}Tests executed:{ENDC}")
     for test in test_info['executed']:
