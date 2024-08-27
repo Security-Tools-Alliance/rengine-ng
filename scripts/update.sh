@@ -75,12 +75,12 @@ read -p "Do you want to update to the latest version? (y/n) " answer
 
 if [[ $answer == "y" ]]; then
   while true; do
-    read -p "Do you want to update from prebuilt images or build from source? (prebuilt/source, default is prebuilt): " install_type
-    install_type=${install_type:-prebuilt}  # Set default to prebuilt if empty
-    if [[ $install_type == "prebuilt" || $install_type == "source" ]]; then
+    read -p "Do you want to update from pre-built images or build from source? (pre-built/source, default is pre-built): " install_type
+    install_type=${install_type:-pre-built}  # Set default to pre-built if empty
+    if [[ $install_type == "pre-built" || $install_type == "source" ]]; then
       break
     else
-      log "Invalid input. Please enter 'prebuilt' or 'source'." $COLOR_YELLOW
+      log "Invalid input. Please enter 'pre-built' or 'source'." $COLOR_YELLOW
     fi
   done
 
@@ -104,7 +104,7 @@ if [[ $answer == "y" ]]; then
       log "Failed to update and apply local changes" $COLOR_RED
       exit 1
     fi
-    if [[ $install_type == "prebuilt" ]]; then
+    if [[ $install_type == "pre-built" ]]; then
       if ! (cd .. && make up); then
         log "Failed to pull and start updated images" $COLOR_RED
         exit 1
@@ -125,7 +125,7 @@ if [[ $answer == "y" ]]; then
       log "Failed to update" $COLOR_RED
       exit 1
     fi
-    if [[ $install_type == "prebuilt" ]]; then
+    if [[ $install_type == "pre-built" ]]; then
       if ! (cd .. && make up); then
         log "Failed to pull and start updated images" $COLOR_RED
         exit 1

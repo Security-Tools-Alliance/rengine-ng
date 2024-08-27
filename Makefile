@@ -53,17 +53,17 @@ dev_up:			## Pull and start all services with development configuration (more de
 	@make down
 	${DOCKER_COMPOSE_FILE_CMD} -f ${COMPOSE_FILE_DEV} up -d ${SERVICES}
 
-superuser_create:		## Generate Username (Use only after make up).
+superuser_create:		## Generate username (use only after `make up`).
 ifeq ($(isNonInteractive), true)
 	${DOCKER_COMPOSE_FILE_CMD} exec web poetry -C /home/rengine run python3 manage.py createsuperuser --username ${DJANGO_SUPERUSER_USERNAME} --email ${DJANGO_SUPERUSER_EMAIL} --noinput
 else
 	${DOCKER_COMPOSE_FILE_CMD} exec web poetry -C /home/rengine run python3 manage.py createsuperuser
 endif
 
-superuser_delete:		## Delete Username (Use only after make up).
+superuser_delete:		## Delete username (use only after `make up`).
 	${DOCKER_COMPOSE_FILE_CMD} exec -T web poetry -C /home/rengine run python3 manage.py shell -c "from django.contrib.auth import get_user_model; User = get_user_model(); User.objects.filter(username='${DJANGO_SUPERUSER_USERNAME}').delete()"
 
-superuser_changepassword:	## Change password for user (Use only after make up & make username).
+superuser_changepassword:	## Change password for user (use only after `make up` & `make username`).
 ifeq ($(isNonInteractive), true)
 	${DOCKER_COMPOSE_FILE_CMD} exec -T web poetry -C /home/rengine run python3 manage.py shell -c "from django.contrib.auth import get_user_model; User = get_user_model(); u = User.objects.get(username='${DJANGO_SUPERUSER_USERNAME}'); u.set_password('${DJANGO_SUPERUSER_PASSWORD}'); u.save()"
 else
