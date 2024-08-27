@@ -6,6 +6,15 @@ set -e
 # Import common functions
 source "$(pwd)/common_functions.sh"
 
+# Check for root privileges with WSL
+if [ "$(whoami)" != "root" ] && [ "$(detect_wsl)" = 0 ]
+  then
+  log ""
+  log "Error launching tests: please run this script as root!" $COLOR_RED
+  log "Example: sudo $0" $COLOR_RED
+  exit
+fi
+
 # Function to determine host architecture
 get_host_architecture() {
     local arch=$(uname -m)
@@ -164,9 +173,6 @@ mkdir -p "$LOG_DIR"
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 LOG_FILE="${LOG_DIR}/test_${TEST_FILE}_log_${TIMESTAMP}.txt"
 
-# Redirect all output to both the console and the log file
-exec > >(tee -a "$LOG_FILE") 2>&1
-
 # When you're ready to use RELEASE_VERSION:
 log "Checking out branch: $RELEASE_VERSION" $COLOR_CYAN
 
@@ -178,10 +184,6 @@ command_exists() {
 # Install QEMU if not already installed
 INSTALLED_PACKAGES_FOR_TESTS="qemu-system-x86 qemu-system-arm qemu-utils cloud-image-utils"
 INSTALLED_COMMON_PACKAGES="socat wget openssh-client tar gzip git curl gpg coreutils"
-
-log "Installing QEMU..." $COLOR_CYAN
-sudo apt-get update
-sudo apt-get install -y $INSTALLED_PACKAGES_FOR_TESTS $INSTALLED_COMMON_PACKAGES
 
 # Create a temporary directory for the test
 mkdir -p $HOME/tmp
@@ -259,7 +261,16 @@ Type your answer (y/n): ' packages_response
 }
 
 # Set trap to ensure cleanup on script exit (normal or abnormal)
-trap cleanup EXIT
+trap 'log "Interruption has been detected." $COLOR_YELLOW; cleanup; log "Exiting script." $COLOR_GREEN;' EXIT
+
+SCRIPT_FINISHED=0
+
+# Execute the tests in a subshell to capture the output and exit status
+(
+# Install QEMU & dependencies
+log "Installing QEMU..." $COLOR_CYAN
+sudo apt-get update
+sudo apt-get install -y $INSTALLED_PACKAGES_FOR_TESTS $INSTALLED_COMMON_PACKAGES
 
 # Copy project files to the temporary directory
 log "Copying project files to temporary directory..." $COLOR_CYAN
@@ -437,8 +448,22 @@ EOF
 # Get the test status
 TEST_STATUS=$?
 
+# Write the test status to a temporary file
+echo $TEST_STATUS > "$TEST_DIR/test_status.txt"
+
 # Log test completion
 log "Tests completed with status: $TEST_STATUS" $COLOR_GREEN
+SCRIPT_FINISHED=1
 
-# Exit with the test status
+) 2>&1 | tee -a "$LOG_FILE"
+
+# Wait for the subscript to finish
+while [ $SCRIPT_FINISHED -eq 0 ]; do
+    sleep 1
+done
+
+# Get the test status of the subshell from the temporary file
+TEST_STATUS=$(cat "$TEST_DIR/test_status.txt")
+
+# Exit with the status
 exit $TEST_STATUS
