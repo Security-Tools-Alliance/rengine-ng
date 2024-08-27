@@ -33,6 +33,11 @@ def index(request, slug):
 @has_permission_decorator(PERM_MODIFY_SCAN_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
 def add_engine(request, slug):
     form = AddEngineForm()
+    
+    # load default yaml config
+    with open(RENGINE_HOME + '/config/default_yaml_config.yaml', 'r') as yaml_file:
+        default_config = yaml_file.read()
+    
     if request.method == "POST":
         form = AddEngineForm(request.POST)
         if form.is_valid():
@@ -42,6 +47,10 @@ def add_engine(request, slug):
                 messages.INFO,
                 'Scan Engine Added successfully')
             return http.HttpResponseRedirect(reverse('scan_engine_index', kwargs={'slug': slug}))
+    else:
+        # fill form with default yaml config
+        form = AddEngineForm(initial={'yaml_configuration': default_config})
+    
     context = {
         'scan_engine_nav_active': 'active',
         'form': form
