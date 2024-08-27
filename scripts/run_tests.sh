@@ -483,7 +483,11 @@ EOF
 
         # Run tests
         cd $RENGINE_ROOT
-        python3 tests/test_$TEST_FILE.py ${FORMATTED_TEST_NAMES:+--tests $FORMATTED_TEST_NAMES}
+        if [ "$WITHOUT_BUILD" = true ]; then
+            python3 tests/test_$TEST_FILE.py ${FORMATTED_TEST_NAMES:+--tests $FORMATTED_TEST_NAMES} --exclude-build
+        else
+            python3 tests/test_$TEST_FILE.py ${FORMATTED_TEST_NAMES:+--tests $FORMATTED_TEST_NAMES}
+        fi
 EOF
 
     # Get the test status
