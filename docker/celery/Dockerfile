@@ -169,7 +169,7 @@ RUN ln -s /usr/local/bin/geckodriver $BINPATH/geckodriver && \
 RUN nuclei -silent && naabu -version && subfinder -version && mkdir -p /home/$USERNAME/.config/theHarvester
 COPY --chown=$USERNAME:$USERNAME ./config/the-harvester-api-keys.yaml /home/$USERNAME/.config/theHarvester/api-keys.yaml
 COPY --chown=$USERNAME:$USERNAME ./config/amass.ini /home/$USERNAME/.config/amass.ini
-COPY --chown=$USERNAME:$USERNAME ./*.toml /home/$USERNAME
+COPY --chown=$USERNAME:$USERNAME ./{,.}*.toml /home/$USERNAME
 
 # Install aliases for tools needing a pyproject.toml
 RUN cd $TOOLPATH/.github/OneForAll && mv /home/$USERNAME/oneforall-pyproject.toml pyproject.toml && poetry env use python3.10 && poetry install --no-cache && echo "#!/bin/bash\n\npoetry -C $TOOLPATH/.github/OneForAll/ run python $TOOLPATH/.github/OneForAll/oneforall.py \"\$@\"" > $BINPATH/oneforall && chmod +x $BINPATH/oneforall && \
