@@ -193,8 +193,6 @@ def tool_specific_settings(request, slug):
     context = {}
     # check for incoming form requests
     if request.method == "POST":
-
-        print(request.FILES)
         if 'gfFileUpload' in request.FILES:
             gf_file = request.FILES['gfFileUpload']
             file_extension = gf_file.name.split('.')[-1]
@@ -250,6 +248,12 @@ def tool_specific_settings(request, slug):
             with open(Path.home() / '.config' / 'theHarvester' / 'api-keys.yaml', "w") as fhandle:
                 fhandle.write(request.POST.get('theharvester_config_text_area'))
             messages.add_message(request, messages.INFO, 'theHarvester config updated!')
+            return http.HttpResponseRedirect(reverse('tool_settings', kwargs={'slug': slug}))
+
+        elif 'gau_config_text_area' in request.POST:
+            with open(Path.home() / '.config' / '.gau.toml', "w") as fhandle:
+                fhandle.write(request.POST.get('gau_config_text_area'))
+            messages.add_message(request, messages.INFO, 'GAU config updated!')
             return http.HttpResponseRedirect(reverse('tool_settings', kwargs={'slug': slug}))
 
     context['settings_nav_active'] = 'active'

@@ -1311,6 +1311,16 @@ class GetFileContents(APIView):
 				response['status'] = False
 			return Response(response)
 
+		if 'gau_config' in req.query_params:
+			path = str(Path.home() / ".config" / '.gau.toml')
+			if not os.path.exists(path):
+				run_command(f'touch {path}')
+				response['message'] = 'File Created!'
+			f = open(path, "r")
+			response['status'] = True
+			response['content'] = f.read()
+			return Response(response)
+
 		response['message'] = 'Invalid Query Params'
 		return Response(response)
 
