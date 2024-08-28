@@ -122,7 +122,7 @@ restart:		## Restart specified services or all if not specified. Use DEV=1 for d
 		fi \
 	fi
 
-remove_images:	## Remove all Docker images for reNgine services.
+remove_images:	## Remove all Docker images for reNgine-ng services.
 	@images=$$(docker images --filter=reference='ghcr.io/security-tools-alliance/rengine-ng:*' --format "{{.ID}}"); \
 	if [ -n "$$images" ]; then \
 		echo "Removing images: $$images"; \
