@@ -4,6 +4,8 @@ import pickle
 import random
 import shutil
 import traceback
+import shlex
+import subprocess
 from time import sleep
 
 import humanize
@@ -1081,6 +1083,9 @@ def generate_header_param(custom_header, tool_name=None):
     Returns:
         str: Command-line parameter for the specified tool.
     """
+    logger.debug(f"Generating header parameters for tool: {tool_name}")
+    logger.debug(f"Input custom_header: {custom_header}")
+
     # Ensure the custom_header is a dictionary
     custom_header = parse_custom_header(custom_header)
 
@@ -1097,8 +1102,12 @@ def generate_header_param(custom_header, tool_name=None):
         'gospider': generate_gospider_params(custom_header),
     }
 
+    # Get the appropriate format based on the tool name
+    result = format_mapping.get(tool_name, format_mapping.get('common'))
+    logger.debug(f"Selected format for {tool_name}: {result}")
+
     # Return the corresponding parameter for the specified tool or default to common_headers format
-    return format_mapping.get(tool_name, format_mapping.get('common'))
+    return result
 
 def generate_gospider_params(custom_header):
     """
@@ -1139,3 +1148,92 @@ def extract_columns(row, columns):
         list: Extracted values from the specified columns.
     """
     return [row[i] for i in columns]
+
+def prepare_command(cmd, shell):
+    """
+    Prepare the command for execution.
+
+    Args:
+        cmd (str): The command to prepare.
+        shell (bool): Whether to use shell execution.
+
+    Returns:
+        str or list: The prepared command, either as a string (for shell execution) or a list (for non-shell execution).
+    """
+    return cmd if shell else shlex.split(cmd)
+
+def create_command_object(cmd, scan_id, activity_id):
+    """
+    Create a Command object in the database.
+
+    Args:
+        cmd (str): The command to be executed.
+        scan_id (int): ID of the associated scan.
+        activity_id (int): ID of the associated activity.
+
+    Returns:
+        Command: The created Command object.
+    """
+    return Command.objects.create(
+        command=cmd,
+        time=timezone.now(),
+        scan_history_id=scan_id,
+        activity_id=activity_id
+    )
+
+def process_line(line, trunc_char=None):
+    """
+    Process a line of output from the command.
+
+    Args:
+        line (str): The line to process.
+        trunc_char (str, optional): Character to truncate the line. Defaults to None.
+
+    Returns:
+        str or dict: The processed line, either as a string or a JSON object if the line is valid JSON.
+    """
+    line = line.strip()
+    ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+    line = ansi_escape.sub('', line)
+    line = line.replace('\\x0d\\x0a', '\n')
+    if trunc_char and line.endswith(trunc_char):
+        line = line[:-1]
+    try:
+        return json.loads(line)
+    except json.JSONDecodeError:
+        return line
+
+def write_history(history_file, cmd, return_code, output):
+    """
+    Write command execution history to a file.
+
+    Args:
+        history_file (str): Path to the history file.
+        cmd (str): The executed command.
+        return_code (int): The return code of the command.
+        output (str): The output of the command.
+    """
+    mode = 'a' if os.path.exists(history_file) else 'w'
+    with open(history_file, mode) as f:
+        f.write(f'\n{cmd}\n{return_code}\n{output}\n------------------\n')
+
+def execute_command(command, shell, cwd):
+    """
+    Execute a command using subprocess.
+
+    Args:
+        command (str or list): The command to execute.
+        shell (bool): Whether to use shell execution.
+        cwd (str): The working directory for the command.
+
+    Returns:
+        subprocess.Popen: The Popen object for the executed command.
+    """
+    return subprocess.Popen(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        universal_newlines=True,
+        shell=shell,
+        cwd=cwd
+    )
