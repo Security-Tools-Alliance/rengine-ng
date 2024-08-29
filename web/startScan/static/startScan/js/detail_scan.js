@@ -147,6 +147,12 @@ function get_endpoints(project, scan_history_id=null, domain_id=null, gf_tags=nu
 			},
 			{
 				"render": function ( data, type, row ) {
+					return htmlEncode(data);
+				},
+				"targets": 3,
+			},
+			{
+				"render": function ( data, type, row ) {
 					if (data){
 						return parse_comma_values_into_span(data, "info");
 					}
@@ -344,6 +350,15 @@ function get_subdomain_changes(scan_history_id){
 					return badges + `<a href="https://`+data+`" class="text-primary" target="_blank">`+data+`</a>`;
 				},
 				"targets": 0
+			},
+			{
+				"render": function ( data, type, row ) {
+					if (data){
+						return htmlEncode(data);
+					}
+					return "";
+				},
+				"targets": 1,
 			},
 			{
 				"render": function ( data, type, row ) {
