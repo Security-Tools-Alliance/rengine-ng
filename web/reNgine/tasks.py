@@ -426,7 +426,7 @@ def subdomain_discovery(
 
             elif tool == 'oneforall':
                 cmd = f'oneforall --target {host} run'
-                cmd_extract = f'cut -d\',\' -f6 ' + str(Path(RENGINE_TOOL_GITHUB_PATH) / 'OneForAll' / 'results' / f'{host}.csv') + ' > ' + str(Path(self.results_dir) / 'subdomains_oneforall.txt')
+                cmd_extract = f'cut -d\',\' -f6 ' + str(Path(RENGINE_TOOL_GITHUB_PATH) / 'OneForAll' / 'results' / f'{host}.csv') + ' | tail -n +2 > ' + str(Path(self.results_dir) / 'subdomains_oneforall.txt')
                 cmd_rm = f'rm -rf ' + str(Path(RENGINE_TOOL_GITHUB_PATH) / 'OneForAll' / 'results'/ f'{host}.csv')
                 cmd += f' && {cmd_extract} && {cmd_rm}'
 
