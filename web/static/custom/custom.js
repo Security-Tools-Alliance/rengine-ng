@@ -1789,13 +1789,17 @@ function display_whois_on_modal(response, show_add_target_btn=false) {
 
 					content += `<div class="tab-pane fade" id="v-pills-nameserver" role="tabpanel" aria-labelledby="v-pills-nameserver-tab" data-simplebar style="max-height: 300px; min-height: 300px;">`;
 
-					content += `<div class="alert alert-success">${response.nameservers.length} NameServers identified</div>`;
-
-					for (var ns in response.nameservers) {
-						var ns_object = response.nameservers[ns];
-						content += `<span class="badge badge-soft-primary me-1 mt-1">${ns_object}</span>`;
+					if (response.nameservers && response.nameservers.length > 0) {
+						content += `<div class="alert alert-success">${response.nameservers.length} NameServers identified</div>`;
+					
+						for (var ns in response.nameservers) {
+							var ns_object = response.nameservers[ns];
+							content += `<span class="badge badge-soft-primary me-1 mt-1">${ns_object}</span>`;
+						}
+					} else {
+						content += `<div class="alert alert-info">No NameServer identified</div>`;
 					}
-
+					
 					content += `</div><div class="tab-pane fade" id="v-pills-similar" role="tabpanel" aria-labelledby="v-pills-similar-tab" data-simplebar style="max-height: 300px; min-height: 300px;">`;
 
 					if (response.related_tlds.length > 0) {
@@ -3256,4 +3260,18 @@ function convertToCamelCase(inputString) {
 	const camelCaseString = words.map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
 
 	return camelCaseString;
+}
+function handleHashInUrl(){
+	// this function handles hash in url used to tab navigation
+	const hash = window.location.hash;
+	if (hash) {
+		const targetId = hash.substring(1);
+		const tabLink = $(`a[href="#${targetId}"][data-bs-toggle="tab"]`);
+		if (tabLink.length) {
+			tabLink.tab('show');
+			setTimeout(() => {
+				tabLink.click();
+			}, 100);
+		}
+	}
 }

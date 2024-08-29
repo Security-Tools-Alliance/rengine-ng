@@ -144,7 +144,7 @@ RUN python3.10 -m pip install pipx && pipx ensurepath && printf "poetry\n\
     https://github.com/aboul3la/Sublist3r/archive/refs/tags/1.1.zip\n\
     https://github.com/laramies/theHarvester/archive/refs/tags/4.6.0.zip\n\
     git+https://github.com/ncrocfer/whatportis@59a1718bf7c531f2a5a4e213cad0c047ce9c1c94\n\
-    git+https://github.com/EnableSecurity/wafw00f@5e5d8e9e5f1b1b6d9b2c1c1f9f9b9b9b9b9b9b9b\n\
+    git+https://github.com/EnableSecurity/wafw00f@914dbf4feab7e2529f064f4300b5fde84ea1cce3\n\
     h8mail\n" | xargs -L1 pipx install || true
 
 # Install tools
@@ -165,6 +165,7 @@ RUN ln -s /usr/local/bin/geckodriver $BINPATH/geckodriver && \
     mkdir -p /home/$USERNAME/nuclei-templates && wget https://raw.githubusercontent.com/NagliNagli/Shockwave-OSS/bd7445cd320a174d3073f0a61867a40849d28436/ssrf.yaml -O /home/$USERNAME/nuclei-templates/ssrf_nagli.yaml && \
     mkdir -p /home/$USERNAME/results
 
+# Copy poetry config files
 COPY --chown=$USERNAME:$USERNAME ./*.toml /home/$USERNAME
 
 # Install aliases for tools needing a pyproject.toml
@@ -174,6 +175,13 @@ RUN cd $TOOLPATH/.github/OneForAll && mv /home/$USERNAME/oneforall-pyproject.tom
     cd $TOOLPATH/.github/CMSeeK && mv /home/$USERNAME/cmseek-pyproject.toml pyproject.toml && poetry env use python3.10 && poetry install --no-cache && echo "#!/bin/bash\n\npoetry -C $TOOLPATH/.github/CMSeeK/ run python $TOOLPATH/.github/CMSeeK/cmseek.py \"\$@\"" > $BINPATH/cmseek && chmod +x $BINPATH/cmseek && \
     cd $TOOLPATH/.github/Infoga && mv /home/$USERNAME/infoga-pyproject.toml pyproject.toml && poetry env use python3.10 && poetry install --no-cache && echo "#!/bin/bash\n\npoetry -C $TOOLPATH/.github/Infoga/ run python $TOOLPATH/.github/Infoga/infoga.py \"\$@\"" > $BINPATH/infoga && chmod +x $BINPATH/infoga && \
     cd /home/$USERNAME && poetry install
+
+# Create tools config files
+RUN nuclei -silent && naabu -version && subfinder -version && mkdir -p /home/$USERNAME/.config/theHarvester
+COPY --chown=$USERNAME:$USERNAME ./config/the-harvester-api-keys.yaml /home/$USERNAME/.config/theHarvester/api-keys.yaml
+COPY --chown=$USERNAME:$USERNAME ./config/amass.ini /home/$USERNAME/.config/amass.ini
+COPY --chown=$USERNAME:$USERNAME ./config/.gau.toml /home/$USERNAME/.config/.gau.toml
+RUN ln -s /home/$USERNAME/.config/.gau.toml /home/$USERNAME/.gau.toml
 
 COPY ./entrypoint.sh /entrypoint.sh
 RUN mkdir -p /home/$USERNAME/rengine /home/$USERNAME/scan_results \

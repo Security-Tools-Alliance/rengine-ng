@@ -1,17 +1,32 @@
 #!/bin/bash
 
+print_msg() {
+  printf "\r\n"
+  printf "========================================\r\n"
+  printf "$1\r\n"
+  printf "========================================\r\n\r\n"
+}
+
+print_msg "Generate Django migrations files"
+poetry run -C $HOME/ python3 manage.py makemigrations
+print_msg "Migrate database"
 poetry run -C $HOME/ python3 manage.py migrate
+print_msg "Collect static files"
 poetry run -C $HOME/ python3 manage.py collectstatic --no-input --clear
 
 # Load default engines, keywords, and external tools
+print_msg "Load default engines"
 poetry run -C $HOME/ python3 manage.py loaddata fixtures/default_scan_engines.yaml --app scanEngine.EngineType
+print_msg "Load default keywords"
 poetry run -C $HOME/ python3 manage.py loaddata fixtures/default_keywords.yaml --app scanEngine.InterestingLookupModel
+print_msg "Load default external tools"
 poetry run -C $HOME/ python3 manage.py loaddata fixtures/external_tools.yaml --app scanEngine.InstalledExternalTool
 
 if [ ! "$CELERY_LOGLEVEL" ]; then
   export CELERY_LOGLEVEL='info'
 fi
 
+print_msg "Start celery workers"
 watchmedo auto-restart --recursive --pattern="*.py" --directory="/home/rengine/rengine/" -- poetry run -C $HOME/ celery -A reNgine.tasks worker --loglevel=$CELERY_LOGLEVEL --autoscale=$MAX_CONCURRENCY,$MIN_CONCURRENCY -Q main_scan_queue &
 watchmedo auto-restart --recursive --pattern="*.py" --directory="/home/rengine/rengine/" -- poetry run -C $HOME/ celery -A reNgine.tasks worker --pool=gevent --concurrency=30 --loglevel=$CELERY_LOGLEVEL -Q initiate_scan_queue -n initiate_scan_worker &
 watchmedo auto-restart --recursive --pattern="*.py" --directory="/home/rengine/rengine/" -- poetry run -C $HOME/ celery -A reNgine.tasks worker --pool=gevent --concurrency=30 --loglevel=$CELERY_LOGLEVEL -Q subscan_queue -n subscan_worker &
