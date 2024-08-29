@@ -1,27 +1,14 @@
 #!/bin/bash
 
-# Define color codes.
-# Using `tput setaf` at some places because the variable only works with log/echo
+# Import common functions
+source "$(pwd)/common_functions.sh"
 
-COLOR_BLACK=0
-COLOR_RED=1
-COLOR_GREEN=2
-COLOR_YELLOW=3
-COLOR_BLUE=4
-COLOR_MAGENTA=5
-COLOR_CYAN=6
-COLOR_WHITE=7
-COLOR_DEFAULT=$COLOR_WHITE # Use white as default for clarity
-
-# Log messages in different colors
-log() {
-  local color=${2:-$COLOR_DEFAULT}  # Use default color if $2 is not set
-  if [ "$color" -ne $COLOR_DEFAULT ]; then
-    tput setaf "$color"
-  fi
-  printf "$1\r\n"
-  tput sgr0  # Reset text color
-}
+# Check for root privileges
+if [ "$(whoami)" != "root" ]; then
+  log "Error updating reNgine-ng: please run this script as root!" $COLOR_RED
+  log "Example: sudo ./update.sh" $COLOR_RED
+  exit 1
+fi
 
 # Function to compare version strings
 version_compare() {
@@ -61,48 +48,93 @@ LATEST_VERSION=$(curl -s https://api.github.com/repos/Security-Tools-Alliance/re
 
 cat ../web/art/reNgine.txt
 
+# Compare versions
+version_compare $CURRENT_VERSION $LATEST_VERSION
+comparison_result=$?
+
 log "\n" $COLOR_DEFAULT
 log "Current version: $CURRENT_VERSION" $COLOR_CYAN
 log "Latest version: $LATEST_VERSION" $COLOR_CYAN
 log "\n" $COLOR_DEFAULT
 
-# Compare versions
-version_compare $CURRENT_VERSION $LATEST_VERSION
-case $? in
+case $comparison_result in
   0) log "You are already on the latest version." $COLOR_GREEN
-     #exit 0
+     exit 0
      ;;
   1) log "Your version is newer than the latest release. No update needed." $COLOR_YELLOW
-     #exit 0
+     exit 0
      ;;
   2) log "An update is available." $COLOR_CYAN
+     ;;
+  *) log "Error comparing versions." $COLOR_RED
+     exit 1
      ;;
 esac
 
 read -p "Do you want to update to the latest version? (y/n) " answer
 
 if [[ $answer == "y" ]]; then
-  read -p "Do you want to update from prebuilt images or build from source? (prebuilt/source) " install_type
-  read -p "Do you want to apply your local changes after updating? (y/n) " apply_changes
-
-  cd ..
-  if [[ $apply_changes == "y" ]]; then
-    make down && git stash save && git pull && git stash apply
-    if [[ $install_type == "prebuilt" ]]; then
-      make pull_up
-    elif [[ $install_type == "source" ]]; then
-      make build_up
+  while true; do
+    read -p "Do you want to update from pre-built images or build from source? (pre-built/source, default is pre-built): " install_type
+    install_type=${install_type:-pre-built}  # Set default to pre-built if empty
+    if [[ $install_type == "pre-built" || $install_type == "source" ]]; then
+      break
     else
-      log "Invalid installation type. Update cancelled." $COLOR_RED
+      log "Invalid input. Please enter 'pre-built' or 'source'." $COLOR_YELLOW
+    fi
+  done
+
+  log "Selected installation type: $install_type" $COLOR_CYAN
+
+  while true; do
+    read -p "Do you want to apply your local changes after updating? (y/n) " apply_changes
+    if [[ $apply_changes == "y" || $apply_changes == "n" ]]; then
+      break
+    else
+      log "Invalid input. Please enter 'y' or 'n'." $COLOR_YELLOW
+    fi
+  done
+  
+  if [[ $apply_changes == "y" ]]; then
+    if ! (cd .. && make down); then
+      log "Failed to stop reNgine-ng" $COLOR_RED
       exit 1
+    fi
+    if ! sudo -u rengine git stash save && sudo -u rengine git pull && sudo -u rengine git stash apply; then
+      log "Failed to update and apply local changes" $COLOR_RED
+      exit 1
+    fi
+    if [[ $install_type == "pre-built" ]]; then
+      if ! (cd .. && make up); then
+        log "Failed to pull and start updated images" $COLOR_RED
+        exit 1
+      fi
+    elif [[ $install_type == "source" ]]; then
+      if ! (cd .. && make build_up); then
+        log "Failed to build and start updated images" $COLOR_RED
+        exit 1
+      fi
     fi
     log "Successfully updated to version $LATEST_VERSION and local changes have been reapplied" $COLOR_GREEN
   elif [[ $apply_changes == "n" ]]; then
-    make down && git stash && git stash drop && git pull
-    if [[ $install_type == "prebuilt" ]]; then
-      make pull_up
+    if ! (cd .. && make down); then
+      log "Failed to stop reNgine-ng" $COLOR_RED
+      exit 1
+    fi
+    if ! sudo -u rengine git stash && sudo -u rengine git stash drop && sudo -u rengine git pull; then
+      log "Failed to update" $COLOR_RED
+      exit 1
+    fi
+    if [[ $install_type == "pre-built" ]]; then
+      if ! (cd .. && make up); then
+        log "Failed to pull and start updated images" $COLOR_RED
+        exit 1
+      fi
     elif [[ $install_type == "source" ]]; then
-      make build_up
+      if ! (cd .. && make build_up); then
+        log "Failed to build and start updated images" $COLOR_RED
+        exit 1
+      fi
     else
       log "Invalid installation type. Update cancelled." $COLOR_RED
       exit 1

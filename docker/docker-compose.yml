@@ -44,11 +44,7 @@ services:
       - CELERY_BROKER=redis://redis:6379/0
       - CELERY_BACKEND=redis://redis:6379/0
     volumes:
-      - type: bind
-        source: ../web
-        target: /home/rengine/rengine
-        bind:
-          create_host_path: true
+      - ../web:/home/rengine/rengine:rw,z
       - ./celery/entrypoint.sh:/entrypoint.sh:ro
       - scan_results:/home/rengine/scan_results
     healthcheck:
