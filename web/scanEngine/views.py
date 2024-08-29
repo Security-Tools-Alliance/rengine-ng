@@ -13,7 +13,7 @@ from django.urls import reverse
 from rolepermissions.decorators import has_permission_decorator
 
 from reNgine.common_func import *
-from reNgine.tasks import (run_command, send_discord_message, send_slack_message,send_lark_message, send_telegram_message)
+from reNgine.tasks import (run_command, send_discord_message, send_slack_message,send_lark_message, send_telegram_message, run_gf_list)
 from scanEngine.forms import *
 from scanEngine.forms import ConfigurationForm
 from scanEngine.models import *
@@ -202,34 +202,30 @@ def tool_specific_settings(request, slug):
     context = {}
     # check for incoming form requests
     if request.method == "POST":
-
-        print(request.FILES)
         if 'gfFileUpload' in request.FILES:
             gf_file = request.FILES['gfFileUpload']
-            file_extension = gf_file.name.split('.')[len(gf_file.name.split('.'))-1]
+            file_extension = gf_file.name.split('.')[-1]
             if file_extension != 'json':
                 messages.add_message(request, messages.ERROR, 'Invalid GF Pattern, upload only *.json extension')
             else:
                 # remove special chars from filename, that could possibly do directory traversal or XSS
                 filename = re.sub(r'[\\/*?:"<>|]',"", gf_file.name)
-                file_path = Path.home() / '.gf/' + filename
-                file = open(file_path, "w")
-                file.write(gf_file.read().decode("utf-8"))
-                file.close()
+                file_path = Path.home() / '.gf/' / filename
+                with open(file_path, "w") as file:
+                    file.write(gf_file.read().decode("utf-8"))
                 messages.add_message(request, messages.INFO, f'Pattern {gf_file.name[:4]} successfully uploaded')
             return http.HttpResponseRedirect(reverse('tool_settings', kwargs={'slug': slug}))
 
         elif 'nucleiFileUpload' in request.FILES:
             nuclei_file = request.FILES['nucleiFileUpload']
-            file_extension = nuclei_file.name.split('.')[len(nuclei_file.name.split('.'))-1]
+            file_extension = nuclei_file.name.split('.')[-1]
             if file_extension != 'yaml':
                 messages.add_message(request, messages.ERROR, 'Invalid Nuclei Pattern, upload only *.yaml extension')
             else:
                 filename = re.sub(r'[\\/*?:"<>|]',"", nuclei_file.name)
-                file_path = Path.home() / 'nuclei-templates/' + filename
-                file = open(file_path, "w")
-                file.write(nuclei_file.read().decode("utf-8"))
-                file.close()
+                file_path = Path.home() / 'nuclei-templates/' / filename
+                with open(file_path, "w") as file:
+                    file.write(nuclei_file.read().decode("utf-8"))
                 messages.add_message(request, messages.INFO, f'Nuclei Pattern {nuclei_file.name[:-5]} successfully uploaded')
             return http.HttpResponseRedirect(reverse('tool_settings', kwargs={'slug': slug}))
 
@@ -258,18 +254,34 @@ def tool_specific_settings(request, slug):
             return http.HttpResponseRedirect(reverse('tool_settings', kwargs={'slug': slug}))
 
         elif 'theharvester_config_text_area' in request.POST:
-            with open(Path(RENGINE_TOOL_GITHUB_PATH) / 'theHarvester' / 'api-keys.yaml', "w") as fhandle:
+            with open(Path.home() / '.config' / 'theHarvester' / 'api-keys.yaml', "w") as fhandle:
                 fhandle.write(request.POST.get('theharvester_config_text_area'))
             messages.add_message(request, messages.INFO, 'theHarvester config updated!')
+            return http.HttpResponseRedirect(reverse('tool_settings', kwargs={'slug': slug}))
+
+        elif 'gau_config_text_area' in request.POST:
+            with open(Path.home() / '.config' / '.gau.toml', "w") as fhandle:
+                fhandle.write(request.POST.get('gau_config_text_area'))
+            messages.add_message(request, messages.INFO, 'GAU config updated!')
             return http.HttpResponseRedirect(reverse('tool_settings', kwargs={'slug': slug}))
 
     context['settings_nav_active'] = 'active'
     context['tool_settings_li'] = 'active'
     context['settings_ul_show'] = 'show'
-    gf_list = (subprocess.check_output(['gf', '-list'])).decode("utf-8")
-    nuclei_custom_pattern = [f for f in glob.glob(Path.home() / "nuclei-templates" / "*.yaml")]
+    try:
+        gf_task = run_gf_list.delay()
+        gf_result = gf_task.get(timeout=30)  # 30 seconds timeout
+        if gf_result['status']:
+            context['gf_patterns'] = sorted(gf_result['output'])
+        else:
+            context['gf_patterns'] = []
+            messages.add_message(request, messages.ERROR, f"Error fetching GF patterns: {gf_result['message']}")
+    except Exception as e:
+        context['gf_patterns'] = []
+        messages.add_message(request, messages.ERROR, f"Error fetching GF patterns: {str(e)}")
+    nuclei_custom_pattern = [f for f in glob.glob(str(Path.home() / "nuclei-templates" / "*.yaml"))]
     context['nuclei_templates'] = nuclei_custom_pattern
-    context['gf_patterns'] = sorted(gf_list.split('\n'))
+    context['gf_patterns'] = context['gf_patterns']
     return render(request, 'scanEngine/settings/tool.html', context)
 
 
