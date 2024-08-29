@@ -1,18 +1,65 @@
 apikeys:
+  bevigil:
+    key:
+
+  binaryedge:
+    key:
+
   bing:
-    key: 
+    key:
+
+  bufferoverun:
+    key:
+
+  censys:
+    id:
+    secret:
+
+  criminalip:
+    key:
+
+  fullhunt:
+    key:
 
   github:
-    key: 
+    key:
 
   hunter:
-    key: 
+    key:
+
+  hunterhow:
+    key:
 
   intelx:
-    key: 9df61df0-84f7-4dc7-b34c-8ccfb8646ace
+    key:
+
+  netlas:
+    key:
+
+  onyphe:
+    key:
+
+  pentestTools:
+    key:
+
+  projectDiscovery:
+    key:
+
+  rocketreach:
+    key:
 
   securityTrails:
-    key: 
+    key:
 
   shodan:
-    key: oCiMsgM6rQWqiTvPxFHYcExlZgg7wvTt
+    key:
+
+  tomba:
+    key:
+    secret:
+
+  virustotal:
+    key:
+
+  zoomeye:
+    key:
