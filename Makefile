@@ -28,7 +28,7 @@ DOCKER_COMPOSE_FILE_CMD := ${DOCKER_COMPOSE_CMD} -f ${COMPOSE_FILE}
 
 .PHONY: certs up dev_up build_up build pull superuser_create superuser_delete superuser_changepassword migrate down stop restart remove_images test logs images prune help
 
-pull:			## Pull prebuilt Docker images from repository.
+pull:			## Pull pre-built Docker images from repository.
 	${DOCKER_COMPOSE_FILE_CMD} pull
 
 images:			## Show all Docker images for reNgine services.
