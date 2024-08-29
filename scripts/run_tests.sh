@@ -6,15 +6,6 @@ set -e
 # Import common functions
 source "$(pwd)/common_functions.sh"
 
-# Check for root privileges with WSL
-if [ "$(whoami)" != "root" ] && [ "$(detect_wsl)" = 0 ]
-  then
-  log ""
-  log "Error launching tests: please run this script as root!" $COLOR_RED
-  log "Example: sudo $0" $COLOR_RED
-  exit
-fi
-
 # Function to determine host architecture
 get_host_architecture() {
     local arch=$(uname -m)
@@ -225,7 +216,7 @@ Type your answer (y/n): ' packages_response
     if [ "$clean_temp" = true ]; then
         log "Cleaning up temporary files and VM..." $COLOR_CYAN
         # Send powerdown command to QEMU monitor
-        echo "system_powerdown" | socat - UNIX-CONNECT:/tmp/qemu-monitor.sock 2>/dev/null || true
+        echo "system_powerdown" | sudo socat - UNIX-CONNECT:/tmp/qemu-monitor.sock 2>/dev/null || true
 
         # Wait for VM to stop (with timeout)
         for i in {1..15}; do
@@ -239,7 +230,7 @@ Type your answer (y/n): ' packages_response
         # Force stop if VM is still running
         if pgrep -f "qemu-system-.*$VM_NAME" > /dev/null; then
             log "Forcing VM to stop..." $COLOR_RED
-            pkill -f "qemu-system-.*$VM_NAME" || true
+            sudo pkill -f "qemu-system-.*$VM_NAME" || true
         fi
 
         if [[ "$TEST_DIR" == "$HOME/tmp/"* ]]; then
@@ -363,7 +354,7 @@ EOF
     # Start the VM
     log "Starting the VM..." $COLOR_CYAN
     if [ "$ARCH" = "amd64" ]; then
-        qemu-system-x86_64 \
+        sudo qemu-system-x86_64 \
             -name $VM_NAME \
             -m $VM_RAM \
             -smp $VM_CPUS \
@@ -379,7 +370,7 @@ EOF
             -vnc :0 \
             -display none &
     elif [ "$ARCH" = "arm64" ]; then
-        qemu-system-aarch64 \
+        sudo qemu-system-aarch64 \
             -name $VM_NAME \
             -M virt \
             -m $VM_RAM \

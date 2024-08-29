@@ -20,20 +20,3 @@ log() {
   printf "$1\r\n"
   tput sgr0  # Reset text color
 }
-
-detect_wsl() {
-    if [ -f /proc/version ]; then
-        if grep -qi microsoft /proc/version; then
-            echo "WSL detected"
-            return 0
-        fi
-    fi
-    if [ -f /proc/sys/kernel/osrelease ]; then
-        if grep -qi microsoft /proc/sys/kernel/osrelease; then
-            echo "WSL detected"
-            return 0
-        fi
-    fi
-    echo "WSL not detected"
-    return 1
-}
