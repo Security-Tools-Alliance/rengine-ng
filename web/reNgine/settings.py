@@ -260,6 +260,13 @@ LOGGING = {
             'filename': 'celery.log',
             'maxBytes': 1024 * 1024 * 100,  # 100 mb
         },
+        'celery_beat': {
+            'class': 'logging.handlers.RotatingFileHandler',
+            'formatter': 'simple',
+            'filename': 'celery_beat.log',
+            'maxBytes': 1024 * 1024 * 100,  # 100 mb
+            'backupCount': 5,
+        },
     },
     'formatters': {
         'default': {
@@ -323,6 +330,11 @@ LOGGING = {
         'celery.utils.functional': {
             'handlers': ['null'],
             'propagate': False,
+        },
+        'django_celery_beat': {
+            'handlers': ['celery_beat', 'console'],
+            'level': 'DEBUG',
+            'propagate': True,
         },
     },
     'root': {
