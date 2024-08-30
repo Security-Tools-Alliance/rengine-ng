@@ -45,7 +45,7 @@ Scheduled Scans
               {% if task.interval %}
               Will run  {{ task.interval }}
               {% elif task.clocked %}
-              Will run exactly at {{ task.clocked.clocked_time}} UTC
+              Will run exactly at {{ task.clocked.clocked_time}} of your timezone
               {% endif %}
             </td>
             <td>{{ task.last_run_at|none_or_never }}</td>

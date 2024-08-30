@@ -2,7 +2,7 @@ import markdown
 
 from celery import group
 from weasyprint import HTML
-from datetime import datetime
+from datetime import datetime, timedelta
 from django.contrib import messages
 from django.db.models import Count
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
@@ -549,8 +549,15 @@ def schedule_scan(request, host_id, slug):
             )
         elif scheduled_mode == 'clocked':
             schedule_time = request.POST['scheduled_time']
+            timezone_offset = int(request.POST.get('timezone_offset', 0))
+            # Convert received hour in UTC
+            local_time = datetime.strptime(schedule_time, '%Y-%m-%d %H:%M')
+            # Adjust hour to UTC
+            utc_time = local_time + timedelta(minutes=timezone_offset)
+            # Make hour "aware" in UTC
+            utc_time = timezone.make_aware(utc_time, timezone.utc)
             clock, _ = ClockedSchedule.objects.get_or_create(
-                clocked_time=schedule_time)
+                clocked_time=utc_time)
             kwargs = {
                 'scan_history_id': 0,
                 'domain_id': host_id,
