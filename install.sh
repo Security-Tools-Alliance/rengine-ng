@@ -85,11 +85,11 @@ if [ $isNonInteractive = false ]; then
           INSTALL_TYPE="source"
           ;;
       2|"")
-          INSTALL_TYPE="pre-built"
+          INSTALL_TYPE="prebuilt"
           ;;
       *)
           log "Invalid choice. Defaulting to pre-built images." $COLOR_YELLOW
-          INSTALL_TYPE="pre-built"
+          INSTALL_TYPE="prebuilt"
           ;;
   esac
 
