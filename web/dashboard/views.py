@@ -4,7 +4,6 @@ from datetime import timedelta
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model, update_session_auth_hash
-from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib.auth.signals import user_logged_in, user_logged_out
 from django.db.models import Count
@@ -18,7 +17,7 @@ from django.template.defaultfilters import slugify
 from rolepermissions.roles import assign_role, clear_roles
 from rolepermissions.decorators import has_permission_decorator
 
-from dashboard.utils import get_user_projects, user_has_project_access, user_has_project_access_by_id
+from dashboard.utils import get_user_projects, user_has_project_access
 from targetApp.models import Domain
 from startScan.models import (
     EndPoint, ScanHistory, Subdomain, Vulnerability, ScanActivity,
@@ -391,16 +390,22 @@ def onboarding(request):
                 NetlasAPIKey.objects.create(key=key_netlas)
 
     context['error'] = error
-    # check is any projects exists, then redirect to project list else onboarding
-    project = Project.objects.first()
+    if request.user.is_superuser:
+        # if super user, redirect to the first project
+        project = Project.objects.first()
+    else:
+        # check is any projects exists for the current user
+        project = Project.objects.filter(users=request.user).first()
 
     context['openai_key'] = OpenAiAPIKey.objects.first()
     context['netlas_key'] = NetlasAPIKey.objects.first()
 
+    # then redirect to the dashboard
     if project:
         slug = project.slug
         return HttpResponseRedirect(reverse('dashboardIndex', kwargs={'slug': slug}))
 
+    # else redirect to the onboarding
     return render(request, 'dashboard/onboarding.html', context)
 
 @user_has_project_access

@@ -1,7 +1,7 @@
 from functools import wraps
 from django.http import JsonResponse
 from django.shortcuts import redirect
-from django.urls import reverse
+from django.urls import reverse, NoReverseMatch
 from .models import Project
 
 def get_user_projects(user):
@@ -26,6 +26,11 @@ def user_has_project_access(view_func):
             project = Project.objects.filter(slug=project_slug).first()
             if project and project in get_user_projects(request.user):
                 return view_func(request, *args, **kwargs)
+            if not project and request.user.is_superuser:
+                return redirect(reverse('onboarding'))
+            else:
+                project = Project.objects.filter(users=request.user).first()
+                return redirect(reverse('page_not_found', kwargs={'slug': project.slug}))
         
         # Check if it's an API request
         if request.path.startswith('/api/'):

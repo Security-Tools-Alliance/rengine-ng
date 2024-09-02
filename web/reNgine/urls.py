@@ -7,7 +7,7 @@ from django.urls import include, path
 from drf_yasg import openapi
 from drf_yasg.views import get_schema_view
 from rest_framework import permissions
-from .common_views import permission_denied
+from .common_views import permission_denied, page_not_found
 
 schema_view = get_schema_view(
    openapi.Info(
@@ -58,5 +58,9 @@ urlpatterns = [
         '<slug:slug>/permission_denied/',
         permission_denied,
         name='permission_denied'),
+    path(
+        '<slug:slug>/page_not_found/',
+        page_not_found,
+        name='page_not_found'),
 ] + static(settings.MEDIA_URL, document_root=settings.RENGINE_RESULTS) + \
     static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

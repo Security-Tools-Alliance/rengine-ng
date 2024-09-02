@@ -13,3 +13,14 @@ def permission_denied(request, slug):
         context.update(processor(request))
     
     return render(request, 'common/permission_denied.html', context.flatten(), status=403)
+
+def page_not_found(request, slug):
+    context = RequestContext(request)
+    
+    # Applying manually the context processors
+    for processor in settings.TEMPLATES[0]['OPTIONS']['context_processors']:
+        if isinstance(processor, str):
+            processor = import_string(processor)
+        context.update(processor(request))
+    
+    return render(request, 'common/page_not_found.html', context.flatten(), status=404)
