@@ -16,7 +16,6 @@
         {
             "label": "Build All Docker Images",
             "type": "shell",
-            "command": "echo Building all images with version ${input:globalVersion}",
             "dependsOn": [
                 "Build CELERY",
                 "Build WEB",
@@ -32,7 +31,6 @@
         {
             "label": "Build and Push All Docker Images",
             "type": "shell",
-            "command": "echo Building and pushing all images with version ${input:globalVersion}",
             "dependsOn": [
                 "Build and Push CELERY",
                 "Build and Push WEB",
@@ -150,7 +148,7 @@
         {
             "id": "isLatest",
             "type": "pickString",
-            "description": "Is this the latest version? (This will also push the 'latest' tag)",
+            "description": "Is this the latest version (this will also push the 'latest' tag)?",
             "options": ["true", "false"],
             "default": "false"
           }    ]
