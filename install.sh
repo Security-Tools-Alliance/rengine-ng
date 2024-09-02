@@ -14,8 +14,8 @@ done
 # Check for root privileges
 if [ $EUID -eq 0 ]; then
   if [ "$SUDO_USER" = "root" ] || [ "$SUDO_USER" = "" ]; then
-    log "Error: Do not run this script as root. Use sudo with a non-root user." $COLOR_RED
-    log "Example: sudo ./install.sh" $COLOR_RED
+    log "Error: Do not run this script as root user. Use 'sudo' with a non-root user." $COLOR_RED
+    log "Example: 'sudo ./install.sh'" $COLOR_RED
     exit 1
   fi
 fi
@@ -23,7 +23,7 @@ fi
 # Check if the script is run with sudo
 if [ -z "$SUDO_USER" ]; then
   log "Error: This script must be run with sudo." $COLOR_RED
-  log "Example: sudo ./install.sh" $COLOR_RED
+  log "Example: 'sudo ./install.sh'" $COLOR_RED
   exit 1
 fi
 
