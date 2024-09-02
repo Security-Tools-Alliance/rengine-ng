@@ -146,3 +146,19 @@ $("#theharvester_config_text_area").dblclick(function() {
     $("#theharvester-config-form").append('<input type="submit" class="btn btn-primary mt-2 float-end" value="Save Changes" id="theharvester-config-submit">');
   }
 });
+
+$.getJSON(`/api/getFileContents?gau_config&format=json`, function(data) {
+  $("#gau_config_text_area").attr("rows", 14);
+  $("textarea#gau_config_text_area").html(htmlEncode(data['content']));
+}).fail(function(){
+  $("#gau_config_text_area").removeAttr("readonly");
+  $("textarea#gau_config_text_area").html(`# Your GAU configuration here.`);
+  $("#gau-config-form").append('<input type="submit" class="btn btn-primary mt-2 float-end" value="Save Changes" id="gau-config-submit">');
+});
+
+$("#gau_config_text_area").dblclick(function() {
+  if (!document.getElementById('gau-config-submit')) {
+    $("#gau_config_text_area").removeAttr("readonly");
+    $("#gau-config-form").append('<input type="submit" class="btn btn-primary mt-2 float-end" value="Save Changes" id="gau-config-submit">');
+  }
+});

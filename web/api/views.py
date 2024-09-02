@@ -266,26 +266,37 @@ class ListTargetsDatatableViewSet(viewsets.ModelViewSet):
 
 
 class WafDetector(APIView):
-	def get(self, request):
-		req = self.request
-		url= req.query_params.get('url')
-		response = {}
-		response['status'] = False
+    def get(self, request):
+        req = self.request
+        url = req.query_params.get('url')
+        response = {
+            'status': False,
+            'message': '',
+            'results': None
+        }
 
-		wafw00f_command = f'wafw00f {url}'
-		output = subprocess.check_output(wafw00f_command, shell=True)
-		# use regex to get the waf
-		regex = "behind \\\\x1b\[1;96m(.*)\\\\x1b"
-		group = re.search(regex, str(output))
+        if not url:
+            response['message'] = 'URL parameter is missing'
+            return Response(response)
 
-		if group:
-			response['status'] = True
-			response['results'] = group.group(1)
-		else:
-			response['message'] = 'Could not detect any WAF!'
+        try:
+            logger.info(f"Initiating WAF detection for URL: {url}")
+            result = run_wafw00f.delay(url).get(timeout=30)
 
-		return Response(response)
+            if result.startswith("Unexpected error"):
+                response['message'] = result
+            elif result != "No WAF detected":
+                response['status'] = True
+                response['results'] = result
+            else:
+                response['message'] = 'Could not detect any WAF!'
 
+            logger.info(f"WAF detection result: {response}")
+        except Exception as e:
+            logger.error(f"Error during WAF detection: {str(e)}")
+            response['message'] = f"An error occurred: {str(e)}"
+
+        return Response(response)
 
 class SearchHistoryView(APIView):
 	def get(self, request):
@@ -1155,54 +1166,21 @@ class DomainIPHistory(APIView):
 
 
 class CMSDetector(APIView):
-	def get(self, request):
-		req = self.request
-		url = req.query_params.get('url')
-		#save_db = True if 'save_db' in req.query_params else False
-		response = {'status': False}
-		try:
-			response = {}
-			cms_detector_command = f'cmseek'
-			cms_detector_command += ' --random-agent --batch --follow-redirect'
-			cms_detector_command += f' -u {url}'
+    def get(self, request):
+        url = request.query_params.get('url')
+        if not url:
+            return Response({'status': False, 'message': 'URL parameter is missing'})
 
-			_, output = run_command(cms_detector_command, remove_ansi_sequence=True)
+        try:
+            task = run_cmseek.delay(url)
+            result = task.get(timeout=300)  # 5 minutes timeout
 
-			response['message'] = 'Could not detect CMS!'
-
-			parsed_url = urlparse(url)
-
-			domain_name = parsed_url.hostname
-			port = parsed_url.port
-
-			find_dir = domain_name
-
-			if port:
-				find_dir += '_{}'.format(port)
-			# look for result path in output
-			path_regex = r"Result: (\/usr\/src[^\"\s]*)"
-			match = re.search(path_regex, output)
-			if match:
-				cms_json_path = match.group(1)
-				if os.path.isfile(cms_json_path):
-					cms_file_content = json.loads(open(cms_json_path, 'r').read())
-					if not cms_file_content.get('cms_id'):
-						return response
-					response = {}
-					response = cms_file_content
-					response['status'] = True
-					try:
-						# remove results
-						cms_dir_path = os.path.dirname(cms_json_path)
-						shutil.rmtree(cms_dir_path)
-					except Exception as e:
-						logger.error(e)
-					return Response(response)
-			return Response(response)
-		except Exception as e:
-			response = {'status': False, 'message': str(e)}
-			return Response(response)
-
+            if result['status']:
+                return Response(result)
+            else:
+                return Response({'status': False, 'message': 'Could not detect CMS!'})
+        except Exception as e:
+            return Response({'status': False, 'message': str(e)})
 
 class IPToDomain(APIView):
 	def get(self, request):
@@ -1269,7 +1247,7 @@ class GetFileContents(APIView):
 			return Response(response)
 
 		if 'subfinder_config' in req.query_params:
-			path = str(Path.home() / ".config" / "subfinder" /" config.yaml")
+			path = str(Path.home() / ".config" / "subfinder" / "config.yaml")
 			if not os.path.exists(path):
 				run_command(f'touch {path}')
 				response['message'] = 'File Created!'
@@ -1289,7 +1267,7 @@ class GetFileContents(APIView):
 			return Response(response)
 
 		if 'theharvester_config' in req.query_params:
-			path = str(Path(RENGINE_TOOL_PATH) / 'theHarvester' / 'api-keys.yaml')
+			path = str(Path.home() / ".config" / 'theHarvester' / 'api-keys.yaml')
 			if not os.path.exists(path):
 				run_command(f'touch {path}')
 				response['message'] = 'File Created!'
@@ -1333,9 +1311,31 @@ class GetFileContents(APIView):
 				response['status'] = False
 			return Response(response)
 
+		if 'gau_config' in req.query_params:
+			path = str(Path.home() / ".config" / '.gau.toml')
+			if not os.path.exists(path):
+				run_command(f'touch {path}')
+				response['message'] = 'File Created!'
+			f = open(path, "r")
+			response['status'] = True
+			response['content'] = f.read()
+			return Response(response)
+
 		response['message'] = 'Invalid Query Params'
 		return Response(response)
 
+class GfList(APIView):
+    def get(self, request):
+        try:
+            task = run_gf_list.delay()
+            result = task.get(timeout=30)  # 30 seconds timeout
+
+            if result['status']:
+                return Response(result['output'])
+            else:
+                return Response({'error': result['message']}, status=500)
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
 
 class ListTodoNotes(APIView):
 	def get(self, request, format=None):

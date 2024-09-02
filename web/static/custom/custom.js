@@ -754,7 +754,14 @@ function get_interesting_endpoints(project, target_id, scan_history_id) {
 				return "<a href='" + data + "' target='_blank' class='text-primary'>" + url + "</a>";
 			},
 			"targets": 0
-		}, {
+		}, 
+		{
+			"render": function(data, type, row) {
+				return htmlEncode(data);
+			},
+			"targets": 1
+		},
+		{
 			"render": function(data, type, row) {
 				// display badge based on http status
 				// green for http status 2XX, orange for 3XX and warning for everything else
@@ -1158,7 +1165,7 @@ function render_endpoint_in_xlmodal(endpoint_count, subdomain_name, result) {
 			<tr>
 			<td>${http_url_td}</td>
 			<td>${get_http_status_badge(endpoint['http_status'])}</td>
-			<td>${return_str_if_not_null(endpoint['page_title'])}</td>
+			<td>${return_str_if_not_null(htmlEncode(endpoint['page_title']))}</td>
 			<td>${parse_comma_values_into_span(endpoint['matched_gf_patterns'], "danger", outline=true)}</td>
 			<td>${return_str_if_not_null(endpoint['content_type'])}</td>
 			<td>${return_str_if_not_null(endpoint['content_length'])}</td>
@@ -1851,13 +1858,17 @@ function display_whois_on_modal(response, show_add_target_btn=false) {
 
 					content += `<div class="tab-pane fade" id="v-pills-nameserver" role="tabpanel" aria-labelledby="v-pills-nameserver-tab" data-simplebar style="max-height: 300px; min-height: 300px;">`;
 
-					content += `<div class="alert alert-success">${response.nameservers.length} NameServers identified</div>`;
-
-					for (var ns in response.nameservers) {
-						var ns_object = response.nameservers[ns];
-						content += `<span class="badge badge-soft-primary me-1 mt-1">${ns_object}</span>`;
+					if (response.nameservers && response.nameservers.length > 0) {
+						content += `<div class="alert alert-success">${response.nameservers.length} NameServers identified</div>`;
+					
+						for (var ns in response.nameservers) {
+							var ns_object = response.nameservers[ns];
+							content += `<span class="badge badge-soft-primary me-1 mt-1">${ns_object}</span>`;
+						}
+					} else {
+						content += `<div class="alert alert-info">No NameServer identified</div>`;
 					}
-
+					
 					content += `</div><div class="tab-pane fade" id="v-pills-similar" role="tabpanel" aria-labelledby="v-pills-similar-tab" data-simplebar style="max-height: 300px; min-height: 300px;">`;
 
 					if (response.related_tlds.length > 0) {
@@ -3318,4 +3329,18 @@ function convertToCamelCase(inputString) {
 	const camelCaseString = words.map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
 
 	return camelCaseString;
+}
+function handleHashInUrl(){
+	// this function handles hash in url used to tab navigation
+	const hash = window.location.hash;
+	if (hash) {
+		const targetId = hash.substring(1);
+		const tabLink = $(`a[href="#${targetId}"][data-bs-toggle="tab"]`);
+		if (tabLink.length) {
+			tabLink.tab('show');
+			setTimeout(() => {
+				tabLink.click();
+			}, 100);
+		}
+	}
 }

@@ -1,17 +1,7 @@
 #!/bin/bash
 
-# Define color codes.
-# Using `tput setaf` at some places because the variable only works with log/echo
-
-COLOR_BLACK=0
-COLOR_RED=1
-COLOR_GREEN=2
-COLOR_YELLOW=3
-COLOR_BLUE=4
-COLOR_MAGENTA=5
-COLOR_CYAN=6
-COLOR_WHITE=7
-COLOR_DEFAULT=$COLOR_WHITE # Use white as default for clarity
+# Import common functions
+source "$(pwd)/scripts/common_functions.sh"
 
 # Fetch the internal and external IP address so that it can be printed later when the script has finished installing reNgine-ng
 external_ip=$(curl -s https://ipecho.net/plain)
@@ -20,16 +10,6 @@ formatted_ips=""
 for ip in $internal_ips; do
     formatted_ips="${formatted_ips}https://$ip\n"
 done
-
-# Log messages in different colors
-log() {
-  local color=${2:-$COLOR_DEFAULT}  # Use default color if $2 is not set
-  if [ "$color" -ne $COLOR_DEFAULT ]; then
-    tput setaf "$color"
-  fi
-  printf "$1\r\n"
-  tput sgr0  # Reset text color
-}
 
 # Check for root privileges
 if [ "$(whoami)" != "root" ]
@@ -94,18 +74,26 @@ if [ $isNonInteractive = false ]; then
       nano .env
       ;;
   esac
-  # Select install type
-  log "Do you want to build Docker images from source or use pre-built images (recommended)? This saves significant build time but requires good download speeds for it to complete fast." $COLOR_RED  
-  select choice in "From source" "Use pre-built images"; do
-    case $choice in
-      "From source" )
-        INSTALL_TYPE="source"
-        break;;
-      "Use pre-built images" )
-        INSTALL_TYPE="prebuilt"
-        break;;
-    esac
-  done
+  # Select install type
+  log "Do you want to build Docker images from source or use pre-built images (recommended)? \nThis saves significant build time but requires good download speeds for it to complete fast." $COLOR_RED
+  log "1) From source" $COLOR_GREEN
+  log "2) Use pre-built images (default)" $COLOR_GREEN
+  read -p "Enter your choice (1 or 2, default is 2): " choice
+
+  case $choice in
+      1)
+          INSTALL_TYPE="source"
+          ;;
+      2|"")
+          INSTALL_TYPE="prebuilt"
+          ;;
+      *)
+          log "Invalid choice. Defaulting to pre-built images." $COLOR_YELLOW
+          INSTALL_TYPE="prebuilt"
+          ;;
+  esac
+
+  log "Selected installation type: $INSTALL_TYPE" $COLOR_CYAN
 fi
 
 # Non interactive install
@@ -220,7 +208,7 @@ sleep 5
 make up && log "reNgine-ng is started!" $COLOR_GREEN || { log "reNgine-ng start failed!" $COLOR_RED; exit 1; }
 
 log "Creating an account..." $COLOR_CYAN
-make username isNonInteractive=$isNonInteractive
+make superuser_create isNonInteractive=$isNonInteractive
 
 log "reNgine-ng is successfully installed and started!" $COLOR_GREEN
 log "\r\nThank you for installing reNgine-ng, happy recon!" $COLOR_GREEN
