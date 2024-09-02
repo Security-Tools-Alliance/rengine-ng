@@ -20,7 +20,7 @@ from scanEngine.forms import AddEngineForm, UpdateEngineForm, AddWordlistForm, E
 from scanEngine.models import EngineType, Wordlist, InstalledExternalTool, InterestingLookupModel, Notification, Hackerone, Proxy, VulnerabilityReportSetting
 from dashboard.models import OpenAiAPIKey, NetlasAPIKey, OllamaSettings
 from reNgine.definitions import PERM_MODIFY_SCAN_CONFIGURATIONS, PERM_MODIFY_SCAN_REPORT, PERM_MODIFY_WORDLISTS, PERM_MODIFY_INTERESTING_LOOKUP, PERM_MODIFY_SYSTEM_CONFIGURATIONS, FOUR_OH_FOUR_URL
-from reNgine.settings import RENGINE_WORDLISTS, RENGINE_TOOL_GITHUB_PATH
+from reNgine.settings import RENGINE_WORDLISTS, RENGINE_HOME
 from pathlib import Path
 import requests
 
