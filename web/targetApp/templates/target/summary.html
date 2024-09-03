@@ -1649,7 +1649,7 @@ $(document).ready(function(){
 		});
 
 		$('#vulnerability_results').on('click', 'tr' , function (e) {
-			if ($(e.target).is('input[type="checkbox"]') || $(e.target).is('svg') || $(e.target).is('a')) {
+			if ($(e.target).is('input[type="checkbox"]') || $(e.target).is('svg') || $(e.target).is('a') || $(e.target).is('span')) {
 				return;
 			}
 			var data = vulnerability_table.row(this).data();
