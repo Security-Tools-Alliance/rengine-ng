@@ -62,6 +62,7 @@ staticfiles/
 
 secret
 docker/secrets
+logs
 
 get-docker.sh
 

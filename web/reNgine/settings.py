@@ -23,7 +23,7 @@ RENGINE_RESULTS = env('RENGINE_RESULTS', default=str(Path.home() / 'scan_results
 RENGINE_CUSTOM_ENGINES = env('RENGINE_CUSTOM_ENGINES', default=str(Path.home() / 'custom_engines'))
 RENGINE_WORDLISTS = env('RENGINE_WORDLISTS', default=str(Path.home() / 'wordlists'))
 RENGINE_TOOL_PATH = env('RENGINE_TOOL_PATH', default=str(Path.home() / 'tools'))
-RENGINE_TOOL_GITHUB_PATH = env('RENGINE_TOOL_GITHUB_PATH', default=str(Path(RENGINE_TOOL_PATH) / '.github.com'))
+RENGINE_TOOL_GITHUB_PATH = env('RENGINE_TOOL_GITHUB_PATH', default=str(Path(RENGINE_TOOL_PATH) / '.github'))
 
 RENGINE_CACHE_ENABLED = env.bool('RENGINE_CACHE_ENABLED', default=False)
 RENGINE_RECORD_ENABLED = env.bool('RENGINE_RECORD_ENABLED', default=True)
@@ -191,9 +191,6 @@ LOGIN_REQUIRED_IGNORE_VIEW_NAMES = [
 LOGIN_URL = 'login'
 LOGIN_REDIRECT_URL = 'onboarding'
 LOGOUT_REDIRECT_URL = 'login'
-
-# Tool Location
-TOOL_LOCATION = '/home/rengine/tools/'
 
 # Number of endpoints that have the same content_length
 DELETE_DUPLICATES_THRESHOLD = 10
