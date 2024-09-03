@@ -466,7 +466,7 @@ $("#vulnerability_results").on('click', '.btn-delete-vulnerability', function ()
 
 $("#bulk_delete_vulnerabilities").on('click', function () {
 	//btn-delete-vulnerability contains vuln id to delete
-	var vulnerabilities = $('.table-success .btn-delete-vulnerability');
+	var vulnerabilities = $('.vulnerability_checkbox:checked').parents("tr").find('.btn-delete-vulnerability')
 	var vulnerabilities_ids = Array();
 	Array.from(vulnerabilities).forEach(vuln => {
 		vulnerabilities_ids.push($(vuln).attr('id'));
@@ -498,7 +498,9 @@ $("#bulk_delete_vulnerabilities").on('click', function () {
 			.then(function (response) {
 				swal.close();
 				if (response['status']) {
-					$('.table-success').remove();
+					Array.from(vulnerabilities).forEach(vuln => {
+						$(vuln).parents('tr').remove();
+					});		
 					Snackbar.show({
 						text: 'Vulnerabilities successfully deleted!',
 						pos: 'top-right',
