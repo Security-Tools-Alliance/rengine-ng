@@ -407,11 +407,11 @@ function vuln_status_change(element, id, status) {
 
 $('#select_all_checkbox').on('click',function(){
 	if($(this).is(':checked')){
-		$(".table-success").children().find(".vulnerability_checkbox").trigger("click")
-		$(".vulnerability_checkbox").trigger("click");
+		$("tr").find("[type=checkbox]").prop('checked', false);
+		$("tr").find("[type=checkbox]").prop('checked', true);
 	}else{
-		$(".table-success").children().find(".vulnerability_checkbox").trigger("click")	
-	}
+		$("tr").find("[type=checkbox]").prop('checked', true);
+		$("tr").find("[type=checkbox]").prop('checked', false);	}
 });
 
 $("#vulnerability_results").on('click', '.btn-delete-vulnerability', function () {
