@@ -200,10 +200,10 @@ $(document).ready(function() {
 			{
 				"render": function ( data, type, row ) {
 					if (data){
-						return '<span class="badge badge-soft-danger" role="button" onclick="vuln_status_change(this, '+row.id+', '+row.open_status+');">OPEN</span>'
+						return '<span class="vuln-status badge badge-soft-danger" role="button" onclick="vuln_status_change(this, '+row.id+', '+row.open_status+');">OPEN</span>'
 					}
 					else{
-						return '<span class="badge badge-soft-success" role="button" onclick="vuln_status_change(this, '+row.id+', '+row.open_status+');">RESOLVED</span>'
+						return '<span class="vuln-status badge badge-soft-success" role="button" onclick="vuln_status_change(this, '+row.id+', '+row.open_status+');">RESOLVED</span>'
 					}
 				},
 				"targets": 15,

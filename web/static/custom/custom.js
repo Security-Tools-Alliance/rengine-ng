@@ -405,6 +405,22 @@ function vuln_status_change(element, id, status) {
 	change_vuln_status(id);
 }
 
+function bulk_vuln_status_change(status){
+	var vulnStatusArray = $('.vulnerability_checkbox:checked').parents("tr").find('.vuln-status')
+	Array.from(vulnStatusArray).forEach(vulnStatus => {
+		if(status==true){
+			if($(vulnStatus).text()=="OPEN"){
+				$(vulnStatus).trigger('click')
+			}
+		}else{
+			if($(vulnStatus).text()=="RESOLVED"){
+				$(vulnStatus).trigger('click')
+		}
+	}
+	});		
+	
+}
+
 $('#select_all_checkbox').on('click',function(){
 	if($(this).is(':checked')){
 		$("tr").find("[type=checkbox]").prop('checked', false);
