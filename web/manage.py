@@ -11,11 +11,18 @@ if UI_REMOTE_DEBUG and sys.argv[1] == 'runserver':
 
 def main():
     os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'reNgine.settings')
-    # show rengine artwork
-    f = open('art/reNgine.txt', 'r')
-    file_contents = f.read()
-    print (file_contents)
-    f.close()
+    
+    # List of commands that should not display the rengine artwork
+    skip_art_commands = ['test', 'dumpdata']
+    
+    # Do not show rengine artwork if we are running tests
+    if not any(cmd in sys.argv for cmd in skip_art_commands):
+        # show rengine artwork
+        f = open('art/reNgine.txt', 'r')
+        file_contents = f.read()
+        print(file_contents)
+        f.close()
+    
     try:
         from django.core.management import execute_from_command_line
     except ImportError as exc:

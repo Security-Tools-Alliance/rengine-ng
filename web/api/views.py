@@ -45,44 +45,58 @@ class OllamaManager(APIView):
 		sends a POST request to download the model
 		"""
 		req = self.request
-		model_name = req.query_params.get('model')
 		response = {
 			'status': False
 		}
 		try:
+			model_name = req.query_params.get('model')
+		except Exception as e:
+			response['error'] = str(e)
+			return Response(response, status=400)
+
+		if not model_name:
+			response['error'] = 'Model name is required'
+			return Response(response, status=400)
+
+		try:
 			pull_model_api = f'{OLLAMA_INSTANCE}/api/pull'
 			_response = requests.post(
-				pull_model_api, 
+				pull_model_api,
 				json={
 					'name': model_name,
 					'stream': False
 				}
 			).json()
 			if _response.get('error'):
-				response['status'] = False
 				response['error'] = _response.get('error')
 			else:
 				response['status'] = True
 		except Exception as e:
-			response['error'] = str(e)		
+			response['error'] = str(e)
 		return Response(response)
 	
 	def delete(self, request):
 		req = self.request
-		model_name = req.query_params.get('model')
-		delete_model_api = f'{OLLAMA_INSTANCE}/api/delete'
 		response = {
 			'status': False
 		}
 		try:
+			model_name = req.query_params.get('model')
+		except Exception as e:
+			response['error'] = str(e)
+			return Response(response, status=400)
+
+		if not model_name:
+			response['error'] = 'Model name is required'
+			return Response(response, status=400)
+
+		delete_model_api = f'{OLLAMA_INSTANCE}/api/delete'
+		try:
 			_response = requests.delete(
-				delete_model_api, 
-				json={
-					'name': model_name
-				}
+				delete_model_api,
+				json={'name': model_name}
 			).json()
 			if _response.get('error'):
-				response['status'] = False
 				response['error'] = _response.get('error')
 			else:
 				response['status'] = True
@@ -91,20 +105,30 @@ class OllamaManager(APIView):
 		return Response(response)
 	
 	def put(self, request):
-		req = self.request
-		model_name = req.query_params.get('model')
-		# check if model_name is in DEFAULT_GPT_MODELS
 		response = {
 			'status': False
 		}
+		try:
+			data = request.data
+			model_name = data.get('model')
+		except Exception as e:
+			response['error'] = str(e)
+			return Response(response, status=400)
+
+		if not model_name:
+			response['error'] = 'Model name is required'
+			return Response(response, status=400)
+
 		use_ollama = True
 		if any(model['name'] == model_name for model in DEFAULT_GPT_MODELS):
 			use_ollama = False
 		try:
+			# Create or update OllamaSettings
 			OllamaSettings.objects.update_or_create(
 				defaults={
 					'selected_model': model_name,
-					'use_ollama': use_ollama
+					'use_ollama': use_ollama,
+					'selected': True
 				},
 				id=1
 			)
@@ -112,7 +136,6 @@ class OllamaManager(APIView):
 		except Exception as e:
 			response['error'] = str(e)
 		return Response(response)
-
 
 class GPTAttackSuggestion(APIView):
 	def get(self, request):
@@ -872,20 +895,26 @@ class InitiateSubTask(APIView):
 
 
 class DeleteSubdomain(APIView):
-	def post(self, request):
-		req = self.request
-		for id in req.data['subdomain_ids']:
-			Subdomain.objects.get(id=id).delete()
-		return Response({'status': True})
-
+    def post(self, request):
+        subdomain_ids = get_data_from_post_request(request, 'subdomain_ids')
+        try:
+            subdomain_ids = [int(id) for id in subdomain_ids]
+            Subdomain.objects.filter(id__in=subdomain_ids).delete()
+            return Response({'status': True})
+        except ValueError:
+            return Response({'status': False, 'message': 'Invalid subdomain ID provided'}, status=400)
+        except Exception as e:
+            return Response({'status': False, 'message': str(e)}, status=500)
 
 class DeleteVulnerability(APIView):
 	def post(self, request):
-		req = self.request
-		for id in req.data['vulnerability_ids']:
-			Vulnerability.objects.get(id=id).delete()
-		return Response({'status': True})
-
+		vulnerability_ids = get_data_from_post_request(request, 'vulnerability_ids')
+		try:
+			vulnerability_ids = [int(id) for id in vulnerability_ids]
+			Vulnerability.objects.filter(id__in=vulnerability_ids).delete()
+			return Response({'status': True})
+		except ValueError:
+			return Response({'status': False, 'message': 'Invalid vulnerability ID provided'}, status=400)
 
 class ListInterestingKeywords(APIView):
 	def get(self, request, format=None):

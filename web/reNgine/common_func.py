@@ -1139,3 +1139,18 @@ def extract_columns(row, columns):
         list: Extracted values from the specified columns.
     """
     return [row[i] for i in columns]
+
+def get_data_from_post_request(request, field):
+    """
+    Get data from a POST request.
+
+    Args:
+        request (HttpRequest): The request object.
+        field (str): The field to get data from.
+    Returns:
+        list: The data from the specified field.
+    """
+    if hasattr(request.data, 'getlist'):
+        return request.data.getlist(field)
+    else:
+        return request.data.get(field, [])
