@@ -40,10 +40,10 @@ function visualise_scan_results(scan_id)
     $('#visualisation-loader').empty();
     $('#visualisation-filter').show();
     
-    // Vérifier si data est un tableau ou un objet
+    // Check if data is an array and get the first element
     var treeData = Array.isArray(data) ? data[0] : data;
 
-    // Vérifier si treeData existe et a des enfants
+    // Check if treeData exists and has children
     if (!treeData || !treeData.children || treeData.children.length === 0) {
       $('#visualisation-loader').html('<p>Aucune donnée à visualiser.</p>');
       return;
@@ -63,7 +63,7 @@ function visualise_scan_results(scan_id)
     var duration = 750;
     var root;
 
-    // Trouver le nœud 'Subdomains' dans les enfants
+    // Find the 'Subdomains' node in the children
     var subdomainsNode = treeData.children.find(child => child.description === 'Subdomains');
     var subdomain_count = subdomainsNode ? subdomainsNode.children.length : 0;
 
@@ -529,6 +529,6 @@ function visualise_scan_results(scan_id)
 
   }).fail(function(){
     $('#visualisation-loader').empty();
-    $("#visualisation-loader").append(`<h5 class="text-danger">Désolé, impossible de visualiser.</h5>`);
+    $("#visualisation-loader").append(`<h5 class="text-danger">Sorry, it's impossible to visualize.</h5>`);
   });;
 }
