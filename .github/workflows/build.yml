@@ -2,10 +2,14 @@ name: Docker Image CI
 
 on:
   pull_request:
+    paths:
+      - 'docker/**'
   push:
     branches:
       - "master"
       - "release/**"
+    paths:
+      - 'docker/**'
     tags:
       - "v*.*.*"
   release:
@@ -37,19 +41,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Docker meta
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ env.PROJECT }}
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            type=sha
-            type=raw,value=latest,enable={{is_default_branch}}
+      - name: Get version
+        id: get_version
+        run: |
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
+            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=latest" >> $GITHUB_OUTPUT
+          fi
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -71,20 +70,10 @@ jobs:
           context: ./docker/${{ matrix.image }}
           file: ./docker/${{ matrix.image }}/Dockerfile
           push: ${{ github.event_name != 'pull_request' || github.event.inputs.push_image == 'true' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ env.PROJECT }}:rengine-${{ matrix.image }}-${{ steps.get_version.outputs.VERSION }}
+            ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ env.PROJECT }}:rengine-${{ matrix.image }}-latest
           platforms: ${{ matrix.platform }}
-          outputs: type=docker,dest=/tmp/image.tar
-
-      - name: Push image if exists
-        if: github.event.inputs.push_image == 'true'
-        run: |
-          if [ -f /tmp/image.tar ]; then
-            docker load --input /tmp/image.tar
-            docker push ${{ steps.meta.outputs.tags }}
-          else
-            echo "No image found to push"
-          fi
 
   update-release:
     needs: build-and-push
