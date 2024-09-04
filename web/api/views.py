@@ -5,6 +5,7 @@ from pathlib import Path
 import socket
 import subprocess
 from ipaddress import IPv4Network
+from collections import defaultdict
 
 import requests
 import validators
@@ -1407,16 +1408,48 @@ class ListTargetsWithoutOrganization(APIView):
 
 
 class VisualiseData(APIView):
-	def get(self, request, format=None):
-		req = self.request
-		scan_id = req.query_params.get('scan_id')
-		if scan_id:
-			mitch_data = ScanHistory.objects.filter(id=scan_id)
-			serializer = VisualiseDataSerializer(mitch_data, many=True)
-			return Response(serializer.data)
-		else:
-			return Response()
+    def get(self, request, format=None):
+        req = self.request
+        scan_id = req.query_params.get('scan_id')
+        if scan_id:
+            mitch_data = ScanHistory.objects.filter(id=scan_id)
+            serializer = VisualiseDataSerializer(mitch_data, many=True)
+            
+            # Traitement des données pour éliminer les doublons
+            processed_data = self.process_visualisation_data(serializer.data)
+            
+            return Response(processed_data)
+        else:
+            return Response()
 
+    def process_visualisation_data(self, data):
+        if not data:
+            return []
+
+        processed_data = data[0]  # Supposons qu'il n'y ait qu'un seul élément dans data
+        subdomains = processed_data.get('subdomains', [])
+
+        # Utiliser un dictionnaire pour regrouper les vulnérabilités par sous-domaine
+        vuln_by_subdomain = defaultdict(list)
+
+        for subdomain in subdomains:
+            subdomain_name = subdomain['name']
+            vulnerabilities = subdomain.get('vulnerabilities', [])
+
+            # Regrouper les vulnérabilités uniques
+            unique_vulns = {}
+            for vuln in vulnerabilities:
+                vuln_key = (vuln['name'], vuln['severity'])
+                if vuln_key not in unique_vulns:
+                    unique_vulns[vuln_key] = vuln
+
+            vuln_by_subdomain[subdomain_name].extend(unique_vulns.values())
+
+        # Mettre à jour les sous-domaines avec les vulnérabilités uniques
+        for subdomain in subdomains:
+            subdomain['vulnerabilities'] = vuln_by_subdomain[subdomain['name']]
+
+        return processed_data
 
 class ListTechnology(APIView):
 	def get(self, request, format=None):
