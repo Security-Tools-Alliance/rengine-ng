@@ -171,10 +171,6 @@ USE_I18N = True
 USE_L10N = True
 USE_TZ = True
 
-# Temporary fix for celery beat crash
-# See https://github.com/yogeshojha/rengine/issues/971
-DJANGO_CELERY_BEAT_TZ_AWARE = False
-
 MEDIA_URL = '/media/'
 FILE_UPLOAD_MAX_MEMORY_SIZE = 100000000
 FILE_UPLOAD_PERMISSIONS = 0o644
@@ -264,6 +260,13 @@ LOGGING = {
             'filename': 'celery.log',
             'maxBytes': 1024 * 1024 * 100,  # 100 mb
         },
+        'celery_beat': {
+            'class': 'logging.handlers.RotatingFileHandler',
+            'formatter': 'simple',
+            'filename': 'celery_beat.log',
+            'maxBytes': 1024 * 1024 * 100,  # 100 mb
+            'backupCount': 5,
+        },
     },
     'formatters': {
         'default': {
@@ -327,6 +330,11 @@ LOGGING = {
         'celery.utils.functional': {
             'handlers': ['null'],
             'propagate': False,
+        },
+        'django_celery_beat': {
+            'handlers': ['celery_beat', 'console'],
+            'level': 'DEBUG',
+            'propagate': True,
         },
     },
     'root': {

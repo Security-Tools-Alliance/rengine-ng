@@ -1,0 +1,52 @@
+name: Delete Untagged GHCR Images
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (does not delete images)'
+        required: true
+        default: 'true'
+        type: choice
+        options:
+        - 'true'
+        - 'false'
+  schedule:
+    - cron: '0 0 1,15 * *'
+
+env:
+  REGISTRY: ghcr.io
+  OWNER: security-tools-alliance
+  PROJECT: rengine-ng
+
+jobs:
+  delete-untagged-ghcr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ vars.GHCR_USERNAME }}
+          password: ${{ secrets.GHCR_PAT }}
+
+      - name: Delete untagged images
+        uses: Chizkiyahu/delete-untagged-ghcr-action@v4
+        with:
+          token: ${{ secrets.GHCR_PAT }}
+          repository_owner: ${{ env.OWNER }}
+          repository: ${{ env.PROJECT }}
+          untagged_only: true
+          owner_type: org
+          except_untagged_multiplatform: true
+
+      - name: Summary
+        if: always()
+        env:
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+        run: |
+          echo "## Summary of untagged image deletion" >> $GITHUB_STEP_SUMMARY
+          echo "- Dry run: $DRY_RUN" >> $GITHUB_STEP_SUMMARY
+          echo "- Owner: $OWNER" >> $GITHUB_STEP_SUMMARY
+          echo "- Project: $PROJECT" >> $GITHUB_STEP_SUMMARY
+          echo "Check the logs above for more details on deleted images or images that would have been deleted in dry run mode." >> $GITHUB_STEP_SUMMARY

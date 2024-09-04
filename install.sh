@@ -12,12 +12,32 @@ for ip in $internal_ips; do
 done
 
 # Check for root privileges
-if [ "$(whoami)" != "root" ]
-  then
-  log ""
-  log "Error installing reNgine-ng: please run this script as root!" $COLOR_RED
-  log "Example: sudo ./install.sh" $COLOR_RED
-  exit
+if [ $EUID -eq 0 ]; then
+  if [ "$SUDO_USER" = "root" ] || [ "$SUDO_USER" = "" ]; then
+    log "Error: Do not run this script as root user. Use 'sudo' with a non-root user." $COLOR_RED
+    log "Example: 'sudo ./install.sh'" $COLOR_RED
+    exit 1
+  fi
+fi
+
+# Check if the script is run with sudo
+if [ -z "$SUDO_USER" ]; then
+  log "Error: This script must be run with sudo." $COLOR_RED
+  log "Example: 'sudo ./install.sh'" $COLOR_RED
+  exit 1
+fi
+
+# Check that the project directory is not owned by root
+project_dir=$(pwd)
+if [ "$(stat -c '%U' $project_dir)" = "root" ]; then
+  log "The project directory is owned by root. Changing ownership..." $COLOR_YELLOW
+  sudo chown -R $SUDO_USER:$SUDO_USER $project_dir
+  if [ $? -eq 0 ]; then
+    log "Project directory ownership successfully changed." $COLOR_GREEN
+  else
+    log "Failed to change project directory ownership." $COLOR_RED
+    exit 1
+  fi
 fi
 
 usageFunction()
