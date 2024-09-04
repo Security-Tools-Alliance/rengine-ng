@@ -2,20 +2,26 @@ import json
 import logging
 import os
 import unittest
+import yaml
 
 os.environ['RENGINE_SECRET_KEY'] = 'secret'
 os.environ['CELERY_ALWAYS_EAGER'] = 'True'
 
-import yaml
-from celery.utils.log import get_task_logger
 from reNgine.settings import CELERY_DEBUG
+from celery.utils.log import get_task_logger
+from scanEngine.models import EngineType
+from django.utils import timezone
 from reNgine.tasks import (dir_file_fuzz, fetch_url, http_crawl, initiate_scan,
                            osint, port_scan, subdomain_discovery,
                            vulnerability_scan)
-from startScan.models import *
+from startScan.models import Endpoint, Domain, ScanHistory, Subdomain
+
 
 logger = get_task_logger(__name__)
-DOMAIN_NAME = os.environ['DOMAIN_NAME']
+# To pass the DOMAIN_NAME variable when running tests, you can use:
+# DOMAIN_NAME=example.com python3 manage.py test
+# Or set a default value if the environment variable is not defined
+DOMAIN_NAME = os.environ.get('DOMAIN_NAME', 'example.com')
 # if not CELERY_DEBUG:
 #     logging.disable(logging.CRITICAL)
 
@@ -42,7 +48,7 @@ class TestOnlineScan(unittest.TestCase):
             scan_type=self.engine,
             start_scan_date=timezone.now())
         self.scan.save()
-        self.endpoint, _ = EndPoint.objects.get_or_create(
+        self.endpoint, _ = Endpoint.objects.get_or_create(
             scan_history=self.scan,
             target_domain=self.domain,
             http_url=self.url)

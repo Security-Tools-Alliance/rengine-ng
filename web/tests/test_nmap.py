@@ -7,7 +7,7 @@ os.environ['CELERY_ALWAYS_EAGER'] = 'True'
 
 from celery.utils.log import get_task_logger
 from reNgine.settings import CELERY_DEBUG
-from reNgine.tasks import parse_nmap_results, parse_nmap_vuln_output, parse_nmap_vulscan_output
+from reNgine.tasks import parse_nmap_results
 import pathlib
 
 logger = get_task_logger(__name__)
