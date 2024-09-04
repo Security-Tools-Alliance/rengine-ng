@@ -11,6 +11,8 @@ on:
         options:
         - 'true'
         - 'false'
+  schedule:
+    - cron: '0 0 1,15 * *'  # Exécute à minuit le 1er et le 15 de chaque mois
 
 env:
   REGISTRY: ghcr.io
@@ -29,7 +31,7 @@ jobs:
           password: ${{ secrets.GHCR_PAT }}
 
       - name: Delete untagged images
-        uses: Chizkiyahu/delete-untagged-ghcr-action@v3
+        uses: Chizkiyahu/delete-untagged-ghcr-action@v4
         with:
           token: ${{ secrets.GHCR_PAT }}
           repository_owner: ${{ env.OWNER }}
@@ -37,12 +39,11 @@ jobs:
           untagged_only: true
           owner_type: org
           except_untagged_multiplatform: true
-          dry_run: ${{ github.event.inputs.dry_run }}
 
       - name: Summary
         if: always()
         env:
-          DRY_RUN: ${{ github.event.inputs.dry_run }}
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
         run: |
           echo "## Summary of untagged image deletion" >> $GITHUB_STEP_SUMMARY
           echo "- Dry run: $DRY_RUN" >> $GITHUB_STEP_SUMMARY
