@@ -12,7 +12,7 @@ on:
         - 'true'
         - 'false'
   schedule:
-    - cron: '0 0 1,15 * *'  # Exécute à minuit le 1er et le 15 de chaque mois
+    - cron: '0 0 1,15 * *'
 
 env:
   REGISTRY: ghcr.io
