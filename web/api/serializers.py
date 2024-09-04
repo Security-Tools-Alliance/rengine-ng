@@ -683,7 +683,7 @@ class VisualiseDataSerializer(serializers.ModelSerializer):
 								if vuln_key not in vuln_dict:
 									vuln_dict[vuln_key] = vuln
 
-				# Reconstruire la structure des vulnérabilités sans doublons
+				# Reconstruct vulnerabilities structure without duplicates
 				new_vuln_structure = []
 				for severity in ['Critical', 'High', 'Medium', 'Low', 'Informational', 'Unknown']:
 					severity_vulns = [v for k, v in vuln_dict.items() if k[1] == severity]
@@ -693,7 +693,7 @@ class VisualiseDataSerializer(serializers.ModelSerializer):
 							'children': severity_vulns
 						})
 
-				# Remplacer l'ancienne structure par la nouvelle
+				# Replace old structure with new
 				subdomain['children'] = [child for child in subdomain['children'] if child.get('description') != 'Vulnerabilities']
 				if new_vuln_structure:
 					subdomain['children'].append({

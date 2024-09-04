@@ -1415,7 +1415,7 @@ class VisualiseData(APIView):
             mitch_data = ScanHistory.objects.filter(id=scan_id)
             serializer = VisualiseDataSerializer(mitch_data, many=True)
             
-            # Traitement des données pour éliminer les doublons
+            # Data processing to remove duplicates
             processed_data = self.process_visualisation_data(serializer.data)
             
             return Response(processed_data)
@@ -1426,17 +1426,17 @@ class VisualiseData(APIView):
         if not data:
             return []
 
-        processed_data = data[0]  # Supposons qu'il n'y ait qu'un seul élément dans data
+        processed_data = data[0]  # Assuming there's only one element in data
         subdomains = processed_data.get('subdomains', [])
 
-        # Utiliser un dictionnaire pour regrouper les vulnérabilités par sous-domaine
+        # Use a dictionary to group vulnerabilities by subdomain
         vuln_by_subdomain = defaultdict(list)
 
         for subdomain in subdomains:
             subdomain_name = subdomain['name']
             vulnerabilities = subdomain.get('vulnerabilities', [])
 
-            # Regrouper les vulnérabilités uniques
+            # Group unique vulnerabilities
             unique_vulns = {}
             for vuln in vulnerabilities:
                 vuln_key = (vuln['name'], vuln['severity'])
@@ -1445,7 +1445,7 @@ class VisualiseData(APIView):
 
             vuln_by_subdomain[subdomain_name].extend(unique_vulns.values())
 
-        # Mettre à jour les sous-domaines avec les vulnérabilités uniques
+        # Update subdomains with unique vulnerabilities
         for subdomain in subdomains:
             subdomain['vulnerabilities'] = vuln_by_subdomain[subdomain['name']]
 
