@@ -18,10 +18,12 @@ def main():
     # Do not show rengine artwork if we are running tests
     if not any(cmd in sys.argv for cmd in skip_art_commands):
         # show rengine artwork
-        f = open('art/reNgine.txt', 'r')
-        file_contents = f.read()
-        print(file_contents)
-        f.close()
+        try:
+            with open('art/reNgine.txt', 'r', encoding='utf-8') as f:
+                file_contents = f.read()
+                print(file_contents)
+        except FileNotFoundError:
+            print("Failed to display reNgine artwork.")
     
     try:
         from django.core.management import execute_from_command_line

@@ -1269,9 +1269,9 @@ class GetFileContents(APIView):
 			if not os.path.exists(path):
 				run_command(f'touch {path}')
 				response['message'] = 'File Created!'
-			f = open(path, "r")
-			response['status'] = True
-			response['content'] = f.read()
+			with open(path, "r") as f:
+				response['status'] = True
+				response['content'] = f.read()
 			return Response(response)
 
 		if 'subfinder_config' in req.query_params:
@@ -1279,9 +1279,9 @@ class GetFileContents(APIView):
 			if not os.path.exists(path):
 				run_command(f'touch {path}')
 				response['message'] = 'File Created!'
-			f = open(path, "r")
-			response['status'] = True
-			response['content'] = f.read()
+			with open(path, "r") as f:
+				response['status'] = True
+				response['content'] = f.read()
 			return Response(response)
 
 		if 'naabu_config' in req.query_params:
@@ -1289,9 +1289,9 @@ class GetFileContents(APIView):
 			if not os.path.exists(path):
 				run_command(f'touch {path}')
 				response['message'] = 'File Created!'
-			f = open(path, "r")
-			response['status'] = True
-			response['content'] = f.read()
+			with open(path, "r") as f:
+				response['status'] = True
+				response['content'] = f.read()
 			return Response(response)
 
 		if 'theharvester_config' in req.query_params:
@@ -1299,9 +1299,9 @@ class GetFileContents(APIView):
 			if not os.path.exists(path):
 				run_command(f'touch {path}')
 				response['message'] = 'File Created!'
-			f = open(path, "r")
-			response['status'] = True
-			response['content'] = f.read()
+			with open(path, "r") as f:
+				response['status'] = True
+				response['content'] = f.read()
 			return Response(response)
 
 		if 'amass_config' in req.query_params:
@@ -1309,16 +1309,17 @@ class GetFileContents(APIView):
 			if not os.path.exists(path):
 				run_command(f'touch {path}')
 				response['message'] = 'File Created!'
-			f = open(path, "r")
-			response['status'] = True
-			response['content'] = f.read()
+			with open(path, "r") as f:
+				response['status'] = True
+				response['content'] = f.read()
 			return Response(response)
 
 		if 'gf_pattern' in req.query_params:
 			basedir = str(Path.home() / '.gf')
 			path = str(Path.home() / '.gf' / f'{name}.json')
 			if is_safe_path(basedir, path) and os.path.exists(path):
-				content = open(path, "r").read()
+				with open(path, "r") as f:
+					content = f.read()
 				response['status'] = True
 				response['content'] = content
 			else:
@@ -1331,7 +1332,8 @@ class GetFileContents(APIView):
 			safe_dir = str(Path.home() / 'nuclei-templates')
 			path = str(Path.home() / 'nuclei-templates' / f'{name}')
 			if is_safe_path(safe_dir, path) and os.path.exists(path):
-				content = open(path.format(name), "r").read()
+				with open(path.format(name), "r") as f:
+					content = f.read()
 				response['status'] = True
 				response['content'] = content
 			else:
@@ -1344,9 +1346,9 @@ class GetFileContents(APIView):
 			if not os.path.exists(path):
 				run_command(f'touch {path}')
 				response['message'] = 'File Created!'
-			f = open(path, "r")
-			response['status'] = True
-			response['content'] = f.read()
+			with open(path, "r") as f:
+				response['status'] = True
+				response['content'] = f.read()
 			return Response(response)
 
 		response['message'] = 'Invalid Query Params'
@@ -1540,8 +1542,8 @@ class ListEmployees(APIView):
 class ListPorts(APIView):
 	def get(self, request, format=None):
 		req = self.request
-		scan_id = req.query_params.get('scan_id')
-		target_id = req.query_params.get('target_id')
+		scan_id = int(req.query_params.get('scan_id'))
+		target_id = int(req.query_params.get('target_id'))
 		ip_address = req.query_params.get('ip_address')
 
 		if target_id:
