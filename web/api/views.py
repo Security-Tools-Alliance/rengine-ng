@@ -81,7 +81,7 @@ class OllamaManager(APIView):
 			'status': False
 		}
 		try:
-			model_name = req.query_params.get('model')
+			model_name = get_data_from_post_request(req, 'model')
 		except Exception as e:
 			response['error'] = str(e)
 			return Response(response, status=400)
@@ -303,7 +303,7 @@ class WafDetector(APIView):
             return Response(response)
 
         try:
-            logger.info(f"Initiating WAF detection for URL: {url}")
+            logger.debug(f"Initiating WAF detection for URL: {url}")
             result = run_wafw00f.delay(url).get(timeout=30)
 
             if result.startswith("Unexpected error"):
@@ -314,7 +314,7 @@ class WafDetector(APIView):
             else:
                 response['message'] = 'Could not detect any WAF!'
 
-            logger.info(f"WAF detection result: {response}")
+            logger.debug(f"WAF detection result: {response}")
         except Exception as e:
             logger.error(f"Error during WAF detection: {str(e)}")
             response['message'] = f"An error occurred: {str(e)}"
@@ -395,11 +395,11 @@ class FetchMostCommonVulnerability(APIView):
 		data = req.data
 
 		try:
-			limit = data.get('limit', 20)
+			limit = int(data.get('limit', 20))
 			project_slug = data.get('slug')
-			scan_history_id = data.get('scan_history_id')
-			target_id = data.get('target_id')
-			is_ignore_info = data.get('ignore_info', False)
+			scan_history_id = int(data.get('scan_history_id'))
+			target_id = int(data.get('target_id'))
+			is_ignore_info = int(data.get('ignore_info', False))
 
 			response = {}
 			response['status'] = False
@@ -480,9 +480,9 @@ class FetchMostVulnerable(APIView):
 		data = req.data
 
 		project_slug = data.get('slug')
-		scan_history_id = data.get('scan_history_id')
-		target_id = data.get('target_id')
-		limit = data.get('limit', 20)
+		scan_history_id = int(data.get('scan_history_id'))
+		target_id = int(data.get('target_id'))
+		limit = int(data.get('limit', 20))
 		is_ignore_info = data.get('ignore_info', False)
 
 		response = {}
@@ -798,17 +798,16 @@ class DeleteMultipleRows(APIView):
 	def post(self, request):
 		req = self.request
 		data = req.data
-
+		subscan_ids = get_data_from_post_request(request, 'rows')
 		try:
 			if data['type'] == 'subscan':
-				for row in data['rows']:
-					SubScan.objects.get(id=row).delete()
-			response = True
+				subscan_ids = [int(id) for id in subscan_ids]
+				SubScan.objects.filter(id__in=subscan_ids).delete()
+				return Response({'status': True})
+		except ValueError:
+			return Response({'status': False, 'message': 'Invalid subscan ID provided'}, status=400)
 		except Exception as e:
-			response = False
-
-		return Response({'status': response})
-
+			return Response({'status': False, 'message': str(e)}, status=500)
 
 class StopScan(APIView):
 	def post(self, request):
@@ -2291,15 +2290,17 @@ class EndPointViewSet(viewsets.ModelViewSet):
 				endpoints_obj
 				.filter(scan_history__id=scan_id)
 				.distinct()
+	            .order_by('id')
 			)
 		else:
-			endpoints = endpoints_obj.distinct()
+			endpoints = endpoints_obj.distinct().order_by('id')
 
 		if url_query:
 			endpoints = (
 				endpoints
 				.filter(Q(target_domain__name=url_query))
 				.distinct()
+	            .order_by('id')
 			)
 
 		if gf_tag:
@@ -2512,31 +2513,28 @@ class EndPointViewSet(viewsets.ModelViewSet):
 
 
 class DirectoryViewSet(viewsets.ModelViewSet):
-	queryset = DirectoryFile.objects.none()
-	serializer_class = DirectoryFileSerializer
+    queryset = DirectoryFile.objects.none()
+    serializer_class = DirectoryFileSerializer
 
-	def get_queryset(self):
-		req = self.request
-		scan_id = req.query_params.get('scan_history')
-		subdomain_id = req.query_params.get('subdomain_id')
-		subdomains = None
-		if not (scan_id or subdomain_id):
-			return Response({
-				'status': False,
-				'message': 'Scan id or subdomain id must be provided.'
-			})
-		elif scan_id:
-			subdomains = Subdomain.objects.filter(scan_history__id=scan_id)
-		elif subdomain_id:
-			subdomains = Subdomain.objects.filter(id=subdomain_id)
-		dirs_scans = DirectoryScan.objects.filter(directories__in=subdomains)
-		qs = (
-			DirectoryFile.objects
-			.filter(directory_files__in=dirs_scans)
-			.distinct()
-		)
-		self.queryset = qs
-		return self.queryset
+    def get_queryset(self):
+        req = self.request
+        scan_id = req.query_params.get('scan_history')
+        subdomain_id = req.query_params.get('subdomain_id')
+        subdomains = None
+        if not (scan_id or subdomain_id):
+            return DirectoryFile.objects.none()
+        elif scan_id:
+            subdomains = Subdomain.objects.filter(scan_history__id=scan_id)
+        elif subdomain_id:
+            subdomains = Subdomain.objects.filter(id=subdomain_id)
+        dirs_scans = DirectoryScan.objects.filter(directories__in=subdomains)
+        qs = (
+            DirectoryFile.objects
+            .filter(directory_files__in=dirs_scans)
+            .distinct()
+            .order_by('id')
+        )
+        return qs
 
 
 class VulnerabilityViewSet(viewsets.ModelViewSet):
