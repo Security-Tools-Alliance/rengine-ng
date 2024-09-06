@@ -39,7 +39,15 @@ function visualise_scan_results(scan_id)
   $.getJSON(`/api/queryAllScanResultVisualise/?scan_id=${scan_id}&format=json`, function(data) {
     $('#visualisation-loader').empty();
     $('#visualisation-filter').show();
-    var treeData = data[0];
+    
+    // Check if data is an array and get the first element
+    var treeData = Array.isArray(data) ? data[0] : data;
+
+    // Check if treeData exists and has children
+    if (!treeData || !treeData.children || treeData.children.length === 0) {
+      $('#visualisation-loader').html('<p>Aucune donnée à visualiser.</p>');
+      return;
+    }
 
     // Calculate total nodes, max label length
     var totalNodes = 0;
@@ -55,7 +63,10 @@ function visualise_scan_results(scan_id)
     var duration = 750;
     var root;
 
-    var subdomain_count = data[0]['children'][0]['children'].length;
+    // Find the 'Subdomains' node in the children
+    var subdomainsNode = treeData.children.find(child => child.description === 'Subdomains');
+    var subdomain_count = subdomainsNode ? subdomainsNode.children.length : 0;
+
     // size of the diagram
     var viewerWidth = screen_width  - 100;
     var viewerHeight = screen_height + 500;
@@ -518,6 +529,6 @@ function visualise_scan_results(scan_id)
 
   }).fail(function(){
     $('#visualisation-loader').empty();
-    $("#visualisation-loader").append(`<h5 class="text-danger">Sorry, could not visualize.</h5>`);
+    $("#visualisation-loader").append(`<h5 class="text-danger">Sorry, it's impossible to visualize.</h5>`);
   });;
 }
