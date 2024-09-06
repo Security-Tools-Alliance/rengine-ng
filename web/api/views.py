@@ -1004,7 +1004,7 @@ class UninstallTool(APIView):
 class UpdateTool(APIView):
 	def get(self, request):
 		req = self.request
-		tool_id = req.query_params.get('tool_id')
+		tool_id = int(req.query_params.get('tool_id'))
 		tool_name = req.query_params.get('name')
 
 		if tool_id:
@@ -1411,7 +1411,6 @@ class ListEngines(APIView):
 
 class ListOrganizations(APIView):
 	def get(self, request, format=None):
-		req = self.request
 		organizations = Organization.objects.all()
 		organization_serializer = OrganizationSerializer(organizations, many=True)
 		return Response({'organizations': organization_serializer.data})

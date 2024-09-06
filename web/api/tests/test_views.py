@@ -108,6 +108,15 @@ class BaseTestCase(TestCase):
         )
         return self.subdomain
 
+    def create_endpoint(self):
+        self.endpoint = EndPoint.objects.create(
+            target_domain=self.domain,
+            subdomain=self.subdomain,
+            scan_history=self.scan_history,
+            http_url="https://admin.example.com/endpoint",
+        )
+        return self.endpoint
+
     def create_vulnerability(self):
         self.vulnerabilities.append(
             Vulnerability.objects.create(
@@ -117,18 +126,10 @@ class BaseTestCase(TestCase):
                 target_domain=self.domain,
                 subdomain=self.subdomain,
                 scan_history=self.scan_history,
+                endpoint=self.endpoint,
             )
         )
         return self.vulnerabilities
-
-    def create_endpoint(self):
-        self.endpoint = EndPoint.objects.create(
-            target_domain=self.domain,
-            subdomain=self.subdomain,
-            scan_history=self.scan_history,
-            http_url="https://admin.example.com/endpoint",
-        )
-        return self.endpoint
 
     def create_directory_scan(self):
         self.directory_scan = DirectoryScan.objects.create(
@@ -155,7 +156,10 @@ class BaseTestCase(TestCase):
 
     def create_installed_external_tool(self):
         self.installed_external_tool = InstalledExternalTool.objects.create(
-            name="Test Tool", github_url="https://github.com/test-tool"
+            name="OneForAll",
+            github_url="https://github.com/shmilylty/OneForAll",
+            update_command="git pull",
+            install_command="git clone https://github.com/shmilylty/OneForAll"
         )
         return self.installed_external_tool
 
@@ -186,7 +190,7 @@ class BaseTestCase(TestCase):
     def create_engine_type(self):
         self.engine_type = EngineType.objects.create(
             engine_name="Test Engine",
-            yaml_configuration="Test Description",
+            yaml_configuration="http_crawl: \{\}",
             default_engine=True,
         )
         return self.engine_type
@@ -217,12 +221,6 @@ class BaseTestCase(TestCase):
         self.dork = Dork.objects.create(type="Test Dork", url="https://example.com")
         self.scan_history.dorks.add(self.dork)
         return self.dork
-
-    def create_port(self):
-        self.port = Port.objects.create(
-            number=80, service_name="http", description="open", is_uncommon=True
-        )
-        return self.port
 
     def create_domain_info(self):
         self.domain_info = DomainInfo.objects.create(
@@ -296,16 +294,21 @@ class BaseTestCase(TestCase):
         self.ip_address = IpAddress.objects.create(address="1.1.1.1")
         self.ip_address.ports.add(self.port)
         self.subdomain.ip_addresses.add(self.ip_address)
-        
         return self.ip_address
+
+    def create_port(self):
+        self.port = Port.objects.create(
+            number=80, service_name="http", description="open", is_uncommon=True
+        )
+        return self.port
 
     def create_project_full(self):
         self.create_project()
         self.create_domain()
         self.create_scan_history()
         self.create_subdomain()
-        self.create_vulnerability()
         self.create_endpoint()
+        self.create_vulnerability()
         self.create_directory_scan()
         self.create_directory_file()
         self.create_subscan()
@@ -354,6 +357,8 @@ class BaseTestCase(TestCase):
         self.create_historical_ip()
         self.create_technology()
         self.create_country_iso()
+        self.create_domain_registration()
+        self.create_domain_info()
 
     def tearDown(self):
         # Restore original on_user_logged_in function
@@ -420,6 +425,7 @@ class TestGPTVulnerabilityReportGenerator(BaseTestCase):
     def setUp(self):
         super().setUp()
         self.create_project_base()
+        self.create_endpoint()
         self.create_vulnerability()
 
     @patch("reNgine.tasks.gpt_vulnerability_description.apply_async")
@@ -503,6 +509,7 @@ class TestDeleteVulnerability(BaseTestCase):
     def setUp(self):
         super().setUp()
         self.create_project_base()
+        self.create_endpoint()
         self.create_vulnerability()
 
     def test_delete_vulnerability(self):
@@ -657,6 +664,7 @@ class TestVulnerabilityViewSet(BaseTestCase):
     def setUp(self):
         super().setUp()
         self.create_project_base()
+        self.create_endpoint()
         self.create_vulnerability()
 
     def test_list_vulnerabilities(self):
@@ -834,6 +842,7 @@ class TestFetchMostCommonVulnerability(BaseTestCase):
     def setUp(self):
         super().setUp()
         self.create_project_base()
+        self.create_endpoint()
         self.create_vulnerability()
         self.create_vulnerability()
 
@@ -859,6 +868,7 @@ class TestFetchMostVulnerable(BaseTestCase):
     def setUp(self):
         super().setUp()
         self.create_project_base()
+        self.create_endpoint()
         self.create_vulnerability()
         self.create_vulnerability()
 
@@ -1017,12 +1027,14 @@ class TestDeleteMultipleRows(BaseTestCase):
 
 
 class TestUpdateTool(BaseTestCase):
+    def setUp(self):
+        super().setUp()
+        self.create_installed_external_tool()
+
     @patch("api.views.run_command")
     def test_update_tool(self, mock_run_command):
-        self.create_installed_external_tool()
-        tool = InstalledExternalTool.objects.first()
         api_url = reverse("api:update_tool")
-        response = self.client.get(api_url, {"tool_id": tool.id})
+        response = self.client.get(api_url, {"tool_id": self.installed_external_tool.id})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data["status"])
         mock_run_command.assert_called()
@@ -1153,13 +1165,17 @@ class TestIPToDomain(BaseTestCase):
 
 
 class TestVulnerabilityReport(BaseTestCase):
+    def setUp(self):
+        super().setUp()
+        self.create_project_full()
+        self.create_endpoint()
+        self.create_vulnerability()
+
     @patch("api.views.send_hackerone_report")
     def test_vulnerability_report(self, mock_send_report):
         mock_send_report.return_value = True
-        self.create_project_full()
-        vulnerability = self.create_vulnerability()
         url = reverse("api:vulnerability_report")
-        response = self.client.get(url, {"vulnerability_id": vulnerability[0].id})
+        response = self.client.get(url, {"vulnerability_id": self.vulnerabilities[0].id})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data["status"])
 
@@ -1191,8 +1207,12 @@ class TestGfList(BaseTestCase):
 
 
 class TestListTodoNotes(BaseTestCase):
-    def test_list_todo_notes(self):
+    def setUp(self):
+        super().setUp()
         self.create_project_full()
+        self.create_todo_note()
+
+    def test_list_todo_notes(self):
         url = reverse("api:listTodoNotes")
         response = self.client.get(url, {"project": self.project.slug})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
