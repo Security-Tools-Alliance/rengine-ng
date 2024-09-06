@@ -632,7 +632,7 @@ class TestListTargetsDatatableViewSet(BaseTestCase):
 
     def test_list_targets(self):
         """Test listing targets."""
-        api_url = "/api/listTargets/"
+        api_url = reverse("api:targets-list")
         response = self.client.get(api_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertGreaterEqual(len(response.data["results"]), 1)
@@ -640,7 +640,7 @@ class TestListTargetsDatatableViewSet(BaseTestCase):
 
     def test_list_targets_with_slug(self):
         """Test listing targets with project slug."""
-        api_url = "/api/listTargets/"
+        api_url = reverse("api:targets-list")
         response = self.client.get(api_url, {"slug": "test-project"})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertGreaterEqual(len(response.data["results"]), 1)
@@ -660,7 +660,7 @@ class TestDirectoryViewSet(BaseTestCase):
 
     def test_get_directory_files(self):
         """Test retrieving directory files."""
-        api_url = "/api/listDirectories/"
+        api_url = reverse("api:directories-list")
         response = self.client.get(api_url, {"scan_history": self.scan_history.id})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertGreaterEqual(len(response.data["results"]), 1)
@@ -668,7 +668,7 @@ class TestDirectoryViewSet(BaseTestCase):
 
     def test_get_directory_files_by_subdomain(self):
         """Test retrieving directory files by subdomain."""
-        api_url = "/api/listDirectories/"
+        api_url = reverse("api:directories-list")
         response = self.client.get(api_url, {"subdomain_id": self.subdomain.id})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertGreaterEqual(len(response.data["results"]), 1)
@@ -686,7 +686,7 @@ class TestVulnerabilityViewSet(BaseTestCase):
 
     def test_list_vulnerabilities(self):
         """Test listing vulnerabilities."""
-        api_url = "/api/listVulnerability/"
+        api_url = reverse("api:vulnerabilities-list")
         response = self.client.get(api_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertGreaterEqual(len(response.data["results"]), 1)
@@ -694,7 +694,7 @@ class TestVulnerabilityViewSet(BaseTestCase):
 
     def test_list_vulnerabilities_by_scan(self):
         """Test listing vulnerabilities by scan history."""
-        api_url = "/api/listVulnerability/"
+        api_url = reverse("api:vulnerabilities-list")
         response = self.client.get(api_url, {"scan_history": self.scan_history.id})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertGreaterEqual(len(response.data["results"]), 1)
@@ -702,7 +702,7 @@ class TestVulnerabilityViewSet(BaseTestCase):
 
     def test_list_vulnerabilities_by_domain(self):
         """Test listing vulnerabilities by domain."""
-        api_url = "/api/listVulnerability/"
+        api_url = reverse("api:vulnerabilities-list")
         response = self.client.get(api_url, {"domain": "example.com"})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertGreaterEqual(len(response.data["results"]), 1)
@@ -710,7 +710,7 @@ class TestVulnerabilityViewSet(BaseTestCase):
 
     def test_list_vulnerabilities_by_severity(self):
         """Test listing vulnerabilities by severity."""
-        api_url = "/api/listVulnerability/"
+        api_url = reverse("api:vulnerabilities-list")
         response = self.client.get(api_url, {"severity": 1})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertGreaterEqual(len(response.data["results"]), 1)
@@ -726,7 +726,7 @@ class TestSubdomainDatatableViewSet(BaseTestCase):
 
     def test_list_subdomains(self):
         """Test listing subdomains."""
-        api_url = "/api/listDatatableSubdomain/"
+        api_url = reverse("api:subdomain-datatable-list")
         response = self.client.get(api_url, {"project": self.project.slug})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertGreaterEqual(len(response.data["results"]), 1)
@@ -734,7 +734,7 @@ class TestSubdomainDatatableViewSet(BaseTestCase):
 
     def test_list_subdomains_by_domain(self):
         """Test listing subdomains by domain."""
-        api_url = "/api/listDatatableSubdomain/"
+        api_url = reverse("api:subdomain-datatable-list")
         response = self.client.get(
             api_url, {"target_id": self.domain.id, "project": self.project.slug}
         )
@@ -750,17 +750,16 @@ class TestEndPointViewSet(BaseTestCase):
         super().setUp()
         self.create_project_base()
         self.create_endpoint()
-        self.endpoint = EndPoint.objects.create(
-            target_domain=self.domain,
-            subdomain=self.subdomain,
-            scan_history=self.scan_history,
-            http_url=self.endpoint.http_url,
-        )
 
     def test_list_endpoints(self):
         """Test listing endpoints."""
-        api_url = "/api/listEndpoints/"
-        response = self.client.get(api_url, {"project": self.project.slug})
+        api_url = reverse("api:endpoints-list")
+        response = self.client.get(api_url, {
+            "project": self.project.slug,
+            "scan_id": self.scan_history.id,
+            "subdomain_id": self.subdomain.id,
+            "target_id": self.domain.id,
+            })
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertGreaterEqual(len(response.data["results"]), 1)
         self.assertEqual(
@@ -770,10 +769,14 @@ class TestEndPointViewSet(BaseTestCase):
 
     def test_list_endpoints_by_subdomain(self):
         """Test listing endpoints by subdomain."""
-        api_url = "/api/listEndpoints/"
+        api_url = reverse("api:endpoints-list")
         response = self.client.get(
-            api_url, {"subdomain_id": self.subdomain.id, "project": self.project.slug}
-        )
+            api_url, {
+                "subdomain_id": self.subdomain.id,
+                "scan_id": self.scan_history.id,
+                "project": self.project.slug,
+                "target_id": self.domain.id,
+                })
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertGreaterEqual(len(response.data["results"]), 1)
         self.assertEqual(
@@ -798,7 +801,7 @@ class TestInterestingSubdomainViewSet(BaseTestCase):
 
     def test_list_interesting_subdomains(self):
         """Test listing interesting subdomains."""
-        api_url = "/api/listInterestingSubdomains/"
+        api_url = reverse("api:interesting-subdomains-list")
         response = self.client.get(
             api_url, {"project": self.project.slug, "scan_id": self.scan_history.id}
         )
@@ -808,7 +811,7 @@ class TestInterestingSubdomainViewSet(BaseTestCase):
 
     def test_list_interesting_subdomains_by_domain(self):
         """Test listing interesting subdomains by domain."""
-        api_url = "/api/listInterestingSubdomains/"
+        api_url = reverse("api:interesting-subdomains-list")
         response = self.client.get(
             api_url,
             {

@@ -1813,7 +1813,7 @@ class EndPointChangesViewSet(viewsets.ModelViewSet):
 
 	def get_queryset(self):
 		req = self.request
-		scan_id = req.query_params.get('scan_id')
+		scan_id = int(req.query_params.get('scan_id'))
 		changes = req.query_params.get('changes')
 		domain_id = ScanHistory.objects.filter(id=scan_id).first().domain.id
 		scan_history = (
