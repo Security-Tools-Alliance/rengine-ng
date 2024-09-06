@@ -80,7 +80,7 @@ def get_lookup_keywords():
 		list: Lookup keywords.
 	"""
 	lookup_model = InterestingLookupModel.objects.first()
-	lookup_obj = InterestingLookupModel.objects.filter(custom_type=True).order_by('-id').first()
+	lookup_obj = InterestingLookupModel.objects.filter().order_by('-id').first()
 	custom_lookup_keywords = []
 	default_lookup_keywords = []
 	if lookup_model:
@@ -371,7 +371,7 @@ def get_interesting_endpoints(scan_history=None, target=None):
 	"""
 
 	lookup_keywords = get_lookup_keywords()
-	lookup_obj = InterestingLookupModel.objects.filter(custom_type=True).order_by('-id').first()
+	lookup_obj = InterestingLookupModel.objects.filter().order_by('-id').first()
 	if not lookup_obj:
 		return EndPoint.objects.none()
 	url_lookup = lookup_obj.url_lookup
@@ -1182,3 +1182,9 @@ def get_data_from_post_request(request, field):
         return request.data.getlist(field)
     else:
         return request.data.get(field, [])
+
+def safe_int_cast(value, default=None):
+    try:
+        return int(value) if value is not None else default
+    except ValueError:
+        return default
