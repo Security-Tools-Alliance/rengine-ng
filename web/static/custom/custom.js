@@ -394,12 +394,12 @@ function vuln_status_change(element, id, status) {
 	if (status) {
 		$(element).closest("tr").addClass("table-success text-strike");
 		$(element).text('RESOLVED')
-		$(element).removeClass('badge-soft-danger').addClass('badge-soft-success');
+		$(element).removeClass('badge-soft-primary').addClass('badge-soft-success');
 		$(element).attr('onclick','vuln_status_change(this, '+id+', false)')
 	} else {
 		$(element).closest("tr").removeClass("table-success text-strike")
 		$(element).text('OPEN')
-		$(element).removeClass('badge-soft-success').addClass('badge-soft-danger');
+		$(element).removeClass('badge-soft-success').addClass('badge-soft-primary');
 		$(element).attr('onclick','vuln_status_change(this, '+id+', true)') 
 	}
 	change_vuln_status(id);

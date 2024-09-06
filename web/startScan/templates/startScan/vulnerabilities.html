@@ -78,7 +78,7 @@ $(document).ready(function() {
 			{"className": "text-center", "targets": []},
 			{
 				"render": function ( data, type, row ) {
-					return `<div class="form-check mb-2 form-check-primary"><input type="checkbox" name="targets_checkbox['+ e + ']" class="float-start form-check-input vulnerability_checkbox">\n<span class="new-control-indicator"></span><span style="visibility:hidden">c</span></div>`;
+					return `<div class="form-check ms-1 form-check-primary"><input type="checkbox" name="targets_checkbox['+ e + ']" class="float-start form-check-input vulnerability_checkbox">\n<span class="new-control-indicator"></span><span style="visibility:hidden">c</span></div>`;
 				},
 				"targets": 0,
 			},
@@ -200,7 +200,7 @@ $(document).ready(function() {
 			{
 				"render": function ( data, type, row ) {
 					if (data){
-						return '<span class="vuln-status badge badge-soft-danger" role="button" onclick="vuln_status_change(this, '+row.id+', '+row.open_status+');">OPEN</span>'
+						return '<span class="vuln-status badge badge-soft-primary " role="button" onclick="vuln_status_change(this, '+row.id+', '+row.open_status+');">OPEN</span>'
 					}
 					else{
 						return '<span class="vuln-status badge badge-soft-success" role="button" onclick="vuln_status_change(this, '+row.id+', '+row.open_status+');">RESOLVED</span>'
