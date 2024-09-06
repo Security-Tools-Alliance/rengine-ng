@@ -1,3 +1,9 @@
+"""
+This file contains the test cases for the API views.
+"""
+
+import logging
+
 from unittest.mock import patch, MagicMock
 from django.test import TestCase, Client
 from django.utils import timezone
@@ -38,7 +44,6 @@ from targetApp.models import (
     Registrar,
     DomainRegistration,
 )
-import logging
 
 
 class BaseTestCase(TestCase):
@@ -84,6 +89,7 @@ class BaseTestCase(TestCase):
     logging.disable(logging.CRITICAL)
 
     def create_project(self):
+        """Create and return a test project."""
         self.project = Project.objects.create(
             name="Test Project",
             insert_date=timezone.now(),
@@ -92,6 +98,7 @@ class BaseTestCase(TestCase):
         return self.project
 
     def create_domain(self):
+        """Create and return a test domain."""
         self.domain = Domain.objects.create(
             name="example.com",
             project=self.project,
@@ -100,6 +107,7 @@ class BaseTestCase(TestCase):
         return self.domain
 
     def create_scan_history(self):
+        """Create and return a test scan history."""
         self.scan_history = ScanHistory.objects.create(
             domain=self.domain,
             start_scan_date=timezone.now(),
@@ -121,6 +129,7 @@ class BaseTestCase(TestCase):
         return self.scan_history
 
     def create_subdomain(self, name="admin.example.com"):
+        """Create and return a test subdomain."""
         self.subdomain = Subdomain.objects.create(
             name=name,
             target_domain=self.domain,
@@ -129,6 +138,7 @@ class BaseTestCase(TestCase):
         return self.subdomain
 
     def create_endpoint(self, name="endpoint"):
+        """Create and return a test endpoint."""
         self.endpoint = EndPoint.objects.create(
             target_domain=self.domain,
             subdomain=self.subdomain,
@@ -138,6 +148,7 @@ class BaseTestCase(TestCase):
         return self.endpoint
 
     def create_vulnerability(self):
+        """Create and return a test vulnerability."""
         self.vulnerabilities.append(
             Vulnerability.objects.create(
                 name="Common Vulnerability",
@@ -152,6 +163,7 @@ class BaseTestCase(TestCase):
         return self.vulnerabilities
 
     def create_directory_scan(self):
+        """Create and return a test directory scan."""
         self.directory_scan = DirectoryScan.objects.create(
             command_line="Test Command",
             scanned_date=timezone.now()
@@ -159,6 +171,7 @@ class BaseTestCase(TestCase):
         return self.directory_scan
 
     def create_directory_file(self):
+        """Create and return a test directory file."""
         self.directory_file = DirectoryFile.objects.create(
             name="test.txt",
             url="https://example.com/test.txt"
@@ -166,6 +179,7 @@ class BaseTestCase(TestCase):
         return self.directory_file
 
     def create_subscan(self):
+        """Create and return a test subscan."""
         self.subscans.append(
             SubScan.objects.create(
                 start_scan_date=timezone.now(),
@@ -177,6 +191,7 @@ class BaseTestCase(TestCase):
         return self.subscans
 
     def create_installed_external_tool(self):
+        """Create and return a test installed external tool."""
         self.installed_external_tool = InstalledExternalTool.objects.create(
             name="OneForAll",
             github_url="https://github.com/shmilylty/OneForAll",
@@ -186,6 +201,7 @@ class BaseTestCase(TestCase):
         return self.installed_external_tool
 
     def create_todo_note(self):
+        """Create and return a test todo note."""
         self.todo_note = TodoNote.objects.create(
             title="Test Note",
             description="Test Description",
@@ -196,10 +212,12 @@ class BaseTestCase(TestCase):
         return self.todo_note
 
     def create_search_history(self):
+        """Create and return a test search history."""
         self.search_history = SearchHistory.objects.create(query="Test Query")
         return self.search_history
 
     def create_interesting_lookup_model(self):
+        """Create and return a test interesting lookup model."""
         self.interesting_lookup_model = InterestingLookupModel.objects.create(
             keywords="Test Keywords",
             custom_type=True,
@@ -210,6 +228,7 @@ class BaseTestCase(TestCase):
         return self.interesting_lookup_model
 
     def create_engine_type(self):
+        """Create and return a test engine type."""
         self.engine_type = EngineType.objects.create(
             engine_name="Test Engine",
             yaml_configuration="http_crawl: \{\}",
@@ -218,6 +237,7 @@ class BaseTestCase(TestCase):
         return self.engine_type
 
     def create_organization(self):
+        """Create and return a test organization."""
         self.organization = Organization.objects.create(
             name="Test Organization",
             description="Test Description",
@@ -228,11 +248,13 @@ class BaseTestCase(TestCase):
         return self.organization
 
     def create_employee(self):
+        """Create and return a test employee."""
         self.employee = Employee.objects.create(name="Test Employee")
         self.scan_history.employees.add(self.employee)
         return self.employee
 
     def create_email(self):
+        """Create and return a test email."""
         self.email = Email.objects.create(
             address="test@example.com",
             password="password"
@@ -241,11 +263,13 @@ class BaseTestCase(TestCase):
         return self.email
 
     def create_dork(self):
+        """Create and return a test dork."""
         self.dork = Dork.objects.create(type="Test Dork", url="https://example.com")
         self.scan_history.dorks.add(self.dork)
         return self.dork
 
     def create_domain_info(self):
+        """Create and return a test domain info."""
         self.domain_info = DomainInfo.objects.create(
             created=timezone.now(),
             updated=timezone.now(),
@@ -264,18 +288,21 @@ class BaseTestCase(TestCase):
         return self.domain_info
 
     def create_whois_status(self):
+        """Create and return a test WHOIS status."""
         self.whois_status = WhoisStatus.objects.create(
             name="clienttransferprohibited",
         )
         return self.whois_status
 
     def create_name_server(self):
+        """Create and return a test name server."""
         self.name_server = NameServer.objects.create(
             name="Test Name Server",
         )
         return self.name_server
 
     def create_dns_record(self):
+        """Create and return a test DNS record."""
         self.dns_record = DNSRecord.objects.create(
             name="Test DNS Record",
             type="a",
@@ -283,49 +310,58 @@ class BaseTestCase(TestCase):
         return self.dns_record
 
     def create_related_domain(self):
+        """Create and return a test related domain."""
         self.related_domain = RelatedDomain.objects.create(
             name="test.com",
         )
         return self.related_domain
 
     def create_domain_registration(self):
+        """Create and return a test domain registration."""
         self.domain_registration = DomainRegistration.objects.create(
             name="Test Domain Registration"
         )
         return self.domain_registration
 
     def create_registrar(self):
+        """Create and return a test registrar."""
         self.registrar = Registrar.objects.create(
             name="Test Registrar",
         )
         return self.registrar
 
     def create_historical_ip(self):
+        """Create and return a test historical IP."""
         self.historical_ip = HistoricalIP.objects.create(ip="127.0.0.1")
         return self.historical_ip
 
     def create_technology(self):
+        """Create and return a test technology."""
         self.technology = Technology.objects.create(name="Test Technology")
         self.subdomain.technologies.add(self.technology)
         return self.technology
 
     def create_country_iso(self):
+        """Create and return a test country ISO."""
         self.country_iso = CountryISO.objects.create(iso="US")
         return self.country_iso
 
     def create_ip_address(self):
+        """Create and return a test IP address."""
         self.ip_address = IpAddress.objects.create(address="1.1.1.1")
         self.ip_address.ports.add(self.port)
         self.subdomain.ip_addresses.add(self.ip_address)
         return self.ip_address
 
     def create_port(self):
+        """Create and return a test port."""
         self.port = Port.objects.create(
             number=80, service_name="http", description="open", is_uncommon=True
         )
         return self.port
 
     def create_metafinder_document(self):
+        """Create and return a test MetaFinder document."""
         self.metafinder_document = MetaFinderDocument.objects.create(
             title="Test MetaFinder Document",
             url="https://example.com",
@@ -340,6 +376,7 @@ class BaseTestCase(TestCase):
         return self.metafinder_document
 
     def create_project_full(self):
+        """Create a full project setup with all related objects."""
         self.create_project()
         self.create_domain()
         self.create_scan_history()
@@ -369,35 +406,13 @@ class BaseTestCase(TestCase):
         self.create_metafinder_document()
 
     def create_project_base(self):
+        """Create a basic project setup with essential objects."""
         self.create_project()
         self.create_domain()
         self.create_scan_history()
         self.create_subdomain()
         self.create_port()
         self.create_ip_address()
-
-    def create_project_additionals(self):
-        self.create_vulnerability()
-        self.create_endpoint()
-        self.create_directory_scan()
-        self.create_directory_file()
-        self.create_subscan()
-        self.create_todo_note()
-        self.create_engine_type()
-        self.create_organization()
-        self.create_employee()
-        self.create_email()
-        self.create_dork()
-        self.create_whois_status()
-        self.create_name_server()
-        self.create_dns_record()
-        self.create_related_domain()
-        self.create_historical_ip()
-        self.create_technology()
-        self.create_country_iso()
-        self.create_domain_registration()
-        self.create_domain_info()
-        self.create_metafinder_document()
 
     def tearDown(self):
         # Restore original on_user_logged_in function
@@ -701,6 +716,7 @@ class TestVulnerabilityViewSet(BaseTestCase):
     """Tests for the Vulnerability ViewSet API."""
 
     def setUp(self):
+        """Set up test environment."""
         super().setUp()
         self.create_project_base()
         self.create_endpoint()
@@ -743,6 +759,7 @@ class TestSubdomainDatatableViewSet(BaseTestCase):
     """Tests for the Subdomain Datatable ViewSet API."""
 
     def setUp(self):
+        """Set up test environment."""
         super().setUp()
         self.create_project_base()
 
@@ -766,9 +783,10 @@ class TestSubdomainDatatableViewSet(BaseTestCase):
 
 
 class TestEndPointViewSet(BaseTestCase):
-    """Tests for the EndPoint ViewSet API."""
+    """Test case for the EndPoint ViewSet API."""
 
     def setUp(self):
+        """Set up test environment."""
         super().setUp()
         self.create_project_base()
         self.create_endpoint()
@@ -808,9 +826,10 @@ class TestEndPointViewSet(BaseTestCase):
 
 
 class TestInterestingSubdomainViewSet(BaseTestCase):
-    """Tests for the Interesting Subdomain ViewSet API."""
+    """Test case for the Interesting Subdomain ViewSet API."""
 
     def setUp(self):
+        """Set up test environment."""
         super().setUp()
         self.create_project_base()
         self.interesting_lookup = InterestingLookupModel.objects.create(
@@ -848,15 +867,17 @@ class TestInterestingSubdomainViewSet(BaseTestCase):
 
 
 class TestUniversalSearch(BaseTestCase):
-    """Tests for the Universal Search API."""
+    """Test case for the Universal Search API."""
 
     def setUp(self):
+        """Set up test environment."""
         super().setUp()
         self.create_project_base()
         self.create_endpoint()
         self.create_vulnerability()
 
     def test_universal_search(self):
+        """Test the universal search functionality."""
         api_url = reverse("api:search")
         response = self.client.get(api_url, {"query": "admin"})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -871,6 +892,7 @@ class TestUniversalSearch(BaseTestCase):
         )
 
     def test_universal_search_no_query(self):
+        """Test the universal search with no query parameter."""
         api_url = reverse("api:search")
         response = self.client.get(api_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -879,9 +901,10 @@ class TestUniversalSearch(BaseTestCase):
 
 
 class TestFetchMostCommonVulnerability(BaseTestCase):
-    """Tests for the Fetch Most Common Vulnerability API."""
+    """Test case for the Fetch Most Common Vulnerability API."""
 
     def setUp(self):
+        """Set up test environment."""
         super().setUp()
         self.create_project_base()
         self.create_endpoint()
@@ -889,11 +912,11 @@ class TestFetchMostCommonVulnerability(BaseTestCase):
         self.create_vulnerability()
 
     def test_fetch_most_common_vulnerability(self):
+        """Test fetching the most common vulnerability."""
         api_url = reverse("api:fetch_most_common_vulnerability")
         data = {
             "target_id": int(self.domain.id),
             "scan_history_id": int(self.scan_history.id),
-            # 'subdomain_id': int(self.scan_history.id),
             "slug": self.project.slug,
             "limit": 10,
         }
@@ -905,9 +928,10 @@ class TestFetchMostCommonVulnerability(BaseTestCase):
 
 
 class TestFetchMostVulnerable(BaseTestCase):
-    """Tests for the Fetch Most Vulnerable API."""
+    """Test case for the Fetch Most Vulnerable API."""
 
     def setUp(self):
+        """Set up test environment."""
         super().setUp()
         self.create_project_base()
         self.create_endpoint()
@@ -915,6 +939,7 @@ class TestFetchMostVulnerable(BaseTestCase):
         self.create_vulnerability()
 
     def test_fetch_most_vulnerable(self):
+        """Test fetching the most vulnerable subdomains."""
         api_url = reverse("api:fetch_most_vulnerable")
         data = {
             "target_id": int(self.domain.id),
@@ -930,10 +955,11 @@ class TestFetchMostVulnerable(BaseTestCase):
 
 
 class TestCVEDetails(BaseTestCase):
-    """Tests for the CVE Details API."""
+    """Test case for the CVE Details API."""
 
     @patch("requests.get")
     def test_get_cve_details(self, mock_get):
+        """Test getting CVE details."""
         mock_get.return_value.status_code = 200
         mock_get.return_value.json.return_value = {
             "id": "CVE-2021-44228",
@@ -946,6 +972,7 @@ class TestCVEDetails(BaseTestCase):
         self.assertEqual(response.data["result"]["id"], "CVE-2021-44228")
 
     def test_get_cve_details_missing_id(self):
+        """Test getting CVE details with missing ID."""
         api_url = reverse("api:cve_details")
         response = self.client.get(api_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -954,13 +981,15 @@ class TestCVEDetails(BaseTestCase):
 
 
 class TestAddReconNote(BaseTestCase):
-    """Tests for the Add Recon Note API."""
+    """Test case for the Add Recon Note API."""
 
     def setUp(self):
+        """Set up test environment."""
         super().setUp()
         self.create_project_base()
 
     def test_add_recon_note(self):
+        """Test adding a recon note."""
         api_url = reverse("api:addReconNote")
         data = {
             "subdomain_id": self.subdomain.id,
@@ -974,6 +1003,7 @@ class TestAddReconNote(BaseTestCase):
         self.assertTrue(response.data["status"])
 
     def test_add_recon_note_missing_data(self):
+        """Test adding a recon note with missing data."""
         api_url = reverse("api:addReconNote")
         data = {"title": "Test Note", "slug": "test-project"}
         response = self.client.post(api_url, data)
@@ -982,11 +1012,15 @@ class TestAddReconNote(BaseTestCase):
 
 
 class TestToggleSubdomainImportantStatus(BaseTestCase):
+    """Test case for toggling subdomain important status."""
+
     def setUp(self):
+        """Set up test environment."""
         super().setUp()
         self.create_project_base()
 
     def test_toggle_subdomain_important_status(self):
+        """Test toggling the important status of a subdomain."""
         api_url = reverse("api:toggle_subdomain")
         initial_status = self.subdomain.is_important
         response = self.client.post(api_url, {"subdomain_id": self.subdomain.id})
@@ -997,11 +1031,15 @@ class TestToggleSubdomainImportantStatus(BaseTestCase):
 
 
 class TestAddTarget(BaseTestCase):
+    """Test case for adding a target."""
+
     def setUp(self):
+        """Set up test environment."""
         super().setUp()
         self.create_project_base()
 
     def test_add_target(self):
+        """Test adding a new target."""
         api_url = reverse("api:addTarget")
         data = {
             "domain_name": "example.com",
@@ -1018,12 +1056,16 @@ class TestAddTarget(BaseTestCase):
 
 
 class TestFetchSubscanResults(BaseTestCase):
+    """Test case for fetching subscan results."""
+
     def setUp(self):
+        """Set up test environment."""
         super().setUp()
         self.create_project_base()
         self.create_subscan()
 
     def test_fetch_subscan_results(self):
+        """Test fetching results of a subscan."""
         api_url = reverse("api:fetch_subscan_results")
         response = self.client.get(api_url, {"subscan_id": self.subscans[0].id})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -1032,12 +1074,16 @@ class TestFetchSubscanResults(BaseTestCase):
 
 
 class TestListSubScans(BaseTestCase):
+    """Test case for listing subscans."""
+
     def setUp(self):
+        """Set up test environment."""
         super().setUp()
         self.create_project_base()
         self.create_subscan()
 
     def test_list_subscans(self):
+        """Test listing all subscans."""
         api_url = reverse("api:listSubScans")
         response = self.client.post(api_url, {"scan_history_id": self.scan_history.id})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -1046,13 +1092,17 @@ class TestListSubScans(BaseTestCase):
 
 
 class TestDeleteMultipleRows(BaseTestCase):
+    """Test case for deleting multiple rows."""
+
     def setUp(self):
+        """Set up test environment."""
         super().setUp()
         self.create_project_base()
         self.create_subscan()
         self.create_subscan()
 
     def test_delete_multiple_rows(self):
+        """Test deleting multiple rows."""
         api_url = reverse("api:delete_rows")
         data = {
             "type": "subscan",
@@ -1069,12 +1119,16 @@ class TestDeleteMultipleRows(BaseTestCase):
 
 
 class TestUpdateTool(BaseTestCase):
+    """Test case for updating a tool."""
+
     def setUp(self):
+        """Set up test environment."""
         super().setUp()
         self.create_installed_external_tool()
 
     @patch("api.views.run_command")
     def test_update_tool(self, mock_run_command):
+        """Test updating a tool."""
         api_url = reverse("api:update_tool")
         response = self.client.get(api_url, {"tool_id": self.installed_external_tool.id})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -1084,7 +1138,10 @@ class TestUpdateTool(BaseTestCase):
 
 
 class TestGetExternalToolCurrentVersion(BaseTestCase):
+    """Test case for getting the current version of an external tool."""
+
     def setUp(self):
+        """Set up test environment."""
         super().setUp()
         self.tool = self.create_installed_external_tool()
         self.tool.version_lookup_command = "echo 'v1.0.0'"
@@ -1093,6 +1150,7 @@ class TestGetExternalToolCurrentVersion(BaseTestCase):
 
     @patch("api.views.run_command")
     def test_get_external_tool_current_version(self, mock_run_command):
+        """Test getting the current version of an external tool."""
         mock_run_command.return_value = (None, "v1.0.0")
         url = reverse("api:external_tool_get_current_release")
         response = self.client.get(url, {"tool_id": self.tool.id})
@@ -1103,7 +1161,10 @@ class TestGetExternalToolCurrentVersion(BaseTestCase):
 
 
 class TestGithubToolCheckGetLatestRelease(BaseTestCase):
+    """Test case for checking the latest release of a GitHub tool."""
+
     def setUp(self):
+        """Set up test environment."""
         super().setUp()
         self.tool = self.create_installed_external_tool()
         self.tool.github_url = "https://github.com/example/tool"
@@ -1111,6 +1172,7 @@ class TestGithubToolCheckGetLatestRelease(BaseTestCase):
 
     @patch("api.views.requests.get")
     def test_github_tool_check_get_latest_release(self, mock_get):
+        """Test checking the latest release of a GitHub tool."""
         mock_get.return_value.json.return_value = [
             {
                 "url": "https://api.github.com/repos/example/tool/releases/1",
@@ -1127,11 +1189,15 @@ class TestGithubToolCheckGetLatestRelease(BaseTestCase):
 
 
 class TestScanStatus(BaseTestCase):
+    """Test case for checking scan status."""
+
     def setUp(self):
+        """Set up test environment."""
         super().setUp()
         self.create_project_full()
 
     def test_scan_status(self):
+        """Test checking the status of a scan."""
         url = reverse("api:scan_status")
         response = self.client.get(url, {"project": self.project.slug})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -1140,12 +1206,16 @@ class TestScanStatus(BaseTestCase):
 
 
 class TestWhois(BaseTestCase):
+    """Test case for WHOIS lookup."""
+
     def setUp(self):
+        """Set up test environment."""
         super().setUp()
         self.create_project_base()
 
     @patch("api.views.query_whois.apply_async")
     def test_whois(self, mock_apply_async):
+        """Test WHOIS lookup for a domain."""
         mock_apply_async.return_value.wait.return_value = {
             "status": True,
             "data": "Whois data",
@@ -1158,12 +1228,16 @@ class TestWhois(BaseTestCase):
 
 
 class TestReverseWhois(BaseTestCase):
+    """Test case for Reverse WHOIS lookup."""
+
     def setUp(self):
+        """Set up test environment."""
         super().setUp()
         self.create_project_base()
 
     @patch("api.views.query_reverse_whois.apply_async")
     def test_reverse_whois(self, mock_apply_async):
+        """Test Reverse WHOIS lookup for a domain."""
         mock_apply_async.return_value.wait.return_value = {
             "status": True,
             "data": "Reverse Whois data",
@@ -1176,12 +1250,16 @@ class TestReverseWhois(BaseTestCase):
 
 
 class TestDomainIPHistory(BaseTestCase):
+    """Test case for domain IP history lookup."""
+
     def setUp(self):
+        """Set up test environment."""
         super().setUp()
         self.create_project_base()
 
     @patch("api.views.query_ip_history.apply_async")
     def test_domain_ip_history(self, mock_apply_async):
+        """Test domain IP history lookup."""
         mock_apply_async.return_value.wait.return_value = {
             "status": True,
             "data": "IP History data",
@@ -1194,12 +1272,16 @@ class TestDomainIPHistory(BaseTestCase):
 
 
 class TestCMSDetector(BaseTestCase):
+    """Test case for CMS detection functionality."""
+
     def setUp(self):
+        """Set up test environment."""
         super().setUp()
         self.create_project_base()
 
     @patch("api.views.run_cmseek.delay")
     def test_cms_detector(self, mock_run_cmseek):
+        """Test CMS detection for a given URL."""
         mock_run_cmseek.return_value.get.return_value = {
             "status": True,
             "cms": "WordPress",
@@ -1212,13 +1294,21 @@ class TestCMSDetector(BaseTestCase):
 
 
 class TestIPToDomain(BaseTestCase):
+    """Test case for IP to domain resolution."""
+
     def setUp(self):
+        """Set up test environment."""
         super().setUp()
         self.create_project_base()
 
     @patch("api.views.socket.gethostbyaddr")
     def test_ip_to_domain(self, mock_gethostbyaddr):
-        mock_gethostbyaddr.return_value = (self.domain.name, [self.domain.name], [self.subdomain.ip_addresses.first().address])
+        """Test resolving an IP address to a domain name."""
+        mock_gethostbyaddr.return_value = (
+            self.domain.name,
+            [self.domain.name],
+            [self.subdomain.ip_addresses.first().address]
+        )
         url = reverse("api:ip_to_domain")
         response = self.client.get(url, {"ip_address": self.subdomain.ip_addresses.first().address})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -1227,7 +1317,10 @@ class TestIPToDomain(BaseTestCase):
 
 
 class TestVulnerabilityReport(BaseTestCase):
+    """Test case for vulnerability reporting functionality."""
+
     def setUp(self):
+        """Set up test environment."""
         super().setUp()
         self.create_project_full()
         self.create_endpoint()
@@ -1235,6 +1328,7 @@ class TestVulnerabilityReport(BaseTestCase):
 
     @patch("api.views.send_hackerone_report")
     def test_vulnerability_report(self, mock_send_report):
+        """Test sending a vulnerability report."""
         mock_send_report.return_value = True
         url = reverse("api:vulnerability_report")
         response = self.client.get(url, {"vulnerability_id": self.vulnerabilities[0].id})
@@ -1243,9 +1337,12 @@ class TestVulnerabilityReport(BaseTestCase):
 
 
 class TestGetFileContents(BaseTestCase):
+    """Test case for retrieving file contents."""
+
     @patch("api.views.os.path.exists")
     @patch("api.views.run_command")
     def test_get_file_contents(self, mock_run_command, mock_exists):
+        """Test retrieving contents of a file."""
         mock_exists.return_value = True
         mock_run_command.return_value = (0, "test content")
         url = reverse("api:getFileContents")
@@ -1256,8 +1353,11 @@ class TestGetFileContents(BaseTestCase):
 
 
 class TestGfList(BaseTestCase):
+    """Test case for retrieving GF patterns."""
+
     @patch("api.views.run_gf_list.delay")
     def test_gf_list(self, mock_run_gf_list):
+        """Test retrieving a list of GF patterns."""
         mock_run_gf_list.return_value.get.return_value = {
             "status": True,
             "output": ["pattern1", "pattern2"],
@@ -1269,12 +1369,16 @@ class TestGfList(BaseTestCase):
 
 
 class TestListTodoNotes(BaseTestCase):
+    """Test case for listing todo notes."""
+
     def setUp(self):
+        """Set up test environment."""
         super().setUp()
         self.create_project_full()
         self.create_todo_note()
 
     def test_list_todo_notes(self):
+        """Test listing todo notes for a project."""
         url = reverse("api:listTodoNotes")
         response = self.client.get(url, {"project": self.project.slug})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -1296,11 +1400,15 @@ class TestListTodoNotes(BaseTestCase):
 
 
 class TestListScanHistory(BaseTestCase):
+    """Test case for listing scan history."""
+
     def setUp(self):
+        """Set up test environment."""
         super().setUp()
         self.create_project_full()
 
     def test_list_scan_history(self):
+        """Test listing scan history for a project."""
         url = reverse("api:listScanHistory")
         response = self.client.get(url, {"project": self.project.slug})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -1309,11 +1417,15 @@ class TestListScanHistory(BaseTestCase):
 
 
 class TestListEngines(BaseTestCase):
+    """Test case for listing engines."""
+
     def setUp(self):
+        """Set up test environment."""
         super().setUp()
         self.create_project_full()
 
     def test_list_engines(self):
+        """Test listing all available engines."""
         url = reverse("api:listEngines")
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -1322,11 +1434,15 @@ class TestListEngines(BaseTestCase):
 
 
 class TestListOrganizations(BaseTestCase):
+    """Test case for listing organizations."""
+
     def setUp(self):
+        """Set up test environment."""
         super().setUp()
         self.create_project_full()
 
     def test_list_organizations(self):
+        """Test listing all organizations."""
         url = reverse("api:listOrganizations")
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -1336,11 +1452,15 @@ class TestListOrganizations(BaseTestCase):
 
 
 class TestListTargetsInOrganization(BaseTestCase):
+    """Test case for listing targets in an organization."""
+
     def setUp(self):
+        """Set up test environment."""
         super().setUp()
         self.create_project_full()
 
     def test_list_targets_in_organization(self):
+        """Test listing targets for a specific organization."""
         url = reverse("api:queryTargetsInOrganization")
         response = self.client.get(url, {"organization_id": self.organization.id})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -1351,11 +1471,15 @@ class TestListTargetsInOrganization(BaseTestCase):
 
 
 class TestListTargetsWithoutOrganization(BaseTestCase):
+    """Test case for listing targets without an organization."""
+
     def setUp(self):
+        """Set up test environment."""
         super().setUp()
         self.create_project_full()
 
     def test_list_targets_without_organization(self):
+        """Test listing targets that are not associated with any organization."""
         url = reverse("api:queryTargetsWithoutOrganization")
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -1365,11 +1489,15 @@ class TestListTargetsWithoutOrganization(BaseTestCase):
 
 
 class TestVisualiseData(BaseTestCase):
+    """Test case for visualising scan data."""
+
     def setUp(self):
+        """Set up test environment."""
         super().setUp()
         self.create_project_full()
 
     def test_visualise_data(self):
+        """Test retrieving visualisation data for a scan."""
         url = reverse("api:queryAllScanResultVisualise")
         response = self.client.get(url, {"scan_id": self.scan_history.id})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -1378,11 +1506,15 @@ class TestVisualiseData(BaseTestCase):
 
 
 class TestListTechnology(BaseTestCase):
+    """Test case for listing technologies."""
+
     def setUp(self):
+        """Set up test environment."""
         super().setUp()
         self.create_project_full()
 
     def test_list_technology(self):
+        """Test listing technologies for a target."""
         url = reverse("api:listTechnologies")
         response = self.client.get(url, {"target_id": self.domain.id})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -1392,11 +1524,15 @@ class TestListTechnology(BaseTestCase):
 
 
 class TestListDorkTypes(BaseTestCase):
+    """Test case for listing dork types."""
+
     def setUp(self):
+        """Set up test environment."""
         super().setUp()
         self.create_project_full()
 
     def test_list_dork_types(self):
+        """Test listing dork types for a scan."""
         url = reverse("api:queryDorkTypes")
         response = self.client.get(url, {"scan_id": self.scan_history.id})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -1406,11 +1542,15 @@ class TestListDorkTypes(BaseTestCase):
 
 
 class TestListEmails(BaseTestCase):
+    """Test case for listing emails."""
+
     def setUp(self):
+        """Set up test environment."""
         super().setUp()
         self.create_project_full()
 
     def test_list_emails(self):
+        """Test listing emails for a scan."""
         url = reverse("api:queryEmails")
         response = self.client.get(url, {"scan_id": self.scan_history.id})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -1420,11 +1560,15 @@ class TestListEmails(BaseTestCase):
 
 
 class TestListDorks(BaseTestCase):
+    """Test case for listing dorks."""
+
     def setUp(self):
+        """Set up test environment."""
         super().setUp()
         self.create_project_full()
 
     def test_list_dorks(self):
+        """Test listing dorks for a scan."""
         url = reverse("api:queryDorks")
         response = self.client.get(url, {"scan_id": self.scan_history.id})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -1435,11 +1579,15 @@ class TestListDorks(BaseTestCase):
 
 
 class TestListEmployees(BaseTestCase):
+    """Test case for listing employees."""
+
     def setUp(self):
+        """Set up test environment."""
         super().setUp()
         self.create_project_full()
 
     def test_list_employees(self):
+        """Test listing employees for a scan."""
         url = reverse("api:queryEmployees")
         response = self.client.get(url, {"scan_id": self.scan_history.id})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -1449,11 +1597,15 @@ class TestListEmployees(BaseTestCase):
 
 
 class TestListPorts(BaseTestCase):
+    """Test case for listing ports."""
+
     def setUp(self):
+        """Set up test environment."""
         super().setUp()
         self.create_project_full()
 
     def test_list_ports(self):
+        """Test listing ports for a target and scan."""
         url = reverse("api:listPorts")
         response = self.client.get(
             url,
@@ -1469,12 +1621,17 @@ class TestListPorts(BaseTestCase):
         self.assertEqual(response.data["ports"][0]["number"], 80)
         self.assertEqual(response.data["ports"][0]["service_name"], "http")
 
+
 class TestListSubdomains(BaseTestCase):
+    """Test case for listing subdomains."""
+
     def setUp(self):
+        """Set up test environment."""
         super().setUp()
         self.create_project_full()
 
     def test_list_subdomains(self):
+        """Test listing subdomains for a target."""
         url = reverse("api:querySubdomains")
         response = self.client.get(url, {"target_id": self.domain.id})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -1482,13 +1639,18 @@ class TestListSubdomains(BaseTestCase):
         self.assertGreaterEqual(len(response.data["subdomains"]), 1)
         self.assertEqual(response.data["subdomains"][0]["name"], self.subdomain.name)
 
+
 class TestListOsintUsers(BaseTestCase):
+    """Test case for listing OSINT users."""
+
     def setUp(self):
+        """Set up test environment."""
         super().setUp()
         self.create_project_base()
         self.create_metafinder_document()
 
     def test_list_osint_users(self):
+        """Test listing OSINT users for a scan."""
         url = reverse("api:queryMetadata")
         response = self.client.get(url, {"scan_id": self.scan_history.id})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -1496,13 +1658,18 @@ class TestListOsintUsers(BaseTestCase):
         self.assertGreaterEqual(len(response.data["metadata"]), 1)
         self.assertEqual(response.data["metadata"][0]["author"], self.metafinder_document.author)
 
+
 class TestListMetadata(BaseTestCase):
+    """Test case for listing metadata."""
+
     def setUp(self):
+        """Set up test environment."""
         super().setUp()
         self.create_project_base()
         self.create_metafinder_document()
 
     def test_list_metadata(self):
+        """Test listing metadata for a scan."""
         url = reverse("api:queryMetadata")
         response = self.client.get(url, {"scan_id": self.scan_history.id})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -1512,12 +1679,17 @@ class TestListMetadata(BaseTestCase):
         self.assertEqual(response.data["metadata"][0]["url"], self.metafinder_document.url)
         self.assertEqual(response.data["metadata"][0]["title"], self.metafinder_document.title)
 
+
 class TestListIPs(BaseTestCase):
+    """Test case for listing IP addresses."""
+
     def setUp(self):
+        """Set up test environment."""
         super().setUp()
         self.create_project_base()
 
     def test_list_ips(self):
+        """Test listing IP addresses for a target."""
         url = reverse('api:listIPs')
         response = self.client.get(url, {'target_id': self.domain.id})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -1525,38 +1697,56 @@ class TestListIPs(BaseTestCase):
         self.assertGreaterEqual(len(response.data['ips']), 1)
         self.assertEqual(response.data['ips'][0]['address'], self.ip_address.address)
 
+
 class TestIpAddressViewSet(BaseTestCase):
+    """Test case for IP address viewset."""
+
     def setUp(self):
+        """Set up test environment."""
         super().setUp()
         self.create_project_base()
 
     def test_ip_address_viewset(self):
+        """Test retrieving IP addresses for a scan."""
         url = reverse('api:ip-addresses-list')
         response = self.client.get(url, {'scan_id': self.scan_history.id})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertGreaterEqual(len(response.data), 1)
-        self.assertEqual(response.data['results'][0]['ip_addresses'][0]['address'], self.ip_address.address)
+        self.assertEqual(
+            response.data['results'][0]['ip_addresses'][0]['address'],
+            self.ip_address.address
+        )
+
 
 class TestSubdomainsViewSet(BaseTestCase):
+    """Test case for subdomains viewset."""
+
     def setUp(self):
+        """Set up test environment."""
         super().setUp()
         self.create_project_full()
 
     def test_subdomains_viewset(self):
+        """Test retrieving subdomains for a scan."""
         url = reverse('api:subdomains-list')
         response = self.client.get(url, {'scan_id': self.scan_history.id})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertGreaterEqual(len(response.data), 1)
         self.assertEqual(response.data['results'][0]['name'], self.subdomain.name)
 
+
 class TestSubdomainChangesViewSet(BaseTestCase):
+    """Test case for subdomain changes viewset."""
+
     def setUp(self):
+        """Set up test environment."""
         super().setUp()
         self.create_project_base()
         self.create_scan_history()
         self.create_subdomain('admin1.example.com')
 
     def test_subdomain_changes_viewset(self):
+        """Test retrieving subdomain changes for a scan."""
         url = reverse('api:subdomain-changes-list')
         response = self.client.get(url, {'scan_id': self.scan_history.id, 'changes': 'added'})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -1564,8 +1754,12 @@ class TestSubdomainChangesViewSet(BaseTestCase):
         self.assertEqual(response.data['results'][0]['name'], self.subdomain.name)
         self.assertEqual(response.data['results'][0]['change'], 'added')
 
+
 class TestEndPointChangesViewSet(BaseTestCase):
+    """Test case for endpoint changes viewset."""
+
     def setUp(self):
+        """Set up test environment."""
         super().setUp()
         self.create_project_base()
         self.create_endpoint()
@@ -1573,6 +1767,7 @@ class TestEndPointChangesViewSet(BaseTestCase):
         self.create_endpoint(name="endpoint2")
 
     def test_endpoint_changes_viewset(self):
+        """Test the EndPoint Changes ViewSet."""
         url = reverse('api:endpoint-changes-list')
         response = self.client.get(url, {'scan_id': self.scan_history.id, 'changes': 'added'})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -1581,12 +1776,16 @@ class TestEndPointChangesViewSet(BaseTestCase):
         self.assertEqual(response.data['results'][0]['change'], 'added')
 
 class TestInterestingEndpointViewSet(BaseTestCase):
+    """Test case for interesting endpoint viewset."""
+
     def setUp(self):
+        """Set up test environment."""
         super().setUp()
         self.create_project_base()
         self.create_endpoint()
 
     def test_interesting_endpoint_viewset(self):
+        """Test retrieving interesting endpoints for a scan."""
         url = reverse('api:interesting-endpoints-list')
         response = self.client.get(url, {'scan_id': self.scan_history.id})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
