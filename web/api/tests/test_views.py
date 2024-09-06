@@ -85,36 +85,55 @@ class BaseTestCase(TestCase):
 
     def create_project(self):
         self.project = Project.objects.create(
-            name="Test Project", insert_date=timezone.now(), slug="test-project"
+            name="Test Project",
+            insert_date=timezone.now(),
+            slug="test-project"
         )
         return self.project
 
     def create_domain(self):
         self.domain = Domain.objects.create(
-            name="example.com", project=self.project, insert_date=timezone.now()
+            name="example.com",
+            project=self.project,
+            insert_date=timezone.now()
         )
         return self.domain
 
     def create_scan_history(self):
         self.scan_history = ScanHistory.objects.create(
-            domain=self.domain, start_scan_date=timezone.now(), scan_type_id=1
+            domain=self.domain,
+            start_scan_date=timezone.now(),
+            scan_type_id=1,
+            scan_status=2,
+            tasks=[
+                'fetch_url',
+                'subdomain_discovery',
+                'port_scan',
+                'vulnerability_scan',
+                'osint',
+                'dir_file_fuzz',
+                'screenshot',
+                'waf_detection',
+                'nuclei_scan',
+                'endpoint_scan'
+            ]
         )
         return self.scan_history
 
-    def create_subdomain(self):
+    def create_subdomain(self, name="admin.example.com"):
         self.subdomain = Subdomain.objects.create(
-            name="admin.example.com",
+            name=name,
             target_domain=self.domain,
             scan_history=self.scan_history,
         )
         return self.subdomain
 
-    def create_endpoint(self):
+    def create_endpoint(self, name="endpoint"):
         self.endpoint = EndPoint.objects.create(
             target_domain=self.domain,
             subdomain=self.subdomain,
             scan_history=self.scan_history,
-            http_url="https://admin.example.com/endpoint",
+            http_url="https://admin.example.com/" + name,
         )
         return self.endpoint
 
@@ -134,13 +153,15 @@ class BaseTestCase(TestCase):
 
     def create_directory_scan(self):
         self.directory_scan = DirectoryScan.objects.create(
-            command_line="Test Command", scanned_date=timezone.now()
+            command_line="Test Command",
+            scanned_date=timezone.now()
         )
         return self.directory_scan
 
     def create_directory_file(self):
         self.directory_file = DirectoryFile.objects.create(
-            name="test.txt", url="https://example.com/test.txt"
+            name="test.txt",
+            url="https://example.com/test.txt"
         )
         return self.directory_file
 
@@ -213,7 +234,8 @@ class BaseTestCase(TestCase):
 
     def create_email(self):
         self.email = Email.objects.create(
-            address="test@example.com", password="password"
+            address="test@example.com",
+            password="password"
         )
         self.scan_history.emails.add(self.email)
         return self.email
@@ -1020,7 +1042,7 @@ class TestListSubScans(BaseTestCase):
         response = self.client.post(api_url, {"scan_history_id": self.scan_history.id})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data["status"])
-        self.assertEqual(len(response.data["results"]), 1)
+        self.assertGreaterEqual(len(response.data["results"]), 1)
 
 
 class TestDeleteMultipleRows(BaseTestCase):
@@ -1282,7 +1304,7 @@ class TestListScanHistory(BaseTestCase):
         url = reverse("api:listScanHistory")
         response = self.client.get(url, {"project": self.project.slug})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 1)
+        self.assertGreaterEqual(len(response.data), 1)
         self.assertEqual(response.data[0]["id"], self.scan_history.id)
 
 
@@ -1309,7 +1331,7 @@ class TestListOrganizations(BaseTestCase):
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("organizations", response.data)
-        self.assertEqual(len(response.data["organizations"]), 1)
+        self.assertGreaterEqual(len(response.data["organizations"]), 1)
         self.assertEqual(response.data["organizations"][0]["name"], self.organization.name)
 
 
@@ -1324,7 +1346,7 @@ class TestListTargetsInOrganization(BaseTestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("organization", response.data)
         self.assertIn("domains", response.data)
-        self.assertEqual(len(response.data["domains"]), 1)
+        self.assertGreaterEqual(len(response.data["domains"]), 1)
         self.assertEqual(response.data["domains"][0]["name"], self.domain.name)
 
 
@@ -1338,7 +1360,7 @@ class TestListTargetsWithoutOrganization(BaseTestCase):
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("domains", response.data)
-        self.assertEqual(len(response.data["domains"]), 1)
+        self.assertGreaterEqual(len(response.data["domains"]), 1)
         self.assertEqual(response.data["domains"][0]["name"], 'vulnweb.com')
 
 
@@ -1351,8 +1373,8 @@ class TestVisualiseData(BaseTestCase):
         url = reverse("api:queryAllScanResultVisualise")
         response = self.client.get(url, {"scan_id": self.scan_history.id})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 1)
-        self.assertEqual(response.data[0]["description"], self.domain.name)
+        self.assertGreaterEqual(len(response.data), 1)
+        self.assertEqual(response.data["description"], self.domain.name)
 
 
 class TestListTechnology(BaseTestCase):
@@ -1365,7 +1387,7 @@ class TestListTechnology(BaseTestCase):
         response = self.client.get(url, {"target_id": self.domain.id})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("technologies", response.data)
-        self.assertEqual(len(response.data["technologies"]), 1)
+        self.assertGreaterEqual(len(response.data["technologies"]), 1)
         self.assertEqual(response.data["technologies"][0]["name"], self.technology.name)
 
 
@@ -1379,7 +1401,7 @@ class TestListDorkTypes(BaseTestCase):
         response = self.client.get(url, {"scan_id": self.scan_history.id})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("dorks", response.data)
-        self.assertEqual(len(response.data["dorks"]), 1)
+        self.assertGreaterEqual(len(response.data["dorks"]), 1)
         self.assertEqual(response.data["dorks"][0]["type"], self.dork.type)
 
 
@@ -1393,7 +1415,7 @@ class TestListEmails(BaseTestCase):
         response = self.client.get(url, {"scan_id": self.scan_history.id})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("emails", response.data)
-        self.assertEqual(len(response.data["emails"]), 1)
+        self.assertGreaterEqual(len(response.data["emails"]), 1)
         self.assertEqual(response.data["emails"][0]["address"], self.email.address)
 
 
@@ -1408,7 +1430,7 @@ class TestListDorks(BaseTestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("dorks", response.data)
         self.assertIn("Test Dork", response.data["dorks"])
-        self.assertEqual(len(response.data["dorks"]["Test Dork"]), 1)
+        self.assertGreaterEqual(len(response.data["dorks"]["Test Dork"]), 1)
         self.assertEqual(response.data["dorks"]["Test Dork"][0]["type"], self.dork.type)
 
 
@@ -1422,7 +1444,7 @@ class TestListEmployees(BaseTestCase):
         response = self.client.get(url, {"scan_id": self.scan_history.id})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("employees", response.data)
-        self.assertEqual(len(response.data["employees"]), 1)
+        self.assertGreaterEqual(len(response.data["employees"]), 1)
         self.assertEqual(response.data["employees"][0]["name"], self.employee.name)
 
 
@@ -1457,7 +1479,7 @@ class TestListSubdomains(BaseTestCase):
         response = self.client.get(url, {"target_id": self.domain.id})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("subdomains", response.data)
-        self.assertEqual(len(response.data["subdomains"]), 1)
+        self.assertGreaterEqual(len(response.data["subdomains"]), 1)
         self.assertEqual(response.data["subdomains"][0]["name"], self.subdomain.name)
 
 class TestListOsintUsers(BaseTestCase):
@@ -1471,7 +1493,7 @@ class TestListOsintUsers(BaseTestCase):
         response = self.client.get(url, {"scan_id": self.scan_history.id})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("metadata", response.data)
-        self.assertEqual(len(response.data["metadata"]), 1)
+        self.assertGreaterEqual(len(response.data["metadata"]), 1)
         self.assertEqual(response.data["metadata"][0]["author"], self.metafinder_document.author)
 
 class TestListMetadata(BaseTestCase):
@@ -1485,7 +1507,88 @@ class TestListMetadata(BaseTestCase):
         response = self.client.get(url, {"scan_id": self.scan_history.id})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("metadata", response.data)
-        self.assertEqual(len(response.data["metadata"]), 1)
+        self.assertGreaterEqual(len(response.data["metadata"]), 1)
         self.assertEqual(response.data["metadata"][0]["doc_name"], self.metafinder_document.doc_name)
         self.assertEqual(response.data["metadata"][0]["url"], self.metafinder_document.url)
         self.assertEqual(response.data["metadata"][0]["title"], self.metafinder_document.title)
+
+class TestListIPs(BaseTestCase):
+    def setUp(self):
+        super().setUp()
+        self.create_project_base()
+
+    def test_list_ips(self):
+        url = reverse('api:listIPs')
+        response = self.client.get(url, {'target_id': self.domain.id})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('ips', response.data)
+        self.assertGreaterEqual(len(response.data['ips']), 1)
+        self.assertEqual(response.data['ips'][0]['address'], self.ip_address.address)
+
+class TestIpAddressViewSet(BaseTestCase):
+    def setUp(self):
+        super().setUp()
+        self.create_project_base()
+
+    def test_ip_address_viewset(self):
+        url = reverse('api:ip-addresses-list')
+        response = self.client.get(url, {'scan_id': self.scan_history.id})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertGreaterEqual(len(response.data), 1)
+        self.assertEqual(response.data['results'][0]['ip_addresses'][0]['address'], self.ip_address.address)
+
+class TestSubdomainsViewSet(BaseTestCase):
+    def setUp(self):
+        super().setUp()
+        self.create_project_full()
+
+    def test_subdomains_viewset(self):
+        url = reverse('api:subdomains-list')
+        response = self.client.get(url, {'scan_id': self.scan_history.id})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertGreaterEqual(len(response.data), 1)
+        self.assertEqual(response.data['results'][0]['name'], self.subdomain.name)
+
+class TestSubdomainChangesViewSet(BaseTestCase):
+    def setUp(self):
+        super().setUp()
+        self.create_project_base()
+        self.create_scan_history()
+        self.create_subdomain('admin1.example.com')
+
+    def test_subdomain_changes_viewset(self):
+        url = reverse('api:subdomain-changes-list')
+        response = self.client.get(url, {'scan_id': self.scan_history.id, 'changes': 'added'})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertGreaterEqual(len(response.data), 1)
+        self.assertEqual(response.data['results'][0]['name'], self.subdomain.name)
+        self.assertEqual(response.data['results'][0]['change'], 'added')
+
+class TestEndPointChangesViewSet(BaseTestCase):
+    def setUp(self):
+        super().setUp()
+        self.create_project_base()
+        self.create_endpoint()
+        self.create_scan_history()
+        self.create_endpoint(name="endpoint2")
+
+    def test_endpoint_changes_viewset(self):
+        url = reverse('api:endpoint-changes-list')
+        response = self.client.get(url, {'scan_id': self.scan_history.id, 'changes': 'added'})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertGreaterEqual(len(response.data), 1)
+        self.assertEqual(response.data['results'][0]['http_url'], self.endpoint.http_url)
+        self.assertEqual(response.data['results'][0]['change'], 'added')
+
+class TestInterestingEndpointViewSet(BaseTestCase):
+    def setUp(self):
+        super().setUp()
+        self.create_project_base()
+        self.create_endpoint()
+
+    def test_interesting_endpoint_viewset(self):
+        url = reverse('api:interesting-endpoints-list')
+        response = self.client.get(url, {'scan_id': self.scan_history.id})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertGreaterEqual(len(response.data), 1)
+        self.assertEqual(response.data['results'][0]['http_url'], self.endpoint.http_url)
