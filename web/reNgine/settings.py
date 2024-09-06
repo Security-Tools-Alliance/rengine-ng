@@ -93,6 +93,7 @@ INSTALLED_APPS = [
     'recon_note.apps.ReconNoteConfig',
     'django_ace',
     'django_celery_beat',
+    'django_extensions',
     'mathfilters',
     'drf_yasg',
     'rolepermissions'
