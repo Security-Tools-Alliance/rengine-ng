@@ -1184,7 +1184,9 @@ def get_data_from_post_request(request, field):
         return request.data.get(field, [])
 
 def safe_int_cast(value, default=None):
+    if isinstance(value, list):
+        return [safe_int_cast(item) for item in value]
     try:
-        return int(value) if value is not None else default
-    except ValueError:
+        return int(value)
+    except (ValueError, TypeError):
         return default

@@ -19,6 +19,7 @@ from rest_framework import viewsets
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.status import HTTP_400_BAD_REQUEST
+from rest_framework.parsers import JSONParser
 
 from recon_note.models import *
 from reNgine.celery import app
@@ -876,12 +877,18 @@ class StopScan(APIView):
 
 
 class InitiateSubTask(APIView):
+	parser_classes = [JSONParser]
+
 	def post(self, request):
-		req = self.request
-		data = req.data
+		data = request.data
 		engine_id = safe_int_cast(data.get('engine_id'))
-		scan_types = data['tasks']
-		for subdomain_id in data['subdomain_ids']:
+		scan_types = data.get('tasks', [])
+		subdomain_ids = safe_int_cast(data.get('subdomain_ids', []))
+		
+		if not scan_types or not subdomain_ids:
+			return Response({'status': False, 'error': 'Missing tasks or subdomain_ids'}, status=400)
+
+		for subdomain_id in subdomain_ids:
 			logger.info(f'Running subscans {scan_types} on subdomain "{subdomain_id}" ...')
 			for stype in scan_types:
 				ctx = {
