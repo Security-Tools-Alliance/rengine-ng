@@ -1184,6 +1184,16 @@ def get_data_from_post_request(request, field):
         return request.data.get(field, [])
 
 def safe_int_cast(value, default=None):
+    """
+    Convert a value to an integer if possible, otherwise return a default value.
+
+    Args:
+        value: The value or the array of values to convert to an integer.
+        default: The default value to return if conversion fails.
+
+    Returns:
+        int or default: The integer value if conversion is successful, otherwise the default value.
+    """
     if isinstance(value, list):
         return [safe_int_cast(item) for item in value]
     try:

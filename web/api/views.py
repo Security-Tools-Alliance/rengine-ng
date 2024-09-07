@@ -3,13 +3,12 @@ import re
 import os.path
 from pathlib import Path
 import socket
-import subprocess
 from ipaddress import IPv4Network
 from collections import defaultdict
 
 import requests
 import validators
-from dashboard.models import *
+from dashboard.models import OllamaSettings, Project, SearchHistory
 from django.db.models import CharField, Count, F, Q, Value
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -21,21 +20,97 @@ from rest_framework.views import APIView
 from rest_framework.status import HTTP_400_BAD_REQUEST
 from rest_framework.parsers import JSONParser
 
-from recon_note.models import *
+from recon_note.models import TodoNote
 from reNgine.celery import app
-from reNgine.common_func import *
-from reNgine.definitions import ABORTED_TASK
-from reNgine.settings import RENGINE_CURRENT_VERSION
-from reNgine.settings import RENGINE_TOOL_PATH
-from reNgine.tasks import *
+from reNgine.common_func import (
+    get_data_from_post_request,
+    get_interesting_endpoints,
+    get_interesting_subdomains,
+    get_lookup_keywords,
+    safe_int_cast
+)
+from reNgine.definitions import (
+    ABORTED_TASK,
+    OLLAMA_INSTANCE,
+    NUCLEI_SEVERITY_MAP,
+    DEFAULT_GPT_MODELS,
+    RUNNING_TASK,
+    SUCCESS_TASK
+)
+from reNgine.settings import (
+    RENGINE_CURRENT_VERSION,
+    RENGINE_TOOL_GITHUB_PATH
+)
+from reNgine.tasks import (
+    create_scan_activity,
+    gpt_vulnerability_description,
+    initiate_subscan,
+    query_ip_history,
+    query_reverse_whois,
+    query_whois,
+    run_cmseek,
+    run_command,
+    run_gf_list,
+    run_wafw00f,
+    send_hackerone_report
+)
 from reNgine.gpt import GPTAttackSuggestionGenerator
-from reNgine.utilities import is_safe_path
-from scanEngine.models import *
-from startScan.models import *
-from startScan.models import EndPoint
-from targetApp.models import *
+from reNgine.utilities import is_safe_path, remove_lead_and_trail_slash
+from scanEngine.models import EngineType, InstalledExternalTool
+from startScan.models import (
+    Command,
+    DirectoryFile,
+    DirectoryScan,
+    Dork,
+    Email,
+    Employee,
+    EndPoint,
+    IpAddress,
+    MetaFinderDocument,
+    Port,
+    ScanActivity,
+    ScanHistory,
+    Subdomain,
+    SubScan,
+    Technology,
+    Vulnerability,
+)
+from targetApp.models import Domain, Organization
 
-from .serializers import *
+from .serializers import (
+    CommandSerializer,
+    DirectoryFileSerializer,
+    DirectoryScanSerializer,
+    DomainSerializer,
+    DorkCountSerializer,
+    DorkSerializer,
+    EmailSerializer,
+    EmployeeSerializer,
+    EndpointOnlyURLsSerializer,
+    EndpointSerializer,
+    EndPointChangesSerializer,
+    EngineSerializer,
+    InterestingEndPointSerializer,
+    InterestingSubdomainSerializer,
+    IpSerializer,
+    IpSubdomainSerializer,
+    MetafinderDocumentSerializer,
+    MetafinderUserSerializer,
+    OnlySubdomainNameSerializer,
+    OrganizationSerializer,
+    OrganizationTargetsSerializer,
+    PortSerializer,
+    ReconNoteSerializer,
+    ScanHistorySerializer,
+    SearchHistorySerializer,
+    SubdomainChangesSerializer,
+    SubdomainSerializer,
+    SubScanResultSerializer,
+    SubScanSerializer,
+    TechnologyCountSerializer,
+    VisualiseDataSerializer,
+    VulnerabilitySerializer
+)
 
 logger = logging.getLogger(__name__)
 
@@ -888,6 +963,9 @@ class InitiateSubTask(APIView):
 		if not scan_types or not subdomain_ids:
 			return Response({'status': False, 'error': 'Missing tasks or subdomain_ids'}, status=400)
 
+		if isinstance(subdomain_ids, int):
+			subdomain_ids = [subdomain_ids]
+
 		for subdomain_id in subdomain_ids:
 			logger.info(f'Running subscans {scan_types} on subdomain "{subdomain_id}" ...')
 			for stype in scan_types:
@@ -1222,6 +1300,7 @@ class IPToDomain(APIView):
 	def get(self, request):
 		req = self.request
 		ip_address = req.query_params.get('ip_address')
+		response = {}
 		if not ip_address:
 			return Response({
 				'status': False,
@@ -2263,7 +2342,7 @@ class ListActivityLogsViewSet(viewsets.ModelViewSet):
 	def get_queryset(self):
 		req = self.request
 		activity_id = safe_int_cast(req.query_params.get('activity_id'))
-		self.queryset = Command.objects.filter(activity__id=activity_id)
+		self.queryset = Command.objects.filter(activity__id=activity_id).order_by('id')
 		return self.queryset
 
 
@@ -2273,7 +2352,7 @@ class ListScanLogsViewSet(viewsets.ModelViewSet):
 	def get_queryset(self):
 		req = self.request
 		scan_id = safe_int_cast(req.query_params.get('scan_id'))
-		self.queryset = Command.objects.filter(scan_history__id=scan_id)
+		self.queryset = Command.objects.filter(scan_history__id=scan_id).order_by('id')
 		return self.queryset
 
 

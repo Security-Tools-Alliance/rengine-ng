@@ -24,7 +24,9 @@ from startScan.models import (
     Dork,
     CountryISO,
     IpAddress,
-    MetaFinderDocument
+    MetaFinderDocument,
+    ScanActivity,
+    Command
 )
 from targetApp.models import (
     Domain,
@@ -339,6 +341,27 @@ class TestDataGenerator:
             subdomain=self.subdomain,
         )
         return self.metafinder_document
+
+    def create_scan_activity(self):
+        """Create and return a test scan activity."""
+        self.scan_activity = ScanActivity.objects.create(
+            name="Test Activity",
+            title="Test Type",
+            time=timezone.now(),
+            scan_of=self.scan_history,
+            status=1
+        )
+        return self.scan_activity
+
+    def create_command(self):
+        """Create and return a test command."""
+        self.command = Command.objects.create(
+            command="test command",
+            time=timezone.now(),
+            scan_history=self.scan_history,
+            activity=self.scan_activity
+        )
+        return self.command
 
     def create_project_full(self):
         """Create a full project setup with all related objects."""

@@ -40,6 +40,37 @@ class TestListScanHistory(BaseTestCase):
         self.assertGreaterEqual(len(response.data), 1)
         self.assertEqual(response.data[0]["id"], self.data_generator.scan_history.id)
 
+class TestListActivityLogsViewSet(BaseTestCase):
+    """Tests for the ListActivityLogsViewSet."""
+
+    def setUp(self):
+        """Set up test environment."""
+        super().setUp()
+        self.data_generator.create_project_base()
+        self.data_generator.create_scan_history()
+        self.data_generator.create_scan_activity()
+        self.data_generator.create_command()
+
+    def test_get_queryset(self):
+        """Test retrieving activity logs."""
+        url = reverse('api:activity-logs-list')
+        response = self.client.get(url, {'activity_id': self.data_generator.scan_activity.id})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('results', response.data)
+        self.assertGreaterEqual(len(response.data['results']), 1)
+        self.assertEqual(response.data['results'][0]['command'], self.data_generator.command.command)
+
+    def test_get_queryset_no_logs(self):
+        """Test retrieving activity logs when there are none."""
+        non_existent_activity_id = 9999  # An ID that doesn't exist
+        url = reverse('api:activity-logs-list')
+        response = self.client.get(url, {'activity_id': non_existent_activity_id})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('results', response.data)
+        self.assertEqual(len(response.data['results']), 0)
+
 class TestListScanLogsViewSet(BaseTestCase):
     """Tests for the ListScanLogsViewSet class."""
 
@@ -177,6 +208,7 @@ class TestDirectoryViewSet(BaseTestCase):
             api_url, {"scan_history": self.data_generator.scan_history.id}
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('results', response.data)
         self.assertGreaterEqual(len(response.data["results"]), 1)
         self.assertEqual(
             response.data["results"][0]["name"], self.data_generator.directory_file.name
@@ -189,6 +221,7 @@ class TestDirectoryViewSet(BaseTestCase):
             api_url, {"subdomain_id": self.data_generator.subdomain.id}
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('results', response.data)
         self.assertGreaterEqual(len(response.data["results"]), 1)
         self.assertEqual(
             response.data["results"][0]["name"], self.data_generator.directory_file.name
@@ -201,7 +234,9 @@ class TestListSubScans(BaseTestCase):
         """Set up test environment."""
         super().setUp()
         self.data_generator.create_project_base()
-        self.data_generator.create_subscan()
+        self.subscan = self.data_generator.create_subscan()
+        self.subscan.celery_id = "test_celery_id"
+        self.subscan.save()
 
     def test_list_subscans(self):
         """Test listing all subscans."""
@@ -210,8 +245,14 @@ class TestListSubScans(BaseTestCase):
             api_url, {"scan_history_id": self.data_generator.scan_history.id}
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('results', response.data)
         self.assertTrue(response.data["status"])
         self.assertGreaterEqual(len(response.data["results"]), 1)
+        
+        # Test if the created subscan is in the results
+        found_subscan = next((s for s in response.data["results"] if s["celery_id"] == "test_celery_id"), None)
+        self.assertIsNotNone(found_subscan, "Le subscan créé n'a pas été trouvé dans les résultats")
+        self.assertEqual(found_subscan["id"], self.subscan.id)
 
 class TestFetchSubscanResults(BaseTestCase):
     """Test case for fetching subscan results."""
@@ -220,12 +261,13 @@ class TestFetchSubscanResults(BaseTestCase):
         """Set up test environment."""
         super().setUp()
         self.data_generator.create_project_full()
+        self.data_generator.create_subscan()
 
     def test_fetch_subscan_results(self):
         """Test fetching results of a subscan."""
         api_url = reverse("api:fetch_subscan_results")
         response = self.client.get(
-            api_url, {"subscan_id": self.data_generator.subscans[0].id}
+            api_url, {"subscan_id": self.data_generator.subscans[-1].id}
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("subscan", response.data)
@@ -242,4 +284,3 @@ class TestListInterestingKeywords(BaseTestCase):
         response = self.client.get(api_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data, ["keyword1", "keyword2"])
-
