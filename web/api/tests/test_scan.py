@@ -234,9 +234,9 @@ class TestListSubScans(BaseTestCase):
         """Set up test environment."""
         super().setUp()
         self.data_generator.create_project_base()
-        self.subscan = self.data_generator.create_subscan()
-        self.subscan.celery_id = "test_celery_id"
-        self.subscan.save()
+        self.subscans = self.data_generator.create_subscan()
+        self.subscans[-1].celery_ids = ["test_celery_id"]
+        self.subscans[-1].save()
 
     def test_list_subscans(self):
         """Test listing all subscans."""
@@ -250,9 +250,9 @@ class TestListSubScans(BaseTestCase):
         self.assertGreaterEqual(len(response.data["results"]), 1)
         
         # Test if the created subscan is in the results
-        found_subscan = next((s for s in response.data["results"] if s["celery_id"] == "test_celery_id"), None)
+        found_subscan = next((s for s in response.data["results"] if s["celery_ids"][0] == "test_celery_id"), None)
         self.assertIsNotNone(found_subscan, "Le subscan créé n'a pas été trouvé dans les résultats")
-        self.assertEqual(found_subscan["id"], self.subscan.id)
+        self.assertEqual(found_subscan["id"], self.subscans[-1].id)
 
 class TestFetchSubscanResults(BaseTestCase):
     """Test case for fetching subscan results."""
