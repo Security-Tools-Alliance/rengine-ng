@@ -6,6 +6,10 @@ from django.contrib.auth import get_user_model
 
 from dashboard.views import on_user_logged_in
 
+__all__ = [
+    'BaseTestCase'
+]
+
 class BaseTestCase(TestCase):
     """
     Base test case for all API tests.

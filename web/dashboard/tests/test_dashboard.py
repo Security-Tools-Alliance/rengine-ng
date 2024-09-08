@@ -6,7 +6,6 @@ from unittest.mock import patch, MagicMock
 from django.test import Client
 from django.urls import reverse
 from utils.test_base import BaseTestCase
-from django.utils import timezone
 
 __all__ = [
     'TestDashboardViews'
