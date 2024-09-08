@@ -6,6 +6,11 @@ from django.urls import reverse
 from rest_framework import status
 from utils.test_base import BaseTestCase
 
+__all__ = [
+    'TestListOrganizations',
+    'TestListTargetsInOrganization',
+    'TestListTargetsWithoutOrganization'
+]
 
 class TestListOrganizations(BaseTestCase):
     """Test case for listing organizations."""
@@ -26,7 +31,6 @@ class TestListOrganizations(BaseTestCase):
             response.data["organizations"][0]["name"],
             self.data_generator.organization.name,
         )
-
 
 class TestListTargetsInOrganization(BaseTestCase):
     """Test case for listing targets in an organization."""
@@ -50,7 +54,6 @@ class TestListTargetsInOrganization(BaseTestCase):
             response.data["domains"][0]["name"], self.data_generator.domain.name
         )
 
-
 class TestListTargetsWithoutOrganization(BaseTestCase):
     """Test case for listing targets without an organization."""
 
@@ -67,4 +70,3 @@ class TestListTargetsWithoutOrganization(BaseTestCase):
         self.assertIn("domains", response.data)
         self.assertGreaterEqual(len(response.data["domains"]), 1)
         self.assertEqual(response.data["domains"][0]["name"], "vulnweb.com")
-

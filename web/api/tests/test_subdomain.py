@@ -7,6 +7,17 @@ from rest_framework import status
 from startScan.models import Subdomain
 from utils.test_base import BaseTestCase
 
+__all__ = [
+    'TestQueryInterestingSubdomains',
+    'TestDeleteSubdomain',
+    'TestListSubdomains',
+    'TestSubdomainsViewSet',
+    'TestSubdomainChangesViewSet',
+    'TestToggleSubdomainImportantStatus',
+    'TestSubdomainDatatableViewSet',
+    'TestInterestingSubdomainViewSet'
+]
+
 class TestQueryInterestingSubdomains(BaseTestCase):
     """Tests for querying interesting subdomains."""
 
@@ -81,7 +92,6 @@ class TestSubdomainsViewSet(BaseTestCase):
         self.assertEqual(
             response.data["results"][0]["name"], self.data_generator.subdomain.name
         )
-
 
 class TestSubdomainChangesViewSet(BaseTestCase):
     """Test case for subdomain changes viewset."""
@@ -203,4 +213,3 @@ class TestInterestingSubdomainViewSet(BaseTestCase):
         self.assertEqual(
             response.data["results"][0]["name"], self.data_generator.subdomain.name
         )
-

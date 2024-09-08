@@ -8,6 +8,20 @@ from rest_framework import status
 from startScan.models import SubScan
 from utils.test_base import BaseTestCase
 
+__all__ = [
+    'TestOllamaManager',
+    'TestWafDetector',
+    'TestCMSDetector',
+    'TestGfList',
+    'TestUpdateTool',
+    'TestUninstallTool',
+    'TestGetExternalToolCurrentVersion',
+    'TestRengineUpdateCheck',
+    'TestGithubToolCheckGetLatestRelease',
+    'TestGetFileContents',
+    'TestDeleteMultipleRows'
+]
+
 class TestOllamaManager(BaseTestCase):
     """Tests for the OllamaManager API endpoints."""
 
@@ -259,4 +273,3 @@ class TestDeleteMultipleRows(BaseTestCase):
                 ]
             ).exists()
         )
-

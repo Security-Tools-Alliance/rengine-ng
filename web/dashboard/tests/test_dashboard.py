@@ -3,12 +3,14 @@ This file contains the test cases for the dashboard views.
 """
 import json
 from unittest.mock import patch, MagicMock
-from django.contrib.messages.storage.fallback import FallbackStorage
 from django.test import Client
 from django.urls import reverse
-from dashboard.views import index, profile, admin_interface, admin_interface_update, search, projects, delete_project, onboarding
 from utils.test_base import BaseTestCase
 from django.utils import timezone
+
+__all__ = [
+    'TestDashboardViews'
+]
 
 class TestDashboardViews(BaseTestCase):
     """Test cases for dashboard views."""
@@ -19,13 +21,6 @@ class TestDashboardViews(BaseTestCase):
         self.data_generator.create_project_full()
         self.client = Client()
         self.client.force_login(self.user)
-        
-        # Update the dates to use timezone-aware datetimes
-        current_time = timezone.now()
-        self.data_generator.domain.insert_date = current_time
-        self.data_generator.domain.save()
-        self.data_generator.subdomain.discovered_date = current_time
-        self.data_generator.subdomain.save()
 
     def test_index_view(self):
         """Test the index view of the dashboard."""
@@ -93,4 +88,3 @@ class TestDashboardViews(BaseTestCase):
             'key_netlas': 'netlas_key'
         })
         self.assertEqual(response.status_code, 302)
-

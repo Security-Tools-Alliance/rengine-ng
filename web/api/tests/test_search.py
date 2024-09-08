@@ -6,6 +6,10 @@ from django.urls import reverse
 from rest_framework import status
 from utils.test_base import BaseTestCase
 
+__all__ = [
+    'TestSearchHistoryView',
+    'TestUniversalSearch'
+]
 
 class TestSearchHistoryView(BaseTestCase):
     """Tests for the Search History API."""
@@ -58,4 +62,3 @@ class TestUniversalSearch(BaseTestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertFalse(response.data["status"])
         self.assertEqual(response.data["message"], "No query parameter provided!")
-

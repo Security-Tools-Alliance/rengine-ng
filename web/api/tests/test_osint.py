@@ -6,6 +6,14 @@ from django.urls import reverse
 from rest_framework import status
 from utils.test_base import BaseTestCase
 
+__all__ = [
+    'TestListDorkTypes',
+    'TestListEmails',
+    'TestListDorks',
+    'TestListEmployees',
+    'TestListOsintUsers',
+    'TestListMetadata'
+]
 
 class TestListDorkTypes(BaseTestCase):
     """Test case for listing dork types."""
@@ -28,7 +36,6 @@ class TestListDorkTypes(BaseTestCase):
             response.data["dorks"][0]["type"], self.data_generator.dork.type
         )
 
-
 class TestListEmails(BaseTestCase):
     """Test case for listing emails."""
 
@@ -49,7 +56,6 @@ class TestListEmails(BaseTestCase):
         self.assertEqual(
             response.data["emails"][0]["address"], self.data_generator.email.address
         )
-
 
 class TestListDorks(BaseTestCase):
     """Test case for listing dorks."""
@@ -73,7 +79,6 @@ class TestListDorks(BaseTestCase):
             response.data["dorks"]["Test Dork"][0]["type"],
             self.data_generator.dork.type,
         )
-
 
 class TestListEmployees(BaseTestCase):
     """Test case for listing employees."""
@@ -119,7 +124,6 @@ class TestListOsintUsers(BaseTestCase):
             self.data_generator.metafinder_document.author,
         )
 
-
 class TestListMetadata(BaseTestCase):
     """Test case for listing metadata."""
 
@@ -150,4 +154,3 @@ class TestListMetadata(BaseTestCase):
             response.data["metadata"][0]["title"],
             self.data_generator.metafinder_document.title,
         )
-

@@ -7,6 +7,11 @@ from rest_framework import status
 from targetApp.models import Domain
 from utils.test_base import BaseTestCase
 
+__all__ = [
+    'TestAddTarget',
+    'TestListTargetsDatatableViewSet'
+]
+
 class TestAddTarget(BaseTestCase):
     """Test case for adding a target."""
 
@@ -59,4 +64,3 @@ class TestListTargetsDatatableViewSet(BaseTestCase):
         self.assertEqual(
             response.data["results"][0]["name"], self.data_generator.domain.name
         )
-

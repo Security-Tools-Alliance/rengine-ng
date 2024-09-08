@@ -7,6 +7,15 @@ from django.urls import reverse
 from rest_framework import status
 from utils.test_base import BaseTestCase
 
+__all__ = [
+    'TestIpAddressViewSet',
+    'TestIPToDomain',
+    'TestDomainIPHistory',
+    'TestListIPs',
+    'TestListPorts',
+    'TestWhois',
+    'TestReverseWhois'
+]
 
 class TestIpAddressViewSet(BaseTestCase):
     """Test case for IP address viewset."""
@@ -164,4 +173,3 @@ class TestReverseWhois(BaseTestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data["status"])
         self.assertEqual(response.data["data"], "Reverse Whois data")
-

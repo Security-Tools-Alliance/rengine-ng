@@ -8,6 +8,12 @@ from django.urls import reverse
 from rest_framework import status
 from utils.test_base import BaseTestCase
 
+__all__ = [
+    'TestCreateProjectApi',
+    'TestAddReconNote',
+    'TestListTodoNotes',
+    'TestGPTAttackSuggestion'
+]
 
 class TestCreateProjectApi(BaseTestCase):
     """Tests for the Create Project API."""

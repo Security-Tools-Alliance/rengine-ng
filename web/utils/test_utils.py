@@ -41,6 +41,10 @@ from targetApp.models import (
     DomainRegistration,
 )
 
+__all__ = [
+    'TestDataGenerator'
+]
+
 class TestDataGenerator:
     """
     Base test case for all API tests.

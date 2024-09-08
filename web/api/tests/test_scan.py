@@ -7,6 +7,21 @@ from django.urls import reverse
 from rest_framework import status
 from utils.test_base import BaseTestCase
 
+__all__ = [
+    'TestScanStatus',
+    'TestListScanHistory',
+    'TestListActivityLogsViewSet',
+    'TestListScanLogsViewSet',
+    'TestStopScan',
+    'TestInitiateSubTask',
+    'TestListEngines',
+    'TestVisualiseData',
+    'TestListTechnology',
+    'TestDirectoryViewSet',
+    'TestListSubScans',
+    'TestFetchSubscanResults',
+    'TestListInterestingKeywords'
+]
 
 class TestScanStatus(BaseTestCase):
     """Test case for checking scan status."""

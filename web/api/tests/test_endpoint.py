@@ -6,6 +6,11 @@ from django.urls import reverse
 from rest_framework import status
 from utils.test_base import BaseTestCase
 
+__all__ = [
+    'TestEndPointViewSet',
+    'TestEndPointChangesViewSet',
+    'TestInterestingEndpointViewSet'
+]
 
 class TestEndPointViewSet(BaseTestCase):
     """Test case for the EndPoint ViewSet API."""
