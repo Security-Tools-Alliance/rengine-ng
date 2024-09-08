@@ -5,7 +5,7 @@ This file contains the test cases for the API views.
 from django.urls import reverse
 from rest_framework import status
 from targetApp.models import Domain
-from .test_base import BaseTestCase
+from utils.test_base import BaseTestCase
 
 class TestAddTarget(BaseTestCase):
     """Test case for adding a target."""

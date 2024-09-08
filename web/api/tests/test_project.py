@@ -6,7 +6,7 @@ from unittest.mock import patch
 from django.utils import timezone
 from django.urls import reverse
 from rest_framework import status
-from .test_base import BaseTestCase
+from utils.test_base import BaseTestCase
 
 
 class TestCreateProjectApi(BaseTestCase):

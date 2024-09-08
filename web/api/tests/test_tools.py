@@ -6,7 +6,7 @@ from unittest.mock import patch
 from django.urls import reverse
 from rest_framework import status
 from startScan.models import SubScan
-from .test_base import BaseTestCase
+from utils.test_base import BaseTestCase
 
 class TestOllamaManager(BaseTestCase):
     """Tests for the OllamaManager API endpoints."""

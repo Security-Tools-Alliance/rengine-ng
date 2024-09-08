@@ -1,7 +1,7 @@
 import json
 import logging
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from django.contrib.auth import get_user_model
 from django.contrib import messages
@@ -97,11 +97,12 @@ def index(request, slug):
     endpoints_in_last_week = []
 
     for date in last_7_dates:
-        _target = count_targets_by_date.filter(date=date)
-        _subdomain = count_subdomains_by_date.filter(date=date)
-        _vuln = count_vulns_by_date.filter(date=date)
-        _scan = count_scans_by_date.filter(date=date)
-        _endpoint = count_endpoints_by_date.filter(date=date)
+        aware_date = timezone.make_aware(datetime.combine(date, datetime.min.time()))
+        _target = count_targets_by_date.filter(date=aware_date)
+        _subdomain = count_subdomains_by_date.filter(date=aware_date)
+        _vuln = count_vulns_by_date.filter(date=aware_date)
+        _scan = count_scans_by_date.filter(date=aware_date)
+        _endpoint = count_endpoints_by_date.filter(date=aware_date)
         if _target:
             targets_in_last_week.append(_target[0]['created_count'])
         else:

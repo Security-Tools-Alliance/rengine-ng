@@ -6,4 +6,4 @@ from .test_endpoint import *
 from .test_project import *
 from .test_organization import *
 from .test_search import *
-from .test_base import *
+from utils.test_base import *

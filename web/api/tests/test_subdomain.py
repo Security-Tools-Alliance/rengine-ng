@@ -5,7 +5,7 @@ This file contains the test cases for the API views.
 from django.urls import reverse
 from rest_framework import status
 from startScan.models import Subdomain
-from .test_base import BaseTestCase
+from utils.test_base import BaseTestCase
 
 class TestQueryInterestingSubdomains(BaseTestCase):
     """Tests for querying interesting subdomains."""

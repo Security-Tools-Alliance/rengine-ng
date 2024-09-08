@@ -109,6 +109,7 @@ class TestDataGenerator:
             target_domain=self.domain,
             subdomain=self.subdomain,
             scan_history=self.scan_history,
+            discovered_date=timezone.now(),
             http_url="https://admin.example.com/" + name,
         )
         return self.endpoint
