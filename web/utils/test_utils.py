@@ -5,6 +5,9 @@ This file contains the test cases
 import logging
 
 from django.utils import timezone
+from django.test import override_settings
+from django.template.loader import get_template
+from django.template import Template
 
 from dashboard.models import Project, SearchHistory
 from recon_note.models import TodoNote
@@ -397,6 +400,8 @@ class TestDataGenerator:
         self.create_domain_registration()
         self.create_domain_info()
         self.create_metafinder_document()
+        self.create_scan_activity()
+        self.create_command()
 
     def create_project_base(self):
         """Create a basic project setup with essential objects."""
@@ -406,3 +411,36 @@ class TestDataGenerator:
         self.create_subdomain()
         self.create_port()
         self.create_ip_address()
+
+class MockTemplate:
+    @staticmethod
+    def mock_template(template_name):
+        def decorator(test_func):
+            def wrapper(*args, **kwargs):
+                with override_settings(TEMPLATES=[{
+                    'BACKEND': 'django.template.backends.django.DjangoTemplates',
+                    'DIRS': [],
+                    'APP_DIRS': True,
+                    'OPTIONS': {
+                        'context_processors': [
+                            'django.template.context_processors.debug',
+                            'django.template.context_processors.request',
+                            'django.contrib.auth.context_processors.auth',
+                            'django.contrib.messages.context_processors.messages',
+                        ],
+                    },
+                }]):
+                    original_get_template = get_template
+                    def mock_get_template(name):
+                        if name == template_name:
+                            return Template('')
+                        return original_get_template(name)
+                    
+                    get_template.patched = mock_get_template
+                    try:
+                        return test_func(*args, **kwargs)
+                    finally:
+                        del get_template.patched
+
+            return wrapper
+        return decorator

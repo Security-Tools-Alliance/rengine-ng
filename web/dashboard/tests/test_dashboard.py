@@ -18,8 +18,6 @@ class TestDashboardViews(BaseTestCase):
         """Set up test environment."""
         super().setUp()
         self.data_generator.create_project_full()
-        self.client = Client()
-        self.client.force_login(self.user)
 
     def test_index_view(self):
         """Test the index view of the dashboard."""
@@ -29,7 +27,6 @@ class TestDashboardViews(BaseTestCase):
 
     def test_profile_view(self):
         """Test the profile view."""
-        self.client.force_login(self.user)
         response = self.client.get(reverse('profile', kwargs={'slug': self.data_generator.project.slug}))
         self.assertEqual(response.status_code, 200)
         self.assertIn('form', response.context)
