@@ -11,39 +11,48 @@ from django.template import Template
 
 from dashboard.models import Project, SearchHistory
 from recon_note.models import TodoNote
-from scanEngine.models import EngineType, InterestingLookupModel, InstalledExternalTool
-from startScan.models import (
-    ScanHistory,
-    Subdomain,
-    EndPoint,
-    Vulnerability,
-    DirectoryScan,
-    DirectoryFile,
-    SubScan,
-    Technology,
-    Port,
-    Employee,
-    Email,
-    Dork,
-    CountryISO,
-    IpAddress,
-    MetaFinderDocument,
-    ScanActivity,
-    Command
-)
-from targetApp.models import (
-    Domain,
-    Organization,
-    WhoisStatus,
-    NameServer,
-    DNSRecord,
-    RelatedDomain,
-    HistoricalIP,
-    DomainInfo,
-    Registrar,
-    DomainRegistration,
+from scanEngine.models import (
+    EngineType,
+    Hackerone,
+    InstalledExternalTool,
+    InterestingLookupModel,
+    Proxy,
+    VulnerabilityReportSetting,
+    Wordlist,
 )
 
+from startScan.models import (
+    Command,
+    DirectoryFile,
+    DirectoryScan,
+    Dork,
+    Email,
+    EndPoint,
+    Employee,
+    IpAddress,
+    ScanActivity,
+    ScanHistory,
+    SubScan,
+    Subdomain,
+    Technology,
+    Vulnerability,
+    Port,
+    CountryISO,
+    MetaFinderDocument,
+)
+
+from targetApp.models import (
+    DNSRecord,
+    Domain,
+    DomainInfo,
+    DomainRegistration,
+    HistoricalIP,
+    NameServer,
+    Organization,
+    Registrar,
+    RelatedDomain,
+    WhoisStatus,
+)
 __all__ = [
     'TestDataGenerator'
 ]
@@ -60,6 +69,51 @@ class TestDataGenerator:
 
     # Disable logging for tests
     logging.disable(logging.CRITICAL)
+
+
+    def create_project_base(self):
+        """Create a basic project setup with essential objects."""
+        self.create_project()
+        self.create_domain()
+        self.create_scan_history()
+        self.create_subdomain()
+        self.create_endpoint()
+        self.create_port()
+        self.create_ip_address()
+
+    def create_project_full(self):
+        """Create a full project setup with all related objects."""
+        self.create_project_base()
+        self.create_vulnerability()
+        self.create_directory_scan()
+        self.create_directory_file()
+        self.create_subscan()
+        self.create_todo_note()
+        self.create_engine_type()
+        self.create_organization()
+        self.create_employee()
+        self.create_email()
+        self.create_dork()
+        self.create_whois_status()
+        self.create_name_server()
+        self.create_dns_record()
+        self.create_related_domain()
+        self.create_historical_ip()
+        self.create_technology()
+        self.create_country_iso()
+        self.create_domain_registration()
+        self.create_domain_info()
+        self.create_metafinder_document()
+        self.create_scan_activity()
+        self.create_command()
+        self.create_installed_external_tool()
+        self.create_engine()
+        self.create_wordlist()
+        self.create_lookup()
+        self.create_proxy()
+        self.create_hackerone()
+        self.create_report_setting()
+        self.create_external_tool()
 
     def create_project(self):
         """Create and return a test project."""
@@ -117,7 +171,7 @@ class TestDataGenerator:
             subdomain=self.subdomain,
             scan_history=self.scan_history,
             discovered_date=timezone.now(),
-            http_url="https://admin.example.com/" + name,
+            http_url=f"https://admin.example.com/{name}",
         )
         return self.endpoint
 
@@ -371,51 +425,85 @@ class TestDataGenerator:
         )
         return self.command
 
-    def create_project_full(self):
-        """Create a full project setup with all related objects."""
-        self.create_project()
-        self.create_domain()
-        self.create_scan_history()
-        self.create_subdomain()
-        self.create_endpoint()
-        self.create_port()
-        self.create_ip_address()
-        self.create_vulnerability()
-        self.create_directory_scan()
-        self.create_directory_file()
-        self.create_subscan()
-        self.create_todo_note()
-        self.create_engine_type()
-        self.create_organization()
-        self.create_employee()
-        self.create_email()
-        self.create_dork()
-        self.create_whois_status()
-        self.create_name_server()
-        self.create_dns_record()
-        self.create_related_domain()
-        self.create_historical_ip()
-        self.create_technology()
-        self.create_country_iso()
-        self.create_domain_registration()
-        self.create_domain_info()
-        self.create_metafinder_document()
-        self.create_scan_activity()
-        self.create_command()
+    def create_engine(self):
+        """
+        Create a test engine.
+        """
+        self.engine = EngineType.objects.create(engine_name='Test Engine', yaml_configuration='test: config')
+        return self.engine
 
-    def create_project_base(self):
-        """Create a basic project setup with essential objects."""
-        self.create_project()
-        self.create_domain()
-        self.create_scan_history()
-        self.create_subdomain()
-        self.create_port()
-        self.create_ip_address()
+    def create_wordlist(self):
+        """
+        Create a test wordlist.
+        """
+        self.wordlist = Wordlist.objects.create(name='Test Wordlist', short_name='test', count=100)
+        return self.wordlist
+
+    def create_lookup(self):
+        """
+        Create a test lookup.
+        """
+        self.lookup = InterestingLookupModel.objects.create(custom_type=True)
+        return self.lookup
+
+    def create_proxy(self):
+        """
+        Create a test proxy.
+        """
+        self.proxy = Proxy.objects.create(use_proxy=True, proxies='127.0.0.1')
+        return self.proxy
+
+    def create_hackerone(self):
+        """
+        Create a test hackerone.
+        """
+        self.hackerone = Hackerone.objects.create(username='test', api_key='testkey')
+        return self.hackerone
+
+    def create_report_setting(self):
+        """
+        Create a test report setting.
+        """
+        self.report_setting = VulnerabilityReportSetting.objects.create(
+            primary_color='#000000',
+            secondary_color='#FFFFFF'
+        )
+        return self.report_setting
+
+    def create_external_tool(self):
+        """
+        Create a test external tool.
+        """
+        self.external_tool = InstalledExternalTool.objects.create(
+            name='Test Tool',
+            github_url='https://github.com/test/tool')
+        return self.external_tool
 
 class MockTemplate:
+    """
+    mock_template is a decorator designed to mock a specific Django template during unit tests. 
+    It temporarily overrides the template settings to return a mock template when the specified 
+    template name is requested, allowing for controlled testing of views that rely on that template.
+    Args:
+        template_name (str): The name of the template to be mocked.
+
+    Returns:
+        function: A decorator that wraps the test function, applying the mock template settings.
+
+    Examples:
+        @mock_template('my_template.html')
+        def test_my_view(self):
+        ...
+    """
     @staticmethod
     def mock_template(template_name):
+        """
+        Decorator to mock a specific Django template during unit tests.
+        """
         def decorator(test_func):
+            """
+            Decorator function to wrap the test function and apply the mock template settings.
+            """
             def wrapper(*args, **kwargs):
                 with override_settings(TEMPLATES=[{
                     'BACKEND': 'django.template.backends.django.DjangoTemplates',
@@ -423,19 +511,17 @@ class MockTemplate:
                     'APP_DIRS': True,
                     'OPTIONS': {
                         'context_processors': [
-                            'django.template.context_processors.debug',
-                            'django.template.context_processors.request',
-                            'django.contrib.auth.context_processors.auth',
-                            'django.contrib.messages.context_processors.messages',
-                        ],
-                    },
-                }]):
+                                'django.template.context_processors.debug',
+                                'django.template.context_processors.request',
+                                'django.contrib.auth.context_processors.auth',
+                                'django.contrib.messages.context_processors.messages',
+                            ],
+                        },
+                    }]):
                     original_get_template = get_template
                     def mock_get_template(name):
-                        if name == template_name:
-                            return Template('')
-                        return original_get_template(name)
-                    
+                        return Template('') if name == template_name else original_get_template(name)
+
                     get_template.patched = mock_get_template
                     try:
                         return test_func(*args, **kwargs)
@@ -443,4 +529,5 @@ class MockTemplate:
                         del get_template.patched
 
             return wrapper
+
         return decorator
