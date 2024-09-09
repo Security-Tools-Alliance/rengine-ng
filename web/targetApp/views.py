@@ -1,27 +1,61 @@
 import csv
 import io
-import ipaddress
 import logging
-import validators
-
 from datetime import timedelta
 from urllib.parse import urlparse
+import validators
+
 from django import http
 from django.conf import settings
 from django.contrib import messages
 from django.db.models import Count
+from django.http import Http404
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.safestring import mark_safe
 from rolepermissions.decorators import has_permission_decorator
+from reNgine.definitions import (
+    PERM_MODIFY_TARGETS,
+    FOUR_OH_FOUR_URL,
+)
 
-from reNgine.common_func import *
-from reNgine.tasks import run_command, sanitize_url
-from scanEngine.models import *
-from startScan.models import *
-from targetApp.forms import *
-from targetApp.models import *
+from reNgine.common_func import (
+    get_ip_info,
+    get_ips_from_cidr_range,
+    safe_int_cast
+)
+from reNgine.tasks import (
+    run_command,
+    sanitize_url,
+)
+from startScan.models import (
+    EndPoint,
+    IpAddress,
+    Port,
+    Vulnerability,
+    VulnerabilityTags,
+    Email,
+    Employee,
+    CveId,
+    CweId,
+    CountryISO,
+    Subdomain,
+    ScanHistory,
+    EngineType,
+)
+from targetApp.models import (
+    Domain,
+    Organization,
+    Project,
+)
+from targetApp.forms import (
+    AddTargetForm,
+    UpdateTargetForm,
+    AddOrganizationForm,
+    UpdateOrganizationForm,
+)
+
 
 logger = logging.getLogger(__name__)
 
@@ -161,11 +195,20 @@ def add_target(request, slug):
             elif 'import-txt-target' in request.POST or 'import-csv-target' in request.POST:
                 txt_file = request.FILES.get('txtFile')
                 csv_file = request.FILES.get('csvFile')
+                # Check if no files were uploaded
                 if not (txt_file or csv_file):
                     messages.add_message(
                         request,
                         messages.ERROR,
                         'Files uploaded are not .txt or .csv files.')
+                    return http.HttpResponseRedirect(reverse('add_target', kwargs={'slug': slug}))
+
+                # Check if the uploaded file is empty
+                if (txt_file and txt_file.size == 0) or (csv_file and csv_file.size == 0):
+                    messages.add_message(
+                        request,
+                        messages.ERROR,
+                        'The uploaded file is empty. Please upload a valid file.')
                     return http.HttpResponseRedirect(reverse('add_target', kwargs={'slug': slug}))
 
                 if txt_file:
@@ -236,6 +279,9 @@ def add_target(request, slug):
                 for ip in resolved_ips:
                     is_domain = bool(validators.domain(ip))
                     is_ip = bool(validators.ipv4(ip)) or bool(validators.ipv6(ip))
+                    if not is_ip and not is_domain:
+                        messages.add_message(request, messages.ERROR, f'IP {ip} is not a valid IP address / domain. Skipping.')
+                        continue
                     description = request.POST.get('targetDescription', '')
                     h1_team_handle = request.POST.get('targetH1TeamHandle')
                     if not Domain.objects.filter(name=ip).exists():
@@ -302,16 +348,24 @@ def list_target(request, slug):
 
 @has_permission_decorator(PERM_MODIFY_TARGETS, redirect_url=FOUR_OH_FOUR_URL)
 def delete_target(request, id):
-    obj = get_object_or_404(Domain, id=id)
     if request.method == "POST":
-        run_command(f'rm -rf {settings.RENGINE_RESULTS}/{obj.name}')
-        run_command(f'rm -rf {settings.RENGINE_RESULTS}/{obj.name}*') # for backward compatibility
-        obj.delete()
-        responseData = {'status': 'true'}
-        messages.add_message(
-            request,
-            messages.INFO,
-            'Domain successfully deleted!')
+        try:
+            target = get_object_or_404(Domain, id=id)
+            run_command(f'rm -rf {settings.RENGINE_RESULTS}/{target.name}')
+            run_command(f'rm -rf {settings.RENGINE_RESULTS}/{target.name}*') # for backward compatibility
+            target.delete()
+            responseData = {'status': 'true'}
+            messages.add_message(
+                request,
+                messages.INFO,
+                'Domain successfully deleted!'
+            )
+        except Http404:
+            messages.add_message(
+                request,
+                messages.ERROR,
+                'Domain not found.')
+            responseData = {'status': 'false'}
     else:
         responseData = {'status': 'false'}
         messages.add_message(
@@ -541,13 +595,20 @@ def list_organization(request, slug):
 @has_permission_decorator(PERM_MODIFY_TARGETS, redirect_url=FOUR_OH_FOUR_URL)
 def delete_organization(request, id):
     if request.method == "POST":
-        obj = get_object_or_404(Organization, id=id)
-        obj.delete()
-        responseData = {'status': 'true'}
-        messages.add_message(
-            request,
-            messages.INFO,
-            'Organization successfully deleted!')
+        try:
+            organization = get_object_or_404(Organization, id=id)
+            organization.delete()
+            messages.add_message(
+                request,
+                messages.INFO,
+                'Organization successfully deleted!')
+            responseData = {'status': 'true'}
+        except Http404:
+            messages.add_message(
+                request,
+                messages.ERROR,
+                'Organization not found.')
+            responseData = {'status': 'false'}
     else:
         responseData = {'status': 'false'}
         messages.add_message(
@@ -561,8 +622,8 @@ def delete_organization(request, id):
 def update_organization(request, slug, id):
     organization = get_object_or_404(Organization, id=id)
     form = UpdateOrganizationForm()
+    domain_list = []
     if request.method == "POST":
-        print(request.POST.getlist("domains"))
         form = UpdateOrganizationForm(request.POST, instance=organization)
         if form.is_valid():
             data = form.cleaned_data
@@ -596,21 +657,3 @@ def update_organization(request, slug, id):
         "form": form
     }
     return render(request, 'organization/update.html', context)
-
-def get_ip_info(ip_address):
-    is_ipv4 = bool(validators.ipv4(ip_address))
-    is_ipv6 = bool(validators.ipv6(ip_address))
-    ip_data = None
-    if is_ipv4:
-        ip_data = ipaddress.IPv4Address(ip_address)
-    elif is_ipv6:
-        ip_data = ipaddress.IPv6Address(ip_address)
-    else:
-        return None
-    return ip_data
-
-def get_ips_from_cidr_range(target):
-    try:
-        return [str(ip) for ip in ipaddress.IPv4Network(target)]
-    except Exception as e:
-        logger.error(f'{target} is not a valid CIDR range. Skipping.')
