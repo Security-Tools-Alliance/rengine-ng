@@ -23,7 +23,6 @@ from reNgine.definitions import (
 from reNgine.common_func import (
     get_ip_info,
     get_ips_from_cidr_range,
-    safe_int_cast
 )
 from reNgine.tasks import (
     run_command,
@@ -195,7 +194,6 @@ def add_target(request, slug):
             elif 'import-txt-target' in request.POST or 'import-csv-target' in request.POST:
                 txt_file = request.FILES.get('txtFile')
                 csv_file = request.FILES.get('csvFile')
-                # Check if no files were uploaded
                 if not (txt_file or csv_file):
                     messages.add_message(
                         request,
@@ -203,7 +201,6 @@ def add_target(request, slug):
                         'Files uploaded are not .txt or .csv files.')
                     return http.HttpResponseRedirect(reverse('add_target', kwargs={'slug': slug}))
 
-                # Check if the uploaded file is empty
                 if (txt_file and txt_file.size == 0) or (csv_file and csv_file.size == 0):
                     messages.add_message(
                         request,
@@ -281,6 +278,7 @@ def add_target(request, slug):
                     is_ip = bool(validators.ipv4(ip)) or bool(validators.ipv6(ip))
                     if not is_ip and not is_domain:
                         messages.add_message(request, messages.ERROR, f'IP {ip} is not a valid IP address / domain. Skipping.')
+                        logger.warning(f'IP {ip} is not a valid IP address / domain. Skipping.')
                         continue
                     description = request.POST.get('targetDescription', '')
                     h1_team_handle = request.POST.get('targetH1TeamHandle')
@@ -361,12 +359,14 @@ def delete_target(request, id):
                 'Domain successfully deleted!'
             )
         except Http404:
+            logger.error(f'Domain not found: {id}')
             messages.add_message(
                 request,
                 messages.ERROR,
                 'Domain not found.')
             responseData = {'status': 'false'}
     else:
+        logger.error(f'Invalid request method: {request.method}')
         responseData = {'status': 'false'}
         messages.add_message(
             request,

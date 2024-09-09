@@ -31,6 +31,10 @@ from django.contrib.messages import get_messages
 from utils.test_base import BaseTestCase
 from targetApp.models import Domain, Organization
 
+__all__ = [
+    'TestTargetAppViews',
+]
+
 class TestTargetAppViews(BaseTestCase):
     """
     Test class for the views of the targetApp.

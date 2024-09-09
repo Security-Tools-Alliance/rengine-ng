@@ -1239,3 +1239,4 @@ def get_ips_from_cidr_range(target):
 		return [str(ip) for ip in ipaddress.IPv4Network(target)]
 	except Exception as e:
 		logger.error(f'{target} is not a valid CIDR range. Skipping.')
+		return []
