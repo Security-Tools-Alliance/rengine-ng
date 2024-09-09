@@ -88,6 +88,8 @@ class TestDataGenerator:
         self.create_directory_scan()
         self.create_directory_file()
         self.create_subscan()
+        self.create_interesting_lookup_model()
+        self.create_search_history()
         self.create_todo_note()
         self.create_engine_type()
         self.create_organization()
@@ -109,7 +111,6 @@ class TestDataGenerator:
         self.create_installed_external_tool()
         self.create_engine()
         self.create_wordlist()
-        self.create_lookup()
         self.create_proxy()
         self.create_hackerone()
         self.create_report_setting()
@@ -438,13 +439,6 @@ class TestDataGenerator:
         """
         self.wordlist = Wordlist.objects.create(name='Test Wordlist', short_name='test', count=100)
         return self.wordlist
-
-    def create_lookup(self):
-        """
-        Create a test lookup.
-        """
-        self.lookup = InterestingLookupModel.objects.create(custom_type=True)
-        return self.lookup
 
     def create_proxy(self):
         """

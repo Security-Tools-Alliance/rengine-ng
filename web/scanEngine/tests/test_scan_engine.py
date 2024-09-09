@@ -114,8 +114,8 @@ class TestScanEngineViews(BaseTestCase):
             'keywords': 'test,lookup'
         })
         self.assertEqual(response.status_code, 302)
-        self.data_generator.lookup.refresh_from_db()
-        self.assertEqual(self.data_generator.lookup.keywords, 'test,lookup')
+        self.data_generator.interesting_lookup_model.refresh_from_db()
+        self.assertEqual(self.data_generator.interesting_lookup_model.keywords, 'test,lookup')
 
     def test_tool_specific_settings_view(self):
         """
