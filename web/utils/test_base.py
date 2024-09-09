@@ -3,7 +3,6 @@ import logging
 from utils.test_utils import TestDataGenerator
 from django.test import TestCase, Client
 from django.contrib.auth import get_user_model
-from django.template.loader import get_template
 from dashboard.views import on_user_logged_in
 
 __all__ = [

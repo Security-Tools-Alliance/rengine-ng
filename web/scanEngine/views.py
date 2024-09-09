@@ -593,8 +593,6 @@ def add_tool(request, slug):
                 project_name = install_command.split('/')[-1]
                 install_command = f'{install_command} {RENGINE_TOOL_GITHUB_PATH}/{project_name} && pip install -r {RENGINE_TOOL_GITHUB_PATH}/{project_name}/requirements.txt'
                 github_clone_path = f'{RENGINE_TOOL_GITHUB_PATH}/{project_name}'
-                # if github cloned we also need to install requirements, atleast found in the main dir
-                install_command = f'pip3 install -r {RENGINE_TOOL_GITHUB_PATH}/{project_name}/requirements.txt'
 
             run_command(install_command)
             run_command.apply_async(args=(install_command,))

@@ -3,7 +3,6 @@ This file contains the test cases for the dashboard views.
 """
 import json
 from unittest.mock import patch, MagicMock
-from django.test import Client
 from django.urls import reverse
 from utils.test_base import BaseTestCase
 
