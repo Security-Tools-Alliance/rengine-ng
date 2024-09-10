@@ -52,16 +52,13 @@ function populateTodofunction(project=null){
   });
 
   const $btns = $('.list-actions').click((event) => {
-    if (this.id === 'all-list') {
-      const $el = $('.' + this.id).fadeIn();
-      $('#ct > div').not($el).hide();
-    } else {
-      const $el = $('.' + this.id).fadeIn();
-      $('#ct > div').not($el).hide();
-    }
+    const selectedId = event.currentTarget.id;
+    const $el = $('.' + selectedId);
+    $('#ct > div').hide();
+    $el.fadeIn();
     $btns.removeClass('active');
     $(event.currentTarget).addClass('active');
-  })
+  });
 
   checkCheckbox();
   importantDropdown();
@@ -87,7 +84,7 @@ function populateTodofunction(project=null){
       let data = {
         'title': $_task,
         'description': $_taskDescriptionText
-      }
+      };
 
       if ($("#scanHistoryIDropdown").val() && $("#scanHistoryIDropdown").val() != 'Choose Scan History...') {
         data['scan_history'] = parseInt($("#scanHistoryIDropdown").val());
@@ -233,7 +230,7 @@ function deleteDropdown() {
   $('.action-dropdown .dropdown-menu .delete.dropdown-item').click(async function() {
     const id = this.id.split('_')[1];
     const main_this = this;
-    const result = await swal.queue([{
+    await swal.queue([{
       title: 'Are you sure you want to delete this Recon Note?',
       text: "You won't be able to revert this!",
       icon: 'warning',
@@ -325,11 +322,12 @@ function importantDropdown() {
       is_important_badge.innerHTML = badge;
 
       $(this).parents('.todo-item').find('.todo-content').after(is_important_badge);
+      $(this).text('Remove Important');
     }
     else if($(this).parents('.todo-item').hasClass('todo-task-important')){
       $(this).parents('.todo-item').removeClass('todo-task-important');
-      $(".list-actions#all-list").trigger('click');
-      $("#important-badge-"+badge_id).empty();
+      $("#important-badge-"+badge_id).remove();
+      $(this).text('Toggle Important');
     }
     new dynamicBadgeNotification('importantList');
     await fetch('/recon_note/flip_important_status', {

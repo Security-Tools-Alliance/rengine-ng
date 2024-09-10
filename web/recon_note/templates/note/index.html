@@ -84,7 +84,7 @@ Recon Todo
           <div class="compose-content" id="addTaskModalTitle">
             <h5 class="">Add Todo</h5>
             <form>
-              <input id="task" type="text" placeholder="Todo Title" class="form-control" name="task" required minlength="3" maxlength="100" pattern="[A-Za-z0-9\s\-\_\.]+" title="Only alphanumeric characters, hyphens, underscores, and periods are allowed.">
+              <input id="task" type="text" placeholder="Todo Title" class="form-control" name="task" required minlength="3" maxlength="100" pattern="[A-Za-z0-9\s\-\_\.]+" title="Only alphanumeric characters, hyphens, underscores, and periods are allowed." autocomplete="on">
               <div class="mt-2">
                 <label for="scanHistoryIDropdown" class="form-label">Select Scan History (Optional)</label>
                 <select class="w-100 form-control" id="scanHistoryIDropdown" data-toggle="select2" data-width="100%">
@@ -187,7 +187,7 @@ $.getJSON(`/api/listTodoNotes?format=json&project={{current_project.slug}}`, fun
     var todo_item = document.createElement("div");
     todo_item.classList.add("todo-item");
     todo_item.classList.add("all-list");
-    todo_item.classList.add("todo-item"); // Add the special class
+    todo_item.classList.add("todo-item");
     var target_text = '';
     if (note_obj['domain_name']) {
       target_text += 'Domain: ' + note_obj['domain_name'] + ', Scanned ' + moment.utc(note_obj['scan_started_time']).fromNow();
