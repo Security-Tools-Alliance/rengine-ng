@@ -580,11 +580,21 @@ class AddReconNote(APIView):
 		req = self.request
 		data = req.data
 
-		subdomain_id = data.get('subdomain_id')
-		scan_history_id = data.get('scan_history_id')
+		subdomain_id = data.get('subdomain')
+		scan_history_id = data.get('scan_history')
 		title = data.get('title')
 		description = data.get('description')
 		project = data.get('project')
+  
+		if not title:
+			return Response({"status": False, "error": "Title is required."}, status=400)
+		if scan_history_id is None:
+			return Response({"status": False, "error": "Scan history is required."}, status=400)
+		if subdomain_id is None:
+			return Response({"status": False, "error": "Subdomain is required."}, status=400)
+		if not project:
+			return Response({"status": False, "error": "Project is required."}, status=400)
+
 
 		try:
 			project = Project.objects.get(slug=project)
@@ -608,12 +618,10 @@ class AddReconNote(APIView):
 
 			note.project = project
 			note.save()
-			response = {'status': True}
+			return Response({"status": True, "error": False, "id": note.id}, status=200)
 		except Exception as e:
-			response = {'status': False, 'message': str(e)}
-
-		return Response(response)
-
+			logger.error(e)
+			return Response({"status": False, "error": "An error occurred."}, status=400)
 
 class ToggleSubdomainImportantStatus(APIView):
 	def post(self, request):
