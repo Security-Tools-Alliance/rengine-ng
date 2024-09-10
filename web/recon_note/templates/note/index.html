@@ -84,7 +84,7 @@ Recon Todo
           <div class="compose-content" id="addTaskModalTitle">
             <h5 class="">Add Todo</h5>
             <form>
-              <input id="task" type="text" placeholder="Todo Title" class="form-control" name="task" required>
+              <input id="task" type="text" placeholder="Todo Title" class="form-control" name="task" required minlength="3" maxlength="100" pattern="[A-Za-z0-9\s\-\_\.]+" title="Only alphanumeric characters, hyphens, underscores, and periods are allowed.">
               <div class="mt-2">
                 <label for="scanHistoryIDropdown" class="form-label">Select Scan History (Optional)</label>
                 <select class="w-100 form-control" id="scanHistoryIDropdown" data-toggle="select2" data-width="100%">
@@ -100,7 +100,10 @@ Recon Todo
                 </select>
               </div>
 
-              <textarea class="form-control" id="taskdescription" rows="5" spellcheck="false" placeholder="Recon Todo/Note"></textarea>
+              <div class="mt-2">
+                <label for="taskdescription" class="form-label">Description (Optional)</label>
+                <textarea class="form-control" id="taskdescription" rows="5" spellcheck="false" placeholder="Recon Todo/Note" maxlength="500" pattern="[A-Za-z0-9\s\.,!?\\-\\_\\\.]+" title="Only alphanumeric characters and punctuation are allowed."></textarea>
+              </div>
             </form>
           </div>
         </div>

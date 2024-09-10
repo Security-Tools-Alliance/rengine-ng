@@ -1,7 +1,6 @@
-
 function populateTodofunction(project=null){
   $('.input-search').on('keyup', function() {
-    var rex = new RegExp($(this).val(), 'i');
+    const rex = new RegExp($(this).val(), 'i');
     $('.todo-box .todo-item').hide();
     $('.todo-box .todo-item').filter(function() {
       return rex.test($(this).text());
@@ -41,7 +40,7 @@ function populateTodofunction(project=null){
       suppressScrollX : true
     });
 
-    populateScanHistory(project=project);
+    populateScanHistory(project);
 
   });
   const ps = new PerfectScrollbar('.todo-box-scroll', {
@@ -52,16 +51,16 @@ function populateTodofunction(project=null){
     suppressScrollX : true
   });
 
-  var $btns = $('.list-actions').click(function() {
-    if (this.id == 'all-list') {
-      var $el = $('.' + this.id).fadeIn();
+  const $btns = $('.list-actions').click((event) => {
+    if (this.id === 'all-list') {
+      const $el = $('.' + this.id).fadeIn();
       $('#ct > div').not($el).hide();
     } else {
-      var $el = $('.' + this.id).fadeIn();
+      const $el = $('.' + this.id).fadeIn();
       $('#ct > div').not($el).hide();
     }
     $btns.removeClass('active');
-    $(this).addClass('active');
+    $(event.currentTarget).addClass('active');
   })
 
   checkCheckbox();
@@ -69,94 +68,92 @@ function populateTodofunction(project=null){
   todoItem();
   deleteDropdown();
 
-  $(".add-tsk").click(function(){
+  $(".add-tsk").click(async function(){
+    try {
+      const $_task = document.getElementById('task').value;
+      const $_taskDescriptionText = document.getElementById('taskdescription').value;
+      const $_taskScanHistory = $("#scanHistoryIDropdown option:selected").text();
+      const $_taskSubdomain = $("#subdomainDropdown option:selected").text();
+      let $_targetText = '';
 
-    var $_task = document.getElementById('task').value;
+      if ($_taskScanHistory != 'Choose Scan History...') {
+        $_targetText = $_taskScanHistory;
+      }
 
-    var $_taskDescriptionText = document.getElementById('taskdescription').value;
+      if ($_taskSubdomain != 'Choose Subdomain...') {
+        $_targetText += ' Subdomain : ' + $_taskSubdomain;
+      }
 
-    var $_taskScanHistory = $("#scanHistoryIDropdown option:selected").text();
+      let data = {
+        'title': $_task,
+        'description': $_taskDescriptionText
+      }
 
-    var $_taskSubdomain = $("#subdomainDropdown option:selected").text();
+      if ($("#scanHistoryIDropdown").val() && $("#scanHistoryIDropdown").val() != 'Choose Scan History...') {
+        data['scan_history'] = parseInt($("#scanHistoryIDropdown").val());
+      }
 
-    var $_targetText = '';
+      if ($("#subdomainDropdown").val() != 'Choose Subdomain...') {
+        data['subdomain'] = parseInt($("#subdomainDropdown").val());
+      }
 
-    if ($_taskScanHistory != 'Choose Scan History...') {
-      $_targetText = $_taskScanHistory;
-    }
+      if (project) {
+        data['project'] = project;
+      }
 
-    if ($_taskSubdomain != 'Choose Subdomain...') {
-      $_targetText += ' Subdomain : ' + $_taskSubdomain;
-    }
-
-    data = {
-      'title': $_task,
-      'description': $_taskDescriptionText
-    }
-
-    if ($("#scanHistoryIDropdown").val() && $("#scanHistoryIDropdown").val() != 'Choose Scan History...') {
-      data['scan_history'] = parseInt($("#scanHistoryIDropdown").val());
-    }
-
-    if ($("#subdomainDropdown").val() != 'Choose Subdomain...') {
-      data['subdomain'] = parseInt($("#subdomainDropdown").val());
-    }
-
-    if (project) {
-      data['project'] = project;
-    }
-
-    fetch('/api/add/recon_note/', {
-      method: 'post',
-      headers: {
-        "X-CSRFToken": getCookie("csrftoken"),
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(data)
-    }).then(function (response) {
-      return response.json().then(function(data) {
-        swal.queue([{
-          title: response.status === 200 ? 'Note added successfully!' : 
-                response.status === 400 ? 'Oops! Unable to add todo!\r\n' + data.error : 
-                response.status === 404 ? 'Oops! Note not found!\r\n' + data.error : 
-                'Oops! An error occurred!\r\n' + data.error,
-          icon: response.status === 200 ? 'success' : 'error'
-        }]);
-
-        if (response.status === 200) {
-          const newNote = {
-            id: data.id,
-            title: $_task,
-            description: $_taskDescriptionText,
-            domain_name: $_targetText,
-            subdomain_name: $_taskSubdomain,
-            is_done: false
-          };
-        
-          let todoHTML = $('#todo-template').html();
-        
-          todoHTML = todoHTML
-            .replace(/{task_id}/g, newNote.id)
-            .replace(/{title}/g, htmlEncode(newNote.title))
-            .replace(/{target_text}/g, newNote.domain_name ? `Domain: ${newNote.domain_name}` : '')
-            .replace(/{description}/g, htmlEncode(newNote.description))
-            .replace(/{is_done}/g, newNote.is_done ? 'todo-task-done' : '')
-            .replace(/{checked}/g, newNote.is_done ? 'checked' : '');
-        
-          // Créer un nouvel élément avec la classe todo-item
-          const $newTodo = $('<div class="todo-item all-list"></div>').append(todoHTML);
-        
-          $("#ct").prepend($newTodo);
-          $('#addTaskModal').modal('hide');
-          checkCheckbox();
-          todoItem();
-          importantDropdown();
-          deleteDropdown();
-          new dynamicBadgeNotification('allList');
-          $(".list-actions#all-list").trigger('click');
-        }
+      let response = await fetch('/api/add/recon_note/', {
+        method: 'post',
+        headers: {
+          "X-CSRFToken": getCookie("csrftoken"),
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
       });
-    });
+
+      const responseData = await response.json();
+      swal.queue([{
+        title: response.status === 200 ? 'Note added successfully!' : 
+              response.status === 400 ? 'Oops! Unable to add todo!\r\n' + responseData.error : 
+              response.status === 404 ? 'Oops! Note not found!\r\n' + responseData.error : 
+              'Oops! An error occurred!\r\n' + responseData.error,
+        icon: response.status === 200 ? 'success' : 'error'
+      }]);
+
+      if (response.status === 200) {
+        const newNote = {
+          id: responseData.id,
+          title: htmlEncode($_task),
+          description: htmlEncode($_taskDescriptionText),
+          domain_name: htmlEncode($_targetText),
+          subdomain_name: htmlEncode($_taskSubdomain),
+          is_done: false
+        };
+      
+        let todoHTML = $('#todo-template').html();
+      
+        todoHTML = todoHTML
+          .replace(/{task_id}/g, newNote.id)
+          .replace(/{title}/g, newNote.title)
+          .replace(/{target_text}/g, newNote.domain_name ? `Domain: ${newNote.domain_name}` : '')
+          .replace(/{description}/g, newNote.description)
+          .replace(/{is_done}/g, newNote.is_done ? 'todo-task-done' : '')
+          .replace(/{checked}/g, newNote.is_done ? 'checked' : '');
+      
+        const $newTodo = $('<div class="todo-item all-list"></div>').append(todoHTML);
+      
+        $("#ct").prepend($newTodo);
+        $('#addTaskModal').modal('hide');
+        checkCheckbox();
+        todoItem();
+        importantDropdown();
+        deleteDropdown();
+        new dynamicBadgeNotification('allList');
+        $(".list-actions#all-list").trigger('click');
+      }
+    } catch (error) {
+      console.error('Error adding todo:', error);
+      swal('Oops! Something went wrong!', error.message, 'error');
+    }
   });
   $('.tab-title .nav-pills a.nav-link').on('click', function(event) {
     $(this).parents('.mail-box-container').find('.tab-title').removeClass('mail-menu-show')
@@ -165,22 +162,22 @@ function populateTodofunction(project=null){
 }
 
 function dynamicBadgeNotification(setTodoCategoryCount) {
-  var todoCategoryCount = setTodoCategoryCount;
+  const todoCategoryCount = setTodoCategoryCount;
 
   // Get Parents Div(s)
-  var get_TodoAllListParentsDiv = $('.todo-item.all-list').not('.todo-item-template'); // Ignorer le modèle
-  var get_TodoCompletedListParentsDiv = $('.todo-item.todo-task-done').not('.todo-item-template'); // Ignorer le modèle
-  var get_TodoImportantListParentsDiv = $('.todo-item.todo-task-important').not('.todo-item-template'); // Ignorer le modèle
+  const get_TodoAllListParentsDiv = $('.todo-item.all-list').not('.todo-item-template');
+  const get_TodoCompletedListParentsDiv = $('.todo-item.todo-task-done').not('.todo-item-template');
+  const get_TodoImportantListParentsDiv = $('.todo-item.todo-task-important').not('.todo-item-template');
 
   // Get Parents Div(s) Counts
-  var get_TodoListElementsCount = get_TodoAllListParentsDiv.length;
-  var get_CompletedTaskElementsCount = get_TodoCompletedListParentsDiv.length;
-  var get_ImportantTaskElementsCount = get_TodoImportantListParentsDiv.length;
+  const get_TodoListElementsCount = get_TodoAllListParentsDiv.length;
+  const get_CompletedTaskElementsCount = get_TodoCompletedListParentsDiv.length;
+  const get_ImportantTaskElementsCount = get_TodoImportantListParentsDiv.length;
 
   // Get Badge Div(s)
-  var getBadgeTodoAllListDiv = $('#all-list .todo-badge');
-  var getBadgeCompletedTaskListDiv = $('#todo-task-done .todo-badge');
-  var getBadgeImportantTaskListDiv = $('#todo-task-important .todo-badge');
+  const getBadgeTodoAllListDiv = $('#all-list .todo-badge');
+  const getBadgeCompletedTaskListDiv = $('#todo-task-done .todo-badge');
+  const getBadgeImportantTaskListDiv = $('#todo-task-important .todo-badge');
 
   if (todoCategoryCount === 'allList') {
     if (get_TodoListElementsCount === 0) {
@@ -233,10 +230,10 @@ function dynamicBadgeNotification(setTodoCategoryCount) {
 }
 
 function deleteDropdown() {
-  $('.action-dropdown .dropdown-menu .delete.dropdown-item').click(function() {
-    var id = this.id.split('_')[1];
-    var main_this = this;
-    swal.queue([{
+  $('.action-dropdown .dropdown-menu .delete.dropdown-item').click(async function() {
+    const id = this.id.split('_')[1];
+    const main_this = this;
+    const result = await swal.queue([{
       title: 'Are you sure you want to delete this Recon Note?',
       text: "You won't be able to revert this!",
       icon: 'warning',
@@ -244,57 +241,58 @@ function deleteDropdown() {
       confirmButtonText: 'Delete',
       padding: '2em',
       showLoaderOnConfirm: true,
-      preConfirm: function() {
-        return fetch('/recon_note/delete_note', {
+      preConfirm: async function() {
+        const response = await fetch('/recon_note/delete_note', {
           method: 'POST',
           credentials: "same-origin",
           headers: {
             "X-CSRFToken": getCookie("csrftoken")
           },
           body: JSON.stringify({ 'id': parseInt(id) })
-        })
-        .then(function (response) {
+        }).catch(error => {
+          swal('Network error', 'An error occurred while deleting the note.', 'error');
+          throw error;
+        });
+
+        if (!response.ok) {
           const errorMessages = {
             400: 'Oops! Unable to delete todo!',
             404: 'Oops! Note not found!',
             200: 'Note deleted successfully!'
           };
-
-          if (response.status in errorMessages) {
-            swal.insertQueueStep({
-              icon: response.status === 200 ? 'success' : 'error',
-              title: errorMessages[response.status]
-            });
-
-            if (response.status === 200) {
-              const getTodoParent = $(main_this).parents('.todo-item');
-              getTodoParent.remove();
-              new dynamicBadgeNotification('allList');
-              new dynamicBadgeNotification('completedList');
-              new dynamicBadgeNotification('importantList');
-            }
-          }
-        })
-        .catch(function() {
           swal.insertQueueStep({
-            type: 'error',
-            title: 'Oops! Unable to delete todo!'
+            icon: response.status === 200 ? 'success' : 'error',
+            title: errorMessages[response.status] || 'An unknown error occurred.'
           });
+          return;
+        }
+
+        const responseData = await response.json();
+        swal.insertQueueStep({
+          icon: response.status === 200 ? 'success' : 'error',
+          title: response.status === 200 ? 'Note deleted successfully!' : 'Oops! An error occurred!\r\n' + responseData.error
         });
+
+        if (response.status === 200) {
+          const getTodoParent = $(main_this).parents('.todo-item');
+          getTodoParent.remove();
+          new dynamicBadgeNotification('allList');
+          new dynamicBadgeNotification('completedList');
+          new dynamicBadgeNotification('importantList');
+        }
       }
     }]);
   });
 }
 function checkCheckbox() {
-  $('.inbox-chkbox').click(function() {
+  $('.inbox-chkbox').click(async function() {
     if ($(this).is(":checked")) {
       $(this).parents('.todo-item').addClass('todo-task-done');
-    }
-    else if ($(this).is(":not(:checked)")) {
+    } else if ($(this).is(":not(:checked)")) {
       $(this).parents('.todo-item').removeClass('todo-task-done');
     }
     new dynamicBadgeNotification('completedList');
-    fetch('/recon_note/flip_todo_status', {
+    await fetch('/recon_note/flip_todo_status', {
       method: 'post',
       headers: {
         "X-CSRFToken": getCookie("csrftoken")
@@ -307,12 +305,12 @@ function checkCheckbox() {
 }
 
 function importantDropdown() {
-  $('.important').click(function() {
+  $('.important').click(async function() {
     badge_id = this.id.split('_')[1];
     if(!$(this).parents('.todo-item').hasClass('todo-task-important')){
       $(this).parents('.todo-item').addClass('todo-task-important');
 
-      var is_important_badge = document.createElement("div");
+      const is_important_badge = document.createElement("div");
       is_important_badge.classList.add("priority-dropdown");
       is_important_badge.classList.add("custom-dropdown-icon");
       is_important_badge.id = 'important-badge-' + this.id.split('_')[1];
@@ -334,7 +332,7 @@ function importantDropdown() {
       $("#important-badge-"+badge_id).empty();
     }
     new dynamicBadgeNotification('importantList');
-    fetch('/recon_note/flip_important_status', {
+    await fetch('/recon_note/flip_important_status', {
       method: 'post',
       headers: {
         "X-CSRFToken": getCookie("csrftoken")
@@ -349,12 +347,9 @@ function importantDropdown() {
 function todoItem() {
   $('.todo-item .todo-content').on('click', function(event) {
     event.preventDefault();
-
-    var $_taskTitle = $(this).find('.todo-heading').text();
-
-    var $_taskTarget = $(this).find('.target').text();
-
-    var $todoDescription = $(this).find('.todo-text').text();
+    const $_taskTitle = $(this).find('.todo-heading').text();
+    const $_taskTarget = $(this).find('.target').text();
+    const $todoDescription = $(this).find('.todo-text').text();
 
     $('.task-heading').text($_taskTitle);
     $('.task-text').html(`<span class="text-success">${$_taskTarget}</span><br>` + htmlEncode($todoDescription));
@@ -368,7 +363,7 @@ function populateScanHistory(project) {
   $.getJSON(`/api/listScanHistory/?format=json&project=${project}`, function(data) {
     for (var history in data){
       history_object = data[history];
-      var option = document.createElement('option');
+      const option = document.createElement('option');
       option.value = history_object['id'];
       option.innerHTML = history_object['domain']['name'] + ' - Scanned ' + moment.utc(history_object['start_scan_date']).fromNow();
       scan_history_select.appendChild(option);
