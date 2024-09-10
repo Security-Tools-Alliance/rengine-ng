@@ -684,6 +684,16 @@ class AddReconNote(APIView):
 		title = data.get('title')
 		description = data.get('description')
 		project = data.get('project')
+  
+		if subdomain_id is None:
+			return Response({"status": False, "error": "Subdomain ID is required."}, status=400)
+		if scan_history_id is None:
+			return Response({"status": False, "error": "Scan history ID is required."}, status=400)
+		if not title:
+			return Response({"status": False, "error": "Title is required."}, status=400)
+		if not project:
+			return Response({"status": False, "error": "Project is required."}, status=400)
+
 
 		try:
 			project = Project.objects.get(slug=project)
