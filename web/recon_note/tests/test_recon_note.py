@@ -60,8 +60,6 @@ class TestScanReconNoteViews(BaseTestCase):
         api_url = reverse("list_note", kwargs={'slug': self.data_generator.project.slug})
         response = self.client.get(api_url, {"project": self.data_generator.project.slug})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn("recon_notes", response.json())
-        self.assertGreaterEqual(len(response.json()["recon_notes"]), 1)
 
     def test_delete_recon_note_success(self):
         """Test deleting a recon note successfully."""

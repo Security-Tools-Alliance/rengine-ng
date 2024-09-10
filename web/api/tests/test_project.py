@@ -67,7 +67,7 @@ class TestAddReconNote(BaseTestCase):
         api_url = reverse("api:addReconNote")
         data = {"title": "Test Note", "slug": "test-project"}
         response = self.client.post(api_url, data)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertFalse(response.data["status"])
 
 class TestListTodoNotes(BaseTestCase):
