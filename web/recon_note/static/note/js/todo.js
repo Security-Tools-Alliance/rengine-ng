@@ -1,16 +1,16 @@
 const populateTodofunction = function(project=null){
-  const taskViewScroll = new PerfectScrollbar('.task-text', {
+  new PerfectScrollbar('.task-text', {
     wheelSpeed:.5,
     swipeEasing:!0,
     minScrollbarLength:40,
     maxScrollbarLength:300,
     suppressScrollX : true
   });
-  const ps = new PerfectScrollbar('.todo-box-scroll', {
+  new PerfectScrollbar('.todo-box-scroll', {
     suppressScrollX : true
   });
 
-  const todoListScroll = new PerfectScrollbar('.todoList-sidebar-scroll', {
+  new PerfectScrollbar('.todoList-sidebar-scroll', {
     suppressScrollX : true
   });
 
@@ -304,7 +304,7 @@ const importantBtnListener = function() {
             <span class="text-danger bs-tooltip" title="Important Todo">
               <i class="fa fa-exclamation-circle"></i>
             </span>
-          </div>`
+          </div>`;
 
       is_important_badge.innerHTML = badge;
 
