@@ -1,47 +1,10 @@
-function populateTodofunction(project=null){
-  $('.input-search').on('keyup', function() {
-    const rex = new RegExp($(this).val(), 'i');
-    $('.todo-box .todo-item').hide();
-    $('.todo-box .todo-item').filter(function() {
-      return rex.test($(this).text());
-    }).show();
-  });
-
+const populateTodofunction = function(project=null){
   const taskViewScroll = new PerfectScrollbar('.task-text', {
     wheelSpeed:.5,
     swipeEasing:!0,
     minScrollbarLength:40,
     maxScrollbarLength:300,
     suppressScrollX : true
-  });
-
-  new dynamicBadgeNotification('allList');
-  new dynamicBadgeNotification('completedList');
-  new dynamicBadgeNotification('importantList');
-
-  $('.mail-menu').on('click', function(event) {
-    $('.tab-title').addClass('mail-menu-show');
-    $('.mail-overlay').addClass('mail-overlay-show');
-  })
-  $('.mail-overlay').on('click', function(event) {
-    $('.tab-title').removeClass('mail-menu-show');
-    $('.mail-overlay').removeClass('mail-overlay-show');
-  })
-  $('#addTask').on('click', function(event) {
-    event.preventDefault();
-
-    $('#task').val('');
-    $('#taskdescription').val('');
-
-    $('.add-tsk').show();
-    $('.edit-tsk').hide();
-    $('#addTaskModal').modal('show');
-    const ps = new PerfectScrollbar('.todo-box-scroll', {
-      suppressScrollX : true
-    });
-
-    populateScanHistory(project);
-
   });
   const ps = new PerfectScrollbar('.todo-box-scroll', {
     suppressScrollX : true
@@ -51,6 +14,23 @@ function populateTodofunction(project=null){
     suppressScrollX : true
   });
 
+  addTaskBtnListener(project);
+  addActionsBtnListener();
+  checkBtnListener();
+  importantBtnListener();
+  todoItemListener();
+  deleteBtnListener();
+
+  // Load search term from local storage if it exists
+  const savedSearchTerm = localStorage.getItem('searchTerm');
+  if (savedSearchTerm) {
+    $('.input-search').val(savedSearchTerm); // Set the input value
+    searchFunction();
+  }
+  updateBadgeCounts();
+}
+
+const addActionsBtnListener = function(){
   const $btns = $('.list-actions').click((event) => {
     const selectedId = event.currentTarget.id;
     const $el = $('.' + selectedId);
@@ -59,13 +39,29 @@ function populateTodofunction(project=null){
     $btns.removeClass('active');
     $(event.currentTarget).addClass('active');
   });
+}
 
-  checkCheckbox();
-  importantDropdown();
-  todoItem();
-  deleteDropdown();
+const addTaskBtnListener = function(project) {
+  $('#addTask').on('click', function (event) {
+    event.preventDefault();
 
-  $(".add-tsk").click(async function(){
+    $('#task').val('');
+    $('#taskdescription').val('');
+
+    $('.add-tsk').show();
+    $('.edit-tsk').hide();
+    $('#addTaskModal').modal('show');
+    const ps = new PerfectScrollbar('.todo-box-scroll', {
+      suppressScrollX: true
+    });
+
+    populateScanHistory(project);
+
+  });
+}
+
+const addTaskPopupListener = function(project) {
+  $(".add-tsk").click(async function () {
     try {
       const $_task = document.getElementById('task').value;
       const $_taskDescriptionText = document.getElementById('taskdescription').value;
@@ -109,9 +105,9 @@ function populateTodofunction(project=null){
 
       const responseData = await response.json();
       swal.queue([{
-        title: response.status === 200 ? 'Note added successfully!' : 
-              response.status === 400 ? 'Oops! Unable to add todo!\r\n' + responseData.error : 
-              response.status === 404 ? 'Oops! Note not found!\r\n' + responseData.error : 
+        title: response.status === 200 ? 'Note added successfully!' :
+          response.status === 400 ? 'Oops! Unable to add todo!\r\n' + responseData.error :
+            response.status === 404 ? 'Oops! Note not found!\r\n' + responseData.error :
               'Oops! An error occurred!\r\n' + responseData.error,
         icon: response.status === 200 ? 'success' : 'error'
       }]);
@@ -125,9 +121,9 @@ function populateTodofunction(project=null){
           subdomain_name: htmlEncode($_taskSubdomain),
           is_done: false
         };
-      
+
         let todoHTML = $('#todo-template').html();
-      
+
         todoHTML = todoHTML
           .replace(/{task_id}/g, newNote.id)
           .replace(/{title}/g, newNote.title)
@@ -135,15 +131,15 @@ function populateTodofunction(project=null){
           .replace(/{description}/g, newNote.description)
           .replace(/{is_done}/g, newNote.is_done ? 'todo-task-done' : '')
           .replace(/{checked}/g, newNote.is_done ? 'checked' : '');
-      
+
         const $newTodo = $('<div class="todo-item all-list"></div>').append(todoHTML);
-      
+
         $("#ct").prepend($newTodo);
         $('#addTaskModal').modal('hide');
-        checkCheckbox();
-        todoItem();
-        importantDropdown();
-        deleteDropdown();
+        checkBtnListener();
+        todoItemListener();
+        importantBtnListener();
+        deleteBtnListener();
         new dynamicBadgeNotification('allList');
         $(".list-actions#all-list").trigger('click');
       }
@@ -152,19 +148,15 @@ function populateTodofunction(project=null){
       swal('Oops! Something went wrong!', error.message, 'error');
     }
   });
-  $('.tab-title .nav-pills a.nav-link').on('click', function(event) {
-    $(this).parents('.mail-box-container').find('.tab-title').removeClass('mail-menu-show')
-    $(this).parents('.mail-box-container').find('.mail-overlay').removeClass('mail-overlay-show')
-  })
 }
 
-function dynamicBadgeNotification(setTodoCategoryCount) {
+const dynamicBadgeNotification = function(setTodoCategoryCount) {
   const todoCategoryCount = setTodoCategoryCount;
 
   // Get Parents Div(s)
-  const get_TodoAllListParentsDiv = $('.todo-item.all-list').not('.todo-item-template');
-  const get_TodoCompletedListParentsDiv = $('.todo-item.todo-task-done').not('.todo-item-template');
-  const get_TodoImportantListParentsDiv = $('.todo-item.todo-task-important').not('.todo-item-template');
+  const get_TodoAllListParentsDiv = $('.todo-item.all-list').not('.todo-item-template').filter(':visible');
+  const get_TodoCompletedListParentsDiv = $('.todo-item.todo-task-done').not('.todo-item-template').filter(':visible');
+  const get_TodoImportantListParentsDiv = $('.todo-item.todo-task-important').not('.todo-item-template').filter(':visible');
 
   // Get Parents Div(s) Counts
   const get_TodoListElementsCount = get_TodoAllListParentsDiv.length;
@@ -226,8 +218,8 @@ function dynamicBadgeNotification(setTodoCategoryCount) {
   }
 }
 
-function deleteDropdown() {
-  $('.action-dropdown .dropdown-menu .delete.dropdown-item').click(async function() {
+const deleteBtnListener = function() {
+  $('.actions-btn .delete-btn').click(async function() {
     const id = this.id.split('_')[1];
     const main_this = this;
     await swal.queue([{
@@ -271,23 +263,18 @@ function deleteDropdown() {
         });
 
         if (response.status === 200) {
-          const getTodoParent = $(main_this).parents('.todo-item');
-          getTodoParent.remove();
-          new dynamicBadgeNotification('allList');
-          new dynamicBadgeNotification('completedList');
-          new dynamicBadgeNotification('importantList');
+          $(main_this).parents('.todo-item').remove();
+          updateBadgeCounts();
         }
       }
     }]);
   });
 }
-function checkCheckbox() {
-  $('.inbox-chkbox').click(async function() {
-    if ($(this).is(":checked")) {
-      $(this).parents('.todo-item').addClass('todo-task-done');
-    } else if ($(this).is(":not(:checked)")) {
-      $(this).parents('.todo-item').removeClass('todo-task-done');
-    }
+const checkBtnListener = function() {
+  $('.actions-btn .done-btn').click(async function() {
+    const todoItem = $(this).parents('.todo-item');
+    todoItem.toggleClass('todo-task-done'); // Toggle the done class
+
     new dynamicBadgeNotification('completedList');
     await fetch('/recon_note/flip_todo_status', {
       method: 'post',
@@ -301,8 +288,8 @@ function checkCheckbox() {
   });
 }
 
-function importantDropdown() {
-  $('.important').click(async function() {
+const importantBtnListener = function() {
+  $('.actions-btn .important-btn').click(async function() {
     badge_id = this.id.split('_')[1];
     if(!$(this).parents('.todo-item').hasClass('todo-task-important')){
       $(this).parents('.todo-item').addClass('todo-task-important');
@@ -313,21 +300,19 @@ function importantDropdown() {
       is_important_badge.id = 'important-badge-' + this.id.split('_')[1];
 
       badge = `
-      <div class="dropdown p-dropdown">
-      <span class="text-danger bs-tooltip" title="Important Task">
-      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-alert-octagon"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12" y2="16"></line></svg>
-      </span>
-      </div>`
+          <div class="dropdown p-dropdown">
+            <span class="text-danger bs-tooltip" title="Important Todo">
+              <i class="fa fa-exclamation-circle"></i>
+            </span>
+          </div>`
 
       is_important_badge.innerHTML = badge;
 
       $(this).parents('.todo-item').find('.todo-content').after(is_important_badge);
-      $(this).text('Remove Important');
     }
     else if($(this).parents('.todo-item').hasClass('todo-task-important')){
       $(this).parents('.todo-item').removeClass('todo-task-important');
       $("#important-badge-"+badge_id).remove();
-      $(this).text('Toggle Important');
     }
     new dynamicBadgeNotification('importantList');
     await fetch('/recon_note/flip_important_status', {
@@ -342,7 +327,7 @@ function importantDropdown() {
   });
 }
 
-function todoItem() {
+const todoItemListener = function() {
   $('.todo-item .todo-content').on('click', function(event) {
     event.preventDefault();
     const $_taskTitle = $(this).find('.todo-heading').text();
@@ -356,7 +341,7 @@ function todoItem() {
   });
 }
 
-function populateScanHistory(project) {
+const populateScanHistory = function(project) {
   scan_history_select = document.getElementById('scanHistoryIDropdown');
   $.getJSON(`/api/listScanHistory/?format=json&project=${project}`, function(data) {
     for (var history in data){
@@ -368,3 +353,58 @@ function populateScanHistory(project) {
     }
   });
 }
+
+// Function to update badge counts
+const updateBadgeCounts = function() {
+  new dynamicBadgeNotification('allList');
+  new dynamicBadgeNotification('completedList');
+  new dynamicBadgeNotification('importantList');
+};
+
+// Updated search function
+const searchFunction = function() {
+  const searchTerm = $('.input-search').val();
+  const rex = new RegExp(searchTerm, 'i'); // Create a regex from the input
+  $('.todo-box .todo-item').hide(); // Hide all items
+  $('.todo-box .todo-item').filter(function() {
+    return rex.test($(this).text()); // Show items that match the regex
+  }).show();
+
+  // Update badge counts after filtering
+  updateBadgeCounts();
+};
+
+$(document).ready(function() {
+  // Show or hide the clear button based on input
+  const updateClearButtonVisibility = function() {
+    const searchTerm = $('.input-search').val();
+    $('#clear-search').toggle(searchTerm.length > 0); // Show the clear button if there's text
+  };
+
+  // Initial check to show the clear button if there's a saved search term
+  const savedSearchTerm = localStorage.getItem('searchTerm');
+  if (savedSearchTerm) {
+    $('.input-search').val(savedSearchTerm); // Set the input value
+    updateClearButtonVisibility(); // Update visibility based on the saved term
+  }
+
+  // Show or hide the clear button on input
+  $('.input-search').on('input', function() {
+    updateClearButtonVisibility();
+  });
+
+  // Clear the search input when the clear button is clicked
+  $('#clear-search').on('click', function() {
+    $('.input-search').val(''); // Clear the input
+    $(this).hide(); // Hide the clear button
+    localStorage.removeItem('searchTerm'); // Remove the search term from local storage
+    searchFunction(); // Call the search function to refresh the list
+  });
+
+  // Attach search function to input
+  $('.input-search').on('keyup', function() {
+    const searchTerm = $(this).val();
+    localStorage.setItem('searchTerm', searchTerm); // Save the search term to local storage
+    searchFunction(); // Call the search function
+  });
+});

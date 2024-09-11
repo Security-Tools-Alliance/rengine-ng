@@ -51,7 +51,12 @@ Recon Todo
       </div>
       <div id="todo-inbox" class="accordion todo-inbox">
         <div class="search">
-          <input type="text" class="form-control input-search" placeholder="Search Here...">
+          <div class="input-group">
+            <span class="input-group-text" id="clear-search" style="cursor: pointer; display: none;">
+              <i class="fa fa-times"></i>
+            </span>
+            <input type="text" class="form-control input-search" placeholder="Search Here...">
+          </div>
         </div>
         <div class="todo-box">
           <div id="ct" class="todo-box-scroll">
@@ -84,7 +89,7 @@ Recon Todo
           <div class="compose-content" id="addTaskModalTitle">
             <h5 class="">Add Todo</h5>
             <form>
-              <input id="task" type="text" placeholder="Todo Title" class="form-control" name="task" required minlength="3" maxlength="100" pattern="[A-Za-z0-9\s\-\_\.]+" title="Only alphanumeric characters, hyphens, underscores, and periods are allowed." autocomplete="on">
+              <input id="task" type="text" placeholder="Todo Title" class="form-control" name="task" required minlength="3" maxlength="100" pattern="[A-Za-z0-9\s\-_\.]+" title="Please enter only letters, numbers, spaces, dashes, underscores, or dots.">
               <div class="mt-2">
                 <label for="scanHistoryIDropdown" class="form-label">Select Scan History (Optional)</label>
                 <select class="w-100 form-control" id="scanHistoryIDropdown" data-toggle="select2" data-width="100%">
@@ -131,20 +136,23 @@ Recon Todo
           <p class="target">{target_text}</p>
           <p class="todo-text">{description}</p>
         </div>
-        <div class="action-dropdown custom-dropdown-icon">
-          <div class="dropdown dropstart">
-            <a class="dropdown-toggle" href="#" role="button" id="dropdownMenuLink-{task_id}" data-bs-toggle="dropdown" aria-expanded="false">
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-more-vertical">
-                <circle cx="12" cy="12" r="1"></circle>
-                <circle cx="12" cy="5" r="1"></circle>
-                <circle cx="12" cy="19" r="1"></circle>
-              </svg>
-            </a>
-            <div class="dropdown-menu" aria-labelledby="dropdownMenuLink-{task_id}">
-              <a class="important dropdown-item" href="javascript:void(0);" id="importantdropdown_{task_id}">Toggle Important</a>
-              <a class="dropdown-item delete" href="javascript:void(0);" id="deletedropdown_{task_id}">Delete</a>
-            </div>
+        <div class="priority-dropdown custom-dropdown-icon" id="important-badge-{task_id}" style="display: flex; align-items: center;">
+          <div class="dropdown p-dropdown">
+            <span class="text-danger bs-tooltip" title="Important Todo">
+              <i class="fa fa-exclamation-circle"></i>
+            </span>
           </div>
+        </div>
+        <div class="actions-btn" style="display: flex; align-items: center;">
+          <button class="btn btn-success done-btn" id="done_{task_id}" title="Done">
+            <i class="fa fa-check-circle"></i>
+          </button>
+          <button class="btn btn-secondary important-btn" id="importantdropdown_{task_id}" title="Toggle Important">
+            <i class="fa fa-exclamation-circle"></i>
+          </button>
+          <button class="btn btn-danger delete-btn" id="deletedropdown_{task_id}" title="Delete">
+            <i class="fa fa-trash"></i>
+          </button>
         </div>
       </div>
     </div>
@@ -198,11 +206,11 @@ $.getJSON(`/api/listTodoNotes?format=json&project={{current_project.slug}}`, fun
     var is_important_badge = '';
     if (note_obj['is_important']) {
       is_important_badge = `<div class="priority-dropdown custom-dropdown-icon" id="important-badge-${note_obj['id']}">
-      <div class="dropdown p-dropdown">
-      <span class="text-danger bs-tooltip" title="Important Todo">
-      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-alert-octagon"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12" y2="16"></line></svg>
-      </span>
-      </div>
+          <div class="dropdown p-dropdown">
+            <span class="text-danger bs-tooltip" title="Important Todo">
+              <i class="fa fa-exclamation-circle"></i>
+            </span>
+          </div>
       </div>`;
     }
     var badges = is_important_badge;
@@ -219,17 +227,17 @@ $.getJSON(`/api/listTodoNotes?format=json&project={{current_project.slug}}`, fun
     <p class="todo-text">${htmlEncode(note_obj['description'])}</p>
     </div>
     ${badges}
-    <div class="action-dropdown custom-dropdown-icon">
-    <div class="dropdown dropstart">
-    <a class="dropdown-toggle" href="#" role="button" id="dropdownMenuLink-${note_obj['id']}" data-bs-toggle="dropdown" aria-expanded="false">
-    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-more-vertical"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg>
-    </a>
-    <div class="dropdown-menu" aria-labelledby="dropdownMenuLink-${note_obj['id']}">
-    <a class="important dropdown-item" href="javascript:void(0);" id="importantdropdown_${note_obj['id']}">Toggle Important</a>
-    <a class="dropdown-item delete" href="javascript:void(0);" id="deletedropdown_${note_obj['id']}">Delete</a>
-    </div>
-    </div>
-    </div>
+        <div class="actions-btn" style="display: flex; align-items: center;">
+          <button class="btn btn-success done-btn" id="done_${note_obj['id']}" title="Done">
+            <i class="fa fa-check-circle"></i>
+          </button>
+          <button class="btn btn-secondary important-btn" id="importantdropdown_${note_obj['id']}" title="Toggle Important">
+            <i class="fa fa-exclamation-circle"></i>
+          </button>
+          <button class="btn btn-danger delete-btn" id="deletedropdown_${note_obj['id']}" title="Delete">
+            <i class="fa fa-trash"></i>
+          </button>
+        </div>
     </div>`;
     todo_item.innerHTML = html;
     document.getElementById('ct').appendChild(todo_item);
