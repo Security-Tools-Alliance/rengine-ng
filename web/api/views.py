@@ -580,8 +580,8 @@ class AddReconNote(APIView):
 		req = self.request
 		data = req.data
 
-		subdomain_id = data.get('subdomain')
-		scan_history_id = data.get('scan_history')
+		subdomain_id = data.get('subdomain_id')
+		scan_history_id = data.get('scan_history_id')
 		title = data.get('title')
 		description = data.get('description')
 		project = data.get('project')
