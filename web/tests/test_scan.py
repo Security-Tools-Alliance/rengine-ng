@@ -3,9 +3,13 @@ import logging
 import os
 import unittest
 import yaml
+from dotenv import load_dotenv
 
-os.environ['RENGINE_SECRET_KEY'] = 'secret'
-os.environ['CELERY_ALWAYS_EAGER'] = 'True'
+# Load environment variables from a .env file
+load_dotenv()
+
+os.environ.setdefault('RENGINE_SECRET_KEY', os.getenv('RENGINE_SECRET_KEY', 'secret'))
+os.environ.setdefault('CELERY_ALWAYS_EAGER', os.getenv('CELERY_ALWAYS_EAGER', 'True'))
 
 from reNgine.settings import CELERY_DEBUG
 from celery.utils.log import get_task_logger
@@ -15,7 +19,6 @@ from reNgine.tasks import (dir_file_fuzz, fetch_url, http_crawl, initiate_scan,
                            osint, port_scan, subdomain_discovery,
                            vulnerability_scan)
 from startScan.models import Endpoint, Domain, ScanHistory, Subdomain
-
 
 logger = get_task_logger(__name__)
 # To pass the DOMAIN_NAME variable when running tests, you can use:

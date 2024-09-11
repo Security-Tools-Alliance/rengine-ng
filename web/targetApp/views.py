@@ -91,7 +91,8 @@ def add_target(request, slug):
             # Multiple targets
             if multiple_targets:
                 bulk_targets = [t.rstrip() for t in request.POST['addTargets'].split('\n') if t]
-                logger.info('Adding multiple targets: %s', bulk_targets)  # Utilisation de la mise en forme paresseuse
+                sanitized_targets = [target if isinstance(target, str) and validators.domain(target) else 'Invalid target' for target in bulk_targets]
+                logger.info('Adding multiple targets: %s', sanitized_targets)
                 description = request.POST.get('targetDescription', '')
                 h1_team_handle = request.POST.get('targetH1TeamHandle')
                 organization_name = request.POST.get('targetOrganization')
@@ -112,7 +113,8 @@ def add_target(request, slug):
                     is_url = bool(validators.url(target))
 
                     # Set ip_domain / http_url based on type of input
-                    logger.info('%s | Domain? %s | IP? %s | CIDR range? %s | URL? %s', target, is_domain, is_ip, is_range, is_url)
+                    sanitized_target = target if isinstance(target, str) and validators.domain(target) else 'Invalid target'
+                    logger.info('%s | Domain? %s | IP? %s | CIDR range? %s | URL? %s', sanitized_target, is_domain, is_ip, is_range, is_url)
 
                     if is_domain:
                        domains.append(target)
@@ -148,7 +150,13 @@ def add_target(request, slug):
                             msg)
                         continue
 
-                    logger.info('IPs: %s | Domains: %s | URLs: %s | Ports: %s', ips, domains, http_urls, ports)
+                    # Sanitize the lists for logging
+                    sanitized_ips = [ip if validators.ipv4(ip) or validators.ipv6(ip) else 'Invalid IP' for ip in ips]
+                    sanitized_domains = [domain if isinstance(domain, str) and validators.domain(domain) else 'Invalid Domain' for domain in domains]
+                    sanitized_http_urls = [url if validators.url(url) else 'Invalid URL' for url in http_urls]
+                    sanitized_ports = [port if isinstance(port, int) else 'Invalid Port' for port in ports]
+                    logger.info('IPs: %s | Domains: %s | URLs: %s | Ports: %s', 
+                                sanitized_ips, sanitized_domains, sanitized_http_urls, sanitized_ports)
 
                     for domain_name in domains:
                         if not Domain.objects.filter(name=domain_name).exists():
@@ -162,7 +170,7 @@ def add_target(request, slug):
                             domain.save()
                             added_target_count += 1
                             if created:
-                                logger.info('Added new domain %s', domain.name)  # Utilisation de la mise en forme paresseuse
+                                logger.info('Added new domain %s', domain.name)
 
                             if organization_name:
                                 organization = None
@@ -288,7 +296,7 @@ def add_target(request, slug):
                     is_ip = bool(validators.ipv4(ip)) or bool(validators.ipv6(ip))
                     if not is_ip and not is_domain:
                         messages.add_message(request, messages.ERROR, f'IP {ip} is not a valid IP address / domain. Skipping.')
-                        logger.warning('IP %s is not a valid IP address / domain. Skipping.', ip)
+                        logger.warning('Invalid IP address/domain provided. Skipping.')
                         continue
                     description = request.POST.get('targetDescription', '')
                     h1_team_handle = request.POST.get('targetH1TeamHandle')
@@ -369,14 +377,22 @@ def delete_target(request, id):
                 'Domain successfully deleted!'
             )
         except Http404:
-            logger.error('Domain not found: %s', id)
+            if isinstance(id, int):  # Ensure id is an integer
+                logger.error('Domain not found: %d', id)
+            else:
+                logger.error('Domain not found: Invalid ID provided')
             messages.add_message(
                 request,
                 messages.ERROR,
                 'Domain not found.')
             responseData = {'status': 'false'}
     else:
-        logger.error('Invalid request method: %s', request.method)
+        valid_methods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD']
+        if request.method in valid_methods:
+            logger.error('Invalid request method: %s', request.method)
+        else:
+            logger.error('Invalid request method: Unknown method provided')
+        
         responseData = {'status': 'false'}
         messages.add_message(
             request,

@@ -1223,20 +1223,20 @@ def get_ip_info(ip_address):
 	return ip_data
 
 def get_ips_from_cidr_range(target):
-	"""
-	get_ips_from_cidr_range generates a list of IP addresses from a given CIDR range. It returns the list of valid IPv4 addresses or logs an error if the provided CIDR range is invalid.
+    """
+    get_ips_from_cidr_range generates a list of IP addresses from a given CIDR range. It returns the list of valid IPv4 addresses or logs an error if the provided CIDR range is invalid.
 
-	Args:
-		target (str): The CIDR range from which to generate IP addresses.
+    Args:
+        target (str): The CIDR range from which to generate IP addresses.
 
-	Returns:
-		list of str: A list of IP addresses as strings if the CIDR range is valid; otherwise, an empty list is returned.
-		
-	Raises:
-		ValueError: If the target is not a valid CIDR range, an error is logged.
-	"""
-	try:
-		return [str(ip) for ip in ipaddress.IPv4Network(target)]
-	except Exception as e:
-		logger.error(f'{target} is not a valid CIDR range. Skipping.')
-		return []
+    Returns:
+        list of str: A list of IP addresses as strings if the CIDR range is valid; otherwise, an empty list is returned.
+        
+    Raises:
+        ValueError: If the target is not a valid CIDR range, an error is logged.
+    """
+    try:
+        return [str(ip) for ip in ipaddress.IPv4Network(target)]
+    except ValueError:
+        logger.error(f'{target} is not a valid CIDR range. Skipping.')
+        return []

@@ -30,9 +30,19 @@ class TestOllamaManager(BaseTestCase):
         """Test downloading an Ollama model."""
         mock_post.return_value.json.return_value = {"status": "success"}
         api_url = reverse("api:ollama_manager")
-        response = self.client.get(api_url, data={"model": "gpt-4"})
+        response = self.client.get(api_url, data={"model": "llama2"})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data["status"])
+
+    @patch("requests.post")
+    def test_get_download_model_failure(self, mock_post):
+        """Test failed downloading of an Ollama model."""
+        mock_post.return_value.json.return_value = {"error": "pull model manifest: file does not exist"}
+        api_url = reverse("api:ollama_manager")
+        response = self.client.get(api_url, data={"model": "invalid-model"})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["error"], "pull model manifest: file does not exist")
+        self.assertFalse(response.data["status"])
 
     @patch("requests.delete")
     def test_delete_model(self, mock_delete):

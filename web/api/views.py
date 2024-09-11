@@ -154,51 +154,48 @@ class OllamaManager(APIView):
 	
 	def delete(self, request):
 		req = self.request
-		response = {
-			'status': False
-		}
-		try:
-			model_name = get_data_from_post_request(req, 'model')
-		except Exception as e:
-			response['error'] = str(e)
-			return Response(response, status=400)
+		response = {'status': False}
 
+		# Get the model name from the request
+		model_name = get_data_from_post_request(req, 'model')
+
+		# Check if the model name is provided
 		if not model_name:
 			response['error'] = 'Model name is required'
 			return Response(response, status=400)
 
 		delete_model_api = f'{OLLAMA_INSTANCE}/api/delete'
+		
 		try:
+			# Make the API call to delete the model
 			_response = requests.delete(
 				delete_model_api,
 				json={'name': model_name}
 			).json()
+
+			# Check for errors in the response
 			if _response.get('error'):
 				response['error'] = _response.get('error')
 			else:
 				response['status'] = True
 		except Exception as e:
 			response['error'] = str(e)
+
 		return Response(response)
 	
 	def put(self, request):
-		response = {
-			'status': False
-		}
-		try:
-			data = request.data
-			model_name = data.get('model')
-		except Exception as e:
-			response['error'] = str(e)
-			return Response(response, status=400)
+		response = {'status': False}
+		
+		data = request.data
+		model_name = data.get('model')
 
 		if not model_name:
 			response['error'] = 'Model name is required'
 			return Response(response, status=400)
 
-		use_ollama = True
-		if any(model['name'] == model_name for model in DEFAULT_GPT_MODELS):
-			use_ollama = False
+		# Invert the condition to simplify the assignment
+		use_ollama = all(model['name'] != model_name for model in DEFAULT_GPT_MODELS)
+
 		try:
 			# Create or update OllamaSettings
 			OllamaSettings.objects.update_or_create(
@@ -212,56 +209,57 @@ class OllamaManager(APIView):
 			response['status'] = True
 		except Exception as e:
 			response['error'] = str(e)
+
 		return Response(response)
 
 class GPTAttackSuggestion(APIView):
-	def get(self, request):
-		req = self.request
-		subdomain_id = safe_int_cast(req.query_params.get('subdomain_id'))
-		if not subdomain_id:
-			return Response({
-				'status': False,
-				'error': 'Missing GET param Subdomain `subdomain_id`'
-			})
-		try:
-			subdomain = Subdomain.objects.get(id=subdomain_id)
-		except Exception as e:
-			return Response({
-				'status': False,
-				'error': 'Subdomain not found with id ' + subdomain_id
-			})
-		if subdomain.attack_surface:
-			return Response({
-				'status': True,
-				'subdomain_name': subdomain.name,
-				'description': subdomain.attack_surface
-			})
-		ip_addrs = subdomain.ip_addresses.all()
-		open_ports_str = ''
-		for ip in ip_addrs:
-			ports = ip.ports.all()
-			for port in ports:
-				open_ports_str += f'{port.number}/{port.service_name}, '
-		tech_used = ''
-		for tech in subdomain.technologies.all():
-			tech_used += f'{tech.name}, '
-		input = f'''
-			Subdomain Name: {subdomain.name}
-			Subdomain Page Title: {subdomain.page_title}
-			Open Ports: {open_ports_str}
-			HTTP Status: {subdomain.http_status}
-			Technologies Used: {tech_used}
-			Content type: {subdomain.content_type}
-			Web Server: {subdomain.webserver}
-			Page Content Length: {subdomain.content_length}
-		'''
-		gpt = GPTAttackSuggestionGenerator()
-		response = gpt.get_attack_suggestion(input)
-		response['subdomain_name'] = subdomain.name
-		if response.get('status'):
-			subdomain.attack_surface = response.get('description')
-			subdomain.save()
-		return Response(response)
+    def get(self, request):
+        req = self.request
+        subdomain_id = safe_int_cast(req.query_params.get('subdomain_id'))
+        if not subdomain_id:
+            return Response({
+                'status': False,
+                'error': 'Missing GET param Subdomain `subdomain_id`'
+            })
+        try:
+            subdomain = Subdomain.objects.get(id=subdomain_id)
+        except Subdomain.DoesNotExist:
+            return Response({
+                'status': False,
+                'error': f'Subdomain not found with id {subdomain_id}'
+            })
+
+        if subdomain.attack_surface:
+            return Response({
+                'status': True,
+                'subdomain_name': subdomain.name,
+                'description': subdomain.attack_surface
+            })
+
+        ip_addrs = subdomain.ip_addresses.all()
+        open_ports = ', '.join(f'{port.number}/{port.service_name}' for ip in ip_addrs for port in ip.ports.all())
+        tech_used = ', '.join(tech.name for tech in subdomain.technologies.all())
+
+        input_data = f'''
+            Subdomain Name: {subdomain.name}
+            Subdomain Page Title: {subdomain.page_title}
+            Open Ports: {open_ports}
+            HTTP Status: {subdomain.http_status}
+            Technologies Used: {tech_used}
+            Content type: {subdomain.content_type}
+            Web Server: {subdomain.webserver}
+            Page Content Length: {subdomain.content_length}
+        '''
+        
+        gpt = GPTAttackSuggestionGenerator()
+        response = gpt.get_attack_suggestion(input_data)
+        response['subdomain_name'] = subdomain.name
+        
+        if response.get('status'):
+            subdomain.attack_surface = response.get('description')
+            subdomain.save()
+        
+        return Response(response)
 
 
 class GPTVulnerabilityReportGenerator(APIView):
@@ -471,6 +469,8 @@ class FetchMostCommonVulnerability(APIView):
 		req = self.request
 		data = req.data
 
+		response = {'status': False}
+
 		try:
 			limit = safe_int_cast(data.get('limit', 20))
 			project_slug = data.get('slug')
@@ -478,75 +478,38 @@ class FetchMostCommonVulnerability(APIView):
 			target_id = safe_int_cast(data.get('target_id'))
 			is_ignore_info = data.get('ignore_info', False)
 
-			response = {}
-			response['status'] = False
-
-			if project_slug:
-				project = Project.objects.get(slug=project_slug)
-				vulnerabilities = Vulnerability.objects.filter(target_domain__project=project)
-			else:
-				vulnerabilities = Vulnerability.objects.all()
-
+			vulnerabilities = (
+				Vulnerability.objects.filter(target_domain__project__slug=project_slug)
+				if project_slug else Vulnerability.objects.all()
+			)
 
 			if scan_history_id:
-				vuln_query = (
-					vulnerabilities
-					.filter(scan_history__id=scan_history_id)
-					.values("name", "severity")
-				)
-				if is_ignore_info:
-					most_common_vulnerabilities = (
-						vuln_query
-						.exclude(severity=0)
-						.annotate(count=Count('name'))
-						.order_by("-count")[:limit]
-					)
-				else:
-					most_common_vulnerabilities = (
-						vuln_query
-						.annotate(count=Count('name'))
-						.order_by("-count")[:limit]
-					)
-
+				vuln_query = vulnerabilities.filter(scan_history__id=scan_history_id).values("name", "severity")
 			elif target_id:
 				vuln_query = vulnerabilities.filter(target_domain__id=target_id).values("name", "severity")
-				if is_ignore_info:
-					most_common_vulnerabilities = (
-						vuln_query
-						.exclude(severity=0)
-						.annotate(count=Count('name'))
-						.order_by("-count")[:limit]
-					)
-				else:
-					most_common_vulnerabilities = (
-						vuln_query
-						.annotate(count=Count('name'))
-						.order_by("-count")[:limit]
-					)
-
 			else:
 				vuln_query = vulnerabilities.values("name", "severity")
-				if is_ignore_info:
-					most_common_vulnerabilities = (
-						vuln_query.exclude(severity=0)
-						.annotate(count=Count('name'))
-						.order_by("-count")[:limit]
-					)
-				else:
-					most_common_vulnerabilities = (
-						vuln_query.annotate(count=Count('name'))
-						.order_by("-count")[:limit]
-					)
 
+			if is_ignore_info:
+				most_common_vulnerabilities = (
+					vuln_query.exclude(severity=0)
+					.annotate(count=Count('name'))
+					.order_by("-count")[:limit]
+				)
+			else:
+				most_common_vulnerabilities = (
+					vuln_query.annotate(count=Count('name'))
+					.order_by("-count")[:limit]
+				)
 
-			most_common_vulnerabilities = [vuln for vuln in most_common_vulnerabilities]
+			most_common_vulnerabilities = list(most_common_vulnerabilities)
 
 			if most_common_vulnerabilities:
 				response['status'] = True
 				response['result'] = most_common_vulnerabilities
+
 		except Exception as e:
-			print(str(e))
-			response = {}
+			print(e)
 
 		return Response(response)
 
@@ -743,49 +706,53 @@ class ToggleSubdomainImportantStatus(APIView):
 
 
 class AddTarget(APIView):
-	def post(self, request):
-		req = self.request
-		data = req.data
-		h1_team_handle = data.get('h1_team_handle')
-		description = data.get('description')
-		domain_name = data.get('domain_name')
-		organization_name = data.get('organization')
-		slug = data.get('slug')
+    def post(self, request):
+        req = self.request
+        data = req.data
+        h1_team_handle = data.get('h1_team_handle')
+        description = data.get('description')
+        domain_name = data.get('domain_name')
+        organization_name = data.get('organization')
+        slug = data.get('slug')
 
-		# Validate domain name
-		if not validators.domain(domain_name):
-			return Response({'status': False, 'message': 'Invalid domain or IP'})
+        # Validate domain name
+        if not validators.domain(domain_name):
+            return Response({'status': False, 'message': 'Invalid domain or IP'}, status=400)
 
-		project = Project.objects.get(slug=slug)
+        project = Project.objects.get(slug=slug)
 
-		# Create domain object in DB
-		domain, _ = Domain.objects.get_or_create(name=domain_name)
-		domain.project = project
-		domain.h1_team_handle = h1_team_handle
-		domain.description = description
-		if not domain.insert_date:
-			domain.insert_date = timezone.now()
-		domain.save()
+        # Check if the domain already exists
+        if Domain.objects.filter(name=domain_name, project=project).exists():
+            return Response({'status': False, 'message': 'Domain already exists as a target!'}, status=400)
 
-		# Create org object in DB
-		if organization_name:
-			organization_obj = None
-			organization_query = Organization.objects.filter(name=organization_name)
-			if organization_query.exists():
-				organization_obj = organization_query[0]
-			else:
-				organization_obj = Organization.objects.create(
-					name=organization_name,
-					project=project,
-					insert_date=timezone.now())
-			organization_obj.domains.add(domain)
+        # Create domain object in DB
+        domain, _ = Domain.objects.get_or_create(name=domain_name)
+        domain.project = project
+        domain.h1_team_handle = h1_team_handle
+        domain.description = description
+        if not domain.insert_date:
+            domain.insert_date = timezone.now()
+        domain.save()
 
-		return Response({
-			'status': True,
-			'message': 'Domain successfully added as target !',
-			'domain_name': domain_name,
-			'domain_id': domain.id
-		})
+        # Create org object in DB
+        if organization_name:
+            organization_obj = None
+            organization_query = Organization.objects.filter(name=organization_name)
+            if organization_query.exists():
+                organization_obj = organization_query[0]
+            else:
+                organization_obj = Organization.objects.create(
+                    name=organization_name,
+                    project=project,
+                    insert_date=timezone.now())
+            organization_obj.domains.add(domain)
+
+        return Response({
+            'status': True,
+            'message': 'Domain successfully added as target!',
+            'domain_name': domain_name,
+            'domain_id': domain.id
+        })
 
 
 class FetchSubscanResults(APIView):
@@ -1002,14 +969,21 @@ class DeleteSubdomain(APIView):
             return Response({'status': False, 'message': logger.debug(e)}, status=500)
 
 class DeleteVulnerability(APIView):
-	def post(self, request):
-		vulnerability_ids = get_data_from_post_request(request, 'vulnerability_ids')
-		try:
-			vulnerability_ids = [int(id) for id in vulnerability_ids]
-			Vulnerability.objects.filter(id__in=vulnerability_ids).delete()
-			return Response({'status': True})
-		except ValueError:
-			return Response({'status': False, 'message': 'Invalid vulnerability ID provided'}, status=400)
+    def post(self, request):
+        vulnerability_ids = get_data_from_post_request(request, 'vulnerability_ids')
+
+        # Check if vulnerability_ids is iterable
+        if not isinstance(vulnerability_ids, (list, tuple)):
+            return Response({'status': False, 'message': 'vulnerability_ids must be a list or tuple'}, status=400)
+
+        try:
+            # Convert to integers
+            vulnerability_ids = [int(id) for id in vulnerability_ids]
+            # Delete vulnerabilities
+            Vulnerability.objects.filter(id__in=vulnerability_ids).delete()
+            return Response({'status': True})
+        except ValueError:
+            return Response({'status': False, 'message': 'Invalid vulnerability ID provided'}, status=400)
 
 class ListInterestingKeywords(APIView):
 	def get(self, request, format=None):
@@ -1577,31 +1551,25 @@ class VisualiseData(APIView):
         return processed_data
 
 class ListTechnology(APIView):
-	def get(self, request, format=None):
-		req = self.request
-		scan_id = safe_int_cast(req.query_params.get('scan_id'))
-		target_id = safe_int_cast(req.query_params.get('target_id'))
+    def get(self, request, format=None):
+        req = self.request
+        scan_id = safe_int_cast(req.query_params.get('scan_id'))
+        target_id = safe_int_cast(req.query_params.get('target_id'))
 
-		if target_id:
-			tech = Technology.objects.filter(
-				technologies__in=Subdomain.objects.filter(
-					target_domain__id=target_id)).annotate(
-				count=Count('name')).order_by('-count')
-			serializer = TechnologyCountSerializer(tech, many=True)
-			return Response({"technologies": serializer.data})
-		elif scan_id:
-			tech = Technology.objects.filter(
-				technologies__in=Subdomain.objects.filter(
-					scan_history__id=scan_id)).annotate(
-				count=Count('name')).order_by('-count')
-			serializer = TechnologyCountSerializer(tech, many=True)
-			return Response({"technologies": serializer.data})
-		else:
-			tech = Technology.objects.filter(
-				technologies__in=Subdomain.objects.all()).annotate(
-				count=Count('name')).order_by('-count')
-			serializer = TechnologyCountSerializer(tech, many=True)
-			return Response({"technologies": serializer.data})
+        # Determine the queryset based on the presence of target_id or scan_id
+        if target_id:
+            subdomain_filter = Subdomain.objects.filter(target_domain__id=target_id)
+        elif scan_id:
+            subdomain_filter = Subdomain.objects.filter(scan_history__id=scan_id)
+        else:
+            subdomain_filter = Subdomain.objects.all()
+
+        # Fetch technologies and serialize the results
+        tech = Technology.objects.filter(technologies__in=subdomain_filter).annotate(
+            count=Count('name')).order_by('-count')
+        serializer = TechnologyCountSerializer(tech, many=True)
+
+        return Response({"technologies": serializer.data})
 
 
 class ListDorkTypes(APIView):

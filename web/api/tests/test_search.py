@@ -62,3 +62,12 @@ class TestUniversalSearch(BaseTestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertFalse(response.data["status"])
         self.assertEqual(response.data["message"], "No query parameter provided!")
+
+    def test_universal_search_with_special_characters(self):  
+        """Test the universal search functionality with special characters."""
+        api_url = reverse("api:search")
+        special_query = "admin'; DROP TABLE users;--"
+        response = self.client.get(api_url, {"query": special_query})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(response.data["status"])
+        self.assertNotIn("users", response.data["results"])

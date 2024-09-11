@@ -23,6 +23,9 @@ class TestDashboardViews(BaseTestCase):
         response = self.client.get(reverse('dashboardIndex', kwargs={'slug': self.data_generator.project.slug}))
         self.assertEqual(response.status_code, 200)
         self.assertIn('dashboard_data_active', response.context)
+        dashboard_data = response.context['dashboard_data_active']
+        self.assertIsInstance(dashboard_data, str)
+        self.assertIn('active', dashboard_data)
 
     def test_profile_view(self):
         """Test the profile view."""

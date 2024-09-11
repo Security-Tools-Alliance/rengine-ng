@@ -1,14 +1,14 @@
 import logging
 import os
 import unittest
+import pathlib
 
 os.environ['RENGINE_SECRET_KEY'] = 'secret'
 os.environ['CELERY_ALWAYS_EAGER'] = 'True'
 
 from celery.utils.log import get_task_logger
 from reNgine.settings import CELERY_DEBUG
-from reNgine.tasks import parse_nmap_results
-import pathlib
+from reNgine.tasks import parse_nmap_results 
 
 logger = get_task_logger(__name__)
 DOMAIN_NAME = os.environ['DOMAIN_NAME']
@@ -34,7 +34,7 @@ class TestNmapParsing(unittest.TestCase):
     def test_nmap_parse(self):
         for xml_file in self.all_xml:
             vulns = parse_nmap_results(self.nmap_vuln_single_xml)
-            self.assertGreater(self.vulns, 0)
+            self.assertGreater(len(vulns), 0)  # Fixed to use len(vulns)
 
     def test_nmap_vuln_single(self):
         pass

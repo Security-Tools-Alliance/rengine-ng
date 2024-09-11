@@ -589,6 +589,8 @@ def add_tool(request, slug):
             # add tool
             install_command = form.data['install_command']
             github_clone_path = None
+            
+            # Only modify install_command if it contains 'git clone'
             if 'git clone' in install_command:
                 project_name = install_command.split('/')[-1]
                 install_command = f'{install_command} {RENGINE_TOOL_GITHUB_PATH}/{project_name} && pip install -r {RENGINE_TOOL_GITHUB_PATH}/{project_name}/requirements.txt'
@@ -597,6 +599,7 @@ def add_tool(request, slug):
             run_command(install_command)
             run_command.apply_async(args=(install_command,))
             saved_form = form.save()
+            
             if github_clone_path:
                 tool = InstalledExternalTool.objects.get(id=saved_form.pk)
                 tool.github_clone_path = github_clone_path
@@ -607,10 +610,11 @@ def add_tool(request, slug):
                 messages.INFO,
                 'External Tool Successfully Added!')
             return http.HttpResponseRedirect(reverse('tool_arsenal', kwargs={'slug': slug}))
+
     context = {
-            'settings_nav_active': 'active',
-            'form': form
-        }
+        'settings_nav_active': 'active',
+        'form': form
+    }
     return render(request, 'scanEngine/settings/add_tool.html', context)
 
 

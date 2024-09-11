@@ -5,6 +5,7 @@ This file contains the test cases for the API views.
 from django.urls import reverse
 from rest_framework import status
 from utils.test_base import BaseTestCase
+from targetApp.models import Organization
 
 __all__ = [
     'TestListOrganizations',
@@ -19,6 +20,14 @@ class TestListOrganizations(BaseTestCase):
         """Set up test environment."""
         super().setUp()
         self.data_generator.create_project_full()
+
+    def test_list_empty_organizations(self):
+        """Test listing organizations when the database is empty."""
+        Organization.objects.all().delete()
+        url = reverse("api:listOrganizations")
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.json()['organizations']), 0)
 
     def test_list_organizations(self):
         """Test listing all organizations."""

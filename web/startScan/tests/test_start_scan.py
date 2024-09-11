@@ -5,6 +5,7 @@ import json
 from unittest.mock import patch
 from django.urls import reverse
 from django.utils import timezone
+from django.test import override_settings
 from utils.test_base import BaseTestCase
 from utils.test_utils import MockTemplate
 from startScan.models import ScanHistory, Subdomain, EndPoint, Vulnerability, ScanActivity
@@ -22,6 +23,7 @@ class TestStartScanViews(BaseTestCase):
         super().setUp()
         self.data_generator.create_project_full()
 
+    @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
     def test_start_scan_view(self):
         """Test the start scan view."""
         data = {
@@ -36,7 +38,11 @@ class TestStartScanViews(BaseTestCase):
             'domain_id': self.data_generator.domain.id
         }), data)
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, '/scan/test-project/history/scan')
+        self.assertEqual(response.url, f"/scan/{self.data_generator.project.slug}/history/scan")
+        
+        scan = ScanHistory.objects.latest('id')
+        self.assertEqual(scan.domain, self.data_generator.domain)
+        self.assertEqual(scan.scan_type.id, self.data_generator.engine_type.id)
 
     def test_scan_history_view(self):
         """Test the scan history view."""

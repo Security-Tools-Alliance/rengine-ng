@@ -1,6 +1,6 @@
 import logging
 
-from utils.test_utils import TestDataGenerator
+from utils.test_utils import TestDataGenerator, TestValidation
 from django.test import TestCase, Client
 from django.contrib.auth import get_user_model
 from dashboard.views import on_user_logged_in
@@ -47,6 +47,7 @@ class BaseTestCase(TestCase):
 
         # Create test data
         self.data_generator = TestDataGenerator()
+        self.test_validation = TestValidation()
 
         # Disable logging for tests
         logging.disable(logging.CRITICAL)

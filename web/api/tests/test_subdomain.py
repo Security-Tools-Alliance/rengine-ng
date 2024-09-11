@@ -54,6 +54,13 @@ class TestDeleteSubdomain(BaseTestCase):
             Subdomain.objects.filter(id=self.data_generator.subdomain.id).exists()
         )
 
+    def test_delete_nonexistent_subdomain(self):
+        """Test deleting a non-existent subdomain."""
+        api_url = reverse("api:delete_subdomain")
+        data = {"subdomain_ids": ["nonexistent_id"]}
+        response = self.client.post(api_url, data)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
 class TestListSubdomains(BaseTestCase):
     """Test case for listing subdomains."""
 

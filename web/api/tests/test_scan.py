@@ -38,6 +38,11 @@ class TestScanStatus(BaseTestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("scans", response.data)
         self.assertIn("tasks", response.data)
+        self.assertIsInstance(response.data["scans"], dict)
+        self.assertIsInstance(response.data["tasks"], dict)
+        if response.data["scans"]:
+            self.assertIn("id", response.data["scans"]["completed"][0])
+            self.assertIn("scan_status", response.data["scans"]["completed"][0])
 
 class TestListScanHistory(BaseTestCase):
     """Test case for listing scan history."""

@@ -16,7 +16,7 @@ def main():
     skip_art_commands = ['test', 'dumpdata']
     
     # Do not show rengine artwork if we are running tests
-    if not any(cmd in sys.argv for cmd in skip_art_commands):
+    if all(cmd not in sys.argv for cmd in skip_art_commands):
         # show rengine artwork
         try:
             with open('art/reNgine.txt', 'r', encoding='utf-8') as f:

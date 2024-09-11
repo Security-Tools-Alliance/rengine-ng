@@ -54,6 +54,8 @@ class TestScanReconNoteViews(BaseTestCase):
         response = self.client.post(api_url, data)
         self.assertIn(response.status_code, [status.HTTP_400_BAD_REQUEST])
         self.assertFalse(response.json()["status"])
+        self.assertIn("error", response.json())
+        self.assertEqual(response.json()["error"], "Subdomain ID is required.")
 
     def test_list_recon_notes(self):
         """Test listing all recon notes."""

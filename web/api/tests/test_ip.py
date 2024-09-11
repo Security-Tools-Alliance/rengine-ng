@@ -6,6 +6,7 @@ from unittest.mock import patch
 from django.urls import reverse
 from rest_framework import status
 from utils.test_base import BaseTestCase
+import socket
 
 __all__ = [
     'TestIpAddressViewSet',
@@ -64,6 +65,27 @@ class TestIPToDomain(BaseTestCase):
         self.assertEqual(
             response.data["ip_address"][0]["domain"], self.data_generator.domain.name
         )
+
+    @patch("api.views.socket.gethostbyaddr")
+    def test_ip_to_domain_failure(self, mock_gethostbyaddr):
+        """Test IP to domain resolution when it fails."""
+        mock_gethostbyaddr.side_effect = socket.herror
+        url = reverse("api:ip_to_domain")
+        response = self.client.get(url, {"ip_address": "192.0.2.1"})
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data["status"])
+        self.assertEqual(response.data["ip_address"][0]["domain"], "192.0.2.1")
+
+    @patch("api.views.socket.gethostbyaddr")
+    def test_ip_to_domain_multiple(self, mock_gethostbyaddr):
+        """Test IP to domain resolution with multiple domains."""
+        mock_domains = ["example.com", "example.org"]
+        mock_gethostbyaddr.return_value = (mock_domains[0], mock_domains, ["192.0.2.1"])
+        url = reverse("api:ip_to_domain")
+        response = self.client.get(url, {"ip_address": "192.0.2.1"})
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("domains", response.data["ip_address"][0])
+        self.assertEqual(response.data["ip_address"][0]["domains"], mock_domains)
 
 class TestDomainIPHistory(BaseTestCase):
     """Test case for domain IP history lookup."""

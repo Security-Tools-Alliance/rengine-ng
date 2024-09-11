@@ -6,11 +6,10 @@ from django.shortcuts import render
 from recon_note.models import TodoNote
 
 def list_note(request, slug):
-    context = {'recon_note_active': 'active'}
-
     if not slug:
         return JsonResponse({'status': False, 'error': 'Slug is required.'}, status=400)
 
+    context = {'recon_note_active': 'active'}
     return render(request, 'note/index.html', context)
 
 def flip_todo_status(request):

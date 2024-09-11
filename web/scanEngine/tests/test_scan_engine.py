@@ -51,10 +51,10 @@ class TestScanEngineViews(BaseTestCase):
         """
         response = self.client.post(reverse('delete_engine_url', kwargs={
             'slug': 'default',
-            'id': self.data_generator.engine.id
+            'id': self.data_generator.engine_type.id
         }))
         self.assertEqual(response.status_code, 200)
-        self.assertFalse(EngineType.objects.filter(id=self.data_generator.engine.id).exists())
+        self.assertFalse(EngineType.objects.filter(id=self.data_generator.engine_type.id).exists())
 
     def test_update_engine_view(self):
         """
@@ -62,14 +62,14 @@ class TestScanEngineViews(BaseTestCase):
         """
         response = self.client.post(reverse('update_engine', kwargs={
             'slug': 'default',
-            'id': self.data_generator.engine.id
+            'id': self.data_generator.engine_type.id
         }), {
             'engine_name': 'Updated Engine',
             'yaml_configuration': 'updated: config'
         })
         self.assertEqual(response.status_code, 302)
-        self.data_generator.engine.refresh_from_db()
-        self.assertEqual(self.data_generator.engine.engine_name, 'Updated Engine')
+        self.data_generator.engine_type.refresh_from_db()
+        self.assertEqual(self.data_generator.engine_type.engine_name, 'Updated Engine')
 
     def test_wordlist_list_view(self):
         """

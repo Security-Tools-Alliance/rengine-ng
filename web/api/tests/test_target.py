@@ -19,6 +19,7 @@ class TestAddTarget(BaseTestCase):
         """Set up test environment."""
         super().setUp()
         self.data_generator.create_project_base()
+        Domain.objects.all().delete()
 
     def test_add_target(self):
         """Test adding a new target."""
@@ -37,6 +38,11 @@ class TestAddTarget(BaseTestCase):
         self.assertTrue(
             Domain.objects.filter(name=self.data_generator.domain.name).exists()
         )
+
+        # Test adding duplicate target
+        response = self.client.post(api_url, data)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(response.data["status"])
 
 class TestListTargetsDatatableViewSet(BaseTestCase):
     """Tests for the List Targets Datatable API."""

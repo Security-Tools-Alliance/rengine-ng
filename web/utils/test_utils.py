@@ -3,6 +3,7 @@ This file contains the test cases
 """
 
 import logging
+import json
 
 from django.utils import timezone
 from django.test import override_settings
@@ -109,7 +110,6 @@ class TestDataGenerator:
         self.create_scan_activity()
         self.create_command()
         self.create_installed_external_tool()
-        self.create_engine()
         self.create_wordlist()
         self.create_proxy()
         self.create_hackerone()
@@ -261,7 +261,7 @@ class TestDataGenerator:
         """Create and return a test engine type."""
         self.engine_type = EngineType.objects.create(
             engine_name="Test Engine",
-            yaml_configuration="http_crawl: \{\}",
+            yaml_configuration="http_crawl: {}",
             default_engine=True,
         )
         return self.engine_type
@@ -426,13 +426,6 @@ class TestDataGenerator:
         )
         return self.command
 
-    def create_engine(self):
-        """
-        Create a test engine.
-        """
-        self.engine = EngineType.objects.create(engine_name='Test Engine', yaml_configuration='test: config')
-        return self.engine
-
     def create_wordlist(self):
         """
         Create a test wordlist.
@@ -472,6 +465,15 @@ class TestDataGenerator:
             name='Test Tool',
             github_url='https://github.com/test/tool')
         return self.external_tool
+
+class TestValidation:
+
+    def is_json(self, value):
+        try:
+            json.loads(value)
+            return True
+        except ValueError:
+            return False
 
 class MockTemplate:
     """
