@@ -136,7 +136,7 @@ Recon Todo
           <p class="target">{target_text}</p>
           <p class="todo-text">{description}</p>
         </div>
-        <div class="priority-dropdown custom-dropdown-icon" id="important-badge-{task_id}" style="display: flex; align-items: center;">
+        <div class="priority-dropdown custom-dropdown-icon" id="important-badge-{task_id}" style="display: flex; align-items: center; {% if not is_important %} display: none; {% endif %}">
           <div class="dropdown p-dropdown">
             <span class="text-danger bs-tooltip" title="Important Todo">
               <i class="fa fa-exclamation-circle"></i>
@@ -249,7 +249,7 @@ $.getJSON(`/api/listTodoNotes?format=json&project={{current_project.slug}}`, fun
       todo_item.classList.add("todo-task-important");
     }
   };
-  populateTodofunction(project='{{current_project.slug}}');
+  populateTodo(project='{{current_project.slug}}');
   $('.bs-tooltip').tooltip();
 });
 </script>

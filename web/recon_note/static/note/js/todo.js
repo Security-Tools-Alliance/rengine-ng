@@ -1,4 +1,4 @@
-const populateTodofunction = function(project=null){
+const populateTodo = function(project=null){
   new PerfectScrollbar('.task-text', {
     wheelSpeed:.5,
     swipeEasing:!0,
@@ -14,8 +14,9 @@ const populateTodofunction = function(project=null){
     suppressScrollX : true
   });
 
+  addTaskPopupListener(project);
   addTaskBtnListener(project);
-  addActionsBtnListener();
+  actionsBtnListener();
   checkBtnListener();
   importantBtnListener();
   todoItemListener();
@@ -30,14 +31,17 @@ const populateTodofunction = function(project=null){
   updateBadgeCounts();
 }
 
-const addActionsBtnListener = function(){
+const actionsBtnListener = function(){
   const $btns = $('.list-actions').click((event) => {
-    const selectedId = event.currentTarget.id;
-    const $el = $('.' + selectedId);
-    $('#ct > div').hide();
-    $el.fadeIn();
-    $btns.removeClass('active');
-    $(event.currentTarget).addClass('active');
+      const selectedId = event.currentTarget.id;
+      const $el = $('.' + selectedId);
+      $('#ct > div').hide();
+      $el.fadeIn();
+      $btns.removeClass('active');
+      $(event.currentTarget).addClass('active');
+      
+      // Apply search and filter when changing menu
+      searchFunction();
   });
 }
 
@@ -119,7 +123,8 @@ const addTaskPopupListener = function(project) {
           description: htmlEncode($_taskDescriptionText),
           domain_name: htmlEncode($_targetText),
           subdomain_name: htmlEncode($_taskSubdomain),
-          is_done: false
+          is_done: false,
+          is_important: false
         };
 
         let todoHTML = $('#todo-template').html();
@@ -130,7 +135,8 @@ const addTaskPopupListener = function(project) {
           .replace(/{target_text}/g, newNote.domain_name ? `Domain: ${newNote.domain_name}` : '')
           .replace(/{description}/g, newNote.description)
           .replace(/{is_done}/g, newNote.is_done ? 'todo-task-done' : '')
-          .replace(/{checked}/g, newNote.is_done ? 'checked' : '');
+          .replace(/{checked}/g, newNote.is_done ? 'checked' : '')
+          .replace(/{is_important}/g, newNote.is_important ? 'todo-task-important' : '');
 
         const $newTodo = $('<div class="todo-item all-list"></div>').append(todoHTML);
 
@@ -367,11 +373,24 @@ const searchFunction = function() {
   const rex = new RegExp(searchTerm, 'i'); // Create a regex from the input
   $('.todo-box .todo-item').hide(); // Hide all items
   $('.todo-box .todo-item').filter(function() {
-    return rex.test($(this).text()); // Show items that match the regex
+      return rex.test($(this).text()); // Show items that match the regex
   }).show();
+
+  // Apply the current filter after search
+  applyCurrentFilter();
 
   // Update badge counts after filtering
   updateBadgeCounts();
+};
+
+// Function to apply the current filter (Todo, Done, Important)
+const applyCurrentFilter = function() {
+  const currentFilter = $('.list-actions.active').attr('id');
+  if (currentFilter === 'todo-task-done') {
+      $('.todo-box .todo-item:visible').not('.todo-task-done').hide();
+  } else if (currentFilter === 'todo-task-important') {
+      $('.todo-box .todo-item:visible').not('.todo-task-important').hide();
+  }
 };
 
 $(document).ready(function() {
