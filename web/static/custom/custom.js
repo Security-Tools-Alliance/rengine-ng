@@ -390,44 +390,32 @@ function download(filename, text) {
 	document.body.removeChild(element);
 }
 
+function updateVulnStatus(element, id, status) {
+    const $element = $(element);
+    const $row = $element.closest("tr");
+
+    $row.toggleClass("table-success text-strike", status);
+    $element.text(status ? 'RESOLVED' : 'OPEN')
+        .toggleClass('badge-soft-primary', !status)
+        .toggleClass('badge-soft-success', status)
+        .attr('onclick', `vuln_status_change(this, ${id}, ${!status})`);
+}
+
 function vuln_status_change(element, id, status) {
-	if (status) {
-		$(element).closest("tr").addClass("table-success text-strike");
-		$(element).text('RESOLVED')
-		$(element).removeClass('badge-soft-primary').addClass('badge-soft-success');
-		$(element).attr('onclick','vuln_status_change(this, '+id+', false)')
-	} else {
-		$(element).closest("tr").removeClass("table-success text-strike")
-		$(element).text('OPEN')
-		$(element).removeClass('badge-soft-success').addClass('badge-soft-primary');
-		$(element).attr('onclick','vuln_status_change(this, '+id+', true)') 
-	}
-	change_vuln_status(id);
+    updateVulnStatus(element, id, status);
+    change_vuln_status(id);
 }
 
-function bulk_vuln_status_change(status){
-	var vulnStatusArray = $('.vulnerability_checkbox:checked').parents("tr").find('.vuln-status')
-	Array.from(vulnStatusArray).forEach(vulnStatus => {
-		if(status==true){
-			if($(vulnStatus).text()=="OPEN"){
-				$(vulnStatus).trigger('click')
-			}
-		}else{
-			if($(vulnStatus).text()=="RESOLVED"){
-				$(vulnStatus).trigger('click')
-		}
-	}
-	});		
-	
+function bulk_vuln_status_change(status) {
+    $('.vulnerability_checkbox:checked')
+        .parents("tr")
+        .find('.vuln-status')
+        .filter((_, el) => (status && $(el).text() === "OPEN") || (!status && $(el).text() === "RESOLVED"))
+        .trigger('click');
 }
 
-$('#select_all_checkbox').on('click',function(){
-	if($(this).is(':checked')){
-		$("tr").find("[type=checkbox]").prop('checked', false);
-		$("tr").find("[type=checkbox]").prop('checked', true);
-	}else{
-		$("tr").find("[type=checkbox]").prop('checked', true);
-		$("tr").find("[type=checkbox]").prop('checked', false);	}
+$('#select_all_checkbox').on('click', function() {
+    $("tr").find("[type=checkbox]").prop('checked', $(this).is(':checked'));
 });
 
 $("#vulnerability_results").on('click', '.btn-delete-vulnerability', function () {
