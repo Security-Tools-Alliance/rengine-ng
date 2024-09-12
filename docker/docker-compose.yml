@@ -147,7 +147,7 @@ services:
         target: /etc/nginx/certs/rengine_rsa.key
     volumes:
       - ./proxy/config/rengine.conf:/etc/nginx/conf.d/rengine.conf:ro
-      - ../web/staticfiles:/home/rengine/rengine/staticfiles/
+      - ../web:/home/rengine/rengine:rw,z
       - scan_results:/home/rengine/scan_results
     networks:
       - rengine_network
