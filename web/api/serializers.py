@@ -1,6 +1,6 @@
+from collections import defaultdict
 from dashboard.models import *
-from django.contrib.humanize.templatetags.humanize import (naturalday,
-														   naturaltime)
+from django.contrib.humanize.templatetags.humanize import (naturalday, naturaltime)
 from django.db.models import F, JSONField, Value
 from recon_note.models import *
 from reNgine.common_func import *
@@ -574,11 +574,14 @@ class VisualiseDataSerializer(serializers.ModelSerializer):
 			many=True,
 			context={'scan_history': history})
 
+		processed_subdomains = self.process_subdomains(subdomain_serializer.data)
+
 		email = Email.objects.filter(emails__in=scan_history)
 		email_serializer = VisualiseEmailSerializer(email, many=True)
 
 		dork = Dork.objects.filter(dorks__in=scan_history)
 		dork_serializer = VisualiseDorkSerializer(dork, many=True)
+		processed_dorks = self.process_dorks(dork_serializer.data)
 
 		employee = Employee.objects.filter(employees__in=scan_history)
 		employee_serializer = VisualiseEmployeeSerializer(employee, many=True)
@@ -588,69 +591,68 @@ class VisualiseDataSerializer(serializers.ModelSerializer):
 
 		return_data = []
 
-		if subdomain_serializer.data:
+		if processed_subdomains:
 			return_data.append({
 				'description': 'Subdomains',
-				'children': subdomain_serializer.data})
+				'children': processed_subdomains})
 
-		if email_serializer.data or employee_serializer.data or dork_serializer.data or metainfo:
-			osint_data = []
-			if email_serializer.data:
-				osint_data.append({
-					'description': 'Emails',
-					'children': email_serializer.data})
-			if employee_serializer.data:
-				osint_data.append({
-					'description': 'Employees',
-					'children': employee_serializer.data})
-			if dork_serializer.data:
-				osint_data.append({
-					'description': 'Dorks',
-					'children': dork_serializer.data})
+		osint_data = []
+		if email_serializer.data:
+			osint_data.append({
+				'description': 'Emails',
+				'children': email_serializer.data})
+		if employee_serializer.data:
+			osint_data.append({
+				'description': 'Employees',
+				'children': employee_serializer.data})
+		if processed_dorks:
+			osint_data.append({
+				'description': 'Dorks',
+				'children': processed_dorks})
 
-			if metainfo:
-				metainfo_data = []
-				usernames = (
-					metainfo
-					.annotate(description=F('author'))
-					.values('description')
-					.distinct()
-					.annotate(children=Value([], output_field=JSONField()))
-					.filter(author__isnull=False)
-				)
+		if metainfo:
+			metainfo_data = []
+			usernames = (
+				metainfo
+				.annotate(description=F('author'))
+				.values('description')
+				.distinct()
+				.annotate(children=Value([], output_field=JSONField()))
+				.filter(author__isnull=False)
+			)
 
-				if usernames:
-					metainfo_data.append({
-						'description': 'Usernames',
-						'children': usernames})
+			if usernames:
+				metainfo_data.append({
+					'description': 'Usernames',
+					'children': usernames})
 
-				software = (
-					metainfo
-					.annotate(description=F('producer'))
-					.values('description')
-					.distinct()
-					.annotate(children=Value([], output_field=JSONField()))
-					.filter(producer__isnull=False)
-				)
+			software = (
+				metainfo
+				.annotate(description=F('producer'))
+				.values('description')
+				.distinct()
+				.annotate(children=Value([], output_field=JSONField()))
+				.filter(producer__isnull=False)
+			)
 
-				if software:
-					metainfo_data.append({
-						'description': 'Software',
-						'children': software})
+			if software:
+				metainfo_data.append({
+					'description': 'Software',
+					'children': software})
 
-				os = (
-					metainfo
-					.annotate(description=F('os'))
-					.values('description')
-					.distinct()
-					.annotate(children=Value([], output_field=JSONField()))
-					.filter(os__isnull=False)
-				)
+			os = (
+				metainfo
+				.annotate(description=F('os'))
+				.values('description')
+				.distinct()
+				.annotate(children=Value([], output_field=JSONField()))
+				.filter(os__isnull=False)
+			)
 
-				if os:
-					metainfo_data.append({
-						'description': 'OS',
-						'children': os})
+			if os:
+				metainfo_data.append({
+					'description': 'OS',
+					'children': os})
 
 			if metainfo:
 				osint_data.append({
@@ -661,8 +663,54 @@ class VisualiseDataSerializer(serializers.ModelSerializer):
 				'description':'OSINT',
 				'children': osint_data})
 
+		if osint_data:
+			return_data.append({
+				'description':'OSINT',
+				'children': osint_data})
+
 		return return_data
 
+	def process_subdomains(self, subdomains):
+		for subdomain in subdomains:
+			if 'children' in subdomain:
+				vuln_dict = defaultdict(list)
+				for child in subdomain['children']:
+					if child.get('description') == 'Vulnerabilities':
+						for vuln_severity in child['children']:
+							severity = vuln_severity['description']
+							for vuln in vuln_severity['children']:
+								vuln_key = (vuln['description'], severity)
+								if vuln_key not in vuln_dict:
+									vuln_dict[vuln_key] = vuln
+
+				# Reconstruct vulnerabilities structure without duplicates
+				new_vuln_structure = []
+				for severity in ['Critical', 'High', 'Medium', 'Low', 'Informational', 'Unknown']:
+					severity_vulns = [v for k, v in vuln_dict.items() if k[1] == severity]
+					if severity_vulns:
+						new_vuln_structure.append({
+							'description': severity,
+							'children': severity_vulns
+						})
+
+				# Replace old structure with new
+				subdomain['children'] = [child for child in subdomain['children'] if child.get('description') != 'Vulnerabilities']
+				if new_vuln_structure:
+					subdomain['children'].append({
+						'description': 'Vulnerabilities',
+						'children': new_vuln_structure
+					})
+
+		return subdomains
+	
+	def process_dorks(self, dorks):
+		unique_dorks = {}
+		for dork in dorks:
+			dork_key = (dork['description'], dork.get('dork_type', ''))
+			if dork_key not in unique_dorks:
+				unique_dorks[dork_key] = dork
+
+		return list(unique_dorks.values())
 
 class SubdomainChangesSerializer(serializers.ModelSerializer):
 

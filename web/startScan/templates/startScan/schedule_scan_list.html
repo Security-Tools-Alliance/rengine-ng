@@ -48,7 +48,7 @@ Scheduled Scans
               Will run exactly at {{ task.clocked.clocked_time}} UTC
               {% endif %}
             </td>
-            <td>{{ task.last_run_at|none_or_never }}</td>
+            <td>{{ task.last_run_at|none_or_never }} UTC</td>
             <td class="text-center">{{ task.total_run_count }}</td>
             <td class="text-center">
               {% if task.one_off %}
