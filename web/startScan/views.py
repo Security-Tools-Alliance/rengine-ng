@@ -40,7 +40,7 @@ def detail_scan(request, id, slug):
 
     # Get scan objects
     scan = get_object_or_404(ScanHistory, id=id)
-    domain_id = scan.domain.id
+    domain_id = safe_int_cast( scan.domain.id)
     scan_engines = EngineType.objects.order_by('engine_name').all()
     recent_scans = ScanHistory.objects.filter(domain__id=domain_id)
     last_scans = (
@@ -267,7 +267,7 @@ def start_scan_ui(request, slug, domain_id):
             filterPath = ''
 
         # Get engine type
-        engine_id = request.POST['scan_mode']
+        engine_id = safe_int_cast(request.POST['scan_mode'])
 
         # Create ScanHistory object
         scan_history_id = create_scan_object(
@@ -321,7 +321,7 @@ def start_multiple_scan(request, slug):
         if request.POST.get('scan_mode', 0):
             # if scan mode is available, then start the scan
             # get engine type
-            engine_id = request.POST['scan_mode']
+            engine_id = safe_int_cast( request.POST['scan_mode'])
             list_of_domains = request.POST['list_of_domain_id']
 
             grouped_scans = []
@@ -681,7 +681,7 @@ def visualise(request, id):
 def start_organization_scan(request, id, slug):
     organization = get_object_or_404(Organization, id=id)
     if request.method == "POST":
-        engine_id = request.POST['scan_mode']
+        engine_id = safe_int_cast( request.POST['scan_mode'])
 
         # Start Celery task for each organization's domains
         for domain in organization.get_domains():

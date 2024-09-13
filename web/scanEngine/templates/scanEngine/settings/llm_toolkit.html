@@ -234,7 +234,7 @@ LLM Toolkit (Beta)
   }
 
   function selectModel(model_name){
-    var url = "/api/tool/ollama/?model=" + model_name;
+    var url = "/api/tool/ollama/";
     swal.queue([{
       title: 'Are you sure you want to select this model?',
       text: "This model will be used to generate Scan Reports and Attack Suggestions.",
@@ -248,8 +248,10 @@ LLM Toolkit (Beta)
           method: 'PUT',
           credentials: "same-origin",
           headers: {
-            "X-CSRFToken": getCookie("csrftoken")
-          }
+            "X-CSRFToken": getCookie("csrftoken"),
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ model: model_name })
         }).then(function(response) {
           return response.json();
         }).then(function(data) {
@@ -272,7 +274,6 @@ LLM Toolkit (Beta)
               }
             }]);
           }
-          //return location.reload();
         }).catch(function() {
           swal.insertQueueStep({
             icon: 'error',

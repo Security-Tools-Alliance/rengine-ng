@@ -1,6 +1,7 @@
 import json
 import logging
-from datetime import timedelta
+
+from datetime import datetime, timedelta
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model, update_session_auth_hash
@@ -97,11 +98,12 @@ def index(request, slug):
     endpoints_in_last_week = []
 
     for date in last_7_dates:
-        _target = count_targets_by_date.filter(date=date)
-        _subdomain = count_subdomains_by_date.filter(date=date)
-        _vuln = count_vulns_by_date.filter(date=date)
-        _scan = count_scans_by_date.filter(date=date)
-        _endpoint = count_endpoints_by_date.filter(date=date)
+        aware_date = timezone.make_aware(datetime.combine(date, datetime.min.time()))
+        _target = count_targets_by_date.filter(date=aware_date)
+        _subdomain = count_subdomains_by_date.filter(date=aware_date)
+        _vuln = count_vulns_by_date.filter(date=aware_date)
+        _scan = count_scans_by_date.filter(date=aware_date)
+        _endpoint = count_endpoints_by_date.filter(date=aware_date)
         if _target:
             targets_in_last_week.append(_target[0]['created_count'])
         else:
@@ -319,11 +321,12 @@ def on_user_logged_out(sender, request, **kwargs):
 
 @receiver(user_logged_in)
 def on_user_logged_in(sender, request, **kwargs):
+    user = kwargs.get('user')
     messages.add_message(
         request,
         messages.INFO,
         'Hi @' +
-        request.user.username +
+        user.username +
         ' welcome back!')
 
 
