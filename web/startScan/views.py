@@ -14,31 +14,27 @@ from django.utils import timezone
 from django_celery_beat.models import ClockedSchedule, IntervalSchedule, PeriodicTask
 from rolepermissions.decorators import has_permission_decorator
 
-from dashboard.utils import user_has_project_access
 from reNgine.celery import app
-from reNgine.common_func import logger, get_interesting_subdomains
+from reNgine.common_func import logger, get_interesting_subdomains, create_scan_object
 from reNgine.settings import RENGINE_RESULTS
-from reNgine.definitions import ABORTED_TASK, SUCCESS_TASK, RUNNING_TASK, LIVE_SCAN, INITIATED_TASK, SCHEDULED_SCAN, PERM_INITATE_SCANS_SUBSCANS, PERM_MODIFY_SCAN_RESULTS, PERM_MODIFY_SCAN_REPORT, PERM_MODIFY_SYSTEM_CONFIGURATIONS, FOUR_OH_FOUR_URL
+from reNgine.definitions import ABORTED_TASK, SUCCESS_TASK, RUNNING_TASK, LIVE_SCAN, SCHEDULED_SCAN, PERM_INITATE_SCANS_SUBSCANS, PERM_MODIFY_SCAN_RESULTS, PERM_MODIFY_SCAN_REPORT, PERM_MODIFY_SYSTEM_CONFIGURATIONS, FOUR_OH_FOUR_URL
 from reNgine.tasks import create_scan_activity, initiate_scan, run_command
 from scanEngine.models import EngineType, VulnerabilityReportSetting
 from startScan.models import ScanHistory, SubScan, Email, Employee, Subdomain, EndPoint, Vulnerability, VulnerabilityTags, IpAddress, CountryISO, ScanActivity, CveId, CweId
 from targetApp.models import Domain, Organization
 
 
-@user_has_project_access
 def scan_history(request, slug):
     host = ScanHistory.objects.filter(domain__project__slug=slug).order_by('-start_scan_date')
     context = {'scan_history_active': 'active', "scan_history": host}
     return render(request, 'startScan/history.html', context)
 
 
-@user_has_project_access
 def subscan_history(request, slug):
     subscans = SubScan.objects.filter(scan_history__domain__project__slug=slug).order_by('-start_scan_date')
     context = {'scan_history_active': 'active', "subscans": subscans}
     return render(request, 'startScan/subscan_history.html', context)
 
-@user_has_project_access
 def detail_scan(request, id, slug):
     ctx = {}
 
@@ -218,7 +214,6 @@ def detail_scan(request, id, slug):
     return render(request, 'startScan/detail_scan.html', ctx)
 
 
-@user_has_project_access
 def all_subdomains(request, slug):
     subdomains = Subdomain.objects.filter(target_domain__project__slug=slug)
     scan_engines = EngineType.objects.order_by('engine_name').all()
@@ -240,7 +235,6 @@ def all_subdomains(request, slug):
     }
     return render(request, 'startScan/subdomains.html', context)
 
-@user_has_project_access
 def detail_vuln_scan(request, slug, id=None):
     if id:
         history = get_object_or_404(ScanHistory, id=id)
@@ -250,7 +244,6 @@ def detail_vuln_scan(request, slug, id=None):
         context = {'vuln_scan_active': 'true'}
     return render(request, 'startScan/vulnerabilities.html', context)
 
-@user_has_project_access
 def all_endpoints(request, slug):
     context = {
         'scan_history_active': 'active'
@@ -258,7 +251,6 @@ def all_endpoints(request, slug):
     return render(request, 'startScan/endpoints.html', context)
 
 
-@user_has_project_access
 def start_scan_ui(request, slug, domain_id):
     domain = get_object_or_404(Domain, id=domain_id)
     if request.method == "POST":
@@ -322,7 +314,6 @@ def start_scan_ui(request, slug, domain_id):
     return render(request, 'startScan/start_scan_ui.html', context)
 
 
-@user_has_project_access
 @has_permission_decorator(PERM_INITATE_SCANS_SUBSCANS, redirect_url=FOUR_OH_FOUR_URL)
 def start_multiple_scan(request, slug):
     # domain = get_object_or_404(Domain, id=host_id)
@@ -506,7 +497,6 @@ def stop_scan(request, id):
 
 
 @has_permission_decorator(PERM_INITATE_SCANS_SUBSCANS, redirect_url=FOUR_OH_FOUR_URL)
-@user_has_project_access
 def schedule_scan(request, host_id, slug):
     domain = Domain.objects.get(id=host_id)
     if request.method == "POST":
@@ -605,7 +595,6 @@ def schedule_scan(request, host_id, slug):
     return render(request, 'startScan/schedule_scan_ui.html', context)
 
 
-@user_has_project_access
 def scheduled_scan_view(request, slug):
     scheduled_tasks = (
         PeriodicTask.objects
@@ -639,7 +628,6 @@ def delete_scheduled_task(request, id):
 
 
 @has_permission_decorator(PERM_MODIFY_SCAN_RESULTS, redirect_url=FOUR_OH_FOUR_URL)
-@user_has_project_access
 def change_scheduled_task_status(request, id):
     if request.method == 'POST':
         task = PeriodicTask.objects.get(id=id)
@@ -648,7 +636,6 @@ def change_scheduled_task_status(request, id):
     return HttpResponse('')
 
 
-@user_has_project_access
 def change_vuln_status(request, id):
     if request.method == 'POST':
         vuln = Vulnerability.objects.get(id=id)
@@ -691,7 +678,6 @@ def visualise(request, id):
 
 
 @has_permission_decorator(PERM_INITATE_SCANS_SUBSCANS, redirect_url=FOUR_OH_FOUR_URL)
-@user_has_project_access
 def start_organization_scan(request, id, slug):
     organization = get_object_or_404(Organization, id=id)
     if request.method == "POST":
@@ -744,7 +730,6 @@ def start_organization_scan(request, id, slug):
 
 
 @has_permission_decorator(PERM_INITATE_SCANS_SUBSCANS, redirect_url=FOUR_OH_FOUR_URL)
-@user_has_project_access
 def schedule_organization_scan(request, slug, id):
     organization =Organization.objects.get(id=id)
     if request.method == "POST":
@@ -835,7 +820,6 @@ def schedule_organization_scan(request, slug, id):
 
 
 @has_permission_decorator(PERM_MODIFY_SCAN_RESULTS, redirect_url=FOUR_OH_FOUR_URL)
-@user_has_project_access
 def delete_scans(request, slug):
     if request.method == "POST":
         for key, value in request.POST.items():

@@ -44,7 +44,7 @@ CELERY_REMOTE_DEBUG = bool(int(os.environ.get('CELERY_REMOTE_DEBUG', '0')))
 CELERY_REMOTE_DEBUG_PORT = int(os.environ.get('CELERY_REMOTE_DEBUG_PORT', 5679))
 
 # Common env vars
-DEBUG = env.bool('DEBUG', default=False)
+DEBUG = env.bool('UI_DEBUG', default=False)
 DOMAIN_NAME = env('DOMAIN_NAME', default='localhost:8000')
 TEMPLATE_DEBUG = env.bool('TEMPLATE_DEBUG', default=False)
 SECRET_FILE = os.path.join(RENGINE_HOME, 'secret')
@@ -107,6 +107,8 @@ MIDDLEWARE = [
     'login_required.middleware.LoginRequiredMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'dashboard.middleware.SlugMiddleware',
+    'dashboard.middleware.ProjectAccessMiddleware',
 ]
 TEMPLATES = [
     {
@@ -119,9 +121,9 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
-                'reNgine.context_processors.projects',
                 'reNgine.context_processors.version',
-                'reNgine.context_processors.misc'
+                'reNgine.context_processors.misc',
+                'dashboard.context_processors.project_context', 
             ],
     },
 }]

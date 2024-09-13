@@ -1,7 +1,7 @@
 from functools import wraps
 from django.http import JsonResponse
 from django.shortcuts import redirect
-from django.urls import reverse, NoReverseMatch
+from django.urls import reverse
 from .models import Project
 
 def get_user_projects(user):
@@ -11,7 +11,7 @@ def get_user_projects(user):
 
 def user_has_project_access_by_id(user, project_id):
     if user.is_superuser:
-        return True
+        return Project.objects.all()
     try:
         project = Project.objects.get(id=project_id)
         return project in get_user_projects(user)
@@ -28,15 +28,15 @@ def user_has_project_access(view_func):
                 return view_func(request, *args, **kwargs)
             if not project and request.user.is_superuser:
                 return redirect(reverse('onboarding'))
-            else:
-                project = Project.objects.filter(users=request.user).first()
-                return redirect(reverse('page_not_found', kwargs={'slug': project.slug}))
+
+            # No need for else here
+            project = Project.objects.filter(users=request.user).first()
+            return redirect(reverse('page_not_found'))
         
         # Check if it's an API request
         if request.path.startswith('/api/'):
             return JsonResponse({'error': 'Permission denied'}, status=403)
-        else:
-            # Redirect to a "Permission denied" page for the UI
-            return redirect(reverse('permission_denied', kwargs={'slug': project_slug}))
+        
+        return redirect(reverse('permission_denied'))
 
     return _wrapped_view

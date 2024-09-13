@@ -16,7 +16,6 @@ from django.utils import timezone
 from django.utils.safestring import mark_safe
 from rolepermissions.decorators import has_permission_decorator
 
-from dashboard.utils import user_has_project_access
 from reNgine.tasks import run_command, sanitize_url
 from reNgine.definitions import PERM_MODIFY_TARGETS, FOUR_OH_FOUR_URL
 from scanEngine.models import EngineType
@@ -33,7 +32,6 @@ def index(request):
 
 
 @has_permission_decorator(PERM_MODIFY_TARGETS, redirect_url=FOUR_OH_FOUR_URL)
-@user_has_project_access
 def add_target(request, slug):
     """Add a new target. Targets can be URLs, IPs, CIDR ranges, or Domains.
 
@@ -292,12 +290,16 @@ def add_target(request, slug):
     }
     return render(request, 'target/add.html', context)
 
-@user_has_project_access
 def list_target(request, slug):
+    project = get_object_or_404(Project, slug=slug)
     context = {
         'list_target_li': 'active',
         'target_data_active': 'active',
-        'slug': slug
+        'detail_scan_url': reverse('detail_scan', args=[project.slug, 0]),
+        'start_scan_url': reverse('start_scan', args=[project.slug, 0]),
+        'schedule_scan_url': reverse('schedule_scan', args=[project.slug, 0]),
+        'update_target_url': reverse('update_target', args=[project.slug, 0]),
+        'target_summary_url': reverse('target_summary', args=[project.slug, 0]),
     }
     return render(request, 'target/list.html', context)
 
@@ -323,7 +325,6 @@ def delete_target(request, id):
     return http.JsonResponse(responseData)
 
 
-@user_has_project_access
 @has_permission_decorator(PERM_MODIFY_TARGETS, redirect_url=FOUR_OH_FOUR_URL)
 def delete_targets(request, slug):
     if request.method == "POST":
@@ -338,7 +339,6 @@ def delete_targets(request, slug):
     return http.HttpResponseRedirect(reverse('list_target', kwargs={'slug': slug}))
 
 
-@user_has_project_access
 @has_permission_decorator(PERM_MODIFY_TARGETS, redirect_url=FOUR_OH_FOUR_URL)
 def update_target(request, slug, id):
     domain = get_object_or_404(Domain, id=id)
@@ -362,7 +362,6 @@ def update_target(request, slug, id):
     }
     return render(request, 'target/update.html', context)
 
-@user_has_project_access
 def target_summary(request, slug, id):
     """Summary of a target (domain). Contains aggregated information on all
     objects (Subdomain, EndPoint, Vulnerability, Emails, ...) found across all
@@ -503,12 +502,9 @@ def target_summary(request, slug, id):
         .order_by('-count')
     )
 
-    context['slug'] = slug
-
     return render(request, 'target/summary.html', context)
 
 
-@user_has_project_access
 @has_permission_decorator(PERM_MODIFY_TARGETS, redirect_url=FOUR_OH_FOUR_URL)
 def add_organization(request, slug):
     form = AddOrganizationForm(request.POST or None, project=slug)
@@ -535,7 +531,6 @@ def add_organization(request, slug):
     }
     return render(request, 'organization/add.html', context)
 
-@user_has_project_access
 def list_organization(request, slug):
     organizations = Organization.objects.filter(project__slug=slug).order_by('-insert_date')
     context = {
@@ -564,7 +559,6 @@ def delete_organization(request, id):
     return http.JsonResponse(responseData)
 
 
-@user_has_project_access
 @has_permission_decorator(PERM_MODIFY_TARGETS, redirect_url=FOUR_OH_FOUR_URL)
 def update_organization(request, slug, id):
     organization = get_object_or_404(Organization, id=id)

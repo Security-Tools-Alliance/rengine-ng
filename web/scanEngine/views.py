@@ -12,7 +12,6 @@ from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from rolepermissions.decorators import has_permission_decorator
 
-from dashboard.utils import user_has_project_access
 from reNgine.common_func import get_open_ai_key
 from reNgine.definitions import OLLAMA_INSTANCE, DEFAULT_GPT_MODELS
 from reNgine.tasks import run_command, send_discord_message, send_slack_message, send_lark_message, send_telegram_message, run_gf_list
@@ -24,8 +23,7 @@ from reNgine.settings import RENGINE_WORDLISTS, RENGINE_HOME
 from pathlib import Path
 import requests
 
-@user_has_project_access
-def index(request, slug):
+def index(request):
     engine_type = EngineType.objects.order_by('engine_name').all()
     context = {
         'engine_ul_show': 'show',
@@ -35,9 +33,8 @@ def index(request, slug):
     }
     return render(request, 'scanEngine/index.html', context)
 
-@user_has_project_access
 @has_permission_decorator(PERM_MODIFY_SCAN_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
-def add_engine(request, slug):
+def add_engine(request):
     form = AddEngineForm()
     
     # load default yaml config
@@ -52,7 +49,7 @@ def add_engine(request, slug):
                 request,
                 messages.INFO,
                 'Scan Engine Added successfully')
-            return http.HttpResponseRedirect(reverse('scan_engine_index', kwargs={'slug': slug}))
+            return http.HttpResponseRedirect(reverse('scan_engine_index'))
     else:
         # fill form with default yaml config
         form = AddEngineForm(initial={'yaml_configuration': default_config})
@@ -63,7 +60,6 @@ def add_engine(request, slug):
     }
     return render(request, 'scanEngine/add_engine.html', context)
 
-@user_has_project_access
 @has_permission_decorator(PERM_MODIFY_SCAN_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
 def delete_engine(request, slug, id):
     obj = get_object_or_404(EngineType, id=id)
@@ -82,9 +78,8 @@ def delete_engine(request, slug, id):
             'Oops! Engine could not be deleted!')
     return http.JsonResponse(responseData)
 
-@user_has_project_access
 @has_permission_decorator(PERM_MODIFY_SCAN_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
-def update_engine(request, slug, id):
+def update_engine(request, id):
     engine = get_object_or_404(EngineType, id=id)
     form = UpdateEngineForm(
         initial={
@@ -99,16 +94,15 @@ def update_engine(request, slug, id):
                 request,
                 messages.INFO,
                 'Engine edited successfully')
-            return http.HttpResponseRedirect(reverse('scan_engine_index', kwargs={'slug': slug}))
+            return http.HttpResponseRedirect(reverse('scan_engine_index'))
     context = {
         'scan_engine_nav_active': 'active',
         'form': form
     }
     return render(request, 'scanEngine/update_engine.html', context)
 
-@user_has_project_access
 @has_permission_decorator(PERM_MODIFY_WORDLISTS, redirect_url=FOUR_OH_FOUR_URL)
-def wordlist_list(request, slug):
+def wordlist_list(request):
     wordlists = Wordlist.objects.all().order_by('id')
     context = {
             'scan_engine_nav_active': 'active',
@@ -116,9 +110,8 @@ def wordlist_list(request, slug):
             'wordlists': wordlists}
     return render(request, 'scanEngine/wordlist/index.html', context)
 
-@user_has_project_access
 @has_permission_decorator(PERM_MODIFY_WORDLISTS, redirect_url=FOUR_OH_FOUR_URL)
-def add_wordlist(request, slug):
+def add_wordlist(request):
     context = {'scan_engine_nav_active': 'active', 'wordlist_li': 'active'}
     form = AddWordlistForm(request.POST or None, request.FILES or None)
     if request.method == "POST":
@@ -140,13 +133,12 @@ def add_wordlist(request, slug):
                     messages.INFO,
                     'Wordlist ' + form.cleaned_data['name'] +
                     ' added successfully')
-                return http.HttpResponseRedirect(reverse('wordlist_list', kwargs={'slug': slug}))
+                return http.HttpResponseRedirect(reverse('wordlist_list'))
     context['form'] = form
     return render(request, 'scanEngine/wordlist/add.html', context)
 
-@user_has_project_access
 @has_permission_decorator(PERM_MODIFY_WORDLISTS, redirect_url=FOUR_OH_FOUR_URL)
-def delete_wordlist(request, slug, id):
+def delete_wordlist(request, id):
     obj = get_object_or_404(Wordlist, id=id)
     if request.method == "POST":
         obj.delete()
@@ -167,9 +159,8 @@ def delete_wordlist(request, slug, id):
             'Oops! Wordlist could not be deleted!')
     return http.JsonResponse(responseData)
 
-@user_has_project_access
 @has_permission_decorator(PERM_MODIFY_INTERESTING_LOOKUP, redirect_url=FOUR_OH_FOUR_URL)
-def interesting_lookup(request, slug):
+def interesting_lookup(request):
     lookup_keywords = None
     context = {}
     context['scan_engine_nav_active'] = 'active'
@@ -193,7 +184,7 @@ def interesting_lookup(request, slug):
                 request,
                 messages.INFO,
                 'Lookup Keywords updated successfully')
-            return http.HttpResponseRedirect(reverse('interesting_lookup', kwargs={'slug': slug}))
+            return http.HttpResponseRedirect(reverse('interesting_lookup'))
 
     if lookup_keywords:
         form.set_value(lookup_keywords)
@@ -202,9 +193,8 @@ def interesting_lookup(request, slug):
     context['default_lookup'] = InterestingLookupModel.objects.filter(id=1)
     return render(request, 'scanEngine/lookup.html', context)
 
-@user_has_project_access
 @has_permission_decorator(PERM_MODIFY_SCAN_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
-def tool_specific_settings(request, slug):
+def tool_specific_settings(request):
     context = {}
     # check for incoming form requests
     if request.method == "POST":
@@ -220,7 +210,7 @@ def tool_specific_settings(request, slug):
                 with open(file_path, "w") as file:
                     file.write(gf_file.read().decode("utf-8"))
                 messages.add_message(request, messages.INFO, f'Pattern {gf_file.name[:4]} successfully uploaded')
-            return http.HttpResponseRedirect(reverse('tool_settings', kwargs={'slug': slug}))
+            return http.HttpResponseRedirect(reverse('tool_settings'))
 
         elif 'nucleiFileUpload' in request.FILES:
             nuclei_file = request.FILES['nucleiFileUpload']
@@ -233,43 +223,43 @@ def tool_specific_settings(request, slug):
                 with open(file_path, "w") as file:
                     file.write(nuclei_file.read().decode("utf-8"))
                 messages.add_message(request, messages.INFO, f'Nuclei Pattern {nuclei_file.name[:-5]} successfully uploaded')
-            return http.HttpResponseRedirect(reverse('tool_settings', kwargs={'slug': slug}))
+            return http.HttpResponseRedirect(reverse('tool_settings'))
 
         elif 'nuclei_config_text_area' in request.POST:
             with open(Path.home() / '.config' / 'nuclei' / 'config.yaml', "w") as fhandle:
                 fhandle.write(request.POST.get('nuclei_config_text_area'))
             messages.add_message(request, messages.INFO, 'Nuclei config updated!')
-            return http.HttpResponseRedirect(reverse('tool_settings', kwargs={'slug': slug}))
+            return http.HttpResponseRedirect(reverse('tool_settings'))
 
         elif 'subfinder_config_text_area' in request.POST:
             with open(Path.home() / '.config' / 'subfinder' / 'config.yaml', "w") as fhandle:
                 fhandle.write(request.POST.get('subfinder_config_text_area'))
             messages.add_message(request, messages.INFO, 'Subfinder config updated!')
-            return http.HttpResponseRedirect(reverse('tool_settings', kwargs={'slug': slug}))
+            return http.HttpResponseRedirect(reverse('tool_settings'))
 
         elif 'naabu_config_text_area' in request.POST:
             with open(Path.home() / '.config' / 'naabu' / 'config.yaml', "w") as fhandle:
                 fhandle.write(request.POST.get('naabu_config_text_area'))
             messages.add_message(request, messages.INFO, 'Naabu config updated!')
-            return http.HttpResponseRedirect(reverse('tool_settings', kwargs={'slug': slug}))
+            return http.HttpResponseRedirect(reverse('tool_settings'))
 
         elif 'amass_config_text_area' in request.POST:
             with open(Path.home() / '.config' / 'amass.ini', "w") as fhandle:
                 fhandle.write(request.POST.get('amass_config_text_area'))
             messages.add_message(request, messages.INFO, 'Amass config updated!')
-            return http.HttpResponseRedirect(reverse('tool_settings', kwargs={'slug': slug}))
+            return http.HttpResponseRedirect(reverse('tool_settings'))
 
         elif 'theharvester_config_text_area' in request.POST:
             with open(Path.home() / '.config' / 'theHarvester' / 'api-keys.yaml', "w") as fhandle:
                 fhandle.write(request.POST.get('theharvester_config_text_area'))
             messages.add_message(request, messages.INFO, 'theHarvester config updated!')
-            return http.HttpResponseRedirect(reverse('tool_settings', kwargs={'slug': slug}))
+            return http.HttpResponseRedirect(reverse('tool_settings'))
 
         elif 'gau_config_text_area' in request.POST:
             with open(Path.home() / '.config' / '.gau.toml', "w") as fhandle:
                 fhandle.write(request.POST.get('gau_config_text_area'))
             messages.add_message(request, messages.INFO, 'GAU config updated!')
-            return http.HttpResponseRedirect(reverse('tool_settings', kwargs={'slug': slug}))
+            return http.HttpResponseRedirect(reverse('tool_settings'))
 
     context['settings_nav_active'] = 'active'
     context['tool_settings_li'] = 'active'
@@ -290,9 +280,8 @@ def tool_specific_settings(request, slug):
     context['gf_patterns'] = context['gf_patterns']
     return render(request, 'scanEngine/settings/tool.html', context)
 
-@user_has_project_access
 @has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
-def rengine_settings(request, slug):
+def rengine_settings(request):
     context = {}
 
     total, used, _ = shutil.disk_usage("/")
@@ -309,9 +298,8 @@ def rengine_settings(request, slug):
 
     return render(request, 'scanEngine/settings/rengine.html', context)
 
-@user_has_project_access
 @has_permission_decorator(PERM_MODIFY_SCAN_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
-def notification_settings(request, slug):
+def notification_settings(request):
     context = {}
     form = NotificationForm()
     notification = None
@@ -337,7 +325,7 @@ def notification_settings(request, slug):
                 request,
                 messages.INFO,
                 'Notification Settings updated successfully and test message was sent.')
-            return http.HttpResponseRedirect(reverse('notification_settings', kwargs={'slug': slug}))
+            return http.HttpResponseRedirect(reverse('notification_settings'))
 
     context['settings_nav_active'] = 'active'
     context['notification_settings_li'] = 'active'
@@ -346,9 +334,8 @@ def notification_settings(request, slug):
 
     return render(request, 'scanEngine/settings/notification.html', context)
 
-@user_has_project_access
 @has_permission_decorator(PERM_MODIFY_SCAN_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
-def proxy_settings(request, slug):
+def proxy_settings(request):
     context = {}
     form = ProxyForm()
     context['form'] = form
@@ -372,14 +359,13 @@ def proxy_settings(request, slug):
                 request,
                 messages.INFO,
                 'Proxies updated.')
-            return http.HttpResponseRedirect(reverse('proxy_settings', kwargs={'slug': slug}))
+            return http.HttpResponseRedirect(reverse('proxy_settings'))
     context['settings_nav_active'] = 'active'
     context['proxy_settings_li'] = 'active'
     context['settings_ul_show'] = 'show'
 
     return render(request, 'scanEngine/settings/proxy.html', context)
 
-@user_has_project_access
 @has_permission_decorator(PERM_MODIFY_SCAN_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
 def test_hackerone(request):
     context = {}
@@ -398,9 +384,8 @@ def test_hackerone(request):
 
     return http.JsonResponse({"status": 401})
 
-@user_has_project_access
 @has_permission_decorator(PERM_MODIFY_SCAN_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
-def hackerone_settings(request, slug):
+def hackerone_settings(request):
     context = {}
     form = HackeroneForm()
     context['form'] = form
@@ -424,16 +409,15 @@ def hackerone_settings(request, slug):
                 request,
                 messages.INFO,
                 'Hackerone Settings updated.')
-            return http.HttpResponseRedirect(reverse('hackerone_settings', kwargs={'slug': slug}))
+            return http.HttpResponseRedirect(reverse('hackerone_settings'))
     context['settings_nav_active'] = 'active'
     context['hackerone_settings_li'] = 'active'
     context['settings_ul_show'] = 'show'
 
     return render(request, 'scanEngine/settings/hackerone.html', context)
 
-@user_has_project_access
 @has_permission_decorator(PERM_MODIFY_SCAN_REPORT, redirect_url=FOUR_OH_FOUR_URL)
-def report_settings(request, slug):
+def report_settings(request):
     context = {}
     form = ReportForm()
     context['form'] = form
@@ -462,7 +446,7 @@ def report_settings(request, slug):
                 request,
                 messages.INFO,
                 'Report Settings updated.')
-            return http.HttpResponseRedirect(reverse('report_settings', kwargs={'slug': slug}))
+            return http.HttpResponseRedirect(reverse('report_settings'))
 
 
     context['settings_nav_active'] = 'active'
@@ -472,17 +456,15 @@ def report_settings(request, slug):
     context['secondary_color'] = secondary_color
     return render(request, 'scanEngine/settings/report.html', context)
 
-@user_has_project_access
 @has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
-def tool_arsenal_section(request, slug):
+def tool_arsenal_section(request):
     context = {}
     tools = InstalledExternalTool.objects.all().order_by('id')
     context['installed_tools'] = tools
     return render(request, 'scanEngine/settings/tool_arsenal.html', context)
 
-@user_has_project_access
 @has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
-def api_vault_delete(request, slug):
+def api_vault_delete(request):
     response = {}
     response["status"] = "error"
     if request.method == "POST":
@@ -501,8 +483,7 @@ def api_vault_delete(request, slug):
 
     return http.JsonResponse(response)
 
-@user_has_project_access
-def llm_toolkit_section(request, slug):
+def llm_toolkit_section(request):
     context = {}
     list_all_models_url = f'{OLLAMA_INSTANCE}/api/tags'
     response = requests.get(list_all_models_url)
@@ -535,9 +516,8 @@ def llm_toolkit_section(request, slug):
         context['openai_key_error'] = True
     return render(request, 'scanEngine/settings/llm_toolkit.html', context)
 
-@user_has_project_access
 @has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
-def api_vault(request, slug):
+def api_vault(request):
     context = {}
     if request.method == "POST":
         key_openai = request.POST.get('key_openai')
@@ -560,7 +540,7 @@ def api_vault(request, slug):
             else:
                 NetlasAPIKey.objects.create(key=key_netlas)
 
-# FIXME: This should be better handled via forms, formviews & formsets
+    # FIXME: This should be better handled via forms, formviews & formsets
     context["apiKeys"] = [
         {
             "recommended": True,
@@ -577,12 +557,10 @@ def api_vault(request, slug):
             "hasKey": True if NetlasAPIKey.objects.first() else False
         }
     ]
-    context["slug"] = slug
     return render(request, 'scanEngine/settings/api.html', context)
 
-@user_has_project_access
 @has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
-def add_tool(request, slug):
+def add_tool(request):
     form = ExternalToolForm()
     if request.method == "POST":
         form = ExternalToolForm(request.POST)
@@ -610,14 +588,13 @@ def add_tool(request, slug):
                 request,
                 messages.INFO,
                 'External Tool Successfully Added!')
-            return http.HttpResponseRedirect(reverse('tool_arsenal', kwargs={'slug': slug}))
+            return http.HttpResponseRedirect(reverse('tool_arsenal'))
     context = {
             'settings_nav_active': 'active',
             'form': form
         }
     return render(request, 'scanEngine/settings/add_tool.html', context)
 
-@user_has_project_access
 @has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
 def modify_tool_in_arsenal(request, slug, id):
     external_tool = get_object_or_404(InstalledExternalTool, id=id)
@@ -630,7 +607,7 @@ def modify_tool_in_arsenal(request, slug, id):
                 request,
                 messages.INFO,
                 'Tool modified successfully')
-            return http.HttpResponseRedirect(reverse('tool_arsenal', kwargs={'slug': slug}))
+            return http.HttpResponseRedirect(reverse('tool_arsenal'))
     else:
         form.set_value(external_tool)
     context = {

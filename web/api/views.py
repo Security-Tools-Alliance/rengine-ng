@@ -16,6 +16,8 @@ from django.utils import timezone
 from packaging import version
 from django.template.defaultfilters import slugify
 from rest_framework import viewsets
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.status import HTTP_400_BAD_REQUEST
@@ -2545,11 +2547,18 @@ class DirectoryViewSet(viewsets.ModelViewSet):
 
 class ProjectViewSet(viewsets.ModelViewSet):
     serializer_class = ProjectSerializer
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        if self.request.user.is_superuser:
-            return Project.objects.all()
-        return Project.objects.filter(users=self.request.user)
+        return Project.objects.filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+    def perform_update(self, serializer):
+        if serializer.instance.user != self.request.user:
+            raise PermissionDenied("You don't have permission to modify this project.")
+        serializer.save()
 
 class VulnerabilityViewSet(viewsets.ModelViewSet):
 	queryset = Vulnerability.objects.none()
