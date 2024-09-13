@@ -594,7 +594,7 @@ def add_tool(request):
     return render(request, 'scanEngine/settings/add_tool.html', context)
 
 @has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
-def modify_tool_in_arsenal(request, slug, id):
+def modify_tool_in_arsenal(request, id):
     external_tool = get_object_or_404(InstalledExternalTool, id=id)
     form = ExternalToolForm()
     if request.method == "POST":

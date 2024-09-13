@@ -2643,6 +2643,7 @@ class DirectoryViewSet(viewsets.ModelViewSet):
 			DirectoryFile.objects
 			.filter(directory_files__in=dirs_scans)
 			.distinct()
+			.order_by('id')
 		)
 		return qs
 

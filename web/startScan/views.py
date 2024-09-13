@@ -389,7 +389,7 @@ def start_multiple_scan(request, slug):
     }
     return render(request, 'startScan/start_multiple_scan_ui.html', context)
 
-def export_subdomains(request, scan_id):
+def export_subdomains(request, slug, scan_id):
     subdomain_list = Subdomain.objects.filter(scan_history__id=scan_id)
     scan = ScanHistory.objects.get(id=scan_id)
     response_body = ""
@@ -404,7 +404,7 @@ def export_subdomains(request, scan_id):
     return response
 
 
-def export_endpoints(request, scan_id):
+def export_endpoints(request, slug, scan_id):
     endpoint_list = EndPoint.objects.filter(scan_history__id=scan_id)
     scan = ScanHistory.objects.get(id=scan_id)
     response_body = ""
@@ -419,7 +419,7 @@ def export_endpoints(request, scan_id):
     return response
 
 
-def export_urls(request, scan_id):
+def export_urls(request, slug, scan_id):
     urls_list = Subdomain.objects.filter(scan_history__id=scan_id)
     scan = ScanHistory.objects.get(id=scan_id)
     response_body = ""
@@ -436,7 +436,7 @@ def export_urls(request, scan_id):
 
 
 @has_permission_decorator(PERM_MODIFY_SCAN_RESULTS, redirect_url=FOUR_OH_FOUR_URL)
-def delete_scan(request, id):
+def delete_scan(request, slug, id):
     obj = get_object_or_404(ScanHistory, id=id)
     if request.method == "POST":
         delete_dir = obj.results_dir
@@ -459,7 +459,7 @@ def delete_scan(request, id):
 
 
 @has_permission_decorator(PERM_INITATE_SCANS_SUBSCANS, redirect_url=FOUR_OH_FOUR_URL)
-def stop_scan(request, id):
+def stop_scan(request, slug, id):
     if request.method == "POST":
         scan = get_object_or_404(ScanHistory, id=id)
         scan.scan_status = ABORTED_TASK

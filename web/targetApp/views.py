@@ -368,7 +368,7 @@ def list_target(request, slug):
 
 
 @has_permission_decorator(PERM_MODIFY_TARGETS, redirect_url=FOUR_OH_FOUR_URL)
-def delete_target(request, id):
+def delete_target(request, slug, id):
     if request.method == "POST":
         try:
             target = get_object_or_404(Domain, id=id)
@@ -621,7 +621,7 @@ def list_organization(request, slug):
 
 
 @has_permission_decorator(PERM_MODIFY_TARGETS, redirect_url=FOUR_OH_FOUR_URL)
-def delete_organization(request, id):
+def delete_organization(request, slug, id):
     if request.method == "POST":
         try:
             organization = get_object_or_404(Organization, id=id)

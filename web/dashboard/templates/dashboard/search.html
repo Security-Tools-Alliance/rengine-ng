@@ -137,7 +137,7 @@ $(document).ready(function() {
 						var subdomain_obj = response.results.subdomains[subdomain];
 						var http_url = subdomain_obj.http_url ? subdomain_obj.http_url : 'https://' + subdomain_obj.name;
 
-						var append_content = `<div class="search-item"><a href="{% url 'all_subdomains' project.slug %}?name=${subdomain_obj.name}" target="_blank">`;
+						var append_content = `<div class="search-item"><a href="{% url 'all_subdomains' current_project.slug %}?name=${subdomain_obj.name}" target="_blank">`;
 
 						append_content += `<h4 class="mb-1"><span class="me-2 text-primary">${highlight_search(search_val, subdomain_obj.name)}</span>${get_http_status_badge(subdomain_obj.http_status)}</h4>`;
 
@@ -176,7 +176,7 @@ $(document).ready(function() {
 					for (var endpoint in response.results.endpoints) {
 						var endpoint_obj = response.results.endpoints[endpoint];
 
-						var append_content = `<div class="search-item"><a href="{% url 'all_endpoints' project.slug %}?url=${endpoint_obj.http_url}" target="_blank">`;
+						var append_content = `<div class="search-item"><a href="{% url 'all_endpoints' current_project.slug %}?url=${endpoint_obj.http_url}" target="_blank">`;
 
 						append_content += `<h4 class="mb-1"><span class="me-2 text-primary">${highlight_search(search_val, endpoint_obj.http_url)}</span>${get_http_status_badge(endpoint_obj.http_status)}</h4>`;
 
@@ -203,7 +203,7 @@ $(document).ready(function() {
 
 					for (var vuln in response.results.vulnerabilities) {
 						var vuln_obj = response.results.vulnerabilities[vuln];
-						var append_content = `<div class="search-item"><a href="{% url 'all_vulns' project.slug scan.id %}?vulnerability_name=${vuln_obj.name}" target="_blank">`;
+						var append_content = `<div class="search-item"><a href="{% url 'all_vulns' current_project.slug %}?vulnerability_name=${vuln_obj.name}" target="_blank">`;
 
 						append_content += `<h4 class="mb-1"><span class="me-2 text-primary">${highlight_search(search_val, vuln_obj.name)}</span>${get_severity_badge(vuln_obj.severity)}</h4>`;
 
