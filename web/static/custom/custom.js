@@ -3282,3 +3282,13 @@ function handleHashInUrl(){
 		}
 	}
 }
+
+function setCurrentProject(projectId) {
+    document.cookie = `currentProjectId=${projectId}; path=/; SameSite=Lax`;
+}
+
+document.querySelectorAll('.dropdown-item[data-project-id]').forEach(link => {
+    link.addEventListener('click', function(e) {
+        setCurrentProject(this.getAttribute('data-project-id'));
+    });
+});

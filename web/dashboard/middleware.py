@@ -6,6 +6,8 @@ from django.urls import reverse
 from dashboard.models import Project
 from django.utils.deprecation import MiddlewareMixin
 from django.template.response import TemplateResponse
+from django.shortcuts import get_object_or_404
+from .models import Project
 
 class ProjectAccessMiddleware:
     def __init__(self, get_response):
@@ -36,32 +38,24 @@ class ProjectAccessMiddleware:
 
 class SlugMiddleware(MiddlewareMixin):
     def process_request(self, request):
-        # Initialize project to None
-        request.project = None
-        request.slug = None  # Initialize slug in the request
+        request.current_project = None
+        request.slug = None
 
-        # Check if the resolver_match is available
-        if request.resolver_match:
-            # Check if the slug is already in the kwargs
-            if 'slug' not in request.resolver_match.kwargs:
-                # Try to retrieve it from the query parameters
-                slug = request.GET.get('slug')
-                if slug:
-                    request.resolver_match.kwargs['slug'] = slug
+        # Try to get the project ID from the cookie
+        if project_id := request.COOKIES.get('currentProjectId'):
+            request.current_project = get_object_or_404(Project, id=project_id)
+            request.slug = request.current_project.slug
+        elif request.resolver_match and 'slug' in request.resolver_match.kwargs:
+            slug = request.resolver_match.kwargs['slug']
+            request.slug = slug
+            request.current_project = get_object_or_404(Project, slug=slug)
 
-            # Fetch the current project based on the slug
-            slug = request.resolver_match.kwargs.get('slug')
-            if slug:
-                request.slug = slug  # Set the slug in the request
-                project = Project.objects.filter(slug=slug).first()
-                request.project = project  # Attach project to the request
-                request.context = {'project': project}
+        # If no project is found, use the first project of the user
+        if request.current_project is None and request.user.is_authenticated:
+            request.current_project = Project.objects.filter(users=request.user).first()
+            if request.current_project:
+                request.slug = request.current_project.slug
 
-        # If no slug is provided or resolver_match is None, retrieve the first project for the authenticated user
-        if request.project is None and request.user.is_authenticated:
-            first_project = Project.objects.filter(users=request.user).first()
-            if first_project:
-                request.project = first_project  # Attach the first project to the request
-                request.slug = first_project.slug  # Set the slug in the request
-                request.context = {'project': first_project}
-
+        # Update the session with the current project ID
+        if request.current_project:
+            request.session['current_project_id'] = request.current_project.id

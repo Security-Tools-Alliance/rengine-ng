@@ -55,11 +55,11 @@ urlpatterns = [
             'api.urls',
             'api')),
     path(
-        '<slug:slug>/permission_denied/',
+        'permission_denied/',
         permission_denied,
         name='permission_denied'),
     path(
-        '<slug:slug>/page_not_found/',
+        'page_not_found/',
         page_not_found,
         name='page_not_found'),
 ] + static(settings.MEDIA_URL, document_root=settings.RENGINE_RESULTS) + \

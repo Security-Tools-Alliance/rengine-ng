@@ -74,7 +74,7 @@ API Vault
       let row = $(this).closest("div.mb3");
       let secretGroup = $(this);
       $.ajax({
-        url: "{% url 'api_vault_delete' slug=slug %}",
+        url: "{% url 'api_vault_delete' %}",
         method: "POST",
         contentType : 'application/json',
         dataType: 'json',

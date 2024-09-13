@@ -34,7 +34,7 @@ def index(request, slug):
         project = Project.objects.get(slug=slug)
     except Project.DoesNotExist as e:
         # if project not found redirect to 404
-        return HttpResponseRedirect(reverse('four_oh_four'))
+        return HttpResponseRedirect(reverse('page_not_found'))
 
     domains = Domain.objects.filter(project=project)
     subdomains = Subdomain.objects.filter(scan_history__domain__project__slug=project)
@@ -442,7 +442,7 @@ def edit_project(request, slug):
     project = get_object_or_404(Project, slug=slug)
     if not project.is_user_authorized(request.user):
         messages.error(request, "You don't have permission to edit this project.")
-        return redirect('list_projects', slug=project.slug)
+        return redirect('list_projects')
     
     User = get_user_model()
     all_users = User.objects.all()
@@ -452,12 +452,12 @@ def edit_project(request, slug):
         if form.is_valid():
             form.save()
             messages.success(request, 'Project updated successfully.')
-            return redirect('list_projects', slug=project.slug)
+            return redirect('list_projects')
     else:
         form = ProjectForm(instance=project)
     
     return render(request, 'dashboard/edit_project.html', {
         'form': form,
-        'project': project,
+        'edit_project': project,
         'users': all_users
     })

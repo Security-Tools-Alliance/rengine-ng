@@ -3,7 +3,12 @@ from django.shortcuts import render
 from django.template import RequestContext
 from django.utils.module_loading import import_string
 
-def permission_denied(request, slug):
+import logging  
+
+logger = logging.getLogger(__name__)  
+
+def permission_denied(request):
+    logger.warning(f"Permission denied for user {request.user}")
     context = RequestContext(request)
     
     # Applying manually the context processors
@@ -14,7 +19,7 @@ def permission_denied(request, slug):
     
     return render(request, 'common/permission_denied.html', context.flatten(), status=403)
 
-def page_not_found(request, slug):
+def page_not_found(request):
     context = RequestContext(request)
     
     # Applying manually the context processors

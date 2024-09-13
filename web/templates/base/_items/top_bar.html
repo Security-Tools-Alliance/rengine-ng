@@ -5,7 +5,7 @@
   <div class="container-fluid">
     <ul class="list-unstyled topnav-menu float-end mb-0">
       <li class="d-none d-lg-block">
-      <form class="app-search" method="get" action="/{{current_project.slug}}/search">
+      <form class="app-search" method="get" action="{% url 'search' %}">
         <div class="app-search-box dropdown">
           <div class="input-group">
             <input type="search" class="form-control" placeholder="Universal Search..." id="top-search" name="query">
@@ -29,9 +29,9 @@
             <i class="mdi mdi-chevron-down ms-1"></i>
         </a>
         <div class="dropdown-menu">
-          {% for project in projects %}
-            <a href="/{{project.slug}}/dashboard" class="dropdown-item {% if project == current_project %} active {% endif %}">
-              <span>{{project.name}}</span>
+          {% for user_project in projects %}
+            <a href="{% url 'dashboardIndex' user_project.slug %}" class="dropdown-item {% if user_project == current_project %} active {% endif %}" data-project-id="{{ user_project.id }}">
+              <span>{{user_project.name}}</span>
             </a>
           {% endfor %}
           <div class="dropdown-divider"></div>
@@ -56,19 +56,19 @@
           </a>
           {% endif %}
           {% if user|can:'modify_scan_configurations' %}
-          <a href="{% url 'add_engine' current_project.slug %}" class="dropdown-item">
+          <a href="{% url 'add_engine' %}" class="dropdown-item">
             <i class="fe-cpu me-1"></i>
             <span>Scan Engine</span>
           </a>
           {% endif %}
           {% if user|can:'modify_system_configurations' %}
-          <a href="{% url 'add_tool' current_project.slug %}" class="dropdown-item">
+          <a href="{% url 'add_tool' %}" class="dropdown-item">
             <i class="mdi mdi-hammer-wrench me-1"></i>
             <span>External Tool</span>
           </a>
           {% endif %}
           {% if user|can:'modify_wordlists' %}
-          <a href="{% url 'add_wordlist' current_project.slug %}" class="dropdown-item">
+          <a href="{% url 'add_wordlist' %}" class="dropdown-item">
             <i class="fe-list me-1"></i>
             <span>Wordlist</span>
           </a>
@@ -123,12 +123,12 @@
           <div class="dropdown-header noti-title">
             <h6 class="text-overflow m-0">Welcome {{user.get_username}}!</h6>
           </div>
-          <a href="{% url 'profile' current_project.slug %}" class="dropdown-item notify-item">
+          <a href="{% url 'profile' %}" class="dropdown-item notify-item">
             <i class="fe-user"></i>
             <span>My Account</span>
           </a>
           {% if user|can:'modify_system_configurations' %}
-          <a href="{% url 'admin_interface' current_project.slug %}" class="dropdown-item notify-item">
+          <a href="{% url 'admin_interface' %}" class="dropdown-item notify-item">
             <i class="fe-settings"></i>
             <span>Admin Settings</span>
           </a>

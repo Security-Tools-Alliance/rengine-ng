@@ -61,7 +61,7 @@ def add_engine(request):
     return render(request, 'scanEngine/add_engine.html', context)
 
 @has_permission_decorator(PERM_MODIFY_SCAN_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
-def delete_engine(request, slug, id):
+def delete_engine(request, id):
     obj = get_object_or_404(EngineType, id=id)
     if request.method == "POST":
         obj.delete()

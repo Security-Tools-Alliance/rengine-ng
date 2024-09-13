@@ -14,7 +14,7 @@ All Projects
 {% endblock page_title %}
 
 {% block breadcrumb_title %}
-<li class="breadcrumb-item"><a href="/{{current_project.slug}}/">Dashboard</a></li>
+<li class="breadcrumb-item"><a href="{% url 'dashboardIndex' current_project.slug %}">Dashboard</a></li>
 <li class="breadcrumb-item active">Projects</li>
 {% endblock breadcrumb_title %}
 
@@ -34,26 +34,26 @@ All Projects
                  </tr>
               </thead>
               <tbody>
-                {% for project in projects %}
+                {% for user_project in projects %}
                   <tr>
                     <td>
-                      <h5 class="m-0 fw-normal"><a href="{% url 'edit_project' project.slug %}">{{project.name}}</a></h5>
-                      {% if current_project.slug == project.slug %}
+                      <h5 class="m-0 fw-normal"><a href="{% url 'edit_project' user_project.slug %}">{{user_project.name}}</a></h5>
+                      {% if user_project.slug == current_project.slug %}
                           <span class="badge bg-soft-primary text-primary mt-1">Current Project</span>
                       {% endif %}
-                      <p class="mb-0 text-muted"><small>Created {{project.insert_date|naturaltime}}</small></p>
+                      <p class="mb-0 text-muted"><small>Created {{user_project.insert_date|naturaltime}}</small></p>
                     </td>
                     <td>
-                      <p>{% if project.description %}{{project.description|truncatechars:100}}{% else %}No description{% endif %}</p>
+                      <p>{% if user_project.description %}{{user_project.description|truncatechars:100}}{% else %}No description{% endif %}</p>
                     </td>
                     <td>
-                      <span class="badge bg-soft-info text-info">{{project.slug}}</span>
+                      <span class="badge bg-soft-info text-info">{{user_project.slug}}</span>
                     </td>
                     <td>
-                      {% if current_project.slug == project.slug %}
+                      {% if user_project.slug == project.slug %}
                       <span class="badge bg-info text-white">Current Project cannot be deleted.</span>
                       {% else %}
-                      <a href="#" onclick="delete_project({{project.id}}, '{{project.name}}')" class="btn btn-xs btn-danger"><i class="mdi mdi-trash-can-outline"></i></a>
+                      <a href="#" onclick="delete_project({{user_project.id}}, '{{user_project.name}}')" class="btn btn-xs btn-danger"><i class="mdi mdi-trash-can-outline"></i></a>
                       {% endif %}
                     </td>
                   </tr>
