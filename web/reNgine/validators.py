@@ -23,3 +23,8 @@ def validate_short_name(value):
         raise ValidationError(_('%(value)s is not a valid short name,'
                                 + ' can only contain - and _'),
                               params={'value': value})
+
+def validate_ip(ip):
+    """Validate if the given IP address is valid."""
+    if not (validators.ipv4(ip) or validators.ipv6(ip)):
+        raise ValidationError(_('Invalid IP address: %(ip)s'), params={'ip': ip})

@@ -80,7 +80,7 @@ def get_lookup_keywords():
 		list: Lookup keywords.
 	"""
 	lookup_model = InterestingLookupModel.objects.first()
-	lookup_obj = InterestingLookupModel.objects.filter(custom_type=True).order_by('-id').first()
+	lookup_obj = InterestingLookupModel.objects.filter().order_by('-id').first()
 	custom_lookup_keywords = []
 	default_lookup_keywords = []
 	if lookup_model:
@@ -371,7 +371,7 @@ def get_interesting_endpoints(scan_history=None, target=None):
 	"""
 
 	lookup_keywords = get_lookup_keywords()
-	lookup_obj = InterestingLookupModel.objects.filter(custom_type=True).order_by('-id').first()
+	lookup_obj = InterestingLookupModel.objects.filter().order_by('-id').first()
 	if not lookup_obj:
 		return EndPoint.objects.none()
 	url_lookup = lookup_obj.url_lookup
@@ -1167,3 +1167,76 @@ def create_scan_object(host_id, engine_id, initiated_by_id=None):
     domain.start_scan_date = current_scan_time
     domain.save()
     return scan.id
+
+def get_data_from_post_request(request, field):
+    """
+    Get data from a POST request.
+
+    Args:
+        request (HttpRequest): The request object.
+        field (str): The field to get data from.
+    Returns:
+        list: The data from the specified field.
+    """
+    if hasattr(request.data, 'getlist'):
+        return request.data.getlist(field)
+    else:
+        return request.data.get(field, [])
+
+def safe_int_cast(value, default=None):
+    """
+    Convert a value to an integer if possible, otherwise return a default value.
+
+    Args:
+        value: The value or the array of values to convert to an integer.
+        default: The default value to return if conversion fails.
+
+    Returns:
+        int or default: The integer value if conversion is successful, otherwise the default value.
+    """
+    if isinstance(value, list):
+        return [safe_int_cast(item) for item in value]
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        return default
+
+def get_ip_info(ip_address):
+	"""
+	get_ip_info retrieves information about a given IP address, determining whether it is an IPv4 or IPv6 address. It returns an appropriate IP address object if the input is valid, or None if the input is not a valid IP address.
+
+	Args:
+		ip_address (str): The IP address to validate and retrieve information for.
+
+	Returns:
+		IPv4Address or IPv6Address or None: An IP address object if the input is valid, otherwise None.
+	"""
+	is_ipv4 = bool(validators.ipv4(ip_address))
+	is_ipv6 = bool(validators.ipv6(ip_address))
+	ip_data = None
+	if is_ipv4:
+		ip_data = ipaddress.IPv4Address(ip_address)
+	elif is_ipv6:
+		ip_data = ipaddress.IPv6Address(ip_address)
+	else:
+		return None
+	return ip_data
+
+def get_ips_from_cidr_range(target):
+    """
+    get_ips_from_cidr_range generates a list of IP addresses from a given CIDR range. It returns the list of valid IPv4 addresses or logs an error if the provided CIDR range is invalid.
+
+    Args:
+        target (str): The CIDR range from which to generate IP addresses.
+
+    Returns:
+        list of str: A list of IP addresses as strings if the CIDR range is valid; otherwise, an empty list is returned.
+        
+    Raises:
+        ValueError: If the target is not a valid CIDR range, an error is logged.
+    """
+    try:
+        return [str(ip) for ip in ipaddress.IPv4Network(target)]
+    except ValueError:
+        logger.error(f'{target} is not a valid CIDR range. Skipping.')
+        return []
