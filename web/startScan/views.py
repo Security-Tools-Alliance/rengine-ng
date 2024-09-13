@@ -15,7 +15,7 @@ from django_celery_beat.models import ClockedSchedule, IntervalSchedule, Periodi
 from rolepermissions.decorators import has_permission_decorator
 
 from reNgine.celery import app
-from reNgine.common_func import logger, get_interesting_subdomains, create_scan_object
+from reNgine.common_func import logger, get_interesting_subdomains, create_scan_object, safe_int_cast
 from reNgine.settings import RENGINE_RESULTS
 from reNgine.definitions import ABORTED_TASK, SUCCESS_TASK, RUNNING_TASK, LIVE_SCAN, SCHEDULED_SCAN, PERM_INITATE_SCANS_SUBSCANS, PERM_MODIFY_SCAN_RESULTS, PERM_MODIFY_SCAN_REPORT, PERM_MODIFY_SYSTEM_CONFIGURATIONS, FOUR_OH_FOUR_URL
 from reNgine.tasks import create_scan_activity, initiate_scan, run_command

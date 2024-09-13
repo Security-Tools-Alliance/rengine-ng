@@ -25,93 +25,94 @@ from rest_framework.parsers import JSONParser
 from recon_note.models import TodoNote
 from reNgine.celery import app
 from reNgine.common_func import (
-    get_data_from_post_request,
-    get_interesting_endpoints,
-    get_interesting_subdomains,
-    get_lookup_keywords,
-    safe_int_cast
+	get_data_from_post_request,
+	get_interesting_endpoints,
+	get_interesting_subdomains,
+	get_lookup_keywords,
+	safe_int_cast
 )
 from reNgine.definitions import (
-    ABORTED_TASK,
-    OLLAMA_INSTANCE,
-    NUCLEI_SEVERITY_MAP,
-    DEFAULT_GPT_MODELS,
-    RUNNING_TASK,
-    SUCCESS_TASK
+	ABORTED_TASK,
+	OLLAMA_INSTANCE,
+	NUCLEI_SEVERITY_MAP,
+	DEFAULT_GPT_MODELS,
+	RUNNING_TASK,
+	SUCCESS_TASK
 )
 from reNgine.settings import (
-    RENGINE_CURRENT_VERSION,
-    RENGINE_TOOL_GITHUB_PATH
+	RENGINE_CURRENT_VERSION,
+	RENGINE_TOOL_GITHUB_PATH
 )
 from reNgine.tasks import (
-    create_scan_activity,
-    gpt_vulnerability_description,
-    initiate_subscan,
-    query_ip_history,
-    query_reverse_whois,
-    query_whois,
-    run_cmseek,
-    run_command,
-    run_gf_list,
-    run_wafw00f,
-    send_hackerone_report
+	create_scan_activity,
+	gpt_vulnerability_description,
+	initiate_subscan,
+	query_ip_history,
+	query_reverse_whois,
+	query_whois,
+	run_cmseek,
+	run_command,
+	run_gf_list,
+	run_wafw00f,
+	send_hackerone_report
 )
 from reNgine.gpt import GPTAttackSuggestionGenerator
 from reNgine.utilities import is_safe_path, remove_lead_and_trail_slash
 from scanEngine.models import EngineType, InstalledExternalTool
 from startScan.models import (
-    Command,
-    DirectoryFile,
-    DirectoryScan,
-    Dork,
-    Email,
-    Employee,
-    EndPoint,
-    IpAddress,
-    MetaFinderDocument,
-    Port,
-    ScanActivity,
-    ScanHistory,
-    Subdomain,
-    SubScan,
-    Technology,
-    Vulnerability,
+	Command,
+	DirectoryFile,
+	DirectoryScan,
+	Dork,
+	Email,
+	Employee,
+	EndPoint,
+	IpAddress,
+	MetaFinderDocument,
+	Port,
+	ScanActivity,
+	ScanHistory,
+	Subdomain,
+	SubScan,
+	Technology,
+	Vulnerability,
 )
 from targetApp.models import Domain, Organization
 
 from .serializers import (
-    CommandSerializer,
-    DirectoryFileSerializer,
-    DirectoryScanSerializer,
-    DomainSerializer,
-    DorkCountSerializer,
-    DorkSerializer,
-    EmailSerializer,
-    EmployeeSerializer,
-    EndpointOnlyURLsSerializer,
-    EndpointSerializer,
-    EndPointChangesSerializer,
-    EngineSerializer,
-    InterestingEndPointSerializer,
-    InterestingSubdomainSerializer,
-    IpSerializer,
-    IpSubdomainSerializer,
-    MetafinderDocumentSerializer,
-    MetafinderUserSerializer,
-    OnlySubdomainNameSerializer,
-    OrganizationSerializer,
-    OrganizationTargetsSerializer,
-    PortSerializer,
-    ReconNoteSerializer,
-    ScanHistorySerializer,
-    SearchHistorySerializer,
-    SubdomainChangesSerializer,
-    SubdomainSerializer,
-    SubScanResultSerializer,
-    SubScanSerializer,
-    TechnologyCountSerializer,
-    VisualiseDataSerializer,
-    VulnerabilitySerializer
+	CommandSerializer,
+	DirectoryFileSerializer,
+	DirectoryScanSerializer,
+	DomainSerializer,
+	DorkCountSerializer,
+	DorkSerializer,
+	EmailSerializer,
+	EmployeeSerializer,
+	EndpointOnlyURLsSerializer,
+	EndpointSerializer,
+	EndPointChangesSerializer,
+	EngineSerializer,
+	InterestingEndPointSerializer,
+	InterestingSubdomainSerializer,
+	IpSerializer,
+	IpSubdomainSerializer,
+	MetafinderDocumentSerializer,
+	MetafinderUserSerializer,
+	OnlySubdomainNameSerializer,
+	OrganizationSerializer,
+	OrganizationTargetsSerializer,
+	PortSerializer,
+ 	ProjectSerializer,
+	ReconNoteSerializer,
+	ScanHistorySerializer,
+	SearchHistorySerializer,
+	SubdomainChangesSerializer,
+	SubdomainSerializer,
+	SubScanResultSerializer,
+	SubScanSerializer,
+	TechnologyCountSerializer,
+	VisualiseDataSerializer,
+	VulnerabilitySerializer
 )
 
 logger = logging.getLogger(__name__)
@@ -215,53 +216,53 @@ class OllamaManager(APIView):
 		return Response(response)
 
 class GPTAttackSuggestion(APIView):
-    def get(self, request):
-        req = self.request
-        subdomain_id = safe_int_cast(req.query_params.get('subdomain_id'))
-        if not subdomain_id:
-            return Response({
-                'status': False,
-                'error': 'Missing GET param Subdomain `subdomain_id`'
-            })
-        try:
-            subdomain = Subdomain.objects.get(id=subdomain_id)
-        except Subdomain.DoesNotExist:
-            return Response({
-                'status': False,
-                'error': f'Subdomain not found with id {subdomain_id}'
-            })
+	def get(self, request):
+		req = self.request
+		subdomain_id = safe_int_cast(req.query_params.get('subdomain_id'))
+		if not subdomain_id:
+			return Response({
+				'status': False,
+				'error': 'Missing GET param Subdomain `subdomain_id`'
+			})
+		try:
+			subdomain = Subdomain.objects.get(id=subdomain_id)
+		except Subdomain.DoesNotExist:
+			return Response({
+				'status': False,
+				'error': f'Subdomain not found with id {subdomain_id}'
+			})
 
-        if subdomain.attack_surface:
-            return Response({
-                'status': True,
-                'subdomain_name': subdomain.name,
-                'description': subdomain.attack_surface
-            })
+		if subdomain.attack_surface:
+			return Response({
+				'status': True,
+				'subdomain_name': subdomain.name,
+				'description': subdomain.attack_surface
+			})
 
-        ip_addrs = subdomain.ip_addresses.all()
-        open_ports = ', '.join(f'{port.number}/{port.service_name}' for ip in ip_addrs for port in ip.ports.all())
-        tech_used = ', '.join(tech.name for tech in subdomain.technologies.all())
+		ip_addrs = subdomain.ip_addresses.all()
+		open_ports = ', '.join(f'{port.number}/{port.service_name}' for ip in ip_addrs for port in ip.ports.all())
+		tech_used = ', '.join(tech.name for tech in subdomain.technologies.all())
 
-        input_data = f'''
-            Subdomain Name: {subdomain.name}
-            Subdomain Page Title: {subdomain.page_title}
-            Open Ports: {open_ports}
-            HTTP Status: {subdomain.http_status}
-            Technologies Used: {tech_used}
-            Content type: {subdomain.content_type}
-            Web Server: {subdomain.webserver}
-            Page Content Length: {subdomain.content_length}
-        '''
-        
-        gpt = GPTAttackSuggestionGenerator()
-        response = gpt.get_attack_suggestion(input_data)
-        response['subdomain_name'] = subdomain.name
-        
-        if response.get('status'):
-            subdomain.attack_surface = response.get('description')
-            subdomain.save()
-        
-        return Response(response)
+		input_data = f'''
+			Subdomain Name: {subdomain.name}
+			Subdomain Page Title: {subdomain.page_title}
+			Open Ports: {open_ports}
+			HTTP Status: {subdomain.http_status}
+			Technologies Used: {tech_used}
+			Content type: {subdomain.content_type}
+			Web Server: {subdomain.webserver}
+			Page Content Length: {subdomain.content_length}
+		'''
+		
+		gpt = GPTAttackSuggestionGenerator()
+		response = gpt.get_attack_suggestion(input_data)
+		response['subdomain_name'] = subdomain.name
+		
+		if response.get('status'):
+			subdomain.attack_surface = response.get('description')
+			subdomain.save()
+		
+		return Response(response)
 
 
 class GPTVulnerabilityReportGenerator(APIView):
@@ -366,37 +367,37 @@ class ListTargetsDatatableViewSet(viewsets.ModelViewSet):
 
 
 class WafDetector(APIView):
-    def get(self, request):
-        req = self.request
-        url = req.query_params.get('url')
-        response = {
-            'status': False,
-            'message': '',
-            'results': None
-        }
+	def get(self, request):
+		req = self.request
+		url = req.query_params.get('url')
+		response = {
+			'status': False,
+			'message': '',
+			'results': None
+		}
 
-        if not url:
-            response['message'] = 'URL parameter is missing'
-            return Response(response)
+		if not url:
+			response['message'] = 'URL parameter is missing'
+			return Response(response)
 
-        try:
-            logger.debug(f"Initiating WAF detection for URL: {url}")
-            result = run_wafw00f.delay(url).get(timeout=30)
+		try:
+			logger.debug(f"Initiating WAF detection for URL: {url}")
+			result = run_wafw00f.delay(url).get(timeout=30)
 
-            if result.startswith("Unexpected error"):
-                response['message'] = result
-            elif result != "No WAF detected":
-                response['status'] = True
-                response['results'] = result
-            else:
-                response['message'] = 'Could not detect any WAF!'
+			if result.startswith("Unexpected error"):
+				response['message'] = result
+			elif result != "No WAF detected":
+				response['status'] = True
+				response['results'] = result
+			else:
+				response['message'] = 'Could not detect any WAF!'
 
-            logger.debug(f"WAF detection result: {response}")
-        except Exception as e:
-            logger.error(f"Error during WAF detection: {str(e)}")
-            response['message'] = f"An error occurred: {str(e)}"
+			logger.debug(f"WAF detection result: {response}")
+		except Exception as e:
+			logger.error(f"Error during WAF detection: {str(e)}")
+			response['message'] = f"An error occurred: {str(e)}"
 
-        return Response(response)
+		return Response(response)
 
 class SearchHistoryView(APIView):
 	def get(self, request):
@@ -649,7 +650,7 @@ class AddReconNote(APIView):
 		title = data.get('title')
 		description = data.get('description')
 		project = data.get('project')
-  
+
 		if subdomain_id is None:
 			return Response({"status": False, "error": "Subdomain ID is required."}, status=400)
 		if scan_history_id is None:
@@ -708,53 +709,53 @@ class ToggleSubdomainImportantStatus(APIView):
 
 
 class AddTarget(APIView):
-    def post(self, request):
-        req = self.request
-        data = req.data
-        h1_team_handle = data.get('h1_team_handle')
-        description = data.get('description')
-        domain_name = data.get('domain_name')
-        organization_name = data.get('organization')
-        slug = data.get('slug')
+	def post(self, request):
+		req = self.request
+		data = req.data
+		h1_team_handle = data.get('h1_team_handle')
+		description = data.get('description')
+		domain_name = data.get('domain_name')
+		organization_name = data.get('organization')
+		slug = data.get('slug')
 
-        # Validate domain name
-        if not validators.domain(domain_name):
-            return Response({'status': False, 'message': 'Invalid domain or IP'}, status=400)
+		# Validate domain name
+		if not validators.domain(domain_name):
+			return Response({'status': False, 'message': 'Invalid domain or IP'}, status=400)
 
-        project = Project.objects.get(slug=slug)
+		project = Project.objects.get(slug=slug)
 
-        # Check if the domain already exists
-        if Domain.objects.filter(name=domain_name, project=project).exists():
-            return Response({'status': False, 'message': 'Domain already exists as a target!'}, status=400)
+		# Check if the domain already exists
+		if Domain.objects.filter(name=domain_name, project=project).exists():
+			return Response({'status': False, 'message': 'Domain already exists as a target!'}, status=400)
 
-        # Create domain object in DB
-        domain, _ = Domain.objects.get_or_create(name=domain_name)
-        domain.project = project
-        domain.h1_team_handle = h1_team_handle
-        domain.description = description
-        if not domain.insert_date:
-            domain.insert_date = timezone.now()
-        domain.save()
+		# Create domain object in DB
+		domain, _ = Domain.objects.get_or_create(name=domain_name)
+		domain.project = project
+		domain.h1_team_handle = h1_team_handle
+		domain.description = description
+		if not domain.insert_date:
+			domain.insert_date = timezone.now()
+		domain.save()
 
-        # Create org object in DB
-        if organization_name:
-            organization_obj = None
-            organization_query = Organization.objects.filter(name=organization_name)
-            if organization_query.exists():
-                organization_obj = organization_query[0]
-            else:
-                organization_obj = Organization.objects.create(
-                    name=organization_name,
-                    project=project,
-                    insert_date=timezone.now())
-            organization_obj.domains.add(domain)
+		# Create org object in DB
+		if organization_name:
+			organization_obj = None
+			organization_query = Organization.objects.filter(name=organization_name)
+			if organization_query.exists():
+				organization_obj = organization_query[0]
+			else:
+				organization_obj = Organization.objects.create(
+					name=organization_name,
+					project=project,
+					insert_date=timezone.now())
+			organization_obj.domains.add(domain)
 
-        return Response({
-            'status': True,
-            'message': 'Domain successfully added as target!',
-            'domain_name': domain_name,
-            'domain_id': domain.id
-        })
+		return Response({
+			'status': True,
+			'message': 'Domain successfully added as target!',
+			'domain_name': domain_name,
+			'domain_id': domain.id
+		})
 
 
 class FetchSubscanResults(APIView):
@@ -959,33 +960,33 @@ class InitiateSubTask(APIView):
 
 
 class DeleteSubdomain(APIView):
-    def post(self, request):
-        subdomain_ids = get_data_from_post_request(request, 'subdomain_ids')
-        try:
-            subdomain_ids = [int(id) for id in subdomain_ids]
-            Subdomain.objects.filter(id__in=subdomain_ids).delete()
-            return Response({'status': True})
-        except ValueError:
-            return Response({'status': False, 'message': 'Invalid subdomain ID provided'}, status=400)
-        except Exception as e:
-            return Response({'status': False, 'message': logger.debug(e)}, status=500)
+	def post(self, request):
+		subdomain_ids = get_data_from_post_request(request, 'subdomain_ids')
+		try:
+			subdomain_ids = [int(id) for id in subdomain_ids]
+			Subdomain.objects.filter(id__in=subdomain_ids).delete()
+			return Response({'status': True})
+		except ValueError:
+			return Response({'status': False, 'message': 'Invalid subdomain ID provided'}, status=400)
+		except Exception as e:
+			return Response({'status': False, 'message': logger.debug(e)}, status=500)
 
 class DeleteVulnerability(APIView):
-    def post(self, request):
-        vulnerability_ids = get_data_from_post_request(request, 'vulnerability_ids')
+	def post(self, request):
+		vulnerability_ids = get_data_from_post_request(request, 'vulnerability_ids')
 
-        # Check if vulnerability_ids is iterable
-        if not isinstance(vulnerability_ids, (list, tuple)):
-            return Response({'status': False, 'message': 'vulnerability_ids must be a list or tuple'}, status=400)
+		# Check if vulnerability_ids is iterable
+		if not isinstance(vulnerability_ids, (list, tuple)):
+			return Response({'status': False, 'message': 'vulnerability_ids must be a list or tuple'}, status=400)
 
-        try:
-            # Convert to integers
-            vulnerability_ids = [int(id) for id in vulnerability_ids]
-            # Delete vulnerabilities
-            Vulnerability.objects.filter(id__in=vulnerability_ids).delete()
-            return Response({'status': True})
-        except ValueError:
-            return Response({'status': False, 'message': 'Invalid vulnerability ID provided'}, status=400)
+		try:
+			# Convert to integers
+			vulnerability_ids = [int(id) for id in vulnerability_ids]
+			# Delete vulnerabilities
+			Vulnerability.objects.filter(id__in=vulnerability_ids).delete()
+			return Response({'status': True})
+		except ValueError:
+			return Response({'status': False, 'message': 'Invalid vulnerability ID provided'}, status=400)
 
 class ListInterestingKeywords(APIView):
 	def get(self, request, format=None):
@@ -1011,8 +1012,8 @@ class RengineUpdateCheck(APIView):
 		
 		# for consistency remove v from both if exists
 		latest_version = re.search(r'v(\d+\.)?(\d+\.)?(\*|\d+)',
-								   ((response[0]['name'
-								   ])[1:] if response[0]['name'][0] == 'v'
+								((response[0]['name'
+								])[1:] if response[0]['name'][0] == 'v'
 									else response[0]['name']))
 
 		latest_version = latest_version.group(0) if latest_version else None
@@ -1266,21 +1267,21 @@ class DomainIPHistory(APIView):
 
 
 class CMSDetector(APIView):
-    def get(self, request):
-        url = request.query_params.get('url')
-        if not url:
-            return Response({'status': False, 'message': 'URL parameter is missing'})
+	def get(self, request):
+		url = request.query_params.get('url')
+		if not url:
+			return Response({'status': False, 'message': 'URL parameter is missing'})
 
-        try:
-            task = run_cmseek.delay(url)
-            result = task.get(timeout=300)  # 5 minutes timeout
+		try:
+			task = run_cmseek.delay(url)
+			result = task.get(timeout=300)  # 5 minutes timeout
 
-            if result['status']:
-                return Response(result)
-            else:
-                return Response({'status': False, 'message': 'Could not detect CMS!'})
-        except Exception as e:
-            return Response({'status': False, 'message': str(e)})
+			if result['status']:
+				return Response(result)
+			else:
+				return Response({'status': False, 'message': 'Could not detect CMS!'})
+		except Exception as e:
+			return Response({'status': False, 'message': str(e)})
 
 class IPToDomain(APIView):
 	def get(self, request):
@@ -1428,17 +1429,17 @@ class GetFileContents(APIView):
 		return Response(response)
 
 class GfList(APIView):
-    def get(self, request):
-        try:
-            task = run_gf_list.delay()
-            result = task.get(timeout=30)  # 30 seconds timeout
+	def get(self, request):
+		try:
+			task = run_gf_list.delay()
+			result = task.get(timeout=30)  # 30 seconds timeout
 
-            if result['status']:
-                return Response(result['output'])
-            else:
-                return Response({'error': result['message']}, status=500)
-        except Exception as e:
-            return Response({'error': str(e)}, status=500)
+			if result['status']:
+				return Response(result['output'])
+			else:
+				return Response({'error': result['message']}, status=500)
+		except Exception as e:
+			return Response({'error': str(e)}, status=500)
 
 class ListTodoNotes(APIView):
 	def get(self, request, format=None):
@@ -1509,69 +1510,69 @@ class ListTargetsWithoutOrganization(APIView):
 
 
 class VisualiseData(APIView):
-    def get(self, request, format=None):
-        req = self.request
-        scan_id = safe_int_cast(req.query_params.get('scan_id'))
-        if scan_id:
-            mitch_data = ScanHistory.objects.filter(id=scan_id)
-            serializer = VisualiseDataSerializer(mitch_data, many=True)
-            
-            # Data processing to remove duplicates
-            processed_data = self.process_visualisation_data(serializer.data)
-            
-            return Response(processed_data)
-        else:
-            return Response()
+	def get(self, request, format=None):
+		req = self.request
+		scan_id = safe_int_cast(req.query_params.get('scan_id'))
+		if scan_id:
+			mitch_data = ScanHistory.objects.filter(id=scan_id)
+			serializer = VisualiseDataSerializer(mitch_data, many=True)
+			
+			# Data processing to remove duplicates
+			processed_data = self.process_visualisation_data(serializer.data)
+			
+			return Response(processed_data)
+		else:
+			return Response()
 
-    def process_visualisation_data(self, data):
-        if not data:
-            return []
+	def process_visualisation_data(self, data):
+		if not data:
+			return []
 
-        processed_data = data[0]  # Assuming there's only one element in data
-        subdomains = processed_data.get('subdomains', [])
+		processed_data = data[0]  # Assuming there's only one element in data
+		subdomains = processed_data.get('subdomains', [])
 
-        # Use a dictionary to group vulnerabilities by subdomain
-        vuln_by_subdomain = defaultdict(list)
+		# Use a dictionary to group vulnerabilities by subdomain
+		vuln_by_subdomain = defaultdict(list)
 
-        for subdomain in subdomains:
-            subdomain_name = subdomain['name']
-            vulnerabilities = subdomain.get('vulnerabilities', [])
+		for subdomain in subdomains:
+			subdomain_name = subdomain['name']
+			vulnerabilities = subdomain.get('vulnerabilities', [])
 
-            # Group unique vulnerabilities
-            unique_vulns = {}
-            for vuln in vulnerabilities:
-                vuln_key = (vuln['name'], vuln['severity'])
-                if vuln_key not in unique_vulns:
-                    unique_vulns[vuln_key] = vuln
+			# Group unique vulnerabilities
+			unique_vulns = {}
+			for vuln in vulnerabilities:
+				vuln_key = (vuln['name'], vuln['severity'])
+				if vuln_key not in unique_vulns:
+					unique_vulns[vuln_key] = vuln
 
-            vuln_by_subdomain[subdomain_name].extend(unique_vulns.values())
+			vuln_by_subdomain[subdomain_name].extend(unique_vulns.values())
 
-        # Update subdomains with unique vulnerabilities
-        for subdomain in subdomains:
-            subdomain['vulnerabilities'] = vuln_by_subdomain[subdomain['name']]
+		# Update subdomains with unique vulnerabilities
+		for subdomain in subdomains:
+			subdomain['vulnerabilities'] = vuln_by_subdomain[subdomain['name']]
 
-        return processed_data
+		return processed_data
 
 class ListTechnology(APIView):
-    def get(self, request, format=None):
-        req = self.request
-        scan_id = safe_int_cast(req.query_params.get('scan_id'))
-        target_id = safe_int_cast(req.query_params.get('target_id'))
+	def get(self, request, format=None):
+		req = self.request
+		scan_id = safe_int_cast(req.query_params.get('scan_id'))
+		target_id = safe_int_cast(req.query_params.get('target_id'))
 
-        # Determine the queryset based on the presence of target_id or scan_id
-        if target_id:
-            subdomain_filter = Subdomain.objects.filter(target_domain__id=target_id)
-        elif scan_id:
-            subdomain_filter = Subdomain.objects.filter(scan_history__id=scan_id)
-        else:
-            subdomain_filter = Subdomain.objects.all()
+		# Determine the queryset based on the presence of target_id or scan_id
+		if target_id:
+			subdomain_filter = Subdomain.objects.filter(target_domain__id=target_id)
+		elif scan_id:
+			subdomain_filter = Subdomain.objects.filter(scan_history__id=scan_id)
+		else:
+			subdomain_filter = Subdomain.objects.all()
 
-        # Fetch technologies and serialize the results
-        tech = Technology.objects.filter(technologies__in=subdomain_filter).annotate(
-            count=Count('name')).order_by('-count')
-        serializer = TechnologyCountSerializer(tech, many=True)
+		# Fetch technologies and serialize the results
+		tech = Technology.objects.filter(technologies__in=subdomain_filter).annotate(
+			count=Count('name')).order_by('-count')
+		serializer = TechnologyCountSerializer(tech, many=True)
 
-        return Response({"technologies": serializer.data})
+		return Response({"technologies": serializer.data})
 
 
 class ListDorkTypes(APIView):
@@ -2397,7 +2398,7 @@ class EndPointViewSet(viewsets.ModelViewSet):
 				endpoints_obj
 				.filter(scan_history__id=scan_id)
 				.distinct()
-	            .order_by('id')
+				.order_by('id')
 			)
 		else:
 			endpoints = endpoints_obj.distinct().order_by('id')
@@ -2407,7 +2408,7 @@ class EndPointViewSet(viewsets.ModelViewSet):
 				endpoints
 				.filter(Q(target_domain__name=url_query))
 				.distinct()
-	            .order_by('id')
+				.order_by('id')
 			)
 
 		if gf_tag:
@@ -2485,13 +2486,13 @@ class EndPointViewSet(viewsets.ModelViewSet):
 	def general_lookup(self, search_value):
 		return \
 			self.queryset.filter(Q(http_url__icontains=search_value) |
-								 Q(page_title__icontains=search_value) |
-								 Q(http_status__icontains=search_value) |
-								 Q(content_type__icontains=search_value) |
-								 Q(webserver__icontains=search_value) |
-								 Q(techs__name__icontains=search_value) |
-								 Q(content_type__icontains=search_value) |
-								 Q(matched_gf_patterns__icontains=search_value))
+								Q(page_title__icontains=search_value) |
+								Q(http_status__icontains=search_value) |
+								Q(content_type__icontains=search_value) |
+								Q(webserver__icontains=search_value) |
+								Q(techs__name__icontains=search_value) |
+								Q(content_type__icontains=search_value) |
+								Q(matched_gf_patterns__icontains=search_value))
 
 	def special_lookup(self, search_value):
 		qs = self.queryset.filter()
@@ -2620,14 +2621,14 @@ class EndPointViewSet(viewsets.ModelViewSet):
 
 
 class DirectoryViewSet(viewsets.ModelViewSet):
-    queryset = DirectoryFile.objects.none()
-    serializer_class = DirectoryFileSerializer
+	queryset = DirectoryFile.objects.none()
+	serializer_class = DirectoryFileSerializer
 
-    def get_queryset(self):
-        req = self.request
-        scan_id = safe_int_cast(req.query_params.get('scan_history'))
-        subdomain_id = safe_int_cast(req.query_params.get('subdomain_id'))
-        subdomains = None
+	def get_queryset(self):
+		req = self.request
+		scan_id = safe_int_cast(req.query_params.get('scan_history'))
+		subdomain_id = safe_int_cast(req.query_params.get('subdomain_id'))
+		subdomains = None
 		if not (scan_id or subdomain_id):
 			return Response({
 				'status': False,
@@ -2646,19 +2647,19 @@ class DirectoryViewSet(viewsets.ModelViewSet):
 		return qs
 
 class ProjectViewSet(viewsets.ModelViewSet):
-    serializer_class = ProjectSerializer
-    permission_classes = [IsAuthenticated]
+	serializer_class = ProjectSerializer
+	permission_classes = [IsAuthenticated]
 
-    def get_queryset(self):
-        return Project.objects.filter(user=self.request.user)
+	def get_queryset(self):
+		return Project.objects.filter(user=self.request.user)
 
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+	def perform_create(self, serializer):
+		serializer.save(user=self.request.user)
 
-    def perform_update(self, serializer):
-        if serializer.instance.user != self.request.user:
-            raise PermissionDenied("You don't have permission to modify this project.")
-        serializer.save()
+	def perform_update(self, serializer):
+		if serializer.instance.user != self.request.user:
+			raise PermissionDenied("You don't have permission to modify this project.")
+		serializer.save()
 
 class VulnerabilityViewSet(viewsets.ModelViewSet):
 	queryset = Vulnerability.objects.none()
@@ -2923,8 +2924,8 @@ class VulnerabilityViewSet(viewsets.ModelViewSet):
 				qs = (
 					self.queryset
 					.exclude(Q(description__icontains=lookup_content) |
-							 Q(template__icontains=lookup_content) |
-							 Q(extracted_results__icontains=lookup_content))
+							Q(template__icontains=lookup_content) |
+							Q(extracted_results__icontains=lookup_content))
 				)
 
 		elif '>' in search_value:
