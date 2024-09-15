@@ -263,7 +263,7 @@ def handle_delete_user(request, user):
         return JsonResponse({'status': True})
     except (ValueError, KeyError) as e:
         logger.error(e)
-        return JsonResponse({'status': False, 'error': str(e)})
+        return JsonResponse({'status': False, 'error': 'An error occurred while deleting the user'})
 
 
 def handle_update_user(request, user):

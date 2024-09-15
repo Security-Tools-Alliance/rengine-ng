@@ -8,10 +8,10 @@ from utils.test_base import BaseTestCase
 from dashboard.views import admin_interface_update
 from dashboard.models import Project
 from django.contrib.auth.models import User
-from rolepermissions.roles import AbstractUserRole
 from rolepermissions.checkers import has_role
 from reNgine.roles import SysAdmin, PenetrationTester
 from django.utils import timezone
+
 __all__ = [
     'TestDashboardViews'
 ]

@@ -247,7 +247,7 @@ class CreateProjectApi(APIView):
         insert_date = timezone.now()
 
         try:
-            project = Project.objects.create(
+            Project.objects.create(
                 name=project_name,
                 slug=slug,
                 insert_date=insert_date
