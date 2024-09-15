@@ -6,19 +6,19 @@ from .views import *
 
 app_name = 'api'
 router = routers.DefaultRouter()
-router.register(r'listDatatableSubdomain', SubdomainDatatableViewSet)
-router.register(r'listTargets', ListTargetsDatatableViewSet)
-router.register(r'listSubdomains', SubdomainsViewSet)
-router.register(r'listEndpoints', EndPointViewSet)
-router.register(r'listDirectories', DirectoryViewSet)
-router.register(r'listVulnerability', VulnerabilityViewSet)
-router.register(r'listInterestingSubdomains', InterestingSubdomainViewSet)
-router.register(r'listInterestingEndpoints', InterestingEndpointViewSet)
-router.register(r'listSubdomainChanges', SubdomainChangesViewSet)
-router.register(r'listEndPointChanges', EndPointChangesViewSet)
-router.register(r'listIps', IpAddressViewSet)
-router.register(r'listActivityLogs', ListActivityLogsViewSet)
-router.register(r'listScanLogs', ListScanLogsViewSet)
+router.register(r'listDatatableSubdomain', SubdomainDatatableViewSet, basename='subdomain-datatable')
+router.register(r'listTargets', ListTargetsDatatableViewSet, basename='targets')
+router.register(r'listSubdomains', SubdomainsViewSet, basename='subdomains')
+router.register(r'listEndpoints', EndPointViewSet, basename='endpoints')
+router.register(r'listDirectories', DirectoryViewSet, basename='directories')
+router.register(r'listVulnerability', VulnerabilityViewSet, basename='vulnerabilities')
+router.register(r'listInterestingSubdomains', InterestingSubdomainViewSet, basename='interesting-subdomains')
+router.register(r'listInterestingEndpoints', InterestingEndpointViewSet, basename='interesting-endpoints')
+router.register(r'listSubdomainChanges', SubdomainChangesViewSet, basename='subdomain-changes')
+router.register(r'listEndPointChanges', EndPointChangesViewSet, basename='endpoint-changes')
+router.register(r'listIps', IpAddressViewSet, basename='ip-addresses')
+router.register(r'listActivityLogs', ListActivityLogsViewSet, basename='activity-logs')
+router.register(r'listScanLogs', ListScanLogsViewSet, basename='scan-logs')
 
 urlpatterns = [
     url('^', include(router.urls)),

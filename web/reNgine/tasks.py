@@ -87,6 +87,10 @@ def initiate_scan(
     try:
         # Get scan engine
         engine_id = engine_id or scan.scan_type.id # scan history engine_id
+        logger.info(f'Engine ID: {engine_id}')
+        engines = EngineType.objects.all()
+        for engine in engines:
+            logger.info(f'Engine: {engine.id} - {engine.engine_name}')
         engine = EngineType.objects.get(pk=engine_id)
 
         # Get YAML config
