@@ -207,6 +207,12 @@ def admin_interface(request):
 @has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
 def admin_interface_update(request):
     user = get_user_from_request(request)
+    
+    # Check if the request is for user creation
+    if request.method == 'POST' and request.GET.get('mode') == 'create':
+        # Skip user check for user creation
+        return handle_post_request(request, None)  # Pass None for user
+
     if not user:
         return JsonResponse({'status': False, 'error': 'User not found'}, status=404)
 
@@ -219,8 +225,7 @@ def admin_interface_update(request):
 
 
 def get_user_from_request(request):
-    user_id = request.GET.get('user')
-    if user_id:
+    if user_id := request.GET.get('user'):
         UserModel = get_user_model()
         return UserModel.objects.filter(id=user_id).first()  # Use first() to avoid exceptions
     return None
@@ -238,7 +243,7 @@ def handle_get_request(request, user):
 def handle_post_request(request, user):
     mode = request.GET.get('mode')
     if mode == 'delete':
-        return handle_delete_user(user)
+        return handle_delete_user(request, user)
     elif mode == 'update':
         return handle_update_user(request, user)
     elif mode == 'create':
@@ -246,7 +251,7 @@ def handle_post_request(request, user):
     return JsonResponse({'status': False, 'error': 'Invalid mode'}, status=400)
 
 
-def handle_delete_user(user):
+def handle_delete_user(request, user):
     try:
         user.delete()
         messages.add_message(
@@ -255,9 +260,9 @@ def handle_delete_user(user):
             f'User {user.username} successfully deleted.'
         )
         return JsonResponse({'status': True})
-    except Exception as e:
+    except (ValueError, KeyError) as e:
         logger.error(e)
-        return JsonResponse({'status': False})
+        return JsonResponse({'status': False, 'error': str(e)})
 
 
 def handle_update_user(request, user):
@@ -280,7 +285,7 @@ def handle_update_user(request, user):
 
         user.save()
         return JsonResponse({'status': True})
-    except Exception as e:
+    except (ValueError, KeyError) as e:
         logger.error(e)
         return JsonResponse({'status': False, 'error': str(e)})
 
@@ -305,7 +310,7 @@ def handle_create_user(request):
             user.projects.add(project)
 
         return JsonResponse({'status': True})
-    except Exception as e:
+    except (ValueError, KeyError) as e:
         logger.error(e)
         return JsonResponse({'status': False, 'error': str(e)})
 
