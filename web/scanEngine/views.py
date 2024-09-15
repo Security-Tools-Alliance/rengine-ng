@@ -161,34 +161,27 @@ def delete_wordlist(request, id):
 
 @has_permission_decorator(PERM_MODIFY_INTERESTING_LOOKUP, redirect_url=FOUR_OH_FOUR_URL)
 def interesting_lookup(request):
-    lookup_keywords = None
-    context = {}
-    context['scan_engine_nav_active'] = 'active'
-    context['interesting_lookup_li'] = 'active'
-    context['engine_ul_show'] = 'show'
-    form = InterestingLookupForm()
-    if InterestingLookupModel.objects.filter(custom_type=True).exists():
-        lookup_keywords = InterestingLookupModel.objects.filter(custom_type=True).order_by('-id')[0]
-    else:
+    lookup_keywords = InterestingLookupModel.objects.filter(custom_type=True).order_by('-id').first()
+    form = InterestingLookupForm(instance=lookup_keywords)
+
+    if not lookup_keywords:
         form.initial_checkbox()
+
     if request.method == "POST":
-        if lookup_keywords:
-            form = InterestingLookupForm(request.POST, instance=lookup_keywords)
-        else:
-            form = InterestingLookupForm(request.POST or None)
+        form = InterestingLookupForm(request.POST, instance=lookup_keywords)
         if form.is_valid():
             form.save()
-            messages.add_message(
-                request,
-                messages.INFO,
-                'Lookup Keywords updated successfully')
+            messages.info(request, 'Lookup Keywords updated successfully')
             return http.HttpResponseRedirect(reverse('interesting_lookup'))
 
-    if lookup_keywords:
-        form.set_value(lookup_keywords)
-        context['interesting_lookup_found'] = True
-    context['form'] = form
-    context['default_lookup'] = InterestingLookupModel.objects.filter(id=1)
+    context = {
+        'scan_engine_nav_active': 'active',
+        'interesting_lookup_li': 'active',
+        'engine_ul_show': 'show',
+        'form': form,
+        'interesting_lookup_found': bool(lookup_keywords),
+        'default_lookup': InterestingLookupModel.objects.filter(id=1)
+    }
     return render(request, 'scanEngine/lookup.html', context)
 
 @has_permission_decorator(PERM_MODIFY_SCAN_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
@@ -196,280 +189,205 @@ def tool_specific_settings(request):
     context = {}
     # check for incoming form requests
     if request.method == "POST":
-        if 'gfFileUpload' in request.FILES:
-            gf_file = request.FILES['gfFileUpload']
-            file_extension = gf_file.name.split('.')[-1]
-            if file_extension != 'json':
-                messages.add_message(request, messages.ERROR, 'Invalid GF Pattern, upload only *.json extension')
-            else:
-                # remove special chars from filename, that could possibly do directory traversal or XSS
-                filename = re.sub(r'[\\/*?:"<>|]',"", gf_file.name)
-                file_path = Path.home() / '.gf/' / filename
-                with open(file_path, "w") as file:
-                    file.write(gf_file.read().decode("utf-8"))
-                messages.add_message(request, messages.INFO, f'Pattern {gf_file.name[:4]} successfully uploaded')
-            return http.HttpResponseRedirect(reverse('tool_settings'))
+        handle_post_request(request)
+        return http.HttpResponseRedirect(reverse('tool_settings'))
 
-        elif 'nucleiFileUpload' in request.FILES:
-            nuclei_file = request.FILES['nucleiFileUpload']
-            file_extension = nuclei_file.name.split('.')[-1]
-            if file_extension != 'yaml':
-                messages.add_message(request, messages.ERROR, 'Invalid Nuclei Pattern, upload only *.yaml extension')
-            else:
-                filename = re.sub(r'[\\/*?:"<>|]',"", nuclei_file.name)
-                file_path = Path.home() / 'nuclei-templates/' / filename
-                with open(file_path, "w") as file:
-                    file.write(nuclei_file.read().decode("utf-8"))
-                messages.add_message(request, messages.INFO, f'Nuclei Pattern {nuclei_file.name[:-5]} successfully uploaded')
-            return http.HttpResponseRedirect(reverse('tool_settings'))
-
-        elif 'nuclei_config_text_area' in request.POST:
-            with open(Path.home() / '.config' / 'nuclei' / 'config.yaml', "w") as fhandle:
-                fhandle.write(request.POST.get('nuclei_config_text_area'))
-            messages.add_message(request, messages.INFO, 'Nuclei config updated!')
-            return http.HttpResponseRedirect(reverse('tool_settings'))
-
-        elif 'subfinder_config_text_area' in request.POST:
-            with open(Path.home() / '.config' / 'subfinder' / 'config.yaml', "w") as fhandle:
-                fhandle.write(request.POST.get('subfinder_config_text_area'))
-            messages.add_message(request, messages.INFO, 'Subfinder config updated!')
-            return http.HttpResponseRedirect(reverse('tool_settings'))
-
-        elif 'naabu_config_text_area' in request.POST:
-            with open(Path.home() / '.config' / 'naabu' / 'config.yaml', "w") as fhandle:
-                fhandle.write(request.POST.get('naabu_config_text_area'))
-            messages.add_message(request, messages.INFO, 'Naabu config updated!')
-            return http.HttpResponseRedirect(reverse('tool_settings'))
-
-        elif 'amass_config_text_area' in request.POST:
-            with open(Path.home() / '.config' / 'amass.ini', "w") as fhandle:
-                fhandle.write(request.POST.get('amass_config_text_area'))
-            messages.add_message(request, messages.INFO, 'Amass config updated!')
-            return http.HttpResponseRedirect(reverse('tool_settings'))
-
-        elif 'theharvester_config_text_area' in request.POST:
-            with open(Path.home() / '.config' / 'theHarvester' / 'api-keys.yaml', "w") as fhandle:
-                fhandle.write(request.POST.get('theharvester_config_text_area'))
-            messages.add_message(request, messages.INFO, 'theHarvester config updated!')
-            return http.HttpResponseRedirect(reverse('tool_settings'))
-
-        elif 'gau_config_text_area' in request.POST:
-            with open(Path.home() / '.config' / '.gau.toml', "w") as fhandle:
-                fhandle.write(request.POST.get('gau_config_text_area'))
-            messages.add_message(request, messages.INFO, 'GAU config updated!')
-            return http.HttpResponseRedirect(reverse('tool_settings'))
-
-    context['settings_nav_active'] = 'active'
-    context['tool_settings_li'] = 'active'
-    context['settings_ul_show'] = 'show'
-    try:
-        gf_task = run_gf_list.delay()
-        gf_result = gf_task.get(timeout=30)  # 30 seconds timeout
-        if gf_result['status']:
-            context['gf_patterns'] = sorted(gf_result['output'])
-        else:
-            context['gf_patterns'] = []
-            messages.add_message(request, messages.ERROR, f"Error fetching GF patterns: {gf_result['message']}")
-    except Exception as e:
-        context['gf_patterns'] = []
-        messages.add_message(request, messages.ERROR, f"Error fetching GF patterns: {str(e)}")
-    nuclei_custom_pattern = [f for f in glob.glob(str(Path.home() / "nuclei-templates" / "*.yaml"))]
-    context['nuclei_templates'] = nuclei_custom_pattern
-    context['gf_patterns'] = context['gf_patterns']
+    context = {
+        'settings_nav_active': 'active',
+        'tool_settings_li': 'active',
+        'settings_ul_show': 'show',
+        'gf_patterns': get_gf_patterns(request),
+        'nuclei_templates': list(glob.glob(str(Path.home() / "nuclei-templates" / "*.yaml")))
+    }
     return render(request, 'scanEngine/settings/tool.html', context)
 
+def handle_post_request(request):
+    handlers = {
+        'gfFileUpload': handle_gf_upload,
+        'nucleiFileUpload': handle_nuclei_upload,
+        'nuclei_config_text_area': lambda r: update_config(r, 'nuclei', 'Nuclei'),
+        'subfinder_config_text_area': lambda r: update_config(r, 'subfinder', 'Subfinder'),
+        'naabu_config_text_area': lambda r: update_config(r, 'naabu', 'Naabu'),
+        'amass_config_text_area': lambda r: update_config(r, 'amass', 'Amass', '.ini'),
+        'theharvester_config_text_area': lambda r: update_config(r, 'theHarvester/api-keys', 'theHarvester'),
+        'gau_config_text_area': lambda r: update_config(r, '.gau', 'GAU', '.toml'),
+    }
+    for key, handler in handlers.items():
+        if key in request.FILES or key in request.POST:
+            handler(request)
+            break
+
+def handle_gf_upload(request):
+    handle_file_upload(request, 'gfFileUpload', '.gf', 'json', 'GF Pattern')
+
+def handle_nuclei_upload(request):
+    handle_file_upload(request, 'nucleiFileUpload', 'nuclei-templates', 'yaml', 'Nuclei Pattern')
+
+def handle_file_upload(request, file_key, directory, expected_extension, pattern_name):
+    uploaded_file = request.FILES[file_key]
+    file_extension = uploaded_file.name.split('.')[-1]
+    if file_extension != expected_extension:
+        messages.error(request, f'Invalid {pattern_name}, upload only *.{expected_extension} extension')
+    else:
+        filename = re.sub(r'[\\/*?:"<>|]', "", uploaded_file.name)
+        file_path = Path.home() / directory / filename
+        with open(file_path, "w") as file:
+            file.write(uploaded_file.read().decode("utf-8"))
+        messages.info(request, f'{pattern_name} {uploaded_file.name[:4]} successfully uploaded')
+
+def update_config(request, tool_name, display_name, file_extension='.yaml'):
+    config_path = Path.home() / '.config' / tool_name / f'config{file_extension}'
+    with open(config_path, "w") as fhandle:
+        fhandle.write(request.POST.get(f'{tool_name}_config_text_area'))
+    messages.info(request, f'{display_name} config updated!')
+
+def get_gf_patterns(request):
+    try:
+        gf_result = run_gf_list.delay().get(timeout=30)
+        if gf_result['status']:
+            return sorted(gf_result['output'])
+        messages.error(request, f"Error fetching GF patterns: {gf_result['message']}")
+    except Exception as e:
+        messages.error(request, f"Error fetching GF patterns: {str(e)}")
+    return []
+
+@has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
 @has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
 def rengine_settings(request):
-    context = {}
-
     total, used, _ = shutil.disk_usage("/")
-    total = total // (2**30)
-    used = used // (2**30)
-    context['total'] = total
-    context['used'] = used
-    context['free'] = total-used
-    context['consumed_percent'] = int(100 * float(used)/float(total))
-
-    context['settings_nav_active'] = 'active'
-    context['rengine_settings_li'] = 'active'
-    context['settings_ul_show'] = 'show'
+    total_gb = total // (2**30)
+    used_gb = used // (2**30)
+    
+    context = {
+        'total': total_gb,
+        'used': used_gb,
+        'free': total_gb - used_gb,
+        'consumed_percent': int(100 * float(used) / float(total)),
+        'settings_nav_active': 'active',
+        'rengine_settings_li': 'active',
+        'settings_ul_show': 'show'
+    }
 
     return render(request, 'scanEngine/settings/rengine.html', context)
 
-@has_permission_decorator(PERM_MODIFY_SCAN_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
+@has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
 def notification_settings(request):
-    context = {}
-    form = NotificationForm()
-    notification = None
-    if Notification.objects.all().exists():
-        notification = Notification.objects.all()[0]
-        form.set_value(notification)
-    else:
-        form.set_initial()
-
+    notification = Notification.objects.first()
+    form = NotificationForm(instance=notification)
+    
     if request.method == "POST":
-        if notification:
-            form = NotificationForm(request.POST, instance=notification)
-        else:
-            form = NotificationForm(request.POST or None)
-
+        form = NotificationForm(request.POST, instance=notification)
         if form.is_valid():
             form.save()
-            send_slack_message('*reNgine*\nCongratulations! your notification services are working.')
-            send_lark_message('*reNgine*\nCongratulations! your notification services are working.')
-            send_telegram_message('*reNgine*\nCongratulations! your notification services are working.')
+            for service in [send_slack_message, send_lark_message, send_telegram_message]:
+                service('*reNgine*\nCongratulations! your notification services are working.')
             send_discord_message('**reNgine**\nCongratulations! your notification services are working.')
-            messages.add_message(
-                request,
-                messages.INFO,
-                'Notification Settings updated successfully and test message was sent.')
+            messages.info(request, 'Notification Settings updated successfully and test message was sent.')
             return http.HttpResponseRedirect(reverse('notification_settings'))
-
-    context['settings_nav_active'] = 'active'
-    context['notification_settings_li'] = 'active'
-    context['settings_ul_show'] = 'show'
-    context['form'] = form
-
+    
+    context = {
+        'form': form,
+        'settings_nav_active': 'active',
+        'notification_settings_li': 'active',
+        'settings_ul_show': 'show'
+    }
     return render(request, 'scanEngine/settings/notification.html', context)
 
 @has_permission_decorator(PERM_MODIFY_SCAN_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
 def proxy_settings(request):
-    context = {}
-    form = ProxyForm()
-    context['form'] = form
-
-    proxy = None
-    if Proxy.objects.all().exists():
-        proxy = Proxy.objects.all()[0]
-        form.set_value(proxy)
-    else:
-        form.set_initial()
-
+    proxy = Proxy.objects.first()
+    form = ProxyForm(instance=proxy)
+    
     if request.method == "POST":
-        if proxy:
-            form = ProxyForm(request.POST, instance=proxy)
-        else:
-            form = ProxyForm(request.POST or None)
-
+        form = ProxyForm(request.POST, instance=proxy)
         if form.is_valid():
             form.save()
-            messages.add_message(
-                request,
-                messages.INFO,
-                'Proxies updated.')
+            messages.info(request, 'Proxies updated.')
             return http.HttpResponseRedirect(reverse('proxy_settings'))
-    context['settings_nav_active'] = 'active'
-    context['proxy_settings_li'] = 'active'
-    context['settings_ul_show'] = 'show'
-
+    
+    context = {
+        'form': form,
+        'settings_nav_active': 'active',
+        'proxy_settings_li': 'active',
+        'settings_ul_show': 'show'
+    }
     return render(request, 'scanEngine/settings/proxy.html', context)
 
-@has_permission_decorator(PERM_MODIFY_SCAN_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
+@has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
 def test_hackerone(request):
-    context = {}
     if request.method == "POST":
-        headers = {
-            'Accept': 'application/json'
-        }
         body = json.loads(request.body)
-        r = requests.get(
+        response = requests.get(
             'https://api.hackerone.com/v1/hackers/payments/balance',
             auth=(body['username'], body['api_key']),
-            headers = headers
+            headers={'Accept': 'application/json'}
         )
-        if r.status_code == 200:
-            return http.JsonResponse({"status": 200})
-
+        return http.JsonResponse({"status": response.status_code})
     return http.JsonResponse({"status": 401})
 
 @has_permission_decorator(PERM_MODIFY_SCAN_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
 def hackerone_settings(request):
-    context = {}
-    form = HackeroneForm()
-    context['form'] = form
-
-    hackerone = None
-    if Hackerone.objects.all().exists():
-        hackerone = Hackerone.objects.all()[0]
-        form.set_value(hackerone)
-    else:
-        form.set_initial()
-
+    hackerone = Hackerone.objects.first()
+    form = HackeroneForm(instance=hackerone)
+    
     if request.method == "POST":
-        if hackerone:
-            form = HackeroneForm(request.POST, instance=hackerone)
-        else:
-            form = HackeroneForm(request.POST or None)
-
+        form = HackeroneForm(request.POST, instance=hackerone)
         if form.is_valid():
             form.save()
-            messages.add_message(
-                request,
-                messages.INFO,
-                'Hackerone Settings updated.')
+            messages.info(request, 'Hackerone Settings updated.')
             return http.HttpResponseRedirect(reverse('hackerone_settings'))
-    context['settings_nav_active'] = 'active'
-    context['hackerone_settings_li'] = 'active'
-    context['settings_ul_show'] = 'show'
-
+    
+    context = {
+        'form': form,
+        'settings_nav_active': 'active',
+        'hackerone_settings_li': 'active',
+        'settings_ul_show': 'show'
+    }
     return render(request, 'scanEngine/settings/hackerone.html', context)
 
 @has_permission_decorator(PERM_MODIFY_SCAN_REPORT, redirect_url=FOUR_OH_FOUR_URL)
 def report_settings(request):
-    context = {}
-    form = ReportForm()
-    context['form'] = form
-
     primary_color = '#FFB74D'
     secondary_color = '#212121'
 
-    report = None
-    if VulnerabilityReportSetting.objects.all().exists():
-        report = VulnerabilityReportSetting.objects.all()[0]
+    if report := VulnerabilityReportSetting.objects.first():
+        form = ReportForm(instance=report)
         primary_color = report.primary_color
         secondary_color = report.secondary_color
-        form.set_value(report)
     else:
+        form = ReportForm()
         form.set_initial()
 
     if request.method == "POST":
-        if report:
-            form = ReportForm(request.POST, instance=report)
-        else:
-            form = ReportForm(request.POST or None)
-
+        form = ReportForm(request.POST, instance=report) if report else ReportForm(request.POST)
         if form.is_valid():
             form.save()
-            messages.add_message(
-                request,
-                messages.INFO,
-                'Report Settings updated.')
+            messages.info(request, 'Report Settings updated.')
             return http.HttpResponseRedirect(reverse('report_settings'))
 
-
-    context['settings_nav_active'] = 'active'
-    context['report_settings_li'] = 'active'
-    context['settings_ul_show'] = 'show'
-    context['primary_color'] = primary_color
-    context['secondary_color'] = secondary_color
+    context = {
+        'form': form,
+        'settings_nav_active': 'active',
+        'report_settings_li': 'active',
+        'settings_ul_show': 'show',
+        'primary_color': primary_color,
+        'secondary_color': secondary_color
+    }
     return render(request, 'scanEngine/settings/report.html', context)
 
 @has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
 def tool_arsenal_section(request):
-    context = {}
-    tools = InstalledExternalTool.objects.all().order_by('id')
-    context['installed_tools'] = tools
-    return render(request, 'scanEngine/settings/tool_arsenal.html', context)
+    return render(request, 'scanEngine/settings/tool_arsenal.html', {
+        'installed_tools': InstalledExternalTool.objects.all().order_by('id')
+    })
 
 @has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
 def api_vault_delete(request):
-    response = {}
-    response["status"] = "error"
+    response = {"status": "error"}
     if request.method == "POST":
         handler = {"key_openai": OpenAiAPIKey, "key_netlas": NetlasAPIKey}
         response["deleted"] = []
-        j = json.loads(request.body.decode("utf-8"))
-        for key in j["keys"]:
+        for key in json.loads(request.body.decode("utf-8"))["keys"]:
             try:
                 handler[key].objects.first().delete()
                 response["deleted"].append(key)
@@ -478,83 +396,66 @@ def api_vault_delete(request):
         response["status"] = "OK"
     else:
         response["message"] = "Method not allowed"
-
     return http.JsonResponse(response)
 
 def llm_toolkit_section(request):
-    context = {}
-    list_all_models_url = f'{OLLAMA_INSTANCE}/api/tags'
-    response = requests.get(list_all_models_url)
-    all_models = []
-    selected_model = None
     all_models = DEFAULT_GPT_MODELS.copy()
+    response = requests.get(f'{OLLAMA_INSTANCE}/api/tags')
     if response.status_code == 200:
-        models = response.json()
-        ollama_models = models.get('models')
+        ollama_models = response.json().get('models', [])
         date_format = "%Y-%m-%dT%H:%M:%S"
-        for model in ollama_models:
-           all_models.append({**model, 
-                'modified_at': datetime.strptime(model['modified_at'].split('.')[0], date_format),
-                'is_local': True,
-            })
-    # find selected model name from db
+        all_models.extend([{**model, 
+            'modified_at': datetime.strptime(model['modified_at'].split('.')[0], date_format),
+            'is_local': True,
+        } for model in ollama_models])
+    
     selected_model = OllamaSettings.objects.first()
-    if selected_model:
-        selected_model = {'selected_model': selected_model.selected_model}
-    else:
-        # use gpt3.5-turbo as default
-        selected_model = {'selected_model': 'gpt-3.5-turbo'}
+    selected_model_name = selected_model.selected_model if selected_model else 'gpt-3.5-turbo'
+    
     for model in all_models:
-        if model['name'] == selected_model['selected_model']:
+        if model['name'] == selected_model_name:
             model['selected'] = True
-    context['installed_models'] = all_models
-    # show error message for openai key, if any gpt is selected
-    openai_key = get_open_ai_key()
-    if not openai_key and 'gpt' in selected_model['selected_model']:
-        context['openai_key_error'] = True
+    
+    context = {
+        'installed_models': all_models,
+        'openai_key_error': not get_open_ai_key() and 'gpt' in selected_model_name
+    }
     return render(request, 'scanEngine/settings/llm_toolkit.html', context)
 
 @has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
 def api_vault(request):
-    context = {}
     if request.method == "POST":
-        key_openai = request.POST.get('key_openai')
-        key_netlas = request.POST.get('key_netlas')
-
-
-        if key_openai and len(key_openai) > 0:
-            openai_api_key = OpenAiAPIKey.objects.first()
-            if openai_api_key:
+        if (key_openai := request.POST.get('key_openai')) and len(key_openai) > 0:
+            if openai_api_key := OpenAiAPIKey.objects.first():
                 openai_api_key.key = key_openai
                 openai_api_key.save()
             else:
                 OpenAiAPIKey.objects.create(key=key_openai)
 
-        if key_netlas and len(key_netlas) > 0:
-            netlas_api_key = NetlasAPIKey.objects.first()
-            if netlas_api_key:
+        if (key_netlas := request.POST.get('key_netlas')) and len(key_netlas) > 0:
+            if netlas_api_key := NetlasAPIKey.objects.first():
                 netlas_api_key.key = key_netlas
                 netlas_api_key.save()
             else:
                 NetlasAPIKey.objects.create(key=key_netlas)
 
     # FIXME: This should be better handled via forms, formviews & formsets
-    context["apiKeys"] = [
+    context = {"apiKeys": [
         {
             "recommended": True,
             "optional": True,
             "experimental": True,
             "name": "OpenAI",
             "text": "OpenAI keys will be used to generate vulnerability description, remediation, impact and vulnerability report writing using ChatGPT.",
-            "hasKey": True if OpenAiAPIKey.objects.first() else False
+            "hasKey": OpenAiAPIKey.objects.first() is not None
         },
         {
             "name": "Netlas",
             "text": "Netlas keys will be used to get whois information and other OSINT data.",
             "optional": True,
-            "hasKey": True if NetlasAPIKey.objects.first() else False
+            "hasKey": NetlasAPIKey.objects.first() is not None
         }
-    ]
+    ]}
     return render(request, 'scanEngine/settings/api.html', context)
 
 @has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)

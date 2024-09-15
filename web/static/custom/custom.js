@@ -3284,7 +3284,8 @@ function handleHashInUrl(){
 }
 
 function setCurrentProject(projectId) {
-    document.cookie = `currentProjectId=${projectId}; path=/; SameSite=Lax`;
+	const secure = location.protocol === 'https:';
+    document.cookie = `currentProjectId=${projectId}; path=/; SameSite=Strict; ${secure ? 'Secure;' : ''} HttpOnly`;
 }
 
 document.querySelectorAll('.dropdown-item[data-project-id]').forEach(link => {

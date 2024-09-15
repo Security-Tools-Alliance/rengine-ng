@@ -119,101 +119,62 @@ logger = logging.getLogger(__name__)
 
 
 class OllamaManager(APIView):
-	def get(self, request):
-		"""
-		API to download Ollama Models
-		sends a POST request to download the model
-		"""
-		req = self.request
-		response = {
-			'status': False
-		}
-		try:
-			model_name = req.query_params.get('model')
-		except Exception as e:
-			response['error'] = str(e)
-			return Response(response, status=400)
+    def get(self, request):
+        model_name = request.query_params.get('model')
+        if not model_name:
+            return Response({'status': False, 'message': 'Model name is required'}, status=400)
 
-		if not model_name:
-			response['error'] = 'Model name is required'
-			return Response(response, status=400)
+        try:
+            pull_model_api = f'{OLLAMA_INSTANCE}/api/pull'
+            _response = requests.post(
+                pull_model_api,
+                json={'name': model_name, 'stream': False}
+            ).json()
+            if _response.get('error'):
+                return Response({'status': False, 'message': _response.get('error')}, status=400)
+            return Response({'status': True})
+        except Exception as e:
+            logger.error(f"Error in OllamaManager GET: {str(e)}")
+            return Response({'status': False, 'message': 'An error occurred while pulling the model.'}, status=500)
+    
+    def delete(self, request):
+        model_name = get_data_from_post_request(request, 'model')
+        if not model_name:
+            return Response({'status': False, 'message': 'Model name is required'}, status=400)
 
-		try:
-			pull_model_api = f'{OLLAMA_INSTANCE}/api/pull'
-			_response = requests.post(
-				pull_model_api,
-				json={
-					'name': model_name,
-					'stream': False
-				}
-			).json()
-			if _response.get('error'):
-				response['error'] = _response.get('error')
-			else:
-				response['status'] = True
-		except Exception as e:
-			response['error'] = str(e)
-		return Response(response)
-	
-	def delete(self, request):
-		req = self.request
-		response = {'status': False}
+        try:
+            delete_model_api = f'{OLLAMA_INSTANCE}/api/delete'
+            _response = requests.delete(
+                delete_model_api,
+                json={'name': model_name}
+            ).json()
+            if _response.get('error'):
+                return Response({'status': False, 'message': _response.get('error')}, status=400)
+            return Response({'status': True})
+        except Exception as e:
+            logger.error(f"Error in OllamaManager DELETE: {str(e)}")
+            return Response({'status': False, 'message': 'An error occurred while deleting the model.'}, status=500)
+    
+    def put(self, request):
+        model_name = request.data.get('model')
+        if not model_name:
+            return Response({'status': False, 'message': 'Model name is required'}, status=400)
 
-		# Get the model name from the request
-		model_name = get_data_from_post_request(req, 'model')
+        use_ollama = all(model['name'] != model_name for model in DEFAULT_GPT_MODELS)
 
-		# Check if the model name is provided
-		if not model_name:
-			response['error'] = 'Model name is required'
-			return Response(response, status=400)
-
-		delete_model_api = f'{OLLAMA_INSTANCE}/api/delete'
-		
-		try:
-			# Make the API call to delete the model
-			_response = requests.delete(
-				delete_model_api,
-				json={'name': model_name}
-			).json()
-
-			# Check for errors in the response
-			if _response.get('error'):
-				response['error'] = _response.get('error')
-			else:
-				response['status'] = True
-		except Exception as e:
-			response['error'] = str(e)
-
-		return Response(response)
-	
-	def put(self, request):
-		response = {'status': False}
-		
-		data = request.data
-		model_name = data.get('model')
-
-		if not model_name:
-			response['error'] = 'Model name is required'
-			return Response(response, status=400)
-
-		# Invert the condition to simplify the assignment
-		use_ollama = all(model['name'] != model_name for model in DEFAULT_GPT_MODELS)
-
-		try:
-			# Create or update OllamaSettings
-			OllamaSettings.objects.update_or_create(
-				defaults={
-					'selected_model': model_name,
-					'use_ollama': use_ollama,
-					'selected': True
-				},
-				id=1
-			)
-			response['status'] = True
-		except Exception as e:
-			response['error'] = str(e)
-
-		return Response(response)
+        try:
+            OllamaSettings.objects.update_or_create(
+                id=1,
+                defaults={
+                    'selected_model': model_name,
+                    'use_ollama': use_ollama,
+                    'selected': True
+                }
+            )
+            return Response({'status': True})
+        except Exception as e:
+            logger.error(f"Error in OllamaManager PUT: {str(e)}")
+            return Response({'status': False, 'message': 'An error occurred while updating Ollama settings.'}, status=500)
 
 class GPTAttackSuggestion(APIView):
 	def get(self, request):
@@ -280,31 +241,21 @@ class GPTVulnerabilityReportGenerator(APIView):
 
 
 class CreateProjectApi(APIView):
-	def get(self, request):
-		req = self.request
-		project_name = req.query_params.get('name')
-		slug = slugify(project_name)
-		insert_date = timezone.now()
+    def get(self, request):
+        project_name = request.query_params.get('name')
+        slug = slugify(project_name)
+        insert_date = timezone.now()
 
-		try:
-			project = Project.objects.create(
-				name=project_name,
-				slug=slug,
-				insert_date =insert_date
-			)
-			response = {
-				'status': True,
-				'project_name': project_name
-			}
-			return Response(response)
-		except Exception as e:
-			response = {
-				'status': False,
-				'error': str(e)
-			}
-			return Response(response, status=HTTP_400_BAD_REQUEST)
-
-
+        try:
+            project = Project.objects.create(
+                name=project_name,
+                slug=slug,
+                insert_date=insert_date
+            )
+            return Response({'status': True, 'project_name': project_name})
+        except Exception as e:
+            logger.error(f"Error in CreateProjectApi: {str(e)}")
+            return Response({'status': False, 'message': 'Failed to create project.'}, status=HTTP_400_BAD_REQUEST)
 
 class QueryInterestingSubdomains(APIView):
 	def get(self, request):
@@ -395,7 +346,7 @@ class WafDetector(APIView):
 			logger.debug(f"WAF detection result: {response}")
 		except Exception as e:
 			logger.error(f"Error during WAF detection: {str(e)}")
-			response['message'] = f"An error occurred: {str(e)}"
+			response['message'] = "An unexpected error occurred. Please try again later."
 
 		return Response(response)
 
@@ -468,54 +419,52 @@ class UniversalSearch(APIView):
 
 
 class FetchMostCommonVulnerability(APIView):
-	def post(self, request):
-		req = self.request
-		data = req.data
+    def post(self, request):
+        data = request.data
+        response = {'status': False}
 
-		response = {'status': False}
+        try:
+            limit = safe_int_cast(data.get('limit', 20))
+            project_slug = data.get('slug')
+            scan_history_id = safe_int_cast(data.get('scan_history_id'))
+            target_id = safe_int_cast(data.get('target_id'))
+            is_ignore_info = data.get('ignore_info', False)
 
-		try:
-			limit = safe_int_cast(data.get('limit', 20))
-			project_slug = data.get('slug')
-			scan_history_id = safe_int_cast(data.get('scan_history_id'))
-			target_id = safe_int_cast(data.get('target_id'))
-			is_ignore_info = data.get('ignore_info', False)
+            vulnerabilities = (
+                Vulnerability.objects.filter(target_domain__project__slug=project_slug)
+                if project_slug else Vulnerability.objects.all()
+            )
 
-			vulnerabilities = (
-				Vulnerability.objects.filter(target_domain__project__slug=project_slug)
-				if project_slug else Vulnerability.objects.all()
-			)
+            if scan_history_id:
+                vuln_query = vulnerabilities.filter(scan_history__id=scan_history_id).values("name", "severity")
+            elif target_id:
+                vuln_query = vulnerabilities.filter(target_domain__id=target_id).values("name", "severity")
+            else:
+                vuln_query = vulnerabilities.values("name", "severity")
 
-			if scan_history_id:
-				vuln_query = vulnerabilities.filter(scan_history__id=scan_history_id).values("name", "severity")
-			elif target_id:
-				vuln_query = vulnerabilities.filter(target_domain__id=target_id).values("name", "severity")
-			else:
-				vuln_query = vulnerabilities.values("name", "severity")
+            if is_ignore_info:
+                most_common_vulnerabilities = (
+                    vuln_query.exclude(severity=0)
+                    .annotate(count=Count('name'))
+                    .order_by("-count")[:limit]
+                )
+            else:
+                most_common_vulnerabilities = (
+                    vuln_query.annotate(count=Count('name'))
+                    .order_by("-count")[:limit]
+                )
 
-			if is_ignore_info:
-				most_common_vulnerabilities = (
-					vuln_query.exclude(severity=0)
-					.annotate(count=Count('name'))
-					.order_by("-count")[:limit]
-				)
-			else:
-				most_common_vulnerabilities = (
-					vuln_query.annotate(count=Count('name'))
-					.order_by("-count")[:limit]
-				)
+            most_common_vulnerabilities = list(most_common_vulnerabilities)
 
-			most_common_vulnerabilities = list(most_common_vulnerabilities)
+            if most_common_vulnerabilities:
+                response['status'] = True
+                response['result'] = most_common_vulnerabilities
 
-			if most_common_vulnerabilities:
-				response['status'] = True
-				response['result'] = most_common_vulnerabilities
+        except Exception as e:
+            logger.error(f"Error in FetchMostCommonVulnerability: {str(e)}")
+            response['message'] = 'An error occurred while fetching vulnerabilities.'
 
-		except Exception as e:
-			print(e)
-
-		return Response(response)
-
+        return Response(response)
 
 class FetchMostVulnerable(APIView):
 	def post(self, request):
@@ -1281,7 +1230,8 @@ class CMSDetector(APIView):
 			else:
 				return Response({'status': False, 'message': 'Could not detect CMS!'})
 		except Exception as e:
-			return Response({'status': False, 'message': str(e)})
+			logger.error(f"Error in CMSDetector: {str(e)}")
+			return Response({'status': False, 'message': 'An unexpected error occurred.'}, status=500)
 
 class IPToDomain(APIView):
 	def get(self, request):
@@ -1439,7 +1389,8 @@ class GfList(APIView):
 			else:
 				return Response({'error': result['message']}, status=500)
 		except Exception as e:
-			return Response({'error': str(e)}, status=500)
+			logger.error(f"Error in GfList: {str(e)}")  # Log the exception for internal tracking
+			return Response({'error': 'An unexpected error occurred. Please try again later.'}, status=500)
 
 class ListTodoNotes(APIView):
 	def get(self, request, format=None):
@@ -1512,8 +1463,7 @@ class ListTargetsWithoutOrganization(APIView):
 class VisualiseData(APIView):
 	def get(self, request, format=None):
 		req = self.request
-		scan_id = safe_int_cast(req.query_params.get('scan_id'))
-		if scan_id:
+		if scan_id := safe_int_cast(req.query_params.get('scan_id')):
 			mitch_data = ScanHistory.objects.filter(id=scan_id)
 			serializer = VisualiseDataSerializer(mitch_data, many=True)
 			
@@ -1557,10 +1507,9 @@ class ListTechnology(APIView):
 	def get(self, request, format=None):
 		req = self.request
 		scan_id = safe_int_cast(req.query_params.get('scan_id'))
-		target_id = safe_int_cast(req.query_params.get('target_id'))
 
 		# Determine the queryset based on the presence of target_id or scan_id
-		if target_id:
+		if target_id := safe_int_cast(req.query_params.get('target_id')):
 			subdomain_filter = Subdomain.objects.filter(target_domain__id=target_id)
 		elif scan_id:
 			subdomain_filter = Subdomain.objects.filter(scan_history__id=scan_id)
@@ -2619,33 +2568,28 @@ class EndPointViewSet(viewsets.ModelViewSet):
 					print(e)
 		return qs
 
-
 class DirectoryViewSet(viewsets.ModelViewSet):
-	queryset = DirectoryFile.objects.none()
-	serializer_class = DirectoryFileSerializer
+    queryset = DirectoryFile.objects.none()
+    serializer_class = DirectoryFileSerializer
 
-	def get_queryset(self):
-		req = self.request
-		scan_id = safe_int_cast(req.query_params.get('scan_history'))
-		subdomain_id = safe_int_cast(req.query_params.get('subdomain_id'))
-		subdomains = None
-		if not (scan_id or subdomain_id):
-			return Response({
-				'status': False,
-				'message': 'Scan id or subdomain id must be provided.'
-			})
-		elif scan_id:
-			subdomains = Subdomain.objects.filter(scan_history__id=scan_id)
-		elif subdomain_id:
-			subdomains = Subdomain.objects.filter(id=subdomain_id)
-		dirs_scans = DirectoryScan.objects.filter(directories__in=subdomains)
-		qs = (
-			DirectoryFile.objects
-			.filter(directory_files__in=dirs_scans)
-			.distinct()
-			.order_by('id')
-		)
-		return qs
+    def get_queryset(self):
+        req = self.request
+        scan_id = safe_int_cast(req.query_params.get('scan_history'))
+        subdomain_id = safe_int_cast(req.query_params.get('subdomain_id'))
+
+        if not (scan_id or subdomain_id):
+            return Response({
+                'status': False,
+                'message': 'Scan id or subdomain id must be provided.'
+            })
+
+        subdomains = Subdomain.objects.filter(scan_history__id=scan_id) if scan_id else \
+                     Subdomain.objects.filter(id=subdomain_id)
+        dirs_scans = DirectoryScan.objects.filter(directories__in=subdomains)
+
+        return DirectoryFile.objects.filter(directory_files__in=dirs_scans) \
+            .distinct() \
+            .order_by('id')
 
 class ProjectViewSet(viewsets.ModelViewSet):
 	serializer_class = ProjectSerializer

@@ -29,8 +29,6 @@ def user_has_project_access(view_func):
             if not project and request.user.is_superuser:
                 return redirect(reverse('onboarding'))
 
-            # No need for else here
-            project = Project.objects.filter(users=request.user).first()
             return redirect(reverse('page_not_found'))
         
         # Check if it's an API request

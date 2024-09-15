@@ -1,11 +1,9 @@
-from django.http import HttpResponseForbidden
 from django.urls import resolve
 from dashboard.utils import get_user_projects
 from django.shortcuts import redirect
 from django.urls import reverse
 from dashboard.models import Project
 from django.utils.deprecation import MiddlewareMixin
-from django.template.response import TemplateResponse
 from django.shortcuts import get_object_or_404
 from .models import Project
 

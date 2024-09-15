@@ -12,6 +12,7 @@ from django.db.models.functions import TruncDay
 from django.dispatch import receiver
 from django.shortcuts import redirect, render, get_object_or_404
 from django.utils import timezone
+from django.utils.text import slugify
 from django.http import HttpResponseRedirect, JsonResponse
 from django.urls import reverse
 from django.template.defaultfilters import slugify
@@ -458,9 +459,24 @@ def edit_project(request, slug):
     if request.method == 'POST':
         form = ProjectForm(request.POST, instance=project)
         if form.is_valid():
-            form.save()
-            messages.success(request, 'Project updated successfully.')
-            return redirect('list_projects')
+            # Generate new slug from the project name
+            new_slug = slugify(form.cleaned_data['name'])
+            
+            # Check if the new slug already exists (excluding the current project)
+            if Project.objects.exclude(id=project.id).filter(slug=new_slug).exists():
+                form.add_error('name', 'A project with a similar name already exists. Please choose a different name.')
+            else:
+                # Save the form without committing to the database
+                updated_project = form.save(commit=False)
+                # Set the new slug
+                updated_project.slug = new_slug
+                # Now save to the database
+                updated_project.save()
+                # If your form has many-to-many fields, you need to call this
+                form.save_m2m()
+                
+                messages.success(request, 'Project updated successfully.')
+                return redirect('list_projects')
     else:
         form = ProjectForm(instance=project)
     

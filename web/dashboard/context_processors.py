@@ -1,4 +1,3 @@
-from .models import Project
 from dashboard.utils import get_user_projects  # Assuming this function exists
 
 def project_context(request):

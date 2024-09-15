@@ -21,7 +21,7 @@ $(document).ready(function() {
 
 
 function delete_api(id, item, type) {
-    var delAPI = type === 'wordlist' ? `wordlist/delete/${id}` : `delete/${id}`;
+    const delAPI = type === 'wordlist' ? `wordlist/delete/${id}` : `delete/${id}`;
     swal.queue([{
         title: `Are you sure you want to delete this ${item}?`,
         text: "You won't be able to revert this!",
