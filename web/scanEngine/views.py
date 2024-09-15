@@ -12,9 +12,16 @@ from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from rolepermissions.decorators import has_permission_decorator
 
+from reNgine.settings import RENGINE_HOME, RENGINE_TOOL_GITHUB_PATH
 from reNgine.common_func import *
-from reNgine.tasks import (run_command, send_discord_message, send_slack_message,send_lark_message, send_telegram_message, run_gf_list)
-from reNgine.settings import RENGINE_HOME
+from reNgine.tasks import (
+    run_command,
+    send_discord_message,
+    send_slack_message,
+    send_lark_message,
+    send_telegram_message,
+    run_gf_list
+)
 from scanEngine.forms import *
 from scanEngine.forms import ConfigurationForm
 from scanEngine.models import *
@@ -180,9 +187,7 @@ def interesting_lookup(request, slug):
             form = InterestingLookupForm(request.POST, instance=lookup_keywords)
         else:
             form = InterestingLookupForm(request.POST or None)
-        print(form.errors)
         if form.is_valid():
-            print(form.cleaned_data)
             form.save()
             messages.add_message(
                 request,
@@ -580,21 +585,21 @@ def add_tool(request, slug):
     form = ExternalToolForm()
     if request.method == "POST":
         form = ExternalToolForm(request.POST)
-        print(form.errors)
         if form.is_valid():
             # add tool
             install_command = form.data['install_command']
             github_clone_path = None
+            
+            # Only modify install_command if it contains 'git clone'
             if 'git clone' in install_command:
                 project_name = install_command.split('/')[-1]
-                install_command = install_command + ' /home/rengine/tools/.github/' + project_name + ' && pip install -r /home/rengine/tools/.github/' + project_name + '/requirements.txt'
-                github_clone_path = '/home/rengine/tools/.github/' + project_name
-                # if github cloned we also need to install requirements, atleast found in the main dir
-                install_command = 'pip3 install -r /home/rengine/tools/.github/' + project_name + '/requirements.txt'
+                install_command = f'{install_command} {RENGINE_TOOL_GITHUB_PATH}/{project_name} && pip install -r {RENGINE_TOOL_GITHUB_PATH}/{project_name}/requirements.txt'
+                github_clone_path = f'{RENGINE_TOOL_GITHUB_PATH}/{project_name}'
 
             run_command(install_command)
             run_command.apply_async(args=(install_command,))
             saved_form = form.save()
+            
             if github_clone_path:
                 tool = InstalledExternalTool.objects.get(id=saved_form.pk)
                 tool.github_clone_path = github_clone_path
@@ -605,10 +610,11 @@ def add_tool(request, slug):
                 messages.INFO,
                 'External Tool Successfully Added!')
             return http.HttpResponseRedirect(reverse('tool_arsenal', kwargs={'slug': slug}))
+
     context = {
-            'settings_nav_active': 'active',
-            'form': form
-        }
+        'settings_nav_active': 'active',
+        'form': form
+    }
     return render(request, 'scanEngine/settings/add_tool.html', context)
 
 

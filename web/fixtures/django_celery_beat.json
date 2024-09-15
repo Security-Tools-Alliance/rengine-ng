@@ -1,0 +1,49 @@
+[
+{
+  "model": "django_celery_beat.crontabschedule",
+  "pk": 1,
+  "fields": {
+    "minute": "0",
+    "hour": "4",
+    "day_of_month": "*",
+    "month_of_year": "*",
+    "day_of_week": "*",
+    "timezone": "UTC"
+  }
+},
+{
+  "model": "django_celery_beat.periodictasks",
+  "pk": 1,
+  "fields": {
+    "last_update": "2024-09-03T22:37:20.601Z"
+  }
+},
+{
+  "model": "django_celery_beat.periodictask",
+  "pk": 1,
+  "fields": {
+    "name": "celery.backend_cleanup",
+    "task": "celery.backend_cleanup",
+    "interval": null,
+    "crontab": 1,
+    "solar": null,
+    "clocked": null,
+    "args": "[]",
+    "kwargs": "{}",
+    "queue": null,
+    "exchange": null,
+    "routing_key": null,
+    "headers": "{}",
+    "priority": null,
+    "expires": null,
+    "expire_seconds": 43200,
+    "one_off": false,
+    "start_time": null,
+    "enabled": true,
+    "last_run_at": null,
+    "total_run_count": 0,
+    "date_changed": "2024-09-03T22:37:20.601Z",
+    "description": ""
+  }
+}
+]

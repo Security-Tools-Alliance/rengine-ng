@@ -12,7 +12,6 @@ from django.shortcuts import render
 
 from recon_note.models import TodoNote
 
-
 def list_note(request, slug):
     """
     list_note renders the list view for recon notes associated with a specific project. 
