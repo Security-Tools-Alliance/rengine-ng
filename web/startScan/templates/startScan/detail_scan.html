@@ -815,8 +815,8 @@ Scan Findings
 						<div class="card">
 							<div class="card-body">
 								<h4 class="header-title mb-0"><span id="tasks-count"><span class="spinner-border spinner-border-sm me-1"></span></span>
-									Recon Note/Todo
-									<span class="text-primary float-end" data-toggle="tooltip" data-placement="top" title="Add Recon Todo" onclick="add_todo_for_scanhistory_modal({{history.id}})">
+									Recon Note/To-do
+									<span class="text-primary float-end" data-toggle="tooltip" data-placement="top" title="Add Recon to-do" onclick="add_todo_for_scanhistory_modal({{history.id}})">
 										<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-plus"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
 									</span>
 								</h4>
@@ -831,13 +831,13 @@ Scan Findings
 											<div class="modal-body">
 												<div class="compose-box">
 													<div class="compose-content" id="addTaskModalTitle">
-														<h4 class="header-title">Add Recon Todo</h4>
+														<h4 class="header-title">Add Recon to-do</h4>
 														<form>
 															<input type="hidden" name="summary_identifier" value="{{history.id}}" id="summary_identifier_val">
 
 															<div class="mt-2">
-																<label for="todoTitle" class="form-label">Todo Title</label>
-																<input id="todoTitle" type="text" placeholder="Todo Title" class="form-control" name="task">
+																<label for="todoTitle" class="form-label">To-do Title</label>
+																<input id="todoTitle" type="text" placeholder="To-do Title" class="form-control" name="task">
 															</div>
 
 															<div class="mt-2">
@@ -849,15 +849,15 @@ Scan Findings
 															</div>
 
 															<div class="">
-																<label for="todoDescription" class="form-label">Todo Description (Optional)</label>
-																<textarea class="form-control" id="todoDescription" rows="5" spellcheck="false" placeholder="Todo Description"></textarea>
+																<label for="todoDescription" class="form-label">To-do Description (Optional)</label>
+																<textarea class="form-control" id="todoDescription" rows="5" spellcheck="false" placeholder="To-do Description"></textarea>
 															</div>
 														</form>
 													</div>
 												</div>
 											</div>
 											<div class="modal-footer">
-												<button class="btn btn-primary add-scan-history-todo">Add Recon Todo</button>
+												<button class="btn btn-primary add-scan-history-todo">Add Recon to-do</button>
 											</div>
 										</div>
 									</div>
@@ -2375,7 +2375,7 @@ $(document).ready(function() {
 							<div class="btn-group mt-2">
 							<button type="button" data-toggle="tooltip" data-placement="top" title="Show Attack Surface" class="btn btn-primary me-1 bs-tooltip" onclick="show_attack_surface_modal(${row['id']})"><i class="fe-eye"></i></button>
 							<button type="button" data-toggle="tooltip" data-placement="top" title="Further Scan Subdomain" class="btn btn-primary btn-scan-subdomain me-1" id="${row['id']}"><i class="fe-zap"></i></button>
-							<button type="button" data-toggle="tooltip" data-placement="top" title="Add Recon Todo/Note" class="btn btn-primary me-1" id="${row['id']}" onclick="add_note_for_subdomain(${row['id']}, '${row['name']}')"><i class="fe-file-plus"></i></button>
+							<button type="button" data-toggle="tooltip" data-placement="top" title="Add Recon To-do/Note" class="btn btn-primary me-1" id="${row['id']}" onclick="add_note_for_subdomain(${row['id']}, '${row['name']}')"><i class="fe-file-plus"></i></button>
 							<button class="btn btn-primary me-1 dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false"><i class="mdi mdi-dots-horizontal"></i></button>
 							<div class="dropdown-menu dropdown-menu-end">
 							<a class="dropdown-item" href="#" onclick="mark_important_subdomain(this, ${row['id']})" id="${row['id']}"><i class="mdi mdi-alert-rhombus-outline me-2 text-muted font-18 vertical-middle"></i>Mark Important Subdomain</a>

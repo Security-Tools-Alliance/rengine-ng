@@ -307,7 +307,7 @@ const importantBtnListener = function() {
 
       badge = `
           <div class="dropdown p-dropdown">
-            <span class="text-danger bs-tooltip" title="Important Todo">
+            <span class="text-danger bs-tooltip" title="Important to-do">
               <i class="fa fa-exclamation-circle"></i>
             </span>
           </div>`;
@@ -383,7 +383,7 @@ const searchFunction = function() {
   updateBadgeCounts();
 };
 
-// Function to apply the current filter (Todo, Done, Important)
+// Function to apply the current filter (To-do, Done, Important)
 const applyCurrentFilter = function() {
   const currentFilter = $('.list-actions.active').attr('id');
   if (currentFilter === 'todo-task-done') {

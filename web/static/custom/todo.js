@@ -24,7 +24,7 @@ function todoCheckboxListener(){
 function delete_todo(todo_id){
   scan_id = parseInt(document.getElementById('summary_identifier_val').value);
   swal.queue([{
-    title: 'Are you sure you want to delete this Recon Todo?',
+    title: 'Are you sure you want to delete this Recon To-do?',
     text: "You won't be able to revert this!",
     type: 'warning',
     showCancelButton: true,
@@ -44,7 +44,7 @@ function delete_todo(todo_id){
       })
       .then(function (response) {
         Snackbar.show({
-          text: 'Recon Todo Deleted.',
+          text: 'Recon To-do Deleted.',
           pos: 'top-right',
           duration: 1500,
         });
@@ -62,10 +62,10 @@ function delete_todo(todo_id){
 
 function change_todo_priority(todo_id, imp_type){
   if (imp_type == 0) {
-    snackbar_text = 'Todo Marked as Unimportant';
+    snackbar_text = 'To-do Marked as Unimportant';
   }
   else if (imp_type == 1) {
-    snackbar_text = 'Todo Marked as Important';
+    snackbar_text = 'To-do Marked as Important';
   }
   scan_id = parseInt(document.getElementById('summary_identifier_val').value);
   fetch('../../recon_note/flip_important_status', {
@@ -194,7 +194,7 @@ function get_recon_notes(target_id, scan_id){
         </a>
         <div class="dropdown-menu" style="">
         ${mark_important}
-        <a class="dropdown-item" onclick="delete_todo(${note['id']})">Delete Todo</a>
+        <a class="dropdown-item" onclick="delete_todo(${note['id']})">Delete to-do</a>
         </div>
         </div>
         </div>
