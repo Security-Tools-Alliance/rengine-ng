@@ -61,7 +61,10 @@
     left: 17%;
     background-color: #4361ee;
 }
-.tab-title #addTask svg { margin-right: 5px; }
+.tab-title #addTask svg { 
+    margin-right: 5px;
+    margin-bottom: 3px;
+}
 .tab-title.mail-menu-show {
     left: 0;
     width: 100%;
@@ -89,25 +92,26 @@
     background: #ebedf2;
     border-top-right-radius: 30px;
     border-bottom-right-radius: 30px;
-    padding: 10px 12px 10px 14px;
 }
 .tab-title .nav-pills a.nav-link {
     position: relative;
     font-weight: 700;
     color: #888ea8;
     border-radius: 0;
-    padding: 20px 0px 20px 15px;
+    padding: 10px 12px 10px 14px;
     -webkit-transition: all 0.35s ease;
     transition: all 0.35s ease;
+    margin-bottom: 15px;
 }
 .tab-title .nav-pills .nav-item:not(:last-child) a.nav-link {}
 .tab-title .nav-pills .nav-link .badge {
     border-radius: 50%;
     position: absolute;
     right: 24px;
+    bottom: 8px;
     padding: 2px 5px;
-    height: 24px;
-    width: 23px;
+    height: 27px;
+    width: 27px;
     font-weight: 700;
     border: 2px solid #e0e6ed;
     transform: none;
@@ -138,7 +142,7 @@
 
 /*
 =====================
-    Todo Inbox
+    To-do Inbox
 =====================
 */
 .todo-inbox {

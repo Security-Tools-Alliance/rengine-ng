@@ -1124,7 +1124,7 @@ $(".add-scan-history-todo").click(function(){
 	.then(function (response) {
 		if (response.status) {
 			Snackbar.show({
-				text: 'Todo Added.',
+				text: 'To-do Added.',
 				pos: 'top-right',
 				duration: 1500,
 			});
@@ -1179,7 +1179,7 @@ function add_note_for_subdomain_handler(subdomain_id){
 
 		if (response.status) {
 			Snackbar.show({
-				text: 'Todo Added.',
+				text: 'To-do Added.',
 				pos: 'top-right',
 				duration: 1500,
 			});
