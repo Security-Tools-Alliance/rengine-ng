@@ -116,6 +116,7 @@ Recon to-do
       <div class="modal-footer">
         <button class="btn add-tsk">Add to-do</button>
         <button class="btn edit-tsk">Save</button>
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
       </div>
     </div>
   </div>
@@ -238,6 +239,9 @@ $.getJSON(`/api/listTodoNotes?format=json&project={{current_project.slug}}`, fun
   };
   populateTodo(project='{{current_project.slug}}');
   $('.bs-tooltip').tooltip();
+  $('.modal-footer .btn-secondary').on('click', function() {
+    $('#addTaskModal').modal('hide');
+  });
 });
 </script>
 {% endblock page_level_script %}
