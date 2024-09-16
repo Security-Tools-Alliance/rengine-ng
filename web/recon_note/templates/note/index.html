@@ -125,12 +125,6 @@ Recon to-do
   <div class="todo-item-template">
     <div class="todo-item-content {is_done}">
       <div class="todo-item-inner">
-        <div class="n-chk text-center">
-          <label class="new-control new-checkbox checkbox-primary">
-            <input type="checkbox" class="form-check-input inbox-chkbox" id="checkbox_{task_id}" {checked}>
-            <span class="new-control-indicator"></span>
-          </label>
-        </div>
         <div class="todo-content">
           <h5 class="todo-heading">{title}</h5>
           <p class="target">{target_text}</p>
@@ -215,12 +209,6 @@ $.getJSON(`/api/listTodoNotes?format=json&project={{current_project.slug}}`, fun
     }
     var badges = is_important_badge;
     var html = `<div class="todo-item-inner">
-    <div class="n-chk text-center">
-    <label class="new-control new-checkbox checkbox-primary">
-    <input type="checkbox" class="new-control-input inbox-chkbox" id="checkbox_${note_obj['id']}">
-    <span class="new-control-indicator"></span>
-    </label>
-    </div>
     <div class="todo-content">
     <h5 class="todo-heading">${htmlEncode(note_obj['title'])}</h5>
     <p class="target">${target_text}</p>
@@ -243,7 +231,6 @@ $.getJSON(`/api/listTodoNotes?format=json&project={{current_project.slug}}`, fun
     document.getElementById('ct').appendChild(todo_item);
     if (note_obj['is_done']) {
       todo_item.classList.add("todo-task-done");
-      document.getElementById('checkbox_'+note_obj['id']).checked = true;
     }
     if (note_obj['is_important']) {
       todo_item.classList.add("todo-task-important");

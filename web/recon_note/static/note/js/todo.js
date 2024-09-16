@@ -159,68 +159,48 @@ const addTaskPopupListener = function(project) {
 const dynamicBadgeNotification = function(setTodoCategoryCount) {
   const todoCategoryCount = setTodoCategoryCount;
 
-  // Get Parents Div(s)
-  const get_TodoAllListParentsDiv = $('.todo-item.all-list').not('.todo-item-template').filter(':visible');
-  const get_TodoCompletedListParentsDiv = $('.todo-item.todo-task-done').not('.todo-item-template').filter(':visible');
-  const get_TodoImportantListParentsDiv = $('.todo-item.todo-task-important').not('.todo-item-template').filter(':visible');
+  // Compter les éléments en se basant uniquement sur les classes CSS
+  const get_TodoAllListParentsDiv = $('.todo-item').not('.todo-item-template');
+  const get_TodoCompletedListParentsDiv = $('.todo-item.todo-task-done').not('.todo-item-template');
+  const get_TodoImportantListParentsDiv = $('.todo-item.todo-task-important').not('.todo-item-template');
 
-  // Get Parents Div(s) Counts
+  // Obtenir les comptes
   const get_TodoListElementsCount = get_TodoAllListParentsDiv.length;
   const get_CompletedTaskElementsCount = get_TodoCompletedListParentsDiv.length;
   const get_ImportantTaskElementsCount = get_TodoImportantListParentsDiv.length;
 
-  // Get Badge Div(s)
+  // Obtenir les éléments de badge
   const getBadgeTodoAllListDiv = $('#all-list .todo-badge');
   const getBadgeCompletedTaskListDiv = $('#todo-task-done .todo-badge');
   const getBadgeImportantTaskListDiv = $('#todo-task-important .todo-badge');
 
-  if (todoCategoryCount === 'allList') {
-    if (get_TodoListElementsCount === 0) {
-      getBadgeTodoAllListDiv.text('');
-      return;
+  // Fonction pour mettre à jour un badge
+  const updateBadge = function(badgeElement, count) {
+    if (count === 0) {
+      badgeElement.text('');
+    } else {
+      badgeElement.text(count);
+      if (count > 9) {
+        badgeElement.css({
+          padding: '2px 0px',
+          height: '25px',
+          width: '25px'
+        });
+      } else {
+        badgeElement.removeAttr('style');
+      }
     }
-    if (get_TodoListElementsCount > 9) {
-      getBadgeTodoAllListDiv.css({
-        padding: '2px 0px',
-        height: '25px',
-        width: '25px'
-      });
-    } else if (get_TodoListElementsCount <= 9) {
-      getBadgeTodoAllListDiv.removeAttr('style');
-    }
-    getBadgeTodoAllListDiv.text(get_TodoListElementsCount);
+  };
+
+  // Mettre à jour les badges en fonction de la catégorie
+  if (todoCategoryCount === 'allList' || todoCategoryCount === undefined) {
+    updateBadge(getBadgeTodoAllListDiv, get_TodoListElementsCount);
   }
-  else if (todoCategoryCount === 'completedList') {
-    if (get_CompletedTaskElementsCount === 0) {
-      getBadgeCompletedTaskListDiv.text('');
-      return;
-    }
-    if (get_CompletedTaskElementsCount > 9) {
-      getBadgeCompletedTaskListDiv.css({
-        padding: '2px 0px',
-        height: '25px',
-        width: '25px'
-      });
-    } else if (get_CompletedTaskElementsCount <= 9) {
-      getBadgeCompletedTaskListDiv.removeAttr('style');
-    }
-    getBadgeCompletedTaskListDiv.text(get_CompletedTaskElementsCount);
+  if (todoCategoryCount === 'completedList' || todoCategoryCount === undefined) {
+    updateBadge(getBadgeCompletedTaskListDiv, get_CompletedTaskElementsCount);
   }
-  else if (todoCategoryCount === 'importantList') {
-    if (get_ImportantTaskElementsCount === 0) {
-      getBadgeImportantTaskListDiv.text('');
-      return;
-    }
-    if (get_ImportantTaskElementsCount > 9) {
-      getBadgeImportantTaskListDiv.css({
-        padding: '2px 0px',
-        height: '25px',
-        width: '25px'
-      });
-    } else if (get_ImportantTaskElementsCount <= 9) {
-      getBadgeImportantTaskListDiv.removeAttr('style');
-    }
-    getBadgeImportantTaskListDiv.text(get_ImportantTaskElementsCount);
+  if (todoCategoryCount === 'importantList' || todoCategoryCount === undefined) {
+    updateBadge(getBadgeImportantTaskListDiv, get_ImportantTaskElementsCount);
   }
 }
 
