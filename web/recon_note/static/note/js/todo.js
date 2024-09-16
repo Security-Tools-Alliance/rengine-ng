@@ -87,11 +87,11 @@ const addTaskPopupListener = function(project) {
       };
 
       if ($("#scanHistoryIDropdown").val() && $("#scanHistoryIDropdown").val() != 'Choose Scan History...') {
-        data['scan_history'] = parseInt($("#scanHistoryIDropdown").val());
+        data['scan_history_id'] = parseInt($("#scanHistoryIDropdown").val());
       }
 
       if ($("#subdomainDropdown").val() != 'Choose Subdomain...') {
-        data['subdomain'] = parseInt($("#subdomainDropdown").val());
+        data['subdomain_id'] = parseInt($("#subdomainDropdown").val());
       }
 
       if (project) {
