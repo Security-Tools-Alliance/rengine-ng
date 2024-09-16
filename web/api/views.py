@@ -650,10 +650,6 @@ class AddReconNote(APIView):
   
 		if not title:
 			return Response({"status": False, "error": "Title is required."}, status=400)
-		if scan_history_id is None:
-			return Response({"status": False, "error": "Scan history is required."}, status=400)
-		if subdomain_id is None:
-			return Response({"status": False, "error": "Subdomain is required."}, status=400)
 		if not project:
 			return Response({"status": False, "error": "Project is required."}, status=400)
 

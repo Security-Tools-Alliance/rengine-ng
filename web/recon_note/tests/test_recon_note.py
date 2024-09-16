@@ -40,7 +40,7 @@ class TestScanReconNoteViews(BaseTestCase):
             "description": "This is a new recon note",
             "project": self.data_generator.project.slug,
         }
-        response = self.client.post(api_url, data)
+        response = self.client.post(api_url, data, content_type='application/json')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.json()["status"])
 
@@ -51,11 +51,11 @@ class TestScanReconNoteViews(BaseTestCase):
             "title": "Incomplete Note",
             "slug": self.data_generator.project.slug,
         }
-        response = self.client.post(api_url, data)
+        response = self.client.post(api_url, data, content_type='application/json')
         self.assertIn(response.status_code, [status.HTTP_400_BAD_REQUEST])
         self.assertFalse(response.json()["status"])
         self.assertIn("error", response.json())
-        self.assertEqual(response.json()["error"], "Subdomain ID is required.")
+        self.assertEqual(response.json()["error"], "Project is required.")
 
     def test_list_recon_notes(self):
         """Test listing all recon notes."""
@@ -67,7 +67,7 @@ class TestScanReconNoteViews(BaseTestCase):
         """Test deleting a recon note successfully."""
         api_url = reverse("delete_note")
         data = {"id": self.todo_note.id}
-        response = self.client.post(api_url, data)
+        response = self.client.post(api_url, data, content_type='application/json')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.json()["status"])
         self.assertFalse(TodoNote.objects.filter(id=self.todo_note.id).exists())
@@ -76,6 +76,6 @@ class TestScanReconNoteViews(BaseTestCase):
         """Test deleting a recon note that does not exist."""
         api_url = reverse("delete_note")
         data = {"id": 99999}  # Non-existent ID
-        response = self.client.post(api_url, data)
+        response = self.client.post(api_url, data, content_type='application/json')
         self.assertIn(response.status_code, [status.HTTP_404_NOT_FOUND])
         self.assertFalse(response.json()["status"])
