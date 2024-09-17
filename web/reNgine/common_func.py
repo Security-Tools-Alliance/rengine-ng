@@ -1045,9 +1045,11 @@ def extract_between(text, pattern):
 		return match.group(1).strip()
 	return ""
 
+import re
+
 def parse_custom_header(custom_header):
     """
-    Parse the custom_header input to ensure it is a dictionary.
+    Parse the custom_header input to ensure it is a dictionary with valid header values.
 
     Args:
         custom_header (dict or str): Dictionary or string containing the custom headers.
@@ -1055,6 +1057,8 @@ def parse_custom_header(custom_header):
     Returns:
         dict: Parsed dictionary of custom headers.
     """
+    def is_valid_header_value(value):
+        return bool(re.match(r'^[\w\-\s.,;:@()/+*=\'\[\]{}]+$', value))
 
     if isinstance(custom_header, str):
         header_dict = {}
@@ -1063,11 +1067,19 @@ def parse_custom_header(custom_header):
             parts = header.split(':', 1)
             if len(parts) == 2:
                 key, value = parts
-                header_dict[key.strip()] = value.strip()
+                key = key.strip()
+                value = value.strip()
+                if is_valid_header_value(value):
+                    header_dict[key] = value
+                else:
+                    raise ValueError(f"Invalid header value: '{value}'")
             else:
                 raise ValueError(f"Invalid header format: '{header}'")
         return header_dict
     elif isinstance(custom_header, dict):
+        for key, value in custom_header.items():
+            if not is_valid_header_value(value):
+                raise ValueError(f"Invalid header value: '{value}'")
         return custom_header
     else:
         raise ValueError("custom_header must be a dictionary or a string")

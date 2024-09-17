@@ -3,7 +3,6 @@ import json
 import os
 import re
 import shutil
-import subprocess
 
 from datetime import datetime
 from django import http
@@ -37,19 +36,30 @@ def index(request, slug):
     }
     return render(request, 'scanEngine/index.html', context)
 
+def clean_quotes(data):
+    if isinstance(data, dict):
+        return {key: clean_quotes(value) for key, value in data.items()}
+    elif isinstance(data, list):
+        return [clean_quotes(item) for item in data]
+    elif isinstance(data, str):
+        return data.replace('"', '')
+    return data
 
 @has_permission_decorator(PERM_MODIFY_SCAN_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
 def add_engine(request, slug):
     form = AddEngineForm()
     
     # load default yaml config
-    with open(RENGINE_HOME + '/config/default_yaml_config.yaml', 'r') as yaml_file:
+    with open(RENGINE_HOME + '/config/default_yaml_config.yaml', 'r', encoding='utf-8') as yaml_file:
         default_config = yaml_file.read()
     
     if request.method == "POST":
         form = AddEngineForm(request.POST)
         if form.is_valid():
-            form.save()
+            cleaned_data = {key: clean_quotes(value) for key, value in form.cleaned_data.items()}
+            for key, value in cleaned_data.items():
+                setattr(form.instance, key, value) 
+            form.instance.save()
             messages.add_message(
                 request,
                 messages.INFO,
@@ -96,7 +106,10 @@ def update_engine(request, slug, id):
     if request.method == "POST":
         form = UpdateEngineForm(request.POST, instance=engine)
         if form.is_valid():
-            form.save()
+            cleaned_data = {key: clean_quotes(value) for key, value in form.cleaned_data.items()}
+            for key, value in cleaned_data.items():
+                setattr(form.instance, key, value) 
+            form.instance.save()
             messages.add_message(
                 request,
                 messages.INFO,
@@ -130,7 +143,8 @@ def add_wordlist(request, slug):
                 wordlist_content = txt_file.read().decode('UTF-8', "ignore")
                 wordlist_file = open(
                     Path(RENGINE_WORDLISTS) / f"{form.cleaned_data['short_name']}.txt",
-                    'w'
+                    'w',
+                    encoding='utf-8',
                 )
                 wordlist_file.write(wordlist_content)
                 Wordlist.objects.create(
@@ -217,7 +231,7 @@ def tool_specific_settings(request, slug):
                 # remove special chars from filename, that could possibly do directory traversal or XSS
                 filename = re.sub(r'[\\/*?:"<>|]',"", gf_file.name)
                 file_path = Path.home() / '.gf/' / filename
-                with open(file_path, "w") as file:
+                with open(file_path, "w", encoding='utf-8') as file:
                     file.write(gf_file.read().decode("utf-8"))
                 messages.add_message(request, messages.INFO, f'Pattern {gf_file.name[:4]} successfully uploaded')
             return http.HttpResponseRedirect(reverse('tool_settings', kwargs={'slug': slug}))
@@ -230,43 +244,43 @@ def tool_specific_settings(request, slug):
             else:
                 filename = re.sub(r'[\\/*?:"<>|]',"", nuclei_file.name)
                 file_path = Path.home() / 'nuclei-templates/' / filename
-                with open(file_path, "w") as file:
+                with open(file_path, "w", encoding='utf-8') as file:
                     file.write(nuclei_file.read().decode("utf-8"))
                 messages.add_message(request, messages.INFO, f'Nuclei Pattern {nuclei_file.name[:-5]} successfully uploaded')
             return http.HttpResponseRedirect(reverse('tool_settings', kwargs={'slug': slug}))
 
         elif 'nuclei_config_text_area' in request.POST:
-            with open(Path.home() / '.config' / 'nuclei' / 'config.yaml', "w") as fhandle:
+            with open(Path.home() / '.config' / 'nuclei' / 'config.yaml', "w", encoding='utf-8') as fhandle:
                 fhandle.write(request.POST.get('nuclei_config_text_area'))
             messages.add_message(request, messages.INFO, 'Nuclei config updated!')
             return http.HttpResponseRedirect(reverse('tool_settings', kwargs={'slug': slug}))
 
         elif 'subfinder_config_text_area' in request.POST:
-            with open(Path.home() / '.config' / 'subfinder' / 'config.yaml', "w") as fhandle:
+            with open(Path.home() / '.config' / 'subfinder' / 'config.yaml', "w", encoding='utf-8') as fhandle:
                 fhandle.write(request.POST.get('subfinder_config_text_area'))
             messages.add_message(request, messages.INFO, 'Subfinder config updated!')
             return http.HttpResponseRedirect(reverse('tool_settings', kwargs={'slug': slug}))
 
         elif 'naabu_config_text_area' in request.POST:
-            with open(Path.home() / '.config' / 'naabu' / 'config.yaml', "w") as fhandle:
+            with open(Path.home() / '.config' / 'naabu' / 'config.yaml', "w", encoding='utf-8') as fhandle:
                 fhandle.write(request.POST.get('naabu_config_text_area'))
             messages.add_message(request, messages.INFO, 'Naabu config updated!')
             return http.HttpResponseRedirect(reverse('tool_settings', kwargs={'slug': slug}))
 
         elif 'amass_config_text_area' in request.POST:
-            with open(Path.home() / '.config' / 'amass.ini', "w") as fhandle:
+            with open(Path.home() / '.config' / 'amass.ini', "w", encoding='utf-8') as fhandle:
                 fhandle.write(request.POST.get('amass_config_text_area'))
             messages.add_message(request, messages.INFO, 'Amass config updated!')
             return http.HttpResponseRedirect(reverse('tool_settings', kwargs={'slug': slug}))
 
         elif 'theharvester_config_text_area' in request.POST:
-            with open(Path.home() / '.config' / 'theHarvester' / 'api-keys.yaml', "w") as fhandle:
+            with open(Path.home() / '.config' / 'theHarvester' / 'api-keys.yaml', "w", encoding='utf-8') as fhandle:
                 fhandle.write(request.POST.get('theharvester_config_text_area'))
             messages.add_message(request, messages.INFO, 'theHarvester config updated!')
             return http.HttpResponseRedirect(reverse('tool_settings', kwargs={'slug': slug}))
 
         elif 'gau_config_text_area' in request.POST:
-            with open(Path.home() / '.config' / '.gau.toml', "w") as fhandle:
+            with open(Path.home() / '.config' / '.gau.toml', "w", encoding='utf-8') as fhandle:
                 fhandle.write(request.POST.get('gau_config_text_area'))
             messages.add_message(request, messages.INFO, 'GAU config updated!')
             return http.HttpResponseRedirect(reverse('tool_settings', kwargs={'slug': slug}))
