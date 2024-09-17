@@ -407,3 +407,9 @@ mark{
   cursor: pointer;
   background-color: #B00020;
 }
+
+.priority-dropdown {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
