@@ -13,7 +13,7 @@ from django.dispatch import receiver
 from django.shortcuts import redirect, render, get_object_or_404
 from django.utils import timezone
 from django.utils.text import slugify
-from django.http import HttpResponseRedirect, JsonResponse
+from django.http import HttpResponseRedirect, HttpResponseBadRequest, JsonResponse
 from django.urls import reverse
 from django.template.defaultfilters import slugify
 from rolepermissions.roles import assign_role, clear_roles
@@ -237,8 +237,20 @@ def handle_get_request(request, user):
     if mode == 'change_status':
         user.is_active = not user.is_active
         user.save()
-        return JsonResponse({'status': True})
-    return JsonResponse({'status': False, 'error': 'Invalid mode'}, status=400)
+        if user.is_active:
+            messages.add_message(
+                request,
+                messages.INFO,
+                f'User {user.username} successfully activated.'
+            )
+        else:
+            messages.add_message(
+                request,
+                messages.INFO,
+                f'User {user.username} successfully deactivated.'
+            )
+        return HttpResponseRedirect(reverse('admin_interface'))
+    return HttpResponseBadRequest(reverse('admin_interface'), status=400)
 
 
 def handle_post_request(request, user):

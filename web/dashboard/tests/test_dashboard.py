@@ -127,8 +127,11 @@ class AdminInterfaceUpdateTests(BaseTestCase):
 
     def test_get_request(self):
         response = self.client.get(reverse('admin_interface_update') + f'?user={self.user_to_test.id}&mode=change_status')
-        self.assertEqual(response.status_code, 200)
-        self.assertTrue(json.loads(response.content)['status'])
+        self.assertEqual(response.status_code, 302)
+
+    def test_get_request_with_invalid_mode(self):
+        response = self.client.get(reverse('admin_interface_update') + f'?user={self.user_to_test.id}&mode=wrong_mode')
+        self.assertEqual(response.status_code, 400)
 
     def test_post_request_update(self):
         data = {
