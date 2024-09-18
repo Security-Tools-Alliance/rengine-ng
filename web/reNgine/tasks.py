@@ -1805,9 +1805,11 @@ def fetch_url(self, urls=[], ctx={}, description=None):
 
     # Initialize the URLs
     if urls and is_iterable(urls):
+        logger.debug(f'URLs provided by user')
         with open(input_path, 'w') as f:
             f.write('\n'.join(urls))
     else:
+        logger.debug(f'URLs gathered from database')
         urls = get_http_urls(
             is_alive=enable_http_crawl,
             write_filepath=input_path,
@@ -1815,6 +1817,11 @@ def fetch_url(self, urls=[], ctx={}, description=None):
             get_only_default_urls=True,
             ctx=ctx
         )
+
+    # check if urls is empty
+    if not urls:
+        logger.warning("No URLs found. Exiting fetch_url.")
+        return
 
     # Log initial URLs
     logger.debug(f'Initial URLs: {urls}')
@@ -4177,139 +4184,91 @@ def remove_duplicate_endpoints(
 
 
 @app.task(name='run_command', bind=False, queue='run_command_queue')
-def run_command(
-        cmd, 
-        cwd=None, 
-        shell=False, 
-        history_file=None, 
-        scan_id=None, 
-        activity_id=None,
-        remove_ansi_sequence=False
-    ):
-    """Run a given command using subprocess module.
+def run_command(cmd, cwd=None, shell=False, history_file=None, scan_id=None, activity_id=None, remove_ansi_sequence=False):
+    """
+    Execute a command and return its output.
 
     Args:
-        cmd (str): Command to run.
-        cwd (str): Current working directory.
-        echo (bool): Log command.
-        shell (bool): Run within separate shell if True.
-        history_file (str): Write command + output to history file.
-        remove_ansi_sequence (bool): Used to remove ANSI escape sequences from output such as color coding
+        cmd (str): The command to execute.
+        cwd (str, optional): The working directory for the command. Defaults to None.
+        shell (bool, optional): Whether to use shell execution. Defaults to False.
+        history_file (str, optional): File to write command history. Defaults to None.
+        scan_id (int, optional): ID of the associated scan. Defaults to None.
+        activity_id (int, optional): ID of the associated activity. Defaults to None.
+        remove_ansi_sequence (bool, optional): Whether to remove ANSI escape sequences from output. Defaults to False.
+
     Returns:
-        tuple: Tuple with return_code, output.
+        tuple: A tuple containing the return code and output of the command.
     """
-    logger.info(cmd)
-    logger.warning(activity_id)
+    logger.info(f"Executing command: {cmd}")
+    command_obj = create_command_object(cmd, scan_id, activity_id)
+    command = prepare_command(cmd, shell)
+    logger.debug(f"Prepared run command: {command}")
 
-    # Create a command record in the database
-    command_obj = Command.objects.create(
-        command=cmd,
-        time=timezone.now(),
-        scan_history_id=scan_id,
-        activity_id=activity_id)
-
-    # Run the command using subprocess
-    popen = subprocess.Popen(
-        cmd if shell else cmd.split(),
-        shell=shell,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        cwd=cwd,
-        universal_newlines=True)
+    process = execute_command(command, shell, cwd)
     output = ''
-    for stdout_line in iter(popen.stdout.readline, ""):
+    for stdout_line in iter(process.stdout.readline, ""):
         item = stdout_line.strip()
         output += '\n' + item
         logger.debug(item)
-    popen.stdout.close()
-    popen.wait()
-    return_code = popen.returncode
+    
+    process.stdout.close()
+    process.wait()
+    return_code = process.returncode
     command_obj.output = output
     command_obj.return_code = return_code
     command_obj.save()
+
     if history_file:
-        mode = 'a'
-        if not os.path.exists(history_file):
-            mode = 'w'
-        with open(history_file, mode) as f:
-            f.write(f'\n{cmd}\n{return_code}\n{output}\n------------------\n')
+        write_history(history_file, cmd, return_code, output)
+    
     if remove_ansi_sequence:
         output = remove_ansi_escape_sequences(output)
+    
     return return_code, output
 
-
-#-------------#
-# Other utils #
-#-------------#
-
 def stream_command(cmd, cwd=None, shell=False, history_file=None, encoding='utf-8', scan_id=None, activity_id=None, trunc_char=None):
-    # Log cmd
-    logger.info(cmd)
-    # logger.warning(activity_id)
+    """
+    Execute a command and yield its output line by line.
 
-    # Create a command record in the database
-    command_obj = Command.objects.create(
-        command=cmd,
-        time=timezone.now(),
-        scan_history_id=scan_id,
-        activity_id=activity_id)
+    Args:
+        cmd (str): The command to execute.
+        cwd (str, optional): The working directory for the command. Defaults to None.
+        shell (bool, optional): Whether to use shell execution. Defaults to False.
+        history_file (str, optional): File to write command history. Defaults to None.
+        encoding (str, optional): Encoding for the command output. Defaults to 'utf-8'.
+        scan_id (int, optional): ID of the associated scan. Defaults to None.
+        activity_id (int, optional): ID of the associated activity. Defaults to None.
+        trunc_char (str, optional): Character to truncate lines. Defaults to None.
 
-    # Sanitize the cmd
-    command = cmd if shell else cmd.split()
-
-    # Run the command using subprocess
-    process = subprocess.Popen(
-        command,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        universal_newlines=True,
-        shell=shell)
-
-    # Log the output in real-time to the database
+    Yields:
+        str: Each line of the command output.
+    """
+    logger.info(f"Starting execution of command: {cmd}")
+    command_obj = create_command_object(cmd, scan_id, activity_id)
+    command = prepare_command(cmd, shell)
+    logger.debug(f"Prepared stream command: {command}")
+    
+    process = execute_command(command, shell, cwd)
     output = ""
 
-    # Process the output
-    for line in iter(lambda: process.stdout.readline(), b''):
+    for line in iter(process.stdout.readline, b''):
         if not line:
             break
-        line = line.strip()
-        ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
-        line = ansi_escape.sub('', line)
-        line = line.replace('\\x0d\\x0a', '\n')
-        if trunc_char and line.endswith(trunc_char):
-            line = line[:-1]
-        item = line
-
-        # Try to parse the line as JSON
-        try:
-            item = json.loads(line)
-        except json.JSONDecodeError:
-            pass
-
-        # Yield the line
-        #logger.debug(item)
+        item = process_line(line, trunc_char)
         yield item
-
-        # Add the log line to the output
-        output += line + "\n"
-
-        # Update the command record in the database
+        output += line
         command_obj.output = output
         command_obj.save()
 
-    # Retrieve the return code and output
     process.wait()
     return_code = process.returncode
-
-    # Update the return code and final output in the database
     command_obj.return_code = return_code
     command_obj.save()
+    logger.info(f'Command returned exit code: {return_code}')
 
-    # Append the command, return code and output to the history file
-    if history_file is not None:
-        with open(history_file, "a") as f:
-            f.write(f"{cmd}\n{return_code}\n{output}\n")
-
+    if history_file:
+        write_history(history_file, cmd, return_code, output)
 
 def process_httpx_response(line):
     """TODO: implement this"""

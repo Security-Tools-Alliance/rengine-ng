@@ -3,7 +3,6 @@ import json
 import os
 import re
 import shutil
-import subprocess
 
 from datetime import datetime
 from django import http
@@ -33,18 +32,30 @@ def index(request):
     }
     return render(request, 'scanEngine/index.html', context)
 
+def clean_quotes(data):
+    if isinstance(data, dict):
+        return {key: clean_quotes(value) for key, value in data.items()}
+    elif isinstance(data, list):
+        return [clean_quotes(item) for item in data]
+    elif isinstance(data, str):
+        return data.replace('"', '')
+    return data
+
 @has_permission_decorator(PERM_MODIFY_SCAN_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
 def add_engine(request):
     form = AddEngineForm()
-    
+
     # load default yaml config
-    with open(RENGINE_HOME + '/config/default_yaml_config.yaml', 'r') as yaml_file:
+    with open(RENGINE_HOME + '/config/default_yaml_config.yaml', 'r', encoding='utf-8') as yaml_file:
         default_config = yaml_file.read()
-    
+
     if request.method == "POST":
         form = AddEngineForm(request.POST)
         if form.is_valid():
-            form.save()
+            cleaned_data = {key: clean_quotes(value) for key, value in form.cleaned_data.items()}
+            for key, value in cleaned_data.items():
+                setattr(form.instance, key, value) 
+            form.instance.save()
             messages.add_message(
                 request,
                 messages.INFO,
@@ -53,7 +64,7 @@ def add_engine(request):
     else:
         # fill form with default yaml config
         form = AddEngineForm(initial={'yaml_configuration': default_config})
-    
+
     context = {
         'scan_engine_nav_active': 'active',
         'form': form
@@ -89,7 +100,10 @@ def update_engine(request, id):
     if request.method == "POST":
         form = UpdateEngineForm(request.POST, instance=engine)
         if form.is_valid():
-            form.save()
+            cleaned_data = {key: clean_quotes(value) for key, value in form.cleaned_data.items()}
+            for key, value in cleaned_data.items():
+                setattr(form.instance, key, value) 
+            form.instance.save()
             messages.add_message(
                 request,
                 messages.INFO,
@@ -121,7 +135,8 @@ def add_wordlist(request):
                 wordlist_content = txt_file.read().decode('UTF-8', "ignore")
                 wordlist_file = open(
                     Path(RENGINE_WORDLISTS) / f"{form.cleaned_data['short_name']}.txt",
-                    'w'
+                    'w',
+                    encoding='utf-8',
                 )
                 wordlist_file.write(wordlist_content)
                 Wordlist.objects.create(
@@ -231,13 +246,13 @@ def handle_file_upload(request, file_key, directory, expected_extension, pattern
     else:
         filename = re.sub(r'[\\/*?:"<>|]', "", uploaded_file.name)
         file_path = Path.home() / directory / filename
-        with open(file_path, "w") as file:
+        with open(file_path, "w", encoding='utf-8') as file:
             file.write(uploaded_file.read().decode("utf-8"))
         messages.info(request, f'{pattern_name} {uploaded_file.name[:4]} successfully uploaded')
 
 def update_config(request, tool_name, display_name, file_extension='.yaml'):
     config_path = Path.home() / '.config' / tool_name / f'config{file_extension}'
-    with open(config_path, "w") as fhandle:
+    with open(config_path, "w", encoding='utf-8') as fhandle:
         fhandle.write(request.POST.get(f'{tool_name}_config_text_area'))
     messages.info(request, f'{display_name} config updated!')
 
@@ -257,7 +272,7 @@ def rengine_settings(request):
     total, used, _ = shutil.disk_usage("/")
     total_gb = total // (2**30)
     used_gb = used // (2**30)
-    
+
     context = {
         'total': total_gb,
         'used': used_gb,
@@ -274,7 +289,7 @@ def rengine_settings(request):
 def notification_settings(request):
     notification = Notification.objects.first()
     form = NotificationForm(instance=notification)
-    
+
     if request.method == "POST":
         form = NotificationForm(request.POST, instance=notification)
         if form.is_valid():
@@ -297,14 +312,14 @@ def notification_settings(request):
 def proxy_settings(request):
     proxy = Proxy.objects.first()
     form = ProxyForm(instance=proxy)
-    
+
     if request.method == "POST":
         form = ProxyForm(request.POST, instance=proxy)
         if form.is_valid():
             form.save()
             messages.info(request, 'Proxies updated.')
             return http.HttpResponseRedirect(reverse('proxy_settings'))
-    
+
     context = {
         'form': form,
         'settings_nav_active': 'active',
@@ -329,14 +344,14 @@ def test_hackerone(request):
 def hackerone_settings(request):
     hackerone = Hackerone.objects.first()
     form = HackeroneForm(instance=hackerone)
-    
+
     if request.method == "POST":
         form = HackeroneForm(request.POST, instance=hackerone)
         if form.is_valid():
             form.save()
             messages.info(request, 'Hackerone Settings updated.')
             return http.HttpResponseRedirect(reverse('hackerone_settings'))
-    
+
     context = {
         'form': form,
         'settings_nav_active': 'active',
@@ -408,14 +423,14 @@ def llm_toolkit_section(request):
             'modified_at': datetime.strptime(model['modified_at'].split('.')[0], date_format),
             'is_local': True,
         } for model in ollama_models])
-    
+
     selected_model = OllamaSettings.objects.first()
     selected_model_name = selected_model.selected_model if selected_model else 'gpt-3.5-turbo'
-    
+
     for model in all_models:
         if model['name'] == selected_model_name:
             model['selected'] = True
-    
+
     context = {
         'installed_models': all_models,
         'openai_key_error': not get_open_ai_key() and 'gpt' in selected_model_name
@@ -467,7 +482,7 @@ def add_tool(request):
             # add tool
             install_command = form.data['install_command']
             github_clone_path = None
-            
+
             # Only modify install_command if it contains 'git clone'
             if 'git clone' in install_command:
                 project_name = install_command.split('/')[-1]
@@ -477,7 +492,7 @@ def add_tool(request):
             run_command(install_command)
             run_command.apply_async(args=(install_command,))
             saved_form = form.save()
-            
+
             if github_clone_path:
                 tool = InstalledExternalTool.objects.get(id=saved_form.pk)
                 tool.github_clone_path = github_clone_path

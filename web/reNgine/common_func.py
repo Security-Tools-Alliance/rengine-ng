@@ -4,6 +4,8 @@ import pickle
 import random
 import shutil
 import traceback
+import shlex
+import subprocess
 from time import sleep
 
 import humanize
@@ -1043,9 +1045,11 @@ def extract_between(text, pattern):
 		return match.group(1).strip()
 	return ""
 
+import re
+
 def parse_custom_header(custom_header):
     """
-    Parse the custom_header input to ensure it is a dictionary.
+    Parse the custom_header input to ensure it is a dictionary with valid header values.
 
     Args:
         custom_header (dict or str): Dictionary or string containing the custom headers.
@@ -1053,6 +1057,8 @@ def parse_custom_header(custom_header):
     Returns:
         dict: Parsed dictionary of custom headers.
     """
+    def is_valid_header_value(value):
+        return bool(re.match(r'^[\w\-\s.,;:@()/+*=\'\[\]{}]+$', value))
 
     if isinstance(custom_header, str):
         header_dict = {}
@@ -1061,11 +1067,19 @@ def parse_custom_header(custom_header):
             parts = header.split(':', 1)
             if len(parts) == 2:
                 key, value = parts
-                header_dict[key.strip()] = value.strip()
+                key = key.strip()
+                value = value.strip()
+                if is_valid_header_value(value):
+                    header_dict[key] = value
+                else:
+                    raise ValueError(f"Invalid header value: '{value}'")
             else:
                 raise ValueError(f"Invalid header format: '{header}'")
         return header_dict
     elif isinstance(custom_header, dict):
+        for key, value in custom_header.items():
+            if not is_valid_header_value(value):
+                raise ValueError(f"Invalid header value: '{value}'")
         return custom_header
     else:
         raise ValueError("custom_header must be a dictionary or a string")
@@ -1081,6 +1095,9 @@ def generate_header_param(custom_header, tool_name=None):
     Returns:
         str: Command-line parameter for the specified tool.
     """
+    logger.debug(f"Generating header parameters for tool: {tool_name}")
+    logger.debug(f"Input custom_header: {custom_header}")
+
     # Ensure the custom_header is a dictionary
     custom_header = parse_custom_header(custom_header)
 
@@ -1097,8 +1114,12 @@ def generate_header_param(custom_header, tool_name=None):
         'gospider': generate_gospider_params(custom_header),
     }
 
+    # Get the appropriate format based on the tool name
+    result = format_mapping.get(tool_name, format_mapping.get('common'))
+    logger.debug(f"Selected format for {tool_name}: {result}")
+
     # Return the corresponding parameter for the specified tool or default to common_headers format
-    return format_mapping.get(tool_name, format_mapping.get('common'))
+    return result
 
 def generate_gospider_params(custom_header):
     """
@@ -1167,6 +1188,95 @@ def create_scan_object(host_id, engine_id, initiated_by_id=None):
     domain.start_scan_date = current_scan_time
     domain.save()
     return scan.id
+
+def prepare_command(cmd, shell):
+    """
+    Prepare the command for execution.
+
+    Args:
+        cmd (str): The command to prepare.
+        shell (bool): Whether to use shell execution.
+
+    Returns:
+        str or list: The prepared command, either as a string (for shell execution) or a list (for non-shell execution).
+    """
+    return cmd if shell else shlex.split(cmd)
+
+def create_command_object(cmd, scan_id, activity_id):
+    """
+    Create a Command object in the database.
+
+    Args:
+        cmd (str): The command to be executed.
+        scan_id (int): ID of the associated scan.
+        activity_id (int): ID of the associated activity.
+
+    Returns:
+        Command: The created Command object.
+    """
+    return Command.objects.create(
+        command=cmd,
+        time=timezone.now(),
+        scan_history_id=scan_id,
+        activity_id=activity_id
+    )
+
+def process_line(line, trunc_char=None):
+    """
+    Process a line of output from the command.
+
+    Args:
+        line (str): The line to process.
+        trunc_char (str, optional): Character to truncate the line. Defaults to None.
+
+    Returns:
+        str or dict: The processed line, either as a string or a JSON object if the line is valid JSON.
+    """
+    line = line.strip()
+    ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+    line = ansi_escape.sub('', line)
+    line = line.replace('\\x0d\\x0a', '\n')
+    if trunc_char and line.endswith(trunc_char):
+        line = line[:-1]
+    try:
+        return json.loads(line)
+    except json.JSONDecodeError:
+        return line
+
+def write_history(history_file, cmd, return_code, output):
+    """
+    Write command execution history to a file.
+
+    Args:
+        history_file (str): Path to the history file.
+        cmd (str): The executed command.
+        return_code (int): The return code of the command.
+        output (str): The output of the command.
+    """
+    mode = 'a' if os.path.exists(history_file) else 'w'
+    with open(history_file, mode) as f:
+        f.write(f'\n{cmd}\n{return_code}\n{output}\n------------------\n')
+
+def execute_command(command, shell, cwd):
+    """
+    Execute a command using subprocess.
+
+    Args:
+        command (str or list): The command to execute.
+        shell (bool): Whether to use shell execution.
+        cwd (str): The working directory for the command.
+
+    Returns:
+        subprocess.Popen: The Popen object for the executed command.
+    """
+    return subprocess.Popen(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        universal_newlines=True,
+        shell=shell,
+        cwd=cwd
+    )
 
 def get_data_from_post_request(request, field):
     """
