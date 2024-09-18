@@ -13,6 +13,8 @@ import redis
 import requests
 import tldextract
 import xmltodict
+import validators
+import ipaddress
 
 from bs4 import BeautifulSoup
 from urllib.parse import urlparse
