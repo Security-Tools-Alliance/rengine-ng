@@ -415,15 +415,31 @@ function bulk_vuln_status_change(status) {
 }
 
 function toggleMultipleVulnerabilitiesButton(){
-	if($('.vulnerability_checkbox:checked').length > 1){
-		$('#select_all_checkbox').prop('checked','checked')
+	if($('.vulnerability_checkbox:checked').length >= 1){
+		if($('.vulnerability_checkbox:checked').length >= 2){
+			$('#select_all_checkbox').prop('checked','checked')
+		}
+		$(".vulnerability_btns").removeClass("disabled")
+		$('#vulnaribilities_selected_count').show().text($('.vulnerability_checkbox:checked').length + ' Vulnerabilities Selected x');
 	}else{
 		$('#select_all_checkbox').prop('checked','')
+		$(".vulnerability_btns").addClass("disabled")
+		$('#vulnaribilities_selected_count').hide()
+
 	} 
+}
+
+function uncheckVulnerabilities(){
+	$('.vulnerability_checkbox:checked').trigger('click')
+}
+
+function countVulnerabilities (){
+
 }
 
 $('#select_all_checkbox').on('click', function() {
     $("tr").find("[type=checkbox]").prop('checked', $(this).is(':checked'));
+	toggleMultipleVulnerabilitiesButton();
 });
 
 $("#vulnerability_results").on('click', '.btn-delete-vulnerability', function () {
