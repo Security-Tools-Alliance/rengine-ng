@@ -30,7 +30,7 @@
         </a>
         <div class="dropdown-menu">
           {% for user_project in projects %}
-            <a href="{% url 'dashboardIndex' user_project.slug %}" class="dropdown-item {% if user_project == current_project %} active {% endif %}" data-project-id="{{ user_project.id }}">
+            <a href="{% url 'set_current_project' user_project.slug %}" class="dropdown-item {% if user_project == current_project %} active {% endif %}">
               <span>{{user_project.name}}</span>
             </a>
           {% endfor %}

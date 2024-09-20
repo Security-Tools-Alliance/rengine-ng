@@ -3282,14 +3282,3 @@ function handleHashInUrl(){
 		}
 	}
 }
-
-function setCurrentProject(projectId) {
-	const secure = location.protocol === 'https:';
-    document.cookie = `currentProjectId=${projectId}; path=/; SameSite=Strict; ${secure ? 'Secure;' : ''} HttpOnly`;
-}
-
-document.querySelectorAll('.dropdown-item[data-project-id]').forEach(link => {
-    link.addEventListener('click', function(e) {
-        setCurrentProject(this.getAttribute('data-project-id'));
-    });
-});

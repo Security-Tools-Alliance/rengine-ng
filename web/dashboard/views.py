@@ -380,7 +380,6 @@ def delete_project(request, id):
             'Oops! Project could not be deleted!')
     return JsonResponse(responseData)
 
-
 def onboarding(request):
     context = {}
     error = ''
@@ -497,3 +496,12 @@ def edit_project(request, slug):
         'edit_project': project,
         'users': all_users
     })
+
+def set_current_project(request, slug):
+    if request.method == 'GET':
+        project = get_object_or_404(Project, slug=slug)
+        response = HttpResponseRedirect(reverse('dashboardIndex', kwargs={'slug': slug}))
+        response.set_cookie('currentProjectId', project.id, path='/', samesite='Strict', httponly=True, secure=request.is_secure())
+        messages.success(request, f'Project {project.name} set as current project.')
+        return response
+    return HttpResponseBadRequest('Invalid request method. Only GET is allowed.', status=400)
