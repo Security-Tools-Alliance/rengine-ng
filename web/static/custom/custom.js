@@ -414,6 +414,14 @@ function bulk_vuln_status_change(status) {
         .trigger('click');
 }
 
+function toggleMultipleVulnerabilitiesButton(){
+	if($('.vulnerability_checkbox:checked').length > 1){
+		$('#select_all_checkbox').prop('checked','checked')
+	}else{
+		$('#select_all_checkbox').prop('checked','')
+	} 
+}
+
 $('#select_all_checkbox').on('click', function() {
     $("tr").find("[type=checkbox]").prop('checked', $(this).is(':checked'));
 });

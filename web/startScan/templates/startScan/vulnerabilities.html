@@ -78,7 +78,7 @@ $(document).ready(function() {
 			{"className": "text-center", "targets": []},
 			{
 				"targets":0, "width":"15px", "className":"", "orderable":!1, render:function(e, a, t, n) {
-					return `<div class="form-check mb-1 form-check-primary"><input type="checkbox" name="targets_checkbox['+ e + ']" class="float-start form-check-input vulnerability_checkbox">\n<span class="new-control-indicator"></span><span style="visibility:hidden">c</span></div>`;				},
+					return `<div class="form-check mb-1 form-check-primary"><input type="checkbox" name="targets_checkbox['+ e + ']" class="float-start form-check-input vulnerability_checkbox" onclick="toggleMultipleVulnerabilitiesButton()">\n<span class="new-control-indicator"></span><span style="visibility:hidden">c</span></div>`;				},
 			},
 			{
 				"render": function ( data, type, row ) {
