@@ -5,6 +5,9 @@ from reNgine.definitions import VULNERABILITY_DESCRIPTION_SYSTEM_MESSAGE, ATTACK
 from langchain_community.llms import Ollama
 
 from dashboard.models import OllamaSettings
+import logging
+
+logger = logging.getLogger(__name__)
 
 class GPTVulnerabilityReportGenerator:
 
@@ -102,13 +105,12 @@ class GPTAttackSuggestionGenerator:
 		'''
 			input (str): input for gpt
 		'''
-		if not self.api_key:
-			prompt = ATTACK_SUGGESTION_GPT_SYSTEM_PROMPT + "\nUser: " + input
-			response_content = self.ollama(prompt)
-		else:
-			openai.api_key = self.api_key
-			print(input)
-			try:
+		try:
+			if not self.api_key:
+				prompt = ATTACK_SUGGESTION_GPT_SYSTEM_PROMPT + "\nUser: " + input
+				response_content = self.ollama(prompt)
+			else:
+				openai.api_key = self.api_key
 				gpt_response = openai.ChatCompletion.create(
 				model=self.model_name,
 				messages=[
@@ -117,15 +119,16 @@ class GPTAttackSuggestionGenerator:
 					]
 				)
 				response_content = gpt_response['choices'][0]['message']['content']
-			except Exception as e:
-				return {
-					'status': False,
-					'error': str(e),
-					'input': input
-				}
-		return {
-			'status': True,
-			'description': response_content,
-			'input': input
-		}
-		
+
+			return {
+				'status': True,
+				'description': response_content,
+				'input': input
+			}
+		except ValueError as e:
+			logger.error("Error in get_attack_suggestion: %s", str(e), exc_info=True)
+			return {
+				'status': False,
+				'error': "An error occurred while processing your request.",
+				'input': input
+			}

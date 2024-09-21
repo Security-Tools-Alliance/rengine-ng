@@ -8,6 +8,7 @@ from rest_framework import serializers
 from scanEngine.models import *
 from startScan.models import *
 from targetApp.models import *
+from dashboard.models import *
 
 
 class SearchHistorySerializer(serializers.ModelSerializer):
@@ -971,3 +972,8 @@ class VulnerabilitySerializer(serializers.ModelSerializer):
 		model = Vulnerability
 		fields = '__all__'
 		depth = 2
+
+class ProjectSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Project
+        fields = ['id', 'name', 'slug', 'description', 'insert_date']

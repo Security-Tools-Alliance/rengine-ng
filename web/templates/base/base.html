@@ -65,7 +65,6 @@
       {# top nav begins #}
       {% include 'base/_items/top_nav.html' %}
       {# top nav ends #}
-      <input type="hidden" name="current_project" value="{{current_project.slug}}">
       <div class="content-page">
         <div class="content">
           <div class="container-fluid">
@@ -150,7 +149,7 @@
           if (response.status) {
             for (var history in response.results) {
               $('#search-history-items').append(`
-                <a href="/${slug}/search?query=${response.results[history].query}" class="dropdown-item notify-item">
+                <a href="{% url 'search' %}?query=${response.results[history].query}" class="dropdown-item notify-item">
                   <span>${response.results[history].query}</span>
                 </a>
               `);

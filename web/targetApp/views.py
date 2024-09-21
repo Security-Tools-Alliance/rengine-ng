@@ -54,6 +54,7 @@ from targetApp.forms import (
     AddOrganizationForm,
     UpdateOrganizationForm,
 )
+from scanEngine.models import EngineType
 
 
 logger = logging.getLogger(__name__)
@@ -352,18 +353,22 @@ def add_target(request, slug):
     }
     return render(request, 'target/add.html', context)
 
-
 def list_target(request, slug):
+    project = get_object_or_404(Project, slug=slug)
     context = {
         'list_target_li': 'active',
         'target_data_active': 'active',
-        'slug': slug
+        'detail_scan_url': reverse('detail_scan', args=[project.slug, 0]),
+        'start_scan_url': reverse('start_scan', args=[project.slug, 0]),
+        'schedule_scan_url': reverse('schedule_scan', args=[project.slug, 0]),
+        'update_target_url': reverse('update_target', args=[project.slug, 0]),
+        'target_summary_url': reverse('target_summary', args=[project.slug, 0]),
     }
     return render(request, 'target/list.html', context)
 
 
 @has_permission_decorator(PERM_MODIFY_TARGETS, redirect_url=FOUR_OH_FOUR_URL)
-def delete_target(request, id):
+def delete_target(request, slug, id):
     if request.method == "POST":
         try:
             target = get_object_or_404(Domain, id=id)
@@ -578,8 +583,6 @@ def target_summary(request, slug, id):
         .order_by('-count')
     )
 
-    context['slug'] = slug
-
     return render(request, 'target/summary.html', context)
 
 
@@ -618,7 +621,7 @@ def list_organization(request, slug):
 
 
 @has_permission_decorator(PERM_MODIFY_TARGETS, redirect_url=FOUR_OH_FOUR_URL)
-def delete_organization(request, id):
+def delete_organization(request, slug, id):
     if request.method == "POST":
         try:
             organization = get_object_or_404(Organization, id=id)

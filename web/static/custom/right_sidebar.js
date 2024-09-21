@@ -33,7 +33,7 @@ function getScanStatusSidebar(project, reload) {
         scan_object = scans['scanning'][scan];
         $('#currently_scanning').append(`
           <div class="card border-primary border mini-card">
-          <a href="/scan/${project}/detail/${scan_object.id}" class="text-reset item-hovered">
+          <a href="/scan/${project}/${scan_object.id}" class="text-reset item-hovered">
           <div class="card-header bg-soft-primary text-primary mini-card-header">
           ${htmlEncode(scan_object.scan_type.engine_name)} on ${scan_object.domain.name}
           <span class="badge badge-soft-primary float-end">
@@ -89,7 +89,7 @@ function getScanStatusSidebar(project, reload) {
 
           $('#completed').append(`
             <div class="card border-${color} border mini-card">
-            <a href="/scan/${project}/detail/${scan_object.id}" class="text-reset item-hovered float-end">
+            <a href="/scan/${project}/${scan_object.id}" class="text-reset item-hovered float-end">
             <div class="card-header ${bg_color} text-${color} mini-card-header">
             ${htmlEncode(scan_object.scan_type.engine_name)} on ${scan_object.domain.name}
             </div>

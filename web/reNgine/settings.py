@@ -44,7 +44,7 @@ CELERY_REMOTE_DEBUG = bool(int(os.environ.get('CELERY_REMOTE_DEBUG', '0')))
 CELERY_REMOTE_DEBUG_PORT = int(os.environ.get('CELERY_REMOTE_DEBUG_PORT', 5679))
 
 # Common env vars
-DEBUG = env.bool('DEBUG', default=False)
+DEBUG = env.bool('UI_DEBUG', default=False)
 DOMAIN_NAME = env('DOMAIN_NAME', default='localhost:8000')
 TEMPLATE_DEBUG = env.bool('TEMPLATE_DEBUG', default=False)
 SECRET_FILE = os.path.join(RENGINE_HOME, 'secret')
@@ -91,6 +91,7 @@ INSTALLED_APPS = [
     'scanEngine.apps.ScanengineConfig',
     'startScan.apps.StartscanConfig',
     'recon_note.apps.ReconNoteConfig',
+    'commonFilters.apps.CommonfiltersConfig',
     'django_ace',
     'django_celery_beat',
     'django_extensions',
@@ -105,6 +106,8 @@ MIDDLEWARE = [
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'login_required.middleware.LoginRequiredMiddleware',
+    'dashboard.middleware.SlugMiddleware',
+    'dashboard.middleware.ProjectAccessMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -119,9 +122,9 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
-                'reNgine.context_processors.projects',
                 'reNgine.context_processors.version',
-                'reNgine.context_processors.misc'
+                'reNgine.context_processors.misc',
+                'dashboard.context_processors.project_context', 
             ],
     },
 }]

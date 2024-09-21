@@ -1,7 +1,7 @@
 {% extends 'base/base.html' %}
 {% load static %}
 {% load humanize %}
-{% load custom_tags %}
+{% load custom_filters %}
 {% block title %}
 {% load mathfilters %}
 Target Summary for {{target.name}}
@@ -74,7 +74,7 @@ Target Summary
 									<ul class="list-unstyled">
 										{% for scan in recent_scans %}
 										<li class="completed">
-											<a href="/scan/{{current_project.slug}}/detail/{{scan.id}}">
+											<a href="{% url 'detail_scan' current_project.slug scan.id %}">
 												<h5 class="mt-0 mb-1">
 													{{scan.scan_type.engine_name}}
 													{% if scan.scan_status == -1 %}

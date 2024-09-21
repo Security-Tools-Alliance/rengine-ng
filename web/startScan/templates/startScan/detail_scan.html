@@ -1,7 +1,7 @@
 {% extends 'base/base.html' %}
 {% load static %}
 {% load humanize %}
-{% load custom_tags %}
+{% load custom_filters %}
 {% load mathfilters %}
 {% block title %}
 Detailed Scan
@@ -239,7 +239,7 @@ Scan Findings
 									<ul class="list-unstyled">
 										{% for scan in most_recent_scans %}
 										<li class="completed">
-											<a href="/scan/{{current_project.slug}}/detail/{{scan.id}}">
+											<a href="{% url 'detail_scan' current_project.slug scan.id %}">
 												<h5 class="mt-0 mb-1">
 													{% if history.id == scan.id %}
 													<span class="active-dot dot"></span>

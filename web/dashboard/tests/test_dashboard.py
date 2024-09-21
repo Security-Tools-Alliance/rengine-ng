@@ -5,6 +5,12 @@ import json
 from unittest.mock import patch, MagicMock
 from django.urls import reverse
 from utils.test_base import BaseTestCase
+from dashboard.views import admin_interface_update
+from dashboard.models import Project
+from django.contrib.auth.models import User
+from rolepermissions.checkers import has_role
+from reNgine.roles import SysAdmin, PenetrationTester
+from django.utils import timezone
 
 __all__ = [
     'TestDashboardViews'
@@ -29,10 +35,9 @@ class TestDashboardViews(BaseTestCase):
 
     def test_profile_view(self):
         """Test the profile view."""
-        response = self.client.get(reverse('profile', kwargs={'slug': self.data_generator.project.slug}))
+        response = self.client.get(reverse('profile'))  # Suppression du paramètre 'slug'
         self.assertEqual(response.status_code, 200)
-        self.assertIn('form', response.context)
-        self.assertEqual(response.context['current_project'], self.data_generator.project)
+        self.assertTemplateUsed(response, 'dashboard/profile.html')  # Vérification du modèle utilisé
 
     @patch('dashboard.views.get_user_model')
     def test_admin_interface_view(self, mock_get_user_model):
@@ -41,28 +46,34 @@ class TestDashboardViews(BaseTestCase):
         mock_queryset = MagicMock()
         mock_queryset.order_by.return_value = mock_queryset
         mock_user_model.objects.all.return_value = mock_queryset
-        response = self.client.get(reverse('admin_interface', kwargs={'slug': self.data_generator.project.slug}))
+        response = self.client.get(reverse('admin_interface'))
         self.assertEqual(response.status_code, 200)
         self.assertIn('users', response.context)
 
-    @patch('dashboard.views.get_user_model')
-    def test_admin_interface_update_view(self, mock_get_user_model):
-        """Test the admin interface update view."""
-        mock_user_model = mock_get_user_model.return_value
-        mock_user_model.objects.get.return_value = self.user
-        response = self.client.get(reverse('admin_interface_update', kwargs={'slug': self.data_generator.project.slug}), {'mode': 'change_status', 'user': 1})
-        self.assertEqual(response.status_code, 302)
-
     def test_search_view(self):
         """Test the search view."""
-        response = self.client.get(reverse('search', kwargs={'slug': self.data_generator.project.slug}))
+        response = self.client.get(reverse('search'))
         self.assertEqual(response.status_code, 200)
 
     def test_projects_view(self):
         """Test the projects view."""
-        response = self.client.get(reverse('list_projects', kwargs={'slug': self.data_generator.project.slug}))
+        response = self.client.get(reverse('list_projects'))
         self.assertEqual(response.status_code, 200)
         self.assertIn('projects', response.context)
+
+    def test_edit_project_view(self):
+        """Test the edit project view."""        
+        response = self.client.get(reverse('edit_project', kwargs={'slug': 'test-project'}))
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'dashboard/edit_project.html')
+        
+        # Test POST with valid data
+        response = self.client.post(reverse('edit_project', kwargs={'slug': 'test-project'}), {
+            'name': 'Updated Project',
+            'description': 'Updated description',
+            'insert_date': timezone.now()
+        })
+        self.assertRedirects(response, reverse('list_projects'))
 
     def test_delete_project_view(self):
         """Test the delete project view."""
@@ -86,3 +97,67 @@ class TestDashboardViews(BaseTestCase):
             'key_netlas': 'netlas_key'
         })
         self.assertEqual(response.status_code, 302)
+
+class AdminInterfaceUpdateTests(BaseTestCase):
+    def setUp(self):
+        super().setUp()
+        self.data_generator.create_project_full()
+        self.user_to_test = User.objects.create_user(username='testuser', password='12345')
+
+    def test_user_creation(self):
+        data = {
+            'username': 'newuser',
+            'password': 'newpassword',
+            'role': 'sys_admin'
+        }
+        response = self.client.post(
+            reverse('admin_interface_update') + '?mode=create',
+            data=json.dumps(data),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(json.loads(response.content)['status'])
+        new_user = User.objects.get(username='newuser')
+        self.assertTrue(has_role(new_user, SysAdmin))
+
+    def test_user_not_found(self):
+        response = self.client.get(reverse('admin_interface_update') + '?user=999')
+        self.assertEqual(response.status_code, 404)
+        self.assertFalse(json.loads(response.content)['status'])
+
+    def test_get_request(self):
+        response = self.client.get(reverse('admin_interface_update') + f'?user={self.user_to_test.id}&mode=change_status')
+        self.assertEqual(response.status_code, 302)
+
+    def test_get_request_with_invalid_mode(self):
+        response = self.client.get(reverse('admin_interface_update') + f'?user={self.user_to_test.id}&mode=wrong_mode')
+        self.assertEqual(response.status_code, 400)
+
+    def test_post_request_update(self):
+        data = {
+            'role': 'penetration_tester',
+            'projects': []
+        }
+        response = self.client.post(
+            reverse('admin_interface_update') + f'?user={self.user_to_test.id}&mode=update',
+            data=json.dumps(data),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(json.loads(response.content)['status'])
+        self.user_to_test.refresh_from_db()
+        self.assertTrue(has_role(self.user_to_test, PenetrationTester))
+
+    def test_post_request_delete(self):
+        response = self.client.post(
+            reverse('admin_interface_update') + f'?user={self.user_to_test.id}&mode=delete',
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(json.loads(response.content)['status'])
+        self.assertFalse(User.objects.filter(id=self.user_to_test.id).exists())
+
+    def test_invalid_method(self):
+        response = self.client.put(reverse('admin_interface_update') + f'?user={self.user_to_test.id}')
+        self.assertEqual(response.status_code, 302)
+

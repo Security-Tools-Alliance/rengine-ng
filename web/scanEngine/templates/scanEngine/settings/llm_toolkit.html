@@ -41,7 +41,7 @@ LLM Toolkit (Beta)
   <h5>{{installed_models|length}} available Models</h5>
   {% if openai_key_error %}
   <div class="alert alert-danger border-0 mb-3 mt-3" role="alert">
-    <b>Warning:</b> GPT model is currently selected and requires API key to be set. Please set the API key in the <a href="/scanEngine/{{current_project.slug}}/api_vault" target="_blank"> API Vault.</a>
+    <b>Warning:</b> GPT model is currently selected and requires API key to be set. Please set the API key in the <a href="{% url 'api_vault' %}"> API Vault.</a>
   </div>
   {% endif %}
   <div class="row mt-2">

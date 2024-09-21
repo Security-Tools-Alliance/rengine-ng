@@ -5,88 +5,88 @@ from . import views
 
 urlpatterns = [
     path(
-        '<slug:slug>/',
+        '',
         views.index,
         name='scan_engine_index'),
     path(
-        '<slug:slug>/add/',
+        'add/',
         views.add_engine,
         name='add_engine'),
     path(
-        '<slug:slug>/delete/<int:id>',
+        'delete/<int:id>',
         views.delete_engine,
         name='delete_engine_url'),
     path(
-        '<slug:slug>/update/<int:id>',
+        'update/<int:id>',
         views.update_engine,
         name='update_engine'),
     path(
-        '<slug:slug>/tool_arsenal/update/<int:id>',
-        views.modify_tool_in_arsenal,
-        name='update_tool_in_arsenal'),
-    path(
-        '<slug:slug>/wordlist/',
-        views.wordlist_list,
-        name='wordlist_list'),
-    path(
-        '<slug:slug>/wordlist/add/',
-        views.add_wordlist,
-        name='add_wordlist'),
-    path(
-        '<slug:slug>/tool_arsenal/add/',
-        views.add_tool,
-        name='add_tool'),
-    path(
-        '<slug:slug>/wordlist/delete/<int:id>',
-        views.delete_wordlist,
-        name='delete_wordlist'),
-    path(
-        '<slug:slug>/interesting/lookup/',
-        views.interesting_lookup,
-        name='interesting_lookup'),
-    path(
-        '<slug:slug>/tool_settings',
-        views.tool_specific_settings,
-        name='tool_settings'),
-    path(
-        '<slug:slug>/api_vault',
+        'api_vault',
         views.api_vault,
         name='api_vault'),
     path(
-        '<slug:slug>/api_vault/delete',
+        'api_vault/delete',
         views.api_vault_delete,
         name='api_vault_delete'),
     path(
-        '<slug:slug>/tool_arsenal',
-        views.tool_arsenal_section,
-        name='tool_arsenal'),
-	path(
-        '<slug:slug>/llm_toolkit',
-        views.llm_toolkit_section,
-        name='llm_toolkit'),
-    path(
-        '<slug:slug>/rengine_settings',
-        views.rengine_settings,
-        name='rengine_settings'),
-    path(
-        '<slug:slug>/notification_settings',
-        views.notification_settings,
-        name='notification_settings'),
-    path(
-        '<slug:slug>/proxy_settings',
-        views.proxy_settings,
-        name='proxy_settings'),
-    path(
-        '<slug:slug>/hackerone_settings',
+        'hackerone_settings',
         views.hackerone_settings,
         name='hackerone_settings'),
     path(
-        '<slug:slug>/report_settings',
+        'interesting/lookup',
+        views.interesting_lookup,
+        name='interesting_lookup'),
+	path(
+        'llm_toolkit',
+        views.llm_toolkit_section,
+        name='llm_toolkit'),
+    path(
+        'notification_settings',
+        views.notification_settings,
+        name='notification_settings'),
+    path(
+        'proxy_settings',
+        views.proxy_settings,
+        name='proxy_settings'),
+    path(
+        'rengine_settings',
+        views.rengine_settings,
+        name='rengine_settings'),
+    path(
+        'report_settings',
         views.report_settings,
         name='report_settings'),
     path(
-        '<slug:slug>/testHackerone/',
+        'testHackerone',
         views.test_hackerone,
         name='testHackerone'
     ),
+    path(
+        'tool_arsenal',
+        views.tool_arsenal_section,
+        name='tool_arsenal'),
+    path(
+        'tool_arsenal/add',
+        views.add_tool,
+        name='add_tool'),
+    path(
+        'tool_arsenal/update/<int:id>',
+        views.modify_tool_in_arsenal,
+        name='update_tool_in_arsenal'),
+    path(
+        'tool_settings',
+        views.tool_specific_settings,
+        name='tool_settings'),
+    path(
+        'wordlist',
+        views.wordlist_list,
+        name='wordlist_list'),
+    path(
+        'wordlist/delete/<int:id>',
+        views.delete_wordlist,
+        name='delete_wordlist'),
+    path(
+        'wordlist/add',
+        views.add_wordlist,
+        name='add_wordlist'),
 ]

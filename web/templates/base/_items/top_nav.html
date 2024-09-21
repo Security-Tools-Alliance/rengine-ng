@@ -11,7 +11,7 @@
             </a>
           </li>
           <li class="nav-item dropdown {{target_data_active}}">
-            <a class="nav-link arrow-none" href="{% url 'list_projects' current_project.slug %}">
+            <a class="nav-link arrow-none" href="{% url 'list_projects' %}">
               <i class="fe-folder me-1"></i> Projects
             </a>
           </li>
@@ -58,13 +58,13 @@
             </a>
             <div class="dropdown-menu" aria-labelledby="topnav-scanengine">
               {% if user|can:'modify_scan_configurations' %}
-              <a href="{% url 'scan_engine_index' current_project.slug %}" class="dropdown-item">Scan Engines</a>
+              <a href="{% url 'scan_engine_index' %}" class="dropdown-item">Scan Engines</a>
               {% endif %}
               {% if user|can:'modify_wordlists' %}
-              <a href="{% url 'wordlist_list' current_project.slug %}" class="dropdown-item">Wordlists</a>
+              <a href="{% url 'wordlist_list' %}" class="dropdown-item">Wordlists</a>
               {% endif %}
               {% if user|can:'modify_interesting_lookup' %}
-              <a href="{% url 'interesting_lookup' current_project.slug %}" class="dropdown-item">Interesting Lookup</a>
+              <a href="{% url 'interesting_lookup' %}" class="dropdown-item">Interesting Lookup</a>
               {% endif %}
             </div>
           </li>
@@ -76,23 +76,23 @@
             </a>
             <div class="dropdown-menu" aria-labelledby="topnav-settings">
               {% if user|can:'modify_scan_configurations' %}
-              <a href="{% url 'proxy_settings' current_project.slug %}" class="dropdown-item">Proxies</a>
-              <a href="{% url 'tool_settings' current_project.slug %}" class="dropdown-item">Tool Settings</a>
+              <a href="{% url 'proxy_settings' %}" class="dropdown-item">Proxies</a>
+              <a href="{% url 'tool_settings' %}" class="dropdown-item">Tool Settings</a>
               {% endif %}
               {% if user|can:'modify_system_configurations' %}
-              <a href="{% url 'api_vault' current_project.slug %}" class="dropdown-item">API Vault</a>
-              <a href="{% url 'llm_toolkit' current_project.slug %}" class="dropdown-item">LLM Toolkit</a>
-              <a href="{% url 'tool_arsenal' current_project.slug %}" class="dropdown-item">Tools Arsenal</a>
+              <a href="{% url 'api_vault' %}" class="dropdown-item">API Vault</a>
+              <a href="{% url 'llm_toolkit' %}" class="dropdown-item">LLM Toolkit</a>
+              <a href="{% url 'tool_arsenal' %}" class="dropdown-item">Tools Arsenal</a>
               {% endif %}
               {% if user|can:'modify_scan_report' %}
-              <a href="{% url 'report_settings' current_project.slug %}" class="dropdown-item">Report Settings</a>
+              <a href="{% url 'report_settings' %}" class="dropdown-item">Report Settings</a>
               {% endif %}
               {% if user|can:'modify_system_configurations' %}
-              <a href="{% url 'rengine_settings' current_project.slug %}" class="dropdown-item">reNgine-ng Settings</a>
+              <a href="{% url 'rengine_settings' %}" class="dropdown-item">reNgine-ng Settings</a>
               {% endif %}
               {% if user|can:'modify_scan_configurations' %}
-              <a href="{% url 'hackerone_settings' current_project.slug %}" class="dropdown-item">Hackerone Settings</a>
-              <a href="{% url 'notification_settings' current_project.slug %}" class="dropdown-item">Notification Settings</a>
+              <a href="{% url 'hackerone_settings' %}" class="dropdown-item">Hackerone Settings</a>
+              <a href="{% url 'notification_settings' %}" class="dropdown-item">Notification Settings</a>
               {% endif %}
             </div>
           </li>

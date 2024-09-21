@@ -3,38 +3,40 @@ import logging
 
 from datetime import datetime, timedelta
 
-from django.contrib.auth import get_user_model
 from django.contrib import messages
-from django.contrib.auth import update_session_auth_hash
+from django.contrib.auth import get_user_model, update_session_auth_hash
 from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib.auth.signals import user_logged_in, user_logged_out
-from django.contrib import messages
 from django.db.models import Count
 from django.db.models.functions import TruncDay
 from django.dispatch import receiver
 from django.shortcuts import redirect, render, get_object_or_404
 from django.utils import timezone
-from django.http import HttpResponseRedirect, JsonResponse
+from django.utils.text import slugify
+from django.http import HttpResponseRedirect, HttpResponseBadRequest, JsonResponse
 from django.urls import reverse
+from django.template.defaultfilters import slugify
 from rolepermissions.roles import assign_role, clear_roles
 from rolepermissions.decorators import has_permission_decorator
-from django.template.defaultfilters import slugify
 
-
-from startScan.models import *
+from dashboard.utils import get_user_projects
 from targetApp.models import Domain
-from dashboard.models import *
-from reNgine.definitions import *
-
+from startScan.models import (
+    EndPoint, ScanHistory, Subdomain, Vulnerability, ScanActivity,
+    IpAddress, Port, Technology, CveId, CweId, VulnerabilityTags, CountryISO
+)
+from dashboard.models import Project, OpenAiAPIKey, NetlasAPIKey
+from dashboard.forms import ProjectForm
+from reNgine.definitions import PERM_MODIFY_SYSTEM_CONFIGURATIONS, FOUR_OH_FOUR_URL
 
 logger = logging.getLogger(__name__)
 
 def index(request, slug):
     try:
         project = Project.objects.get(slug=slug)
-    except Exception as e:
+    except Project.DoesNotExist as e:
         # if project not found redirect to 404
-        return HttpResponseRedirect(reverse('four_oh_four'))
+        return HttpResponseRedirect(reverse('page_not_found'))
 
     domains = Domain.objects.filter(project=project)
     subdomains = Subdomain.objects.filter(scan_history__domain__project__slug=project)
@@ -155,7 +157,6 @@ def index(request, slug):
         'scans_in_last_week': scans_in_last_week,
         'endpoints_in_last_week': endpoints_in_last_week,
         'last_7_dates': last_7_dates,
-        'project': project
     }
 
     ip_addresses = IpAddress.objects.filter(ip_addresses__in=subdomains)
@@ -173,8 +174,7 @@ def index(request, slug):
 
     return render(request, 'dashboard/index.html', context)
 
-
-def profile(request, slug):
+def profile(request):
     if request.method == 'POST':
         form = PasswordChangeForm(request.user, request.POST)
         if form.is_valid():
@@ -194,7 +194,7 @@ def profile(request, slug):
 
 
 @has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
-def admin_interface(request, slug):
+def admin_interface(request):
     UserModel = get_user_model()
     users = UserModel.objects.all().order_by('date_joined')
     return render(
@@ -206,61 +206,126 @@ def admin_interface(request, slug):
     )
 
 @has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
-def admin_interface_update(request, slug):
-    mode = request.GET.get('mode')
-    user_id = request.GET.get('user')
-    if user_id:
-        UserModel = get_user_model()
-        user = UserModel.objects.get(id=user_id)
+def admin_interface_update(request):
+    user = get_user_from_request(request)
+    
+    # Check if the request is for user creation
+    if request.method == 'POST' and request.GET.get('mode') == 'create':
+        # Skip user check for user creation
+        return handle_post_request(request, None)  # Pass None for user
+
+    if not user:
+        return JsonResponse({'status': False, 'error': 'User not found'}, status=404)
+
     if request.method == 'GET':
-        if mode == 'change_status':
-            user.is_active = not user.is_active
-            user.save()
+        return handle_get_request(request, user)
     elif request.method == 'POST':
-        if mode == 'delete':
-            try:
-                user.delete()
-                messages.add_message(
-                    request,
-                    messages.INFO,
-                    f'User {user.username} successfully deleted.'
-                )
-                messageData = {'status': True}
-            except Exception as e:
-                logger.error(e)
-                messageData = {'status': False}
-        elif mode == 'update':
-            try:
-                response = json.loads(request.body)
-                role = response.get('role')
-                change_password = response.get('change_password')
-                clear_roles(user)
-                assign_role(user, role)
-                if change_password:
-                    user.set_password(change_password)
-                    user.save()
-                messageData = {'status': True}
-            except Exception as e:
-                logger.error(e)
-                messageData = {'status': False, 'error': str(e)}
-        elif mode == 'create':
-            try:
-                response = json.loads(request.body)
-                if not response.get('password'):
-                    messageData = {'status': False, 'error': 'Empty passwords are not allowed'}
-                    return JsonResponse(messageData)
-                UserModel = get_user_model()
-                user = UserModel.objects.create_user(
-                    username=response.get('username'),
-                    password=response.get('password')
-                )
-                assign_role(user, response.get('role'))
-                messageData = {'status': True}
-            except Exception as e:
-                logger.error(e)
-                messageData = {'status': False, 'error': str(e)}
-        return JsonResponse(messageData)
-    return HttpResponseRedirect(reverse('admin_interface', kwargs={'slug': slug}))
+        return handle_post_request(request, user)
+
+    return HttpResponseRedirect(reverse('admin_interface'))
+
+
+def get_user_from_request(request):
+    if user_id := request.GET.get('user'):
+        UserModel = get_user_model()
+        return UserModel.objects.filter(id=user_id).first()  # Use first() to avoid exceptions
+    return None
+
+
+def handle_get_request(request, user):
+    mode = request.GET.get('mode')
+    if mode == 'change_status':
+        user.is_active = not user.is_active
+        user.save()
+        if user.is_active:
+            messages.add_message(
+                request,
+                messages.INFO,
+                f'User {user.username} successfully activated.'
+            )
+        else:
+            messages.add_message(
+                request,
+                messages.INFO,
+                f'User {user.username} successfully deactivated.'
+            )
+        return HttpResponseRedirect(reverse('admin_interface'))
+    return HttpResponseBadRequest(reverse('admin_interface'), status=400)
+
+
+def handle_post_request(request, user):
+    mode = request.GET.get('mode')
+    if mode == 'delete':
+        return handle_delete_user(request, user)
+    elif mode == 'update':
+        return handle_update_user(request, user)
+    elif mode == 'create':
+        return handle_create_user(request)
+    return JsonResponse({'status': False, 'error': 'Invalid mode'}, status=400)
+
+
+def handle_delete_user(request, user):
+    try:
+        user.delete()
+        messages.add_message(
+            request,
+            messages.INFO,
+            f'User {user.username} successfully deleted.'
+        )
+        return JsonResponse({'status': True})
+    except (ValueError, KeyError) as e:
+        logger.error(e)
+        return JsonResponse({'status': False, 'error': 'An error occurred while deleting the user'})
+
+
+def handle_update_user(request, user):
+    try:
+        response = json.loads(request.body)
+        role = response.get('role')
+        change_password = response.get('change_password')
+        projects = response.get('projects', [])
+        
+        clear_roles(user)
+        assign_role(user, role)
+        if change_password:
+            user.set_password(change_password)
+
+        # Update projects
+        user.projects.clear()  # Remove all existing projects
+        for project_id in projects:
+            project = Project.objects.get(id=project_id)
+            user.projects.add(project)
+
+        user.save()
+        return JsonResponse({'status': True})
+    except (ValueError, KeyError) as e:
+        logger.error(e)
+        return JsonResponse({'status': False, 'error': str(e)})
+
+
+def handle_create_user(request):
+    try:
+        response = json.loads(request.body)
+        if not response.get('password'):
+            return JsonResponse({'status': False, 'error': 'Empty passwords are not allowed'})
+
+        UserModel = get_user_model()
+        user = UserModel.objects.create_user(
+            username=response.get('username'),
+            password=response.get('password')
+        )
+        assign_role(user, response.get('role'))
+
+        # Add projects
+        projects = response.get('projects', [])
+        for project_id in projects:
+            project = Project.objects.get(id=project_id)
+            user.projects.add(project)
+
+        return JsonResponse({'status': True})
+    except (ValueError, KeyError) as e:
+        logger.error(e)
+        return JsonResponse({'status': False, 'error': str(e)})
 
 
 @receiver(user_logged_out)
@@ -269,7 +334,7 @@ def on_user_logged_out(sender, request, **kwargs):
         request,
         messages.INFO,
         'You have been successfully logged out. Thank you ' +
-        'for using reNgine.')
+        'for using reNgine-ng.')
 
 
 @receiver(user_logged_in)
@@ -283,20 +348,19 @@ def on_user_logged_in(sender, request, **kwargs):
         ' welcome back!')
 
 
-def search(request, slug):
+def search(request):
     return render(request, 'dashboard/search.html')
 
 
 def four_oh_four(request):
     return render(request, '404.html')
 
-
-def projects(request, slug):
-    context = {}
-    context['projects'] = Project.objects.all()
+def projects(request):
+    context = {'projects': get_user_projects(request.user)}
     return render(request, 'dashboard/projects.html', context)
 
 
+@has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
 def delete_project(request, id):
     obj = get_object_or_404(Project, id=id)
     if request.method == "POST":
@@ -315,7 +379,6 @@ def delete_project(request, id):
             messages.ERROR,
             'Oops! Project could not be deleted!')
     return JsonResponse(responseData)
-
 
 def onboarding(request):
     context = {}
@@ -372,14 +435,73 @@ def onboarding(request):
                 NetlasAPIKey.objects.create(key=key_netlas)
 
     context['error'] = error
-    # check is any projects exists, then redirect to project list else onboarding
-    project = Project.objects.first()
+    if request.user.is_superuser:
+        # if super user, redirect to the first project
+        project = Project.objects.first()
+    else:
+        # check is any projects exists for the current user
+        project = Project.objects.filter(users=request.user).first()
 
     context['openai_key'] = OpenAiAPIKey.objects.first()
     context['netlas_key'] = NetlasAPIKey.objects.first()
 
+    # then redirect to the dashboard
     if project:
         slug = project.slug
         return HttpResponseRedirect(reverse('dashboardIndex', kwargs={'slug': slug}))
 
+    # else redirect to the onboarding
     return render(request, 'dashboard/onboarding.html', context)
+
+def list_projects(request):
+    projects = get_user_projects(request.user)
+    return render(request, 'dashboard/projects.html', {'projects': projects})
+
+@has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
+def edit_project(request, slug):
+    project = get_object_or_404(Project, slug=slug)
+    if not project.is_user_authorized(request.user):
+        messages.error(request, "You don't have permission to edit this project.")
+        return redirect('list_projects')
+    
+    User = get_user_model()
+    all_users = User.objects.all()
+
+    if request.method == 'POST':
+        form = ProjectForm(request.POST, instance=project)
+        if form.is_valid():
+            # Generate new slug from the project name
+            new_slug = slugify(form.cleaned_data['name'])
+            
+            # Check if the new slug already exists (excluding the current project)
+            if Project.objects.exclude(id=project.id).filter(slug=new_slug).exists():
+                form.add_error('name', 'A project with a similar name already exists. Please choose a different name.')
+            else:
+                # Save the form without committing to the database
+                updated_project = form.save(commit=False)
+                # Set the new slug
+                updated_project.slug = new_slug
+                # Now save to the database
+                updated_project.save()
+                # If your form has many-to-many fields, you need to call this
+                form.save_m2m()
+                
+                messages.success(request, 'Project updated successfully.')
+                return redirect('list_projects')
+    else:
+        form = ProjectForm(instance=project)
+    
+    return render(request, 'dashboard/edit_project.html', {
+        'form': form,
+        'edit_project': project,
+        'users': all_users
+    })
+
+def set_current_project(request, slug):
+    if request.method == 'GET':
+        project = get_object_or_404(Project, slug=slug)
+        response = HttpResponseRedirect(reverse('dashboardIndex', kwargs={'slug': slug}))
+        response.set_cookie('currentProjectId', project.id, path='/', samesite='Strict', httponly=True, secure=request.is_secure())
+        messages.success(request, f'Project {project.name} set as current project.')
+        return response
+    return HttpResponseBadRequest('Invalid request method. Only GET is allowed.', status=400)

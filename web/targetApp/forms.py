@@ -1,4 +1,5 @@
 from django import forms
+from django.contrib.auth.models import User
 from reNgine.validators import validate_domain
 
 from .models import *
@@ -169,3 +170,18 @@ class UpdateOrganizationForm(forms.ModelForm):
     def set_value(self, organization_value, description_value):
         self.initial['name'] = organization_value
         self.initial['description'] = description_value
+
+class ProjectForm(forms.ModelForm):
+    users = forms.ModelMultipleChoiceField(
+        queryset=User.objects.all(),
+        widget=forms.CheckboxSelectMultiple,
+        required=False
+    )
+    description = forms.CharField(
+        widget=forms.Textarea(attrs={'rows': 4}),
+        required=False
+    )
+
+    class Meta:
+        model = Project
+        fields = ['name', 'description', 'users']

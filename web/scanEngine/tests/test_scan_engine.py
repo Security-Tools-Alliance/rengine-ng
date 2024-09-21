@@ -30,7 +30,7 @@ class TestScanEngineViews(BaseTestCase):
         """
         Tests the index view to ensure it returns the correct status code and template.
         """
-        response = self.client.get(reverse('scan_engine_index', kwargs={'slug': 'default'}))
+        response = self.client.get(reverse('scan_engine_index'))
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, 'scanEngine/index.html')
 
@@ -38,7 +38,7 @@ class TestScanEngineViews(BaseTestCase):
         """
         Tests the add engine view to ensure a new engine is created successfully.
         """
-        response = self.client.post(reverse('add_engine', kwargs={'slug': 'default'}), {
+        response = self.client.post(reverse('add_engine'), {
             'engine_name': 'New Engine',
             'yaml_configuration': 'new: config'
         })
@@ -50,7 +50,6 @@ class TestScanEngineViews(BaseTestCase):
         Tests the delete engine view to ensure an engine is deleted successfully.
         """
         response = self.client.post(reverse('delete_engine_url', kwargs={
-            'slug': 'default',
             'id': self.data_generator.engine_type.id
         }))
         self.assertEqual(response.status_code, 200)
@@ -61,7 +60,6 @@ class TestScanEngineViews(BaseTestCase):
         Tests the update engine view to ensure an engine is updated successfully.
         """
         response = self.client.post(reverse('update_engine', kwargs={
-            'slug': 'default',
             'id': self.data_generator.engine_type.id
         }), {
             'engine_name': 'Updated Engine',
@@ -75,7 +73,7 @@ class TestScanEngineViews(BaseTestCase):
         """
         Tests the wordlist list view to ensure it returns the correct status code and template.
         """
-        response = self.client.get(reverse('wordlist_list', kwargs={'slug': 'default'}))
+        response = self.client.get(reverse('wordlist_list'))
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, 'scanEngine/wordlist/index.html')
 
@@ -86,7 +84,7 @@ class TestScanEngineViews(BaseTestCase):
         with open('test_wordlist.txt', 'w', encoding='utf-8') as f:
             f.write('test\nword\nlist')
         with open('test_wordlist.txt', 'rb') as f:
-            response = self.client.post(reverse('add_wordlist', kwargs={'slug': 'default'}), {
+            response = self.client.post(reverse('add_wordlist'), {
                 'name': 'New Wordlist',
                 'short_name': 'new',
                 'upload_file': f
@@ -99,7 +97,6 @@ class TestScanEngineViews(BaseTestCase):
         Tests the delete wordlist view to ensure a wordlist is deleted successfully.
         """
         response = self.client.post(reverse('delete_wordlist', kwargs={
-            'slug': 'default',
             'id': self.data_generator.wordlist.id
         }))
         self.assertEqual(response.status_code, 200)
@@ -109,7 +106,7 @@ class TestScanEngineViews(BaseTestCase):
         """
         Tests the interesting lookup view to ensure it updates keywords successfully.
         """
-        response = self.client.post(reverse('interesting_lookup', kwargs={'slug': 'default'}), {
+        response = self.client.post(reverse('interesting_lookup'), {
             'custom_type': True,
             'keywords': 'test,lookup'
         })
@@ -121,7 +118,7 @@ class TestScanEngineViews(BaseTestCase):
         """
         Tests the tool-specific settings view to ensure it returns the correct status code and template.
         """
-        response = self.client.get(reverse('tool_settings', kwargs={'slug': 'default'}))
+        response = self.client.get(reverse('tool_settings'))
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, 'scanEngine/settings/tool.html')
 
@@ -129,7 +126,7 @@ class TestScanEngineViews(BaseTestCase):
         """
         Tests the rengine settings view to ensure it returns the correct status code and template.
         """
-        response = self.client.get(reverse('rengine_settings', kwargs={'slug': 'default'}))
+        response = self.client.get(reverse('rengine_settings'))
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, 'scanEngine/settings/rengine.html')
 
@@ -137,7 +134,7 @@ class TestScanEngineViews(BaseTestCase):
         """
         Tests the notification settings view to ensure it returns the correct status code and template.
         """
-        response = self.client.get(reverse('notification_settings', kwargs={'slug': 'default'}))
+        response = self.client.get(reverse('notification_settings'))
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, 'scanEngine/settings/notification.html')
 
@@ -145,7 +142,7 @@ class TestScanEngineViews(BaseTestCase):
         """
         Tests the proxy settings view to ensure it updates proxy settings successfully.
         """
-        response = self.client.post(reverse('proxy_settings', kwargs={'slug': 'default'}), {
+        response = self.client.post(reverse('proxy_settings'), {
             'use_proxy': True,
             'proxies': '192.168.1.1',
         })
@@ -157,7 +154,7 @@ class TestScanEngineViews(BaseTestCase):
         """
         Tests the Hackerone settings view to ensure it updates settings successfully.
         """
-        response = self.client.post(reverse('hackerone_settings', kwargs={'slug': 'default'}), {
+        response = self.client.post(reverse('hackerone_settings'), {
             'username': 'newuser',
             'api_key': 'newapikey'
         })
@@ -169,7 +166,7 @@ class TestScanEngineViews(BaseTestCase):
         """
         Tests the report settings view to ensure it updates settings successfully.
         """
-        response = self.client.post(reverse('report_settings', kwargs={'slug': 'default'}), {
+        response = self.client.post(reverse('report_settings'), {
             'primary_color': '#FFFFFF',
             'secondary_color': '#000000'
         })
@@ -181,7 +178,7 @@ class TestScanEngineViews(BaseTestCase):
         """
         Tests the tool arsenal section view to ensure it returns the correct status code and template.
         """
-        response = self.client.get(reverse('tool_arsenal', kwargs={'slug': 'default'}))
+        response = self.client.get(reverse('tool_arsenal'))
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, 'scanEngine/settings/tool_arsenal.html')
 
@@ -189,7 +186,7 @@ class TestScanEngineViews(BaseTestCase):
         """
         Tests the API vault view to ensure it updates API keys successfully.
         """
-        response = self.client.post(reverse('api_vault', kwargs={'slug': 'default'}), {
+        response = self.client.post(reverse('api_vault'), {
             'key_openai': 'test_openai_key',
             'key_netlas': 'test_netlas_key'
         })
@@ -200,7 +197,7 @@ class TestScanEngineViews(BaseTestCase):
         """
         Tests the add tool view to ensure a new tool is created successfully.
         """
-        response = self.client.post(reverse('add_tool', kwargs={'slug': 'default'}), {
+        response = self.client.post(reverse('add_tool'), {
             'name': 'New Tool',
             'github_url': 'https://github.com/new/tool',
             'install_command': 'pip install new-tool',
@@ -214,7 +211,6 @@ class TestScanEngineViews(BaseTestCase):
         Tests the modify tool in arsenal view to ensure a tool is updated successfully.
         """
         response = self.client.post(reverse('update_tool_in_arsenal', kwargs={
-            'slug': 'default',
             'id': self.data_generator.external_tool.id
         }), {
             'name': 'Modified Tool',

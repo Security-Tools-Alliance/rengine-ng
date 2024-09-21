@@ -199,7 +199,8 @@ class TestTargetAppViews(BaseTestCase):
         """
         response = self.client.post(
             reverse('delete_target', kwargs={
-                'id': self.data_generator.domain.id
+                'id': self.data_generator.domain.id,
+                'slug': self.data_generator.project.slug
             })
         )
         self.assertEqual(response.status_code, 200)
@@ -262,7 +263,10 @@ class TestTargetAppViews(BaseTestCase):
         non_existent_id = self.data_generator.domain.id + 999  # Ensure this ID does not exist
 
         response = self.client.post(
-            reverse('delete_target', kwargs={'id': non_existent_id}),
+            reverse('delete_target', kwargs={
+                'id': non_existent_id,
+                'slug': self.data_generator.project.slug
+            }),
             follow=True  # Follow the redirect after deletion
         )
 
@@ -313,7 +317,8 @@ class TestTargetAppViews(BaseTestCase):
         """
         response = self.client.post(
             reverse('delete_organization', kwargs={
-                'id': self.data_generator.organization.id
+                'id': self.data_generator.organization.id,
+                'slug': self.data_generator.project.slug
             })
         )
         self.assertEqual(response.status_code, 200)
@@ -396,7 +401,10 @@ class TestTargetAppViews(BaseTestCase):
         non_existent_id = self.data_generator.organization.id + 999
 
         response = self.client.post(
-            reverse('delete_organization', kwargs={'id': non_existent_id}),
+            reverse('delete_organization', kwargs={
+                'id': non_existent_id,
+                'slug': self.data_generator.project.slug
+            }),
             follow=True  # Follow the redirect after deletion
         )
 

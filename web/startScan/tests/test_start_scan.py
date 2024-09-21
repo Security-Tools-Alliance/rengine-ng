@@ -38,7 +38,7 @@ class TestStartScanViews(BaseTestCase):
             'domain_id': self.data_generator.domain.id
         }), data)
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, f"/scan/{self.data_generator.project.slug}/history/scan")
+        self.assertEqual(response.url, f"/scan/{self.data_generator.project.slug}/history")
         
         scan = ScanHistory.objects.latest('id')
         self.assertEqual(scan.domain, self.data_generator.domain)
@@ -66,7 +66,8 @@ class TestStartScanViews(BaseTestCase):
         """Test the delete scan view."""
         mock_delete_scan.return_value = True
         response = self.client.post(reverse('delete_scan', kwargs={
-            'id': self.data_generator.scan_history.id
+            'slug': self.data_generator.project.slug,
+            'id': self.data_generator.scan_history.id,
         }))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(json.loads(response.content), {'status': 'true'})
@@ -77,14 +78,16 @@ class TestStartScanViews(BaseTestCase):
         """Test the delete scan view when deletion fails."""
         mock_delete_scan.return_value = False
         response = self.client.post(reverse('delete_scan', kwargs={
-            'id': 999
+            'slug': self.data_generator.project.slug,
+            'id': 999,
         }))
         self.assertEqual(response.status_code, 404)
 
     def test_stop_scan_view(self):
         """Test the stop scan view."""
         response = self.client.post(reverse('stop_scan', kwargs={
-            'id': self.data_generator.scan_history.id
+            'id': self.data_generator.scan_history.id,
+            'slug': self.data_generator.project.slug,
         }))
         self.assertEqual(response.status_code, 200)
         self.assertIn('status', json.loads(response.content))
@@ -92,7 +95,8 @@ class TestStartScanViews(BaseTestCase):
     def test_export_subdomains_view(self):
         """Test the export subdomains view."""
         response = self.client.get(reverse('export_subdomains', kwargs={
-            'scan_id': self.data_generator.scan_history.id
+            'scan_id': self.data_generator.scan_history.id,
+            'slug': self.data_generator.project.slug,
         }))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response['Content-Type'], 'text/plain')
@@ -102,7 +106,8 @@ class TestStartScanViews(BaseTestCase):
         Subdomain.objects.all().delete()
 
         response = self.client.get(reverse('export_subdomains', kwargs={
-            'scan_id': self.data_generator.scan_history.id
+            'scan_id': self.data_generator.scan_history.id,
+            'slug': self.data_generator.project.slug,
         }))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response['Content-Type'], 'text/plain')
@@ -111,7 +116,8 @@ class TestStartScanViews(BaseTestCase):
     def test_export_endpoints_view(self):
         """Test the export endpoints view."""
         response = self.client.get(reverse('export_endpoints', kwargs={
-            'scan_id': self.data_generator.scan_history.id
+            'scan_id': self.data_generator.scan_history.id,
+            'slug': self.data_generator.project.slug,
         }))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response['Content-Type'], 'text/plain')
@@ -122,7 +128,8 @@ class TestStartScanViews(BaseTestCase):
         EndPoint.objects.all().delete()
 
         response = self.client.get(reverse('export_endpoints', kwargs={
-            'scan_id': self.data_generator.scan_history.id
+            'scan_id': self.data_generator.scan_history.id,
+            'slug': self.data_generator.project.slug,
         }))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response['Content-Type'], 'text/plain')
