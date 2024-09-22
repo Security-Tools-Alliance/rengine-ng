@@ -77,20 +77,13 @@ $(document).ready(function() {
 			},
 			{"className": "text-center", "targets": []},
 			{
-				"render": function ( data, type, row ) {
-					if(row['open_status']){
-						return `<div class="form-check mb-2 form-check-primary"><input type="checkbox" name="targets_checkbox['+ e + ']" class="float-start form-check-input" onchange="vuln_status_change(this, `+data+`);">\n<span class="new-control-indicator"></span><span style="visibility:hidden">c</span></div>`;
-					}
-					else{
-						return `<div class="form-check mb-2 form-check-primary"><input type="checkbox" checked name="targets_checkbox['+ e + ']" class="float-start form-check-input" onchange="vuln_status_change(this, `+data+`);">\n<span class="new-control-indicator"></span><span style="visibility:hidden">c</span></div>`;
-					}
-				},
-				"targets": 0,
+				"targets":0, "width":"15px", "className":"", "orderable":!1, render:function(e, a, t, n) {
+					return `<div class="form-check mb-1 form-check-primary"><input type="checkbox" name="targets_checkbox['+ e + ']" class="float-start form-check-input vulnerability_checkbox" onclick="toggleMultipleVulnerabilitiesButton()">\n<span class="new-control-indicator"></span><span style="visibility:hidden">c</span></div>`;				},
 			},
 			{
 				"render": function ( data, type, row ) {
 					if (data) {
-						return `<span class="badge badge-outline-primary">&nbsp;&nbsp;${data.toUpperCase()}&nbsp;&nbsp;</span>`;
+						return `<span class="badge badge-outline-primary">${data.toUpperCase()}</span>`;
 					}
 				},
 				"targets": 1,
@@ -98,7 +91,7 @@ $(document).ready(function() {
 			{
 				"render": function ( data, type, row ) {
 					if (data) {
-						return `<span class="badge badge-soft-primary">&nbsp;&nbsp;${data.toUpperCase()}&nbsp;&nbsp;</span>`;
+						return `<span class="badge badge-soft-primary">${data.toUpperCase()}</span>`;
 					}
 				},
 				"targets": 2,
@@ -205,10 +198,10 @@ $(document).ready(function() {
 			{
 				"render": function ( data, type, row ) {
 					if (data){
-						return '<span class="badge badge-soft-danger">&nbsp;&nbsp;OPEN&nbsp;&nbsp;</span>'
+						return '<span class="vuln-status badge badge-soft-primary " role="button" onclick="vuln_status_change(this, '+row.id+', '+row.open_status+');">OPEN</span>'
 					}
 					else{
-						return '<span class="badge badge-soft-success">&nbsp;&nbsp;RESOLVED&nbsp;&nbsp;</span>'
+						return '<span class="vuln-status badge badge-soft-success" role="button" onclick="vuln_status_change(this, '+row.id+', '+row.open_status+');">RESOLVED</span>'
 					}
 				},
 				"targets": 15,
@@ -297,8 +290,7 @@ $(document).ready(function() {
 	});
 
 	$('#vulnerability_results').on('click', 'tr' , function (e) {
-		console.log(e.target);
-		if ($(e.target).is('input[type="checkbox"]') || $(e.target).is('svg') || $(e.target).is('a') || $(e.target).is('th')) {
+		if ($(e.target).is('input[type="checkbox"]') || $(e.target).is('svg') || $(e.target).is('a') || $(e.target).is('th') || $(e.target).is('span')) {
 			return;
 		}
 		var data = vulnerability_table.row(this).data();

@@ -390,15 +390,57 @@ function download(filename, text) {
 	document.body.removeChild(element);
 }
 
-function vuln_status_change(checkbox, id) {
-	if (checkbox.checked) {
-		checkbox.parentNode.parentNode.parentNode.className = "table-success text-strike";
-	} else {
-		checkbox.parentNode.parentNode.parentNode.classList.remove("table-success");
-		checkbox.parentNode.parentNode.parentNode.classList.remove("text-strike");
-	}
-	change_vuln_status(id);
+function updateVulnStatus(element, id, status) {
+    const $element = $(element);
+    const $row = $element.closest("tr");
+
+    $row.toggleClass("table-success text-strike", status);
+    $element.text(status ? 'RESOLVED' : 'OPEN')
+        .toggleClass('badge-soft-primary', !status)
+        .toggleClass('badge-soft-success', status)
+        .attr('onclick', `vuln_status_change(this, ${id}, ${!status})`);
 }
+
+function vuln_status_change(element, id, status) {
+    updateVulnStatus(element, id, status);
+    change_vuln_status(id);
+}
+
+function bulk_vuln_status_change(status) {
+    $('.vulnerability_checkbox:checked')
+        .parents("tr")
+        .find('.vuln-status')
+        .filter((_, el) => (status && $(el).text() === "OPEN") || (!status && $(el).text() === "RESOLVED"))
+        .trigger('click');
+}
+
+function toggleMultipleVulnerabilitiesButton(){
+	if($('.vulnerability_checkbox:checked').length >= 1){
+		if($('.vulnerability_checkbox:checked').length >= 2){
+			$('#select_all_checkbox').prop('checked','checked')
+		}
+		$(".vulnerability_btns").removeClass("disabled")
+		$('#vulnaribilities_selected_count').show().text($('.vulnerability_checkbox:checked').length + ' Vulnerabilities Selected x');
+	}else{
+		$('#select_all_checkbox').prop('checked','')
+		$(".vulnerability_btns").addClass("disabled")
+		$('#vulnaribilities_selected_count').hide()
+
+	} 
+}
+
+function uncheckVulnerabilities(){
+	$('.vulnerability_checkbox:checked').trigger('click')
+}
+
+function countVulnerabilities (){
+
+}
+
+$('#select_all_checkbox').on('click', function() {
+    $("tr").find("[type=checkbox]").prop('checked', $(this).is(':checked'));
+	toggleMultipleVulnerabilitiesButton();
+});
 
 $("#vulnerability_results").on('click', '.btn-delete-vulnerability', function () {
 	var vulnerability_id = $(this).attr('id');
@@ -449,6 +491,61 @@ $("#vulnerability_results").on('click', '.btn-delete-vulnerability', function ()
 	$('a[data-toggle="tooltip"]').tooltip("hide")
 });
 
+
+$("#bulk_delete_vulnerabilities").on('click', function () {
+	//btn-delete-vulnerability contains vuln id to delete
+	var vulnerabilities = $('.vulnerability_checkbox:checked').parents("tr").find('.btn-delete-vulnerability')
+	var vulnerabilities_ids = Array();
+	Array.from(vulnerabilities).forEach(vuln => {
+		vulnerabilities_ids.push($(vuln).attr('id'));
+	});		
+	var data = {'vulnerability_ids': vulnerabilities_ids};
+	Swal.fire({
+		showCancelButton: true,
+		title: 'Bulk Delete Vulnerabilities!',
+		text: 'Do you really want to delete all those Vulnerabilities? This action cannot be undone.',
+		icon: 'error',
+		confirmButtonText: 'Delete',
+	}).then((result) => {
+		if (result.isConfirmed) {
+			Swal.fire({
+				title: 'Deleting Vulnerabilities...',
+				allowOutsideClick: false
+			});
+			swal.showLoading();
+			fetch('/api/action/vulnerability/delete/', {
+				method: 'POST',
+				credentials: "same-origin",
+				headers: {
+					"X-CSRFToken": getCookie("csrftoken"),
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify(data)
+			})
+			.then(response => response.json())
+			.then(function (response) {
+				swal.close();
+				if (response['status']) {
+					Array.from(vulnerabilities).forEach(vuln => {
+						$(vuln).parents('tr').remove();
+					});		
+					Snackbar.show({
+						text: 'Vulnerabilities successfully deleted!',
+						pos: 'top-right',
+						duration: 2500
+					});
+				}
+				else{
+					Swal.fire({
+						title:  'Could not delete Vulnerabilities!',
+						icon: 'fail',
+					});
+				}
+			});
+		}
+	});;
+	$('a[data-toggle="tooltip').tooltip("hide")
+});
 
 function report_hackerone(vulnerability_id, severity) {
 	message = ""
