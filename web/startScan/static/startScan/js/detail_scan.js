@@ -41,11 +41,11 @@ function render_ips(data)
 }
 
 
-function get_endpoints(project, scan_history_id=null, domain_id=null, gf_tags=null){
+function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, scan_history_id=null, domain_id=null, gf_tags=null){
 	var is_endpoint_grouping = false;
 	var endpoint_grouping_col = 6;
 
-	var lookup_url = '/api/listEndpoints/?format=datatables&project=' + project;
+	var lookup_url = endpoint_endpoint_url + '?format=datatables&project=' + project;
 
 	if (scan_history_id) {
 		lookup_url += `&scan_history=${scan_history_id}`;
@@ -111,7 +111,7 @@ function get_endpoints(project, scan_history_id=null, domain_id=null, gf_tags=nu
 					var tech_badge = '';
 					var web_server = '';
 					if (row['techs']){
-						tech_badge = `</br>` + parse_technology(row['techs'], "primary", outline=true);
+						tech_badge = `</br>` + parse_technology(endpoint_subdomain_url, row['techs'], "primary", true, false, true);
 					}
 
 					if (row['webserver']) {
@@ -275,7 +275,7 @@ function get_endpoints(project, scan_history_id=null, domain_id=null, gf_tags=nu
 	});
 }
 
-function get_subdomain_changes(scan_history_id){
+function get_subdomain_changes(endpoint, scan_history_id){
 	$('#table-subdomain-changes').DataTable({
 		"drawCallback": function(settings, start, end, max, total, pre) {
 			if (this.fnSettings().fnRecordsTotal() > 0) {
@@ -303,7 +303,7 @@ function get_subdomain_changes(scan_history_id){
 		"destroy": true,
 		"stripeClasses": [],
 		'serverSide': true,
-		"ajax": `/api/listSubdomainChanges/?scan_id=${scan_history_id}&format=datatables`,
+		"ajax": `${endpoint}?scan_id=${scan_history_id}&format=datatables`,
 		"order": [[ 3, "desc" ]],
 		"columns": [
 			{'data': 'name'},
@@ -402,7 +402,7 @@ function get_subdomain_changes(scan_history_id){
 	});
 }
 
-function get_endpoint_changes(scan_history_id){
+function get_endpoint_changes(endpoint, scan_history_id){
 	$('#table-endpoint-changes').DataTable({
 		"drawCallback": function(settings, start, end, max, total, pre) {
 			if (this.fnSettings().fnRecordsTotal() > 0) {
@@ -429,7 +429,7 @@ function get_endpoint_changes(scan_history_id){
 		"destroy": true,
 		"stripeClasses": [],
 		'serverSide': true,
-		"ajax": `/api/listEndPointChanges/?scan_id=${scan_history_id}&format=datatables`,
+		"ajax": `${endpoint}?scan_id=${scan_history_id}&format=datatables`,
 		"order": [[ 3, "desc" ]],
 		"columns": [
 			{'data': 'http_url'},
@@ -496,7 +496,7 @@ function get_osint_users(scan_id){
 	});
 }
 
-function get_screenshot(scan_id){
+function get_screenshot(endpoint, scan_id){
 	var port_array = [];
 	var service_array = [];
 	var tech_array = [];
@@ -508,7 +508,7 @@ function get_screenshot(scan_id){
 	gridzyElement.setAttribute('data-gridzy-desiredwidth', 350);
 	gridzyElement.setAttribute('data-gridzySearchField', "#screenshot-search");
 	var interesting_badge = `<span class="m-1 float-end badge  badge-soft-danger">Interesting</span>`;
-	$.getJSON(`/api/listSubdomains/?scan_id=${scan_id}&no_page&only_screenshot`, function(data) {
+	$.getJSON(`${endpoint}?scan_id=${scan_id}&no_page&only_screenshot`, function(data) {
 		$("#screenshot-loader").remove();
 		$("#filter-screenshot").show();
 		for (var subdomain in data) {
@@ -878,8 +878,8 @@ function get_dork_details(dork_type, scan_id){
 }
 
 
-function get_vulnerability_modal(scan_id=null, severity=null, subdomain_id=null, subdomain_name=null){
-	var url = `/api/listVulnerability/?&format=json`;
+function get_vulnerability_modal(endpoint_url, scan_id=null, severity=null, subdomain_id=null, subdomain_name=null){
+	var url = `${endpoint_url}?&format=json`;
 
 	if (scan_id) {
 		url += `&scan_history=${scan_id}`;
@@ -895,7 +895,7 @@ function get_vulnerability_modal(scan_id=null, severity=null, subdomain_id=null,
 
 
 	// else{
-	// 	url = `/api/listVulnerability/?severity=${severity}&subdomain_name=${subdomain_name}&format=json`;
+	// 	url = `${endpoint_url}?severity=${severity}&subdomain_name=${subdomain_name}&format=json`;
 	// }
 	switch (severity) {
 		case 0:
@@ -936,7 +936,7 @@ function get_vulnerability_modal(scan_id=null, severity=null, subdomain_id=null,
 	}).then(response => response.json()).then(function(response) {
 		swal.close();
 		$('#xl-modal_title').html(`${subdomain_name}`);
-		render_vulnerability_in_xl_modal(response['count'], subdomain_name, response['results'])
+		render_vulnerability_in_xl_modal(endpoint_url, response['count'], subdomain_name, response['results'])
 	});
 	$('#modal_xl_scroll_dialog').modal('show');
 	$("body").tooltip({
@@ -946,7 +946,7 @@ function get_vulnerability_modal(scan_id=null, severity=null, subdomain_id=null,
 }
 
 
-function get_endpoint_modal(project, scan_id, subdomain_id, subdomain_name){
+function get_endpoint_modal(endpoint_url, project, scan_id, subdomain_id, subdomain_name){
 	// This function will display a xl modal with datatable for displaying endpoints
 	// associated with the subdomain
 	$('#xl-modal-title').empty();
@@ -954,10 +954,10 @@ function get_endpoint_modal(project, scan_id, subdomain_id, subdomain_name){
 	$('#xl-modal-footer').empty();
 
 	if (scan_id) {
-		url = `/api/listEndpoints/?project=${project}&scan_id=${scan_id}&subdomain_id=${subdomain_id}&format=json`
+		url = `${endpoint_url}?project=${project}&scan_id=${scan_id}&subdomain_id=${subdomain_id}&format=json`
 	}
 	else{
-		url = `/api/listEndpoints/?project=${project}&subdomain_id=${subdomain_id}&format=json`
+		url = `${endpoint_url}?project=${project}&subdomain_id=${subdomain_id}&format=json`
 	}
 
 	Swal.fire({
@@ -975,7 +975,7 @@ function get_endpoint_modal(project, scan_id, subdomain_id, subdomain_name){
 	}).then(response => response.json()).then(function(response) {
 		swal.close();
 		$('#xl-modal_title').html(`${subdomain_name}`);
-		render_endpoint_in_xlmodal(response['count'], subdomain_name, response['results'])
+		render_endpoint_in_xl_modal(response['count'], subdomain_name, response['results'])
 	});
 	$('#modal_xl_scroll_dialog').modal('show');
 	$("body").tooltip({
@@ -984,7 +984,7 @@ function get_endpoint_modal(project, scan_id, subdomain_id, subdomain_name){
 
 }
 
-function get_directory_modal(scan_id=null, subdomain_id=null, subdomain_name=null){
+function get_directory_modal(endpoint_url, scan_id=null, subdomain_id=null, subdomain_name=null){
 	// This function will display a xl modal with datatable for displaying endpoints
 	// associated with the subdomain
 	$('#xl-modal-title').empty();
@@ -992,10 +992,10 @@ function get_directory_modal(scan_id=null, subdomain_id=null, subdomain_name=nul
 	$('#xl-modal-footer').empty();
 
 	if (scan_id) {
-		url = `/api/listDirectories/?scan_id=${scan_id}&subdomain_id=${subdomain_id}&format=json`
+		url = `${endpoint_url}?scan_id=${scan_id}&subdomain_id=${subdomain_id}&format=json`
 	}
 	else{
-		url = `/api/listDirectories/?subdomain_id=${subdomain_id}&format=json`
+		url = `${endpoint_url}?subdomain_id=${subdomain_id}&format=json`
 	}
 
 	Swal.fire({

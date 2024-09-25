@@ -1,7 +1,3 @@
-function getCurrentProjectSlug(){
-	return document.querySelector('input[name="current_project"]').value;
-}
-
 function checkall(clickchk, relChkbox) {
 	var checker = $('#' + clickchk);
 	var multichk = $('.' + relChkbox);
@@ -75,8 +71,7 @@ function jsEscape(str) {
 	});
 }
 
-function deleteScheduledScan(id) {
-	const delAPI = "/scan/delete/scheduled_task/" + id;
+function deleteScheduledScan(endpoint_url) {
 	swal.queue([{
 		title: 'Are you sure you want to delete this?',
 		text: "This action can not be undone.",
@@ -86,7 +81,7 @@ function deleteScheduledScan(id) {
 		padding: '2em',
 		showLoaderOnConfirm: true,
 		preConfirm: function() {
-			return fetch(delAPI, {
+			return fetch(endpoint_url, {
 				method: 'POST',
 				credentials: "same-origin",
 				headers: {
@@ -107,7 +102,7 @@ function deleteScheduledScan(id) {
 	}])
 }
 
-function change_scheduled_task_status(id, checkbox) {
+function change_scheduled_task_status(endpoint_url, checkbox) {
 	if (checkbox.checked) {
 		text_msg = 'Schedule Scan Started';
 	} else {
@@ -118,8 +113,7 @@ function change_scheduled_task_status(id, checkbox) {
 		pos: 'top-right',
 		duration: 2500
 	});
-	const taskStatusApi = "/scan/toggle/scheduled_task/" + id;
-	return fetch(taskStatusApi, {
+	return fetch(endpoint_url, {
 		method: 'POST',
 		credentials: "same-origin",
 		headers: {
@@ -128,9 +122,8 @@ function change_scheduled_task_status(id, checkbox) {
 	})
 }
 
-function change_vuln_status(id) {
-	const vulnStatusApi = "/scan/toggle/vuln_status/" + id;
-	return fetch(vulnStatusApi, {
+function change_vuln_status(endpoint_url) {
+	return fetch(endpoint_url, {
 		method: 'POST',
 		credentials: "same-origin",
 		headers: {
@@ -252,8 +245,7 @@ function get_randid() {
 	return '_' + Math.random().toString(36).substr(2, 9);
 }
 
-function delete_all_scan_results() {
-	const delAPI = "/scan/delete/scan_results/";
+function delete_all_scan_results(endpoint_url) {
 	swal.queue([{
 		title: 'Are you sure you want to delete all scan results?',
 		text: "You won't be able to revert this!",
@@ -263,7 +255,7 @@ function delete_all_scan_results() {
 		padding: '2em',
 		showLoaderOnConfirm: true,
 		preConfirm: function() {
-			return fetch(delAPI, {
+			return fetch(endpoint_url, {
 				method: 'POST',
 				credentials: "same-origin",
 				headers: {
@@ -284,8 +276,7 @@ function delete_all_scan_results() {
 	}])
 }
 
-function delete_all_screenshots() {
-	const delAPI = "/scan/delete/screenshots/";
+function delete_all_screenshots(endpoint_url) {
 	swal.queue([{
 		title: 'Are you sure you want to delete all Screenshots?',
 		text: "You won't be able to revert this!",
@@ -295,7 +286,7 @@ function delete_all_screenshots() {
 		padding: '2em',
 		showLoaderOnConfirm: true,
 		preConfirm: function() {
-			return fetch(delAPI, {
+			return fetch(endpoint_url, {
 				method: 'POST',
 				credentials: "same-origin",
 				headers: {
@@ -350,15 +341,15 @@ function get_response_time_text(response_time) {
 	return '';
 }
 
-function parse_technology(data, color, scan_id = null, domain_id=null) {
+function parse_technology(endpoint_url, data, color, scan_id = null, domain_id=null, link=true) {
 	var badge = `<span data-toggle="tooltip" title="Technology" class='badge-link badge badge-soft-` + color + ` mt-1 me-1'`;
 	var data_with_span = "";
 	for (var key in data) {
-		if (scan_id) {
-			data_with_span += badge + ` onclick="get_tech_details('${data[key]['name']}', ${scan_id}, domain_id=null)">` + data[key]['name'] + "</span>";
-		} else if (domain_id) {
-			data_with_span += badge + ` onclick="get_tech_details('${data[key]['name']}', scan_id=null, domain_id=domain_id)">` + data[key]['name'] + "</span>";
+		let onclick = '';
+		if(link) {
+			onclick = ` onclick="get_tech_details('${endpoint_url}', '${data[key]['name']}', ${scan_id}, domain_id=null)"`
 		}
+		data_with_span += badge + onclick + `>` + data[key]['name'] + "</span>";
 	}
 	return data_with_span;
 }
@@ -390,7 +381,7 @@ function download(filename, text) {
 	document.body.removeChild(element);
 }
 
-function updateVulnStatus(element, id, status) {
+function updateVulnStatus(endpoint_url, element, id, status) {
     const $element = $(element);
     const $row = $element.closest("tr");
 
@@ -398,12 +389,13 @@ function updateVulnStatus(element, id, status) {
     $element.text(status ? 'RESOLVED' : 'OPEN')
         .toggleClass('badge-soft-primary', !status)
         .toggleClass('badge-soft-success', status)
-        .attr('onclick', `vuln_status_change(this, ${id}, ${!status})`);
+        .attr('onclick', `vuln_status_change('${endpoint_url}', this, ${id}, ${!status})`);
 }
 
-function vuln_status_change(element, id, status) {
-    updateVulnStatus(element, id, status);
-    change_vuln_status(id);
+function vuln_status_change(endpoint_url, element, id, status) {
+	const updatedEndpointUrl = endpoint_url.replace(/\/0$/, `/${id}`);
+    updateVulnStatus(updatedEndpointUrl, element, id, status);
+    change_vuln_status(updatedEndpointUrl);
 }
 
 function bulk_vuln_status_change(status) {
@@ -445,6 +437,7 @@ $('#select_all_checkbox').on('click', function() {
 $("#vulnerability_results").on('click', '.btn-delete-vulnerability', function () {
 	var vulnerability_id = $(this).attr('id');
 	var data = {'vulnerability_ids': [vulnerability_id]};
+	var endpoint_url = $(this).attr('data-url');
 	var row = this;
 	Swal.fire({
 		showCancelButton: true,
@@ -459,7 +452,7 @@ $("#vulnerability_results").on('click', '.btn-delete-vulnerability', function ()
 				allowOutsideClick: false
 			});
 			swal.showLoading();
-			fetch('/api/action/vulnerability/delete/', {
+			fetch(endpoint_url, {
 				method: 'POST',
 				credentials: "same-origin",
 				headers: {
@@ -496,6 +489,7 @@ $("#bulk_delete_vulnerabilities").on('click', function () {
 	//btn-delete-vulnerability contains vuln id to delete
 	var vulnerabilities = $('.vulnerability_checkbox:checked').parents("tr").find('.btn-delete-vulnerability')
 	var vulnerabilities_ids = Array();
+	var endpoint_url = $(this).attr('data-url');
 	Array.from(vulnerabilities).forEach(vuln => {
 		vulnerabilities_ids.push($(vuln).attr('id'));
 	});		
@@ -513,7 +507,7 @@ $("#bulk_delete_vulnerabilities").on('click', function () {
 				allowOutsideClick: false
 			});
 			swal.showLoading();
-			fetch('/api/action/vulnerability/delete/', {
+			fetch(endpoint_url, {
 				method: 'POST',
 				credentials: "same-origin",
 				headers: {
@@ -547,14 +541,14 @@ $("#bulk_delete_vulnerabilities").on('click', function () {
 	$('a[data-toggle="tooltip').tooltip("hide")
 });
 
-function report_hackerone(vulnerability_id, severity) {
+function report_hackerone(endpoint_url, vulnerability_id, severity) {
 	message = ""
 	if (severity == 'Info' || severity == 'Low' || severity == 'Medium') {
 		message = "We do not recommended sending this vulnerability report to hackerone due to the severity, do you still want to report this?"
 	} else {
 		message = "This vulnerability report will be sent to Hackerone.";
 	}
-	const vulnerability_report_api = "/api/vulnerability/report/?vulnerability_id=" + vulnerability_id;
+	const vulnerability_report_api = endpoint_url+ '?vulnerability_id=' + vulnerability_id;
 	swal.queue([{
 		title: 'Reporting vulnerability to hackerone',
 		text: message,
@@ -573,7 +567,6 @@ function report_hackerone(vulnerability_id, severity) {
 			}).then(function(response) {
 				return response.json();
 			}).then(function(data) {
-				console.log(data.status)
 				if (data.status == 111) {
 					swal.insertQueueStep({
 						icon: 'error',
@@ -615,12 +608,12 @@ function report_hackerone(vulnerability_id, severity) {
 	}])
 }
 
-function get_interesting_subdomains(project, target_id, scan_history_id) {
+function get_interesting_subdomains(endpoint_url, project, target_id, scan_history_id) {
 	if (target_id) {
-		url = `/api/listInterestingEndpoints/?project=${project}&target_id=${target_id}&format=datatables`;
+		url = `${endpoint_url}?project=${project}&target_id=${target_id}&format=datatables`;
 		non_orderable_targets = [0, 1, 2, 3];
 	} else if (scan_history_id) {
-		url = `/api/listInterestingSubdomains/?project=${project}&scan_id=${scan_history_id}&format=datatables`;
+		url = `${endpoint_url}?project=${project}&scan_id=${scan_history_id}&format=datatables`;
 		non_orderable_targets = [];
 	}
 	var interesting_subdomain_table = $('#interesting_subdomains').DataTable({
@@ -700,7 +693,7 @@ function get_interesting_subdomains(project, target_id, scan_history_id) {
 			"render": function(data, type, row) {
 				tech_badge = '';
 				if (row['technologies']) {
-					// tech_badge = `</br>` + parse_technology(row['technologies'], "primary", outline=true, scan_id=null);
+					// tech_badge = `</br>` + parse_technology( endpoint_url, row['technologies'], "primary", outline=true, scan_id=null);
 				}
 				if (row['http_url']) {
 					return `<a href="` + row['http_url'] + `" class="text-primary" target="_blank">` + data + `</a>` + tech_badge;
@@ -727,13 +720,13 @@ function get_interesting_subdomains(project, target_id, scan_history_id) {
 	});
 }
 
-function get_interesting_endpoints(project, target_id, scan_history_id) {
+function get_interesting_endpoints(endpoint_url, project, target_id, scan_history_id) {
 	var non_orderable_targets = [];
 	if (target_id) {
-		url = `/api/listInterestingEndpoints/?project=${project}&target_id=${target_id}&format=datatables`;
+		url = `${endpoint_url}/?project=${project}&target_id=${target_id}&format=datatables`;
 		// non_orderable_targets = [0, 1, 2, 3];
 	} else if (scan_history_id) {
-		url = `/api/listInterestingEndpoints/?project=${project}&scan_id=${scan_history_id}&format=datatables`;
+		url = `${endpoint_url}/?project=${project}&scan_id=${scan_history_id}&format=datatables`;
 		// non_orderable_targets = [0, 1, 2, 3];
 	}
 	$('#interesting_endpoints').DataTable({
@@ -815,8 +808,8 @@ function get_interesting_endpoints(project, target_id, scan_history_id) {
 	});
 }
 
-function get_important_subdomains(target_id, scan_history_id) {
-	var url = `/api/querySubdomains/?only_important&no_lookup_interesting&format=json`;
+function get_important_subdomains(endpoint_url, target_id, scan_history_id) {
+	var url = `${endpoint_url}?only_important&no_lookup_interesting&format=json`;
 	if (target_id) {
 		url += `&target_id=${target_id}`;
 	} else if (scan_history_id) {
@@ -852,7 +845,7 @@ function get_important_subdomains(target_id, scan_history_id) {
 	});
 }
 
-function mark_important_subdomain(row, subdomain_id) {
+function mark_important_subdomain(url, row, subdomain_id) {
 	if (row) {
 		parentNode = row.parentNode.parentNode.parentNode.parentNode;
 		if (parentNode.classList.contains('table-danger')) {
@@ -864,8 +857,6 @@ function mark_important_subdomain(row, subdomain_id) {
 
 	var data = {'subdomain_id': subdomain_id}
 
-	const subdomainImpApi = "/api/toggle/subdomain/important/";
-
 	if ($("#important_subdomain_" + subdomain_id).length == 0) {
 		$("#subdomain-" + subdomain_id).prepend(`<span id="important_subdomain_${subdomain_id}"></span>`);
 		setTooltip("#subdomain-" + subdomain_id, 'Marked Important!');
@@ -873,7 +864,7 @@ function mark_important_subdomain(row, subdomain_id) {
 		$("#important_subdomain_" + subdomain_id).remove();
 		setTooltip("#subdomain-" + subdomain_id, 'Marked Un-Important!');
 	}
-	return fetch(subdomainImpApi, {
+	return fetch(url, {
 		method: 'POST',
 		credentials: "same-origin",
 		headers: {
@@ -884,8 +875,8 @@ function mark_important_subdomain(row, subdomain_id) {
 	});
 }
 
-function delete_scan(id) {
-	const delAPI = "/scan/delete/scan/" + id;
+function delete_scan(url) {
+
 	swal.queue([{
 		title: 'Are you sure you want to delete this scan history?',
 		text: "You won't be able to revert this!",
@@ -895,7 +886,7 @@ function delete_scan(id) {
 		padding: '2em',
 		showLoaderOnConfirm: true,
 		preConfirm: function() {
-			return fetch(delAPI, {
+			return fetch(url, {
 				method: 'POST',
 				credentials: "same-origin",
 				headers: {
@@ -916,8 +907,7 @@ function delete_scan(id) {
 	}]);
 }
 
-function stop_scan(scan_id=null, subscan_id=null, reload_scan_bar=true, reload_location=false) {
-	const stopAPI = "/api/action/stop/scan/";
+function stop_scan(url, scan_id=null, subscan_id=null, reload_scan_bar=true, reload_location=false) {
 
 	if (scan_id) {
 		var data = {'scan_id': scan_id}
@@ -934,7 +924,7 @@ function stop_scan(scan_id=null, subscan_id=null, reload_scan_bar=true, reload_l
 		padding: '2em',
 		showLoaderOnConfirm: true,
 		preConfirm: function() {
-			return fetch(stopAPI, {
+			return fetch(url, {
 				method: 'POST',
 				credentials: "same-origin",
 				body: JSON.stringify(data),
@@ -1001,10 +991,9 @@ function delete_datatable_rows(table_id, rows_id, show_snackbar = true, snackbar
 	});
 }
 
-function delete_subscan(subscan_id) {
+function delete_subscan(endpoint_url,subscan_id) {
 	// This function will delete the sunscans using rest api
 	// Supported method: POST
-	const delAPI = "/api/action/rows/delete/";
 	var data = {
 		'type': 'subscan',
 		'rows': [subscan_id]
@@ -1018,7 +1007,7 @@ function delete_subscan(subscan_id) {
 		padding: '2em',
 		showLoaderOnConfirm: true,
 		preConfirm: function() {
-			return fetch(delAPI, {
+			return fetch(endpoint_url, {
 				method: 'POST',
 				credentials: "same-origin",
 				headers: {
@@ -1042,10 +1031,10 @@ function delete_subscan(subscan_id) {
 	}])
 }
 
-function show_subscan_results(subscan_id) {
+function show_subscan_results(endpoint_url, subscan_id) {
 	// This function will popup a modal and show the subscan results
 	// modal being used is from base
-	var api_url = '/api/fetch/results/subscan/?format=json&subscan_id=' + subscan_id;
+	var api_url = endpoint_url + '?format=json&subscan_id=' + subscan_id;
 	Swal.fire({
 		title: 'Fetching Results...'
 	});
@@ -1107,7 +1096,6 @@ function show_subscan_results(subscan_id) {
 					$('#port_results_li').append(`<h5>IP Address: ${ip_addr}</br></br>${response['result'][ip]['ports'].length} Ports Open</h5>`);
 					$('#port_results_li').append(`<ul id="${id_name}"></ul>`);
 					for (var port_obj in response['result'][ip]['ports']) {
-						console.log(port_obj);
 						var port = response['result'][ip]['ports'][port_obj];
 						var port_color = 'primary';
 						if (port["is_uncommon"]) {
@@ -1120,7 +1108,7 @@ function show_subscan_results(subscan_id) {
 			} else if (response['subscan']['task'] == 'vulnerability_scan') {
 				render_vulnerability_in_xl_modal(vuln_count = response['result'].length, subdomain_name = response['subscan']['subdomain_name'], result = response['result']);
 			} else if (response['subscan']['task'] == 'fetch_url') {
-				render_endpoint_in_xlmodal(endpoint_count = response['result'].length, subdomain_name = response['subscan']['subdomain_name'], result = response['result']);
+				render_endpoint_in_xl_modal(endpoint_count = response['result'].length, subdomain_name = response['subscan']['subdomain_name'], result = response['result']);
 			} else if (response['subscan']['task'] == 'dir_file_fuzz') {
 				if (response['result'][0]['directory_files'].length == 0) {
 					$('#xl-modal-content').append(`
@@ -1158,7 +1146,7 @@ function get_http_status_badge(data) {
 	return "<span class='badge  badge-soft-danger'>" + data + "</span>";
 }
 
-function render_endpoint_in_xlmodal(endpoint_count, subdomain_name, result) {
+function render_endpoint_in_xl_modal(endpoint_count, subdomain_name, result) {
 	// This function renders endpoints datatable in xl modal
 	// Used in Subscan results and subdomain to endpoints modal
 	$('#xl-modal-content').append(`<h5> ${endpoint_count} Endpoints Discovered on subdomain ${subdomain_name}</h5>`);
@@ -1186,8 +1174,8 @@ function render_endpoint_in_xlmodal(endpoint_count, subdomain_name, result) {
 		var endpoint = result[endpoint_obj];
 		var tech_badge = '';
 		var web_server = '';
-		if (endpoint['technologies']) {
-			tech_badge = '<div>' + parse_technology(endpoint['technologies'], "primary", outline = true);
+		if (endpoint['techs']) {
+			tech_badge = '<div>' + parse_technology('', endpoint['techs'], "primary", true, false, false);
 		}
 		if (endpoint['webserver']) {
 			web_server = `<span class='m-1 badge badge-soft-info' data-toggle="tooltip" data-placement="top" title="Web Server">${endpoint['webserver']}</span>`;
@@ -1229,7 +1217,7 @@ function render_endpoint_in_xlmodal(endpoint_count, subdomain_name, result) {
 	});
 }
 
-function render_vulnerability_in_xl_modal(vuln_count, subdomain_name, result) {
+function render_vulnerability_in_xl_modal(endpoint_url, vuln_count, subdomain_name, result) {
 	// This function will render the vulnerability datatable in xl modal
 	$('#xl-modal-content').append(`<h5> ${vuln_count} Vulnerabilities Discovered on subdomain ${subdomain_name}</h5>`);
 	$('#xl-modal-content').append(`<ol id="vuln_results_ol" class="list-group list-group-numbered"></ol>`);
@@ -1323,7 +1311,7 @@ function render_vulnerability_in_xl_modal(vuln_count, subdomain_name, result) {
 		<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-more-horizontal"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg>
 		</a>
 		<div class="dropdown-menu" style="">
-		<a class="dropdown-item" href="javascript:report_hackerone(${vuln_obj['id']}, '${vuln_obj['severity']}');">Report to Hackerone</a>
+		<a class="dropdown-item" href="javascript:report_hackerone('{% url 'api:vulnerability_report' %}', ${vuln_obj['id']}, '${vuln_obj['severity']}');">Report to Hackerone</a>
 		</div>
 		</div>`;
 		$('#vuln_tbody').append(`
@@ -1411,7 +1399,7 @@ function render_directories_in_xl_modal(directory_count, subdomain_name, result)
 			$(".dataTables_paginate > .pagination").addClass("pagination-rounded");
 		}
 	});
-	// TODO: Find interetsing dirs
+	// TODO: Find interesting dirs
 	// fetch("/api/listInterestingKeywords")
 	// .then(response => {
 	// 	return response.json();
@@ -1425,13 +1413,13 @@ function render_directories_in_xl_modal(directory_count, subdomain_name, result)
 }
 
 
-function get_and_render_subscan_history(subdomain_id, subdomain_name) {
+function get_and_render_subscan_history(endpoint, subdomain_id, subdomain_name) {
 	// This function displays the subscan history in a modal for any particular subdomain
 	var data = {
 		'subdomain_id': subdomain_id
 	};
 
-	fetch('/api/listSubScans/?format=json', {
+	fetch(endpoint + '?format=json', {
 		method: 'POST',
 		credentials: "same-origin",
 		body: JSON.stringify(data),
@@ -1442,7 +1430,6 @@ function get_and_render_subscan_history(subdomain_id, subdomain_name) {
 	}).then(function(response) {
 		return response.json();
 	}).then(function(data) {
-		console.log(data);
 		if (data['status']) {
 			$('#modal_title').html('Subscan History for subdomain ' + subdomain_name);
 			$('#modal-content').empty();
@@ -1453,7 +1440,6 @@ function get_and_render_subscan_history(subdomain_id, subdomain_name) {
 			for (var result in data['results']) {
 
 				var result_obj = data['results'][result];
-				console.log(result_obj)
 				var error_message = '';
 				var task_name = result_obj.type;
 
@@ -1474,7 +1460,7 @@ function get_and_render_subscan_history(subdomain_id, subdomain_name) {
 
 				$('#subscan_history_table').append(`
 					<div class="card border-${color} border mini-card">
-					<a href="#" class="text-reset item-hovered" onclick="show_subscan_results(${result_obj['id']})">
+					<a href="#" class="text-reset item-hovered" onclick="show_subscan_results(${data['endpoint']}, ${result_obj['id']})">
 					<div class="card-header ${bg_color} text-${color} mini-card-header">
 					${task_name} on <b>${result_obj.subdomain_name}</b> using engine <b>${htmlEncode(result_obj.engine)}</b>
 					</div>
@@ -1499,10 +1485,10 @@ function get_and_render_subscan_history(subdomain_id, subdomain_name) {
 	});
 }
 
-function fetch_whois(domain_name, force_reload_whois=false) {
+function fetch_whois(endpoint_url, domain_name, force_reload_whois=false) {
 	// this function will fetch WHOIS record for any subdomain and also display
 	// snackbar once whois is fetched
-	var url = `/api/tools/whois/?format=json&ip_domain=${domain_name}`;
+	var url = `${endpoint_url}?format=json&ip_domain=${domain_name}`;
 	if (force_reload_whois) {
 		url+='&is_reload=true'
 	}
@@ -1522,7 +1508,6 @@ function fetch_whois(domain_name, force_reload_whois=false) {
 			document.getElementById('ip_geolocation').innerHTML = response['domain']['geolocation'];
 
 			document.getElementById('registrant_name').innerHTML = response['registrant']['name'];
-			console.log(response['registrant']['organization'])
 			document.getElementById('registrant_organization').innerHTML = response['registrant']['organization'] ? response['registrant']['organization'] : ' ';
 			document.getElementById('registrant_address').innerHTML = response['registrant']['address'] + ' ' + response['registrant']['city'] + ' ' + response['registrant']['state'] + ' ' + response['registrant']['country'];
 			document.getElementById('registrant_phone_numbers').innerHTML = response['registrant']['tel'];
@@ -1545,8 +1530,8 @@ function fetch_whois(domain_name, force_reload_whois=false) {
 		});
 }
 
-function get_target_whois(domain_name) {
-	var url = `/api/tools/whois/?format=json&ip_domain=${domain_name}`
+function get_target_whois(endpoint_url, domain_name) {
+	var url = `${endpoint_url}?format=json&ip_domain=${domain_name}`
 	Swal.fire({
 		title: `Fetching WHOIS details for ${domain_name}...`
 	});
@@ -1559,12 +1544,11 @@ function get_target_whois(domain_name) {
 			'Content-Type': 'application/json'
 		},
 	}).then(response => response.json()).then(function(response) {
-		console.log(response);
 		if (response.status) {
 			swal.close();
 			display_whois_on_modal(response);
 		} else {
-			fetch(`/api/tools/whois/?format=json&ip_domain=${domain_name}`, {
+			fetch(`${endpoint_url}?format=json&ip_domain=${domain_name}`, {
 				method: 'GET',
 				credentials: "same-origin",
 				headers: {
@@ -1572,7 +1556,6 @@ function get_target_whois(domain_name) {
 					'Content-Type': 'application/json'
 				},
 			}).then(response => response.json()).then(function(response) {
-				console.log(response);
 				if (response.status) {
 					swal.close();
 					display_whois_on_modal(response);
@@ -1588,10 +1571,10 @@ function get_target_whois(domain_name) {
 	});
 }
 
-function get_domain_whois(domain_name, show_add_target_btn=false) {
+function get_domain_whois(whoisLookupUrl, domain_name, addTargetUrl, project_slug, show_add_target_btn=false) {
 	// this function will get whois for domains that are not targets, this will
 	// not store whois into db nor create target
-	var url = `/api/tools/whois/?format=json&ip_domain=${domain_name}`
+	var url = `${whoisLookupUrl}?format=json&ip_domain=${domain_name}`
 	Swal.fire({
 		title: `Fetching WHOIS details for ${domain_name}...`
 	});
@@ -1607,7 +1590,7 @@ function get_domain_whois(domain_name, show_add_target_btn=false) {
 	}).then(response => response.json()).then(function(response) {
 		swal.close();
 		if (response.status) {
-			display_whois_on_modal(response, show_add_target_btn=show_add_target_btn);
+			display_whois_on_modal(response, addTargetUrl, project_slug, show_add_target_btn=show_add_target_btn);
 		} else {
 			Swal.fire({
 				title: 'Oops!',
@@ -1618,11 +1601,11 @@ function get_domain_whois(domain_name, show_add_target_btn=false) {
 	});
 }
 
-function display_whois_on_modal(response, show_add_target_btn=false) {
+function display_whois_on_modal(response, addTargetUrl, project_slug, show_add_target_btn=false) {
 	// this function will display whois data on modal, should be followed after get_domain_whois()
-	$('#modal_dialog').modal('show');
-	$('#modal-content').empty();
-	$("#modal-footer").empty();
+	$('#whoisLookupResultModal').modal('show');
+	$('#whoisLookupResultModal #modal-content').empty();
+	$("#whoisLookupResultModal #modal-footer").empty();
 
 	content = `
 	<div class="row mt-3">
@@ -1909,7 +1892,7 @@ function display_whois_on_modal(response, show_add_target_btn=false) {
 					if (response.related_tlds.length > 0) {
 						for (var domain in response.related_tlds) {
 							var dom_object = response.related_tlds[domain];
-							content += `<span class="badge badge-soft-primary badge-link waves-effect waves-light me-1" data-toggle="tooltip" title="Add ${dom_object} as target." onclick="add_target('${dom_object}')">${dom_object}</span>`;
+							content += `<span class="badge badge-soft-primary badge-link waves-effect waves-light me-1" data-toggle="tooltip" title="Add ${dom_object} as target." onclick="add_target('${addTargetUrl}', '${project_slug}', '${dom_object}'')">${dom_object}</span>`;
 						}
 					}
 					else{
@@ -1923,7 +1906,7 @@ function display_whois_on_modal(response, show_add_target_btn=false) {
 					if (response.related_domains.length > 0) {
 						for (var domain in response.related_domains) {
 							var dom_object = response.related_domains[domain];
-							content += `<span class="badge badge-soft-primary badge-link waves-effect waves-light me-1" data-toggle="tooltip" title="Add ${dom_object} as target." onclick="add_target('${dom_object}')">${dom_object}</span>`;
+							content += `<span class="badge badge-soft-primary badge-link waves-effect waves-light me-1" data-toggle="tooltip" title="Add ${dom_object} as target." onclick="add_target('${addTargetUrl}', '${project_slug}', '${dom_object}')">${dom_object}</span>`;
 						}
 					}
 					else{
@@ -1938,65 +1921,35 @@ function display_whois_on_modal(response, show_add_target_btn=false) {
 
 	if (show_add_target_btn) {
 		content += `<div class="text-center">
-			<button class="btn btn-primary float-end mt-4" type="submit" id="search_whois_toolbox_btn" onclick="add_target('${response['ip_domain']}')">Add ${response['ip_domain']} as target</button>
+			<button class="btn btn-primary float-end mt-4" type="submit" onclick="add_target('${addTargetUrl}', '${project_slug}', '${response['ip_domain']}')">Add ${response['ip_domain']} as target</button>
 		</div>`
 	}
 
-	$('#modal-content').append(content);
+	$('#whoisLookupResultModal #modal-content').append(content);
 	$('[data-toggle="tooltip"]').tooltip();
 
 }
 
 function show_quick_add_target_modal() {
-	// this function will display the modal to add  target
-	$('#modal_title').html('Add target');
-	$('#modal-content').empty();
-	$('#modal-content').append(`
-		If you would like to add IP/CIDRs, multiple domain, Please <a href="/target/add/target">click here.</a>
-		<div class="mb-3">
-			<label for="target_name_modal" class="form-label">Target Name</label>
-			<input class="form-control" type="text" id="target_name_modal" required="" placeholder="yourdomain.com">
-		</div>
-
-		<div class="mb-3">
-			<label for="target_description_modal" class="form-label">Description (Optional)</label>
-			<input class="form-control" type="text" id="target_description_modal" required="" placeholder="Target Description">
-		</div>
-		
-		<div class="mb-3">
-			<label for="h1_handle_modal" class="form-label">Hackerone Target Team Handle (Optional)</label>
-			<input class="form-control" type="text" id="h1_handle_modal" placeholder="hackerone.com/team_handle, Only enter team_handle after /">
-		</div>
-
-		<div class="mb-3">
-			<label for="target_organization_modal" class="form-label">Target Organization (Optional)</label>
-			<input class="form-control" type="text" id="target_organization_modal" placeholder="Target Org">
-		</div>
-
-		<div class="mb-3 text-center">
-			<button class="btn btn-primary float-end" type="submit" id="add_target_modal" onclick="add_quick_target()">Add Target</button>
-		</div>
-
-	`);
-	$('#modal_dialog').modal('show');
+	$('#addTargetModal').modal('show');
 }
 
-function add_quick_target() {
+$(document).on('click', '#add_target_modal', function(){
 	// this function will be a onclick for add target button on add_target modal
-	$('#modal_dialog').modal('hide');
+	$('#addTargetModal').modal('hide');
+	var endpoint_url = $(this).data('url');
+	var current_slug = $(this).data('slug');
 	var domain_name = $('#target_name_modal').val();
 	var description = $('#target_description_modal').val();
 	var h1_handle = $('#h1_handle_modal').val();
 	var organization = $('#target_organization_modal').val();
-	add_target(domain_name, h1_handle = h1_handle, description = description, organization = organization);
-}
+	add_target(endpoint_url, current_slug, domain_name, h1_handle = h1_handle, description = description, organization = organization);
+});
 
 
-function add_target(domain_name, h1_handle = null, description = null, organization = null) {
-	var current_slug = getCurrentProjectSlug();
+function add_target(endpoint_url, current_slug, domain_name, h1_handle = null, description = null, organization = null) {
 	// this function will add domain_name as target
-	console.log('Adding new target ' + domain_name)
-	const add_api = '/api/add/target/?format=json';
+	const add_api = endpoint_url + '?format=json';
 	const data = {
 		'domain_name': domain_name,
 		'h1_team_handle': h1_handle,
@@ -2022,10 +1975,8 @@ function add_target(domain_name, h1_handle = null, description = null, organizat
 				},
 				body: JSON.stringify(data)
 			}).then(function(response) {
-				console.log(response)
 				return response.json();
 			}).then(function(data) {
-				console.log(data)
 				if (data.status) {
 					swal.queue([{
 						title: 'Target Successfully added!',
@@ -2036,7 +1987,7 @@ function add_target(domain_name, h1_handle = null, description = null, organizat
 						padding: '2em',
 						showLoaderOnConfirm: true,
 						preConfirm: function() {
-							window.location = `/scan/${current_slug}/start/${data.domain_id}`;
+							window.location = `${data.initiate_scan_url}`;
 						}
 					}]);
 				} else {
@@ -2056,7 +2007,7 @@ function add_target(domain_name, h1_handle = null, description = null, organizat
 }
 
 
-function loadSubscanHistoryWidget(scan_history_id = null, domain_id = null) {
+function loadSubscanHistoryWidget(endpoint, scan_history_id = null, domain_id = null) {
 	// This function will load the subscan history widget
 	if (scan_history_id) {
 		var data = {
@@ -2070,7 +2021,7 @@ function loadSubscanHistoryWidget(scan_history_id = null, domain_id = null) {
 		}
 	}
 
-	fetch('/api/listSubScans/?format=json', {
+	fetch(endpoint + '?format=json', {
 		method: 'POST',
 		credentials: "same-origin",
 		body: JSON.stringify(data),
@@ -2143,9 +2094,9 @@ function loadSubscanHistoryWidget(scan_history_id = null, domain_id = null) {
 	});
 }
 
-function get_ips(scan_id=null, domain_id=null){
+function get_ips(endpoint, scan_id=null, domain_id=null){
 	// this function will fetch and render ips in widget
-	var url = '/api/queryIps/?';
+	var url = `${endpoint}?`;
 
 	if (scan_id) {
 		url += `scan_id=${scan_id}`;
@@ -2176,9 +2127,9 @@ function get_ips(scan_id=null, domain_id=null){
 }
 
 
-function get_technologies(scan_id=null, domain_id=null){
+function get_technologies(endpoint_url, scan_id=null, domain_id=null){
 	// this function will fetch and render tech in widget
-	var url = '/api/queryTechnologies/?';
+	var url = `${endpoint_url}?`;
 
 	if (scan_id) {
 		url += `scan_id=${scan_id}`;
@@ -2195,10 +2146,10 @@ function get_technologies(scan_id=null, domain_id=null){
 		for (var val in data['technologies']){
 			tech = data['technologies'][val]
 			if (scan_id) {
-				$("#technologies").append(`<span class='badge badge-soft-primary  m-1 badge-link' data-toggle="tooltip" title="${tech['count']} Subdomains use this technology." onclick="get_tech_details('${tech['name']}', scan_id=${scan_id}, domain_id=null)">${tech['name']}</span>`);
+				$("#technologies").append(`<span class='badge badge-soft-primary  m-1 badge-link' data-toggle="tooltip" title="${tech['count']} Subdomains use this technology." onclick="get_tech_details('${endpoint_url}', '${tech['name']}', scan_id=${scan_id}, domain_id=null)">${tech['name']}</span>`);
 			}
 			else if (domain_id) {
-				$("#technologies").append(`<span class='badge badge-soft-primary  m-1 badge-link' data-toggle="tooltip" title="${tech['count']} Subdomains use this technology." onclick="get_tech_details('${tech['name']}', scan_id=null, domain_id=${domain_id})">${tech['name']}</span>`);
+				$("#technologies").append(`<span class='badge badge-soft-primary  m-1 badge-link' data-toggle="tooltip" title="${tech['count']} Subdomains use this technology." onclick="get_tech_details('${endpoint_url}', '${tech['name']}', scan_id=null, domain_id=${domain_id})">${tech['name']}</span>`);
 			}
 		}
 		$('#technologies-count').html(`<span class="badge badge-soft-primary me-1">${data['technologies'].length}</span>`);
@@ -2207,9 +2158,9 @@ function get_technologies(scan_id=null, domain_id=null){
 }
 
 
-function get_ports(scan_id=null, domain_id=null){
+function get_ports(endpoint_url, scan_id=null, domain_id=null){
 	// this function will fetch and render ports in widget
-	var url = '/api/queryPorts/?';
+	var url = `${endpoint_url}?`;
 
 	if (scan_id) {
 		url += `scan_id=${scan_id}`;
@@ -2238,9 +2189,9 @@ function get_ports(scan_id=null, domain_id=null){
 }
 
 
-function get_ip_details(ip_address, scan_id=null, domain_id=null){
-	var port_url = `/api/queryPorts/?ip_address=${ip_address}`;
-	var subdomain_url = `/api/querySubdomains/?ip_address=${ip_address}`;
+function get_ip_details(endpoint_port_url, endpoint_subdomain_url, ip_address, scan_id=null, domain_id=null){
+	var port_url = `${endpoint_port_url}?ip_address=${ip_address}`;
+	var subdomain_url = `${endpoint_subdomain_url}?ip_address=${ip_address}`;
 
 	if (scan_id) {
 		port_url += `&scan_id=${scan_id}`;
@@ -2325,10 +2276,10 @@ function get_ip_details(ip_address, scan_id=null, domain_id=null){
 	});
 }
 
-function get_port_details(port, scan_id=null, domain_id=null){
+function get_port_details(endpoint_ip_url, endpoint_subdomain_url, port, scan_id=null, domain_id=null){
 
-	var ip_url = `/api/queryIps/?port=${port}`;
-	var subdomain_url = `/api/querySubdomains/?port=${port}`;
+	var ip_url = `${endpoint_ip_url}?port=${port}`;
+	var subdomain_url = `${endpoint_subdomain_url}?port=${port}`;
 
 	if (scan_id) {
 		ip_url += `&scan_id=${scan_id}`;
@@ -2409,9 +2360,9 @@ function get_port_details(port, scan_id=null, domain_id=null){
 	});
 }
 
-function get_tech_details(tech, scan_id=null, domain_id=null){
+function get_tech_details(endpoint_subdomain_url, tech, scan_id=null, domain_id=null){
 
-	var url = `/api/querySubdomains/?tech=${tech}`;
+	var url = `${endpoint_subdomain_url}?tech=${tech}`;
 
 	if (scan_id) {
 		url += `&scan_id=${scan_id}`;
@@ -2435,15 +2386,16 @@ function get_tech_details(tech, scan_id=null, domain_id=null){
 		$('#modal-loader').empty();
 		$('#modal-content').empty();
 		$('#modal-content').append(`${data['subdomains'].length} Subdomains are using ${tech}`);
+		const subdomainList = $('<ul></ul>');
 		for (subdomain in data['subdomains']){
 			subdomain_obj = data['subdomains'][subdomain];
 			badge_color = subdomain_obj['http_status'] >= 400 ? 'danger' : '';
 			li_id = get_randid();
 			if (subdomain_obj['http_url']) {
-				$("#modal-content").append(`<li id="${li_id}"><a href='${subdomain_obj['http_url']}' target="_blank" class="text-${badge_color}">${subdomain_obj['name']}</a></li>`)
+				subdomainList.append(`<li id="${li_id}"><a href='${subdomain_obj['http_url']}' target="_blank" class="text-${badge_color}">${subdomain_obj['name']}</a></li>`)
 			}
 			else {
-				$("#modal-content").append(`<li class="text-${badge_color}" id="${li_id}">${subdomain_obj['name']}</li>`);
+				subdomainList.append(`<li class="text-${badge_color}" id="${li_id}">${subdomain_obj['name']}</li>`);
 			}
 
 			if (subdomain_obj['http_status']) {
@@ -2456,6 +2408,7 @@ function get_tech_details(tech, scan_id=null, domain_id=null){
 			}
 
 		}
+		$("#modal-content").append(subdomainList);
 		$("#modal-content").append(`<span class="float-end text-danger">*Subdomains highlighted are 40X HTTP Status</span>`);
 		$("#subdomain-modal-loader").remove();
 	}).fail(function(){
@@ -2485,8 +2438,8 @@ function get_http_badge(http_status){
 }
 
 
-function get_and_render_cve_details(cve_id){
-	var api_url = `/api/tools/cve_details/?cve_id=${cve_id}&format=json`;
+function get_and_render_cve_details(endpoint_url, cve_id){
+	var api_url = `${endpoint_url}?cve_id=${cve_id}&format=json`;
 	Swal.fire({
 		title: 'Fetching CVE Details...'
 	});
@@ -2499,7 +2452,6 @@ function get_and_render_cve_details(cve_id){
 			"Content-Type": "application/json"
 		},
 	}).then(response => response.json()).then(function(response) {
-		console.log(response);
 		swal.close();
 		if (response.status) {
 			$('#xl-modal-title').empty();
@@ -2619,7 +2571,7 @@ function get_and_render_cve_details(cve_id){
 }
 
 
-function get_most_vulnerable_target(slug=null, scan_id=null, target_id=null, ignore_info=false, limit=50){
+function get_most_vulnerable_target(endpoint_url, endpoint_vuln_url, slug=null, scan_id=null, target_id=null, ignore_info=false, limit=50){
 	$('#most_vulnerable_target_div').empty();
 	$('#most_vulnerable_spinner').append(`<div class="spinner-border text-primary m-2" role="status"></div>`);
 	var data = {};
@@ -2635,7 +2587,7 @@ function get_most_vulnerable_target(slug=null, scan_id=null, target_id=null, ign
 	data['ignore_info'] = ignore_info;
 	data['limit'] = limit;
 
-	fetch('/api/fetch/most_vulnerable/?format=json', {
+	fetch(endpoint_url, {
 		method: 'POST',
 		credentials: "same-origin",
 		body: JSON.stringify(data),
@@ -2663,9 +2615,9 @@ function get_most_vulnerable_target(slug=null, scan_id=null, target_id=null, ign
 
 			for (var res in response.result) {
 				var targ_obj = response.result[res];
-				var tr = `<tr onclick="window.location='/scan/${slug}/detail/vuln?domain=${targ_obj.name}';" style="cursor: pointer;">`;
+				var tr = `<tr onclick="window.location='${endpoint_vuln_url}?domain=${targ_obj.name}';" style="cursor: pointer;">`;
 				if (scan_id || target_id) {
-					tr = `<tr onclick="window.location='/scan/${slug}/detail/vuln?subdomain=${targ_obj.name}';" style="cursor: pointer;">`;
+					tr = `<tr onclick="window.location='${endpoint_vuln_url}?subdomain=${targ_obj.name}';" style="cursor: pointer;">`;
 				}
 				$('#most_vulnerable_target_tbody').append(`
 					${tr}
@@ -2691,7 +2643,7 @@ function get_most_vulnerable_target(slug=null, scan_id=null, target_id=null, ign
 }
 
 
-function get_most_common_vulnerability(slug=null, scan_id=null, target_id=null, ignore_info=false, limit=50){
+function get_most_common_vulnerability(endpoint_url, endpoint_vuln_url, slug=null, scan_id=null, target_id=null, ignore_info=false, limit=50){
 	$('#most_common_vuln_div').empty();
 	$('#most_common_vuln_spinner').append(`<div class="spinner-border text-primary m-2" role="status"></div>`);
 	var data = {};
@@ -2707,7 +2659,7 @@ function get_most_common_vulnerability(slug=null, scan_id=null, target_id=null, 
 	data['ignore_info'] = ignore_info;
 	data['limit'] = limit;
 
-	fetch('/api/fetch/most_common_vulnerability/?format=json', {
+	fetch(endpoint_url + '?format=json', {
 		method: 'POST',
 		credentials: "same-origin",
 		body: JSON.stringify(data),
@@ -2760,7 +2712,7 @@ function get_most_common_vulnerability(slug=null, scan_id=null, target_id=null, 
 						vuln_badge = get_severity_badge('Unknown');
 				}
 				$('#most_common_vuln_tbody').append(`
-					<tr onclick="window.location='/scan/${slug}/detail/vuln?vulnerability_name=${vuln_obj.name}';" style="cursor: pointer;">
+					<tr onclick="window.location='${endpoint_vuln_url}?vulnerability_name=${vuln_obj.name}';" style="cursor: pointer;">
 						<td>
 							<h5 class="m-0 fw-normal">${vuln_obj.name}</h5>
 						</td>
@@ -2827,7 +2779,7 @@ function shadeColor(color, percent) {
 }
 
 
-function add_project_modal(){
+function add_project_modal(endpoint_url){
 	Swal.fire({
 		title: 'Enter the project name',
 		input: 'text',
@@ -2839,7 +2791,7 @@ function add_project_modal(){
 		confirmButtonText: 'Create Project',
 		showLoaderOnConfirm: true,
 		preConfirm: (name) => {
-			return fetch(`/api/action/create/project?name=${name}`)
+			return fetch(`${endpoint_url}?name=${name}`)
 				.then(response => {
 					if (!response.ok) {
 						throw new Error(response.error)
@@ -2854,7 +2806,6 @@ function add_project_modal(){
 			},
 			allowOutsideClick: () => !Swal.isLoading()
 		}).then((result) => {
-			console.log(result);
 			if (result.isConfirmed) {
 				Swal.fire({
 					title: `${result.value.project_name} is created.`,
@@ -2872,7 +2823,6 @@ function reloadPage(){
 
 function render_vuln_offcanvas(vuln){
 	$('#offcanvas').addClass('offcanvas-size-lg');
-	console.log(vuln);
 	var default_color = 'primary';
 	var default_badge_color = 'soft-primary';
 	switch (vuln.severity) {
@@ -3193,8 +3143,8 @@ function showSwalLoader(title, text){
 	});
 }
 
-async function send_gpt_api_request(vuln_id){
-	const api = "/api/tools/gpt_vulnerability_report/?format=json&id=" + vuln_id;
+async function send_gpt_api_request(endpoint_url, vuln_id){
+	const api = `${endpoint_url}?format=json&id=${vuln_id}`;
 	try {
 		const response = await fetch(api, {
 				method: 'GET',
@@ -3214,14 +3164,13 @@ async function send_gpt_api_request(vuln_id){
 }
 
 
-async function fetch_gpt_vuln_details(id, title) {
+async function fetch_gpt_vuln_details(endpoint_url, id, title) {
 	var loader_title = "Loading...";
 	var text = 'Please wait while the GPT is generating vulnerability description.'
 	try {
 		showSwalLoader(loader_title, text);
-		const data = await send_gpt_api_request(id);
+		const data = await send_gpt_api_request(endpoint_url, id);
 		Swal.close();
-		console.log(data);
 		if (data.status) {
 			render_gpt_vuln_modal(data, title);
 		}
@@ -3301,8 +3250,8 @@ function endpoint_datatable_col_visibility(endpoint_table){
 }
 
 
-async function send_gpt__attack_surface_api_request(subdomain_id){
-	const api = `/api/tools/gpt_get_possible_attacks/?format=json&subdomain_id=${subdomain_id}`;
+async function send_gpt__attack_surface_api_request(endpoint_url, subdomain_id){
+	const api = `${endpoint_url}?format=json&subdomain_id=${subdomain_id}`;
 	try {
 		const response = await fetch(api, {
 				method: 'GET',
@@ -3322,12 +3271,12 @@ async function send_gpt__attack_surface_api_request(subdomain_id){
 }
 
 
-async function show_attack_surface_modal(id){
+async function show_attack_surface_modal(endpoint_url, id){
 	var loader_title = "Loading...";
 	var text = 'Please wait while the GPT is generating attack surface.'
 	try {
 		showSwalLoader(loader_title, text);
-		const data = await send_gpt__attack_surface_api_request(id);
+		const data = await send_gpt__attack_surface_api_request(endpoint_url,id);
 		Swal.close();
 		if (data.status) {
 			$('#modal_title').html(`Attack Surface Suggestion for ${data.subdomain_name} (BETA)`);

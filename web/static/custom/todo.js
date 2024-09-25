@@ -141,8 +141,8 @@ function get_task_details(todo_id){
   });
 }
 
-function get_recon_notes(target_id, scan_id){
-  var url = `/api/listTodoNotes/?`;
+function get_recon_notes(endpoint, target_id, scan_id){
+  var url = `${endpoint}?`;
 
   if (target_id) {
     url += `target_id=${target_id}`;

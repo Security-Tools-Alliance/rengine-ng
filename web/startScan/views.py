@@ -609,7 +609,7 @@ def scheduled_scan_view(request, slug):
 
 
 @has_permission_decorator(PERM_MODIFY_SCAN_RESULTS, redirect_url=FOUR_OH_FOUR_URL)
-def delete_scheduled_task(request, id):
+def delete_scheduled_task(request, slug, id):
     task_object = get_object_or_404(PeriodicTask, id=id)
     if request.method == "POST":
         task_object.delete()
@@ -628,7 +628,7 @@ def delete_scheduled_task(request, id):
 
 
 @has_permission_decorator(PERM_MODIFY_SCAN_RESULTS, redirect_url=FOUR_OH_FOUR_URL)
-def change_scheduled_task_status(request, id):
+def change_scheduled_task_status(request, slug, id):
     if request.method == 'POST':
         task = PeriodicTask.objects.get(id=id)
         task.enabled = not task.enabled
@@ -636,7 +636,7 @@ def change_scheduled_task_status(request, id):
     return HttpResponse('')
 
 
-def change_vuln_status(request, id):
+def change_vuln_status(request, slug, id):
     if request.method == 'POST':
         vuln = Vulnerability.objects.get(id=id)
         vuln.open_status = not vuln.open_status
@@ -645,9 +645,9 @@ def change_vuln_status(request, id):
 
 
 @has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
-def delete_all_scan_results(request):
+def delete_all_scan_results(request, slug):
     if request.method == 'POST':
-        ScanHistory.objects.all().delete()
+        ScanHistory.objects.filter(project__slug=slug).delete()
         messageData = {'status': 'true'}
         messages.add_message(
             request,
@@ -657,9 +657,11 @@ def delete_all_scan_results(request):
 
 
 @has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
-def delete_all_screenshots(request):
+def delete_all_screenshots(request, slug):
     if request.method == 'POST':
-        run_command('rm -rf ' + str(Path(RENGINE_RESULTS) / '*'))
+        domains = Domain.objects.filter(project__slug=slug)
+        for domain in domains:
+            run_command(f'rm -rf {str(Path(RENGINE_RESULTS) / domain.name)}')
         messageData = {'status': 'true'}
         messages.add_message(
             request,
@@ -847,7 +849,7 @@ def customize_report(request, id):
 
 
 @has_permission_decorator(PERM_MODIFY_SCAN_REPORT, redirect_url=FOUR_OH_FOUR_URL)
-def create_report(request, id):
+def create_report(request, slug, id):
     primary_color = '#FFB74D'
     secondary_color = '#212121'
     # get report type

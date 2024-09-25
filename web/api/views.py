@@ -8,6 +8,7 @@ from collections import defaultdict
 
 import requests
 import validators
+from django.urls import reverse
 from dashboard.models import OllamaSettings, Project, SearchHistory
 from django.db.models import CharField, Count, F, Q, Value
 from django.shortcuts import get_object_or_404
@@ -697,7 +698,8 @@ class AddTarget(APIView):
 			'status': True,
 			'message': 'Domain successfully added as target!',
 			'domain_name': domain_name,
-			'domain_id': domain.id
+			'domain_id': domain.id,
+			'initiate_scan_url': reverse('start_scan', kwargs={'slug': slug, 'domain_id': domain.id})
 		})
 
 
@@ -744,7 +746,7 @@ class FetchSubscanResults(APIView):
 		logger.info(subscan_data)
 		logger.info(subscan_results)
 
-		return Response({'subscan': subscan_data, 'result': subscan_results})
+		return Response({'subscan': subscan_data, 'result': subscan_results, 'endpoint_url': reverse('api:endpoints-list'), 'vulnerability_url': reverse('api:vulnerabilities-list')})
 
 
 class ListSubScans(APIView):
