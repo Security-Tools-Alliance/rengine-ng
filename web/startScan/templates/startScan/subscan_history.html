@@ -134,7 +134,7 @@ SubScan History
                   <div class="dropdown-menu" style="">
                     {% if user|can:'initiate_scans_subscans' %}
                       {% if subscan.status == 1 %}
-                        <a href="#" class="dropdown-item text-danger" onclick="stop_scan(scan_id=null, subscan_id={{subscan.id}}, reload_scan_bar=false, reload_location=true)"><i class="fe-alert-triangle"></i>&nbsp;Stop Subscan</a>
+                        <a href="#" class="dropdown-item text-danger" onclick="stop_scan('{% url 'api:stop_scan' %}', scan_id=null, subscan_id={{subscan.id}}, reload_scan_bar=false, reload_location=true)"><i class="fe-alert-triangle"></i>&nbsp;Stop Subscan</a>
                       {% endif %}
                     {% endif %}
                     {% if user|can:'modify_scan_results' %}
