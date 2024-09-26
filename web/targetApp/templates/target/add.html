@@ -340,7 +340,7 @@ Add or Import Targets
     // check if target exists or not
     var domain = document.getElementById("domainName").value;
     if (domain) {
-      get_domain_whois(domain);
+      get_domain_whois('{% url 'api:whois' %}', domain, '{% url 'api:addTarget' %}', '{{current_project.slug}}', true);
     }
   }
 

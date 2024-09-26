@@ -1,62 +1,43 @@
 function show_whois_lookup_modal(){
-	$('#modal_title').html('WHOIS Lookup');
-	$('#modal-content').empty();
-	$('#modal-content').append(`
-		<div class="mb-3">
-			<label for="whois_domain_name" class="form-label">Domain Name/IP Address</label>
-			<input class="form-control" type="text" id="whois_domain_name" required="" placeholder="yourdomain.com">
-		</div>
-		<div class="mb-3 text-center">
-			<button class="btn btn-primary float-end" type="submit" id="search_whois_toolbox_btn" onclick="toolbox_lookup_whois()">Search Whois</button>
-		</div>
-	`);
-	$('#modal_dialog').modal('show');
+	$('#whoisLookupModal').modal('show');
 }
 
-function toolbox_lookup_whois(){
+$(document).on('click', '#search_whois_toolbox_btn', function(){
 	var domain = document.getElementById("whois_domain_name").value;
+	var whoisLookupUrl = $(this).data('url');
+	var project_slug = $(this).data('slug');
+	var addTargetUrl = $(this).data('addtargeturl');
 	if (domain) {
-		get_domain_whois(domain, show_add_target_btn=true);
+		get_domain_whois(whoisLookupUrl, domain, addTargetUrl, project_slug, true);
 	}
 	else{
 		swal.fire("Error!", 'Please enter the domain/IP Address!', "warning", {
 			button: "Okay",
 		});
 	}
-}
+});
 
 
 function cms_detector(){
-	$('#modal_title').html('Detect CMS');
-	$('#modal-content').empty();
-	$('#modal-content').append(`
-		<div class="mb-1">
-			<label for="cms_detector_input_url" class="form-label">HTTP URL/Domain Name</label>
-			<input class="form-control" type="text" id="cms_detector_input_url" required="" placeholder="https://yourdomain.com">
-		</div>
-		<small class="mb-3 float-end text-muted">(reNgine-ng uses <a href="https://github.com/Tuhinshubhra/CMSeeK" target="_blank">CMSeeK</a> to detect CMS.)</span>
-		<div class="mt-3 mb-3 text-center">
-			<button class="btn btn-primary float-end" type="submit" id="detect_cms_submit_btn">Detect CMS</button>
-		</div>
-	`);
-	$('#modal_dialog').modal('show');
+	$('#cmsDetectorModal').modal('show');
 }
 
 
 $(document).on('click', '#detect_cms_submit_btn', function(){
 	var url = document.getElementById("cms_detector_input_url").value;
+	var cmsDetectorUrl = $(this).data('url');
 	if (!validURL(url)) {
 		swal.fire("Error!", 'Please enter a valid URL!', "warning", {
 			button: "Okay",
 		});
 		return;
 	}
-	cms_detector_api_call(url);
+	cms_detector_api_call(cmsDetectorUrl, url);
 });
 
 
-function cms_detector_api_call(url){
-	var api_url = `/api/tools/cms_detector/?format=json&url=${url}`
+function cms_detector_api_call(cmsDetectorUrl, url){
+	var api_url = `${cmsDetectorUrl}?format=json&url=${url}`
 	Swal.fire({
 		title: `Detecting CMS`,
 		text: `reNgine is detecting CMS on ${url} and this may take a while. Please wait...`,
@@ -209,8 +190,8 @@ function cms_detector_api_call(url){
 
 			content += '</div>'
 
-			$('#modal-content').append(content);
-			$('#modal_dialog').modal('show');
+			$('#cmsDetectorResultModal #modal-content').append(content);
+			$('#cmsDetectorResultModal').modal('show');
 		} else {
 			Swal.fire({
 				title: 'Oops!',
@@ -223,66 +204,46 @@ function cms_detector_api_call(url){
 
 
 function toolbox_cve_detail(){
-	$('#modal_title').html('CVE Details Lookup');
-	$('#modal-content').empty();
-	$('#modal-content').append(`
-		<div class="mb-1">
-			<label for="cve_id" class="form-label">CVE ID</label>
-			<input class="form-control" type="text" id="cve_id" required="" placeholder="CVE-XXXX-XXXX">
-		</div>
-		<div class="mt-3 mb-3 text-center">
-			<button class="btn btn-primary float-end" type="submit" id="cve_detail_submit_btn">Lookup CVE</button>
-		</div>
-	`);
-	$('#modal_dialog').modal('show');
+	$('#cveDetailModal').modal('show');
 }
 
 
 
 $(document).on('click', '#cve_detail_submit_btn', function(){
-	var cve_id = document.getElementById("cve_id").value;
-	if (cve_id) {
-		get_and_render_cve_details(cve_id);
-	}
-	else{
-		swal.fire("Error!", 'Please enter CVE ID!', "warning", {
-			button: "Okay",
-		});
-	}
+    var cve_id = document.getElementById("cve_id").value;
+    var cveDetailsUrl = $(this).data('url');
+
+    if (cve_id) {
+        get_and_render_cve_details(cveDetailsUrl, cve_id);
+    }
+    else{
+        swal.fire("Error!", 'Please enter CVE ID!', "warning", {
+            button: "Okay",
+        });
+    }
 });
 
 
 function toolbox_waf_detector(){
-	$('#modal_title').html('WAF Detector');
-	$('#modal-content').empty();
-	$('#modal-content').append(`
-		<div class="mb-1">
-			<label for="cms_detector_input_url" class="form-label">HTTP URL/Domain Name</label>
-			<input class="form-control" type="text" id="waf_detector_input_url" required="" placeholder="https://yourdomain.com">
-		</div>
-		<small class="mb-3 float-end text-muted">(reNgine-ng uses <a href="https://github.com/EnableSecurity/wafw00f" target="_blank">wafw00f</a> to detect WAF.)</span>
-		<div class="mt-3 mb-3 text-center">
-			<button class="btn btn-primary float-end" type="submit" id="detect_waf_submit_btn">Detect WAF</button>
-		</div>
-	`);
-	$('#modal_dialog').modal('show');
+	$('#wafDetectorModal').modal('show');
 }
 
 
 $(document).on('click', '#detect_waf_submit_btn', function(){
 	var url = document.getElementById("waf_detector_input_url").value;
+	var wafDetectorUrl = $(this).data('url');
 	if (!validURL(url)) {
 		swal.fire("Error!", 'Please enter a valid URL!', "warning", {
 			button: "Okay",
 		});
 		return;
 	}
-	waf_detector_api_call(url);
+	waf_detector_api_call(wafDetectorUrl, url);
 });
 
 
-function waf_detector_api_call(url){
-	var api_url = `/api/tools/waf_detector/?format=json&url=${url}`
+function waf_detector_api_call(wafDetectorUrl, url){
+	var api_url = `${wafDetectorUrl}?format=json&url=${url}`
 	Swal.fire({
 		title: `Detecting WAF`,
 		text: `reNgine is detecting WAF on ${url} and this may take a while. Please wait...`,

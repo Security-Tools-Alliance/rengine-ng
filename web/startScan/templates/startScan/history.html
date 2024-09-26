@@ -177,19 +177,19 @@ Quick Scan History
                           {% endif %}
 
                           {% if scan_history.scan_status == 1 or scan_history.scan_status == -1%}
-                          <a href="#" class="dropdown-item text-danger" onclick="stop_scan(scan_id={{ scan_history.id }}, subscan_id=null, reload_scan_bar=false, reload_location=true)">
+                          <a href="#" class="dropdown-item text-danger" onclick="stop_scan('{% url 'api:stop_scan' %}', scan_id={{ scan_history.id }}, subscan_id=null, reload_scan_bar=false, reload_location=true)">
                           <i class="fe-alert-triangle"></i>&nbsp;Stop Scan</a>
                           {% endif %}
                         {% endif %}
                         {% if user|can:'modify_scan_results' %}
                           {% if scan_history.scan_status == 2 or scan_history.scan_status == 3 or scan_history.scan_status == 0 %}
-                            <a href="#" class="dropdown-item text-danger" onclick="delete_scan('{{ scan_history.id }}')">
+                            <a href="#" class="dropdown-item text-danger" onclick="delete_scan('{% url 'delete_scan' current_project.slug scan_history.id %}')">
                             <i class="fe-trash-2"></i>&nbsp;Delete Scan Results</a>
                           {% endif %}
                           <div class="dropdown-divider"></div>
                         {% endif %}
                         {% if scan.scan_status != -1%}
-                          <a href="#" class="dropdown-item text-dark" onclick="initiate_report({{scan_history.id}}, '{% if 'subdomain_discovery' in scan_history.scan_type.tasks %}True{% endif %}', '{% if 'vulnerability_scan' in scan_history.scan_type.tasks %}True{% endif %}', '{{ scan_history.domain.name }}')">
+                          <a href="#" class="dropdown-item text-dark" onclick="initiate_report('{% url 'create_report' current_project.slug scan_history.id %}', {{scan_history.id}}, '{% if 'subdomain_discovery' in scan_history.scan_type.tasks %}True{% endif %}', '{% if 'vulnerability_scan' in scan_history.scan_type.tasks %}True{% endif %}', '{{ scan_history.domain.name }}')">
                           <i class="fe-download"></i>&nbsp;Scan Report</a>
                         {% endif %}
                         </div>
@@ -489,7 +489,7 @@ Quick Scan History
     }
 });
 
-  function initiate_report(id, is_subdomain_scan, is_vulnerability_scan, domain_name) {
+  function initiate_report(url, id, is_subdomain_scan, is_vulnerability_scan, domain_name) {
     $('#generateReportModal').modal('show');
     $('#report_alert_message').empty();
     $('#report_type_select').empty();
@@ -525,13 +525,13 @@ Quick Scan History
           text: 'Vulnerability Report'
         }));
     }
-    $('#generateReportButton').attr('onClick', `generate_report(${id}, '${domain_name}')`);
-    $('#previewReportButton').attr('onClick', `preview_report(${id}, '${domain_name}')`);
+    $('#generateReportButton').attr('onClick', `generate_report('${url}', ${id}, '${domain_name}')`);
+    $('#previewReportButton').attr('onClick', `preview_report('${url}', ${id}, '${domain_name}')`);
   }
 
-  function preview_report(id, domain_name){
+  function preview_report(url, id, domain_name){
     var report_type = $("#report_type_select option:selected").val();
-    var url = `/scan/create_report/${id}?report_type=${report_type}`;
+    var url = `${url}?report_type=${report_type}`;
     if ($('#report_ignore_info_vuln').is(":checked")) {
       url += `&ignore_info_vuln`
     }
@@ -539,9 +539,9 @@ Quick Scan History
     window.open(url, '_blank').focus();
   }
 
-  function generate_report(id, domain_name) {
+  function generate_report(url, id, domain_name) {
     var report_type = $("#report_type_select option:selected").val();
-    var url = `/scan/create_report/${id}?report_type=${report_type}&download`;
+    var url = `${url}?report_type=${report_type}&download`;
     if ($('#report_ignore_info_vuln').is(":checked")) {
       url += `&ignore_info_vuln`
     }

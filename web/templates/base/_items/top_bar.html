@@ -35,7 +35,7 @@
             </a>
           {% endfor %}
           <div class="dropdown-divider"></div>
-          <a href="#" onclick="add_project_modal()" class="dropdown-item"><i class="mdi mdi-account-plus"></i> Create New Project</a>
+          <a href="#" onclick="add_project_modal('{% url 'api:create_project' %}')" class="dropdown-item"><i class="mdi mdi-account-plus"></i> Create New Project</a>
         </div>
       </li>
       {% if user|can:'modify_targets' or user|can:'modify_scan_configurations' or user|can:'modify_system_configurations' or user|can:'modify_wordlists' %}
@@ -161,7 +161,7 @@
         </a>
       </li>
       <li class="dropdown top-activity-counter">
-        <a class="nav-link dropdown-toggle waves-effect waves-light right-bar-toggle" href="javascript:getScanStatusSidebar(project='{{current_project.slug}}', reload=false)">
+        <a class="nav-link dropdown-toggle waves-effect waves-light right-bar-toggle" href="javascript:getScanStatusSidebar('{% url 'api:scan_status' %}', '{% url 'api:stop_scan' %}', '{% url 'api:fetch_subscan_results' %}', project='{{current_project.slug}}', reload=false)">
           <i class="fe-activity noti-icon"></i>
           <span class="badge bg-danger noti-icon-badge"><span id="current_scan_counter">0</span></span>
         </a>
@@ -202,5 +202,153 @@
       </li>
     </ul>
     <div class="clearfix"></div>
+  </div>
+</div>
+
+<div class="modal fade" id="wafDetectorModal" tabindex="-1" role="dialog" aria-labelledby="wafDetectorModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg" role="document">
+      <div class="modal-content">
+          <div class="modal-header">
+              <h5 class="modal-title" id="modal_title">WAF Detector</h5>
+              <button type="button" class="btn-close" data-dismiss="modal" aria-label="Close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body" id="modal-content">
+              <div class="mb-1">
+                  <label for="waf_detector_input_url" class="form-label">HTTP URL/Domain Name</label>
+                  <input class="form-control" type="text" id="waf_detector_input_url" required="" placeholder="https://yourdomain.com">
+              </div>
+              <small class="mb-3 float-end text-muted">(reNgine-ng uses <a href="https://github.com/EnableSecurity/wafw00f" target="_blank">wafw00f</a> to detect WAF.)</small>
+              <div class="mt-3 mb-3 text-center">
+                  <button class="btn btn-primary float-end" type="submit" id="detect_waf_submit_btn" data-url="{% url 'api:waf_detector' %}">Detect WAF</button>
+              </div>
+          </div>
+      </div>
+  </div>
+</div>
+
+<div class="modal fade" id="cmsDetectorModal" tabindex="-1" role="dialog" aria-labelledby="cmsDetectorModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg" role="document">
+      <div class="modal-content">
+          <div class="modal-header">
+              <h5 class="modal-title" id="modal_title">Detect CMS</h5>
+              <button type="button" class="btn-close" data-dismiss="modal" aria-label="Close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body" id="modal-content">
+              <div class="mb-1">
+                  <label for="cms_detector_input_url" class="form-label">HTTP URL/Domain Name</label>
+                  <input class="form-control" type="text" id="cms_detector_input_url" required="" placeholder="https://yourdomain.com">
+              </div>
+              <small class="mb-3 float-end text-muted">(reNgine-ng uses <a href="https://github.com/Tuhinshubhra/CMSeeK" target="_blank">CMSeeK</a> to detect CMS.)</small>
+              <div class="mt-3 mb-3 text-center">
+                  <button class="btn btn-primary float-end" type="submit" id="detect_cms_submit_btn" data-url="{% url 'api:cms_detector' %}">Detect CMS</button>
+              </div>
+          </div>
+      </div>
+  </div>
+</div>
+
+<div class="modal fade" id="cmsDetectorResultModal" tabindex="-1" role="dialog" aria-labelledby="cmsDetectorModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg" role="document">
+      <div class="modal-content">
+          <div class="modal-header">
+              <h5 class="modal-title" id="modal_title">CMS Details</h5>
+              <button type="button" class="btn-close" data-dismiss="modal" aria-label="Close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body" id="modal-content">
+          </div>
+          <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+          </div>
+      </div>
+  </div>
+</div>
+
+<div class="modal fade" id="whoisLookupModal" tabindex="-1" role="dialog" aria-labelledby="whoisLookupModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg" role="document">
+      <div class="modal-content">
+          <div class="modal-header">
+              <h5 class="modal-title" id="modal_title">WHOIS Lookup</h5>
+              <button type="button" class="btn-close" data-dismiss="modal" aria-label="Close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body" id="modal-content">
+              <div class="mb-3">
+                  <label for="whois_domain_name" class="form-label">Domain Name/IP Address</label>
+                  <input class="form-control" type="text" id="whois_domain_name" required="" placeholder="yourdomain.com">
+              </div>
+              <div class="mb-3 text-center">
+                  <button class="btn btn-primary float-end" type="submit" id="search_whois_toolbox_btn" data-url="{% url 'api:whois' %}" data-slug="{{current_project.slug}}" data-addTargetUrl="{% url 'api:addTarget' %}">Search Whois</button>
+              </div>
+          </div>
+      </div>
+  </div>
+</div>
+
+<div class="modal fade" id="whoisLookupResultModal" tabindex="-1" role="dialog" aria-labelledby="whoisLookupModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg" role="document">
+      <div class="modal-content">
+          <div class="modal-header">
+              <h5 class="modal-title" id="modal_title">WHOIS Details</h5>
+              <button type="button" class="btn-close" data-dismiss="modal" aria-label="Close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body" id="modal-content">
+          </div>
+          <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+          </div>
+      </div>
+  </div>
+</div>
+
+<div class="modal fade" id="cveDetailModal" tabindex="-1" role="dialog" aria-labelledby="cveDetailModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg" role="document">
+      <div class="modal-content">
+          <div class="modal-header">
+              <h5 class="modal-title" id="modal_title">CVE Details Lookup</h5>
+              <button type="button" class="btn-close" data-dismiss="modal" aria-label="Close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body" id="modal-content">
+              <div class="mb-1">
+                  <label for="cve_id" class="form-label">CVE ID</label>
+                  <input class="form-control" type="text" id="cve_id" required="" placeholder="CVE-XXXX-XXXX">
+              </div>
+          </div>
+          <div class="modal-footer">
+              <button class="btn btn-primary float-end" type="submit" id="cve_detail_submit_btn" data-url="{% url 'api:cve_details' %}">Lookup CVE</button>
+          </div>
+      </div>
+  </div>
+</div>
+
+<div class="modal fade" id="addTargetModal" tabindex="-1" role="dialog" aria-labelledby="addTargetModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg" role="document">
+      <div class="modal-content">
+          <div class="modal-header">
+              <h5 class="modal-title" id="modal_title">Add Target</h5>
+              <button type="button" class="btn-close" data-dismiss="modal" aria-label="Close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body" id="modal-content">
+              <p>If you would like to add IP/CIDRs, multiple domains, please <a href="{% url 'add_target' current_project.slug %}">click here.</a></p>
+              <div class="mb-3">
+                  <label for="target_name_modal" class="form-label">Target Name</label>
+                  <input class="form-control" type="text" id="target_name_modal" required="" placeholder="yourdomain.com">
+              </div>
+              <div class="mb-3">
+                  <label for="target_description_modal" class="form-label">Description (Optional)</label>
+                  <input class="form-control" type="text" id="target_description_modal" required="" placeholder="Target Description">
+              </div>
+              <div class="mb-3">
+                  <label for="h1_handle_modal" class="form-label">Hackerone Target Team Handle (Optional)</label>
+                  <input class="form-control" type="text" id="h1_handle_modal" placeholder="hackerone.com/team_handle, Only enter team_handle after /">
+              </div>
+              <div class="mb-3">
+                  <label for="target_organization_modal" class="form-label">Target Organization (Optional)</label>
+                  <input class="form-control" type="text" id="target_organization_modal" placeholder="Target Org">
+              </div>
+          </div>
+          <div class="modal-footer">
+              <button class="btn btn-primary float-end" type="submit" id="add_target_modal" data-url="{% url 'api:addTarget' %}" data-slug="{{current_project.slug}}">Add Target</button>
+              <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+          </div>
+      </div>
   </div>
 </div>

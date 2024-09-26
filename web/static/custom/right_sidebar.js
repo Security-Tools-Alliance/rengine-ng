@@ -1,5 +1,5 @@
-function getScanStatusSidebar(project, reload) {
-  $.getJSON('/api/scan_status/?project=' + project, function(data) {
+function getScanStatusSidebar(endpoint_url, endpoint_stop_scan_url, endpoint_scan_status_url, project, reload) {
+  $.getJSON(endpoint_url + '?project=' + project, function(data) {
     // main scans
     $('#currently_scanning').empty();
     $('#completed').empty();
@@ -57,7 +57,7 @@ function getScanStatusSidebar(project, reload) {
           <div class="progress mt-2" style="height: 4px;">
           <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary" role="progressbar" aria-valuenow="${scan_object.current_progress}" aria-valuemin="0" aria-valuemax="100" style="width: ${scan_object.current_progress}%"></div>
           </div>
-          <a href="#" onclick="stop_scan(scan_id=${scan_object.id}, subscan_id=null, reload_scan_bar=true, reload_location=false)" class="btn btn-xs btn-soft-danger waves-effect waves-light mt-1 float-end"><i class="fe-alert-triangle"></i> Stop</a>
+          <a href="#" onclick="stop_scan('${endpoint_stop_scan_url}', scan_id=${scan_object.id}, subscan_id=null, reload_scan_bar=true, reload_location=false)" class="btn btn-xs btn-soft-danger waves-effect waves-light mt-1 float-end"><i class="fe-alert-triangle"></i> Stop</a>
           </div>
           </a>
           </div>
@@ -128,7 +128,7 @@ function getScanStatusSidebar(project, reload) {
 
           $('#currently_running_tasks').append(`
             <div class="card border-primary border mini-card">
-            <a href="#" onclick="show_subscan_results(${task_object['id']})" class="text-reset item-hovered">
+            <a href="#" onclick="show_subscan_results('${endpoint_scan_status_url}', ${task_object['id']})" class="text-reset item-hovered">
             <div class="card-header bg-soft-primary text-primary mini-card-header">
             ${task_name} on <b>${task_object.subdomain_name}</b> using engine <b>${htmlEncode(task_object.engine)}</b>
             </div>
@@ -143,7 +143,7 @@ function getScanStatusSidebar(project, reload) {
             </p>
             <div>
             </div>
-            <a href="#" onclick="stop_scan(scan_id=null, subscan_id=${task_object.id}, reload_scan_bar=true, reload_location=false)" class="btn btn-xs btn-soft-danger waves-effect waves-light mt-1 float-end"><i class="fe-alert-triangle"></i> Stop</a>
+            <a href="#" onclick="stop_scan('${endpoint_stop_scan_url}', scan_id=null, subscan_id=${task_object.id}, reload_scan_bar=true, reload_location=false)" class="btn btn-xs btn-soft-danger waves-effect waves-light mt-1 float-end"><i class="fe-alert-triangle"></i> Stop</a>
             </div>
             </a>
             </div>
@@ -179,7 +179,7 @@ function getScanStatusSidebar(project, reload) {
 
           $('#completed_tasks').append(`
             <div class="card border-${color} border mini-card">
-            <a href="#" class="text-reset item-hovered" onclick="show_subscan_results(${task_object['id']})">
+            <a href="#" class="text-reset item-hovered" onclick="show_subscan_results('${endpoint_scan_status_url}', ${task_object['id']})">
             <div class="card-header ${bg_color} text-${color} mini-card-header">
             ${task_name} on <b>${task_object.subdomain_name}</b> using engine <b>${htmlEncode(task_object.engine)}</b>
             </div>

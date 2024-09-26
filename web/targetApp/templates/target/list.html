@@ -162,7 +162,7 @@ $(document).ready(function(){
 				{
 					"render": function(data, type, row) {
 						var content = '';
-						content += `<b>${data}</b>&nbsp;&nbsp;<a href="#" onclick="get_target_whois('${data}')">(view whois)</a>`;
+						content += `<b>${data}</b>&nbsp;&nbsp;<a href="#" onclick="get_target_whois('{% url 'api:whois' %}', '${data}')">(view whois)</a>`;
 						if (row.organization) {
 							content += '<br>';
 							for (var org in row.organization) {
