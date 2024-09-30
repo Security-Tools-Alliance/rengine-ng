@@ -54,7 +54,7 @@ function cms_detector_api_call(cmsDetectorUrl, url){
 	}).then(response => response.json()).then(function(response) {
 		if (response.status) {
 			swal.close();
-			$('#cmsDetectorResultModal .modal-title').html('CMS Details for ' + url);
+			$('#cmsDetectorResultModal .modal-title').text('CMS Details for ' + url);
 			$('#cmsDetectorResultModal .modal-body').empty();
 
 			content = `
