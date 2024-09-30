@@ -79,21 +79,22 @@ if [ $isNonInteractive = false ]; then
       * )
       if ! command -v nano &> /dev/null; then
         . /etc/os-release
-        case "$ID" in
-          ubuntu|debian) sudo apt update && sudo apt install -y nano ;;
-          fedora) sudo dnf install -y nano ;;
-          centos|rhel) sudo yum install -y nano ;;
-          arch) sudo pacman -Sy nano ;;
-          opensuse|suse) sudo zypper install -y nano ;;
+        DISTRO_FAMILY="${ID_LIKE:-$ID}"  # Use ID_LIKE if available, otherwise fallback to ID
+        case "$DISTRO_FAMILY" in
+          *debian*) sudo apt update && sudo apt install -y nano ;;
+          *fedora*|*centos*|*rhel*) sudo dnf install -y nano ;;
+          *arch*) sudo pacman -Sy nano ;;
+          *suse*|*opensuse*) sudo zypper install -y nano ;;
           *) log "Unsupported Linux distribution. Please install nano manually." $COLOR_RED; exit 1 ;;
         esac
         [ $? -eq 0 ] && log "nano installed!" $COLOR_GREEN || { log "Failed to install nano." $COLOR_RED; exit 1; }
       else
         log "nano already installed, skipping." $COLOR_GREEN
-        fi
+      fi
       nano .env
       ;;
   esac
+
   # Select install type
   log "Do you want to build Docker images from source or use pre-built images (recommended)? \nThis saves significant build time but requires good download speeds for it to complete fast." $COLOR_RED
   log "1) From source" $COLOR_GREEN
@@ -144,17 +145,17 @@ log "Installing curl..." $COLOR_CYAN
 
 if ! command -v curl &> /dev/null; then
   . /etc/os-release
-  case "$ID" in
-    ubuntu|debian) sudo apt update && sudo apt install -y curl ;;
-    fedora) sudo dnf install -y curl ;;
-    centos|rhel) sudo yum install -y curl ;;
-    arch) sudo pacman -Sy curl ;;
-    opensuse|suse) sudo zypper install -y curl ;;
+  DISTRO_FAMILY="${ID_LIKE:-$ID}"  # Use ID_LIKE if available, otherwise fallback to ID
+  case "$DISTRO_FAMILY" in
+    *debian*) sudo apt update && sudo apt install -y curl ;;
+    *fedora*|*centos*|*rhel*) sudo dnf install -y curl ;;
+    *arch*) sudo pacman -Sy curl ;;
+    *suse*|*opensuse*) sudo zypper install -y curl ;;
     *) log "Unsupported Linux distribution. Please install curl manually." $COLOR_RED; exit 1 ;;
   esac
-  [ $? -eq 0 ] && log "CURL installed!" $COLOR_GREEN || { log "Failed to install CURL." $COLOR_RED; exit 1; }
+  [ $? -eq 0 ] && log "curl installed!" $COLOR_GREEN || { log "Failed to install curl." $COLOR_RED; exit 1; }
 else
-  log "CURL already installed, skipping." $COLOR_GREEN
+  log "curl already installed, skipping." $COLOR_GREEN
 fi
 
 log "Installing Docker..." $COLOR_CYAN
@@ -177,12 +178,12 @@ fi
 
 if ! command -v make &> /dev/null; then
   . /etc/os-release
-  case "$ID" in
-    ubuntu|debian) sudo apt update && sudo apt install -y make ;;
-    fedora) sudo dnf install -y make ;;
-    centos|rhel) sudo yum install -y make ;;
-    arch) sudo pacman -Sy make ;;
-    opensuse|suse) sudo zypper install -y make ;;
+  DISTRO_FAMILY="${ID_LIKE:-$ID}"  # Use ID_LIKE if available, otherwise fallback to ID
+  case "$DISTRO_FAMILY" in
+    *debian*) sudo apt update && sudo apt install -y make ;;
+    *fedora*|*centos*|*rhel*) sudo dnf install -y make ;;
+    *arch*) sudo pacman -Sy make ;;
+    *suse*|*opensuse*) sudo zypper install -y make ;;
     *) log "Unsupported Linux distribution. Please install make manually." $COLOR_RED; exit 1 ;;
   esac
   [ $? -eq 0 ] && log "make installed!" $COLOR_GREEN || { log "Failed to install make." $COLOR_RED; exit 1; }
