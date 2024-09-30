@@ -209,10 +209,10 @@
   <div class="modal-dialog modal-lg" role="document">
       <div class="modal-content">
           <div class="modal-header">
-              <h5 class="modal-title" id="modal_title">WAF Detector</h5>
-              <button type="button" class="btn-close" data-dismiss="modal" aria-label="Close" data-bs-dismiss="modal"></button>
+              <h5 class="modal-title">WAF Detector</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" data-bs-dismiss="modal"></button>
           </div>
-          <div class="modal-body" id="modal-content">
+          <div class="modal-body">
               <div class="mb-1">
                   <label for="waf_detector_input_url" class="form-label">HTTP URL/Domain Name</label>
                   <input class="form-control" type="text" id="waf_detector_input_url" required="" placeholder="https://yourdomain.com">
@@ -230,10 +230,10 @@
   <div class="modal-dialog modal-lg" role="document">
       <div class="modal-content">
           <div class="modal-header">
-              <h5 class="modal-title" id="modal_title">Detect CMS</h5>
-              <button type="button" class="btn-close" data-dismiss="modal" aria-label="Close" data-bs-dismiss="modal"></button>
+              <h5 class="modal-title">Detect CMS</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" data-bs-dismiss="modal"></button>
           </div>
-          <div class="modal-body" id="modal-content">
+          <div class="modal-body">
               <div class="mb-1">
                   <label for="cms_detector_input_url" class="form-label">HTTP URL/Domain Name</label>
                   <input class="form-control" type="text" id="cms_detector_input_url" required="" placeholder="https://yourdomain.com">
@@ -251,13 +251,13 @@
   <div class="modal-dialog modal-lg" role="document">
       <div class="modal-content">
           <div class="modal-header">
-              <h5 class="modal-title" id="modal_title">CMS Details</h5>
-              <button type="button" class="btn-close" data-dismiss="modal" aria-label="Close" data-bs-dismiss="modal"></button>
+              <h5 class="modal-title">CMS Details</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" data-bs-dismiss="modal"></button>
           </div>
-          <div class="modal-body" id="modal-content">
+          <div class="modal-body">
           </div>
           <div class="modal-footer">
-              <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
           </div>
       </div>
   </div>
@@ -267,10 +267,10 @@
   <div class="modal-dialog modal-lg" role="document">
       <div class="modal-content">
           <div class="modal-header">
-              <h5 class="modal-title" id="modal_title">WHOIS Lookup</h5>
-              <button type="button" class="btn-close" data-dismiss="modal" aria-label="Close" data-bs-dismiss="modal"></button>
+              <h5 class="modal-title">WHOIS Lookup</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" data-bs-dismiss="modal"></button>
           </div>
-          <div class="modal-body" id="modal-content">
+          <div class="modal-body">
               <div class="mb-3">
                   <label for="whois_domain_name" class="form-label">Domain Name/IP Address</label>
                   <input class="form-control" type="text" id="whois_domain_name" required="" placeholder="yourdomain.com">
@@ -287,13 +287,13 @@
   <div class="modal-dialog modal-lg" role="document">
       <div class="modal-content">
           <div class="modal-header">
-              <h5 class="modal-title" id="modal_title">WHOIS Details</h5>
-              <button type="button" class="btn-close" data-dismiss="modal" aria-label="Close" data-bs-dismiss="modal"></button>
+              <h5 class="modal-title">WHOIS Details</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" data-bs-dismiss="modal"></button>
           </div>
-          <div class="modal-body" id="modal-content">
+          <div class="modal-body">
           </div>
           <div class="modal-footer">
-              <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
           </div>
       </div>
   </div>
@@ -303,10 +303,10 @@
   <div class="modal-dialog modal-lg" role="document">
       <div class="modal-content">
           <div class="modal-header">
-              <h5 class="modal-title" id="modal_title">CVE Details Lookup</h5>
-              <button type="button" class="btn-close" data-dismiss="modal" aria-label="Close" data-bs-dismiss="modal"></button>
+              <h5 class="modal-title">CVE Details Lookup</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" data-bs-dismiss="modal"></button>
           </div>
-          <div class="modal-body" id="modal-content">
+          <div class="modal-body">
               <div class="mb-1">
                   <label for="cve_id" class="form-label">CVE ID</label>
                   <input class="form-control" type="text" id="cve_id" required="" placeholder="CVE-XXXX-XXXX">
@@ -323,10 +323,10 @@
   <div class="modal-dialog modal-lg" role="document">
       <div class="modal-content">
           <div class="modal-header">
-              <h5 class="modal-title" id="modal_title">Add Target</h5>
-              <button type="button" class="btn-close" data-dismiss="modal" aria-label="Close" data-bs-dismiss="modal"></button>
+              <h5 class="modal-title">Add Target</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" data-bs-dismiss="modal"></button>
           </div>
-          <div class="modal-body" id="modal-content">
+          <div class="modal-body">
               <p>If you would like to add IP/CIDRs, multiple domains, please <a href="{% url 'add_target' current_project.slug %}">click here.</a></p>
               <div class="mb-3">
                   <label for="target_name_modal" class="form-label">Target Name</label>
@@ -347,7 +347,7 @@
           </div>
           <div class="modal-footer">
               <button class="btn btn-primary float-end" type="submit" id="add_target_modal" data-url="{% url 'api:addTarget' %}" data-slug="{{current_project.slug}}">Add Target</button>
-              <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
           </div>
       </div>
   </div>

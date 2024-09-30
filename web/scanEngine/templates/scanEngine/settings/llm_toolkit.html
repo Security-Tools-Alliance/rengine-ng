@@ -158,9 +158,9 @@ LLM Toolkit (Beta)
   }
 
   function showAddNewModelModal(){
-    $('#modal_title').html('Add new LLM Model');
-    $('#modal-content').empty();
-    $('#modal-content').append(`
+    $('#modal_dialog .modal-title').html('Add new LLM Model');
+    $('#modal_dialog .modal-text').empty();
+    $('#modal_dialog .modal-text').append(`
       <p>You can find the list of supported models in <a href="https://ollama.com/library" target="_blank">Ollama Library</a></p>
       <p>We recommend using llama2-uncensored model for better results.</p>
       <div class="mb-3">
