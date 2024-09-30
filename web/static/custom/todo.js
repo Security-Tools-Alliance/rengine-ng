@@ -91,14 +91,14 @@ function change_todo_priority(todo_id, imp_type){
 function list_subdomain_todos(subdomain_id, subdomain_name){
   $('.modal-title').html(`Todos for subdomain ${subdomain_name}`);
   $('#modal_dialog').modal('show');
-  $('#modal-content').empty();
-   $('#modal-footer').empty();
-  $('#modal-content').append(`<div class='outer-div' id="modal-loader"><span class="inner-div spinner-border text-info align-self-center loader-sm"></span></div>`);
+  $('#modal_dialog .modal-text').empty();
+   $('#modal_dialog .modal-footer').empty();
+  $('#modal_dialog .modal-text').append(`<div class='outer-div' id="modal-loader"><span class="inner-div spinner-border text-info align-self-center loader-sm"></span></div>`);
   // query subdomains
   $.getJSON(`/api/listTodoNotes/?subdomain_id=${subdomain_id}&format=json`, function(data) {
-    $('#modal-loader').empty();
-    $('#modal-content').empty();
-    $('#modal-content').append(`<ul id="todo-modal-content-ul"></ul>`);
+    $('#modal_dialog #modal-loader').empty();
+    $('#modal_dialog .modal-text').empty();
+    $('#modal_dialog .modal-text').append(`<ul id="todo-modal-content-ul"></ul>`);
     for (todo in data['notes']){
       todo_obj = data['notes'][todo];
       important_badge = '';
@@ -121,23 +121,23 @@ function list_subdomain_todos(subdomain_id, subdomain_name){
     }
     $('.bs-tooltip').tooltip();
   }).fail(function(){
-    $('#modal-loader').empty();
+    $('#modal_dialog #modal-loader').empty();
   });
 }
 
 function get_task_details(todo_id){
   $('#modal_dialog').modal('show');
-  $('.modal-text').empty(); $('#modal-footer').empty();
+  $('.modal-text').empty(); $('#modal_dialog .modal-footer').empty();
   $('.modal-text').append(`<div class='outer-div' id="modal-loader"><span class="inner-div spinner-border text-info align-self-center loader-sm"></span></div>`);
   $.getJSON(`/api/listTodoNotes/?todo_id=${todo_id}&format=json`, function(data) {
-    $('.modal-text').empty(); $('#modal-footer').empty();
+    $('.modal-text').empty(); $('#modal_dialog .modal-footer').empty();
     note = data['notes'][0];
     subdomain_name = '';
     if (note['subdomain_name']) {
       subdomain_name = '<small class="text-success"> Subdomain: ' + note['subdomain_name'] + '</small></br>';
     }
     $('.modal-title').html(`<b>${htmlEncode(note['title'])}</b>`);
-    $('#modal-content').append(`<p>${subdomain_name} ${htmlEncode(note['description'])}</p>`);
+    $('#modal_dialog .modal-text').append(`<p>${subdomain_name} ${htmlEncode(note['description'])}</p>`);
   });
 }
 

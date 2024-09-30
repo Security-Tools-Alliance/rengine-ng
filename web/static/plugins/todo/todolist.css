@@ -353,14 +353,14 @@
 }
 .compose-box .compose-content .task-text p { word-break: break-word; }
 .compose-box .compose-content .task-text img { max-width: 100%; }
-#todoShowListItem .modal-footer .btn[data-dismiss="modal"] {
+#todoShowListItem .modal-footer .btn[data-bs-dismiss="modal"] {
     background-color: #fff;
     color: #4361ee;
     font-weight: 700;
     border: 1px solid #e8e8e8;
     padding: 10px 25px;
 }
-#todoShowListItem .modal-footer .btn[data-dismiss="modal"] svg {
+#todoShowListItem .modal-footer .btn[data-bs-dismiss="modal"] svg {
     margin-right: 8px;
     width: 19px;
     height: 19px;
@@ -387,7 +387,7 @@
     border-top: none;
     padding-top: 0;
 }
-#addTaskModal .modal-footer .btn[data-dismiss="modal"] {
+#addTaskModal .modal-footer .btn[data-bs-dismiss="modal"] {
     background-color: #fff;
     color: #4361ee;
     font-weight: 700;
