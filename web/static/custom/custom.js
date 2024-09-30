@@ -1431,9 +1431,9 @@ function get_and_render_subscan_history(endpoint, subdomain_id, subdomain_name) 
 		return response.json();
 	}).then(function(data) {
 		if (data['status']) {
-			$('#modal_title').html('Subscan History for subdomain ' + subdomain_name);
-			$('#modal-content').empty();
-			$('#modal-content').append(`<div id="subscan_history_table"></div>`);
+			$('#modal_dialog .modal-title').html('Subscan History for subdomain ' + subdomain_name);
+			$('#modal_dialog .modal-text').empty();
+			$('#modal_dialog .modal-text').append(`<div id="subscan_history_table"></div>`);
 
 			$('#subscan_history_table').empty();
 
@@ -1604,8 +1604,8 @@ function get_domain_whois(whoisLookupUrl, domain_name, addTargetUrl, project_slu
 function display_whois_on_modal(response, addTargetUrl, project_slug, show_add_target_btn=false) {
 	// this function will display whois data on modal, should be followed after get_domain_whois()
 	$('#whoisLookupResultModal').modal('show');
-	$('#whoisLookupResultModal #modal-content').empty();
-	$("#whoisLookupResultModal #modal-footer").empty();
+	$('#whoisLookupResultModal .modal-body').empty();
+	$("#whoisLookupResultModal .modal-footer").empty();
 
 	content = `
 	<div class="row mt-3">
@@ -1925,7 +1925,7 @@ function display_whois_on_modal(response, addTargetUrl, project_slug, show_add_t
 		</div>`
 	}
 
-	$('#whoisLookupResultModal #modal-content').append(content);
+	$('#whoisLookupResultModal .modal-body').append(content);
 	$('[data-toggle="tooltip"]').tooltip();
 
 }
@@ -2211,12 +2211,12 @@ function get_ip_details(endpoint_port_url, endpoint_subdomain_url, ip_address, s
 	var subdomain_loader = `<span class="inner-div spinner-border text-primary align-self-center loader-sm" id="subdomain-modal-loader"></span>`;
 
 	// add tab modal title
-	$('#modal_title').html('Details for IP: <b>' + ip_address + '</b>');
+	$('#modal_dialog .modal-title').html('Details for IP: <b>' + ip_address + '</b>');
 
-	$('#modal-content').empty();
+	$('#modal_dialog .modal-text').empty();
 	$('#modal-tabs').empty();
 
-	$('#modal-content').append(`<ul class='nav nav-tabs nav-bordered' id="modal_tab_nav"></ul><div id="modal_tab_content" class="tab-content"></div>`);
+	$('#modal_dialog .modal-text').append(`<ul class='nav nav-tabs nav-bordered' id="modal_tab_nav"></ul><div id="modal_tab_content" class="tab-content"></div>`);
 
 	$('#modal_tab_nav').append(`<li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#modal_content_port" aria-expanded="true"><span id="modal-open-ports-count"></span>Open Ports &nbsp;${port_loader}</a></li>`);
 	$('#modal_tab_nav').append(`<li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#modal_content_subdomain" aria-expanded="false"><span id="modal-subdomain-count"></span>Subdomains &nbsp;${subdomain_loader}</a></li>`)
@@ -2297,13 +2297,13 @@ function get_port_details(endpoint_ip_url, endpoint_subdomain_url, port, scan_id
 	var ip_spinner = `<span class="spinner-border spinner-border-sm me-1" id="ip-modal-loader"></span>`;
 	var subdomain_spinner = `<span class="spinner-border spinner-border-sm me-1" id="subdomain-modal-loader"></span>`;
 
-	$('#modal_title').html('Details for Port: <b>' + port + '</b>');
+	$('#modal_dialog .modal-title').html('Details for Port: <b>' + port + '</b>');
 
-	$('#modal-content').empty();
+	$('#modal_dialog .modal-text').empty();
 	$('#modal-tabs').empty();
 
 
-	$('#modal-content').append(`<ul class='nav nav-tabs nav-bordered' id="modal_tab_nav"></ul><div id="modal_tab_content" class="tab-content"></div>`);
+	$('#modal_dialog .modal-text').append(`<ul class='nav nav-tabs nav-bordered' id="modal_tab_nav"></ul><div id="modal_tab_content" class="tab-content"></div>`);
 
 	$('#modal_tab_nav').append(`<li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#modal_content_ip" aria-expanded="true"><span id="modal-ip-count"></span>IP Address&nbsp;${ip_spinner}</a></li>`);
 	$('#modal_tab_nav').append(`<li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#modal_content_subdomain" aria-expanded="false"><span id="modal-subdomain-count"></span>Subdomains&nbsp;${subdomain_spinner}</a></li>`)
@@ -2375,17 +2375,17 @@ function get_tech_details(endpoint_subdomain_url, tech, scan_id=null, domain_id=
 
 	var interesting_badge = `<span class="m-1 badge  badge-soft-danger bs-tooltip" title="Interesting Subdomain">Interesting</span>`;
 	// render tab modal
-	$('.modal-title').html('Details for Technology: <b>' + tech + '</b>');
+	$('#modal_dialog .modal-title').html('Details for Technology: <b>' + tech + '</b>');
 	$('#modal_dialog').modal('show');
 
-	$('.modal-text').empty();
-	$('#modal-footer').empty();
-	$('.modal-text').append(`<div class='outer-div' id="modal-loader"><span class="inner-div spinner-border text-primary align-self-center loader-sm"></span></div>`);
+	$('#modal_dialog .modal-text').empty();
+	$('#modal_dialog .modal-footer').empty();
+	$('#modal_dialog .modal-text').append(`<div class='outer-div' id="modal-loader"><span class="inner-div spinner-border text-primary align-self-center loader-sm"></span></div>`);
 	// query subdomains
 	$.getJSON(url, function(data) {
-		$('#modal-loader').empty();
-		$('#modal-content').empty();
-		$('#modal-content').append(`${data['subdomains'].length} Subdomains are using ${tech}`);
+		$('#modal_dialog #modal-loader').empty();
+		$('#modal_dialog .modal-text').empty();
+		$('#modal_dialog .modal-text').append(`${data['subdomains'].length} Subdomains are using ${tech}`);
 		const subdomainList = $('<ul></ul>');
 		for (subdomain in data['subdomains']){
 			subdomain_obj = data['subdomains'][subdomain];
@@ -2408,11 +2408,11 @@ function get_tech_details(endpoint_subdomain_url, tech, scan_id=null, domain_id=
 			}
 
 		}
-		$("#modal-content").append(subdomainList);
-		$("#modal-content").append(`<span class="float-end text-danger">*Subdomains highlighted are 40X HTTP Status</span>`);
+		$("#modal_dialog .modal-text").append(subdomainList);
+		$("#modal_dialog .modal-text").append(`<span class="float-end text-danger">*Subdomains highlighted are 40X HTTP Status</span>`);
 		$("#subdomain-modal-loader").remove();
 	}).fail(function(){
-		$('#modal-loader').empty();
+		$('#modal_dialog #modal-loader').empty();
 	});
 }
 
@@ -3195,10 +3195,10 @@ async function fetch_gpt_vuln_details(endpoint_url, id, title) {
 
 
 function render_gpt_vuln_modal(data, title){
-	$('#modal-title').empty();
-	$('#modal-content').empty();
-	$('#modal-footer').empty();
-	$('#modal_title').html(`Vulnerability detail for ${title}`);
+	$('#modal_dialog .modal-title').empty();
+	$('#modal_dialog .modal-text').empty();
+	$('#modal_dialog .modal-footer').empty();
+	$('#modal_dialog .modal-title').html(`Vulnerability detail for ${title}`);
 
 	var modal_content = `
 		<h4>Description</h4>
@@ -3217,7 +3217,7 @@ function render_gpt_vuln_modal(data, title){
 
 	modal_content += '</ul></p>';
 
-	$('#modal-content').append(modal_content);
+	$('#modal_dialog .modal-text').append(modal_content);
 	$('#modal_dialog').modal('show');
 }
 
@@ -3279,9 +3279,9 @@ async function show_attack_surface_modal(endpoint_url, id){
 		const data = await send_gpt__attack_surface_api_request(endpoint_url,id);
 		Swal.close();
 		if (data.status) {
-			$('#modal_title').html(`Attack Surface Suggestion for ${data.subdomain_name} (BETA)`);
-			$('#modal-content').empty();
-			$('#modal-content').append(data.description.replace(new RegExp('\r?\n','g'), '<br />'));
+			$('#modal_dialog .modal-title').html(`Attack Surface Suggestion for ${data.subdomain_name} (BETA)`);
+			$('#modal_dialog .modal-text').empty();
+			$('#modal_dialog .modal-text').append(data.description.replace(new RegExp('\r?\n','g'), '<br />'));
 			$('#modal_dialog').modal('show');
 		}
 		else{

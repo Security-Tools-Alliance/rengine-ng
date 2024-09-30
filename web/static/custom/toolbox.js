@@ -54,8 +54,8 @@ function cms_detector_api_call(cmsDetectorUrl, url){
 	}).then(response => response.json()).then(function(response) {
 		if (response.status) {
 			swal.close();
-			$('#modal_title').html('CMS Details for ' + url);
-			$('#modal-content').empty();
+			$('#cmsDetectorResultModal .modal-title').text('CMS Details for ' + url);
+			$('#cmsDetectorResultModal .modal-body').empty();
 
 			content = `
 				<div class="d-flex align-items-start mb-3">
@@ -190,7 +190,7 @@ function cms_detector_api_call(cmsDetectorUrl, url){
 
 			content += '</div>'
 
-			$('#cmsDetectorResultModal #modal-content').append(content);
+			$('#cmsDetectorResultModal .modal-body').append(content);
 			$('#cmsDetectorResultModal').modal('show');
 		} else {
 			Swal.fire({
