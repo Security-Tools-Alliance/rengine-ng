@@ -862,10 +862,10 @@ function get_dorks(scan_id){
 
 function get_dork_details(dork_type, scan_id){
 	// render tab modal
-	$('.modal-title').html('Dorking Results in category: <b>' + dork_type + '</b>');
+	$('#modal_dialog .modal-title').html('Dorking Results in category: <b>' + dork_type + '</b>');
 	$('#modal_dialog').modal('show');
-	$('.modal-text').empty(); $('#modal_dialog .modal-footer').empty();
-	$('.modal-text').append(`<div class='outer-div' id="modal-loader"><span class="inner-div spinner-border text-primary align-self-center loader-sm"></span></div>`);
+	$('#modal_dialog .modal-text').empty(); $('#modal_dialog .modal-footer').empty();
+	$('#modal_dialog .modal-text').append(`<div class='outer-div' id="modal-loader"><span class="inner-div spinner-border text-primary align-self-center loader-sm"></span></div>`);
 	$.getJSON(`/api/queryDorks/?scan_id=${scan_id}&type=${dork_type}&format=json`, function(data) {
 		$('#modal_dialog #modal-loader').empty();
 		$('#modal_dialog .modal-text').append(`<b>${data['dorks'].length} results found in this dork category.</b>`);
