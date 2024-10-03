@@ -11,6 +11,87 @@ for ip in $internal_ips; do
     formatted_ips="${formatted_ips}https://$ip\n"
 done
 
+# Function to install nano
+install_nano() {
+  log "Installing nano..." $COLOR_CYAN
+  if ! command -v nano &> /dev/null; then
+    . /etc/os-release
+    DISTRO_FAMILY="${ID_LIKE:-$ID}"
+    case "$DISTRO_FAMILY" in
+      *debian*) sudo apt update && sudo apt install -y nano ;;
+      *fedora*|*centos*|*rhel*) sudo dnf install -y nano ;;
+      *arch*) sudo pacman -Sy nano ;;
+      *suse*|*opensuse*) sudo zypper install -y nano ;;
+      *) log "Unsupported Linux distribution. Please install nano manually." $COLOR_RED; exit 1 ;;
+    esac
+    [ $? -eq 0 ] && log "nano installed!" $COLOR_GREEN || { log "Failed to install nano." $COLOR_RED; exit 1; }
+  else
+    log "nano already installed, skipping." $COLOR_GREEN
+  fi
+}
+
+# Function to install curl
+install_curl() {
+  log "Installing curl..." $COLOR_CYAN
+  if ! command -v curl &> /dev/null; then
+    . /etc/os-release
+    DISTRO_FAMILY="${ID_LIKE:-$ID}"
+    case "$DISTRO_FAMILY" in
+      *debian*) sudo apt update && sudo apt install -y curl ;;
+      *fedora*|*centos*|*rhel*) sudo dnf install -y curl ;;
+      *arch*) sudo pacman -Sy curl ;;
+      *suse*|*opensuse*) sudo zypper install -y curl ;;
+      *) log "Unsupported Linux distribution. Please install curl manually." $COLOR_RED; exit 1 ;;
+    esac
+    [ $? -eq 0 ] && log "curl installed!" $COLOR_GREEN || { log "Failed to install curl." $COLOR_RED; exit 1; }
+  else
+    log "curl already installed, skipping." $COLOR_GREEN
+  fi
+}
+
+# Function to install Docker
+install_docker() {
+  log "Installing Docker..." $COLOR_CYAN
+  if ! command -v docker &> /dev/null; then
+    curl -fsSL https://get.docker.com -o get-docker.sh && sh get-docker.sh
+    [ $? -eq 0 ] && log "Docker installed!" $COLOR_GREEN || { log "Failed to install Docker." $COLOR_RED; exit 1; }
+  else
+    log "Docker already installed, skipping." $COLOR_GREEN
+  fi
+}
+
+# Function to install Docker Compose
+install_docker_compose() {
+  log "Installing Docker Compose..." $COLOR_CYAN
+  if ! command -v docker compose &> /dev/null; then
+    curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+    chmod +x /usr/local/bin/docker-compose
+    ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose
+    [ $? -eq 0 ] && log "Docker Compose installed!" $COLOR_GREEN || { log "Failed to install Docker Compose." $COLOR_RED; exit 1; }
+  else
+    log "Docker Compose already installed, skipping." $COLOR_GREEN
+  fi
+}
+
+# Function to install make
+install_make() {
+  log "Installing make..." $COLOR_CYAN
+  if ! command -v make &> /dev/null; then
+    . /etc/os-release
+    DISTRO_FAMILY="${ID_LIKE:-$ID}"
+    case "$DISTRO_FAMILY" in
+      *debian*) sudo apt update && sudo apt install -y make ;;
+      *fedora*|*centos*|*rhel*) sudo dnf install -y make ;;
+      *arch*) sudo pacman -Sy make ;;
+      *suse*|*opensuse*) sudo zypper install -y make ;;
+      *) log "Unsupported Linux distribution. Please install make manually." $COLOR_RED; exit 1 ;;
+    esac
+    [ $? -eq 0 ] && log "make installed!" $COLOR_GREEN || { log "Failed to install make." $COLOR_RED; exit 1; }
+  else
+    log "make already installed, skipping." $COLOR_GREEN
+  fi
+}
+
 # Check for root privileges
 if [ $EUID -eq 0 ]; then
   if [ "$SUDO_USER" = "root" ] || [ "$SUDO_USER" = "" ]; then
@@ -69,7 +150,9 @@ while getopts nh opt; do
    esac
 done
 
-# Interactive install
+log "Installing reNgine-ng and its dependencies..." $COLOR_CYAN
+
+# Interactive install
 if [ $isNonInteractive = false ]; then
   read -p "Are you sure you made changes to the '.env' file (y/n)? " answer
   case ${answer:0:1} in
@@ -77,49 +160,41 @@ if [ $isNonInteractive = false ]; then
         log "\nContinuing installation!\n" $COLOR_GREEN
       ;;
       * )
-      if ! command -v nano &> /dev/null; then
-        . /etc/os-release
-        DISTRO_FAMILY="${ID_LIKE:-$ID}"  # Use ID_LIKE if available, otherwise fallback to ID
-        case "$DISTRO_FAMILY" in
-          *debian*) sudo apt update && sudo apt install -y nano ;;
-          *fedora*|*centos*|*rhel*) sudo dnf install -y nano ;;
-          *arch*) sudo pacman -Sy nano ;;
-          *suse*|*opensuse*) sudo zypper install -y nano ;;
-          *) log "Unsupported Linux distribution. Please install nano manually." $COLOR_RED; exit 1 ;;
-        esac
-        [ $? -eq 0 ] && log "nano installed!" $COLOR_GREEN || { log "Failed to install nano." $COLOR_RED; exit 1; }
-      else
-        log "nano already installed, skipping." $COLOR_GREEN
-      fi
-      nano .env
+        install_nano
+        nano .env
       ;;
   esac
 
-  # Select install type
-  log "Do you want to build Docker images from source or use pre-built images (recommended)? \nThis saves significant build time but requires good download speeds for it to complete fast." $COLOR_RED
-  log "1) From source" $COLOR_GREEN
-  log "2) Use pre-built images (default)" $COLOR_GREEN
-  read -p "Enter your choice (1 or 2, default is 2): " choice
-
-  case $choice in
-      1)
-          INSTALL_TYPE="source"
-          ;;
-      2|"")
-          INSTALL_TYPE="prebuilt"
-          ;;
-      *)
-          log "Invalid choice. Defaulting to pre-built images." $COLOR_YELLOW
-          INSTALL_TYPE="prebuilt"
-          ;;
-  esac
-
-  log "Selected installation type: $INSTALL_TYPE" $COLOR_CYAN
+  install_curl
+  install_docker
+  install_docker_compose
+  install_make
 fi
 
-# Non interactive install
+# Select install type
+log "Do you want to build Docker images from source or use pre-built images (recommended)? \nThis saves significant build time but requires good download speeds for it to complete fast." $COLOR_RED
+log "1) From source" $COLOR_GREEN
+log "2) Use pre-built images (default)" $COLOR_GREEN
+read -p "Enter your choice (1 or 2, default is 2): " choice
+
+case $choice in
+    1)
+        INSTALL_TYPE="source"
+        ;;
+    2|"")
+        INSTALL_TYPE="prebuilt"
+        ;;
+    *)
+        log "Invalid choice. Defaulting to pre-built images." $COLOR_YELLOW
+        INSTALL_TYPE="prebuilt"
+        ;;
+esac
+
+log "Selected installation type: $INSTALL_TYPE" $COLOR_CYAN
+
+# Non-interactive install
 if [ $isNonInteractive = true ]; then
-  # Check if .env file exists and load vars from env file
+  # Load and verify .env file
   if [ -f .env ]; then
       export $(grep -v '^#' .env | xargs)
   else
@@ -131,64 +206,14 @@ if [ $isNonInteractive = true ]; then
     log "Error: DJANGO_SUPERUSER_USERNAME, DJANGO_SUPERUSER_EMAIL, and DJANGO_SUPERUSER_PASSWORD must be set in .env for non-interactive installation" $COLOR_RED
     exit 1
   fi
-  # Define INSTALL_TYPE from .env or use a default value
-  if [ -z "$INSTALL_TYPE" ]; then
-    log "Warning: INSTALL_TYPE is not set in .env for non-interactive installation, fallback to prebuilt install" $COLOR_YELLOW
-  fi
+
   INSTALL_TYPE=${INSTALL_TYPE:-prebuilt}
   log "Non-interactive installation parameter set. Installation begins." $COLOR_GREEN
-fi
 
-log "Installing reNgine-ng and its dependencies..." $COLOR_CYAN
-
-log "Installing curl..." $COLOR_CYAN
-
-if ! command -v curl &> /dev/null; then
-  . /etc/os-release
-  DISTRO_FAMILY="${ID_LIKE:-$ID}"  # Use ID_LIKE if available, otherwise fallback to ID
-  case "$DISTRO_FAMILY" in
-    *debian*) sudo apt update && sudo apt install -y curl ;;
-    *fedora*|*centos*|*rhel*) sudo dnf install -y curl ;;
-    *arch*) sudo pacman -Sy curl ;;
-    *suse*|*opensuse*) sudo zypper install -y curl ;;
-    *) log "Unsupported Linux distribution. Please install curl manually." $COLOR_RED; exit 1 ;;
-  esac
-  [ $? -eq 0 ] && log "curl installed!" $COLOR_GREEN || { log "Failed to install curl." $COLOR_RED; exit 1; }
-else
-  log "curl already installed, skipping." $COLOR_GREEN
-fi
-
-log "Installing Docker..." $COLOR_CYAN
-if ! command -v docker 2> /dev/null; then
-  curl -fsSL https://get.docker.com -o get-docker.sh && sh get-docker.sh
-  log "Docker installed!" $COLOR_GREEN
-else
-  log "Docker already installed, skipping." $COLOR_GREEN
-fi
-
-log "Installing Docker Compose..." $COLOR_CYAN
-if ! command -v docker compose 2> /dev/null; then
-  curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-  chmod +x /usr/local/bin/docker-compose
-  ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose
-  log "Docker Compose installed!" $COLOR_GREEN
-else
-  log "Docker Compose already installed, skipping." $COLOR_GREEN
-fi
-
-if ! command -v make &> /dev/null; then
-  . /etc/os-release
-  DISTRO_FAMILY="${ID_LIKE:-$ID}"  # Use ID_LIKE if available, otherwise fallback to ID
-  case "$DISTRO_FAMILY" in
-    *debian*) sudo apt update && sudo apt install -y make ;;
-    *fedora*|*centos*|*rhel*) sudo dnf install -y make ;;
-    *arch*) sudo pacman -Sy make ;;
-    *suse*|*opensuse*) sudo zypper install -y make ;;
-    *) log "Unsupported Linux distribution. Please install make manually." $COLOR_RED; exit 1 ;;
-  esac
-  [ $? -eq 0 ] && log "make installed!" $COLOR_GREEN || { log "Failed to install make." $COLOR_RED; exit 1; }
-else
-  log "make already installed, skipping." $COLOR_GREEN
+  install_curl
+  install_docker
+  install_docker_compose
+  install_make
 fi
 
 log "Checking Docker status..." $COLOR_CYAN
