@@ -362,6 +362,7 @@ def list_target(request, slug):
         'start_scan_url': reverse('start_scan', args=[project.slug, 0]),
         'schedule_scan_url': reverse('schedule_scan', args=[project.slug, 0]),
         'update_target_url': reverse('update_target', args=[project.slug, 0]),
+        'delete_target_url': reverse('delete_target', args=[project.slug, 0]),
         'target_summary_url': reverse('target_summary', args=[project.slug, 0]),
     }
     return render(request, 'target/list.html', context)

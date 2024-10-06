@@ -53,7 +53,7 @@ All Projects
                       {% if user_project.slug == project.slug %}
                       <span class="badge bg-info text-white">Current Project cannot be deleted.</span>
                       {% else %}
-                      <a href="#" onclick="delete_project({{user_project.id}}, '{{user_project.name}}')" class="btn btn-xs btn-danger"><i class="mdi mdi-trash-can-outline"></i></a>
+                      <a href="#" onclick="delete_project('{% url 'delete_project' user_project.id %}', '{{user_project.name}}')" class="btn btn-xs btn-danger"><i class="mdi mdi-trash-can-outline"></i></a>
                       {% endif %}
                     </td>
                   </tr>
@@ -70,8 +70,7 @@ All Projects
 
 {% block page_level_script %}
 <script type="text/javascript">
-  function delete_project(id, project_name){
-    const delAPI = "../../delete/project/" + id;
+  function delete_project(url_endpoint, project_name){
     swal.queue([{
       title: 'Are you sure you want to delete '+project_name +'?',
       text: "You won't be able to revert this, all targets and scan results also will be deleted!",
@@ -81,7 +80,7 @@ All Projects
       padding: '2em',
       showLoaderOnConfirm: true,
       preConfirm: function() {
-        return fetch(delAPI, {
+        return fetch(url_endpoint, {
           method: 'POST',
           credentials: "same-origin",
           headers: {
