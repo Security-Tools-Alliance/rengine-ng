@@ -217,6 +217,7 @@ $(document).ready(function(){
 						const scheduleScanUrl = `{{ schedule_scan_url|slice:":-1" }}${row.id}`;
 						const updateTargetUrl = `{{ update_target_url|slice:":-1" }}${row.id}`;
 						const targetSummaryUrl = `{{ target_summary_url|slice:":-1" }}${row.id}`;
+						const deleteTargetUrl = `{{ delete_target_url|slice:":-1" }}${row.id}`;
 
 						{% if user|has_role:'penetration_tester' or user|has_role:'admin'%}
 						content += `
@@ -231,7 +232,7 @@ $(document).ready(function(){
 						<a class="dropdown-item" href="${scheduleScanUrl}"><i class="fe-clock"></i>&nbsp;&nbsp;Schedule Scan</a>
 						<div class="dropdown-divider"></div>
 						<a class="dropdown-item" href="${updateTargetUrl}"><i class="fe-edit-2"></i>&nbsp;&nbsp;Edit Target</a>
-						<a class="dropdown-item text-danger" href="#" onclick="delete_target(${row.id}, '${row.name}')"><i class="fe-trash-2"></i>&nbsp;&nbsp;Delete target</a>
+						<a class="dropdown-item text-danger" href="#" onclick="delete_target('${deleteTargetUrl}', '${row.name}')"><i class="fe-trash-2"></i>&nbsp;&nbsp;Delete target</a>
 						</div>
 						</div>
 						</div>

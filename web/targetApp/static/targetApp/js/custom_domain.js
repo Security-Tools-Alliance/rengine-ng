@@ -1,5 +1,4 @@
-function delete_target(id, domain_name) {
-  const delAPI = "../../delete/target/" + id;
+function delete_target(url_endpoint, domain_name) {
   swal.queue([{
     title: 'Are you sure you want to delete '+ domain_name +'?',
     text: "You won't be able to revert this!",
@@ -9,7 +8,7 @@ function delete_target(id, domain_name) {
     padding: '2em',
     showLoaderOnConfirm: true,
     preConfirm: function() {
-      return fetch(delAPI, {
+      return fetch(url_endpoint, {
         method: 'POST',
         credentials: "same-origin",
         headers: {
