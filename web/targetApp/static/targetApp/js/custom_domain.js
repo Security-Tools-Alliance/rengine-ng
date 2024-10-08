@@ -44,7 +44,7 @@ function checkedCount () {
   return count;
 }
 
-function scanMultipleTargets(slug) {
+function scanMultipleTargets(url_endpoint) {
   if (!checkedCount()) {
     swal({
       title: '',
@@ -56,12 +56,12 @@ function scanMultipleTargets(slug) {
   else {
     // atleast one target is selected
     multipleScanForm = document.getElementById("multiple_targets_form");
-    multipleScanForm.action = `/scan/${slug}/start/multiple/`;
+    multipleScanForm.action = url_endpoint;
     multipleScanForm.submit();
   }
 }
 
-function deleteMultipleTargets(slug) {
+function deleteMultipleTargets(url_endpoint) {
   if (!checkedCount()) {
     swal({
       title: '',
@@ -82,7 +82,7 @@ function deleteMultipleTargets(slug) {
       showLoaderOnConfirm: true,
       preConfirm: function() {
         deleteForm = document.getElementById("multiple_targets_form");
-        deleteForm.action = `/target/${slug}/delete/multiple`;
+        deleteForm.action = url_endpoint;
         deleteForm.submit();
       }
     }])
