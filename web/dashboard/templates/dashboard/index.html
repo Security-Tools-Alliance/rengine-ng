@@ -150,7 +150,7 @@ Dashboard
 								text-info
 								{% endif %}"></i>
 								<div class="w-100">
-									<a href='scan/detail/vuln?query={{item.id}}' class="mt-1 font-14 text-muted">
+									<a href='{% url 'detail_vuln_scan' current_project.slug item.scan_history.id %}' class="mt-1 font-14 text-muted">
 										<strong class="
 										{% if item.severity == 0 %}
 										text-primary
