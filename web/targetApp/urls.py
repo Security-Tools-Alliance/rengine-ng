@@ -16,7 +16,7 @@ urlpatterns = [
         views.delete_target,
         name='delete_target'),
     path(
-        '<slug:slug>/delete/multiple',
+        '<slug:slug>/multiple/delete',
         views.delete_targets,
         name='delete_multiple_targets'),
     path(
