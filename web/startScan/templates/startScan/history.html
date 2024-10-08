@@ -59,7 +59,7 @@ Quick Scan History
             </div>
           </div>
           <div class="col-xl-6 col-lg-6 col-md-6 col-sm-12 col-12">
-            <a class="btn btn-soft-danger float-end disabled ms-1" href="#" onclick="deleteMultipleScan()" id="delete_multiple_button">Delete Multiple Scans</a>
+            <a class="btn btn-soft-danger float-end disabled ms-1" href="#" onclick="deleteMultipleScan('{% url 'delete_multiple_scans' current_project.slug %}')" id="delete_multiple_button">Delete Multiple Scans</a>
           </div>
         </div>
       </div>
@@ -80,6 +80,7 @@ Quick Scan History
               <th>Summary</th>
               <th class="">Scan Engine Used</th>
               <th>Last Scan</th>
+              <th>Initiated By</th>
               <th class="text-center">Status</th>
               <th class="text-center">Progress</th>
               <th class="text-center no-sorting">Action</th>
@@ -108,6 +109,9 @@ Quick Scan History
               <td>
                 <span data-toggle="tooltip" data-placement="top" title="{{scan_history.start_scan_date}}">{{scan_history.start_scan_date|naturaltime}}</span>
               </td>
+              <td>
+                <span class="badge badge-soft-secondary">{{scan_history.initiated_by.username}}</span>
+              </td>
               <td class="text-center">
                 {% if scan_history.scan_status == -1 %}
                 <span class="badge badge-soft-warning" data-placement="top" data-toggle="tooltip" data-placement="top" title="Waiting for other scans to complete"><span class="spinner-border spinner-border-sm"></span> Pending</span>
@@ -120,6 +124,8 @@ Quick Scan History
                 <span class="badge badge-soft-success">Successful</span>
                 {% elif scan_history.scan_status == 3 %}
                 <span class="badge badge-soft-danger">Aborted</span>
+                <br>
+                <small class="text-muted">Aborted by: {{scan_history.aborted_by}}</small>
                 {% else %}
                 <span class="badge badge-soft-danger">Unknown</span>
                 {% endif %}
@@ -158,7 +164,7 @@ Quick Scan History
               <td class="text-center">
                 <div class="btn-group mb-2 dropstart">
                   <div class="btn-group">
-                    <a href="/scan/{{current_project.slug}}/detail/{{scan_history.id}}" class="btn btn-soft-primary">View Results</a>
+                    <a href="{% url 'detail_scan' current_project.slug scan_history.id %}" class="btn btn-soft-primary">View Results</a>
                     <div class="btn-group dropstart" role="group">
                       <button type="button" class="btn btn-soft-primary dropdown-toggle dropdown-toggle-split" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
                         <i class="mdi mdi-chevron-right"></i>
@@ -166,24 +172,24 @@ Quick Scan History
                       <div class="dropdown-menu" style="">
                         {% if user|can:'initiate_scans_subscans' %}
                           {% if scan_history.scan_status == 0 or scan_history.scan_status == 2 or scan_history.scan_status == 3 %}
-                          <a class="dropdown-item text-primary" href="/scan/{{current_project.slug}}/start/{{scan_history.domain.id}}">
+                          <a class="dropdown-item text-primary" href="{% url 'start_scan' current_project.slug scan_history.domain.id %}">
                           <i class="fe-refresh-ccw"></i>&nbsp;Rescan </a>
                           {% endif %}
 
                           {% if scan_history.scan_status == 1 or scan_history.scan_status == -1%}
-                          <a href="#" class="dropdown-item text-danger" onclick="stop_scan(scan_id={{ scan_history.id }}, subscan_id=null, reload_scan_bar=false, reload_location=true)">
+                          <a href="#" class="dropdown-item text-danger" onclick="stop_scan('{% url 'api:stop_scan' %}', scan_id={{ scan_history.id }}, subscan_id=null, reload_scan_bar=false, reload_location=true)">
                           <i class="fe-alert-triangle"></i>&nbsp;Stop Scan</a>
                           {% endif %}
                         {% endif %}
                         {% if user|can:'modify_scan_results' %}
                           {% if scan_history.scan_status == 2 or scan_history.scan_status == 3 or scan_history.scan_status == 0 %}
-                            <a href="#" class="dropdown-item text-danger" onclick="delete_scan('{{ scan_history.id }}')">
+                            <a href="#" class="dropdown-item text-danger" onclick="delete_scan('{% url 'delete_scan' current_project.slug scan_history.id %}')">
                             <i class="fe-trash-2"></i>&nbsp;Delete Scan Results</a>
                           {% endif %}
                           <div class="dropdown-divider"></div>
                         {% endif %}
                         {% if scan.scan_status != -1%}
-                          <a href="#" class="dropdown-item text-dark" onclick="initiate_report({{scan_history.id}}, '{% if 'subdomain_discovery' in scan_history.scan_type.tasks %}True{% endif %}', '{% if 'vulnerability_scan' in scan_history.scan_type.tasks %}True{% endif %}', '{{ scan_history.domain.name }}')">
+                          <a href="#" class="dropdown-item text-dark" onclick="initiate_report('{% url 'create_report' current_project.slug scan_history.id %}', {{scan_history.id}}, '{% if 'subdomain_discovery' in scan_history.scan_type.tasks %}True{% endif %}', '{% if 'vulnerability_scan' in scan_history.scan_type.tasks %}True{% endif %}', '{{ scan_history.domain.name }}')">
                           <i class="fe-download"></i>&nbsp;Scan Report</a>
                         {% endif %}
                         </div>
@@ -444,7 +450,7 @@ Quick Scan History
     }
   }
 
-  function deleteMultipleScan() {
+  function deleteMultipleScan(url_endpoint) {
     if (!checkedCount()) {
       swal({
         title: '',
@@ -464,7 +470,7 @@ Quick Scan History
         showLoaderOnConfirm: true,
         preConfirm: function() {
           deleteForm = document.getElementById("scan_history_form");
-          deleteForm.action = "../delete/multiple";
+          deleteForm.action = url_endpoint;
           deleteForm.submit();
         }
       }])
@@ -483,7 +489,7 @@ Quick Scan History
     }
 });
 
-  function initiate_report(id, is_subdomain_scan, is_vulnerability_scan, domain_name) {
+  function initiate_report(url, id, is_subdomain_scan, is_vulnerability_scan, domain_name) {
     $('#generateReportModal').modal('show');
     $('#report_alert_message').empty();
     $('#report_type_select').empty();
@@ -519,13 +525,13 @@ Quick Scan History
           text: 'Vulnerability Report'
         }));
     }
-    $('#generateReportButton').attr('onClick', `generate_report(${id}, '${domain_name}')`);
-    $('#previewReportButton').attr('onClick', `preview_report(${id}, '${domain_name}')`);
+    $('#generateReportButton').attr('onClick', `generate_report('${url}', ${id}, '${domain_name}')`);
+    $('#previewReportButton').attr('onClick', `preview_report('${url}', ${id}, '${domain_name}')`);
   }
 
-  function preview_report(id, domain_name){
+  function preview_report(url, id, domain_name){
     var report_type = $("#report_type_select option:selected").val();
-    var url = `/scan/create_report/${id}?report_type=${report_type}`;
+    var url = `${url}?report_type=${report_type}`;
     if ($('#report_ignore_info_vuln').is(":checked")) {
       url += `&ignore_info_vuln`
     }
@@ -533,9 +539,9 @@ Quick Scan History
     window.open(url, '_blank').focus();
   }
 
-  function generate_report(id, domain_name) {
+  function generate_report(url, id, domain_name) {
     var report_type = $("#report_type_select option:selected").val();
-    var url = `/scan/create_report/${id}?report_type=${report_type}&download`;
+    var url = `${url}?report_type=${report_type}&download`;
     if ($('#report_ignore_info_vuln').is(":checked")) {
       url += `&ignore_info_vuln`
     }

@@ -2,6 +2,7 @@
 {% load humanize %}
 {% load permission_tags %}
 {% load static %}
+{% load custom_filters %}
 
 {% block title %}
 Profile
@@ -15,7 +16,7 @@ Admin Settings
 {% endblock page_title %}
 
 {% block breadcrumb_title %}
-<li class="breadcrumb-item"><a href="/{{current_project.slug}}/">Dashboard</a></li>
+<li class="breadcrumb-item"><a href="{% url 'dashboardIndex' current_project.slug %}">Dashboard</a></li>
 <li class="breadcrumb-item active">Admin Settings</li>
 {% endblock breadcrumb_title %}
 
@@ -99,16 +100,33 @@ Admin Settings
                 <td>
                   {% if user != muser %}
                     {% if muser.is_active %}
-                    <a href="./update?mode=change_status&user={{ muser.id }}" class="action-icon" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Disable Account"> <i class="mdi mdi-account-cancel"></i></a>
+                    <a href="./update?mode=change_status&user={{ muser.id }}" class="action-icon" 
+                       data-bs-toggle="tooltip" data-bs-placement="bottom" title="Disable Account"> 
+                       <i class="mdi mdi-account-cancel"></i>
+                    </a>
                     {% else %}
-                    <a href="./update?mode=change_status&user={{ muser.id }}" class="action-icon" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Enable Account"> <i class="mdi mdi-account-check"></i></a>
+                    <a href="./update?mode=change_status&user={{ muser.id }}" class="action-icon" 
+                       data-bs-toggle="tooltip" data-bs-placement="bottom" title="Enable Account"> 
+                       <i class="mdi mdi-account-check"></i>
+                    </a>
                     {% endif %}
                   {% else %}
                   &nbsp;
                   {% endif %}
-                  <a href="#" onclick="update_user_modal({{muser.id}}, '{% if muser|has_role:'sys_admin' %}admin{% elif muser|has_role:'auditor'%}auditor{% elif muser|has_role:'penetration_tester'%}penetration_tester{%endif%}')" class="action-icon" id="change_user_details_btn" title="Update User Detail" data-bs-toggle="tooltip" data-bs-placement="bottom"> <i class="mdi mdi-account-edit"></i></a>
+                  {% with user_role=muser|get_user_role %}
+                  {% with user_projects=muser.projects.all|map:'id'|join:',' %}
+                  <a href="#" onclick="update_user_modal({{ muser.id }}, '{{ user_role }}', [{{ user_projects }}])" 
+                     class="action-icon" id="change_user_details_btn" title="Update User Detail" 
+                     data-bs-toggle="tooltip" data-bs-placement="bottom"> 
+                     <i class="mdi mdi-account-edit"></i>
+                  </a>
+                  {% endwith %}
+                  {% endwith %}
                   {% if user != muser %}
-                    <a href="#" onclick="delete_user({{muser.id}}, '{{muser.username}}')" class="action-icon" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Delete Account"> <i class="mdi mdi-trash-can"></i></a>
+                  <a href="#" onclick="delete_user({{ muser.id }}, '{{ muser.username }}')" class="action-icon" 
+                     data-bs-toggle="tooltip" data-bs-placement="bottom" title="Delete Account"> 
+                     <i class="mdi mdi-trash-can"></i>
+                  </a>
                   {% endif %}
                 </td>
               </tr>
@@ -159,29 +177,37 @@ function delete_user(id, username) {
   }])
 }
 
-function update_user_modal(user_id, permission){
-  var html_content = '';
-
-  html_content += `
+function update_user_modal(user_id, permission, user_projects) {
+  var html_content = `
   <div class="form mb-3">
-    <label for="user_role" class="form-label float-start">Role</label>
-    <select class="form-select" id="user_role">
-    <option ${permission == 'sys_admin' ? 'selected': ''} value='sys_admin'>Sys Admin</option>
-    <option ${permission == 'penetration_tester' ? 'selected': ''} value='penetration_tester'>Penetration Tester</option>
-    <option ${permission == 'auditor' ? 'selected': ''} value='auditor'>Auditor</option>
-    </select>
+      <label for="user_role" class="form-label float-start">Role</label>
+      <select class="form-select" id="user_role">
+          <option ${permission == 'sys_admin' ? 'selected' : ''} value='sys_admin'>Sys Admin</option>
+          <option ${permission == 'penetration_tester' ? 'selected' : ''} value='penetration_tester'>Penetration Tester</option>
+          <option ${permission == 'auditor' ? 'selected' : ''} value='auditor'>Auditor</option>
+      </select>
   </div>
   <div class="form mb-3">
-    <label for="password" class="form-label float-start">Change Password</label>
-    <div class="input-group input-group-merge">
-      <input type="password" id="password" class="form-control" placeholder="Password">
-    </div>
-    <div class="form-check form-switch float-end mt-2">
-      <input type="checkbox" class="form-check-input" id="show-password">
-      <label class="form-check-label text-small" for="show-password" style="font-size: 12px;">Show Password</label>
-    </div>
+      <label for="user_projects" class="form-label float-start">Projects</label>
+      ${permission === 'sys_admin' ? 
+          `<p>This user has access to all projects.</p>` : 
+          `<select class="form-select" id="user_projects" multiple>
+              {% for user_project in projects %}
+                  <option value="{{ user_project.id }}" {% if user_project.id in user_projects %}selected{% endif %}>{{ user_project.name }}</option>
+              {% endfor %}
+          </select>`
+      }
   </div>
-
+  <div class="form mb-3">
+      <label for="password" class="form-label float-start">Change Password</label>
+      <div class="input-group input-group-merge">
+          <input type="password" id="password" class="form-control" placeholder="Password">
+      </div>
+      <div class="form-check form-switch float-end mt-2">
+          <input type="checkbox" class="form-check-input" id="show-password">
+          <label class="form-check-label text-small" for="show-password" style="font-size: 12px;">Show Password</label>
+      </div>
+  </div>
   `;
 
   Swal.fire({
@@ -192,79 +218,91 @@ function update_user_modal(user_id, permission){
       confirmButtonText: 'Update',
       showLoaderOnConfirm: true,
       preConfirm: function () {
-        return new Promise(function (resolve) {
-          var role_selected = document.getElementById('user_role').value;
-          var change_password = document.getElementById('password').value;
-          const data = {
-            'role': role_selected,
-            'change_password': change_password
-          };
-          fetch('./update?mode=update&user=' + user_id, {
-            method: 'POST',
-            credentials: "same-origin",
-            headers: {
-              "X-CSRFToken": getCookie("csrftoken")
-            },
-            body: JSON.stringify(data)
+          return new Promise(function (resolve) {
+              var role_selected = document.getElementById('user_role').value;
+              var change_password = document.getElementById('password').value;
+              var selected_projects = permission === 'sys_admin' ? [] : Array.from(document.getElementById('user_projects').selectedOptions).map(option => option.value);
+              const data = {
+                  'role': role_selected,
+                  'change_password': change_password,
+                  'projects': selected_projects
+              };
+              fetch('./update?mode=update&user=' + user_id, {
+                  method: 'POST',
+                  credentials: "same-origin",
+                  headers: {
+                      "X-CSRFToken": getCookie("csrftoken")
+                  },
+                  body: JSON.stringify(data)
+              })
+              .then(function (response) {
+                  return response.json();
+              })
+              .then(function(data) {
+                  return location.reload();
+              })
+              .catch(function() {
+                  swal.insertQueueStep({
+                      type: 'error',
+                      title: 'Oops! Unable to update user!'
+                  })
+              })
+              resolve()
           })
-          .then(function (response) {
-            return response.json();
-          })
-          .then(function(data) {
-            return location.reload();
-          })
-          .catch(function() {
-            swal.insertQueueStep({
-              type: 'error',
-              title: 'Oops! Unable to updte user!'
-            })
-          })
-          resolve()
-        })
       }
   });
+
+  // If the user is a Sys Admin, no need to select projects
+  if (permission !== 'sys_admin') {
+      user_projects.forEach(function(project_id) {
+          document.querySelector(`#user_projects option[value="${project_id}"]`).selected = true;
+      });
+  }
 
   const passwordInput = document.getElementById('password');
   const showPasswordCheckbox = document.getElementById('show-password');
 
-
   showPasswordCheckbox.addEventListener('change', function() {
-    if (showPasswordCheckbox.checked) {
-      passwordInput.type = 'text';
-    } else {
-      passwordInput.type = 'password';
-    }
+      if (showPasswordCheckbox.checked) {
+          passwordInput.type = 'text';
+      } else {
+          passwordInput.type = 'password';
+      }
   });
-
 }
 
-function create_user_modal(){
-  var html_content = '';
-
-  html_content += `
+function create_user_modal() {
+  var html_content = `
   <div class="form mb-3">
-    <label for="create_username" class="form-label float-start">Username</label>
-    <input id="create_username" class="form-control" placeholder="Username" autocomplete="off">
+      <label for="create_username" class="form-label float-start">Username</label>
+      <input type="text" id="create_username" class="form-control" placeholder="Username" required>
   </div>
   <div class="form mb-3">
-    <label for="create_user_role" class="form-label float-start">Role</label>
-    <select class="form-select" id="create_user_role">
-    <option value='sys_admin'>Sys Admin</option>
-    <option value='penetration_tester'>Penetration Tester</option>
-    <option value='auditor'>Auditor</option>
-    </select>
+      <label for="create_user_role" class="form-label float-start">Role</label>
+      <select class="form-select" id="create_user_role">
+          <option value='sys_admin'>Sys Admin</option>
+          <option value='penetration_tester'>Penetration Tester</option>
+          <option value='auditor'>Auditor</option>
+      </select>
+  </div>
+  <div class="form mb-3" id="projects_container">
+      <label for="create_user_projects" class="form-label float-start">Projects</label>
+      <select class="form-select" id="create_user_projects" multiple>
+          {% for project in projects %}
+              <option value="{{ project.id }}">{{ project.name }}</option>
+          {% endfor %}
+      </select>
   </div>
   <div class="form mb-3">
-    <label for="create_password" class="form-label float-start">Create Password</label>
-    <div class="input-group input-group-merge">
-      <input type="password" id="create_password" class="form-control" placeholder="Password">
-    </div>
-    <div class="form-check form-switch float-end mt-2">
-      <input type="checkbox" class="form-check-input" id="show-password">
-      <label class="form-check-label text-small" for="show-password" style="font-size: 12px;">Show Password</label>
-    </div>
+      <label for="create_password" class="form-label float-start">Create Password</label>
+      <div class="input-group input-group-merge">
+          <input type="password" id="create_password" class="form-control" placeholder="Password">
+      </div>
+      <div class="form-check form-switch float-end mt-2">
+          <input type="checkbox" class="form-check-input" id="show-password">
+          <label class="form-check-label text-small" for="show-password" style="font-size: 12px;">Show Password</label>
+      </div>
   </div>
-
   `;
 
   Swal.fire({
@@ -275,69 +313,92 @@ function create_user_modal(){
       confirmButtonText: 'Create User',
       showLoaderOnConfirm: true,
       preConfirm: function () {
-        return new Promise(function (resolve) {
-          var create_username = document.getElementById('create_username').value;
-          var role_selected = document.getElementById('create_user_role').value;
-          var create_password = document.getElementById('create_password').value;
-          if (!create_password) {
-            Swal.fire({
-              title: "Oops! Passwords can't be empty!",
-              icon: 'error',
-            })
-            return
-          }
-          const data = {
-            'username': create_username,
-            'role': role_selected,
-            'password': create_password
-          };
-          fetch('./update?mode=create', {
-            method: 'POST',
-            credentials: "same-origin",
-            headers: {
-              "X-CSRFToken": getCookie("csrftoken")
-            },
-            body: JSON.stringify(data)
-          })
-          .then(function (response) {
-            return response.json();
-          })
-          .then(function(data) {
-            if (data.status) {
-              return location.reload();
-            }
-            else{
-              Swal.fire({
-                title: "Oops! Can't create user!",
-                icon: 'error',
-                text: 'Error: ' + data.error,
+          return new Promise(function (resolve) {
+              var create_username = document.getElementById('create_username').value;
+              var role_selected = document.getElementById('create_user_role').value;
+              var create_password = document.getElementById('create_password').value;
+              var selected_projects = role_selected === 'sys_admin' ? [] : Array.from(document.getElementById('create_user_projects').selectedOptions).map(option => option.value);
+              
+              if (!create_password) {
+                  Swal.fire({
+                      title: "Oops! Passwords can't be empty!",
+                      icon: 'error',
+                  });
+                  return;
+              }
+              
+              const data = {
+                  'username': create_username,
+                  'role': role_selected,
+                  'password': create_password,
+                  'projects': selected_projects
+              };
+              
+              fetch('./update?mode=create', {
+                  method: 'POST',
+                  credentials: "same-origin",
+                  headers: {
+                      "X-CSRFToken": getCookie("csrftoken")
+                  },
+                  body: JSON.stringify(data)
               })
-            }
-
-          })
-          .catch(function() {
-            swal.insertQueueStep({
-              type: 'error',
-              title: 'Oops! Unable to updte user!'
-            })
-          })
-          resolve()
-        })
+              .then(function (response) {
+                  return response.json();
+              })
+              .then(function(data) {
+                  if (data.status) {
+                      return location.reload();
+                  } else {
+                      Swal.fire({
+                          title: "Oops! Can't create user!",
+                          icon: 'error',
+                          text: 'Error: ' + data.error,
+                      });
+                  }
+              })
+              .catch(function() {
+                  swal.insertQueueStep({
+                      type: 'error',
+                      title: 'Oops! Unable to create user!'
+                  });
+              });
+              resolve();
+          });
       }
   });
 
   const passwordInput = document.getElementById('create_password');
   const showPasswordCheckbox = document.getElementById('show-password');
 
-
   showPasswordCheckbox.addEventListener('change', function() {
-    if (showPasswordCheckbox.checked) {
-      passwordInput.type = 'text';
-    } else {
-      passwordInput.type = 'password';
-    }
+      if (showPasswordCheckbox.checked) {
+          passwordInput.type = 'text';
+      } else {
+          passwordInput.type = 'password';
+      }
   });
 
+  // Handle the role change to show/hide project selection
+  const roleSelect = document.getElementById('create_user_role');
+  roleSelect.addEventListener('change', function() {
+      var role = this.value;
+      var projectsContainer = document.getElementById('projects_container');
+      if (role === 'sys_admin') {
+          projectsContainer.innerHTML = '<p>This user has access to all projects.</p>';
+      } else {
+          projectsContainer.innerHTML = `
+          <label for="create_user_projects" class="form-label float-start">Projects</label>
+          <select class="form-select" id="create_user_projects" multiple>
+              {% for project in projects %}
+                  <option value="{{ project.id }}">{{ project.name }}</option>
+              {% endfor %}
+          </select>
+          `;
+      }
+  });
+
+  // Trigger the change event on load to set the correct state
+  roleSelect.dispatchEvent(new Event('change'));
 }
 
 </script>

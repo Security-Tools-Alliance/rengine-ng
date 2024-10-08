@@ -97,7 +97,7 @@ SubScan History
               <span class="badge badge-soft-dark mt-1 me-1" data-toggle="tooltip" data-placement="top" title="Domain {{domain.name}} belongs to organization {{organization.name}}">{{ organization.name }}</span>
             {% endfor %}
           </br>
-          <a href="/scan/{{current_project.slug}}/detail/{{subscan.scan_history.id}}" class="text-info">Recent Scan&nbsp;<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-external-link"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line>< svg></a>
+          <a href="{% url 'detail_scan' current_project.slug subscan.scan_history.id %}" class="text-info">Recent Scan&nbsp;<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-external-link"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line>< svg></a>
           </td>
           <td class="text-center">
             <span class="badge badge-soft-primary">{{ subscan.get_task_name_str }}</span>
@@ -126,7 +126,7 @@ SubScan History
           <td class="text-center">
             <div class="btn-group mb-2 dropstart">
               <div class="btn-group">
-                <a href="#" class="btn btn-soft-primary" onclick="show_subscan_results({{subscan.id}})">View Results</a>
+                <a href="#" class="btn btn-soft-primary" onclick="show_subscan_results('{% url 'api:fetch_subscan_results' %}', {{subscan.id}})">View Results</a>
                 <div class="btn-group dropstart" role="group">
                   <button type="button" class="btn btn-soft-primary dropdown-toggle dropdown-toggle-split" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
                     <i class="mdi mdi-chevron-right"></i>
@@ -134,11 +134,11 @@ SubScan History
                   <div class="dropdown-menu" style="">
                     {% if user|can:'initiate_scans_subscans' %}
                       {% if subscan.status == 1 %}
-                        <a href="#" class="dropdown-item text-danger" onclick="stop_scan(scan_id=null, subscan_id={{subscan.id}}, reload_scan_bar=false, reload_location=true)"><i class="fe-alert-triangle"></i>&nbsp;Stop Subscan</a>
+                        <a href="#" class="dropdown-item text-danger" onclick="stop_scan('{% url 'api:stop_scan' %}', scan_id=null, subscan_id={{subscan.id}}, reload_scan_bar=false, reload_location=true)"><i class="fe-alert-triangle"></i>&nbsp;Stop Subscan</a>
                       {% endif %}
                     {% endif %}
                     {% if user|can:'modify_scan_results' %}
-                    <a href="#" class="dropdown-item text-danger" onclick="delete_subscan('{{ subscan.id }}')"><i class="fe-trash-2"></i>&nbsp;Delete Subscan</a>
+                    <a href="#" class="dropdown-item text-danger" onclick="delete_subscan('{% url 'api:delete_rows' %}', {{ subscan.id }})"><i class="fe-trash-2"></i>&nbsp;Delete Subscan</a>
                     {% endif %}
                   </div>
                 </div>

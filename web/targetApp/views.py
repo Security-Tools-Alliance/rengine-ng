@@ -1,32 +1,75 @@
 import csv
 import io
-import ipaddress
 import logging
-import validators
-
 from datetime import timedelta
 from urllib.parse import urlparse
+import validators
+
 from django import http
 from django.conf import settings
 from django.contrib import messages
 from django.db.models import Count
+from django.http import Http404
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.safestring import mark_safe
 from rolepermissions.decorators import has_permission_decorator
+from reNgine.definitions import (
+    PERM_MODIFY_TARGETS,
+    FOUR_OH_FOUR_URL,
+)
 
-from reNgine.common_func import *
-from reNgine.tasks import run_command, sanitize_url
-from scanEngine.models import *
-from startScan.models import *
-from targetApp.forms import *
-from targetApp.models import *
+from reNgine.common_func import (
+    get_ip_info,
+    get_ips_from_cidr_range,
+)
+from reNgine.tasks import (
+    run_command,
+    sanitize_url,
+)
+from startScan.models import (
+    EndPoint,
+    IpAddress,
+    Port,
+    Vulnerability,
+    VulnerabilityTags,
+    Email,
+    Employee,
+    CveId,
+    CweId,
+    CountryISO,
+    Subdomain,
+    ScanHistory,
+    EngineType,
+)
+from targetApp.models import (
+    Domain,
+    Organization,
+    Project,
+)
+from targetApp.forms import (
+    AddTargetForm,
+    UpdateTargetForm,
+    AddOrganizationForm,
+    UpdateOrganizationForm,
+)
+from scanEngine.models import EngineType
+
 
 logger = logging.getLogger(__name__)
 
 
 def index(request):
+    """
+    index renders the index page for the target application. It returns the HTML template for the target index view, allowing users to access the main interface for managing targets.
+
+    Args:
+        request (HttpRequest): The HTTP request object containing metadata about the request.
+
+    Returns:
+        HttpResponse: The rendered HTML response for the target index page.
+    """
     # TODO bring default target page
     return render(request, 'target/index.html')
 
@@ -49,9 +92,11 @@ def add_target(request, slug):
             # Multiple targets
             if multiple_targets:
                 bulk_targets = [t.rstrip() for t in request.POST['addTargets'].split('\n') if t]
-                logger.info(f'Adding multiple targets: {bulk_targets}')
+                sanitized_targets = [target if isinstance(target, str) and validators.domain(target) else 'Invalid target' for target in bulk_targets]
+                logger.info('Adding multiple targets: %s', sanitized_targets)
                 description = request.POST.get('targetDescription', '')
                 h1_team_handle = request.POST.get('targetH1TeamHandle')
+                organization_name = request.POST.get('targetOrganization')
                 for target in bulk_targets:
                     target = target.rstrip('\n')
                     http_urls = []
@@ -69,7 +114,8 @@ def add_target(request, slug):
                     is_url = bool(validators.url(target))
 
                     # Set ip_domain / http_url based on type of input
-                    logger.info(f'{target} | Domain? {is_domain} | IP? {is_ip} | CIDR range? {is_range} | URL? {is_url}')
+                    sanitized_target = target if isinstance(target, str) and validators.domain(target) else 'Invalid target'
+                    logger.info('%s | Domain? %s | IP? %s | CIDR range? %s | URL? %s', sanitized_target, is_domain, is_ip, is_range, is_url)
 
                     if is_domain:
                        domains.append(target)
@@ -92,8 +138,8 @@ def add_target(request, slug):
                         domains.append(target)
 
                     elif is_range:
-                        ips = get_ips_from_cidr_range(target)
-                        for ip_address in ips:
+                        _ips = get_ips_from_cidr_range(target)
+                        for ip_address in _ips:
                             ips.append(ip_address)
                             domains.append(ip_address)
                     else:
@@ -105,7 +151,13 @@ def add_target(request, slug):
                             msg)
                         continue
 
-                    logger.info(f'IPs: {ips} | Domains: {domains} | URLs: {http_urls} | Ports: {ports}')
+                    # Sanitize the lists for logging
+                    sanitized_ips = [ip if validators.ipv4(ip) or validators.ipv6(ip) else 'Invalid IP' for ip in ips]
+                    sanitized_domains = [domain if isinstance(domain, str) and validators.domain(domain) else 'Invalid Domain' for domain in domains]
+                    sanitized_http_urls = [url if validators.url(url) else 'Invalid URL' for url in http_urls]
+                    sanitized_ports = [port if isinstance(port, int) else 'Invalid Port' for port in ports]
+                    logger.info('IPs: %s | Domains: %s | URLs: %s | Ports: %s', 
+                                sanitized_ips, sanitized_domains, sanitized_http_urls, sanitized_ports)
 
                     for domain_name in domains:
                         if not Domain.objects.filter(name=domain_name).exists():
@@ -119,7 +171,20 @@ def add_target(request, slug):
                             domain.save()
                             added_target_count += 1
                             if created:
-                                logger.info(f'Added new domain {domain.name}')
+                                logger.info('Added new domain %s', domain.name)
+
+                            if organization_name:
+                                organization = None
+                                organization_query = Organization.objects.filter(name=organization_name)
+                                if organization_query.exists():
+                                    organization = organization_query[0]
+                                else:
+                                    organization = Organization.objects.create(
+                                        name=organization_name,
+                                        project=project,
+                                        insert_date=timezone.now())
+                                organization.domains.add(domain)
+
 
                     for http_url in http_urls:
                         http_url = sanitize_url(http_url)
@@ -127,7 +192,7 @@ def add_target(request, slug):
                             target_domain=domain,
                             http_url=http_url)
                         if created:
-                            logger.info(f'Added new endpoint {endpoint.http_url}')
+                            logger.info('Added new endpoint %s', endpoint.http_url)
 
                     for ip_address in ips:
                         ip_data = get_ip_info(ip_address)
@@ -137,12 +202,12 @@ def add_target(request, slug):
                         ip.version = ip_data.version
                         ip.save()
                         if created:
-                            logger.warning(f'Added new IP {ip}')
+                            logger.warning('Added new IP %s', ip)
 
                     for port in ports:
                         port, created = Port.objects.get_or_create(number=port_number)
                         if created:
-                            logger.warning(f'Added new port {port.number}.')
+                            logger.warning('Added new port %s', port.number)
 
             # Import from txt / csv
             elif 'import-txt-target' in request.POST or 'import-csv-target' in request.POST:
@@ -155,7 +220,13 @@ def add_target(request, slug):
                         'Files uploaded are not .txt or .csv files.')
                     return http.HttpResponseRedirect(reverse('add_target', kwargs={'slug': slug}))
 
-                #Specters Fix
+                if (txt_file and txt_file.size == 0) or (csv_file and csv_file.size == 0):
+                    messages.add_message(
+                        request,
+                        messages.ERROR,
+                        'The uploaded file is empty. Please upload a valid file.')
+                    return http.HttpResponseRedirect(reverse('add_target', kwargs={'slug': slug}))
+
                 if txt_file:
                     is_txt = txt_file.content_type == 'text/plain' or txt_file.name.split('.')[-1] == 'txt'
                     if not is_txt:
@@ -168,10 +239,10 @@ def add_target(request, slug):
                     io_string = io.StringIO(txt_content)
                     for target in io_string:
                         target_domain = target.rstrip("\n").rstrip("\r")
-                        domain = None  # Move the domain variable declaration here
+                        domain = None
                         domain_query = Domain.objects.filter(name=target_domain)
                         if not domain_query.exists():
-                            if not validators.domain(target_domain):  # Change 'domain' to 'target_domain'
+                            if not validators.domain(target_domain):
                                 messages.add_message(request, messages.ERROR, f'Domain {target_domain} is not a valid domain name. Skipping.')
                                 continue
                             Domain.objects.create(
@@ -193,20 +264,66 @@ def add_target(request, slug):
                     io_string = io.StringIO(csv_content)
                     for column in csv.reader(io_string, delimiter=','):
                         domain = column[0]
-                        description = None if len(column) == 1 else column[1]
+                        description = None if len(column) <= 1 else column[1]
+                        organization = None if len(column) <= 2 else column[2]
                         domain_query = Domain.objects.filter(name=domain)
                         if not domain_query.exists():
                             if not validators.domain(domain):
                                 messages.add_message(request, messages.ERROR, f'Domain {domain} is not a valid domain name. Skipping.')
                                 continue
-                            Domain.objects.create(
+                            domain_obj = Domain.objects.create(
                                 name=domain,
                                 project=project,
                                 description=description,
                                 insert_date=timezone.now())
                             added_target_count += 1
+                        
+                            # Optionally add domain to organization
+                            if organization:
+                                organization_query = Organization.objects.filter(name=organization)
+                                if organization_query.exists():
+                                    organization = organization_query[0]
+                                else:
+                                    organization = Organization.objects.create(
+                                        name=organization,
+                                        project=project,
+                                        insert_date=timezone.now())
+                                organization.domains.add(domain_obj)
+            elif ip_target:
+                # add ip's from "resolve and add ip address" tab
+                resolved_ips = [ip.rstrip() for ip in request.POST.getlist('resolved_ip_domains') if ip]
+                for ip in resolved_ips:
+                    is_domain = bool(validators.domain(ip))
+                    is_ip = bool(validators.ipv4(ip)) or bool(validators.ipv6(ip))
+                    if not is_ip and not is_domain:
+                        messages.add_message(request, messages.ERROR, f'IP {ip} is not a valid IP address / domain. Skipping.')
+                        logger.warning('Invalid IP address/domain provided. Skipping.')
+                        continue
+                    description = request.POST.get('targetDescription', '')
+                    h1_team_handle = request.POST.get('targetH1TeamHandle')
+                    if not Domain.objects.filter(name=ip).exists():
+                        domain, created = Domain.objects.get_or_create(
+                            name=ip,
+                            description=description,
+                            h1_team_handle=h1_team_handle,
+                            project=project,
+                            ip_address_cidr=ip if is_ip else None)
+                        domain.insert_date = timezone.now()
+                        domain.save()
+                        added_target_count += 1
+                        if created:
+                            logger.info('Added new domain %s', domain.name)
+                        if is_ip:
+                            ip_data = get_ip_info(ip)
+                            ip, created = IpAddress.objects.get_or_create(address=ip)
+                            ip.reverse_pointer = ip_data.reverse_pointer
+                            ip.is_private = ip_data.is_private
+                            ip.version = ip_data.version
+                            ip.save()
+                            if created:
+                                logger.info('Added new IP %s', ip)
 
-        except Exception as e:
+        except (Http404, ValueError) as e:
             logger.exception(e)
             messages.add_message(
                 request,
@@ -236,29 +353,52 @@ def add_target(request, slug):
     }
     return render(request, 'target/add.html', context)
 
-
 def list_target(request, slug):
+    project = get_object_or_404(Project, slug=slug)
     context = {
         'list_target_li': 'active',
         'target_data_active': 'active',
-        'slug': slug
+        'detail_scan_url': reverse('detail_scan', args=[project.slug, 0]),
+        'start_scan_url': reverse('start_scan', args=[project.slug, 0]),
+        'schedule_scan_url': reverse('schedule_scan', args=[project.slug, 0]),
+        'update_target_url': reverse('update_target', args=[project.slug, 0]),
+        'delete_target_url': reverse('delete_target', args=[project.slug, 0]),
+        'target_summary_url': reverse('target_summary', args=[project.slug, 0]),
     }
     return render(request, 'target/list.html', context)
 
 
 @has_permission_decorator(PERM_MODIFY_TARGETS, redirect_url=FOUR_OH_FOUR_URL)
-def delete_target(request, id):
-    obj = get_object_or_404(Domain, id=id)
+def delete_target(request, slug, id):
     if request.method == "POST":
-        run_command(f'rm -rf {settings.RENGINE_RESULTS}/{obj.name}')
-        run_command(f'rm -rf {settings.RENGINE_RESULTS}/{obj.name}*') # for backward compatibility
-        obj.delete()
-        responseData = {'status': 'true'}
-        messages.add_message(
-            request,
-            messages.INFO,
-            'Domain successfully deleted!')
+        try:
+            target = get_object_or_404(Domain, id=id)
+            run_command(f'rm -rf {settings.RENGINE_RESULTS}/{target.name}')
+            run_command(f'rm -rf {settings.RENGINE_RESULTS}/{target.name}*') # for backward compatibility
+            target.delete()
+            responseData = {'status': 'true'}
+            messages.add_message(
+                request,
+                messages.INFO,
+                'Domain successfully deleted!'
+            )
+        except Http404:
+            if isinstance(id, int):  # Ensure id is an integer
+                logger.error('Domain not found: %d', id)
+            else:
+                logger.error('Domain not found: Invalid ID provided')
+            messages.add_message(
+                request,
+                messages.ERROR,
+                'Domain not found.')
+            responseData = {'status': 'false'}
     else:
+        valid_methods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD']
+        if request.method in valid_methods:
+            logger.error('Invalid request method: %s', request.method)
+        else:
+            logger.error('Invalid request method: Unknown method provided')
+        
         responseData = {'status': 'false'}
         messages.add_message(
             request,
@@ -444,31 +584,28 @@ def target_summary(request, slug, id):
         .order_by('-count')
     )
 
-    context['slug'] = slug
-
     return render(request, 'target/summary.html', context)
 
 
 @has_permission_decorator(PERM_MODIFY_TARGETS, redirect_url=FOUR_OH_FOUR_URL)
 def add_organization(request, slug):
     form = AddOrganizationForm(request.POST or None, project=slug)
-    if request.method == "POST":
-        if form.is_valid():
-            data = form.cleaned_data
-            project = Project.objects.get(slug=slug)
-            organization = Organization.objects.create(
-                name=data['name'],
-                description=data['description'],
-                project=project,
-                insert_date=timezone.now())
-            for domain_id in request.POST.getlist("domains"):
-                domain = Domain.objects.get(id=domain_id)
-                organization.domains.add(domain)
-            messages.add_message(
-                request,
-                messages.INFO,
-                f'Organization {data["name"]} added successfully')
-            return http.HttpResponseRedirect(reverse('list_organization', kwargs={'slug': slug}))
+    if request.method == "POST" and form.is_valid():
+        data = form.cleaned_data
+        project = Project.objects.get(slug=slug)
+        organization = Organization.objects.create(
+            name=data['name'],
+            description=data['description'],
+            project=project,
+            insert_date=timezone.now())
+        for domain_id in request.POST.getlist("domains"):
+            domain = Domain.objects.get(id=domain_id)
+            organization.domains.add(domain)
+        messages.add_message(
+            request,
+            messages.INFO,
+            f'Organization {data["name"]} added successfully')
+        return http.HttpResponseRedirect(reverse('list_organization', kwargs={'slug': slug}))
     context = {
         "organization_active": "active",
         "form": form
@@ -485,15 +622,22 @@ def list_organization(request, slug):
 
 
 @has_permission_decorator(PERM_MODIFY_TARGETS, redirect_url=FOUR_OH_FOUR_URL)
-def delete_organization(request, id):
+def delete_organization(request, slug, id):
     if request.method == "POST":
-        obj = get_object_or_404(Organization, id=id)
-        obj.delete()
-        responseData = {'status': 'true'}
-        messages.add_message(
-            request,
-            messages.INFO,
-            'Organization successfully deleted!')
+        try:
+            organization = get_object_or_404(Organization, id=id)
+            organization.delete()
+            messages.add_message(
+                request,
+                messages.INFO,
+                'Organization successfully deleted!')
+            responseData = {'status': 'true'}
+        except Http404:
+            messages.add_message(
+                request,
+                messages.ERROR,
+                'Organization not found.')
+            responseData = {'status': 'false'}
     else:
         responseData = {'status': 'false'}
         messages.add_message(
@@ -507,8 +651,8 @@ def delete_organization(request, id):
 def update_organization(request, slug, id):
     organization = get_object_or_404(Organization, id=id)
     form = UpdateOrganizationForm()
+    domain_list = []
     if request.method == "POST":
-        print(request.POST.getlist("domains"))
         form = UpdateOrganizationForm(request.POST, instance=organization)
         if form.is_valid():
             data = form.cleaned_data
@@ -542,21 +686,3 @@ def update_organization(request, slug, id):
         "form": form
     }
     return render(request, 'organization/update.html', context)
-
-def get_ip_info(ip_address):
-    is_ipv4 = bool(validators.ipv4(ip_address))
-    is_ipv6 = bool(validators.ipv6(ip_address))
-    ip_data = None
-    if is_ipv4:
-        ip_data = ipaddress.IPv4Address(ip_address)
-    elif is_ipv6:
-        ip_data = ipaddress.IPv6Address(ip_address)
-    else:
-        return None
-    return ip_data
-
-def get_ips_from_cidr_range(target):
-    try:
-        return [str(ip) for ip in ipaddress.IPv4Network(target)]
-    except Exception as e:
-        logger.error(f'{target} is not a valid CIDR range. Skipping.')

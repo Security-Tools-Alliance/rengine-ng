@@ -1,0 +1,63 @@
+{% extends 'base/base.html' %}
+{% load humanize %}
+{% load static %}
+
+{% block title %}Edit Project{% endblock title %}
+
+{% block custom_js_css_link %}
+<link href="{% static 'plugins/select2/select2.min.css' %}" rel="stylesheet" type="text/css" />
+{% endblock custom_js_css_link %}
+
+{% block page_title %}Edit Project: {{ edit_project.name }}{% endblock page_title %}
+
+{% block breadcrumb_title %}
+<li class="breadcrumb-item"><a href="{% url 'dashboardIndex' current_project.slug %}">Dashboard</a></li>
+<li class="breadcrumb-item"><a href="{% url 'list_projects' %}">Projects</a></li>
+<li class="breadcrumb-item active">Edit Project</li>
+{% endblock breadcrumb_title %}
+
+{% block main_content %}
+<div class="row">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-body">
+        <h4 class="mb-4">Edit Project Details</h4>
+        <form method="POST">
+          {% csrf_token %}
+          <div class="mb-3">
+            <label for="name" class="form-label">Project Name</label>
+            <input type="text" class="form-control" id="name" name="name" value="{{ edit_project.name }}" required>
+          </div>
+          <div class="mb-3">
+            <label for="description" class="form-label">Description</label>
+            <textarea class="form-control" id="description" name="description" rows="3">{% if edit_project.description %}{{ edit_project.description }}{% endif %}</textarea>
+          </div>
+          <div class="mb-3">
+            <label for="users" class="form-label">Assigned Users</label>
+            <select class="form-control select2" id="users" name="users" multiple>
+              {% for user in users %}
+                <option value="{{ user.id }}" {% if user in edit_project.users.all %}selected{% endif %}>{{ user.username }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="text-end mt-4">
+            <button type="submit" class="btn btn-primary">Update Project</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock main_content %}
+
+{% block page_level_script %}
+<script src="{% static 'plugins/select2/select2.min.js' %}"></script>
+<script>
+  $(document).ready(function() {
+    $('#users').select2({
+      placeholder: "Select users",
+      allowClear: true
+    });
+  });
+</script>
+{% endblock page_level_script %}

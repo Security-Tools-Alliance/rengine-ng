@@ -1,0 +1,3392 @@
+[
+{
+  "model": "startScan.scanhistory",
+  "pk": 1,
+  "fields": {
+    "start_scan_date": "2024-09-03T21:25:45.594Z",
+    "scan_status": 2,
+    "results_dir": "/home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97",
+    "domain": 1,
+    "scan_type": 7,
+    "celery_ids": "[\"c2de965c-4db3-405b-b58d-9894f18306b2\", \"d3715a2f-20dd-471f-a1b6-0a7f35472afd\", \"a0d9c581-9f0f-46e9-ad45-2abb20681fe0\", null, \"13e72a80-8f84-4ae6-b47f-081f0ecd4b6c\", \"3596c2c2-2dca-4164-b342-b5046c697304\", \"dc33f486-7ad0-4c73-a355-4c93df4538af\", \"b74526bd-8f9a-4738-a98f-876ba776da33\", \"e1351fcc-958c-4fd2-941b-e8c34c3db9d9\", \"e61a5153-22d3-4890-984c-c45177e93baa\", \"267cc8e5-24ab-4651-a708-4286b4506ee0\", \"3f932d02-9beb-4c0b-9cb0-394fc6e73401\"]",
+    "tasks": "[\"subdomain_discovery\", \"http_crawl\", \"port_scan\", \"osint\", \"dir_file_fuzz\", \"fetch_url\", \"vulnerability_scan\", \"waf_detection\", \"screenshot\"]",
+    "stop_scan_date": "2024-09-03T22:29:36.469Z",
+    "used_gf_patterns": "debug_logic,idor,interestingEXT,interestingparams,interestingsubs,lfi,rce,redirect,sqli,ssrf,ssti,xss",
+    "error_message": null,
+    "initiated_by": 1,
+    "aborted_by": null,
+    "emails": [],
+    "employees": [],
+    "buckets": [],
+    "dorks": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29,
+      30,
+      31,
+      32,
+      33,
+      34,
+      35,
+      36,
+      37,
+      38,
+      39,
+      40,
+      41,
+      42,
+      43,
+      44,
+      45,
+      46,
+      47,
+      48,
+      49,
+      50,
+      51,
+      52,
+      53,
+      54,
+      55,
+      56,
+      57,
+      58,
+      59,
+      60,
+      61,
+      62,
+      63,
+      64,
+      65,
+      66,
+      67,
+      68,
+      69,
+      70,
+      71,
+      72,
+      73,
+      74,
+      75,
+      76,
+      77
+    ]
+  }
+},
+{
+  "model": "startScan.subdomain",
+  "pk": 1,
+  "fields": {
+    "scan_history": 1,
+    "target_domain": 1,
+    "name": "testphp.vulnweb.com",
+    "is_imported_subdomain": true,
+    "is_important": false,
+    "http_url": "http://testphp.vulnweb.com",
+    "screenshot_path": "/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/screenshots/screens/http.testphp.vulnweb.com.png",
+    "http_header_path": null,
+    "discovered_date": "2024-09-03T21:25:45.864Z",
+    "cname": null,
+    "is_cdn": false,
+    "cdn_name": null,
+    "http_status": 200,
+    "content_type": "text/html",
+    "response_time": 0.345110429,
+    "webserver": "nginx/1.19.0",
+    "content_length": 4958,
+    "page_title": "Home of Acunetix Art",
+    "attack_surface": null,
+    "technologies": [
+      1,
+      2,
+      3,
+      4
+    ],
+    "ip_addresses": [
+      1
+    ],
+    "directories": [
+      5
+    ],
+    "waf": []
+  }
+},
+{
+  "model": "startScan.subdomain",
+  "pk": 2,
+  "fields": {
+    "scan_history": 1,
+    "target_domain": 1,
+    "name": "vulnweb.com",
+    "is_imported_subdomain": false,
+    "is_important": false,
+    "http_url": "http://vulnweb.com",
+    "screenshot_path": "/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/screenshots/screens/http.vulnweb.com.png",
+    "http_header_path": null,
+    "discovered_date": "2024-09-03T21:25:57.076Z",
+    "cname": null,
+    "is_cdn": false,
+    "cdn_name": null,
+    "http_status": 200,
+    "content_type": "text/html",
+    "response_time": 0.352853777,
+    "webserver": "nginx/1.19.0",
+    "content_length": 4018,
+    "page_title": "Acunetix Web Vulnerability Scanner - Test websites",
+    "attack_surface": null,
+    "technologies": [
+      2
+    ],
+    "ip_addresses": [
+      1
+    ],
+    "directories": [
+      6
+    ],
+    "waf": []
+  }
+},
+{
+  "model": "startScan.subdomain",
+  "pk": 16,
+  "fields": {
+    "scan_history": 1,
+    "target_domain": 1,
+    "name": "rest.vulnweb.com",
+    "is_imported_subdomain": false,
+    "is_important": false,
+    "http_url": "http://rest.vulnweb.com",
+    "screenshot_path": "/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/screenshots/screens/http.rest.vulnweb.com.png",
+    "http_header_path": null,
+    "discovered_date": "2024-09-03T21:28:09.647Z",
+    "cname": null,
+    "is_cdn": false,
+    "cdn_name": null,
+    "http_status": 200,
+    "content_type": "text/html",
+    "response_time": 0.422205408,
+    "webserver": "Apache/2.4.25 (Debian)",
+    "content_length": 3555,
+    "page_title": "Acunetix Vulnerable REST API",
+    "attack_surface": null,
+    "technologies": [
+      9,
+      10,
+      11
+    ],
+    "ip_addresses": [
+      3
+    ],
+    "directories": [
+      1
+    ],
+    "waf": []
+  }
+},
+{
+  "model": "startScan.subdomain",
+  "pk": 23,
+  "fields": {
+    "scan_history": 1,
+    "target_domain": 1,
+    "name": "testasp.vulnweb.com",
+    "is_imported_subdomain": false,
+    "is_important": false,
+    "http_url": "http://testasp.vulnweb.com",
+    "screenshot_path": "/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/screenshots/screens/http.testasp.vulnweb.com.png",
+    "http_header_path": null,
+    "discovered_date": "2024-09-03T21:28:09.673Z",
+    "cname": null,
+    "is_cdn": false,
+    "cdn_name": null,
+    "http_status": 200,
+    "content_type": "text/html",
+    "response_time": 0.36117539699999995,
+    "webserver": "Microsoft-IIS/8.5",
+    "content_length": 3537,
+    "page_title": "acuforum forums",
+    "attack_surface": null,
+    "technologies": [
+      1,
+      6,
+      7,
+      8
+    ],
+    "ip_addresses": [
+      2
+    ],
+    "directories": [
+      2
+    ],
+    "waf": []
+  }
+},
+{
+  "model": "startScan.subdomain",
+  "pk": 24,
+  "fields": {
+    "scan_history": 1,
+    "target_domain": 1,
+    "name": "testaspnet.vulnweb.com",
+    "is_imported_subdomain": false,
+    "is_important": false,
+    "http_url": "http://testaspnet.vulnweb.com",
+    "screenshot_path": "/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/screenshots/screens/http.testaspnet.vulnweb.com.png",
+    "http_header_path": null,
+    "discovered_date": "2024-09-03T21:28:09.677Z",
+    "cname": null,
+    "is_cdn": false,
+    "cdn_name": null,
+    "http_status": 200,
+    "content_type": "text/html",
+    "response_time": 0.535234499,
+    "webserver": "Microsoft-IIS/8.5",
+    "content_length": 14082,
+    "page_title": "acublog news",
+    "attack_surface": null,
+    "technologies": [
+      6,
+      8,
+      12,
+      13
+    ],
+    "ip_addresses": [
+      2
+    ],
+    "directories": [
+      3
+    ],
+    "waf": []
+  }
+},
+{
+  "model": "startScan.subdomain",
+  "pk": 26,
+  "fields": {
+    "scan_history": 1,
+    "target_domain": 1,
+    "name": "testhtml5.vulnweb.com",
+    "is_imported_subdomain": false,
+    "is_important": false,
+    "http_url": "http://testhtml5.vulnweb.com",
+    "screenshot_path": "/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/screenshots/screens/http.testhtml5.vulnweb.com.png",
+    "http_header_path": null,
+    "discovered_date": "2024-09-03T21:28:09.686Z",
+    "cname": null,
+    "is_cdn": false,
+    "cdn_name": null,
+    "http_status": 200,
+    "content_type": "text/html",
+    "response_time": 0.342381867,
+    "webserver": "nginx/1.19.0",
+    "content_length": 6940,
+    "page_title": "SecurityTweets - HTML5 test website for Acunetix Web Vulnerability Scanner",
+    "attack_surface": null,
+    "technologies": [
+      2,
+      5
+    ],
+    "ip_addresses": [
+      1
+    ],
+    "directories": [
+      4
+    ],
+    "waf": []
+  }
+},
+{
+  "model": "startScan.subdomain",
+  "pk": 38,
+  "fields": {
+    "scan_history": 1,
+    "target_domain": 1,
+    "name": "www.vulnweb.com",
+    "is_imported_subdomain": false,
+    "is_important": false,
+    "http_url": "http://www.vulnweb.com",
+    "screenshot_path": "/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/screenshots/screens/http.www.vulnweb.com.png",
+    "http_header_path": null,
+    "discovered_date": "2024-09-03T21:28:09.730Z",
+    "cname": null,
+    "is_cdn": false,
+    "cdn_name": null,
+    "http_status": 200,
+    "content_type": "text/html",
+    "response_time": 0.352635869,
+    "webserver": "nginx/1.19.0",
+    "content_length": 4018,
+    "page_title": "Acunetix Web Vulnerability Scanner - Test websites",
+    "attack_surface": null,
+    "technologies": [
+      2
+    ],
+    "ip_addresses": [
+      1
+    ],
+    "directories": [
+      7
+    ],
+    "waf": []
+  }
+},
+{
+  "model": "startScan.vulnerabilitytags",
+  "pk": 1,
+  "fields": {
+    "name": "dns"
+  }
+},
+{
+  "model": "startScan.vulnerabilitytags",
+  "pk": 2,
+  "fields": {
+    "name": "caa"
+  }
+},
+{
+  "model": "startScan.vulnerabilitytags",
+  "pk": 3,
+  "fields": {
+    "name": "spf"
+  }
+},
+{
+  "model": "startScan.vulnerabilitytags",
+  "pk": 4,
+  "fields": {
+    "name": "txt"
+  }
+},
+{
+  "model": "startScan.vulnerabilitytags",
+  "pk": 5,
+  "fields": {
+    "name": "tech"
+  }
+},
+{
+  "model": "startScan.vulnerabilitytags",
+  "pk": 6,
+  "fields": {
+    "name": "nginx"
+  }
+},
+{
+  "model": "startScan.vulnerabilitytags",
+  "pk": 7,
+  "fields": {
+    "name": "misconfig"
+  }
+},
+{
+  "model": "startScan.vulnerabilitytags",
+  "pk": 8,
+  "fields": {
+    "name": "http"
+  }
+},
+{
+  "model": "startScan.vulnerabilitytags",
+  "pk": 9,
+  "fields": {
+    "name": "cookie"
+  }
+},
+{
+  "model": "startScan.vulnerabilitytags",
+  "pk": 10,
+  "fields": {
+    "name": "generic"
+  }
+},
+{
+  "model": "startScan.vulnerabilitytags",
+  "pk": 11,
+  "fields": {
+    "name": "apache"
+  }
+},
+{
+  "model": "startScan.vulnerabilitytags",
+  "pk": 12,
+  "fields": {
+    "name": "php"
+  }
+},
+{
+  "model": "startScan.vulnerabilitytags",
+  "pk": 13,
+  "fields": {
+    "name": "ns"
+  }
+},
+{
+  "model": "startScan.vulnerabilitytags",
+  "pk": 14,
+  "fields": {
+    "name": "form"
+  }
+},
+{
+  "model": "startScan.vulnerabilitytags",
+  "pk": 15,
+  "fields": {
+    "name": "misc"
+  }
+},
+{
+  "model": "startScan.vulnerabilitytags",
+  "pk": 16,
+  "fields": {
+    "name": "miscellaneous"
+  }
+},
+{
+  "model": "startScan.vulnerabilitytags",
+  "pk": 17,
+  "fields": {
+    "name": "cve"
+  }
+},
+{
+  "model": "startScan.vulnerabilitytags",
+  "pk": 18,
+  "fields": {
+    "name": "cve2022"
+  }
+},
+{
+  "model": "startScan.vulnerabilitytags",
+  "pk": 19,
+  "fields": {
+    "name": "carrental"
+  }
+},
+{
+  "model": "startScan.vulnerabilitytags",
+  "pk": 20,
+  "fields": {
+    "name": "cms"
+  }
+},
+{
+  "model": "startScan.vulnerabilitytags",
+  "pk": 21,
+  "fields": {
+    "name": "sqli"
+  }
+},
+{
+  "model": "startScan.vulnerabilitytags",
+  "pk": 22,
+  "fields": {
+    "name": "authenticated"
+  }
+},
+{
+  "model": "startScan.vulnerabilitytags",
+  "pk": 23,
+  "fields": {
+    "name": "car_rental_management_system_project"
+  }
+},
+{
+  "model": "startScan.vulnerabilitytags",
+  "pk": 24,
+  "fields": {
+    "name": "headers"
+  }
+},
+{
+  "model": "startScan.vulnerabilitytags",
+  "pk": 25,
+  "fields": {
+    "name": "detect"
+  }
+},
+{
+  "model": "startScan.vulnerabilitytags",
+  "pk": 26,
+  "fields": {
+    "name": "aspnet"
+  }
+},
+{
+  "model": "startScan.vulnerabilitytags",
+  "pk": 27,
+  "fields": {
+    "name": "phpstorm"
+  }
+},
+{
+  "model": "startScan.vulnerabilitytags",
+  "pk": 28,
+  "fields": {
+    "name": "jetbrains"
+  }
+},
+{
+  "model": "startScan.vulnerabilitytags",
+  "pk": 29,
+  "fields": {
+    "name": "idea"
+  }
+},
+{
+  "model": "startScan.vulnerabilitytags",
+  "pk": 30,
+  "fields": {
+    "name": "exposure"
+  }
+},
+{
+  "model": "startScan.vulnerabilitytags",
+  "pk": 31,
+  "fields": {
+    "name": "files"
+  }
+},
+{
+  "model": "startScan.vulnerabilitytags",
+  "pk": 32,
+  "fields": {
+    "name": "debug"
+  }
+},
+{
+  "model": "startScan.vulnerabilitytags",
+  "pk": 33,
+  "fields": {
+    "name": "microsoft"
+  }
+},
+{
+  "model": "startScan.vulnerabilitytags",
+  "pk": 34,
+  "fields": {
+    "name": "iis"
+  }
+},
+{
+  "model": "startScan.vulnerabilitytags",
+  "pk": 35,
+  "fields": {
+    "name": "waf"
+  }
+},
+{
+  "model": "startScan.vulnerabilitytags",
+  "pk": 36,
+  "fields": {
+    "name": "xxe"
+  }
+},
+{
+  "model": "startScan.vulnerabilitytags",
+  "pk": 37,
+  "fields": {
+    "name": "blind"
+  }
+},
+{
+  "model": "startScan.vulnerabilityreference",
+  "pk": 1,
+  "fields": {
+    "url": "https://support.dnsimple.com/articles/caa-record/#whats-a-caa-record"
+  }
+},
+{
+  "model": "startScan.vulnerabilityreference",
+  "pk": 2,
+  "fields": {
+    "url": "https://www.mimecast.com/content/how-to-create-an-spf-txt-record"
+  }
+},
+{
+  "model": "startScan.vulnerabilityreference",
+  "pk": 3,
+  "fields": {
+    "url": "https://www.netspi.com/blog/technical/network-penetration-testing/analyzing-dns-txt-records-to-fingerprint-service-providers/"
+  }
+},
+{
+  "model": "startScan.vulnerabilityreference",
+  "pk": 4,
+  "fields": {
+    "url": "https://owasp.org/www-community/HttpOnly"
+  }
+},
+{
+  "model": "startScan.vulnerabilityreference",
+  "pk": 5,
+  "fields": {
+    "url": "https://owasp.org/www-community/controls/SecureCookieAttribute"
+  }
+},
+{
+  "model": "startScan.vulnerabilityreference",
+  "pk": 6,
+  "fields": {
+    "url": "https://github.com/dirtycoder0124/formcrawler"
+  }
+},
+{
+  "model": "startScan.vulnerabilityreference",
+  "pk": 7,
+  "fields": {
+    "url": "https://github.com/k0xx11/bug_report/blob/main/vendors/campcodes.com/car-rental-management-system/SQLi-8.md"
+  }
+},
+{
+  "model": "startScan.vulnerabilityreference",
+  "pk": 8,
+  "fields": {
+    "url": "https://nvd.nist.gov/vuln/detail/CVE-2022-32028"
+  }
+},
+{
+  "model": "startScan.vulnerabilityreference",
+  "pk": 9,
+  "fields": {
+    "url": "https://github.com/ARPSyndicate/kenzer-templates"
+  }
+},
+{
+  "model": "startScan.vulnerabilityreference",
+  "pk": 10,
+  "fields": {
+    "url": "https://developer.mozilla.org/en-US/docs/Web/Security/Mixed_content"
+  }
+},
+{
+  "model": "startScan.vulnerabilityreference",
+  "pk": 11,
+  "fields": {
+    "url": "https://portswigger.net/kb/issues/01000400_mixed-content"
+  }
+},
+{
+  "model": "startScan.vulnerabilityreference",
+  "pk": 12,
+  "fields": {
+    "url": "https://resources.infosecinstitute.com/topics/vulnerabilities/https-mixed-content-vulnerability/"
+  }
+},
+{
+  "model": "startScan.vulnerabilityreference",
+  "pk": 13,
+  "fields": {
+    "url": "https://docs.gitlab.com/ee/user/application_security/dast/checks/319.1.html"
+  }
+},
+{
+  "model": "startScan.vulnerabilityreference",
+  "pk": 14,
+  "fields": {
+    "url": "https://portswigger.net/kb/issues/00100800_asp-net-debugging-enabled"
+  }
+},
+{
+  "model": "startScan.vulnerabilityreference",
+  "pk": 15,
+  "fields": {
+    "url": "https://github.com/Ekultek/WhatWaf"
+  }
+},
+{
+  "model": "startScan.scanactivity",
+  "pk": 1,
+  "fields": {
+    "scan_of": 1,
+    "title": "Subdomain discovery",
+    "name": "subdomain_discovery",
+    "time": "2024-09-03T21:28:31.457Z",
+    "status": 2,
+    "error_message": null,
+    "traceback": null,
+    "celery_id": "be34c2cd-c7b3-41df-abd6-3e12bb512ea3"
+  }
+},
+{
+  "model": "startScan.scanactivity",
+  "pk": 2,
+  "fields": {
+    "scan_of": 1,
+    "title": "OS Intelligence",
+    "name": "osint",
+    "time": "2024-09-03T21:26:58.275Z",
+    "status": 2,
+    "error_message": null,
+    "traceback": null,
+    "celery_id": "a0d9c581-9f0f-46e9-ad45-2abb20681fe0"
+  }
+},
+{
+  "model": "startScan.scanactivity",
+  "pk": 3,
+  "fields": {
+    "scan_of": 1,
+    "title": "Http crawl",
+    "name": "http_crawl",
+    "time": "2024-09-03T21:28:31.186Z",
+    "status": 2,
+    "error_message": null,
+    "traceback": null,
+    "celery_id": null
+  }
+},
+{
+  "model": "startScan.scanactivity",
+  "pk": 4,
+  "fields": {
+    "scan_of": 1,
+    "title": "Port scan",
+    "name": "port_scan",
+    "time": "2024-09-03T21:29:11.664Z",
+    "status": 2,
+    "error_message": null,
+    "traceback": null,
+    "celery_id": "13e72a80-8f84-4ae6-b47f-081f0ecd4b6c"
+  }
+},
+{
+  "model": "startScan.scanactivity",
+  "pk": 5,
+  "fields": {
+    "scan_of": 1,
+    "title": "Fetch URL",
+    "name": "fetch_url",
+    "time": "2024-09-03T22:02:45.068Z",
+    "status": 2,
+    "error_message": null,
+    "traceback": null,
+    "celery_id": "3596c2c2-2dca-4164-b342-b5046c697304"
+  }
+},
+{
+  "model": "startScan.scanactivity",
+  "pk": 6,
+  "fields": {
+    "scan_of": 1,
+    "title": "Directories & files fuzz",
+    "name": "dir_file_fuzz",
+    "time": "2024-09-03T22:13:05.287Z",
+    "status": 2,
+    "error_message": null,
+    "traceback": null,
+    "celery_id": "032f40df-a5f0-4fb6-bb06-63b73a54bd17"
+  }
+},
+{
+  "model": "startScan.scanactivity",
+  "pk": 7,
+  "fields": {
+    "scan_of": 1,
+    "title": "Vulnerability scan",
+    "name": "vulnerability_scan",
+    "time": "2024-09-03T22:29:16.424Z",
+    "status": 2,
+    "error_message": null,
+    "traceback": null,
+    "celery_id": "6673b166-bc55-4440-a217-9932b697cd69"
+  }
+},
+{
+  "model": "startScan.scanactivity",
+  "pk": 8,
+  "fields": {
+    "scan_of": 1,
+    "title": "Screenshot",
+    "name": "screenshot",
+    "time": "2024-09-03T22:03:01.734Z",
+    "status": 2,
+    "error_message": null,
+    "traceback": null,
+    "celery_id": "dc33f486-7ad0-4c73-a355-4c93df4538af"
+  }
+},
+{
+  "model": "startScan.scanactivity",
+  "pk": 9,
+  "fields": {
+    "scan_of": 1,
+    "title": "WAF detection",
+    "name": "waf_detection",
+    "time": "2024-09-03T22:03:10.096Z",
+    "status": 2,
+    "error_message": null,
+    "traceback": null,
+    "celery_id": "c4ccc7f8-b370-4354-9a6a-098ba13fde0f"
+  }
+},
+{
+  "model": "startScan.scanactivity",
+  "pk": 10,
+  "fields": {
+    "scan_of": 1,
+    "title": "Nuclei Scan",
+    "name": "nuclei_scan",
+    "time": "2024-09-03T22:29:15.243Z",
+    "status": 2,
+    "error_message": null,
+    "traceback": null,
+    "celery_id": "b74526bd-8f9a-4738-a98f-876ba776da33"
+  }
+},
+{
+  "model": "startScan.scanactivity",
+  "pk": 11,
+  "fields": {
+    "scan_of": 1,
+    "title": "Nuclei Scan with severity unknown",
+    "name": "nuclei_individual_severity_module",
+    "time": "2024-09-03T22:04:05.946Z",
+    "status": 2,
+    "error_message": null,
+    "traceback": null,
+    "celery_id": "e1351fcc-958c-4fd2-941b-e8c34c3db9d9"
+  }
+},
+{
+  "model": "startScan.scanactivity",
+  "pk": 12,
+  "fields": {
+    "scan_of": 1,
+    "title": "Nuclei Scan with severity info",
+    "name": "nuclei_individual_severity_module",
+    "time": "2024-09-03T22:16:51.232Z",
+    "status": 2,
+    "error_message": null,
+    "traceback": null,
+    "celery_id": "e61a5153-22d3-4890-984c-c45177e93baa"
+  }
+},
+{
+  "model": "startScan.scanactivity",
+  "pk": 13,
+  "fields": {
+    "scan_of": 1,
+    "title": "Nuclei Scan with severity low",
+    "name": "nuclei_individual_severity_module",
+    "time": "2024-09-03T22:08:56.115Z",
+    "status": 2,
+    "error_message": null,
+    "traceback": null,
+    "celery_id": "267cc8e5-24ab-4651-a708-4286b4506ee0"
+  }
+},
+{
+  "model": "startScan.scanactivity",
+  "pk": 14,
+  "fields": {
+    "scan_of": 1,
+    "title": "Nuclei Scan with severity medium",
+    "name": "nuclei_individual_severity_module",
+    "time": "2024-09-03T22:28:15.118Z",
+    "status": 2,
+    "error_message": null,
+    "traceback": null,
+    "celery_id": "47b90b12-ecce-49c9-93cf-f1e26fc15db6"
+  }
+},
+{
+  "model": "startScan.scanactivity",
+  "pk": 15,
+  "fields": {
+    "scan_of": 1,
+    "title": "Nuclei Scan with severity high",
+    "name": "nuclei_individual_severity_module",
+    "time": "2024-09-03T22:29:10.920Z",
+    "status": 2,
+    "error_message": null,
+    "traceback": null,
+    "celery_id": "06e12924-022d-4972-8b4b-ceda9b6985f2"
+  }
+},
+{
+  "model": "startScan.scanactivity",
+  "pk": 16,
+  "fields": {
+    "scan_of": 1,
+    "title": "Nuclei Scan with severity critical",
+    "name": "nuclei_individual_severity_module",
+    "time": "2024-09-03T22:06:56.220Z",
+    "status": 2,
+    "error_message": null,
+    "traceback": null,
+    "celery_id": "3f932d02-9beb-4c0b-9cb0-394fc6e73401"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 1,
+  "fields": {
+    "scan_history": 1,
+    "activity": null,
+    "command": "httpx -cl -ct -rt -location -td -websocket -cname -asn -cdn -probe -random-agent -t 1 -json -u testphp.vulnweb.com -silent",
+    "return_code": 0,
+    "output": "{\"timestamp\":\"2024-09-03T21:25:56.985783616Z\",\"port\":\"80\",\"url\":\"http://testphp.vulnweb.com\",\"input\":\"testphp.vulnweb.com\",\"title\":\"Home of Acunetix Art\",\"scheme\":\"http\",\"webserver\":\"nginx/1.19.0\",\"content_type\":\"text/html\",\"method\":\"GET\",\"host\":\"44.228.249.3\",\"path\":\"/\",\"time\":\"343.388749ms\",\"a\":[\"44.228.249.3\"],\"tech\":[\"DreamWeaver\",\"Nginx:1.19.0\",\"PHP:5.6.40\",\"Ubuntu\"],\"words\":514,\"lines\":110,\"status_code\":200,\"content_length\":4958,\"failed\":false,\"knowledgebase\":{\"PageType\":\"nonerror\",\"pHash\":0}}\n",
+    "time": "2024-09-03T21:25:45.871Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 2,
+  "fields": {
+    "scan_history": 1,
+    "activity": null,
+    "command": "rm /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/httpx_input.txt",
+    "return_code": 0,
+    "output": "",
+    "time": "2024-09-03T21:25:57.045Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 3,
+  "fields": {
+    "scan_history": null,
+    "activity": null,
+    "command": "geoiplookup 44.228.249.3",
+    "return_code": null,
+    "output": null,
+    "time": "2024-09-03T21:25:57.037Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 4,
+  "fields": {
+    "scan_history": 1,
+    "activity": null,
+    "command": "httpx -cl -ct -rt -location -td -websocket -cname -asn -cdn -probe -random-agent -t 1 -json -u vulnweb.com -silent",
+    "return_code": 0,
+    "output": "{\"timestamp\":\"2024-09-03T21:26:08.122014174Z\",\"port\":\"80\",\"url\":\"http://vulnweb.com\",\"input\":\"vulnweb.com\",\"title\":\"Acunetix Web Vulnerability Scanner - Test websites\",\"scheme\":\"http\",\"webserver\":\"nginx/1.19.0\",\"content_type\":\"text/html\",\"method\":\"GET\",\"host\":\"44.228.249.3\",\"path\":\"/\",\"time\":\"351.001638ms\",\"a\":[\"44.228.249.3\"],\"tech\":[\"Nginx:1.19.0\"],\"words\":482,\"lines\":74,\"status_code\":200,\"content_length\":4018,\"failed\":false,\"knowledgebase\":{\"PageType\":\"nonerror\",\"pHash\":0}}\n",
+    "time": "2024-09-03T21:25:57.079Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 5,
+  "fields": {
+    "scan_history": 1,
+    "activity": null,
+    "command": "rm /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/httpx_input.txt",
+    "return_code": 0,
+    "output": "",
+    "time": "2024-09-03T21:26:08.160Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 6,
+  "fields": {
+    "scan_history": 1,
+    "activity": 1,
+    "command": "subfinder -d vulnweb.com -o /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/subdomains_subfinder.txt -timeout 5 -t 30 -silent",
+    "return_code": 0,
+    "output": "\n[\u001b[34mINF\u001b[0m] Current subfinder version v2.6.6 (\u001b[92mlatest\u001b[0m)\nblogger.com.vulnweb.com\nodincovo.vulnweb.com\ntestasp.vulnweb.com\nwww.testphp.vulnweb.com\ntestphp.vulnweb.com\n2ftestasp.vulnweb.com\nedu-rost.rutestasp.vulnweb.com\nu003erest.vulnweb.com\ntestaspnet.vulnweb.com\ntetphp.vulnweb.com\nrest.vulnweb.com\ntestaspx.vulnweb.com\n5burl-3dhttp-3a-2f-2fwww.vulnweb.com\n7ctestasp.vulnweb.com\nwww.test.php.vulnweb.com\nedu-rost.ruwww.vulnweb.com\ntesthtml5.vulnweb.com\nwww.virus.vulnweb.com\nu003etestasp.vulnweb.com\ntest.php.vulnweb.com\ntestap.vulnweb.com\nwww.testasp.vulnweb.com\nestphp.vulnweb.com\ntestapsnet.vulnweb.com\nhttptestaspnet.vulnweb.com\n2f-2fwww.vulnweb.com\nrestasp.vulnweb.com\nviruswall.vulnweb.com\nvirus.vulnweb.com\nttestphp.vulnweb.com\nwww.vulnweb.com\ntest.vulnweb.com\ntestaps.vulnweb.com\n2fwww.vulnweb.com\nantivirus1.vulnweb.com\ntestpphp.vulnweb.com",
+    "time": "2024-09-03T21:26:08.233Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 7,
+  "fields": {
+    "scan_history": 1,
+    "activity": null,
+    "command": "GooFuzz -t vulnweb.com -d 3 -p 5 -w /login/,login.html -o /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/gofuzz.txt",
+    "return_code": 1,
+    "output": "\n*********************************************************\n* GooFuzz 1.2.5 - The Power of Google Dorks\t\t*\n*********************************************************\n\nTarget: \u001b[1mvulnweb.com\u001b[0m\n\n===================================================================\nDirectories and files found from: \u001b[1m/login/,login.html\u001b[0m\n===================================================================\n\nhttp://rest.vulnweb.com/basic_authentication/api/\nhttp://rest.vulnweb.com/docs/\nhttp://testasp.vulnweb.com/Search.asp\nhttp://testaspnet.vulnweb.com/login.aspx\nhttp://testhtml5.vulnweb.com/\nhttp://testphp.vulnweb.com/\nhttp://testphp.vulnweb.com/admin/\nhttp://testphp.vulnweb.com/artists.php\nhttp://testphp.vulnweb.com/artists.php?artist\nhttp://testphp.vulnweb.com/artists.php?artist=1\nhttp://testphp.vulnweb.com/artists.php?artist=2\nhttp://testphp.vulnweb.com/categories.php\nhttp://testphp.vulnweb.com/disclaimer.php\nhttp://testphp.vulnweb.com/listproducts.php?cat\nhttp://testphp.vulnweb.com/listproducts.php?cat=1\nhttp://testphp.vulnweb.com/login.php\nhttp://testphp.vulnweb.com/search.php\nhttp://www.vulnweb.com/",
+    "time": "2024-09-03T21:26:08.250Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 8,
+  "fields": {
+    "scan_history": 1,
+    "activity": 1,
+    "command": "ctfr -d vulnweb.com -o /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/subdomains_ctfr.txt && cat /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/subdomains_ctfr.txt | sed 's/\\*.//g' | tail -n +12 | uniq | sort > /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/subdomains_ctfr.txt",
+    "return_code": 0,
+    "output": "\n\n____ _____ _____ ____\n/ ___|_   _|  ___|  _ \\\n| |     | | | |_  | |_) |\n| |___  | | |  _| |  _ <\n\\____| |_| |_|   |_| \\_\\\n\nVersion 1.2 - Hey don't miss AXFR!\nMade by Sheila A. Berta (UnaPibaGeek)\n\n\n[!] ---- TARGET: vulnweb.com ---- [!]\n\n\n\n[!]  Done. Have a nice day! ;).",
+    "time": "2024-09-03T21:26:10.094Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 9,
+  "fields": {
+    "scan_history": 1,
+    "activity": 1,
+    "command": "sublist3r -d vulnweb.com -t 30 -o /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/subdomains_sublister.txt",
+    "return_code": 0,
+    "output": "\n\u001b[91m\n____        _     _ _     _   _____\n/ ___| _   _| |__ | (_)___| |_|___ / _ __\n\\___ \\| | | | '_ \\| | / __| __| |_ \\| '__|\n___) | |_| | |_) | | \\__ \\ |_ ___) | |\n|____/ \\__,_|_.__/|_|_|___/\\__|____/|_|\u001b[0m\u001b[93m\n\n# Coded By Ahmed Aboul-Ela - @aboul3la\n\n\u001b[94m[-] Enumerating subdomains now for vulnweb.com\u001b[0m\n\u001b[92m[-] Searching now in Baidu..\u001b[0m\n\u001b[92m[-] Searching now in Yahoo..\u001b[0m\n\u001b[92m[-] Searching now in Google..\u001b[0m\n\u001b[92m[-] Searching now in Bing..\u001b[0m\n\u001b[92m[-] Searching now in Ask..\u001b[0m\n\u001b[92m[-] Searching now in Netcraft..\u001b[0m\n\u001b[92m[-] Searching now in DNSdumpster..\u001b[0m\n\u001b[92m[-] Searching now in Virustotal..\u001b[0m\n\u001b[92m[-] Searching now in ThreatCrowd..\u001b[0m\n\u001b[92m[-] Searching now in SSL Certificates..\u001b[0m\n\u001b[92m[-] Searching now in PassiveDNS..\u001b[0m\n\u001b[91m[!] Error: Virustotal probably now is blocking our requests\u001b[0m",
+    "time": "2024-09-03T21:26:11.036Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 10,
+  "fields": {
+    "scan_history": 1,
+    "activity": null,
+    "command": "GooFuzz -t vulnweb.com -d 3 -p 5 -w /admin/,admin.html -o /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/gofuzz.txt",
+    "return_code": 1,
+    "output": "\n*********************************************************\n* GooFuzz 1.2.5 - The Power of Google Dorks\t\t*\n*********************************************************\n\nTarget: \u001b[1mvulnweb.com\u001b[0m\n\n===================================================================\nDirectories and files found from: \u001b[1m/admin/,admin.html\u001b[0m\n===================================================================\n\nhttp://rest.vulnweb.com/basic_authentication/api/\nhttp://rest.vulnweb.com/docs/\nhttp://rest.vulnweb.com/images/1_basic_authentication.png\nhttp://rest.vulnweb.com/images/2_jwt.png\nhttp://rest.vulnweb.com/images/3_oauth2.png\nhttp://testphp.vulnweb.com/admin/\nhttp://testphp.vulnweb.com/login.php\nhttp://testphp.vulnweb.com/secured/phpinfo.php",
+    "time": "2024-09-03T21:26:12.068Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 11,
+  "fields": {
+    "scan_history": 1,
+    "activity": null,
+    "command": "GooFuzz -t vulnweb.com -d 3 -p 5 -w /dashboard/,dashboard.html -o /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/gofuzz.txt",
+    "return_code": 1,
+    "output": "\n*********************************************************\n* GooFuzz 1.2.5 - The Power of Google Dorks\t\t*\n*********************************************************\n\nTarget: \u001b[1mvulnweb.com\u001b[0m\n\nSorry, no results found.",
+    "time": "2024-09-03T21:26:15.816Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 12,
+  "fields": {
+    "scan_history": 1,
+    "activity": null,
+    "command": "GooFuzz -t stackoverflow.com -d 3 -p 2 -w vulnweb.com -o /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/gofuzz.txt",
+    "return_code": 1,
+    "output": "\n*********************************************************\n* GooFuzz 1.2.5 - The Power of Google Dorks\t\t*\n*********************************************************\n\nTarget: \u001b[1mstackoverflow.com\u001b[0m\n\nSorry, no results found.",
+    "time": "2024-09-03T21:26:16.663Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 13,
+  "fields": {
+    "scan_history": 1,
+    "activity": null,
+    "command": "GooFuzz -t tiktok.com -d 3 -p 2 -w vulnweb.com -o /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/gofuzz.txt",
+    "return_code": 1,
+    "output": "\n*********************************************************\n* GooFuzz 1.2.5 - The Power of Google Dorks\t\t*\n*********************************************************\n\nTarget: \u001b[1mtiktok.com\u001b[0m\n\nSorry, no results found.",
+    "time": "2024-09-03T21:26:17.334Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 14,
+  "fields": {
+    "scan_history": 1,
+    "activity": null,
+    "command": "GooFuzz -t facebook.com -d 3 -p 2 -w vulnweb.com -o /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/gofuzz.txt",
+    "return_code": 1,
+    "output": "\n*********************************************************\n* GooFuzz 1.2.5 - The Power of Google Dorks\t\t*\n*********************************************************\n\nTarget: \u001b[1mfacebook.com\u001b[0m\n\n===================================================================\nDirectories and files found from: \u001b[1mvulnweb.com\u001b[0m\n===================================================================\n\nhttps://m.facebook.com/QwertyAloneC/posts/dork-sqli-just-add-inurl-before-themphpcatidcartphpidphpcidindexphpshowtopiccont/142828509609539/\nhttps://m.facebook.com/groups/3201261889909211/posts/3624197390948990/\nhttps://m.facebook.com/groups/3201261889909211/posts/4007010936000965/\nhttps://m.facebook.com/groups/3201261889909211/posts/4007311169304275/\nhttps://m.facebook.com/groups/3201261889909211/posts/4188319924536731/\nhttps://m.facebook.com/groups/3201261889909211/posts/4367877359914319/\nhttps://m.facebook.com/groups/3201261889909211/posts/6293716407330395/\nhttps://m.facebook.com/groups/hackingteam2022/posts/2726773620796174/\nhttps://www.facebook.com/KaliLinuxBrazil/photos/tenha-certeza-de-estar-com-o-tor-instaladoinstala%C3%A7%C3%A3o-tor-rootkaliapt-get-install/972928206082146/\nhttps://www.facebook.com/KaliLinuxBrazil/photos/tenha-certeza-de-estar-com-o-tor-instaladoinstala&C3&A7&C3&A3o-tor-rootkaliapt-get-install/972928206082146/\nhttps://www.facebook.com/groups/3201261889909211/",
+    "time": "2024-09-03T21:26:18.037Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 15,
+  "fields": {
+    "scan_history": 1,
+    "activity": null,
+    "command": "GooFuzz -t twitter.com -d 3 -p 2 -w vulnweb.com -o /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/gofuzz.txt",
+    "return_code": 1,
+    "output": "\n*********************************************************\n* GooFuzz 1.2.5 - The Power of Google Dorks\t\t*\n*********************************************************\n\nTarget: \u001b[1mtwitter.com\u001b[0m\n\n===================================================================\nDirectories and files found from: \u001b[1mvulnweb.com\u001b[0m\n===================================================================\n\nhttps://mobile.twitter.com/MrHades2020\nhttps://twitter.com/0xSwayamm\nhttps://twitter.com/7h3r4bb17\nhttps://twitter.com/SadatTamzit\nhttps://twitter.com/deathpoolx1\nhttps://twitter.com/hunterabubakar\nhttps://twitter.com/kg4409\nhttps://twitter.com/ravidutt04?lang\nhttps://twitter.com/ravidutt04?lang=ca\nhttps://twitter.com/therceman/status/1711473903934054427\nhttps://twitter.com/vishack81",
+    "time": "2024-09-03T21:26:21.869Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 16,
+  "fields": {
+    "scan_history": 1,
+    "activity": null,
+    "command": "GooFuzz -t youtube.com -d 3 -p 2 -w vulnweb.com -o /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/gofuzz.txt",
+    "return_code": 1,
+    "output": "\n*********************************************************\n* GooFuzz 1.2.5 - The Power of Google Dorks\t\t*\n*********************************************************\n\nTarget: \u001b[1myoutube.com\u001b[0m\n\n===================================================================\nDirectories and files found from: \u001b[1mvulnweb.com\u001b[0m\n===================================================================\n\nhttps://m.youtube.com/watch?v\nhttps://m.youtube.com/watch?v=2_lswM1S264\nhttps://m.youtube.com/watch?v=2tJgPyRITGc\nhttps://m.youtube.com/watch?v=6FDKHewTP4A\nhttps://m.youtube.com/watch?v=cEoPdpVUeyU\nhttps://m.youtube.com/watch?v=gHkGuVb9vX8\nhttps://www.youtube.com/watch?v\nhttps://www.youtube.com/watch?v=IbDAHDSlgYg\nhttps://www.youtube.com/watch?v=ZstyFyfS3g4\nhttps://www.youtube.com/watch?v=cEoPdpVUeyU\nhttps://www.youtube.com/watch?v=dabm-7CcHaE\nhttps://www.youtube.com/watch?v=tAxMpoKkvCw",
+    "time": "2024-09-03T21:26:25.626Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 17,
+  "fields": {
+    "scan_history": 1,
+    "activity": null,
+    "command": "GooFuzz -t reddit.com -d 3 -p 2 -w vulnweb.com -o /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/gofuzz.txt",
+    "return_code": 1,
+    "output": "\n*********************************************************\n* GooFuzz 1.2.5 - The Power of Google Dorks\t\t*\n*********************************************************\n\nTarget: \u001b[1mreddit.com\u001b[0m\n\n===================================================================\nDirectories and files found from: \u001b[1mvulnweb.com\u001b[0m\n===================================================================\n\nhttps://www.reddit.com/r/sysadmin/comments/gs031c/how_to_login_to_web_by_submitting_username/",
+    "time": "2024-09-03T21:26:29.388Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 18,
+  "fields": {
+    "scan_history": 1,
+    "activity": null,
+    "command": "GooFuzz -t trello.com -d 3 -p 2 -w vulnweb.com -o /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/gofuzz.txt",
+    "return_code": 1,
+    "output": "\n*********************************************************\n* GooFuzz 1.2.5 - The Power of Google Dorks\t\t*\n*********************************************************\n\nTarget: \u001b[1mtrello.com\u001b[0m\n\nSorry, no results found.",
+    "time": "2024-09-03T21:26:33.059Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 19,
+  "fields": {
+    "scan_history": 1,
+    "activity": null,
+    "command": "GooFuzz -t atlassian.net -d 3 -p 2 -w vulnweb.com -o /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/gofuzz.txt",
+    "return_code": 1,
+    "output": "\n*********************************************************\n* GooFuzz 1.2.5 - The Power of Google Dorks\t\t*\n*********************************************************\n\nTarget: \u001b[1matlassian.net\u001b[0m\n\nSorry, no results found.",
+    "time": "2024-09-03T21:26:33.737Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 20,
+  "fields": {
+    "scan_history": 1,
+    "activity": 1,
+    "command": "tlsx -san -cn -silent -ro -host vulnweb.com | sed -n '/^\\([a-zA-Z0-9]\\([-a-zA-Z0-9]*[a-zA-Z0-9]\\)\\?\\.\\)\\+vulnweb.com$/p' | uniq | sort > /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/subdomains_tlsx.txt",
+    "return_code": 0,
+    "output": "",
+    "time": "2024-09-03T21:26:34.437Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 21,
+  "fields": {
+    "scan_history": 1,
+    "activity": null,
+    "command": "GooFuzz -t github.com -d 3 -p 2 -w vulnweb.com -o /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/gofuzz.txt",
+    "return_code": 1,
+    "output": "\n*********************************************************\n* GooFuzz 1.2.5 - The Power of Google Dorks\t\t*\n*********************************************************\n\nTarget: \u001b[1mgithub.com\u001b[0m\n\n===================================================================\nDirectories and files found from: \u001b[1mvulnweb.com\u001b[0m\n===================================================================\n\nhttps://github.com/dradis/dradis-acunetix/blob/master/spec/fixtures/files/testphp.vulnweb.com.export.acunetix.xml\nhttps://github.com/dtag-dev-sec/explo/blob/master/examples/SQLI_LOGIN_testphp.vulnweb.com.yaml\nhttps://github.com/dtag-dev-sec/explo/blob/master/examples/SQLI_testphp.vulnweb.com.yaml\nhttps://github.com/yangbh/Hammer/blob/master/output/testphp.vulnweb.com/http_testphp.vulnweb.com",
+    "time": "2024-09-03T21:26:34.456Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 22,
+  "fields": {
+    "scan_history": 1,
+    "activity": null,
+    "command": "GooFuzz -t gitlab.com -d 3 -p 2 -w vulnweb.com -o /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/gofuzz.txt",
+    "return_code": 1,
+    "output": "\n*********************************************************\n* GooFuzz 1.2.5 - The Power of Google Dorks\t\t*\n*********************************************************\n\nTarget: \u001b[1mgitlab.com\u001b[0m\n\nSorry, no results found.",
+    "time": "2024-09-03T21:26:38.165Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 23,
+  "fields": {
+    "scan_history": 1,
+    "activity": null,
+    "command": "GooFuzz -t bitbucket.org -d 3 -p 2 -w vulnweb.com -o /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/gofuzz.txt",
+    "return_code": 1,
+    "output": "\n*********************************************************\n* GooFuzz 1.2.5 - The Power of Google Dorks\t\t*\n*********************************************************\n\nTarget: \u001b[1mbitbucket.org\u001b[0m\n\n===================================================================\nDirectories and files found from: \u001b[1mvulnweb.com\u001b[0m\n===================================================================\n\nhttps://bitbucket.org/snippets/alms/KrG4LL\nhttps://bitbucket.org/snippets/bakueikozo/rex9ar/playstation-classic-uart-login-console\nhttps://bitbucket.org/snippets/especnorthamerica/neb6dq/examples-of-web-controller-rest-api-usage\nhttps://bitbucket.org/snippets/faridani/pRX6r\nhttps://bitbucket.org/snippets/orrp/xeGzXB/interactive-mgg\nhttps://bitbucket.org/snippets/raerose01/5enKR5\nhttps://bitbucket.org/snippets/sglienke/64LG6b/introsort\nhttps://bitbucket.org/snippets/sglienke/6oBqMb\nhttps://bitbucket.org/snippets/suntorytime/rAGXar/wellness-sources-overview\nhttps://bitbucket.org/snippets/wmgodyak/6bXKj",
+    "time": "2024-09-03T21:26:38.820Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 24,
+  "fields": {
+    "scan_history": 1,
+    "activity": null,
+    "command": "GooFuzz -t vulnweb.com -d 3 -p 4 -e env,xml,conf,toml,yml,yaml,cnf,inf,rdp,ora,txt,cfg,ini -o /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/gofuzz.txt",
+    "return_code": 1,
+    "output": "\n*********************************************************\n* GooFuzz 1.2.5 - The Power of Google Dorks\t\t*\n*********************************************************\n\nTarget: \u001b[1mvulnweb.com\u001b[0m\n\nSorry, no results found for \u001b[1menv\u001b[0m.\n\n===================================================================\nExtension: \u001b[1mxml\u001b[0m\n===================================================================\n\nhttp://testphp.vulnweb.com/.idea/workspace.xml\nhttp://testphp.vulnweb.com/crossdomain.xml\n\n\u001b[1m[!]\u001b[0m Oops... Looks like Google has temporarily blocked your IP address.",
+    "time": "2024-09-03T21:26:42.598Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 25,
+  "fields": {
+    "scan_history": 1,
+    "activity": null,
+    "command": "GooFuzz -t vulnweb.com -d 3 -p 1 -w Jenkins -o /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/gofuzz.txt",
+    "return_code": 1,
+    "output": "\n*********************************************************\n* GooFuzz 1.2.5 - The Power of Google Dorks\t\t*\n*********************************************************\n\nTarget: \u001b[1mvulnweb.com\u001b[0m\n\n\u001b[1m[!]\u001b[0m Oops... Looks like Google has temporarily blocked your IP address.",
+    "time": "2024-09-03T21:26:47.795Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 26,
+  "fields": {
+    "scan_history": 1,
+    "activity": null,
+    "command": "GooFuzz -t vulnweb.com -d 3 -p 5 -w /wp-content/,/wp-includes/ -o /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/gofuzz.txt",
+    "return_code": 1,
+    "output": "\n*********************************************************\n* GooFuzz 1.2.5 - The Power of Google Dorks\t\t*\n*********************************************************\n\nTarget: \u001b[1mvulnweb.com\u001b[0m\n\n\u001b[1m[!]\u001b[0m Oops... Looks like Google has temporarily blocked your IP address.",
+    "time": "2024-09-03T21:26:48.862Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 27,
+  "fields": {
+    "scan_history": 1,
+    "activity": null,
+    "command": "GooFuzz -t vulnweb.com -d 3 -p 5 -w PHP Parse error,PHP Warning,PHP Error -o /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/gofuzz.txt",
+    "return_code": 1,
+    "output": "\n*********************************************************\n* GooFuzz 1.2.5 - The Power of Google Dorks\t\t*\n*********************************************************\n\nTarget: \u001b[1mvulnweb.com\u001b[0m\n\n\u001b[1m[!]\u001b[0m Oops... Looks like Google has temporarily blocked your IP address.",
+    "time": "2024-09-03T21:26:49.546Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 28,
+  "fields": {
+    "scan_history": 1,
+    "activity": null,
+    "command": "GooFuzz -t vulnweb.com -d 3 -p 7 -e doc,docx,odt,pdf,rtf,sxw,psw,ppt,pptx,pps,csv -o /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/gofuzz.txt",
+    "return_code": 1,
+    "output": "\n*********************************************************\n* GooFuzz 1.2.5 - The Power of Google Dorks\t\t*\n*********************************************************\n\nTarget: \u001b[1mvulnweb.com\u001b[0m\n\n\u001b[1m[!]\u001b[0m Oops... Looks like Google has temporarily blocked your IP address.",
+    "time": "2024-09-03T21:26:50.666Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 29,
+  "fields": {
+    "scan_history": 1,
+    "activity": null,
+    "command": "GooFuzz -t vulnweb.com -d 3 -p 1 -e sql,db,dbf,mdb -o /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/gofuzz.txt",
+    "return_code": 1,
+    "output": "\n*********************************************************\n* GooFuzz 1.2.5 - The Power of Google Dorks\t\t*\n*********************************************************\n\nTarget: \u001b[1mvulnweb.com\u001b[0m\n\n\u001b[1m[!]\u001b[0m Oops... Looks like Google has temporarily blocked your IP address.",
+    "time": "2024-09-03T21:26:51.510Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 30,
+  "fields": {
+    "scan_history": 1,
+    "activity": null,
+    "command": "GooFuzz -t vulnweb.com -d 3 -p 1 -e git -o /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/gofuzz.txt",
+    "return_code": 1,
+    "output": "\n*********************************************************\n* GooFuzz 1.2.5 - The Power of Google Dorks\t\t*\n*********************************************************\n\nTarget: \u001b[1mvulnweb.com\u001b[0m\n\n\u001b[1m[!]\u001b[0m Oops... Looks like Google has temporarily blocked your IP address.",
+    "time": "2024-09-03T21:26:52.449Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 31,
+  "fields": {
+    "scan_history": 1,
+    "activity": 1,
+    "command": "oneforall --target vulnweb.com run && cut -d',' -f6 /home/rengine/tools/.github/OneForAll/results/vulnweb.com.csv | tail -n +2 > /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/subdomains_oneforall.txt && rm -rf /home/rengine/tools/.github/OneForAll/results/vulnweb.com.csv",
+    "return_code": 0,
+    "output": "\n\nOneForAll is a powerful subdomain integration tool\u001b[01;33m\n___             _ _\n___ ___ ___|  _|___ ___ ___| | | \u001b[01;37m{\u001b[1;31mv0.4.5 #dev\u001b[01;37m}\u001b[01;32m\n| . |   | -_|  _| . |  _| .'| | | \u001b[01;34m\n|___|_|_|___|_| |___|_| |__,|_|_| \u001b[01;37mgit.io/fjHT1\n\n\u001b[1;31mOneForAll is under development, please update before each use!\u001b[0m\n\n[*] Starting OneForAll @ 2024-09-03 21:27:05\n\n21:27:05,902 [INFOR] utils:532 - Checking dependent environment\n21:27:05,902 [INFOR] utils:544 - Checking network environment\n21:27:06,465 [INFOR] utils:555 - Checking for the latest version\n21:27:06,730 [INFOR] utils:579 - The current version v0.4.5 is already the latest version\n21:27:06,731 [INFOR] oneforall:241 - Start running OneForAll\n21:27:06,732 [INFOR] oneforall:246 - Got 1 domains\n21:27:06,763 [INFOR] wildcard:108 - Detecting vulnweb.com use wildcard dns record or not\n21:27:06,881 [ALERT] wildcard:47 - 370500ba.vulnweb.com resolve to: 370500ba.vulnweb.com. IP: {'44.228.249.3'} TTL: 3600\n21:27:06,907 [ALERT] wildcard:47 - 62a5f2cb.vulnweb.com resolve to: 62a5f2cb.vulnweb.com. IP: {'44.228.249.3'} TTL: 3600\n21:27:06,933 [ALERT] wildcard:47 - ee447f63.vulnweb.com resolve to: ee447f63.vulnweb.com. IP: {'44.228.249.3'} TTL: 3600\n21:27:06,934 [INFOR] utils:700 - Attempting to request http://370500ba.vulnweb.com\n21:27:07,318 [ALERT] utils:708 - Error request http://370500ba.vulnweb.com\n21:27:07,318 [INFOR] utils:700 - Attempting to request http://62a5f2cb.vulnweb.com\n21:27:07,721 [ALERT] utils:708 - Error request http://62a5f2cb.vulnweb.com\n21:27:07,722 [INFOR] utils:700 - Attempting to request http://ee447f63.vulnweb.com\n21:27:08,135 [ALERT] utils:708 - Error request http://ee447f63.vulnweb.com\n21:27:08,135 [ALERT] wildcard:121 - The domain vulnweb.com enables wildcard\n21:27:08,135 [INFOR] collect:44 - Start collecting subdomains of vulnweb.com\n21:27:08,208 [INFOR] module:63 - AXFRCheck module took 0.0 seconds found 0 subdomains\n21:27:08,218 [INFOR] module:63 - NSECCheck module took 0.0 seconds found 0 subdomains\n21:27:08,232 [INFOR] module:63 - QueryMX module took 0.0 seconds found 0 subdomains\n21:27:08,232 [INFOR] module:63 - QuerySOA module took 0.0 seconds found 0 subdomains\n21:27:08,233 [INFOR] module:63 - QueryNS module took 0.0 seconds found 0 subdomains\n21:27:08,262 [INFOR] module:63 - QuerySPF module took 0.0 seconds found 0 subdomains\n21:27:08,267 [INFOR] module:63 - QueryTXT module took 0.1 seconds found 0 subdomains\n21:27:08,418 [ERROR] module:129 - HTTPSConnectionPool(host='riddler.io', port=443): Max retries exceeded with url: /search?q=pld%3Avulnweb.com (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7fd7ed109540>: Failed to establish a new connection: [Errno -5] No address associated with hostname'))\n21:27:08,419 [INFOR] module:63 - RiddlerQuery module took 0.2 seconds found 0 subdomains\n21:27:08,448 [INFOR] module:63 - CrtshQuery module took 0.3 seconds found 0 subdomains\n21:27:08,537 [ALERT] utils:273 - GET https://www.dnsgrep.cn/subdomain/vulnweb.com 403 - Forbidden 17723\n21:27:08,538 [INFOR] module:63 - DnsgrepQuery module took 0.3 seconds found 0 subdomains\n21:27:08,555 [INFOR] module:63 - SiteDossierQuery module took 0.4 seconds found 4 subdomains\n21:27:08,556 [INFOR] module:63 - CertSpotterQuery module took 0.4 seconds found 0 subdomains\n21:27:08,564 [INFOR] module:63 - ThreatMinerQuery module took 0.4 seconds found 0 subdomains\n21:27:08,646 [INFOR] module:63 - UrlscanQuery module took 0.4 seconds found 8 subdomains\n21:27:08,648 [ALERT] utils:273 - GET https://www.virustotal.com/ui/domains/vulnweb.com/subdomains?limit=40&cursor= 429 - Too Many Requests 181\n21:27:08,648 [ALERT] utils:282 - {'error': {'code': 'RecaptchaRequiredError', 'message': 'Please re-send request with a valid reCAPTCHA response in the \"x-recaptcha-response\" header'}}\n21:27:08,649 [INFOR] module:63 - CSPCheck module took 0.5 seconds found 0 subdomains\n21:27:08,650 [INFOR] module:63 - VirusTotalQuery module took 0.4 seconds found 0 subdomains\n21:27:08,726 [ALERT] utils:273 - GET https://fullhunt.io/api/v1/domain/vulnweb.com/subdomains 401 - UNAUTHORIZED 50\n21:27:08,726 [ALERT] utils:282 - {'message': 'Unauthorized access', 'success': False}\n21:27:08,728 [INFOR] module:63 - FullHuntAPIQuery module took 0.5 seconds found 0 subdomains\n21:27:08,894 [INFOR] module:63 - AnubisQuery module took 0.7 seconds found 12 subdomains\n21:27:08,895 [ALERT] utils:273 - GET https://transparencyreport.google.com/transparencyreport/api/v3/httpsreport/ct/certsearch?include_expired=true&include_subdomains=true&domain=vulnweb.com 404 - Not Found 1611\n21:27:08,897 [INFOR] module:63 - GoogleQuery module took 0.7 seconds found 0 subdomains\n21:27:08,953 [INFOR] module:63 - HackerTargetQuery module took 0.8 seconds found 22 subdomains\n21:27:09,137 [INFOR] module:63 - AlienVaultQuery module took 0.9 seconds found 19 subdomains\n21:27:09,276 [ALERT] utils:273 - GET https://searchdns.netcraft.com/?restriction=site+contains&position=limited&host=%2A.vulnweb.com&from=1 403 - Forbidden 17830\n21:27:09,277 [INFOR] module:63 - NetCraftQuery module took 1.1 seconds found 0 subdomains\n21:27:09,399 [INFOR] module:63 - AskSearch module took 1.2 seconds found 0 subdomains\n21:27:09,427 [INFOR] module:63 - DNSDumpsterQuery module took 1.2 seconds found 11 subdomains\n21:27:09,572 [ALERT] utils:273 - GET https://ce.baidu.com/index/getRelatedSites?site_address=vulnweb.com 500 - Internal Server Error 0\n21:27:09,573 [INFOR] module:63 - CeBaiduQuery module took 1.4 seconds found 0 subdomains\n21:27:09,666 [ALERT] utils:273 - POST https://www.dnsscan.cn/dns.html?keywords=vulnweb.com&page=1 404 - Not Found 206\n21:27:09,668 [INFOR] module:63 - QianXunQuery module took 1.5 seconds found 0 subdomains\n21:27:09,897 [INFOR] module:63 - BingSearch module took 1.7 seconds found 0 subdomains\n21:27:09,985 [INFOR] module:63 - ChinazQuery module took 1.8 seconds found 2 subdomains\n21:27:10,151 [INFOR] module:63 - MySSLQuery module took 2.0 seconds found 0 subdomains\n21:27:10,355 [INFOR] module:63 - RapidDNSQuery module took 2.2 seconds found 281 subdomains\n21:27:10,428 [INFOR] module:63 - SogouSearch module took 2.2 seconds found 5 subdomains\n21:27:10,760 [INFOR] module:63 - IP138Query module took 2.6 seconds found 16 subdomains\n21:27:10,878 [INFOR] module:63 - GiteeSearch module took 2.7 seconds found 0 subdomains\n21:27:11,603 [ERROR] module:129 - HTTPSConnectionPool(host='api.sublist3r.com', port=443): Max retries exceeded with url: /search.php?domain=vulnweb.com (Caused by SSLError(SSLError(1, '[SSL: TLSV1_ALERT_INTERNAL_ERROR] tlsv1 alert internal error (_ssl.c:997)')))\n21:27:11,604 [INFOR] module:63 - Sublist3rQuery module took 3.4 seconds found 0 subdomains\n21:27:11,627 [INFOR] module:63 - YahooSearch module took 3.4 seconds found 0 subdomains\n21:27:11,922 [INFOR] module:63 - RobtexQuery module took 3.7 seconds found 15 subdomains\n21:27:12,070 [INFOR] module:63 - BaiduSearch module took 3.9 seconds found 0 subdomains\n21:27:12,271 [INFOR] module:63 - WzSearch module took 4.1 seconds found 0 subdomains\n21:27:12,901 [INFOR] module:63 - SoSearch module took 4.7 seconds found 1 subdomains\n21:27:12,985 [ALERT] utils:273 - GET https://www.google.com/sorry/index?continue=https://www.google.com/search%3Fq%3Dsite%253A.vulnweb.com%26start%3D1%26num%3D50%26filter%3D0%26btnG%3DSearch%26gbv%3D1%26hl%3Den&hl=en&q=EgRdFhUyGLD-3bYGIjAXsFmbSQzD5Zn_V7wNiBiIu7JIhrukOC5iwq21AZzzrLaQgQb6Du1W_V-vgWEc488yAXJaAUM 429 - Too Many Requests 3385\n21:27:12,987 [INFOR] module:63 - GoogleSearch module took 4.8 seconds found 0 subdomains\n21:27:14,309 [INFOR] module:63 - YandexSearch module took 6.1 seconds found 0 subdomains\n21:27:18,296 [INFOR] module:63 - CertInfo module took 10.1 seconds found 0 subdomains\n21:27:34,346 [INFOR] module:63 - SitemapCheck module took 26.2 seconds found 0 subdomains\n21:27:34,702 [INFOR] module:63 - RobotsCheck module took 26.5 seconds found 0 subdomains\n21:27:34,710 [INFOR] module:63 - CrossDomainCheck module took 26.5 seconds found 0 subdomains\n21:27:34,906 [INFOR] module:63 - BruteSRV module took 0.2 seconds found 0 subdomains\n21:27:34,910 [INFOR] brute:460 - Start running Brute module\n21:27:34,911 [INFOR] brute:410 - Blasting vulnweb.com\n21:27:34,911 [INFOR] utils:174 - /home/rengine/tools/.github/OneForAll/results/temp does not exist, directory will be created\n21:27:34,911 [INFOR] brute:119 - Querying NS records of vulnweb.com\n21:27:34,936 [INFOR] brute:129 - vulnweb.com's authoritative name server is ['ns1.eurodns.com.', 'ns2.eurodns.com.', 'ns3.eurodns.com.', 'ns4.eurodns.com.']\n21:27:34,936 [INFOR] brute:99 - Querying A record from authoritative name server: ['ns1.eurodns.com.', 'ns2.eurodns.com.', 'ns3.eurodns.com.', 'ns4.eurodns.com.']\n21:27:35,027 [INFOR] brute:114 - Authoritative name server A record result: ['199.167.66.107', '104.37.178.107', '199.167.66.108', '104.37.178.108']\n21:27:35,027 [INFOR] wildcard:159 - Collecting wildcard dns record for vulnweb.com\n21:27:35,028 [INFOR] wildcard:128 - Query e5822a54.vulnweb.com 's wildcard dns record in authoritative name server\n21:27:35,042 [INFOR] wildcard:153 - e5822a54.vulnweb.com results on authoritative name server: e5822a54.vulnweb.com. IP: {'44.228.249.3'} TTL: 3600\n21:27:35,043 [INFOR] wildcard:128 - Query 2d14ad45.vulnweb.com 's wildcard dns record in authoritative name server\n21:27:35,058 [INFOR] wildcard:153 - 2d14ad45.vulnweb.com results on authoritative name server: 2d14ad45.vulnweb.com. IP: {'44.228.249.3'} TTL: 3600\n21:27:35,059 [INFOR] brute:347 - Generating dictionary for vulnweb.com\n21:27:35,131 [ALERT] utils:695 - Please check whether sol.vulnweb.com is correct or not\n21:27:35,133 [INFOR] brute:365 - Dictionary size: 95247\n21:27:35,165 [INFOR] brute:441 - Running massdns to brute subdomains\n21:27:39,270 [INFOR] brute:197 - Counting IP cname appear times\n21:27:39,510 [INFOR] brute:238 - Processing result\n21:27:40,095 [ALERT] brute:451 - Brute module takes 5.2 seconds, found 4 subdomains of vulnweb.com\n21:27:40,109 [INFOR] brute:489 - Finished Brute module to brute vulnweb.com\n21:27:40,125 [INFOR] resolve:143 - Start resolving subdomains of vulnweb.com\n21:27:40,144 [INFOR] resolve:166 - Running massdns to resolve subdomains\n21:27:42,189 [INFOR] resolve:104 - Processing resolved results\n21:27:42,192 [INFOR] resolve:172 - Finished resolve subdomains of vulnweb.com\n21:27:42,192 [INFOR] resolve:61 - Saving resolved results\n21:27:42,236 [INFOR] request:258 - Start requesting subdomains of vulnweb.com\n21:27:42,236 [INFOR] request:39 - Port range:[80, 443]\n21:27:42,237 [INFOR] request:56 - Generating request urls\n21:27:42,237 [INFOR] request:217 - Requesting urls in bulk\n\n0it [00:00, ?it/s]\nRequest Progress:  88%|███████████████████████▋   | 7/8 [00:00<00:00, 70.00it/s]\nRequest Progress: 9it [00:13,  1.46s/it]\n21:27:55,384 [INFOR] request:264 - Found that vulnweb.com has 3 alive subdomains\n21:27:55,384 [INFOR] finder:23 - Start Finder module\n\n0it [00:00, ?it/s]21:27:55,387 [INFOR] request:217 - Requesting urls in bulk\n\nRequest Progress: 1it [00:00, 4165.15it/s]\n21:27:55,389 [INFOR] module:63 - Finder module took 0.0 seconds found 1 subdomains\n21:27:55,389 [INFOR] resolve:143 - Start resolving subdomains of vulnweb.com\n21:27:55,409 [INFOR] resolve:166 - Running massdns to resolve subdomains\n21:27:55,436 [INFOR] resolve:104 - Processing resolved results\n\n0it [00:00, ?it/s]21:27:55,436 [INFOR] resolve:172 - Finished resolve subdomains of vulnweb.com\n21:27:55,437 [INFOR] request:258 - Start requesting subdomains of vulnweb.com\n21:27:55,437 [INFOR] request:39 - Port range:[80, 443]\n21:27:55,437 [INFOR] request:56 - Generating request urls\n21:27:55,437 [INFOR] request:217 - Requesting urls in bulk\n\nRequest Progress: 3it [00:13,  4.36s/it]\n21:28:08,520 [INFOR] request:264 - Found that vulnweb.com has 4 alive subdomains\n21:28:08,520 [INFOR] altdns:203 - Start altdns module\n\n0it [00:00, ?it/s]21:28:08,529 [INFOR] altdns:210 - The altdns module generated 0 new subdomains\n21:28:08,529 [INFOR] resolve:143 - Start resolving subdomains of vulnweb.com\n21:28:08,529 [INFOR] request:258 - Start requesting subdomains of vulnweb.com\n21:28:08,530 [INFOR] request:39 - Port range:[80, 443]\n21:28:08,530 [INFOR] request:56 - Generating request urls\n21:28:08,530 [INFOR] request:217 - Requesting urls in bulk\n\nRequest Progress: 1it [00:00, 391.52it/s]\n21:28:08,534 [INFOR] request:264 - Found that vulnweb.com has 4 alive subdomains\n21:28:08,877 [ALERT] export:66 - The subdomain result for vulnweb.com: /home/rengine/tools/.github/OneForAll/results/vulnweb.com.csv\n21:28:08,878 [INFOR] oneforall:255 - Finished OneForAll",
+    "time": "2024-09-03T21:27:04.860Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 32,
+  "fields": {
+    "scan_history": 1,
+    "activity": 1,
+    "command": "netlas search -d domain -i domain domain:\"*.vulnweb.com\" -f json | grep -oE '([a-zA-Z0-9]([-a-zA-Z0-9]*[a-zA-Z0-9])?\\.)+vulnweb.com' > /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/subdomains_netlas.txt",
+    "return_code": 0,
+    "output": "",
+    "time": "2024-09-03T21:28:08.941Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 33,
+  "fields": {
+    "scan_history": 1,
+    "activity": 1,
+    "command": "cat /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/subdomains_*.txt > /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/#1_subdomain_discovery.txt",
+    "return_code": 0,
+    "output": "",
+    "time": "2024-09-03T21:28:09.587Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 34,
+  "fields": {
+    "scan_history": 1,
+    "activity": 1,
+    "command": "sort -u /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/#1_subdomain_discovery.txt -o /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/#1_subdomain_discovery.txt",
+    "return_code": 0,
+    "output": "",
+    "time": "2024-09-03T21:28:09.592Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 35,
+  "fields": {
+    "scan_history": 1,
+    "activity": 3,
+    "command": "httpx -cl -ct -rt -location -td -websocket -cname -asn -cdn -probe -random-agent -t 30 -json -l /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/httpx_input.txt -silent",
+    "return_code": 0,
+    "output": "{\"timestamp\":\"2024-09-03T21:28:10.479003156Z\",\"url\":\"http://localhost.vulnweb.com\",\"input\":\"localhost.vulnweb.com\",\"error\":\"connection refused\",\"words\":0,\"lines\":0,\"failed\":true}\n{\"timestamp\":\"2024-09-03T21:28:20.770588207Z\",\"url\":\"http://edu-rost.ruwww.vulnweb.com\",\"input\":\"edu-rost.ruwww.vulnweb.com\",\"error\":\"EOF\",\"words\":0,\"lines\":0,\"failed\":true}\n{\"timestamp\":\"2024-09-03T21:28:20.770698494Z\",\"url\":\"http://test.vulnweb.com\",\"input\":\"test.vulnweb.com\",\"error\":\"EOF\",\"words\":0,\"lines\":0,\"failed\":true}\n{\"timestamp\":\"2024-09-03T21:28:20.772639921Z\",\"url\":\"http://tetphp.vulnweb.com\",\"input\":\"tetphp.vulnweb.com\",\"error\":\"EOF\",\"words\":0,\"lines\":0,\"failed\":true}\n{\"timestamp\":\"2024-09-03T21:28:20.773795126Z\",\"url\":\"http://blogger.com.vulnweb.com\",\"input\":\"blogger.com.vulnweb.com\",\"error\":\"EOF\",\"words\":0,\"lines\":0,\"failed\":true}\n{\"timestamp\":\"2024-09-03T21:28:20.774028924Z\",\"url\":\"http://testaps.vulnweb.com\",\"input\":\"testaps.vulnweb.com\",\"error\":\"EOF\",\"words\":0,\"lines\":0,\"failed\":true}\n{\"timestamp\":\"2024-09-03T21:28:20.774314729Z\",\"url\":\"http://test.php.vulnweb.com\",\"input\":\"test.php.vulnweb.com\",\"error\":\"EOF\",\"words\":0,\"lines\":0,\"failed\":true}\n{\"timestamp\":\"2024-09-03T21:28:20.778213954Z\",\"url\":\"http://u003erest.vulnweb.com\",\"input\":\"u003erest.vulnweb.com\",\"error\":\"EOF\",\"words\":0,\"lines\":0,\"failed\":true}\n{\"timestamp\":\"2024-09-03T21:28:20.779635989Z\",\"url\":\"http://u003etestasp.vulnweb.com\",\"input\":\"u003etestasp.vulnweb.com\",\"error\":\"EOF\",\"words\":0,\"lines\":0,\"failed\":true}\n{\"timestamp\":\"2024-09-03T21:28:20.779901386Z\",\"url\":\"http://5burl-3dhttp-3a-2f-2fwww.vulnweb.com\",\"input\":\"5burl-3dhttp-3a-2f-2fwww.vulnweb.com\",\"error\":\"EOF\",\"words\":0,\"lines\":0,\"failed\":true}\n{\"timestamp\":\"2024-09-03T21:28:20.782169265Z\",\"url\":\"http://testap.vulnweb.com\",\"input\":\"testap.vulnweb.com\",\"error\":\"EOF\",\"words\":0,\"lines\":0,\"failed\":true}\n{\"timestamp\":\"2024-09-03T21:28:20.783045016Z\",\"url\":\"http://testpphp.vulnweb.com\",\"input\":\"testpphp.vulnweb.com\",\"error\":\"EOF\",\"words\":0,\"lines\":0,\"failed\":true}\n{\"timestamp\":\"2024-09-03T21:28:20.783385584Z\",\"port\":\"80\",\"url\":\"http://testphp.vulnweb.com\",\"input\":\"testphp.vulnweb.com\",\"title\":\"Home of Acunetix Art\",\"scheme\":\"http\",\"webserver\":\"nginx/1.19.0\",\"content_type\":\"text/html\",\"method\":\"GET\",\"host\":\"44.228.249.3\",\"path\":\"/\",\"time\":\"345.110429ms\",\"a\":[\"44.228.249.3\"],\"tech\":[\"DreamWeaver\",\"Nginx:1.19.0\",\"PHP:5.6.40\",\"Ubuntu\"],\"words\":514,\"lines\":110,\"status_code\":200,\"content_length\":4958,\"failed\":false,\"knowledgebase\":{\"PageType\":\"nonerror\",\"pHash\":0}}\n{\"timestamp\":\"2024-09-03T21:28:20.783891311Z\",\"port\":\"80\",\"url\":\"http://testhtml5.vulnweb.com\",\"input\":\"testhtml5.vulnweb.com\",\"title\":\"SecurityTweets - HTML5 test website for Acunetix Web Vulnerability Scanner\",\"scheme\":\"http\",\"webserver\":\"nginx/1.19.0\",\"content_type\":\"text/html\",\"method\":\"GET\",\"host\":\"44.228.249.3\",\"path\":\"/\",\"time\":\"342.381867ms\",\"a\":[\"44.228.249.3\"],\"tech\":[\"AngularJS\",\"Nginx:1.19.0\"],\"words\":1483,\"lines\":164,\"status_code\":200,\"content_length\":6940,\"failed\":false,\"knowledgebase\":{\"PageType\":\"nonerror\",\"pHash\":0}}\n{\"timestamp\":\"2024-09-03T21:28:20.79672208Z\",\"url\":\"http://testapsnet.vulnweb.com\",\"input\":\"testapsnet.vulnweb.com\",\"error\":\"EOF\",\"words\":0,\"lines\":0,\"failed\":true}\n{\"timestamp\":\"2024-09-03T21:28:20.797297117Z\",\"url\":\"http://antivirus1.vulnweb.com\",\"input\":\"antivirus1.vulnweb.com\",\"error\":\"EOF\",\"words\":0,\"lines\":0,\"failed\":true}\n{\"timestamp\":\"2024-09-03T21:28:20.797526076Z\",\"url\":\"http://testaspx.vulnweb.com\",\"input\":\"testaspx.vulnweb.com\",\"error\":\"EOF\",\"words\":0,\"lines\":0,\"failed\":true}\n{\"timestamp\":\"2024-09-03T21:28:20.798569381Z\",\"port\":\"80\",\"url\":\"http://testasp.vulnweb.com\",\"input\":\"testasp.vulnweb.com\",\"title\":\"acuforum forums\",\"scheme\":\"http\",\"webserver\":\"Microsoft-IIS/8.5\",\"content_type\":\"text/html\",\"method\":\"GET\",\"host\":\"44.238.29.244\",\"path\":\"/\",\"time\":\"361.175397ms\",\"a\":[\"44.238.29.244\"],\"tech\":[\"DreamWeaver\",\"IIS:8.5\",\"Microsoft ASP.NET\",\"Windows Server\"],\"words\":328,\"lines\":46,\"status_code\":200,\"content_length\":3537,\"failed\":false,\"knowledgebase\":{\"PageType\":\"nonerror\",\"pHash\":0}}\n{\"timestamp\":\"2024-09-03T21:28:20.801057773Z\",\"url\":\"http://httptestaspnet.vulnweb.com\",\"input\":\"httptestaspnet.vulnweb.com\",\"error\":\"EOF\",\"words\":0,\"lines\":0,\"failed\":true}\n{\"timestamp\":\"2024-09-03T21:28:20.805003305Z\",\"url\":\"http://ttestphp.vulnweb.com\",\"input\":\"ttestphp.vulnweb.com\",\"error\":\"EOF\",\"words\":0,\"lines\":0,\"failed\":true}\n{\"timestamp\":\"2024-09-03T21:28:20.805102451Z\",\"url\":\"http://2f-2fwww.vulnweb.com\",\"input\":\"2f-2fwww.vulnweb.com\",\"error\":\"EOF\",\"words\":0,\"lines\":0,\"failed\":true}\n{\"timestamp\":\"2024-09-03T21:28:20.806546145Z\",\"url\":\"http://odincovo.vulnweb.com\",\"input\":\"odincovo.vulnweb.com\",\"error\":\"EOF\",\"words\":0,\"lines\":0,\"failed\":true}\n{\"timestamp\":\"2024-09-03T21:28:20.808176239Z\",\"url\":\"http://2fwww.vulnweb.com\",\"input\":\"2fwww.vulnweb.com\",\"error\":\"EOF\",\"words\":0,\"lines\":0,\"failed\":true}\n{\"timestamp\":\"2024-09-03T21:28:20.808798495Z\",\"url\":\"http://7ctestasp.vulnweb.com\",\"input\":\"7ctestasp.vulnweb.com\",\"error\":\"EOF\",\"words\":0,\"lines\":0,\"failed\":true}\n{\"timestamp\":\"2024-09-03T21:28:20.80931386Z\",\"url\":\"http://estphp.vulnweb.com\",\"input\":\"estphp.vulnweb.com\",\"error\":\"EOF\",\"words\":0,\"lines\":0,\"failed\":true}\n{\"timestamp\":\"2024-09-03T21:28:20.812391837Z\",\"url\":\"http://restasp.vulnweb.com\",\"input\":\"restasp.vulnweb.com\",\"error\":\"EOF\",\"words\":0,\"lines\":0,\"failed\":true}\n{\"timestamp\":\"2024-09-03T21:28:20.814600876Z\",\"url\":\"http://2ftestasp.vulnweb.com\",\"input\":\"2ftestasp.vulnweb.com\",\"error\":\"EOF\",\"words\":0,\"lines\":0,\"failed\":true}\n{\"timestamp\":\"2024-09-03T21:28:20.822120875Z\",\"url\":\"http://virus.vulnweb.com\",\"input\":\"virus.vulnweb.com\",\"error\":\"EOF\",\"words\":0,\"lines\":0,\"failed\":true}\n{\"timestamp\":\"2024-09-03T21:28:20.83703144Z\",\"url\":\"http://edu-rost.rutestasp.vulnweb.com\",\"input\":\"edu-rost.rutestasp.vulnweb.com\",\"error\":\"EOF\",\"words\":0,\"lines\":0,\"failed\":true}\n{\"timestamp\":\"2024-09-03T21:28:20.856906486Z\",\"port\":\"80\",\"url\":\"http://rest.vulnweb.com\",\"input\":\"rest.vulnweb.com\",\"title\":\"Acunetix Vulnerable REST API\",\"scheme\":\"http\",\"webserver\":\"Apache/2.4.25 (Debian)\",\"content_type\":\"text/html\",\"method\":\"GET\",\"host\":\"35.81.188.86\",\"path\":\"/\",\"time\":\"422.205408ms\",\"a\":[\"35.81.188.86\"],\"tech\":[\"Apache HTTP Server:2.4.25\",\"Debian\",\"PHP:7.1.26\"],\"words\":1397,\"lines\":138,\"status_code\":200,\"content_length\":3555,\"failed\":false,\"knowledgebase\":{\"PageType\":\"nonerror\",\"pHash\":0}}\n{\"timestamp\":\"2024-09-03T21:28:20.992940938Z\",\"port\":\"80\",\"url\":\"http://testaspnet.vulnweb.com\",\"input\":\"testaspnet.vulnweb.com\",\"title\":\"acublog news\",\"scheme\":\"http\",\"webserver\":\"Microsoft-IIS/8.5\",\"content_type\":\"text/html\",\"method\":\"GET\",\"host\":\"44.238.29.244\",\"path\":\"/\",\"time\":\"535.234499ms\",\"a\":[\"44.238.29.244\"],\"tech\":[\"IIS:8.5\",\"Microsoft ASP.NET:2.0.50727\",\"Microsoft Visual Studio\",\"Windows Server\"],\"words\":774,\"lines\":89,\"status_code\":200,\"content_length\":14082,\"failed\":false,\"knowledgebase\":{\"PageType\":\"other\",\"pHash\":0}}\n{\"timestamp\":\"2024-09-03T21:28:21.214887749Z\",\"url\":\"http://www.testphp.vulnweb.com\",\"input\":\"www.testphp.vulnweb.com\",\"error\":\"no address found for host\",\"words\":0,\"lines\":0,\"failed\":true}\n{\"timestamp\":\"2024-09-03T21:28:21.224643226Z\",\"url\":\"http://www.testasp.vulnweb.com\",\"input\":\"www.testasp.vulnweb.com\",\"error\":\"no address found for host\",\"words\":0,\"lines\":0,\"failed\":true}\n{\"timestamp\":\"2024-09-03T21:28:31.115507511Z\",\"url\":\"http://www.test.php.vulnweb.com\",\"input\":\"www.test.php.vulnweb.com\",\"error\":\"EOF\",\"words\":0,\"lines\":0,\"failed\":true}\n{\"timestamp\":\"2024-09-03T21:28:31.121278393Z\",\"url\":\"http://www.virus.vulnweb.com\",\"input\":\"www.virus.vulnweb.com\",\"error\":\"EOF\",\"words\":0,\"lines\":0,\"failed\":true}\n{\"timestamp\":\"2024-09-03T21:28:31.13080372Z\",\"port\":\"80\",\"url\":\"http://vulnweb.com\",\"input\":\"vulnweb.com\",\"title\":\"Acunetix Web Vulnerability Scanner - Test websites\",\"scheme\":\"http\",\"webserver\":\"nginx/1.19.0\",\"content_type\":\"text/html\",\"method\":\"GET\",\"host\":\"44.228.249.3\",\"path\":\"/\",\"time\":\"352.853777ms\",\"a\":[\"44.228.249.3\"],\"tech\":[\"Nginx:1.19.0\"],\"words\":482,\"lines\":74,\"status_code\":200,\"content_length\":4018,\"failed\":false,\"knowledgebase\":{\"PageType\":\"nonerror\",\"pHash\":0}}\n{\"timestamp\":\"2024-09-03T21:28:31.13762029Z\",\"port\":\"80\",\"url\":\"http://www.vulnweb.com\",\"input\":\"www.vulnweb.com\",\"title\":\"Acunetix Web Vulnerability Scanner - Test websites\",\"scheme\":\"http\",\"webserver\":\"nginx/1.19.0\",\"content_type\":\"text/html\",\"method\":\"GET\",\"host\":\"44.228.249.3\",\"path\":\"/\",\"time\":\"352.635869ms\",\"a\":[\"44.228.249.3\"],\"tech\":[\"Nginx:1.19.0\"],\"words\":482,\"lines\":74,\"status_code\":200,\"content_length\":4018,\"failed\":false,\"knowledgebase\":{\"PageType\":\"nonerror\",\"pHash\":0}}\n{\"timestamp\":\"2024-09-03T21:28:31.142479444Z\",\"url\":\"http://viruswall.vulnweb.com\",\"input\":\"viruswall.vulnweb.com\",\"error\":\"EOF\",\"words\":0,\"lines\":0,\"failed\":true}\n",
+    "time": "2024-09-03T21:28:09.749Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 36,
+  "fields": {
+    "scan_history": null,
+    "activity": null,
+    "command": "geoiplookup 44.238.29.244",
+    "return_code": null,
+    "output": null,
+    "time": "2024-09-03T21:28:20.894Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 37,
+  "fields": {
+    "scan_history": null,
+    "activity": null,
+    "command": "geoiplookup 35.81.188.86",
+    "return_code": null,
+    "output": null,
+    "time": "2024-09-03T21:28:20.945Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 38,
+  "fields": {
+    "scan_history": 1,
+    "activity": 3,
+    "command": "rm /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/httpx_input.txt",
+    "return_code": 0,
+    "output": "",
+    "time": "2024-09-03T21:28:31.181Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 39,
+  "fields": {
+    "scan_history": 1,
+    "activity": 4,
+    "command": "naabu -json -exclude-cdn -list /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/input_subdomains_port_scan.txt -top-ports 100 -c 30 -rate 150 -timeout 5000 -silent",
+    "return_code": 0,
+    "output": "\n__\n___  ___  ___ _/ /  __ __\n/ _ \\/ _ \\/ _ \\/ _ \\/ // /\n/_//_/\\_,_/\\_,_/_.__/\\_,_/\n\nprojectdiscovery.io\n\n[INF] Current naabu version 2.3.0 (outdated)\n{\"host\":\"rest.vulnweb.com\",\"ip\":\"35.81.188.86\",\"timestamp\":\"2024-09-03T21:28:34.852197905Z\",\"port\":8080,\"protocol\":\"tcp\",\"tls\":false}\n{\"host\":\"testasp.vulnweb.com\",\"ip\":\"44.238.29.244\",\"timestamp\":\"2024-09-03T21:28:38.833012077Z\",\"port\":80,\"protocol\":\"tcp\",\"tls\":false}\n{\"host\":\"testaspnet.vulnweb.com\",\"ip\":\"44.238.29.244\",\"timestamp\":\"2024-09-03T21:28:38.833058584Z\",\"port\":80,\"protocol\":\"tcp\",\"tls\":false}\n{\"host\":\"rest.vulnweb.com\",\"ip\":\"35.81.188.86\",\"timestamp\":\"2024-09-03T21:28:39.816853087Z\",\"port\":80,\"protocol\":\"tcp\",\"tls\":false}\n{\"host\":\"2f-2fwww.vulnweb.com\",\"ip\":\"44.228.249.3\",\"timestamp\":\"2024-09-03T21:28:39.846295137Z\",\"port\":80,\"protocol\":\"tcp\",\"tls\":false}\n{\"host\":\"2ftestasp.vulnweb.com\",\"ip\":\"44.228.249.3\",\"timestamp\":\"2024-09-03T21:28:39.846355841Z\",\"port\":80,\"protocol\":\"tcp\",\"tls\":false}\n{\"host\":\"5burl-3dhttp-3a-2f-2fwww.vulnweb.com\",\"ip\":\"44.228.249.3\",\"timestamp\":\"2024-09-03T21:28:39.846373614Z\",\"port\":80,\"protocol\":\"tcp\",\"tls\":false}\n{\"host\":\"7ctestasp.vulnweb.com\",\"ip\":\"44.228.249.3\",\"timestamp\":\"2024-09-03T21:28:39.846384815Z\",\"port\":80,\"protocol\":\"tcp\",\"tls\":false}\n{\"host\":\"antivirus1.vulnweb.com\",\"ip\":\"44.228.249.3\",\"timestamp\":\"2024-09-03T21:28:39.846391618Z\",\"port\":80,\"protocol\":\"tcp\",\"tls\":false}\n{\"host\":\"blogger.com.vulnweb.com\",\"ip\":\"44.228.249.3\",\"timestamp\":\"2024-09-03T21:28:39.846396848Z\",\"port\":80,\"protocol\":\"tcp\",\"tls\":false}\n{\"host\":\"edu-rost.rutestasp.vulnweb.com\",\"ip\":\"44.228.249.3\",\"timestamp\":\"2024-09-03T21:28:39.846400745Z\",\"port\":80,\"protocol\":\"tcp\",\"tls\":false}\n{\"host\":\"edu-rost.ruwww.vulnweb.com\",\"ip\":\"44.228.249.3\",\"timestamp\":\"2024-09-03T21:28:39.846405213Z\",\"port\":80,\"protocol\":\"tcp\",\"tls\":false}\n{\"host\":\"estphp.vulnweb.com\",\"ip\":\"44.228.249.3\",\"timestamp\":\"2024-09-03T21:28:39.846411675Z\",\"port\":80,\"protocol\":\"tcp\",\"tls\":false}\n{\"host\":\"httptestaspnet.vulnweb.com\",\"ip\":\"44.228.249.3\",\"timestamp\":\"2024-09-03T21:28:39.846415963Z\",\"port\":80,\"protocol\":\"tcp\",\"tls\":false}\n{\"host\":\"odincovo.vulnweb.com\",\"ip\":\"44.228.249.3\",\"timestamp\":\"2024-09-03T21:28:39.846419801Z\",\"port\":80,\"protocol\":\"tcp\",\"tls\":false}\n{\"host\":\"restasp.vulnweb.com\",\"ip\":\"44.228.249.3\",\"timestamp\":\"2024-09-03T21:28:39.846423748Z\",\"port\":80,\"protocol\":\"tcp\",\"tls\":false}\n{\"host\":\"test.php.vulnweb.com\",\"ip\":\"44.228.249.3\",\"timestamp\":\"2024-09-03T21:28:39.846428026Z\",\"port\":80,\"protocol\":\"tcp\",\"tls\":false}\n{\"host\":\"test.vulnweb.com\",\"ip\":\"44.228.249.3\",\"timestamp\":\"2024-09-03T21:28:39.846438285Z\",\"port\":80,\"protocol\":\"tcp\",\"tls\":false}\n{\"host\":\"testap.vulnweb.com\",\"ip\":\"44.228.249.3\",\"timestamp\":\"2024-09-03T21:28:39.846442483Z\",\"port\":80,\"protocol\":\"tcp\",\"tls\":false}\n{\"host\":\"testaps.vulnweb.com\",\"ip\":\"44.228.249.3\",\"timestamp\":\"2024-09-03T21:28:39.84644639Z\",\"port\":80,\"protocol\":\"tcp\",\"tls\":false}\n{\"host\":\"testapsnet.vulnweb.com\",\"ip\":\"44.228.249.3\",\"timestamp\":\"2024-09-03T21:28:39.846450137Z\",\"port\":80,\"protocol\":\"tcp\",\"tls\":false}\n{\"host\":\"testaspx.vulnweb.com\",\"ip\":\"44.228.249.3\",\"timestamp\":\"2024-09-03T21:28:39.846456559Z\",\"port\":80,\"protocol\":\"tcp\",\"tls\":false}\n{\"host\":\"testhtml5.vulnweb.com\",\"ip\":\"44.228.249.3\",\"timestamp\":\"2024-09-03T21:28:39.846461439Z\",\"port\":80,\"protocol\":\"tcp\",\"tls\":false}\n{\"host\":\"testphp.vulnweb.com\",\"ip\":\"44.228.249.3\",\"timestamp\":\"2024-09-03T21:28:39.846469183Z\",\"port\":80,\"protocol\":\"tcp\",\"tls\":false}\n{\"host\":\"testpphp.vulnweb.com\",\"ip\":\"44.228.249.3\",\"timestamp\":\"2024-09-03T21:28:39.846474944Z\",\"port\":80,\"protocol\":\"tcp\",\"tls\":false}\n{\"host\":\"tetphp.vulnweb.com\",\"ip\":\"44.228.249.3\",\"timestamp\":\"2024-09-03T21:28:39.846479302Z\",\"port\":80,\"protocol\":\"tcp\",\"tls\":false}\n{\"host\":\"ttestphp.vulnweb.com\",\"ip\":\"44.228.249.3\",\"timestamp\":\"2024-09-03T21:28:39.84648337Z\",\"port\":80,\"protocol\":\"tcp\",\"tls\":false}\n{\"host\":\"u003erest.vulnweb.com\",\"ip\":\"44.228.249.3\",\"timestamp\":\"2024-09-03T21:28:39.846487688Z\",\"port\":80,\"protocol\":\"tcp\",\"tls\":false}\n{\"host\":\"u003etestasp.vulnweb.com\",\"ip\":\"44.228.249.3\",\"timestamp\":\"2024-09-03T21:28:39.846492607Z\",\"port\":80,\"protocol\":\"tcp\",\"tls\":false}\n{\"host\":\"virus.vulnweb.com\",\"ip\":\"44.228.249.3\",\"timestamp\":\"2024-09-03T21:28:39.8464998Z\",\"port\":80,\"protocol\":\"tcp\",\"tls\":false}\n{\"host\":\"viruswall.vulnweb.com\",\"ip\":\"44.228.249.3\",\"timestamp\":\"2024-09-03T21:28:39.846504209Z\",\"port\":80,\"protocol\":\"tcp\",\"tls\":false}\n{\"host\":\"www.test.php.vulnweb.com\",\"ip\":\"44.228.249.3\",\"timestamp\":\"2024-09-03T21:28:39.846508697Z\",\"port\":80,\"protocol\":\"tcp\",\"tls\":false}\n{\"host\":\"www.virus.vulnweb.com\",\"ip\":\"44.228.249.3\",\"timestamp\":\"2024-09-03T21:28:39.846512795Z\",\"port\":80,\"protocol\":\"tcp\",\"tls\":false}\n",
+    "time": "2024-09-03T21:28:31.494Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 40,
+  "fields": {
+    "scan_history": 1,
+    "activity": null,
+    "command": "httpx -cl -ct -rt -location -td -websocket -cname -asn -cdn -probe -random-agent -t 1 -json -u rest.vulnweb.com:8080 -silent",
+    "return_code": 0,
+    "output": "{\"timestamp\":\"2024-09-03T21:28:36.659376329Z\",\"port\":\"8080\",\"url\":\"http://rest.vulnweb.com:8080\",\"input\":\"rest.vulnweb.com:8080\",\"scheme\":\"http\",\"webserver\":\"Apache/2.4.25 (Debian)\",\"content_type\":\"application/json\",\"method\":\"GET\",\"host\":\"35.81.188.86\",\"path\":\"/\",\"time\":\"353.948066ms\",\"a\":[\"35.81.188.86\"],\"tech\":[\"Apache HTTP Server:2.4.25\",\"Debian\",\"PHP:7.1.26\"],\"words\":4,\"lines\":1,\"status_code\":200,\"content_length\":36,\"failed\":false,\"knowledgebase\":{\"PageType\":\"error\",\"pHash\":0}}\n",
+    "time": "2024-09-03T21:28:34.882Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 41,
+  "fields": {
+    "scan_history": 1,
+    "activity": null,
+    "command": "rm /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/httpx_input.txt",
+    "return_code": 0,
+    "output": "",
+    "time": "2024-09-03T21:28:36.698Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 42,
+  "fields": {
+    "scan_history": 1,
+    "activity": 5,
+    "command": "echo \"http://rest.vulnweb.com\" | gospider --js -d 2 --sitemap --robots -w -r -a -t 30 --no-redirect | grep -Eo 'https?://rest\\.vulnweb\\.com(:[0-9]+)?(/.*)?$' > /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/urls_gospider_rest.vulnweb.com.txt",
+    "return_code": 0,
+    "output": "",
+    "time": "2024-09-03T21:29:11.700Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 43,
+  "fields": {
+    "scan_history": 1,
+    "activity": 5,
+    "command": "echo \"http://rest.vulnweb.com\" | hakrawler -subs -u -t 30 -dr | grep -Eo 'https?://rest\\.vulnweb\\.com(:[0-9]+)?(/.*)?$' > /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/urls_hakrawler_rest.vulnweb.com.txt",
+    "return_code": 0,
+    "output": "",
+    "time": "2024-09-03T21:29:11.724Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 44,
+  "fields": {
+    "scan_history": 1,
+    "activity": 5,
+    "command": "echo \"http://rest.vulnweb.com\" | waybackurls | grep -Eo 'https?://rest\\.vulnweb\\.com(:[0-9]+)?(/.*)?$' > /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/urls_waybackurls_rest.vulnweb.com.txt",
+    "return_code": 0,
+    "output": "",
+    "time": "2024-09-03T21:29:11.740Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 45,
+  "fields": {
+    "scan_history": 1,
+    "activity": 5,
+    "command": "echo \"http://rest.vulnweb.com\" | katana -silent -jc -kf all -d 3 -fs rdn -c 30 -dr | grep -Eo 'https?://rest\\.vulnweb\\.com(:[0-9]+)?(/.*)?$' > /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/urls_katana_rest.vulnweb.com.txt",
+    "return_code": 0,
+    "output": "",
+    "time": "2024-09-03T21:29:11.756Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 46,
+  "fields": {
+    "scan_history": 1,
+    "activity": 5,
+    "command": "echo \"http://rest.vulnweb.com\" | gau --threads 30 | grep -Eo 'https?://rest\\.vulnweb\\.com(:[0-9]+)?(/.*)?$' > /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/urls_gau_rest.vulnweb.com.txt",
+    "return_code": 1,
+    "output": "",
+    "time": "2024-09-03T21:29:11.771Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 47,
+  "fields": {
+    "scan_history": 1,
+    "activity": 5,
+    "command": "echo \"http://testasp.vulnweb.com\" | gospider --js -d 2 --sitemap --robots -w -r -a -t 30 --no-redirect | grep -Eo 'https?://testasp\\.vulnweb\\.com(:[0-9]+)?(/.*)?$' > /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/urls_gospider_testasp.vulnweb.com.txt",
+    "return_code": 0,
+    "output": "",
+    "time": "2024-09-03T21:29:11.789Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 48,
+  "fields": {
+    "scan_history": 1,
+    "activity": 5,
+    "command": "echo \"http://testasp.vulnweb.com\" | hakrawler -subs -u -t 30 -dr | grep -Eo 'https?://testasp\\.vulnweb\\.com(:[0-9]+)?(/.*)?$' > /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/urls_hakrawler_testasp.vulnweb.com.txt",
+    "return_code": 0,
+    "output": "",
+    "time": "2024-09-03T21:29:11.807Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 49,
+  "fields": {
+    "scan_history": 1,
+    "activity": 5,
+    "command": "echo \"http://testasp.vulnweb.com\" | waybackurls | grep -Eo 'https?://testasp\\.vulnweb\\.com(:[0-9]+)?(/.*)?$' > /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/urls_waybackurls_testasp.vulnweb.com.txt",
+    "return_code": 0,
+    "output": "",
+    "time": "2024-09-03T21:29:11.822Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 50,
+  "fields": {
+    "scan_history": 1,
+    "activity": 5,
+    "command": "echo \"http://testasp.vulnweb.com\" | katana -silent -jc -kf all -d 3 -fs rdn -c 30 -dr | grep -Eo 'https?://testasp\\.vulnweb\\.com(:[0-9]+)?(/.*)?$' > /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/urls_katana_testasp.vulnweb.com.txt",
+    "return_code": 0,
+    "output": "",
+    "time": "2024-09-03T21:29:11.836Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 51,
+  "fields": {
+    "scan_history": 1,
+    "activity": 5,
+    "command": "echo \"http://testasp.vulnweb.com\" | gau --threads 30 | grep -Eo 'https?://testasp\\.vulnweb\\.com(:[0-9]+)?(/.*)?$' > /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/urls_gau_testasp.vulnweb.com.txt",
+    "return_code": 1,
+    "output": "",
+    "time": "2024-09-03T21:29:11.849Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 52,
+  "fields": {
+    "scan_history": 1,
+    "activity": 5,
+    "command": "echo \"http://testaspnet.vulnweb.com\" | gospider --js -d 2 --sitemap --robots -w -r -a -t 30 --no-redirect | grep -Eo 'https?://testaspnet\\.vulnweb\\.com(:[0-9]+)?(/.*)?$' > /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/urls_gospider_testaspnet.vulnweb.com.txt",
+    "return_code": 0,
+    "output": "",
+    "time": "2024-09-03T21:29:11.863Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 53,
+  "fields": {
+    "scan_history": 1,
+    "activity": 5,
+    "command": "echo \"http://testaspnet.vulnweb.com\" | hakrawler -subs -u -t 30 -dr | grep -Eo 'https?://testaspnet\\.vulnweb\\.com(:[0-9]+)?(/.*)?$' > /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/urls_hakrawler_testaspnet.vulnweb.com.txt",
+    "return_code": 0,
+    "output": "",
+    "time": "2024-09-03T21:29:11.878Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 54,
+  "fields": {
+    "scan_history": 1,
+    "activity": 5,
+    "command": "echo \"http://testaspnet.vulnweb.com\" | waybackurls | grep -Eo 'https?://testaspnet\\.vulnweb\\.com(:[0-9]+)?(/.*)?$' > /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/urls_waybackurls_testaspnet.vulnweb.com.txt",
+    "return_code": 0,
+    "output": "",
+    "time": "2024-09-03T21:29:11.892Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 55,
+  "fields": {
+    "scan_history": 1,
+    "activity": 5,
+    "command": "echo \"http://testaspnet.vulnweb.com\" | katana -silent -jc -kf all -d 3 -fs rdn -c 30 -dr | grep -Eo 'https?://testaspnet\\.vulnweb\\.com(:[0-9]+)?(/.*)?$' > /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/urls_katana_testaspnet.vulnweb.com.txt",
+    "return_code": 0,
+    "output": "",
+    "time": "2024-09-03T21:29:11.906Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 56,
+  "fields": {
+    "scan_history": 1,
+    "activity": 5,
+    "command": "echo \"http://testaspnet.vulnweb.com\" | gau --threads 30 | grep -Eo 'https?://testaspnet\\.vulnweb\\.com(:[0-9]+)?(/.*)?$' > /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/urls_gau_testaspnet.vulnweb.com.txt",
+    "return_code": 1,
+    "output": "",
+    "time": "2024-09-03T21:29:11.921Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 57,
+  "fields": {
+    "scan_history": 1,
+    "activity": 5,
+    "command": "echo \"http://testhtml5.vulnweb.com\" | gospider --js -d 2 --sitemap --robots -w -r -a -t 30 --no-redirect | grep -Eo 'https?://testhtml5\\.vulnweb\\.com(:[0-9]+)?(/.*)?$' > /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/urls_gospider_testhtml5.vulnweb.com.txt",
+    "return_code": 0,
+    "output": "",
+    "time": "2024-09-03T21:29:11.935Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 58,
+  "fields": {
+    "scan_history": 1,
+    "activity": 5,
+    "command": "echo \"http://testhtml5.vulnweb.com\" | hakrawler -subs -u -t 30 -dr | grep -Eo 'https?://testhtml5\\.vulnweb\\.com(:[0-9]+)?(/.*)?$' > /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/urls_hakrawler_testhtml5.vulnweb.com.txt",
+    "return_code": 0,
+    "output": "",
+    "time": "2024-09-03T21:29:11.952Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 59,
+  "fields": {
+    "scan_history": 1,
+    "activity": 5,
+    "command": "echo \"http://testhtml5.vulnweb.com\" | waybackurls | grep -Eo 'https?://testhtml5\\.vulnweb\\.com(:[0-9]+)?(/.*)?$' > /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/urls_waybackurls_testhtml5.vulnweb.com.txt",
+    "return_code": 0,
+    "output": "",
+    "time": "2024-09-03T21:29:11.966Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 60,
+  "fields": {
+    "scan_history": 1,
+    "activity": 5,
+    "command": "echo \"http://testhtml5.vulnweb.com\" | katana -silent -jc -kf all -d 3 -fs rdn -c 30 -dr | grep -Eo 'https?://testhtml5\\.vulnweb\\.com(:[0-9]+)?(/.*)?$' > /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/urls_katana_testhtml5.vulnweb.com.txt",
+    "return_code": 0,
+    "output": "",
+    "time": "2024-09-03T21:29:11.981Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 61,
+  "fields": {
+    "scan_history": 1,
+    "activity": 5,
+    "command": "echo \"http://testhtml5.vulnweb.com\" | gau --threads 30 | grep -Eo 'https?://testhtml5\\.vulnweb\\.com(:[0-9]+)?(/.*)?$' > /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/urls_gau_testhtml5.vulnweb.com.txt",
+    "return_code": 1,
+    "output": "",
+    "time": "2024-09-03T21:29:11.995Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 62,
+  "fields": {
+    "scan_history": 1,
+    "activity": 5,
+    "command": "echo \"http://testphp.vulnweb.com\" | gospider --js -d 2 --sitemap --robots -w -r -a -t 30 --no-redirect | grep -Eo 'https?://testphp\\.vulnweb\\.com(:[0-9]+)?(/.*)?$' > /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/urls_gospider_testphp.vulnweb.com.txt",
+    "return_code": 0,
+    "output": "",
+    "time": "2024-09-03T21:29:12.011Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 63,
+  "fields": {
+    "scan_history": 1,
+    "activity": 5,
+    "command": "echo \"http://testphp.vulnweb.com\" | hakrawler -subs -u -t 30 -dr | grep -Eo 'https?://testphp\\.vulnweb\\.com(:[0-9]+)?(/.*)?$' > /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/urls_hakrawler_testphp.vulnweb.com.txt",
+    "return_code": 0,
+    "output": "",
+    "time": "2024-09-03T21:29:12.028Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 64,
+  "fields": {
+    "scan_history": 1,
+    "activity": 5,
+    "command": "echo \"http://testphp.vulnweb.com\" | waybackurls | grep -Eo 'https?://testphp\\.vulnweb\\.com(:[0-9]+)?(/.*)?$' > /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/urls_waybackurls_testphp.vulnweb.com.txt",
+    "return_code": 0,
+    "output": "",
+    "time": "2024-09-03T21:29:12.042Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 65,
+  "fields": {
+    "scan_history": 1,
+    "activity": 5,
+    "command": "echo \"http://testphp.vulnweb.com\" | katana -silent -jc -kf all -d 3 -fs rdn -c 30 -dr | grep -Eo 'https?://testphp\\.vulnweb\\.com(:[0-9]+)?(/.*)?$' > /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/urls_katana_testphp.vulnweb.com.txt",
+    "return_code": 0,
+    "output": "",
+    "time": "2024-09-03T21:29:12.057Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 66,
+  "fields": {
+    "scan_history": 1,
+    "activity": 5,
+    "command": "echo \"http://testphp.vulnweb.com\" | gau --threads 30 | grep -Eo 'https?://testphp\\.vulnweb\\.com(:[0-9]+)?(/.*)?$' > /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/urls_gau_testphp.vulnweb.com.txt",
+    "return_code": 1,
+    "output": "",
+    "time": "2024-09-03T21:29:12.072Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 67,
+  "fields": {
+    "scan_history": 1,
+    "activity": 5,
+    "command": "echo \"http://vulnweb.com\" | gospider --js -d 2 --sitemap --robots -w -r -a -t 30 --no-redirect | grep -Eo 'https?://vulnweb\\.com(:[0-9]+)?(/.*)?$' > /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/urls_gospider_vulnweb.com.txt",
+    "return_code": 0,
+    "output": "",
+    "time": "2024-09-03T21:29:12.087Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 68,
+  "fields": {
+    "scan_history": 1,
+    "activity": 5,
+    "command": "echo \"http://vulnweb.com\" | hakrawler -subs -u -t 30 -dr | grep -Eo 'https?://vulnweb\\.com(:[0-9]+)?(/.*)?$' > /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/urls_hakrawler_vulnweb.com.txt",
+    "return_code": 0,
+    "output": "",
+    "time": "2024-09-03T21:29:12.100Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 69,
+  "fields": {
+    "scan_history": 1,
+    "activity": 5,
+    "command": "echo \"http://vulnweb.com\" | waybackurls | grep -Eo 'https?://vulnweb\\.com(:[0-9]+)?(/.*)?$' > /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/urls_waybackurls_vulnweb.com.txt",
+    "return_code": 0,
+    "output": "",
+    "time": "2024-09-03T21:29:12.113Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 70,
+  "fields": {
+    "scan_history": 1,
+    "activity": 5,
+    "command": "echo \"http://vulnweb.com\" | katana -silent -jc -kf all -d 3 -fs rdn -c 30 -dr | grep -Eo 'https?://vulnweb\\.com(:[0-9]+)?(/.*)?$' > /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/urls_katana_vulnweb.com.txt",
+    "return_code": 0,
+    "output": "",
+    "time": "2024-09-03T21:29:12.128Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 71,
+  "fields": {
+    "scan_history": 1,
+    "activity": 5,
+    "command": "echo \"http://vulnweb.com\" | gau --threads 30 | grep -Eo 'https?://vulnweb\\.com(:[0-9]+)?(/.*)?$' > /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/urls_gau_vulnweb.com.txt",
+    "return_code": 1,
+    "output": "",
+    "time": "2024-09-03T21:29:12.143Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 72,
+  "fields": {
+    "scan_history": 1,
+    "activity": 5,
+    "command": "echo \"http://www.vulnweb.com\" | gospider --js -d 2 --sitemap --robots -w -r -a -t 30 --no-redirect | grep -Eo 'https?://www\\.vulnweb\\.com(:[0-9]+)?(/.*)?$' > /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/urls_gospider_www.vulnweb.com.txt",
+    "return_code": 0,
+    "output": "",
+    "time": "2024-09-03T21:29:12.159Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 73,
+  "fields": {
+    "scan_history": 1,
+    "activity": 5,
+    "command": "echo \"http://www.vulnweb.com\" | hakrawler -subs -u -t 30 -dr | grep -Eo 'https?://www\\.vulnweb\\.com(:[0-9]+)?(/.*)?$' > /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/urls_hakrawler_www.vulnweb.com.txt",
+    "return_code": 1,
+    "output": "",
+    "time": "2024-09-03T21:29:12.176Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 74,
+  "fields": {
+    "scan_history": 1,
+    "activity": 5,
+    "command": "echo \"http://www.vulnweb.com\" | waybackurls | grep -Eo 'https?://www\\.vulnweb\\.com(:[0-9]+)?(/.*)?$' > /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/urls_waybackurls_www.vulnweb.com.txt",
+    "return_code": 0,
+    "output": "",
+    "time": "2024-09-03T21:29:12.191Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 75,
+  "fields": {
+    "scan_history": 1,
+    "activity": 5,
+    "command": "echo \"http://www.vulnweb.com\" | katana -silent -jc -kf all -d 3 -fs rdn -c 30 -dr | grep -Eo 'https?://www\\.vulnweb\\.com(:[0-9]+)?(/.*)?$' > /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/urls_katana_www.vulnweb.com.txt",
+    "return_code": 0,
+    "output": "",
+    "time": "2024-09-03T21:29:12.207Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 76,
+  "fields": {
+    "scan_history": 1,
+    "activity": 5,
+    "command": "echo \"http://www.vulnweb.com\" | gau --threads 30 | grep -Eo 'https?://www\\.vulnweb\\.com(:[0-9]+)?(/.*)?$' > /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/urls_gau_www.vulnweb.com.txt",
+    "return_code": 1,
+    "output": "",
+    "time": "2024-09-03T21:29:12.222Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 77,
+  "fields": {
+    "scan_history": null,
+    "activity": null,
+    "command": "tlsx -san -cn -silent -ro -host vulnweb.com -o /tmp/ip_domain_tlsx.txt",
+    "return_code": 0,
+    "output": "",
+    "time": "2024-09-03T21:33:01.109Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 78,
+  "fields": {
+    "scan_history": 1,
+    "activity": 5,
+    "command": "cat /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/urls_* > /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/#1_fetch_url.txt",
+    "return_code": 0,
+    "output": "",
+    "time": "2024-09-03T21:35:38.599Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 79,
+  "fields": {
+    "scan_history": 1,
+    "activity": 5,
+    "command": "cat /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/input_endpoints_fetch_url.txt >> /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/#1_fetch_url.txt",
+    "return_code": 0,
+    "output": "",
+    "time": "2024-09-03T21:35:38.631Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 80,
+  "fields": {
+    "scan_history": 1,
+    "activity": 5,
+    "command": "sort -u /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/#1_fetch_url.txt -o /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/#1_fetch_url.txt",
+    "return_code": 0,
+    "output": "",
+    "time": "2024-09-03T21:35:38.659Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 81,
+  "fields": {
+    "scan_history": 1,
+    "activity": 5,
+    "command": "cat /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/#1_fetch_url.txt | grep -Eiv \"\\.(png|jpg|jpeg|gif|mp4|mpeg|mp3).*\" > /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/urls_filtered.txt",
+    "return_code": 0,
+    "output": "",
+    "time": "2024-09-03T21:35:38.696Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 82,
+  "fields": {
+    "scan_history": 1,
+    "activity": 5,
+    "command": "mv /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/urls_filtered.txt /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/#1_fetch_url.txt",
+    "return_code": 0,
+    "output": "",
+    "time": "2024-09-03T21:35:38.727Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 106,
+  "fields": {
+    "scan_history": 1,
+    "activity": 14,
+    "command": "nuclei -j -irr -l /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/urls_unfurled.txt -c 50 -retries 1 -rl 150 -timeout 5 -silent -t /home/rengine/nuclei-templates -severity medium",
+    "return_code": 0,
+    "output": null,
+    "time": "2024-09-03T22:02:49.873Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 117,
+  "fields": {
+    "scan_history": 1,
+    "activity": null,
+    "command": "httpx -cl -ct -rt -location -td -websocket -cname -asn -cdn -probe -random-agent -t 7 -json -l /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/httpx_input.txt -silent",
+    "return_code": 0,
+    "output": "{\"timestamp\":\"2024-09-03T22:13:05.027538389Z\",\"port\":\"80\",\"url\":\"http://vulnweb.com\",\"input\":\"http://vulnweb.com\",\"title\":\"Acunetix Web Vulnerability Scanner - Test websites\",\"scheme\":\"http\",\"webserver\":\"nginx/1.19.0\",\"content_type\":\"text/html\",\"method\":\"GET\",\"host\":\"44.228.249.3\",\"path\":\"/\",\"time\":\"341.066989ms\",\"a\":[\"44.228.249.3\"],\"tech\":[\"Nginx:1.19.0\"],\"words\":482,\"lines\":74,\"status_code\":200,\"content_length\":4018,\"failed\":false,\"knowledgebase\":{\"PageType\":\"nonerror\",\"pHash\":0}}\n{\"timestamp\":\"2024-09-03T22:13:05.034995861Z\",\"port\":\"80\",\"url\":\"http://www.vulnweb.com\",\"input\":\"http://www.vulnweb.com\",\"title\":\"Acunetix Web Vulnerability Scanner - Test websites\",\"scheme\":\"http\",\"webserver\":\"nginx/1.19.0\",\"content_type\":\"text/html\",\"method\":\"GET\",\"host\":\"44.228.249.3\",\"path\":\"/\",\"time\":\"347.273586ms\",\"a\":[\"44.228.249.3\"],\"tech\":[\"Nginx:1.19.0\"],\"words\":482,\"lines\":74,\"status_code\":200,\"content_length\":4018,\"failed\":false,\"knowledgebase\":{\"PageType\":\"nonerror\",\"pHash\":0}}\n{\"timestamp\":\"2024-09-03T22:13:05.035316875Z\",\"port\":\"80\",\"url\":\"http://testasp.vulnweb.com\",\"input\":\"http://testasp.vulnweb.com\",\"title\":\"acuforum forums\",\"scheme\":\"http\",\"webserver\":\"Microsoft-IIS/8.5\",\"content_type\":\"text/html\",\"method\":\"GET\",\"host\":\"44.238.29.244\",\"path\":\"/\",\"time\":\"347.420538ms\",\"a\":[\"44.238.29.244\"],\"tech\":[\"DreamWeaver\",\"IIS:8.5\",\"Microsoft ASP.NET\",\"Windows Server\"],\"words\":328,\"lines\":46,\"status_code\":200,\"content_length\":3538,\"failed\":false,\"knowledgebase\":{\"PageType\":\"nonerror\",\"pHash\":0}}\n{\"timestamp\":\"2024-09-03T22:13:05.036463189Z\",\"port\":\"80\",\"url\":\"http://testhtml5.vulnweb.com\",\"input\":\"http://testhtml5.vulnweb.com\",\"title\":\"SecurityTweets - HTML5 test website for Acunetix Web Vulnerability Scanner\",\"scheme\":\"http\",\"webserver\":\"nginx/1.19.0\",\"content_type\":\"text/html\",\"method\":\"GET\",\"host\":\"44.228.249.3\",\"path\":\"/\",\"time\":\"342.066622ms\",\"a\":[\"44.228.249.3\"],\"tech\":[\"AngularJS\",\"Nginx:1.19.0\"],\"words\":1483,\"lines\":164,\"status_code\":200,\"content_length\":6940,\"failed\":false,\"knowledgebase\":{\"PageType\":\"nonerror\",\"pHash\":0}}\n{\"timestamp\":\"2024-09-03T22:13:05.053531252Z\",\"port\":\"80\",\"url\":\"http://rest.vulnweb.com\",\"input\":\"http://rest.vulnweb.com\",\"title\":\"Acunetix Vulnerable REST API\",\"scheme\":\"http\",\"webserver\":\"Apache/2.4.25 (Debian)\",\"content_type\":\"text/html\",\"method\":\"GET\",\"host\":\"35.81.188.86\",\"path\":\"/\",\"time\":\"367.185091ms\",\"a\":[\"35.81.188.86\"],\"tech\":[\"Apache HTTP Server:2.4.25\",\"Debian\",\"PHP:7.1.26\"],\"words\":1397,\"lines\":138,\"status_code\":200,\"content_length\":3555,\"failed\":false,\"knowledgebase\":{\"PageType\":\"nonerror\",\"pHash\":0}}\n{\"timestamp\":\"2024-09-03T22:13:05.066012087Z\",\"port\":\"80\",\"url\":\"http://testphp.vulnweb.com\",\"input\":\"http://testphp.vulnweb.com\",\"title\":\"Home of Acunetix Art\",\"scheme\":\"http\",\"webserver\":\"nginx/1.19.0\",\"content_type\":\"text/html\",\"method\":\"GET\",\"host\":\"44.228.249.3\",\"path\":\"/\",\"time\":\"374.757261ms\",\"a\":[\"44.228.249.3\"],\"tech\":[\"DreamWeaver\",\"Nginx:1.19.0\",\"PHP:5.6.40\",\"Ubuntu\"],\"words\":514,\"lines\":110,\"status_code\":200,\"content_length\":4958,\"failed\":false,\"knowledgebase\":{\"PageType\":\"nonerror\",\"pHash\":0}}\n{\"timestamp\":\"2024-09-03T22:13:05.228722074Z\",\"port\":\"80\",\"url\":\"http://testaspnet.vulnweb.com\",\"input\":\"http://testaspnet.vulnweb.com\",\"title\":\"acublog news\",\"scheme\":\"http\",\"webserver\":\"Microsoft-IIS/8.5\",\"content_type\":\"text/html\",\"method\":\"GET\",\"host\":\"44.238.29.244\",\"path\":\"/\",\"time\":\"513.247119ms\",\"a\":[\"44.238.29.244\"],\"tech\":[\"IIS:8.5\",\"Microsoft ASP.NET:2.0.50727\",\"Microsoft Visual Studio\",\"Windows Server\"],\"words\":774,\"lines\":89,\"status_code\":200,\"content_length\":14081,\"failed\":false,\"knowledgebase\":{\"PageType\":\"other\",\"pHash\":0}}\n",
+    "time": "2024-09-03T22:12:53.901Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 118,
+  "fields": {
+    "scan_history": 1,
+    "activity": null,
+    "command": "rm /home/rengine/scan_results/vulnweb.com/scans/14c80983-6a3b-11ef-b939-73cc220d8f97/httpx_input.txt",
+    "return_code": 0,
+    "output": "",
+    "time": "2024-09-03T22:13:05.280Z"
+  }
+},
+{
+  "model": "startScan.command",
+  "pk": 119,
+  "fields": {
+    "scan_history": null,
+    "activity": null,
+    "command": "gf -list",
+    "return_code": 0,
+    "output": "\naws-keys\nbase64\ncors\ndebug-pages\ndebug_logic\nfirebase\nfw\ngo-functions\nhttp-auth\nidor\nimg-traversal\ninterestingEXT\ninterestingparams\ninterestingsubs\nip\njson-sec\njsvar\nlfi\nmeg-headers\nphp-curl\nphp-errors\nphp-serialized\nphp-sinks\nphp-sources\nrce\nredirect\ns3-buckets\nsec\nservers\nsqli\nssrf\nssti\nstrings\ntakeovers\nupload-fields\nurls\nxss",
+    "time": "2024-09-03T23:36:10.771Z"
+  }
+},
+{
+  "model": "startScan.technology",
+  "pk": 1,
+  "fields": {
+    "name": "DreamWeaver"
+  }
+},
+{
+  "model": "startScan.technology",
+  "pk": 2,
+  "fields": {
+    "name": "Nginx:1.19.0"
+  }
+},
+{
+  "model": "startScan.technology",
+  "pk": 3,
+  "fields": {
+    "name": "PHP:5.6.40"
+  }
+},
+{
+  "model": "startScan.technology",
+  "pk": 4,
+  "fields": {
+    "name": "Ubuntu"
+  }
+},
+{
+  "model": "startScan.technology",
+  "pk": 5,
+  "fields": {
+    "name": "AngularJS"
+  }
+},
+{
+  "model": "startScan.technology",
+  "pk": 6,
+  "fields": {
+    "name": "IIS:8.5"
+  }
+},
+{
+  "model": "startScan.technology",
+  "pk": 7,
+  "fields": {
+    "name": "Microsoft ASP.NET"
+  }
+},
+{
+  "model": "startScan.technology",
+  "pk": 8,
+  "fields": {
+    "name": "Windows Server"
+  }
+},
+{
+  "model": "startScan.technology",
+  "pk": 9,
+  "fields": {
+    "name": "Apache HTTP Server:2.4.25"
+  }
+},
+{
+  "model": "startScan.technology",
+  "pk": 10,
+  "fields": {
+    "name": "Debian"
+  }
+},
+{
+  "model": "startScan.technology",
+  "pk": 11,
+  "fields": {
+    "name": "PHP:7.1.26"
+  }
+},
+{
+  "model": "startScan.technology",
+  "pk": 12,
+  "fields": {
+    "name": "Microsoft ASP.NET:2.0.50727"
+  }
+},
+{
+  "model": "startScan.technology",
+  "pk": 13,
+  "fields": {
+    "name": "Microsoft Visual Studio"
+  }
+},
+{
+  "model": "startScan.technology",
+  "pk": 14,
+  "fields": {
+    "name": "Bootstrap"
+  }
+},
+{
+  "model": "startScan.technology",
+  "pk": 15,
+  "fields": {
+    "name": "Basic"
+  }
+},
+{
+  "model": "startScan.ipaddress",
+  "pk": 1,
+  "fields": {
+    "address": "44.228.249.3",
+    "is_cdn": false,
+    "geo_iso": null,
+    "version": null,
+    "is_private": false,
+    "reverse_pointer": null,
+    "ports": [
+      2
+    ],
+    "ip_subscan_ids": []
+  }
+},
+{
+  "model": "startScan.ipaddress",
+  "pk": 2,
+  "fields": {
+    "address": "44.238.29.244",
+    "is_cdn": false,
+    "geo_iso": null,
+    "version": null,
+    "is_private": false,
+    "reverse_pointer": null,
+    "ports": [
+      2
+    ],
+    "ip_subscan_ids": []
+  }
+},
+{
+  "model": "startScan.ipaddress",
+  "pk": 3,
+  "fields": {
+    "address": "35.81.188.86",
+    "is_cdn": false,
+    "geo_iso": null,
+    "version": null,
+    "is_private": false,
+    "reverse_pointer": null,
+    "ports": [
+      1,
+      2
+    ],
+    "ip_subscan_ids": []
+  }
+},
+{
+  "model": "startScan.port",
+  "pk": 1,
+  "fields": {
+    "number": 8080,
+    "service_name": "unknown",
+    "description": "",
+    "is_uncommon": true
+  }
+},
+{
+  "model": "startScan.port",
+  "pk": 2,
+  "fields": {
+    "number": 80,
+    "service_name": "unknown",
+    "description": "",
+    "is_uncommon": false
+  }
+},
+{
+  "model": "startScan.directoryfile",
+  "pk": 1,
+  "fields": {
+    "length": 28674,
+    "lines": 688,
+    "http_status": 200,
+    "words": 5389,
+    "name": "ZG9jcy8=",
+    "url": "http://rest.vulnweb.com/docs/",
+    "content_type": "text/html; charset=UTF-8"
+  }
+},
+{
+  "model": "startScan.directoryfile",
+  "pk": 2,
+  "fields": {
+    "length": 3555,
+    "lines": 138,
+    "http_status": 200,
+    "words": 1397,
+    "name": "aW5kZXgucGhw",
+    "url": "http://rest.vulnweb.com/index.php",
+    "content_type": "text/html; charset=UTF-8"
+  }
+},
+{
+  "model": "startScan.directoryfile",
+  "pk": 3,
+  "fields": {
+    "length": 3555,
+    "lines": 138,
+    "http_status": 200,
+    "words": 1397,
+    "name": "aW5kZXgucEhw",
+    "url": "http://rest.vulnweb.com/index.pHp",
+    "content_type": "text/html; charset=UTF-8"
+  }
+},
+{
+  "model": "startScan.directoryfile",
+  "pk": 4,
+  "fields": {
+    "length": 926,
+    "lines": 16,
+    "http_status": 200,
+    "words": 29,
+    "name": "X3Z0aV9jbmYv",
+    "url": "http://testasp.vulnweb.com/_vti_cnf/",
+    "content_type": "text/html"
+  }
+},
+{
+  "model": "startScan.directoryfile",
+  "pk": 5,
+  "fields": {
+    "length": 3194,
+    "lines": 55,
+    "http_status": 200,
+    "words": 429,
+    "name": "bG9naW4uYXNw",
+    "url": "http://testasp.vulnweb.com/login.asp",
+    "content_type": "text/html"
+  }
+},
+{
+  "model": "startScan.directoryfile",
+  "pk": 6,
+  "fields": {
+    "length": 13,
+    "lines": 1,
+    "http_status": 200,
+    "words": 2,
+    "name": "cm9ib3RzLnR4dA==",
+    "url": "http://testasp.vulnweb.com/robots.txt",
+    "content_type": "text/plain"
+  }
+},
+{
+  "model": "startScan.directoryfile",
+  "pk": 7,
+  "fields": {
+    "length": 894,
+    "lines": 4,
+    "http_status": 200,
+    "words": 2,
+    "name": "ZmF2aWNvbi5pY28=",
+    "url": "http://testaspnet.vulnweb.com/favicon.ico",
+    "content_type": "image/x-icon"
+  }
+},
+{
+  "model": "startScan.directoryfile",
+  "pk": 8,
+  "fields": {
+    "length": 13,
+    "lines": 1,
+    "http_status": 200,
+    "words": 2,
+    "name": "cm9ib3RzLnR4dA==",
+    "url": "http://testaspnet.vulnweb.com/robots.txt",
+    "content_type": "text/plain"
+  }
+},
+{
+  "model": "startScan.directoryfile",
+  "pk": 9,
+  "fields": {
+    "length": 3,
+    "lines": 1,
+    "http_status": 200,
+    "words": 1,
+    "name": "dGVzdC50eHQ=",
+    "url": "http://testaspnet.vulnweb.com/test.txt",
+    "content_type": "text/plain"
+  }
+},
+{
+  "model": "startScan.directoryfile",
+  "pk": 10,
+  "fields": {
+    "length": 4472,
+    "lines": 101,
+    "http_status": 200,
+    "words": 899,
+    "name": "Y29tbWVudA==",
+    "url": "http://testhtml5.vulnweb.com/comment",
+    "content_type": "text/html; charset=utf-8"
+  }
+},
+{
+  "model": "startScan.directoryfile",
+  "pk": 11,
+  "fields": {
+    "length": 493,
+    "lines": 15,
+    "http_status": 200,
+    "words": 87,
+    "name": "ZXhhbXBsZXM=",
+    "url": "http://testhtml5.vulnweb.com/examples",
+    "content_type": "text/html; charset=utf-8"
+  }
+},
+{
+  "model": "startScan.directoryfile",
+  "pk": 12,
+  "fields": {
+    "length": 894,
+    "lines": 81,
+    "http_status": 200,
+    "words": 4,
+    "name": "ZmF2aWNvbi5pY28=",
+    "url": "http://testhtml5.vulnweb.com/favicon.ico",
+    "content_type": "image/x-icon"
+  }
+},
+{
+  "model": "startScan.directoryfile",
+  "pk": 13,
+  "fields": {
+    "length": 4462,
+    "lines": 101,
+    "http_status": 200,
+    "words": 898,
+    "name": "cmVwb3J0",
+    "url": "http://testhtml5.vulnweb.com/report",
+    "content_type": "text/html; charset=utf-8"
+  }
+},
+{
+  "model": "startScan.directoryfile",
+  "pk": 14,
+  "fields": {
+    "length": 386,
+    "lines": 14,
+    "http_status": 200,
+    "words": 54,
+    "name": "c2FtcGxlcy8=",
+    "url": "http://testhtml5.vulnweb.com/samples/",
+    "content_type": "text/html; charset=utf-8"
+  }
+},
+{
+  "model": "startScan.directoryfile",
+  "pk": 15,
+  "fields": {
+    "length": 386,
+    "lines": 14,
+    "http_status": 200,
+    "words": 54,
+    "name": "c2FtcGxlcw==",
+    "url": "http://testhtml5.vulnweb.com/samples",
+    "content_type": "text/html; charset=utf-8"
+  }
+},
+{
+  "model": "startScan.directoryfile",
+  "pk": 16,
+  "fields": {
+    "length": 6,
+    "lines": 1,
+    "http_status": 200,
+    "words": 1,
+    "name": "LmlkZWEvLm5hbWU=",
+    "url": "http://testphp.vulnweb.com/.idea/.name",
+    "content_type": "application/octet-stream"
+  }
+},
+{
+  "model": "startScan.directoryfile",
+  "pk": 17,
+  "fields": {
+    "length": 951,
+    "lines": 14,
+    "http_status": 200,
+    "words": 427,
+    "name": "LmlkZWEv",
+    "url": "http://testphp.vulnweb.com/.idea/",
+    "content_type": "text/html"
+  }
+},
+{
+  "model": "startScan.directoryfile",
+  "pk": 18,
+  "fields": {
+    "length": 171,
+    "lines": 6,
+    "http_status": 200,
+    "words": 10,
+    "name": "LmlkZWEvZW5jb2RpbmdzLnhtbA==",
+    "url": "http://testphp.vulnweb.com/.idea/encodings.xml",
+    "content_type": "text/xml"
+  }
+},
+{
+  "model": "startScan.directoryfile",
+  "pk": 19,
+  "fields": {
+    "length": 275,
+    "lines": 10,
+    "http_status": 200,
+    "words": 26,
+    "name": "LmlkZWEvbW9kdWxlcy54bWw=",
+    "url": "http://testphp.vulnweb.com/.idea/modules.xml",
+    "content_type": "text/xml"
+  }
+},
+{
+  "model": "startScan.directoryfile",
+  "pk": 20,
+  "fields": {
+    "length": 143,
+    "lines": 5,
+    "http_status": 200,
+    "words": 13,
+    "name": "LmlkZWEvc2NvcGVzL3Njb3BlX3NldHRpbmdzLnhtbA==",
+    "url": "http://testphp.vulnweb.com/.idea/scopes/scope_settings.xml",
+    "content_type": "text/xml"
+  }
+},
+{
+  "model": "startScan.directoryfile",
+  "pk": 21,
+  "fields": {
+    "length": 266,
+    "lines": 9,
+    "http_status": 200,
+    "words": 18,
+    "name": "LmlkZWEvbWlzYy54bWw=",
+    "url": "http://testphp.vulnweb.com/.idea/misc.xml",
+    "content_type": "text/xml"
+  }
+},
+{
+  "model": "startScan.directoryfile",
+  "pk": 22,
+  "fields": {
+    "length": 173,
+    "lines": 8,
+    "http_status": 200,
+    "words": 16,
+    "name": "LmlkZWEvdmNzLnhtbA==",
+    "url": "http://testphp.vulnweb.com/.idea/vcs.xml",
+    "content_type": "text/xml"
+  }
+},
+{
+  "model": "startScan.directoryfile",
+  "pk": 23,
+  "fields": {
+    "length": 12473,
+    "lines": 217,
+    "http_status": 200,
+    "words": 1702,
+    "name": "LmlkZWEvd29ya3NwYWNlLnhtbA==",
+    "url": "http://testphp.vulnweb.com/.idea/workspace.xml",
+    "content_type": "text/xml"
+  }
+},
+{
+  "model": "startScan.directoryfile",
+  "pk": 24,
+  "fields": {
+    "length": 400,
+    "lines": 9,
+    "http_status": 200,
+    "words": 122,
+    "name": "X21tU2VydmVyU2NyaXB0cy8=",
+    "url": "http://testphp.vulnweb.com/_mmServerScripts/",
+    "content_type": "text/html"
+  }
+},
+{
+  "model": "startScan.directoryfile",
+  "pk": 25,
+  "fields": {
+    "length": 93,
+    "lines": 1,
+    "http_status": 200,
+    "words": 4,
+    "name": "X21tU2VydmVyU2NyaXB0cy9NTUhUVFBEQi5waHA=",
+    "url": "http://testphp.vulnweb.com/_mmServerScripts/MMHTTPDB.php",
+    "content_type": "text/html; charset=UTF-8"
+  }
+},
+{
+  "model": "startScan.directoryfile",
+  "pk": 26,
+  "fields": {
+    "length": 262,
+    "lines": 8,
+    "http_status": 200,
+    "words": 66,
+    "name": "YWRtaW4v",
+    "url": "http://testphp.vulnweb.com/admin/",
+    "content_type": "text/html"
+  }
+},
+{
+  "model": "startScan.directoryfile",
+  "pk": 27,
+  "fields": {
+    "length": 224,
+    "lines": 5,
+    "http_status": 200,
+    "words": 8,
+    "name": "Y3Jvc3Nkb21haW4ueG1s",
+    "url": "http://testphp.vulnweb.com/crossdomain.xml",
+    "content_type": "text/xml"
+  }
+},
+{
+  "model": "startScan.directoryfile",
+  "pk": 28,
+  "fields": {
+    "length": 595,
+    "lines": 11,
+    "http_status": 200,
+    "words": 262,
+    "name": "Q1ZTLw==",
+    "url": "http://testphp.vulnweb.com/CVS/",
+    "content_type": "text/html"
+  }
+},
+{
+  "model": "startScan.directoryfile",
+  "pk": 29,
+  "fields": {
+    "length": 1,
+    "lines": 1,
+    "http_status": 200,
+    "words": 2,
+    "name": "Q1ZTL0VudHJpZXM=",
+    "url": "http://testphp.vulnweb.com/CVS/Entries",
+    "content_type": "application/octet-stream"
+  }
+},
+{
+  "model": "startScan.directoryfile",
+  "pk": 30,
+  "fields": {
+    "length": 1,
+    "lines": 1,
+    "http_status": 200,
+    "words": 2,
+    "name": "Q1ZTL1Jvb3Q=",
+    "url": "http://testphp.vulnweb.com/CVS/Root",
+    "content_type": "application/octet-stream"
+  }
+},
+{
+  "model": "startScan.directoryfile",
+  "pk": 31,
+  "fields": {
+    "length": 894,
+    "lines": 4,
+    "http_status": 200,
+    "words": 2,
+    "name": "ZmF2aWNvbi5pY28=",
+    "url": "http://testphp.vulnweb.com/favicon.ico",
+    "content_type": "image/x-icon"
+  }
+},
+{
+  "model": "startScan.directoryfile",
+  "pk": 32,
+  "fields": {
+    "length": 377,
+    "lines": 9,
+    "http_status": 200,
+    "words": 128,
+    "name": "aW1hZ2VzLw==",
+    "url": "http://testphp.vulnweb.com/images/",
+    "content_type": "text/html"
+  }
+},
+{
+  "model": "startScan.directoryfile",
+  "pk": 33,
+  "fields": {
+    "length": 3265,
+    "lines": 91,
+    "http_status": 200,
+    "words": 350,
+    "name": "aW5kZXguYmFr",
+    "url": "http://testphp.vulnweb.com/index.bak",
+    "content_type": "application/octet-stream"
+  }
+},
+{
+  "model": "startScan.directoryfile",
+  "pk": 34,
+  "fields": {
+    "length": 4958,
+    "lines": 110,
+    "http_status": 200,
+    "words": 514,
+    "name": "aW5kZXgucGhw",
+    "url": "http://testphp.vulnweb.com/index.php",
+    "content_type": "text/html; charset=UTF-8"
+  }
+},
+{
+  "model": "startScan.directoryfile",
+  "pk": 35,
+  "fields": {
+    "length": 2586,
+    "lines": 2,
+    "http_status": 200,
+    "words": 9,
+    "name": "aW5kZXguemlw",
+    "url": "http://testphp.vulnweb.com/index.zip",
+    "content_type": "application/zip"
+  }
+},
+{
+  "model": "startScan.directoryfile",
+  "pk": 36,
+  "fields": {
+    "length": 5523,
+    "lines": 120,
+    "http_status": 200,
+    "words": 557,
+    "name": "bG9naW4ucGhw",
+    "url": "http://testphp.vulnweb.com/login.php",
+    "content_type": "text/html; charset=UTF-8"
+  }
+},
+{
+  "model": "startScan.directoryfile",
+  "pk": 37,
+  "fields": {
+    "length": 268,
+    "lines": 8,
+    "http_status": 200,
+    "words": 60,
+    "name": "dmVuZG9yLw==",
+    "url": "http://testphp.vulnweb.com/vendor/",
+    "content_type": "text/html"
+  }
+},
+{
+  "model": "startScan.directoryfile",
+  "pk": 38,
+  "fields": {
+    "length": 4018,
+    "lines": 74,
+    "http_status": 200,
+    "words": 482,
+    "name": "aW5kZXguaHRtbA==",
+    "url": "http://vulnweb.com/index.html",
+    "content_type": "text/html"
+  }
+},
+{
+  "model": "startScan.directoryfile",
+  "pk": 39,
+  "fields": {
+    "length": 4018,
+    "lines": 74,
+    "http_status": 200,
+    "words": 482,
+    "name": "aW5kZXguaHRtbA==",
+    "url": "http://www.vulnweb.com/index.html",
+    "content_type": "text/html"
+  }
+},
+{
+  "model": "startScan.directoryscan",
+  "pk": 1,
+  "fields": {
+    "command_line": "ffuf -w /home/rengine/wordlists/dicc.txt -p 0.05 -t 30 -timeout 5 -ac -mc 200,204 -u http://rest.vulnweb.com/FUZZ -json",
+    "scanned_date": "2024-09-03T22:02:45.119Z",
+    "directory_files": [
+      1,
+      2,
+      3
+    ],
+    "dir_subscan_ids": []
+  }
+},
+{
+  "model": "startScan.directoryscan",
+  "pk": 2,
+  "fields": {
+    "command_line": "ffuf -w /home/rengine/wordlists/dicc.txt -p 0.05 -t 30 -timeout 5 -ac -mc 200,204 -u http://testasp.vulnweb.com/FUZZ -json",
+    "scanned_date": "2024-09-03T22:05:24.142Z",
+    "directory_files": [
+      4,
+      5,
+      6
+    ],
+    "dir_subscan_ids": []
+  }
+},
+{
+  "model": "startScan.directoryscan",
+  "pk": 3,
+  "fields": {
+    "command_line": "ffuf -w /home/rengine/wordlists/dicc.txt -p 0.05 -t 30 -timeout 5 -ac -mc 200,204 -u http://testaspnet.vulnweb.com/FUZZ -json",
+    "scanned_date": "2024-09-03T22:06:42.524Z",
+    "directory_files": [
+      7,
+      8,
+      9
+    ],
+    "dir_subscan_ids": []
+  }
+},
+{
+  "model": "startScan.directoryscan",
+  "pk": 4,
+  "fields": {
+    "command_line": "ffuf -w /home/rengine/wordlists/dicc.txt -p 0.05 -t 30 -timeout 5 -ac -mc 200,204 -u http://testhtml5.vulnweb.com/FUZZ -json",
+    "scanned_date": "2024-09-03T22:07:57.153Z",
+    "directory_files": [
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    "dir_subscan_ids": []
+  }
+},
+{
+  "model": "startScan.directoryscan",
+  "pk": 5,
+  "fields": {
+    "command_line": "ffuf -w /home/rengine/wordlists/dicc.txt -p 0.05 -t 30 -timeout 5 -ac -mc 200,204 -u http://testphp.vulnweb.com/FUZZ -json",
+    "scanned_date": "2024-09-03T22:09:11.505Z",
+    "directory_files": [
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29,
+      30,
+      31,
+      32,
+      33,
+      34,
+      35,
+      36,
+      37
+    ],
+    "dir_subscan_ids": []
+  }
+},
+{
+  "model": "startScan.directoryscan",
+  "pk": 6,
+  "fields": {
+    "command_line": "ffuf -w /home/rengine/wordlists/dicc.txt -p 0.05 -t 30 -timeout 5 -ac -mc 200,204 -u http://vulnweb.com/FUZZ -json",
+    "scanned_date": "2024-09-03T22:10:26.882Z",
+    "directory_files": [
+      38
+    ],
+    "dir_subscan_ids": []
+  }
+},
+{
+  "model": "startScan.directoryscan",
+  "pk": 7,
+  "fields": {
+    "command_line": "ffuf -w /home/rengine/wordlists/dicc.txt -p 0.05 -t 30 -timeout 5 -ac -mc 200,204 -u http://www.vulnweb.com/FUZZ -json",
+    "scanned_date": "2024-09-03T22:11:40.431Z",
+    "directory_files": [
+      39
+    ],
+    "dir_subscan_ids": []
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 1,
+  "fields": {
+    "type": "login_pages",
+    "url": "http://rest.vulnweb.com/basic_authentication/api/"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 2,
+  "fields": {
+    "type": "login_pages",
+    "url": "http://rest.vulnweb.com/docs/"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 3,
+  "fields": {
+    "type": "login_pages",
+    "url": "http://testasp.vulnweb.com/Search.asp"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 4,
+  "fields": {
+    "type": "login_pages",
+    "url": "http://testaspnet.vulnweb.com/login.aspx"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 5,
+  "fields": {
+    "type": "login_pages",
+    "url": "http://testhtml5.vulnweb.com/"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 6,
+  "fields": {
+    "type": "login_pages",
+    "url": "http://testphp.vulnweb.com/"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 7,
+  "fields": {
+    "type": "login_pages",
+    "url": "http://testphp.vulnweb.com/admin/"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 8,
+  "fields": {
+    "type": "login_pages",
+    "url": "http://testphp.vulnweb.com/artists.php"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 9,
+  "fields": {
+    "type": "login_pages",
+    "url": "http://testphp.vulnweb.com/artists.php?artist"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 10,
+  "fields": {
+    "type": "login_pages",
+    "url": "http://testphp.vulnweb.com/artists.php?artist=1"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 11,
+  "fields": {
+    "type": "login_pages",
+    "url": "http://testphp.vulnweb.com/artists.php?artist=2"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 12,
+  "fields": {
+    "type": "login_pages",
+    "url": "http://testphp.vulnweb.com/categories.php"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 13,
+  "fields": {
+    "type": "login_pages",
+    "url": "http://testphp.vulnweb.com/disclaimer.php"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 14,
+  "fields": {
+    "type": "login_pages",
+    "url": "http://testphp.vulnweb.com/listproducts.php?cat"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 15,
+  "fields": {
+    "type": "login_pages",
+    "url": "http://testphp.vulnweb.com/listproducts.php?cat=1"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 16,
+  "fields": {
+    "type": "login_pages",
+    "url": "http://testphp.vulnweb.com/login.php"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 17,
+  "fields": {
+    "type": "login_pages",
+    "url": "http://testphp.vulnweb.com/search.php"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 18,
+  "fields": {
+    "type": "login_pages",
+    "url": "http://www.vulnweb.com/"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 19,
+  "fields": {
+    "type": "admin_panels",
+    "url": "http://rest.vulnweb.com/basic_authentication/api/"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 20,
+  "fields": {
+    "type": "admin_panels",
+    "url": "http://rest.vulnweb.com/docs/"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 21,
+  "fields": {
+    "type": "admin_panels",
+    "url": "http://rest.vulnweb.com/images/1_basic_authentication.png"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 22,
+  "fields": {
+    "type": "admin_panels",
+    "url": "http://rest.vulnweb.com/images/2_jwt.png"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 23,
+  "fields": {
+    "type": "admin_panels",
+    "url": "http://rest.vulnweb.com/images/3_oauth2.png"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 24,
+  "fields": {
+    "type": "admin_panels",
+    "url": "http://testphp.vulnweb.com/admin/"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 25,
+  "fields": {
+    "type": "admin_panels",
+    "url": "http://testphp.vulnweb.com/login.php"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 26,
+  "fields": {
+    "type": "admin_panels",
+    "url": "http://testphp.vulnweb.com/secured/phpinfo.php"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 27,
+  "fields": {
+    "type": "social_media",
+    "url": "https://m.facebook.com/QwertyAloneC/posts/dork-sqli-just-add-inurl-before-themphpcatidcartphpidphpcidindexphpshowtopiccont/142828509609539/"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 28,
+  "fields": {
+    "type": "social_media",
+    "url": "https://m.facebook.com/groups/3201261889909211/posts/3624197390948990/"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 29,
+  "fields": {
+    "type": "social_media",
+    "url": "https://m.facebook.com/groups/3201261889909211/posts/4007010936000965/"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 30,
+  "fields": {
+    "type": "social_media",
+    "url": "https://m.facebook.com/groups/3201261889909211/posts/4007311169304275/"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 31,
+  "fields": {
+    "type": "social_media",
+    "url": "https://m.facebook.com/groups/3201261889909211/posts/4188319924536731/"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 32,
+  "fields": {
+    "type": "social_media",
+    "url": "https://m.facebook.com/groups/3201261889909211/posts/4367877359914319/"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 33,
+  "fields": {
+    "type": "social_media",
+    "url": "https://m.facebook.com/groups/3201261889909211/posts/6293716407330395/"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 34,
+  "fields": {
+    "type": "social_media",
+    "url": "https://m.facebook.com/groups/hackingteam2022/posts/2726773620796174/"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 35,
+  "fields": {
+    "type": "social_media",
+    "url": "https://www.facebook.com/KaliLinuxBrazil/photos/tenha-certeza-de-estar-com-o-tor-instaladoinstala%C3%A7%C3%A3o-tor-rootkaliapt-get-install/972928206082146/"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 36,
+  "fields": {
+    "type": "social_media",
+    "url": "https://www.facebook.com/KaliLinuxBrazil/photos/tenha-certeza-de-estar-com-o-tor-instaladoinstala&C3&A7&C3&A3o-tor-rootkaliapt-get-install/972928206082146/"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 37,
+  "fields": {
+    "type": "social_media",
+    "url": "https://www.facebook.com/groups/3201261889909211/"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 38,
+  "fields": {
+    "type": "social_media",
+    "url": "https://mobile.twitter.com/MrHades2020"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 39,
+  "fields": {
+    "type": "social_media",
+    "url": "https://twitter.com/0xSwayamm"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 40,
+  "fields": {
+    "type": "social_media",
+    "url": "https://twitter.com/7h3r4bb17"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 41,
+  "fields": {
+    "type": "social_media",
+    "url": "https://twitter.com/SadatTamzit"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 42,
+  "fields": {
+    "type": "social_media",
+    "url": "https://twitter.com/deathpoolx1"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 43,
+  "fields": {
+    "type": "social_media",
+    "url": "https://twitter.com/hunterabubakar"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 44,
+  "fields": {
+    "type": "social_media",
+    "url": "https://twitter.com/kg4409"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 45,
+  "fields": {
+    "type": "social_media",
+    "url": "https://twitter.com/ravidutt04?lang"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 46,
+  "fields": {
+    "type": "social_media",
+    "url": "https://twitter.com/ravidutt04?lang=ca"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 47,
+  "fields": {
+    "type": "social_media",
+    "url": "https://twitter.com/therceman/status/1711473903934054427"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 48,
+  "fields": {
+    "type": "social_media",
+    "url": "https://twitter.com/vishack81"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 49,
+  "fields": {
+    "type": "social_media",
+    "url": "https://m.youtube.com/watch?v"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 50,
+  "fields": {
+    "type": "social_media",
+    "url": "https://m.youtube.com/watch?v=2_lswM1S264"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 51,
+  "fields": {
+    "type": "social_media",
+    "url": "https://m.youtube.com/watch?v=2tJgPyRITGc"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 52,
+  "fields": {
+    "type": "social_media",
+    "url": "https://m.youtube.com/watch?v=6FDKHewTP4A"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 53,
+  "fields": {
+    "type": "social_media",
+    "url": "https://m.youtube.com/watch?v=cEoPdpVUeyU"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 54,
+  "fields": {
+    "type": "social_media",
+    "url": "https://m.youtube.com/watch?v=gHkGuVb9vX8"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 55,
+  "fields": {
+    "type": "social_media",
+    "url": "https://www.youtube.com/watch?v"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 56,
+  "fields": {
+    "type": "social_media",
+    "url": "https://www.youtube.com/watch?v=IbDAHDSlgYg"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 57,
+  "fields": {
+    "type": "social_media",
+    "url": "https://www.youtube.com/watch?v=ZstyFyfS3g4"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 58,
+  "fields": {
+    "type": "social_media",
+    "url": "https://www.youtube.com/watch?v=cEoPdpVUeyU"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 59,
+  "fields": {
+    "type": "social_media",
+    "url": "https://www.youtube.com/watch?v=dabm-7CcHaE"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 60,
+  "fields": {
+    "type": "social_media",
+    "url": "https://www.youtube.com/watch?v=tAxMpoKkvCw"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 61,
+  "fields": {
+    "type": "social_media",
+    "url": "https://www.reddit.com/r/sysadmin/comments/gs031c/how_to_login_to_web_by_submitting_username/"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 62,
+  "fields": {
+    "type": "code_sharing",
+    "url": "https://github.com/dradis/dradis-acunetix/blob/master/spec/fixtures/files/testphp.vulnweb.com.export.acunetix.xml"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 63,
+  "fields": {
+    "type": "code_sharing",
+    "url": "https://github.com/dtag-dev-sec/explo/blob/master/examples/SQLI_LOGIN_testphp.vulnweb.com.yaml"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 64,
+  "fields": {
+    "type": "code_sharing",
+    "url": "https://github.com/dtag-dev-sec/explo/blob/master/examples/SQLI_testphp.vulnweb.com.yaml"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 65,
+  "fields": {
+    "type": "code_sharing",
+    "url": "https://github.com/yangbh/Hammer/blob/master/output/testphp.vulnweb.com/http_testphp.vulnweb.com"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 66,
+  "fields": {
+    "type": "code_sharing",
+    "url": "https://bitbucket.org/snippets/alms/KrG4LL"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 67,
+  "fields": {
+    "type": "code_sharing",
+    "url": "https://bitbucket.org/snippets/bakueikozo/rex9ar/playstation-classic-uart-login-console"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 68,
+  "fields": {
+    "type": "code_sharing",
+    "url": "https://bitbucket.org/snippets/especnorthamerica/neb6dq/examples-of-web-controller-rest-api-usage"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 69,
+  "fields": {
+    "type": "code_sharing",
+    "url": "https://bitbucket.org/snippets/faridani/pRX6r"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 70,
+  "fields": {
+    "type": "code_sharing",
+    "url": "https://bitbucket.org/snippets/orrp/xeGzXB/interactive-mgg"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 71,
+  "fields": {
+    "type": "code_sharing",
+    "url": "https://bitbucket.org/snippets/raerose01/5enKR5"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 72,
+  "fields": {
+    "type": "code_sharing",
+    "url": "https://bitbucket.org/snippets/sglienke/64LG6b/introsort"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 73,
+  "fields": {
+    "type": "code_sharing",
+    "url": "https://bitbucket.org/snippets/sglienke/6oBqMb"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 74,
+  "fields": {
+    "type": "code_sharing",
+    "url": "https://bitbucket.org/snippets/suntorytime/rAGXar/wellness-sources-overview"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 75,
+  "fields": {
+    "type": "code_sharing",
+    "url": "https://bitbucket.org/snippets/wmgodyak/6bXKj"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 76,
+  "fields": {
+    "type": "config_files",
+    "url": "http://testphp.vulnweb.com/.idea/workspace.xml"
+  }
+},
+{
+  "model": "startScan.dork",
+  "pk": 77,
+  "fields": {
+    "type": "config_files",
+    "url": "http://testphp.vulnweb.com/crossdomain.xml"
+  }
+}
+]

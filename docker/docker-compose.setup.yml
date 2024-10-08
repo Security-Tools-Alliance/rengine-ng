@@ -1,0 +1,7 @@
+services:
+  certs:
+    image: ghcr.io/security-tools-alliance/rengine-ng:rengine-certs-v${RENGINE_VERSION}
+    env_file:
+      - ../.env
+    volumes:
+      - ./secrets/certs:/certs:rw

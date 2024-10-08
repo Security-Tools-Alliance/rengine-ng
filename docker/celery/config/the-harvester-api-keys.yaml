@@ -1,0 +1,65 @@
+apikeys:
+  bevigil:
+    key:
+
+  binaryedge:
+    key:
+
+  bing:
+    key:
+
+  bufferoverun:
+    key:
+
+  censys:
+    id:
+    secret:
+
+  criminalip:
+    key:
+
+  fullhunt:
+    key:
+
+  github:
+    key:
+
+  hunter:
+    key:
+
+  hunterhow:
+    key:
+
+  intelx:
+    key:
+
+  netlas:
+    key:
+
+  onyphe:
+    key:
+
+  pentestTools:
+    key:
+
+  projectDiscovery:
+    key:
+
+  rocketreach:
+    key:
+
+  securityTrails:
+    key:
+
+  shodan:
+    key:
+
+  tomba:
+    key:
+    secret:
+
+  virustotal:
+    key:
+
+  zoomeye:
+    key:

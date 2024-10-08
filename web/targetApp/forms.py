@@ -1,4 +1,5 @@
 from django import forms
+from django.contrib.auth.models import User
 from reNgine.validators import validate_domain
 
 from .models import *
@@ -33,13 +34,38 @@ class AddTargetForm(forms.Form):
                 "placeholder": "team_handle"
             }
         ))
+    organization_name = forms.CharField(
+        required=False,
+        widget=forms.TextInput(
+            attrs={
+                "class": "form-control form-control-lg",
+                "id": "organizationName",
+                "placeholder": "Organization Name"
+            }
+        ))
 
-class AddOrganizationForm(forms.Form):
+class AddOrganizationForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         project = kwargs.pop('project')
         super(AddOrganizationForm, self).__init__(*args, **kwargs)
-        self.fields['domains'].choices = [(domain.id, domain.name) for domain in Domain.objects.filter(project__slug=project) if not domain.get_organization()]
-
+        self.fields['domains'] = forms.ModelMultipleChoiceField(
+            queryset=Domain.objects.filter(project__slug=project, domains__isnull=True),
+            widget=forms.SelectMultiple(
+                attrs={
+                    "class": "form-control select2-multiple",
+                    "data-toggle": "select2",
+                    "data-width": "100%",
+                    "data-placeholder": "Choose Targets",
+                    "id": "domains",
+                }
+            ),
+            required=True
+        )
+    
+    class Meta:
+        model = Organization
+        fields = ['name', 'description', 'domains']
+    
     name = forms.CharField(
         required=True,
         widget=forms.TextInput(
@@ -59,26 +85,10 @@ class AddOrganizationForm(forms.Form):
             }
         ))
 
-    domains = forms.ChoiceField(
-        required=True,
-        widget=forms.Select(
-            attrs={
-                "class": "form-control select2-multiple",
-                "multiple": "multiple",
-                "data-toggle": "select2",
-                "data-width": "100%",
-                "multiple": "multiple",
-                "data-placeholder": "Choose Targets",
-                "id": "domains",
-            }
-        )
-    )
-
-    def clean_name(self):
-        data = self.cleaned_data['name']
-        if Organization.objects.filter(name=data).count() > 0:
-            raise forms.ValidationError("{} Organization already exists".format(data))
-        return data
+    def clean_domains(self):
+        if domains := self.cleaned_data.get('domains'):
+            return [int(domain.id) for domain in domains]
+        return []
 
 
 class UpdateTargetForm(forms.ModelForm):
@@ -160,3 +170,18 @@ class UpdateOrganizationForm(forms.ModelForm):
     def set_value(self, organization_value, description_value):
         self.initial['name'] = organization_value
         self.initial['description'] = description_value
+
+class ProjectForm(forms.ModelForm):
+    users = forms.ModelMultipleChoiceField(
+        queryset=User.objects.all(),
+        widget=forms.CheckboxSelectMultiple,
+        required=False
+    )
+    description = forms.CharField(
+        widget=forms.Textarea(attrs={'rows': 4}),
+        required=False
+    )
+
+    class Meta:
+        model = Project
+        fields = ['name', 'description', 'users']

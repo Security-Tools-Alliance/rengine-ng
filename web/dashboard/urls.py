@@ -10,23 +10,23 @@ urlpatterns = [
         views.onboarding,
         name='onboarding'),
     path(
-        '<slug:slug>/dashboard/',
+        'dashboard/<slug:slug>',
         views.index,
         name='dashboardIndex'),
     path(
-        '<slug:slug>/profile/',
+        'profile/',
         views.profile,
         name='profile'),
     path(
-        '<slug:slug>/admin_interface/',
+        'admin_interface/',
         views.admin_interface,
         name='admin_interface'),
     path(
-        '<slug:slug>/admin_interface/update',
+        'admin_interface/update',
         views.admin_interface_update,
         name='admin_interface_update'),
     path(
-        '<slug:slug>/search',
+        'search',
         views.search,
         name='search'),
     path(
@@ -34,13 +34,21 @@ urlpatterns = [
         views.four_oh_four,
         name='four_oh_four'),
     path(
-        '<slug:slug>/projects/',
+        'project/list',
         views.projects,
         name='list_projects'),
     path(
-        'delete/project/<int:id>',
+        'project/delete/<int:id>',
         views.delete_project,
         name='delete_project'),
+    path(
+        'project/edit/<slug:slug>',
+        views.edit_project,
+        name='edit_project'),
+    path(
+        'project/set_current/<slug:slug>',
+        views.set_current_project,
+        name='set_current_project'),
 ]
 
 if UI_DEBUG:

@@ -1,5 +1,4 @@
-function delete_organization(id) {
-    const delAPI = "../../delete/organization/"+id;
+function delete_organization(url_endpoint) {
     swal.queue([{
         title: 'Are you sure you want to delete?',
         text: "You won't be able to revert this!",
@@ -9,7 +8,7 @@ function delete_organization(id) {
         padding: '2em',
         showLoaderOnConfirm: true,
         preConfirm: function() {
-          return fetch(delAPI, {
+          return fetch(url_endpoint, {
 	            method: 'POST',
                 credentials: "same-origin",
                 headers: {

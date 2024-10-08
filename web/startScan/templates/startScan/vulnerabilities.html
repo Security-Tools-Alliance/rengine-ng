@@ -1,7 +1,7 @@
 {% extends 'base/base.html' %}
 {% load static %}
 {% load humanize %}
-{% load custom_tags %}
+{% load custom_filters %}
 {% block title %}
 All Vulnerabilities
 {% endblock title %}
@@ -28,13 +28,13 @@ $(document).ready(function() {
 	var is_vuln_grouping = false;
 	var vuln_grouping_col = 3;
 	{% if request.GET.domain %}
-		var vuln_ajax_url = '/api/listVulnerability/?project={{current_project.slug}}&format=datatables&domain={{request.GET.domain}}';
+		var vuln_ajax_url = '{% url 'api:vulnerabilities-list' %}?project={{current_project.slug}}&format=datatables&domain={{request.GET.domain}}';
 	{% elif request.GET.vulnerability_name %}
-		var vuln_ajax_url = '/api/listVulnerability/?project={{current_project.slug}}&format=datatables&vulnerability_name={{request.GET.vulnerability_name}}';
+		var vuln_ajax_url = '{% url 'api:vulnerabilities-list' %}?project={{current_project.slug}}&format=datatables&vulnerability_name={{request.GET.vulnerability_name}}';
 	{% elif request.GET.subdomain %}
-		var vuln_ajax_url = '/api/listVulnerability/?project={{current_project.slug}}&format=datatables&subdomain={{request.GET.subdomain}}';
+		var vuln_ajax_url = '{% url 'api:vulnerabilities-list' %}?project={{current_project.slug}}&format=datatables&subdomain={{request.GET.subdomain}}';
 	{% else %}
-		var vuln_ajax_url = '/api/listVulnerability/?project={{current_project.slug}}&format=datatables';
+		var vuln_ajax_url = '{% url 'api:vulnerabilities-list' %}?project={{current_project.slug}}&format=datatables';
 	{% endif %}
 	var vulnerability_table = $('#vulnerability_results').DataTable({
 		"destroy": true,
@@ -77,20 +77,13 @@ $(document).ready(function() {
 			},
 			{"className": "text-center", "targets": []},
 			{
-				"render": function ( data, type, row ) {
-					if(row['open_status']){
-						return `<div class="form-check mb-2 form-check-primary"><input type="checkbox" name="targets_checkbox['+ e + ']" class="float-start form-check-input" onchange="vuln_status_change(this, `+data+`);">\n<span class="new-control-indicator"></span><span style="visibility:hidden">c</span></div>`;
-					}
-					else{
-						return `<div class="form-check mb-2 form-check-primary"><input type="checkbox" checked name="targets_checkbox['+ e + ']" class="float-start form-check-input" onchange="vuln_status_change(this, `+data+`);">\n<span class="new-control-indicator"></span><span style="visibility:hidden">c</span></div>`;
-					}
-				},
-				"targets": 0,
+				"targets":0, "width":"15px", "className":"", "orderable":!1, render:function(e, a, t, n) {
+					return `<div class="form-check mb-1 form-check-primary"><input type="checkbox" name="targets_checkbox['+ e + ']" class="float-start form-check-input vulnerability_checkbox" onclick="toggleMultipleVulnerabilitiesButton()">\n<span class="new-control-indicator"></span><span style="visibility:hidden">c</span></div>`;				},
 			},
 			{
 				"render": function ( data, type, row ) {
 					if (data) {
-						return `<span class="badge badge-outline-primary">&nbsp;&nbsp;${data.toUpperCase()}&nbsp;&nbsp;</span>`;
+						return `<span class="badge badge-outline-primary">${data.toUpperCase()}</span>`;
 					}
 				},
 				"targets": 1,
@@ -98,7 +91,7 @@ $(document).ready(function() {
 			{
 				"render": function ( data, type, row ) {
 					if (data) {
-						return `<span class="badge badge-soft-primary">&nbsp;&nbsp;${data.toUpperCase()}&nbsp;&nbsp;</span>`;
+						return `<span class="badge badge-soft-primary">${data.toUpperCase()}</span>`;
 					}
 				},
 				"targets": 2,
@@ -150,7 +143,7 @@ $(document).ready(function() {
 					}
 					if (row['cve_ids']) {
 						row['cve_ids'].forEach(cve => {
-							cve_cwe_badge += `<a href="#" onclick="get_and_render_cve_details('${cve.name.toUpperCase()}')" class="badge badge-outline-primary mt-1 me-1" data-toggle="tooltip" data-placement="top" title="CVE ID">${cve.name.toUpperCase()}</a>`;
+							cve_cwe_badge += `<a href="#" onclick="get_and_render_cve_details('{% url 'api:cve_details' %}', '${cve.name.toUpperCase()}')" class="badge badge-outline-primary mt-1 me-1" data-toggle="tooltip" data-placement="top" title="CVE ID">${cve.name.toUpperCase()}</a>`;
 						});
 					}
 					if (row['cwe_ids']) {
@@ -205,10 +198,10 @@ $(document).ready(function() {
 			{
 				"render": function ( data, type, row ) {
 					if (data){
-						return '<span class="badge badge-soft-danger">&nbsp;&nbsp;OPEN&nbsp;&nbsp;</span>'
+						return '<span class="vuln-status badge badge-soft-primary " role="button" onclick="vuln_status_change(\'{% url 'change_vuln_status' current_project.slug 0 %}\', this, '+row.id+', '+row.open_status+');">OPEN</span>'
 					}
 					else{
-						return '<span class="badge badge-soft-success">&nbsp;&nbsp;RESOLVED&nbsp;&nbsp;</span>'
+						return '<span class="vuln-status badge badge-soft-success" role="button" onclick="vuln_status_change(\'{% url 'change_vuln_status' current_project.slug 0 %}\', this, '+row.id+', '+row.open_status+');">RESOLVED</span>'
 					}
 				},
 				"targets": 15,
@@ -222,9 +215,9 @@ $(document).ready(function() {
 						<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-more-horizontal"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg>
 						</a>
 						<div class="dropdown-menu" style="">
-						<a class="dropdown-item" href="javascript:fetch_gpt_vuln_details(${row['id']}, '${row['name']}');">Fetch GPT Vulnerability Details</a>
-						<a class="dropdown-item" href="javascript:report_hackerone(${row['id']}, '${row['severity']}');">Report to Hackerone</a>
-						<a class="text-danger dropdown-item btn-delete-vulnerability" href="#" id="${row['id']}">Delete Vulnerability</a>
+						<a class="dropdown-item" href="javascript:fetch_gpt_vuln_details('{% url 'api:gpt_vulnerability_report_generator' %}', ${row['id']}, '${row['name']}');">Fetch GPT Vulnerability Details</a>
+						<a class="dropdown-item" href="javascript:report_hackerone('{% url 'api:vulnerability_report' %}', ${row['id']}, '${row['severity']}');">Report to Hackerone</a>
+						<a class="text-danger dropdown-item btn-delete-vulnerability" href="#" id="${row['id']}" data-url="{% url 'api:delete_vulnerability' %}">Delete Vulnerability</a>
 						</div>
 						</div>`;
 					}
@@ -297,8 +290,7 @@ $(document).ready(function() {
 	});
 
 	$('#vulnerability_results').on('click', 'tr' , function (e) {
-		console.log(e.target);
-		if ($(e.target).is('input[type="checkbox"]') || $(e.target).is('svg') || $(e.target).is('a') || $(e.target).is('th')) {
+		if ($(e.target).is('input[type="checkbox"]') || $(e.target).is('svg') || $(e.target).is('a') || $(e.target).is('th') || $(e.target).is('span')) {
 			return;
 		}
 		var data = vulnerability_table.row(this).data();

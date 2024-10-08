@@ -1,7 +1,7 @@
 {% extends 'base/base.html' %}
 {% load static %}
 {% load humanize %}
-{% load custom_tags %}
+{% load custom_filters %}
 {% block title %}
 All Endpoints
 {% endblock title %}
@@ -25,7 +25,7 @@ All Endpoints
 <script type="text/javascript">
 $(document).ready(function() {
   const ps = new PerfectScrollbar(document.querySelector('.endpoint-search'));
-  get_endpoints('{{current_project.slug}}', null, null, null);
+  get_endpoints('{% url 'api:endpoints-list' %}', '{% url 'api:subdomains-list' %}', '{{current_project.slug}}', null, null, null);
   var filter_cols = [
     'end_http_status_filter_checkbox',
     'end_page_title_filter_checkbox',

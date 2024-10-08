@@ -120,7 +120,7 @@ form-control:disabled, .form-control[readonly]{
 .badge {
   font-weight: 600 !important;
   line-height: 1.4 !important;
-  padding: 3px 6px !important;
+  padding: 3px 12px !important;
   font-size: 13px !important;
   font-weight: 600 !important;
   transition: all 0.3s ease-out !important;
@@ -390,4 +390,26 @@ mark{
 .tab-content .card-body {
   padding-left: 0.8rem !important;
   padding-right: 0.8rem !important;
+}
+
+.delete-secret:before {
+  font-family:feather !important;
+  content: "\e8da";
+  font-style: normal;
+  font-weight: 400;
+  font-variant: normal;
+  vertical-align: middle;
+  line-height:1.2; font-size: 16px;
+  color: #fff;
+}
+
+.delete-secret-group {
+  cursor: pointer;
+  background-color: #B00020;
+}
+
+.priority-dropdown {
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }

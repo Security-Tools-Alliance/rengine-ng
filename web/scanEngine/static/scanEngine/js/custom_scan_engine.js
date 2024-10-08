@@ -20,11 +20,10 @@ $(document).ready(function() {
 } );
 
 
-function delete_api(id, item)
-{
-    var delAPI = 'delete/'+id;
+function delete_api(id, item, type) {
+    const delAPI = type === 'wordlist' ? `wordlist/delete/${id}` : `delete/${id}`;
     swal.queue([{
-        title: 'Are you sure you want to delete this scan engine?',
+        title: `Are you sure you want to delete this ${item}?`,
         text: "You won't be able to revert this!",
         type: 'warning',
         showCancelButton: true,
@@ -32,8 +31,8 @@ function delete_api(id, item)
         padding: '2em',
         showLoaderOnConfirm: true,
         preConfirm: function() {
-          return fetch(delAPI, {
-	            method: 'POST',
+            return fetch(delAPI, {
+                method: 'POST',
                 credentials: "same-origin",
                 headers: {
                     "X-CSRFToken": getCookie("csrftoken")
@@ -44,14 +43,14 @@ function delete_api(id, item)
             })
             .then(function(data) {
                 // TODO Look for better way
-               return location.reload();
+                return location.reload();
             })
             .catch(function() {
-              swal.insertQueueStep({
-                type: 'error',
-                title: 'Oops! Unable to delete'
-              })
-            })
+                swal.insertQueueStep({
+                    type: 'error',
+                    title: 'Oops! Unable to delete'
+                });
+            });
         }
-    }])
+    }]);
 }

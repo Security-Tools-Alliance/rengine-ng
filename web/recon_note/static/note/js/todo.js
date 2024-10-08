@@ -1,34 +1,52 @@
-
-function populateTodofunction(project=null){
-  $('.input-search').on('keyup', function() {
-    var rex = new RegExp($(this).val(), 'i');
-    $('.todo-box .todo-item').hide();
-    $('.todo-box .todo-item').filter(function() {
-      return rex.test($(this).text());
-    }).show();
-  });
-
-  const taskViewScroll = new PerfectScrollbar('.task-text', {
+const populateTodo = function(project=null){
+  new PerfectScrollbar('.task-text', {
     wheelSpeed:.5,
     swipeEasing:!0,
     minScrollbarLength:40,
     maxScrollbarLength:300,
     suppressScrollX : true
   });
+  new PerfectScrollbar('.todo-box-scroll', {
+    suppressScrollX : true
+  });
 
-  new dynamicBadgeNotification('allList');
-  new dynamicBadgeNotification('completedList');
-  new dynamicBadgeNotification('importantList');
+  new PerfectScrollbar('.todoList-sidebar-scroll', {
+    suppressScrollX : true
+  });
 
-  $('.mail-menu').on('click', function(event) {
-    $('.tab-title').addClass('mail-menu-show');
-    $('.mail-overlay').addClass('mail-overlay-show');
-  })
-  $('.mail-overlay').on('click', function(event) {
-    $('.tab-title').removeClass('mail-menu-show');
-    $('.mail-overlay').removeClass('mail-overlay-show');
-  })
-  $('#addTask').on('click', function(event) {
+  addTaskPopupListener(project);
+  addTaskBtnListener(project);
+  actionsBtnListener();
+  checkBtnListener();
+  importantBtnListener();
+  todoItemListener();
+  deleteBtnListener();
+
+  // Load search term from local storage if it exists
+  const savedSearchTerm = localStorage.getItem('searchTerm');
+  if (savedSearchTerm) {
+    $('.input-search').val(savedSearchTerm); // Set the input value
+    searchFunction();
+  }
+  updateBadgeCounts();
+}
+
+const actionsBtnListener = function(){
+  const $btns = $('.list-actions').click((event) => {
+      const selectedId = event.currentTarget.id;
+      const $el = $('.' + selectedId);
+      $('#ct > div').hide();
+      $el.fadeIn();
+      $btns.removeClass('active');
+      $(event.currentTarget).addClass('active');
+      
+      // Apply search and filter when changing menu
+      searchFunction();
+  });
+}
+
+const addTaskBtnListener = function(project) {
+  $('#addTask').on('click', function (event) {
     event.preventDefault();
 
     $('#task').val('');
@@ -38,272 +56,213 @@ function populateTodofunction(project=null){
     $('.edit-tsk').hide();
     $('#addTaskModal').modal('show');
     const ps = new PerfectScrollbar('.todo-box-scroll', {
-      suppressScrollX : true
+      suppressScrollX: true
     });
 
-    populateScanHistory(project=project);
+    populateScanHistory(project);
 
   });
-  const ps = new PerfectScrollbar('.todo-box-scroll', {
-    suppressScrollX : true
-  });
+}
 
-  const todoListScroll = new PerfectScrollbar('.todoList-sidebar-scroll', {
-    suppressScrollX : true
-  });
+const addTaskPopupListener = function(project) {
+  $(".add-tsk").click(async function () {
+    try {
+      const $_task = document.getElementById('task').value;
+      const $_taskDescriptionText = document.getElementById('taskdescription').value;
+      const $_taskScanHistory = $("#scanHistoryIDropdown option:selected").text();
+      const $_taskSubdomain = $("#subdomainDropdown option:selected").text();
+      let $_targetText = '';
 
-  var $btns = $('.list-actions').click(function() {
-    if (this.id == 'all-list') {
-      var $el = $('.' + this.id).fadeIn();
-      $('#ct > div').not($el).hide();
+      if ($_taskScanHistory != 'Choose Scan History...') {
+        $_targetText = $_taskScanHistory;
+      }
+
+      if ($_taskSubdomain != 'Choose Subdomain...') {
+        $_targetText += ' Subdomain : ' + $_taskSubdomain;
+      }
+
+      let data = {
+        'title': $_task,
+        'description': $_taskDescriptionText
+      };
+
+      if ($("#scanHistoryIDropdown").val() && $("#scanHistoryIDropdown").val() != 'Choose Scan History...') {
+        data['scan_history_id'] = parseInt($("#scanHistoryIDropdown").val());
+      }
+
+      if ($("#subdomainDropdown").val() != 'Choose Subdomain...') {
+        data['subdomain_id'] = parseInt($("#subdomainDropdown").val());
+      }
+
+      if (project) {
+        data['project'] = project;
+      }
+
+      let response = await fetch('/api/add/recon_note/', {
+        method: 'post',
+        headers: {
+          "X-CSRFToken": getCookie("csrftoken"),
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+      });
+
+      const responseData = await response.json();
+      swal.queue([{
+        title: response.status === 200 ? 'Note added successfully!' :
+          response.status === 400 ? 'Oops! Unable to add todo!\r\n' + responseData.error :
+            response.status === 404 ? 'Oops! Note not found!\r\n' + responseData.error :
+              'Oops! An error occurred!\r\n' + responseData.error,
+        icon: response.status === 200 ? 'success' : 'error'
+      }]);
+
+      if (response.status === 200) {
+        const newNote = {
+          id: responseData.id,
+          title: htmlEncode($_task),
+          description: htmlEncode($_taskDescriptionText),
+          domain_name: htmlEncode($_targetText),
+          subdomain_name: htmlEncode($_taskSubdomain),
+          is_done: false,
+          is_important: false
+        };
+
+        let todoHTML = $('#todo-template').html();
+
+        todoHTML = todoHTML
+          .replace(/{task_id}/g, newNote.id)
+          .replace(/{title}/g, newNote.title)
+          .replace(/{target_text}/g, newNote.domain_name ? `Domain: ${newNote.domain_name}` : '')
+          .replace(/{description}/g, newNote.description)
+          .replace(/{is_done}/g, newNote.is_done ? 'todo-task-done' : '')
+          .replace(/{checked}/g, newNote.is_done ? 'checked' : '')
+          .replace(/{is_important}/g, newNote.is_important ? 'todo-task-important' : '');
+
+        const $newTodo = $('<div class="todo-item all-list"></div>').append(todoHTML);
+
+        $("#ct").prepend($newTodo);
+        $('#addTaskModal').modal('hide');
+        checkBtnListener();
+        todoItemListener();
+        importantBtnListener();
+        deleteBtnListener();
+        new dynamicBadgeNotification('allList');
+        $(".list-actions#all-list").trigger('click');
+      }
+    } catch (error) {
+      console.error('Error adding todo:', error);
+      swal('Oops! Something went wrong!', error.message, 'error');
+    }
+  });
+}
+
+const dynamicBadgeNotification = function(setTodoCategoryCount) {
+  const todoCategoryCount = setTodoCategoryCount;
+
+  // Compter les éléments en se basant uniquement sur les classes CSS
+  const get_TodoAllListParentsDiv = $('.todo-item').not('.todo-item-template');
+  const get_TodoCompletedListParentsDiv = $('.todo-item.todo-task-done').not('.todo-item-template');
+  const get_TodoImportantListParentsDiv = $('.todo-item.todo-task-important').not('.todo-item-template');
+
+  // Obtenir les comptes
+  const get_TodoListElementsCount = get_TodoAllListParentsDiv.length;
+  const get_CompletedTaskElementsCount = get_TodoCompletedListParentsDiv.length;
+  const get_ImportantTaskElementsCount = get_TodoImportantListParentsDiv.length;
+
+  // Obtenir les éléments de badge
+  const getBadgeTodoAllListDiv = $('#all-list .todo-badge');
+  const getBadgeCompletedTaskListDiv = $('#todo-task-done .todo-badge');
+  const getBadgeImportantTaskListDiv = $('#todo-task-important .todo-badge');
+
+  // Fonction pour mettre à jour un badge
+  const updateBadge = function(badgeElement, count) {
+    if (count === 0) {
+      badgeElement.text('');
     } else {
-      var $el = $('.' + this.id).fadeIn();
-      $('#ct > div').not($el).hide();
+      badgeElement.text(count);
+      if (count > 9) {
+        badgeElement.css({
+          padding: '2px 0px',
+          height: '25px',
+          width: '25px'
+        });
+      } else {
+        badgeElement.removeAttr('style');
+      }
     }
-    $btns.removeClass('active');
-    $(this).addClass('active');
-  })
+  };
 
-  checkCheckbox();
-  importantDropdown();
-  todoItem();
-  deleteDropdown();
-
-  $(".add-tsk").click(function(){
-
-    var $_task = document.getElementById('task').value;
-
-    var $_taskDescriptionText = document.getElementById('taskdescription').value;
-
-    var $_taskScanHistory = $("#scanHistoryIDropdown option:selected").text();
-
-    var $_taskSubdomain = $("#subdomainDropdown option:selected").text();
-
-    var $_targetText = '';
-
-    if ($_taskScanHistory != 'Choose Scan History...') {
-      $_targetText = $_taskScanHistory;
-    }
-
-    if ($_taskSubdomain != 'Choose Subdomain...') {
-      $_targetText += ' Subdomain : ' + $_taskSubdomain;
-    }
-
-    $html = '<div class="todo-item all-list">'+
-    '<div class="todo-item-inner">'+
-    '<div class="n-chk text-center">'+
-    '<label class="new-control new-checkbox checkbox-primary">'+
-    '<input type="checkbox" class="form-check-input inbox-chkbox">'+
-    '<span class="new-control-indicator"></span>'+
-    '</label>'+
-    '</div>'+
-
-    '<div class="todo-content">'+
-    '<h5 class="todo-heading">'+htmlEncode($_task)+'</h5>'+
-    '<p class="target">'+$_targetText+'</h5>'+
-    "<p class='todo-text' >"+htmlEncode($_taskDescriptionText)+"</p>"+
-    '</div>'+
-
-    '<div class="action-dropdown custom-dropdown-icon">'+
-    '<div class="dropdown dropstart">'+
-    '<a class="dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">'+
-    '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-more-vertical"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg>'+
-    '</a>'+
-
-    '<div class="dropdown-menu">'+
-    '<a class="important dropdown-item" href="javascript:void(0);">Toggle Important</a>'+
-    '<a class="dropdown-item delete" href="javascript:void(0);">Delete</a>'+
-    '</div>'+
-    '</div>'+
-    '</div>'+
-
-    '</div>'+
-    '</div>';
-
-
-    $("#ct").prepend($html);
-    $('#addTaskModal').modal('hide');
-    checkCheckbox();
-    todoItem();
-    importantDropdown();
-    deleteDropdown();
-    new dynamicBadgeNotification('allList');
-    $(".list-actions#all-list").trigger('click');
-
-    data = {
-      'title': $_task,
-      'description': $_taskDescriptionText
-    }
-
-    if ($("#scanHistoryIDropdown").val() && $("#scanHistoryIDropdown").val() != 'Choose Scan History...') {
-      data['scan_history'] = parseInt($("#scanHistoryIDropdown").val());
-    }
-
-    if ($("#subdomainDropdown").val() != 'Choose Subdomain...') {
-      data['subdomain'] = parseInt($("#subdomainDropdown").val());
-    }
-
-    if (project) {
-      data['project'] = project;
-    }
-
-    fetch('/api/add/recon_note/', {
-      method: 'post',
-      headers: {
-        "X-CSRFToken": getCookie("csrftoken"),
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(data)
-    }).then(res => res.json())
-    .then(res => console.log(res));
-  });
-
-  $('.tab-title .nav-pills a.nav-link').on('click', function(event) {
-    $(this).parents('.mail-box-container').find('.tab-title').removeClass('mail-menu-show')
-    $(this).parents('.mail-box-container').find('.mail-overlay').removeClass('mail-overlay-show')
-  })
-
-}
-
-function dynamicBadgeNotification( setTodoCategoryCount ) {
-  var todoCategoryCount = setTodoCategoryCount;
-
-  // Get Parents Div(s)
-  var get_ParentsDiv = $('.todo-item');
-  var get_TodoAllListParentsDiv = $('.todo-item.all-list');
-  var get_TodoCompletedListParentsDiv = $('.todo-item.todo-task-done');
-  var get_TodoImportantListParentsDiv = $('.todo-item.todo-task-important');
-
-  // Get Parents Div(s) Counts
-  var get_TodoListElementsCount = get_TodoAllListParentsDiv.length;
-  var get_CompletedTaskElementsCount = get_TodoCompletedListParentsDiv.length;
-  var get_ImportantTaskElementsCount = get_TodoImportantListParentsDiv.length;
-
-  // Get Badge Div(s)
-  var getBadgeTodoAllListDiv = $('#all-list .todo-badge');
-  var getBadgeCompletedTaskListDiv = $('#todo-task-done .todo-badge');
-  var getBadgeImportantTaskListDiv = $('#todo-task-important .todo-badge');
-
-
-  if (todoCategoryCount === 'allList') {
-    if (get_TodoListElementsCount === 0) {
-      getBadgeTodoAllListDiv.text('');
-      return;
-    }
-    if (get_TodoListElementsCount > 9) {
-      getBadgeTodoAllListDiv.css({
-        padding: '2px 0px',
-        height: '25px',
-        width: '25px'
-      });
-    } else if (get_TodoListElementsCount <= 9) {
-      getBadgeTodoAllListDiv.removeAttr('style');
-    }
-    getBadgeTodoAllListDiv.text(get_TodoListElementsCount);
+  // Mettre à jour les badges en fonction de la catégorie
+  if (todoCategoryCount === 'allList' || todoCategoryCount === undefined) {
+    updateBadge(getBadgeTodoAllListDiv, get_TodoListElementsCount);
   }
-  else if (todoCategoryCount === 'completedList') {
-    if (get_CompletedTaskElementsCount === 0) {
-      getBadgeCompletedTaskListDiv.text('');
-      return;
-    }
-    if (get_CompletedTaskElementsCount > 9) {
-      getBadgeCompletedTaskListDiv.css({
-        padding: '2px 0px',
-        height: '25px',
-        width: '25px'
-      });
-    } else if (get_CompletedTaskElementsCount <= 9) {
-      getBadgeCompletedTaskListDiv.removeAttr('style');
-    }
-    getBadgeCompletedTaskListDiv.text(get_CompletedTaskElementsCount);
+  if (todoCategoryCount === 'completedList' || todoCategoryCount === undefined) {
+    updateBadge(getBadgeCompletedTaskListDiv, get_CompletedTaskElementsCount);
   }
-  else if (todoCategoryCount === 'importantList') {
-    if (get_ImportantTaskElementsCount === 0) {
-      getBadgeImportantTaskListDiv.text('');
-      return;
-    }
-    if (get_ImportantTaskElementsCount > 9) {
-      getBadgeImportantTaskListDiv.css({
-        padding: '2px 0px',
-        height: '25px',
-        width: '25px'
-      });
-    } else if (get_ImportantTaskElementsCount <= 9) {
-      getBadgeImportantTaskListDiv.removeAttr('style');
-    }
-    getBadgeImportantTaskListDiv.text(get_ImportantTaskElementsCount);
+  if (todoCategoryCount === 'importantList' || todoCategoryCount === undefined) {
+    updateBadge(getBadgeImportantTaskListDiv, get_ImportantTaskElementsCount);
   }
 }
 
-function deleteDropdown() {
-  $('.action-dropdown .dropdown-menu .delete.dropdown-item').click(function() {
-    var id = this.id.split('_')[1];
-    var main_this = this;
-    swal.queue([{
+const deleteBtnListener = function() {
+  $('.actions-btn .delete-btn').click(async function() {
+    const id = this.id.split('_')[1];
+    const main_this = this;
+    await swal.queue([{
       title: 'Are you sure you want to delete this Recon Note?',
       text: "You won't be able to revert this!",
-      type: 'warning',
+      icon: 'warning',
       showCancelButton: true,
       confirmButtonText: 'Delete',
       padding: '2em',
       showLoaderOnConfirm: true,
-      preConfirm: function() {
-        return fetch('../delete_note', {
+      preConfirm: async function() {
+        const response = await fetch('/recon_note/delete_note', {
           method: 'POST',
           credentials: "same-origin",
           headers: {
             "X-CSRFToken": getCookie("csrftoken")
           },
-          body: JSON.stringify({
-            'id': parseInt(id),
-          })
-        })
-        .then(function (response) {
-          if(!$(main_this).parents('.todo-item').hasClass('todo-task-trash')) {
-            var getTodoParent = $(main_this).parents('.todo-item');
-            var getTodoClass = getTodoParent.attr('class');
+          body: JSON.stringify({ 'id': parseInt(id) })
+        }).catch(error => {
+          swal('Network error', 'An error occurred while deleting the note.', 'error');
+          throw error;
+        });
 
-            var getFirstClass = getTodoClass.split(' ')[1];
-            var getSecondClass = getTodoClass.split(' ')[2];
-            var getThirdClass = getTodoClass.split(' ')[3];
-
-            if (getFirstClass === 'all-list') {
-              getTodoParent.removeClass(getFirstClass);
-            }
-            if (getSecondClass === 'todo-task-done' || getSecondClass === 'todo-task-important') {
-              getTodoParent.removeClass(getSecondClass);
-            }
-            if (getThirdClass === 'todo-task-done' || getThirdClass === 'todo-task-important') {
-              getTodoParent.removeClass(getThirdClass);
-            }
-            $(main_this).parents('.todo-item').addClass('todo-task-trash');
-          } else if($(main_this).parents('.todo-item').hasClass('todo-task-trash')) {
-            $(main_this).parents('.todo-item').removeClass('todo-task-trash');
-          }
-          new dynamicBadgeNotification('allList');
-          new dynamicBadgeNotification('completedList');
-          new dynamicBadgeNotification('importantList');
-        })
-        .catch(function() {
+        if (!response.ok) {
+          const errorMessages = {
+            400: 'Oops! Unable to delete todo!',
+            404: 'Oops! Note not found!',
+            200: 'Note deleted successfully!'
+          };
           swal.insertQueueStep({
-            type: 'error',
-            title: 'Oops! Unable to delete todo!'
-          })
-        })
+            icon: response.status === 200 ? 'success' : 'error',
+            title: errorMessages[response.status] || 'An unknown error occurred.'
+          });
+          return;
+        }
+
+        const responseData = await response.json();
+        swal.insertQueueStep({
+          icon: response.status === 200 ? 'success' : 'error',
+          title: response.status === 200 ? 'Note deleted successfully!' : 'Oops! An error occurred!\r\n' + responseData.error
+        });
+
+        if (response.status === 200) {
+          $(main_this).parents('.todo-item').remove();
+          updateBadgeCounts();
+        }
       }
     }]);
   });
 }
-function checkCheckbox() {
-  $('.inbox-chkbox').click(function() {
-    if ($(this).is(":checked")) {
-      $(this).parents('.todo-item').addClass('todo-task-done');
-    }
-    else if ($(this).is(":not(:checked)")) {
-      $(this).parents('.todo-item').removeClass('todo-task-done');
-    }
+const checkBtnListener = function() {
+  $('.actions-btn .done-btn').click(async function() {
+    const todoItem = $(this).parents('.todo-item');
+    todoItem.toggleClass('todo-task-done'); // Toggle the done class
+
     new dynamicBadgeNotification('completedList');
-    fetch('../flip_todo_status', {
+    await fetch('/recon_note/flip_todo_status', {
       method: 'post',
       headers: {
         "X-CSRFToken": getCookie("csrftoken")
@@ -311,28 +270,27 @@ function checkCheckbox() {
       body: JSON.stringify({
         'id': parseInt(this.id.split('_')[1]),
       })
-    }).then(res => res.json())
-    .then(res => console.log(res));
+    }).then(res => res.json());
   });
 }
 
-function importantDropdown() {
-  $('.important').click(function() {
+const importantBtnListener = function() {
+  $('.actions-btn .important-btn').click(async function() {
     badge_id = this.id.split('_')[1];
     if(!$(this).parents('.todo-item').hasClass('todo-task-important')){
       $(this).parents('.todo-item').addClass('todo-task-important');
 
-      var is_important_badge = document.createElement("div");
+      const is_important_badge = document.createElement("div");
       is_important_badge.classList.add("priority-dropdown");
       is_important_badge.classList.add("custom-dropdown-icon");
       is_important_badge.id = 'important-badge-' + this.id.split('_')[1];
 
       badge = `
-      <div class="dropdown p-dropdown">
-      <span class="text-danger bs-tooltip" title="Important Task">
-      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-alert-octagon"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12" y2="16"></line></svg>
-      </span>
-      </div>`
+          <div class="dropdown p-dropdown">
+            <span class="text-danger bs-tooltip" title="Important to-do">
+              <i class="fa fa-exclamation-circle"></i>
+            </span>
+          </div>`;
 
       is_important_badge.innerHTML = badge;
 
@@ -340,11 +298,10 @@ function importantDropdown() {
     }
     else if($(this).parents('.todo-item').hasClass('todo-task-important')){
       $(this).parents('.todo-item').removeClass('todo-task-important');
-      $(".list-actions#all-list").trigger('click');
-      $("#important-badge-"+badge_id).empty();
+      $("#important-badge-"+badge_id).remove();
     }
     new dynamicBadgeNotification('importantList');
-    fetch('../flip_important_status', {
+    await fetch('/recon_note/flip_important_status', {
       method: 'post',
       headers: {
         "X-CSRFToken": getCookie("csrftoken")
@@ -352,20 +309,16 @@ function importantDropdown() {
       body: JSON.stringify({
         'id': parseInt(this.id.split('_')[1]),
       })
-    }).then(res => res.json())
-    .then(res => console.log(res));
+    }).then(res => res.json());
   });
 }
 
-function todoItem() {
+const todoItemListener = function() {
   $('.todo-item .todo-content').on('click', function(event) {
     event.preventDefault();
-
-    var $_taskTitle = $(this).find('.todo-heading').text();
-
-    var $_taskTarget = $(this).find('.target').text();
-
-    var $todoDescription = $(this).find('.todo-text').text();
+    const $_taskTitle = $(this).find('.todo-heading').text();
+    const $_taskTarget = $(this).find('.target').text();
+    const $todoDescription = $(this).find('.todo-text').text();
 
     $('.task-heading').text($_taskTitle);
     $('.task-text').html(`<span class="text-success">${$_taskTarget}</span><br>` + htmlEncode($todoDescription));
@@ -374,15 +327,83 @@ function todoItem() {
   });
 }
 
-function populateScanHistory(project) {
+const populateScanHistory = function(project) {
   scan_history_select = document.getElementById('scanHistoryIDropdown');
   $.getJSON(`/api/listScanHistory/?format=json&project=${project}`, function(data) {
     for (var history in data){
       history_object = data[history];
-      var option = document.createElement('option');
+      const option = document.createElement('option');
       option.value = history_object['id'];
       option.innerHTML = history_object['domain']['name'] + ' - Scanned ' + moment.utc(history_object['start_scan_date']).fromNow();
       scan_history_select.appendChild(option);
     }
   });
 }
+
+// Function to update badge counts
+const updateBadgeCounts = function() {
+  new dynamicBadgeNotification('allList');
+  new dynamicBadgeNotification('completedList');
+  new dynamicBadgeNotification('importantList');
+};
+
+// Updated search function
+const searchFunction = function() {
+  const searchTerm = $('.input-search').val();
+  const rex = new RegExp(searchTerm, 'i'); // Create a regex from the input
+  $('.todo-box .todo-item').hide(); // Hide all items
+  $('.todo-box .todo-item').filter(function() {
+      return rex.test($(this).text()); // Show items that match the regex
+  }).show();
+
+  // Apply the current filter after search
+  applyCurrentFilter();
+
+  // Update badge counts after filtering
+  updateBadgeCounts();
+};
+
+// Function to apply the current filter (To-do, Done, Important)
+const applyCurrentFilter = function() {
+  const currentFilter = $('.list-actions.active').attr('id');
+  if (currentFilter === 'todo-task-done') {
+      $('.todo-box .todo-item:visible').not('.todo-task-done').hide();
+  } else if (currentFilter === 'todo-task-important') {
+      $('.todo-box .todo-item:visible').not('.todo-task-important').hide();
+  }
+};
+
+$(document).ready(function() {
+  // Show or hide the clear button based on input
+  const updateClearButtonVisibility = function() {
+    const searchTerm = $('.input-search').val();
+    $('#clear-search').toggle(searchTerm.length > 0); // Show the clear button if there's text
+  };
+
+  // Initial check to show the clear button if there's a saved search term
+  const savedSearchTerm = localStorage.getItem('searchTerm');
+  if (savedSearchTerm) {
+    $('.input-search').val(savedSearchTerm); // Set the input value
+    updateClearButtonVisibility(); // Update visibility based on the saved term
+  }
+
+  // Show or hide the clear button on input
+  $('.input-search').on('input', function() {
+    updateClearButtonVisibility();
+  });
+
+  // Clear the search input when the clear button is clicked
+  $('#clear-search').on('click', function() {
+    $('.input-search').val(''); // Clear the input
+    $(this).hide(); // Hide the clear button
+    localStorage.removeItem('searchTerm'); // Remove the search term from local storage
+    searchFunction(); // Call the search function to refresh the list
+  });
+
+  // Attach search function to input
+  $('.input-search').on('keyup', function() {
+    const searchTerm = $(this).val();
+    localStorage.setItem('searchTerm', searchTerm); // Save the search term to local storage
+    searchFunction(); // Call the search function
+  });
+});

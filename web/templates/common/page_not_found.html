@@ -1,0 +1,26 @@
+{% extends 'base/base.html' %}
+{% load static %}
+
+{% block title %}
+Page Not Found
+{% endblock title %}
+
+{% block page_title %}
+Page Not Found
+{% endblock page_title %}
+
+{% block custom_js_css_link %}
+<link rel="stylesheet" type="text/css" href="{% static 'custom/custom.css' %}">
+{% endblock custom_js_css_link %}
+
+{% block main_content %}
+<div class="row justify-content-center">
+    <div class="col-lg-6">
+        <div class="text-center">
+            <h1 class="text-error mt-4">404</h1>
+            <h4 class="text-uppercase text-danger mt-3">Page not found</h4>
+            <p>The page you are looking for might have been removed, had its name changed, or is temporarily unavailable.</p>
+        </div>
+    </div>
+</div>
+{% endblock main_content %}

@@ -7,13 +7,13 @@ function load_gf_template(pattern_name){
   $.getJSON(`/api/getFileContents?gf_pattern&name=${pattern_name}&format=json`, function(response) {
     swal.close();
     if (response.status) {
-      $('#modal_title').empty();
-      $('#modal-content').empty();
-      $("#modal-footer").empty();
+      $('#modal_dialog .modal-title').empty();
+      $('#modal_dialog .modal-text').empty();
+      $("#modal_dialog .modal-footer").empty();
 
-      $('#modal_title').html(`GF Pattern ` + htmlEncode(pattern_name));
+      $('#modal_dialog .modal-title').html(`GF Pattern ` + htmlEncode(pattern_name));
 
-      $('#modal-content').append(`<pre>${htmlEncode(response['content'])}</pre>`);
+      $('#modal_dialog .modal-text').append(`<pre>${htmlEncode(response['content'])}</pre>`);
       $('#modal_dialog').modal('show');
     }
     else{
@@ -38,13 +38,13 @@ function load_nuclei_template(pattern_name){
   $.getJSON(`/api/getFileContents?nuclei_template&name=${pattern_name}&format=json`, function(response) {
     swal.close();
     if (response.status) {
-      $('#modal_title').empty();
-      $('#modal-content').empty();
-      $("#modal-footer").empty();
+      $('#modal_dialog .modal-title').empty();
+      $('#modal_dialog .modal-text').empty();
+      $("#modal_dialog .modal-footer").empty();
 
-      $('#modal_title').html(`Nuclei Template: ` + htmlEncode(pattern_name));
+      $('#modal_dialog .modal-title').html(`Nuclei Template: ` + htmlEncode(pattern_name));
 
-      $('#modal-content').append(`<pre>${htmlEncode(response['content'])}</pre>`);
+      $('#modal_dialog .modal-text').append(`<pre>${htmlEncode(response['content'])}</pre>`);
       $('#modal_dialog').modal('show');
     }
     else{
@@ -144,5 +144,21 @@ $("#theharvester_config_text_area").dblclick(function() {
   if (!document.getElementById('theharvester-config-submit')) {
     $("#theharvester_config_text_area").removeAttr("readonly");
     $("#theharvester-config-form").append('<input type="submit" class="btn btn-primary mt-2 float-end" value="Save Changes" id="theharvester-config-submit">');
+  }
+});
+
+$.getJSON(`/api/getFileContents?gau_config&format=json`, function(data) {
+  $("#gau_config_text_area").attr("rows", 14);
+  $("textarea#gau_config_text_area").html(htmlEncode(data['content']));
+}).fail(function(){
+  $("#gau_config_text_area").removeAttr("readonly");
+  $("textarea#gau_config_text_area").html(`# Your GAU configuration here.`);
+  $("#gau-config-form").append('<input type="submit" class="btn btn-primary mt-2 float-end" value="Save Changes" id="gau-config-submit">');
+});
+
+$("#gau_config_text_area").dblclick(function() {
+  if (!document.getElementById('gau-config-submit')) {
+    $("#gau_config_text_area").removeAttr("readonly");
+    $("#gau-config-form").append('<input type="submit" class="btn btn-primary mt-2 float-end" value="Save Changes" id="gau-config-submit">');
   }
 });

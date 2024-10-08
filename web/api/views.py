@@ -1,43 +1,186 @@
 import logging
 import re
+import os.path
+from pathlib import Path
 import socket
-import subprocess
+from ipaddress import IPv4Network
+from collections import defaultdict
 
 import requests
 import validators
-from dashboard.models import *
+from django.urls import reverse
+from dashboard.models import OllamaSettings, Project, SearchHistory
 from django.db.models import CharField, Count, F, Q, Value
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from packaging import version
 from django.template.defaultfilters import slugify
 from rest_framework import viewsets
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.status import HTTP_400_BAD_REQUEST
+from rest_framework.parsers import JSONParser
 
-from recon_note.models import *
+from recon_note.models import TodoNote
 from reNgine.celery import app
-from reNgine.common_func import *
-from reNgine.definitions import ABORTED_TASK
-from reNgine.settings import RENGINE_CURRENT_VERSION
-from reNgine.tasks import *
+from reNgine.common_func import (
+	get_data_from_post_request,
+	get_interesting_endpoints,
+	get_interesting_subdomains,
+	get_lookup_keywords,
+	safe_int_cast
+)
+from reNgine.definitions import (
+	ABORTED_TASK,
+	OLLAMA_INSTANCE,
+	NUCLEI_SEVERITY_MAP,
+	DEFAULT_GPT_MODELS,
+	RUNNING_TASK,
+	SUCCESS_TASK
+)
+from reNgine.settings import (
+	RENGINE_CURRENT_VERSION,
+	RENGINE_TOOL_GITHUB_PATH
+)
+from reNgine.tasks import (
+	create_scan_activity,
+	gpt_vulnerability_description,
+	initiate_subscan,
+	query_ip_history,
+	query_reverse_whois,
+	query_whois,
+	run_cmseek,
+	run_command,
+	run_gf_list,
+	run_wafw00f,
+	send_hackerone_report
+)
 from reNgine.gpt import GPTAttackSuggestionGenerator
-from reNgine.utilities import is_safe_path
-from scanEngine.models import *
-from startScan.models import *
-from startScan.models import EndPoint
-from targetApp.models import *
+from reNgine.utilities import is_safe_path, remove_lead_and_trail_slash
+from scanEngine.models import EngineType, InstalledExternalTool
+from startScan.models import (
+	Command,
+	DirectoryFile,
+	DirectoryScan,
+	Dork,
+	Email,
+	Employee,
+	EndPoint,
+	IpAddress,
+	MetaFinderDocument,
+	Port,
+	ScanActivity,
+	ScanHistory,
+	Subdomain,
+	SubScan,
+	Technology,
+	Vulnerability,
+)
+from targetApp.models import Domain, Organization
 
-from .serializers import *
+from .serializers import (
+	CommandSerializer,
+	DirectoryFileSerializer,
+	DirectoryScanSerializer,
+	DomainSerializer,
+	DorkCountSerializer,
+	DorkSerializer,
+	EmailSerializer,
+	EmployeeSerializer,
+	EndpointOnlyURLsSerializer,
+	EndpointSerializer,
+	EndPointChangesSerializer,
+	EngineSerializer,
+	InterestingEndPointSerializer,
+	InterestingSubdomainSerializer,
+	IpSerializer,
+	IpSubdomainSerializer,
+	MetafinderDocumentSerializer,
+	MetafinderUserSerializer,
+	OnlySubdomainNameSerializer,
+	OrganizationSerializer,
+	OrganizationTargetsSerializer,
+	PortSerializer,
+ 	ProjectSerializer,
+	ReconNoteSerializer,
+	ScanHistorySerializer,
+	SearchHistorySerializer,
+	SubdomainChangesSerializer,
+	SubdomainSerializer,
+	SubScanResultSerializer,
+	SubScanSerializer,
+	TechnologyCountSerializer,
+	VisualiseDataSerializer,
+	VulnerabilitySerializer
+)
 
 logger = logging.getLogger(__name__)
 
 
+class OllamaManager(APIView):
+    def get(self, request):
+        model_name = request.query_params.get('model')
+        if not model_name:
+            return Response({'status': False, 'message': 'Model name is required'}, status=400)
+
+        try:
+            pull_model_api = f'{OLLAMA_INSTANCE}/api/pull'
+            _response = requests.post(
+                pull_model_api,
+                json={'name': model_name, 'stream': False}
+            ).json()
+            if _response.get('error'):
+                return Response({'status': False, 'message': _response.get('error')}, status=400)
+            return Response({'status': True})
+        except Exception as e:
+            logger.error(f"Error in OllamaManager GET: {str(e)}")
+            return Response({'status': False, 'message': 'An error occurred while pulling the model.'}, status=500)
+    
+    def delete(self, request):
+        model_name = get_data_from_post_request(request, 'model')
+        if not model_name:
+            return Response({'status': False, 'message': 'Model name is required'}, status=400)
+
+        try:
+            delete_model_api = f'{OLLAMA_INSTANCE}/api/delete'
+            _response = requests.delete(
+                delete_model_api,
+                json={'name': model_name}
+            ).json()
+            if _response.get('error'):
+                return Response({'status': False, 'message': _response.get('error')}, status=400)
+            return Response({'status': True})
+        except Exception as e:
+            logger.error(f"Error in OllamaManager DELETE: {str(e)}")
+            return Response({'status': False, 'message': 'An error occurred while deleting the model.'}, status=500)
+    
+    def put(self, request):
+        model_name = request.data.get('model')
+        if not model_name:
+            return Response({'status': False, 'message': 'Model name is required'}, status=400)
+
+        use_ollama = all(model['name'] != model_name for model in DEFAULT_GPT_MODELS)
+
+        try:
+            OllamaSettings.objects.update_or_create(
+                id=1,
+                defaults={
+                    'selected_model': model_name,
+                    'use_ollama': use_ollama,
+                    'selected': True
+                }
+            )
+            return Response({'status': True})
+        except Exception as e:
+            logger.error(f"Error in OllamaManager PUT: {str(e)}")
+            return Response({'status': False, 'message': 'An error occurred while updating Ollama settings.'}, status=500)
+
 class GPTAttackSuggestion(APIView):
 	def get(self, request):
 		req = self.request
-		subdomain_id = req.query_params.get('subdomain_id')
+		subdomain_id = safe_int_cast(req.query_params.get('subdomain_id'))
 		if not subdomain_id:
 			return Response({
 				'status': False,
@@ -45,49 +188,49 @@ class GPTAttackSuggestion(APIView):
 			})
 		try:
 			subdomain = Subdomain.objects.get(id=subdomain_id)
-		except Exception as e:
+		except Subdomain.DoesNotExist:
 			return Response({
 				'status': False,
-				'error': 'Subdomain not found with id ' + subdomain_id
+				'error': f'Subdomain not found with id {subdomain_id}'
 			})
+
 		if subdomain.attack_surface:
 			return Response({
 				'status': True,
 				'subdomain_name': subdomain.name,
 				'description': subdomain.attack_surface
 			})
+
 		ip_addrs = subdomain.ip_addresses.all()
-		open_ports_str = ''
-		for ip in ip_addrs:
-			ports = ip.ports.all()
-			for port in ports:
-				open_ports_str += f'{port.number}/{port.service_name}, '
-		tech_used = ''
-		for tech in subdomain.technologies.all():
-			tech_used += f'{tech.name}, '
-		input = f'''
+		open_ports = ', '.join(f'{port.number}/{port.service_name}' for ip in ip_addrs for port in ip.ports.all())
+		tech_used = ', '.join(tech.name for tech in subdomain.technologies.all())
+
+		input_data = f'''
 			Subdomain Name: {subdomain.name}
 			Subdomain Page Title: {subdomain.page_title}
-			Open Ports: {open_ports_str}
+			Open Ports: {open_ports}
 			HTTP Status: {subdomain.http_status}
 			Technologies Used: {tech_used}
 			Content type: {subdomain.content_type}
 			Web Server: {subdomain.webserver}
 			Page Content Length: {subdomain.content_length}
 		'''
+		
 		gpt = GPTAttackSuggestionGenerator()
-		response = gpt.get_attack_suggestion(input)
+		response = gpt.get_attack_suggestion(input_data)
 		response['subdomain_name'] = subdomain.name
+		
 		if response.get('status'):
 			subdomain.attack_surface = response.get('description')
 			subdomain.save()
+		
 		return Response(response)
 
 
 class GPTVulnerabilityReportGenerator(APIView):
 	def get(self, request):
 		req = self.request
-		vulnerability_id = req.query_params.get('id')
+		vulnerability_id = safe_int_cast(req.query_params.get('id'))
 		if not vulnerability_id:
 			return Response({
 				'status': False,
@@ -99,37 +242,27 @@ class GPTVulnerabilityReportGenerator(APIView):
 
 
 class CreateProjectApi(APIView):
-	def get(self, request):
-		req = self.request
-		project_name = req.query_params.get('name')
-		slug = slugify(project_name)
-		insert_date = timezone.now()
+    def get(self, request):
+        project_name = request.query_params.get('name')
+        slug = slugify(project_name)
+        insert_date = timezone.now()
 
-		try:
-			project = Project.objects.create(
-				name=project_name,
-				slug=slug,
-				insert_date =insert_date
-			)
-			response = {
-				'status': True,
-				'project_name': project_name
-			}
-			return Response(response)
-		except Exception as e:
-			response = {
-				'status': False,
-				'error': str(e)
-			}
-			return Response(response, status=HTTP_400_BAD_REQUEST)
-
-
+        try:
+            Project.objects.create(
+                name=project_name,
+                slug=slug,
+                insert_date=insert_date
+            )
+            return Response({'status': True, 'project_name': project_name})
+        except Exception as e:
+            logger.error(f"Error in CreateProjectApi: {str(e)}")
+            return Response({'status': False, 'message': 'Failed to create project.'}, status=HTTP_400_BAD_REQUEST)
 
 class QueryInterestingSubdomains(APIView):
 	def get(self, request):
 		req = self.request
-		scan_id = req.query_params.get('scan_id')
-		domain_id = req.query_params.get('target_id')
+		scan_id = safe_int_cast(req.query_params.get('scan_id'))
+		domain_id = safe_int_cast(req.query_params.get('target_id'))
 
 		if scan_id:
 			queryset = get_interesting_subdomains(scan_history=scan_id)
@@ -172,7 +305,7 @@ class ListTargetsDatatableViewSet(viewsets.ModelViewSet):
 
 
 			if _order_direction == 'desc':
-				order_col = '-{}'.format(order_col)
+				order_col = f'-{order_col}'
 
 			qs = self.queryset.filter(
 				Q(name__icontains=search_value) |
@@ -188,24 +321,35 @@ class ListTargetsDatatableViewSet(viewsets.ModelViewSet):
 class WafDetector(APIView):
 	def get(self, request):
 		req = self.request
-		url= req.query_params.get('url')
-		response = {}
-		response['status'] = False
+		url = req.query_params.get('url')
+		response = {
+			'status': False,
+			'message': '',
+			'results': None
+		}
 
-		wafw00f_command = f'wafw00f {url}'
-		output = subprocess.check_output(wafw00f_command, shell=True)
-		# use regex to get the waf
-		regex = "behind \\\\x1b\[1;96m(.*)\\\\x1b"
-		group = re.search(regex, str(output))
+		if not url:
+			response['message'] = 'URL parameter is missing'
+			return Response(response)
 
-		if group:
-			response['status'] = True
-			response['results'] = group.group(1)
-		else:
-			response['message'] = 'Could not detect any WAF!'
+		try:
+			logger.debug(f"Initiating WAF detection for URL: {url}")
+			result = run_wafw00f.delay(url).get(timeout=30)
+
+			if result.startswith("Unexpected error"):
+				response['message'] = result
+			elif result != "No WAF detected":
+				response['status'] = True
+				response['results'] = result
+			else:
+				response['message'] = 'Could not detect any WAF!'
+
+			logger.debug(f"WAF detection result: {response}")
+		except Exception as e:
+			logger.error(f"Error during WAF detection: {str(e)}")
+			response['message'] = "An unexpected error occurred. Please try again later."
 
 		return Response(response)
-
 
 class SearchHistoryView(APIView):
 	def get(self, request):
@@ -276,89 +420,52 @@ class UniversalSearch(APIView):
 
 
 class FetchMostCommonVulnerability(APIView):
-	def post(self, request):
-		req = self.request
-		data = req.data
+    def post(self, request):
+        data = request.data
+        response = {'status': False}
 
-		try:
-			limit = data.get('limit', 20)
-			project_slug = data.get('slug')
-			scan_history_id = data.get('scan_history_id')
-			target_id = data.get('target_id')
-			is_ignore_info = data.get('ignore_info', False)
+        try:
+            limit = safe_int_cast(data.get('limit', 20))
+            project_slug = data.get('slug')
+            scan_history_id = safe_int_cast(data.get('scan_history_id'))
+            target_id = safe_int_cast(data.get('target_id'))
+            is_ignore_info = data.get('ignore_info', False)
 
-			response = {}
-			response['status'] = False
+            vulnerabilities = (
+                Vulnerability.objects.filter(target_domain__project__slug=project_slug)
+                if project_slug else Vulnerability.objects.all()
+            )
 
-			if project_slug:
-				project = Project.objects.get(slug=project_slug)
-				vulnerabilities = Vulnerability.objects.filter(target_domain__project=project)
-			else:
-				vulnerabilities = Vulnerability.objects.all()
+            if scan_history_id:
+                vuln_query = vulnerabilities.filter(scan_history__id=scan_history_id).values("name", "severity")
+            elif target_id:
+                vuln_query = vulnerabilities.filter(target_domain__id=target_id).values("name", "severity")
+            else:
+                vuln_query = vulnerabilities.values("name", "severity")
 
+            if is_ignore_info:
+                most_common_vulnerabilities = (
+                    vuln_query.exclude(severity=0)
+                    .annotate(count=Count('name'))
+                    .order_by("-count")[:limit]
+                )
+            else:
+                most_common_vulnerabilities = (
+                    vuln_query.annotate(count=Count('name'))
+                    .order_by("-count")[:limit]
+                )
 
-			if scan_history_id:
-				vuln_query = (
-					vulnerabilities
-					.filter(scan_history__id=scan_history_id)
-					.values("name", "severity")
-				)
-				if is_ignore_info:
-					most_common_vulnerabilities = (
-						vuln_query
-						.exclude(severity=0)
-						.annotate(count=Count('name'))
-						.order_by("-count")[:limit]
-					)
-				else:
-					most_common_vulnerabilities = (
-						vuln_query
-						.annotate(count=Count('name'))
-						.order_by("-count")[:limit]
-					)
+            most_common_vulnerabilities = list(most_common_vulnerabilities)
 
-			elif target_id:
-				vuln_query = vulnerabilities.filter(target_domain__id=target_id).values("name", "severity")
-				if is_ignore_info:
-					most_common_vulnerabilities = (
-						vuln_query
-						.exclude(severity=0)
-						.annotate(count=Count('name'))
-						.order_by("-count")[:limit]
-					)
-				else:
-					most_common_vulnerabilities = (
-						vuln_query
-						.annotate(count=Count('name'))
-						.order_by("-count")[:limit]
-					)
+            if most_common_vulnerabilities:
+                response['status'] = True
+                response['result'] = most_common_vulnerabilities
 
-			else:
-				vuln_query = vulnerabilities.values("name", "severity")
-				if is_ignore_info:
-					most_common_vulnerabilities = (
-						vuln_query.exclude(severity=0)
-						.annotate(count=Count('name'))
-						.order_by("-count")[:limit]
-					)
-				else:
-					most_common_vulnerabilities = (
-						vuln_query.annotate(count=Count('name'))
-						.order_by("-count")[:limit]
-					)
+        except Exception as e:
+            logger.error(f"Error in FetchMostCommonVulnerability: {str(e)}")
+            response['message'] = 'An error occurred while fetching vulnerabilities.'
 
-
-			most_common_vulnerabilities = [vuln for vuln in most_common_vulnerabilities]
-
-			if most_common_vulnerabilities:
-				response['status'] = True
-				response['result'] = most_common_vulnerabilities
-		except Exception as e:
-			print(str(e))
-			response = {}
-
-		return Response(response)
-
+        return Response(response)
 
 class FetchMostVulnerable(APIView):
 	def post(self, request):
@@ -366,9 +473,9 @@ class FetchMostVulnerable(APIView):
 		data = req.data
 
 		project_slug = data.get('slug')
-		scan_history_id = data.get('scan_history_id')
-		target_id = data.get('target_id')
-		limit = data.get('limit', 20)
+		scan_history_id = safe_int_cast(data.get('scan_history_id'))
+		target_id = safe_int_cast(data.get('target_id'))
+		limit = safe_int_cast(data.get('limit', 20))
 		is_ignore_info = data.get('ignore_info', False)
 
 		response = {}
@@ -488,11 +595,17 @@ class AddReconNote(APIView):
 		req = self.request
 		data = req.data
 
-		subdomain_id = data.get('subdomain_id')
-		scan_history_id = data.get('scan_history_id')
+		subdomain_id = safe_int_cast(data.get('subdomain_id'))
+		scan_history_id = safe_int_cast(data.get('scan_history_id'))
 		title = data.get('title')
 		description = data.get('description')
 		project = data.get('project')
+  
+		if not title:
+			return Response({"status": False, "error": "Title is required."}, status=400)
+		if not project:
+			return Response({"status": False, "error": "Project is required."}, status=400)
+
 
 		try:
 			project = Project.objects.get(slug=project)
@@ -516,19 +629,17 @@ class AddReconNote(APIView):
 
 			note.project = project
 			note.save()
-			response = {'status': True}
+			return Response({"status": True, "error": False, "id": note.id}, status=200)
 		except Exception as e:
-			response = {'status': False, 'message': str(e)}
-
-		return Response(response)
-
+			logger.error(e)
+			return Response({"status": False, "error": "An error occurred."}, status=400)
 
 class ToggleSubdomainImportantStatus(APIView):
 	def post(self, request):
 		req = self.request
 		data = req.data
 
-		subdomain_id = data.get('subdomain_id')
+		subdomain_id = safe_int_cast(data.get('subdomain_id'))
 
 		response = {'status': False, 'message': 'No subdomain_id provided'}
 
@@ -548,13 +659,18 @@ class AddTarget(APIView):
 		h1_team_handle = data.get('h1_team_handle')
 		description = data.get('description')
 		domain_name = data.get('domain_name')
+		organization_name = data.get('organization')
 		slug = data.get('slug')
 
 		# Validate domain name
 		if not validators.domain(domain_name):
-			return Response({'status': False, 'message': 'Invalid domain or IP'})
+			return Response({'status': False, 'message': 'Invalid domain or IP'}, status=400)
 
 		project = Project.objects.get(slug=slug)
+
+		# Check if the domain already exists
+		if Domain.objects.filter(name=domain_name, project=project).exists():
+			return Response({'status': False, 'message': 'Domain already exists as a target!'}, status=400)
 
 		# Create domain object in DB
 		domain, _ = Domain.objects.get_or_create(name=domain_name)
@@ -564,11 +680,26 @@ class AddTarget(APIView):
 		if not domain.insert_date:
 			domain.insert_date = timezone.now()
 		domain.save()
+
+		# Create org object in DB
+		if organization_name:
+			organization_obj = None
+			organization_query = Organization.objects.filter(name=organization_name)
+			if organization_query.exists():
+				organization_obj = organization_query[0]
+			else:
+				organization_obj = Organization.objects.create(
+					name=organization_name,
+					project=project,
+					insert_date=timezone.now())
+			organization_obj.domains.add(domain)
+
 		return Response({
 			'status': True,
-			'message': 'Domain successfully added as target !',
+			'message': 'Domain successfully added as target!',
 			'domain_name': domain_name,
-			'domain_id': domain.id
+			'domain_id': domain.id,
+			'initiate_scan_url': reverse('start_scan', kwargs={'slug': slug, 'domain_id': domain.id})
 		})
 
 
@@ -576,7 +707,7 @@ class FetchSubscanResults(APIView):
 	def get(self, request):
 		req = self.request
 		# data = req.data
-		subscan_id = req.query_params.get('subscan_id')
+		subscan_id = safe_int_cast(req.query_params.get('subscan_id'))
 		subscan = SubScan.objects.filter(id=subscan_id)
 		if not subscan.exists():
 			return Response({
@@ -615,16 +746,16 @@ class FetchSubscanResults(APIView):
 		logger.info(subscan_data)
 		logger.info(subscan_results)
 
-		return Response({'subscan': subscan_data, 'result': subscan_results})
+		return Response({'subscan': subscan_data, 'result': subscan_results, 'endpoint_url': reverse('api:endpoints-list'), 'vulnerability_url': reverse('api:vulnerabilities-list')})
 
 
 class ListSubScans(APIView):
 	def post(self, request):
 		req = self.request
 		data = req.data
-		subdomain_id = data.get('subdomain_id', None)
-		scan_history = data.get('scan_history_id', None)
-		domain_id = data.get('domain_id', None)
+		subdomain_id = safe_int_cast(data.get('subdomain_id', None))
+		scan_history = safe_int_cast(data.get('scan_history_id', None))
+		domain_id = safe_int_cast(data.get('domain_id', None))
 		response = {}
 		response['status'] = False
 
@@ -669,24 +800,23 @@ class DeleteMultipleRows(APIView):
 	def post(self, request):
 		req = self.request
 		data = req.data
-
+		subscan_ids = get_data_from_post_request(request, 'rows')
 		try:
 			if data['type'] == 'subscan':
-				for row in data['rows']:
-					SubScan.objects.get(id=row).delete()
-			response = True
+				subscan_ids = [int(id) for id in subscan_ids]
+				SubScan.objects.filter(id__in=subscan_ids).delete()
+				return Response({'status': True})
+		except ValueError:
+			return Response({'status': False, 'message': 'Invalid subscan ID provided'}, status=400)
 		except Exception as e:
-			response = False
-
-		return Response({'status': response})
-
+			return Response({'status': False, 'message': logger.debug(e)}, status=500)
 
 class StopScan(APIView):
 	def post(self, request):
 		req = self.request
 		data = req.data
-		scan_id = data.get('scan_id')
-		subscan_id = data.get('subscan_id')
+		scan_id = safe_int_cast(data.get('scan_id'))
+		subscan_id = safe_int_cast(data.get('subscan_id'))
 		response = {}
 		task_ids = []
 		scan = None
@@ -713,6 +843,7 @@ class StopScan(APIView):
 				task_ids = scan.celery_ids
 				scan.scan_status = ABORTED_TASK
 				scan.stop_scan_date = timezone.now()
+				scan.aborted_by = request.user
 				scan.save()
 				create_scan_activity(
 					scan.id,
@@ -746,12 +877,21 @@ class StopScan(APIView):
 
 
 class InitiateSubTask(APIView):
+	parser_classes = [JSONParser]
+
 	def post(self, request):
-		req = self.request
-		data = req.data
-		engine_id = data.get('engine_id')
-		scan_types = data['tasks']
-		for subdomain_id in data['subdomain_ids']:
+		data = request.data
+		engine_id = safe_int_cast(data.get('engine_id'))
+		scan_types = data.get('tasks', [])
+		subdomain_ids = safe_int_cast(data.get('subdomain_ids', []))
+		
+		if not scan_types or not subdomain_ids:
+			return Response({'status': False, 'error': 'Missing tasks or subdomain_ids'}, status=400)
+
+		if isinstance(subdomain_ids, int):
+			subdomain_ids = [subdomain_ids]
+
+		for subdomain_id in subdomain_ids:
 			logger.info(f'Running subscans {scan_types} on subdomain "{subdomain_id}" ...')
 			for stype in scan_types:
 				ctx = {
@@ -766,19 +906,32 @@ class InitiateSubTask(APIView):
 
 class DeleteSubdomain(APIView):
 	def post(self, request):
-		req = self.request
-		for id in req.data['subdomain_ids']:
-			Subdomain.objects.get(id=id).delete()
-		return Response({'status': True})
-
+		subdomain_ids = get_data_from_post_request(request, 'subdomain_ids')
+		try:
+			subdomain_ids = [int(id) for id in subdomain_ids]
+			Subdomain.objects.filter(id__in=subdomain_ids).delete()
+			return Response({'status': True})
+		except ValueError:
+			return Response({'status': False, 'message': 'Invalid subdomain ID provided'}, status=400)
+		except Exception as e:
+			return Response({'status': False, 'message': logger.debug(e)}, status=500)
 
 class DeleteVulnerability(APIView):
 	def post(self, request):
-		req = self.request
-		for id in req.data['vulnerability_ids']:
-			Vulnerability.objects.get(id=id).delete()
-		return Response({'status': True})
+		vulnerability_ids = get_data_from_post_request(request, 'vulnerability_ids')
 
+		# Check if vulnerability_ids is iterable
+		if not isinstance(vulnerability_ids, (list, tuple)):
+			return Response({'status': False, 'message': 'vulnerability_ids must be a list or tuple'}, status=400)
+
+		try:
+			# Convert to integers
+			vulnerability_ids = [int(id) for id in vulnerability_ids]
+			# Delete vulnerabilities
+			Vulnerability.objects.filter(id__in=vulnerability_ids).delete()
+			return Response({'status': True})
+		except ValueError:
+			return Response({'status': False, 'message': 'Invalid vulnerability ID provided'}, status=400)
 
 class ListInterestingKeywords(APIView):
 	def get(self, request, format=None):
@@ -804,8 +957,8 @@ class RengineUpdateCheck(APIView):
 		
 		# for consistency remove v from both if exists
 		latest_version = re.search(r'v(\d+\.)?(\d+\.)?(\*|\d+)',
-								   ((response[0]['name'
-								   ])[1:] if response[0]['name'][0] == 'v'
+								((response[0]['name'
+								])[1:] if response[0]['name'][0] == 'v'
 									else response[0]['name']))
 
 		latest_version = latest_version.group(0) if latest_version else None
@@ -831,7 +984,7 @@ class RengineUpdateCheck(APIView):
 class UninstallTool(APIView):
 	def get(self, request):
 		req = self.request
-		tool_id = req.query_params.get('tool_id')
+		tool_id = safe_int_cast(req.query_params.get('tool_id'))
 		tool_name = req.query_params.get('name')
 
 		if tool_id:
@@ -869,7 +1022,7 @@ class UninstallTool(APIView):
 class UpdateTool(APIView):
 	def get(self, request):
 		req = self.request
-		tool_id = req.query_params.get('tool_id')
+		tool_id = safe_int_cast(req.query_params.get('tool_id'))
 		tool_name = req.query_params.get('name')
 
 		if tool_id:
@@ -887,7 +1040,7 @@ class UpdateTool(APIView):
 		elif update_command == 'git pull':
 			tool_name = tool.install_command[:-1] if tool.install_command[-1] == '/' else tool.install_command
 			tool_name = tool_name.split('/')[-1]
-			update_command = 'cd /usr/src/github/' + tool_name + ' && git pull && cd -'
+			update_command = 'cd ' + str(Path(RENGINE_TOOL_GITHUB_PATH) / tool_name) + ' && git pull && cd -'
 
 		run_command(update_command)
 		run_command.apply_async(args=(update_command,))
@@ -898,7 +1051,7 @@ class GetExternalToolCurrentVersion(APIView):
 	def get(self, request):
 		req = self.request
 		# toolname is also the command
-		tool_id = req.query_params.get('tool_id')
+		tool_id = safe_int_cast(req.query_params.get('tool_id'))
 		tool_name = req.query_params.get('name')
 		# can supply either tool id or tool_name
 
@@ -930,7 +1083,7 @@ class GithubToolCheckGetLatestRelease(APIView):
 	def get(self, request):
 		req = self.request
 
-		tool_id = req.query_params.get('tool_id')
+		tool_id = safe_int_cast(req.query_params.get('tool_id'))
 		tool_name = req.query_params.get('name')
 
 		if not InstalledExternalTool.objects.filter(id=tool_id).exists():
@@ -947,7 +1100,7 @@ class GithubToolCheckGetLatestRelease(APIView):
 		# if tool_github_url has https://github.com/ remove and also remove trailing /
 		tool_github_url = tool.github_url.replace('http://github.com/', '').replace('https://github.com/', '')
 		tool_github_url = remove_lead_and_trail_slash(tool_github_url)
-		github_api = 'https://api.github.com/repos/{}/releases'.format(tool_github_url)
+		github_api = f'https://api.github.com/repos/{tool_github_url}/releases'
 		response = requests.get(github_api).json()
 		# check if api rate limit exceeded
 		if 'message' in response and response['message'] == 'RateLimited':
@@ -956,7 +1109,7 @@ class GithubToolCheckGetLatestRelease(APIView):
 			return Response({'status': False, 'message': 'Not Found'})
 		elif not response:
 			return Response({'status': False, 'message': 'Not Found'})
-		
+
 		# only send latest release
 		response = response[0]
 
@@ -1060,59 +1213,27 @@ class DomainIPHistory(APIView):
 
 class CMSDetector(APIView):
 	def get(self, request):
-		req = self.request
-		url = req.query_params.get('url')
-		#save_db = True if 'save_db' in req.query_params else False
-		response = {'status': False}
+		url = request.query_params.get('url')
+		if not url:
+			return Response({'status': False, 'message': 'URL parameter is missing'})
+
 		try:
-			# response = get_cms_details(url)
-			response = {}
-			cms_detector_command = f'python3 /usr/src/github/CMSeeK/cmseek.py'
-			cms_detector_command += ' --random-agent --batch --follow-redirect'
-			cms_detector_command += f' -u {url}'
+			task = run_cmseek.delay(url)
+			result = task.get(timeout=300)  # 5 minutes timeout
 
-			_, output = run_command(cms_detector_command, remove_ansi_sequence=True)
-
-			response['message'] = 'Could not detect CMS!'
-
-			parsed_url = urlparse(url)
-
-			domain_name = parsed_url.hostname
-			port = parsed_url.port
-
-			find_dir = domain_name
-
-			if port:
-				find_dir += '_{}'.format(port)
-			# look for result path in output
-			path_regex = r"Result: (\/usr\/src[^\"\s]*)"
-			match = re.search(path_regex, output)
-			if match:
-				cms_json_path = match.group(1)
-				if os.path.isfile(cms_json_path):
-					cms_file_content = json.loads(open(cms_json_path, 'r').read())
-					if not cms_file_content.get('cms_id'):
-						return response
-					response = {}
-					response = cms_file_content
-					response['status'] = True
-					try:
-						# remove results
-						cms_dir_path = os.path.dirname(cms_json_path)
-						shutil.rmtree(cms_dir_path)
-					except Exception as e:
-						logger.error(e)
-					return Response(response)
-			return Response(response)
+			if result['status']:
+				return Response(result)
+			else:
+				return Response({'status': False, 'message': 'Could not detect CMS!'})
 		except Exception as e:
-			response = {'status': False, 'message': str(e)}
-			return Response(response)
-
+			logger.error(f"Error in CMSDetector: {str(e)}")
+			return Response({'status': False, 'message': 'An unexpected error occurred.'}, status=500)
 
 class IPToDomain(APIView):
 	def get(self, request):
 		req = self.request
 		ip_address = req.query_params.get('ip_address')
+		response = {}
 		if not ip_address:
 			return Response({
 				'status': False,
@@ -1120,27 +1241,29 @@ class IPToDomain(APIView):
 			})
 		try:
 			logger.info(f'Resolving IP address {ip_address} ...')
-			domain, domains, ips = socket.gethostbyaddr(ip_address)
+			resolved_ips = []
+			for ip in IPv4Network(ip_address, False):
+				domains = []
+				ips = []
+				try:
+					(domain, domains, ips) = socket.gethostbyaddr(str(ip))
+				except socket.herror:
+					logger.info(f'No PTR record for {ip_address}')
+					domain = str(ip)
+				if domain not in domains:
+					domains.append(domain)
+				resolved_ips.append({'ip': str(ip),'domain': domain, 'domains': domains, 'ips': ips})
 			response = {
 				'status': True,
-				'ip_address': ip_address,
-				'domains': domains or [domain],
-				'resolves_to': domain
-			}
-		except socket.herror: # ip does not have a PTR record
-			logger.info(f'No PTR record for {ip_address}')
-			response = {
-				'status': True,
-				'ip_address': ip_address,
-				'domains': [ip_address],
-				'resolves_to': ip_address
+				'orig': ip_address,
+				'ip_address': resolved_ips,
 			}
 		except Exception as e:
 			logger.exception(e)
 			response = {
 				'status': False,
 				'ip_address': ip_address,
-				'message': 'Exception {}'.format(e)
+				'message': f'Exception {e}'
 			}
 		finally:
 			return Response(response)
@@ -1149,7 +1272,7 @@ class IPToDomain(APIView):
 class VulnerabilityReport(APIView):
 	def get(self, request):
 		req = self.request
-		vulnerability_id = req.query_params.get('vulnerability_id')
+		vulnerability_id = safe_int_cast(req.query_params.get('vulnerability_id'))
 		return Response({"status": send_hackerone_report(vulnerability_id)})
 
 
@@ -1162,60 +1285,61 @@ class GetFileContents(APIView):
 		response['status'] = False
 
 		if 'nuclei_config' in req.query_params:
-			path = "/root/.config/nuclei/config.yaml"
+			path = str(Path.home() / ".config" / "nuclei" / "config.yaml")
 			if not os.path.exists(path):
 				run_command(f'touch {path}')
 				response['message'] = 'File Created!'
-			f = open(path, "r")
-			response['status'] = True
-			response['content'] = f.read()
+			with open(path, "r") as f:
+				response['status'] = True
+				response['content'] = f.read()
 			return Response(response)
 
 		if 'subfinder_config' in req.query_params:
-			path = "/root/.config/subfinder/config.yaml"
+			path = str(Path.home() / ".config" / "subfinder" / "config.yaml")
 			if not os.path.exists(path):
 				run_command(f'touch {path}')
 				response['message'] = 'File Created!'
-			f = open(path, "r")
-			response['status'] = True
-			response['content'] = f.read()
+			with open(path, "r") as f:
+				response['status'] = True
+				response['content'] = f.read()
 			return Response(response)
 
 		if 'naabu_config' in req.query_params:
-			path = "/root/.config/naabu/config.yaml"
+			path = str(Path.home() / ".config" / "naabu" / "config.yaml")
 			if not os.path.exists(path):
 				run_command(f'touch {path}')
 				response['message'] = 'File Created!'
-			f = open(path, "r")
-			response['status'] = True
-			response['content'] = f.read()
+			with open(path, "r") as f:
+				response['status'] = True
+				response['content'] = f.read()
 			return Response(response)
 
 		if 'theharvester_config' in req.query_params:
-			path = "/usr/src/github/theHarvester/api-keys.yaml"
+			path = str(Path.home() / ".config" / 'theHarvester' / 'api-keys.yaml')
 			if not os.path.exists(path):
 				run_command(f'touch {path}')
 				response['message'] = 'File Created!'
-			f = open(path, "r")
-			response['status'] = True
-			response['content'] = f.read()
+			with open(path, "r") as f:
+				response['status'] = True
+				response['content'] = f.read()
 			return Response(response)
 
 		if 'amass_config' in req.query_params:
-			path = "/root/.config/amass.ini"
+			path = str(Path.home() / ".config" / "amass.ini")
 			if not os.path.exists(path):
 				run_command(f'touch {path}')
 				response['message'] = 'File Created!'
-			f = open(path, "r")
-			response['status'] = True
-			response['content'] = f.read()
+			with open(path, "r") as f:
+				response['status'] = True
+				response['content'] = f.read()
 			return Response(response)
 
 		if 'gf_pattern' in req.query_params:
-			basedir = '/root/.gf'
-			path = f'/root/.gf/{name}.json'
+			basedir = str(Path.home() / '.gf')
+			path = str(Path.home() / '.gf' / f'{name}.json')
 			if is_safe_path(basedir, path) and os.path.exists(path):
-				content = open(path, "r").read()
+				with open(path, "r") as f:
+					content = f.read()
 				response['status'] = True
 				response['content'] = content
 			else:
@@ -1225,10 +1349,11 @@ class GetFileContents(APIView):
 
 
 		if 'nuclei_template' in req.query_params:
-			safe_dir = '/root/nuclei-templates'
-			path = f'/root/nuclei-templates/{name}'
+			safe_dir = str(Path.home() / 'nuclei-templates')
+			path = str(Path.home() / 'nuclei-templates' / f'{name}')
 			if is_safe_path(safe_dir, path) and os.path.exists(path):
-				content = open(path.format(name), "r").read()
+				with open(path.format(name), "r") as f:
+					content = f.read()
 				response['status'] = True
 				response['content'] = content
 			else:
@@ -1236,21 +1361,44 @@ class GetFileContents(APIView):
 				response['status'] = False
 			return Response(response)
 
+		if 'gau_config' in req.query_params:
+			path = str(Path.home() / ".config" / '.gau.toml')
+			if not os.path.exists(path):
+				run_command(f'touch {path}')
+				response['message'] = 'File Created!'
+			with open(path, "r") as f:
+				response['status'] = True
+				response['content'] = f.read()
+			return Response(response)
+
 		response['message'] = 'Invalid Query Params'
 		return Response(response)
 
+class GfList(APIView):
+	def get(self, request):
+		try:
+			task = run_gf_list.delay()
+			result = task.get(timeout=30)  # 30 seconds timeout
+
+			if result['status']:
+				return Response(result['output'])
+			else:
+				return Response({'error': result['message']}, status=500)
+		except Exception as e:
+			logger.error(f"Error in GfList: {str(e)}")  # Log the exception for internal tracking
+			return Response({'error': 'An unexpected error occurred. Please try again later.'}, status=500)
 
 class ListTodoNotes(APIView):
 	def get(self, request, format=None):
 		req = self.request
 		notes = TodoNote.objects.all().order_by('-id')
-		scan_id = req.query_params.get('scan_id')
+		scan_id = safe_int_cast(req.query_params.get('scan_id'))
 		project = req.query_params.get('project')
 		if project:
 			notes = notes.filter(project__slug=project)
-		target_id = req.query_params.get('target_id')
+		target_id = safe_int_cast(req.query_params.get('target_id'))
 		todo_id = req.query_params.get('todo_id')
-		subdomain_id = req.query_params.get('subdomain_id')
+		subdomain_id = safe_int_cast(req.query_params.get('subdomain_id'))
 		if target_id:
 			notes = notes.filter(scan_history__in=ScanHistory.objects.filter(domain__id=target_id))
 		elif scan_id:
@@ -1284,7 +1432,6 @@ class ListEngines(APIView):
 
 class ListOrganizations(APIView):
 	def get(self, request, format=None):
-		req = self.request
 		organizations = Organization.objects.all()
 		organization_serializer = OrganizationSerializer(organizations, many=True)
 		return Response({'organizations': organization_serializer.data})
@@ -1293,7 +1440,7 @@ class ListOrganizations(APIView):
 class ListTargetsInOrganization(APIView):
 	def get(self, request, format=None):
 		req = self.request
-		organization_id = req.query_params.get('organization_id')
+		organization_id = safe_int_cast(req.query_params.get('organization_id'))
 		organization = Organization.objects.filter(id=organization_id)
 		targets = Domain.objects.filter(domains__in=organization)
 		organization_serializer = OrganizationSerializer(organization, many=True)
@@ -1312,47 +1459,71 @@ class ListTargetsWithoutOrganization(APIView):
 class VisualiseData(APIView):
 	def get(self, request, format=None):
 		req = self.request
-		scan_id = req.query_params.get('scan_id')
-		if scan_id:
+		if scan_id := safe_int_cast(req.query_params.get('scan_id')):
 			mitch_data = ScanHistory.objects.filter(id=scan_id)
 			serializer = VisualiseDataSerializer(mitch_data, many=True)
-			return Response(serializer.data)
+			
+			# Data processing to remove duplicates
+			processed_data = self.process_visualisation_data(serializer.data)
+			
+			return Response(processed_data)
 		else:
 			return Response()
 
+	def process_visualisation_data(self, data):
+		if not data:
+			return []
+
+		processed_data = data[0]  # Assuming there's only one element in data
+		subdomains = processed_data.get('subdomains', [])
+
+		# Use a dictionary to group vulnerabilities by subdomain
+		vuln_by_subdomain = defaultdict(list)
+
+		for subdomain in subdomains:
+			subdomain_name = subdomain['name']
+			vulnerabilities = subdomain.get('vulnerabilities', [])
+
+			# Group unique vulnerabilities
+			unique_vulns = {}
+			for vuln in vulnerabilities:
+				vuln_key = (vuln['name'], vuln['severity'])
+				if vuln_key not in unique_vulns:
+					unique_vulns[vuln_key] = vuln
+
+			vuln_by_subdomain[subdomain_name].extend(unique_vulns.values())
+
+		# Update subdomains with unique vulnerabilities
+		for subdomain in subdomains:
+			subdomain['vulnerabilities'] = vuln_by_subdomain[subdomain['name']]
+
+		return processed_data
 
 class ListTechnology(APIView):
 	def get(self, request, format=None):
 		req = self.request
-		scan_id = req.query_params.get('scan_id')
-		target_id = req.query_params.get('target_id')
+		scan_id = safe_int_cast(req.query_params.get('scan_id'))
 
-		if target_id:
-			tech = Technology.objects.filter(
-				technologies__in=Subdomain.objects.filter(
-					target_domain__id=target_id)).annotate(
-				count=Count('name')).order_by('-count')
-			serializer = TechnologyCountSerializer(tech, many=True)
-			return Response({"technologies": serializer.data})
+		# Determine the queryset based on the presence of target_id or scan_id
+		if target_id := safe_int_cast(req.query_params.get('target_id')):
+			subdomain_filter = Subdomain.objects.filter(target_domain__id=target_id)
 		elif scan_id:
-			tech = Technology.objects.filter(
-				technologies__in=Subdomain.objects.filter(
-					scan_history__id=scan_id)).annotate(
-				count=Count('name')).order_by('-count')
-			serializer = TechnologyCountSerializer(tech, many=True)
-			return Response({"technologies": serializer.data})
+			subdomain_filter = Subdomain.objects.filter(scan_history__id=scan_id)
 		else:
-			tech = Technology.objects.filter(
-				technologies__in=Subdomain.objects.all()).annotate(
-				count=Count('name')).order_by('-count')
-			serializer = TechnologyCountSerializer(tech, many=True)
-			return Response({"technologies": serializer.data})
+			subdomain_filter = Subdomain.objects.all()
+
+		# Fetch technologies and serialize the results
+		tech = Technology.objects.filter(technologies__in=subdomain_filter).annotate(
+			count=Count('name')).order_by('-count')
+		serializer = TechnologyCountSerializer(tech, many=True)
+
+		return Response({"technologies": serializer.data})
 
 
 class ListDorkTypes(APIView):
 	def get(self, request, format=None):
 		req = self.request
-		scan_id = req.query_params.get('scan_id')
+		scan_id = safe_int_cast(req.query_params.get('scan_id'))
 		if scan_id:
 			dork = Dork.objects.filter(
 				dorks__in=ScanHistory.objects.filter(id=scan_id)
@@ -1370,7 +1541,7 @@ class ListDorkTypes(APIView):
 class ListEmails(APIView):
 	def get(self, request, format=None):
 		req = self.request
-		scan_id = req.query_params.get('scan_id')
+		scan_id = safe_int_cast(req.query_params.get('scan_id'))
 		if scan_id:
 			email = Email.objects.filter(
 				emails__in=ScanHistory.objects.filter(id=scan_id)).order_by('password')
@@ -1381,7 +1552,7 @@ class ListEmails(APIView):
 class ListDorks(APIView):
 	def get(self, request, format=None):
 		req = self.request
-		scan_id = req.query_params.get('scan_id')
+		scan_id = safe_int_cast(req.query_params.get('scan_id'))
 		type = req.query_params.get('type')
 		if scan_id:
 			dork = Dork.objects.filter(
@@ -1404,7 +1575,7 @@ class ListDorks(APIView):
 class ListEmployees(APIView):
 	def get(self, request, format=None):
 		req = self.request
-		scan_id = req.query_params.get('scan_id')
+		scan_id = safe_int_cast(req.query_params.get('scan_id'))
 		if scan_id:
 			employee = Employee.objects.filter(
 				employees__in=ScanHistory.objects.filter(id=scan_id))
@@ -1415,8 +1586,8 @@ class ListEmployees(APIView):
 class ListPorts(APIView):
 	def get(self, request, format=None):
 		req = self.request
-		scan_id = req.query_params.get('scan_id')
-		target_id = req.query_params.get('target_id')
+		scan_id = safe_int_cast(req.query_params.get('scan_id'))
+		target_id = safe_int_cast(req.query_params.get('target_id'))
 		ip_address = req.query_params.get('ip_address')
 
 		if target_id:
@@ -1444,9 +1615,9 @@ class ListPorts(APIView):
 class ListSubdomains(APIView):
 	def get(self, request, format=None):
 		req = self.request
-		scan_id = req.query_params.get('scan_id')
+		scan_id = safe_int_cast(req.query_params.get('scan_id'))
 		project = req.query_params.get('project')
-		target_id = req.query_params.get('target_id')
+		target_id = safe_int_cast(req.query_params.get('target_id'))
 		ip_address = req.query_params.get('ip_address')
 		port = req.query_params.get('port')
 		tech = req.query_params.get('tech')
@@ -1503,7 +1674,7 @@ class ListSubdomains(APIView):
 class ListOsintUsers(APIView):
 	def get(self, request, format=None):
 		req = self.request
-		scan_id = req.query_params.get('scan_id')
+		scan_id = safe_int_cast(req.query_params.get('scan_id'))
 		if scan_id:
 			documents = MetaFinderDocument.objects.filter(scan_history__id=scan_id).exclude(author__isnull=True).values('author').distinct()
 			serializer = MetafinderUserSerializer(documents, many=True)
@@ -1513,7 +1684,7 @@ class ListOsintUsers(APIView):
 class ListMetadata(APIView):
 	def get(self, request, format=None):
 		req = self.request
-		scan_id = req.query_params.get('scan_id')
+		scan_id = safe_int_cast(req.query_params.get('scan_id'))
 		if scan_id:
 			documents = MetaFinderDocument.objects.filter(scan_history__id=scan_id).distinct()
 			serializer = MetafinderDocumentSerializer(documents, many=True)
@@ -1523,8 +1694,8 @@ class ListMetadata(APIView):
 class ListIPs(APIView):
 	def get(self, request, format=None):
 		req = self.request
-		scan_id = req.query_params.get('scan_id')
-		target_id = req.query_params.get('target_id')
+		scan_id = safe_int_cast(req.query_params.get('scan_id'))
+		target_id = safe_int_cast(req.query_params.get('target_id'))
 
 		port = req.query_params.get('port')
 
@@ -1553,10 +1724,11 @@ class ListIPs(APIView):
 class IpAddressViewSet(viewsets.ModelViewSet):
 	queryset = Subdomain.objects.none()
 	serializer_class = IpSubdomainSerializer
+	ordering = ('name',)
 
 	def get_queryset(self):
 		req = self.request
-		scan_id = req.query_params.get('scan_id')
+		scan_id = safe_int_cast(req.query_params.get('scan_id'))
 
 		if scan_id:
 			self.queryset = Subdomain.objects.filter(
@@ -1571,16 +1743,17 @@ class IpAddressViewSet(viewsets.ModelViewSet):
 		if 'no_page' in self.request.query_params:
 			return None
 		return self.paginator.paginate_queryset(
-			queryset, self.request, view=self)
+			queryset.order_by(*self.ordering), self.request, view=self)
 
 
 class SubdomainsViewSet(viewsets.ModelViewSet):
 	queryset = Subdomain.objects.none()
 	serializer_class = SubdomainSerializer
+	ordering = ('name',)
 
 	def get_queryset(self):
 		req = self.request
-		scan_id = req.query_params.get('scan_id')
+		scan_id = safe_int_cast(req.query_params.get('scan_id'))
 		if scan_id:
 			if 'only_screenshot' in self.request.query_params:
 				return (
@@ -1593,7 +1766,7 @@ class SubdomainsViewSet(viewsets.ModelViewSet):
 		if 'no_page' in self.request.query_params:
 			return None
 		return self.paginator.paginate_queryset(
-			queryset, self.request, view=self)
+			queryset.order_by(*self.ordering), self.request, view=self)
 
 
 class SubdomainChangesViewSet(viewsets.ModelViewSet):
@@ -1605,12 +1778,13 @@ class SubdomainChangesViewSet(viewsets.ModelViewSet):
 	'''
 	queryset = Subdomain.objects.none()
 	serializer_class = SubdomainChangesSerializer
+	ordering = ('name',)
 
 	def get_queryset(self):
 		req = self.request
-		scan_id = req.query_params.get('scan_id')
+		scan_id = safe_int_cast(req.query_params.get('scan_id'))
 		changes = req.query_params.get('changes')
-		domain_id = ScanHistory.objects.filter(id=scan_id)[0].domain.id
+		domain_id = safe_int_cast(ScanHistory.objects.filter(id=safe_int_cast(scan_id)).first().domain.id)
 		scan_history_query = (
 			ScanHistory.objects
 			.filter(domain=domain_id)
@@ -1675,7 +1849,7 @@ class SubdomainChangesViewSet(viewsets.ModelViewSet):
 		if 'no_page' in self.request.query_params:
 			return None
 		return self.paginator.paginate_queryset(
-			queryset, self.request, view=self)
+			queryset.order_by(*self.ordering), self.request, view=self)
 
 
 class EndPointChangesViewSet(viewsets.ModelViewSet):
@@ -1684,12 +1858,13 @@ class EndPointChangesViewSet(viewsets.ModelViewSet):
 	'''
 	queryset = EndPoint.objects.none()
 	serializer_class = EndPointChangesSerializer
+	ordering = ('http_url',)
 
 	def get_queryset(self):
 		req = self.request
-		scan_id = req.query_params.get('scan_id')
+		scan_id = safe_int_cast(req.query_params.get('scan_id'))
 		changes = req.query_params.get('changes')
-		domain_id = ScanHistory.objects.filter(id=scan_id).first().domain.id
+		domain_id = safe_int_cast(ScanHistory.objects.filter(id=scan_id).first().domain.id)
 		scan_history = (
 			ScanHistory.objects
 			.filter(domain=domain_id)
@@ -1746,17 +1921,18 @@ class EndPointChangesViewSet(viewsets.ModelViewSet):
 		if 'no_page' in self.request.query_params:
 			return None
 		return self.paginator.paginate_queryset(
-			queryset, self.request, view=self)
+			queryset.order_by(*self.ordering), self.request, view=self)
 
 
 class InterestingSubdomainViewSet(viewsets.ModelViewSet):
 	queryset = Subdomain.objects.none()
 	serializer_class = SubdomainSerializer
+	ordering = ('name',)
 
 	def get_queryset(self):
 		req = self.request
-		scan_id = req.query_params.get('scan_id')
-		domain_id = req.query_params.get('target_id')
+		scan_id = safe_int_cast(req.query_params.get('scan_id'))
+		domain_id = safe_int_cast(req.query_params.get('target_id'))
 
 		if 'only_subdomains' in self.request.query_params:
 			self.serializer_class = InterestingSubdomainSerializer
@@ -1786,7 +1962,7 @@ class InterestingSubdomainViewSet(viewsets.ModelViewSet):
 			order_col = 'content_length'
 
 		if _order_direction == 'desc':
-			order_col = '-{}'.format(order_col)
+			order_col = f'-{order_col}'
 
 		if search_value:
 			qs = self.queryset.filter(
@@ -1800,17 +1976,19 @@ class InterestingSubdomainViewSet(viewsets.ModelViewSet):
 		if 'no_page' in self.request.query_params:
 			return None
 		return self.paginator.paginate_queryset(
-			queryset, self.request, view=self)
+			queryset.order_by(*self.ordering), self.request, view=self)
 
 
 class InterestingEndpointViewSet(viewsets.ModelViewSet):
 	queryset = EndPoint.objects.none()
 	serializer_class = EndpointSerializer
+	ordering = ('http_url',)
 
 	def get_queryset(self):
 		req = self.request
-		scan_id = req.query_params.get('scan_id')
-		target_id = req.query_params.get('target_id')
+		scan_id = safe_int_cast(req.query_params.get('scan_id'))
+		target_id = safe_int_cast(req.query_params.get('target_id'))
+
 		if 'only_endpoints' in self.request.query_params:
 			self.serializer_class = InterestingEndPointSerializer
 		if scan_id:
@@ -1824,7 +2002,7 @@ class InterestingEndpointViewSet(viewsets.ModelViewSet):
 		if 'no_page' in self.request.query_params:
 			return None
 		return self.paginator.paginate_queryset(
-			queryset, self.request, view=self)
+			queryset.order_by(*self.ordering), self.request, view=self)
 
 
 class SubdomainDatatableViewSet(viewsets.ModelViewSet):
@@ -1833,14 +2011,17 @@ class SubdomainDatatableViewSet(viewsets.ModelViewSet):
 
 	def get_queryset(self):
 		req = self.request
-		scan_id = req.query_params.get('scan_id')
-		target_id = req.query_params.get('target_id')
+		scan_id = safe_int_cast(req.query_params.get('scan_id'))
+		target_id = safe_int_cast(req.query_params.get('target_id'))
 		url_query = req.query_params.get('query_param')
 		ip_address = req.query_params.get('ip_address')
 		name = req.query_params.get('name')
 		project = req.query_params.get('project')
 
 		subdomains = Subdomain.objects.filter(target_domain__project__slug=project)
+
+		if 'is_important' in req.query_params:
+			subdomains = subdomains.filter(is_important=True)
 
 		if target_id:
 			self.queryset = (
@@ -1893,7 +2074,7 @@ class SubdomainDatatableViewSet(viewsets.ModelViewSet):
 		elif _order_col == '10':
 			order_col = 'response_time'
 		if _order_direction == 'desc':
-			order_col = '-{}'.format(order_col)
+			order_col = f'-{order_col}'
 		# if the search query is separated by = means, it is a specific lookup
 		# divide the search query into two half and lookup
 		if search_value:
@@ -2086,8 +2267,8 @@ class ListActivityLogsViewSet(viewsets.ModelViewSet):
 	queryset = Command.objects.none()
 	def get_queryset(self):
 		req = self.request
-		activity_id = req.query_params.get('activity_id')
-		self.queryset = Command.objects.filter(activity__id=activity_id)
+		activity_id = safe_int_cast(req.query_params.get('activity_id'))
+		self.queryset = Command.objects.filter(activity__id=activity_id).order_by('id')
 		return self.queryset
 
 
@@ -2096,8 +2277,8 @@ class ListScanLogsViewSet(viewsets.ModelViewSet):
 	queryset = Command.objects.none()
 	def get_queryset(self):
 		req = self.request
-		scan_id = req.query_params.get('scan_id')
-		self.queryset = Command.objects.filter(scan_history__id=scan_id)
+		scan_id = safe_int_cast(req.query_params.get('scan_id'))
+		self.queryset = Command.objects.filter(scan_history__id=scan_id).order_by('id')
 		return self.queryset
 
 
@@ -2105,8 +2286,8 @@ class ListEndpoints(APIView):
 	def get(self, request, format=None):
 		req = self.request
 
-		scan_id = req.query_params.get('scan_id')
-		target_id = req.query_params.get('target_id')
+		scan_id = safe_int_cast(req.query_params.get('scan_id'))
+		target_id = safe_int_cast(req.query_params.get('target_id'))
 		subdomain_name = req.query_params.get('subdomain_name')
 		pattern = req.query_params.get('pattern')
 
@@ -2146,10 +2327,10 @@ class EndPointViewSet(viewsets.ModelViewSet):
 	def get_queryset(self):
 		req = self.request
 
-		scan_id = req.query_params.get('scan_history')
-		target_id = req.query_params.get('target_id')
+		scan_id = safe_int_cast(req.query_params.get('scan_history'))
+		target_id = safe_int_cast(req.query_params.get('target_id'))
 		url_query = req.query_params.get('query_param')
-		subdomain_id = req.query_params.get('subdomain_id')
+		subdomain_id = safe_int_cast(req.query_params.get('subdomain_id'))
 		project = req.query_params.get('project')
 
 		endpoints_obj = EndPoint.objects.filter(scan_history__domain__project__slug=project)
@@ -2162,15 +2343,17 @@ class EndPointViewSet(viewsets.ModelViewSet):
 				endpoints_obj
 				.filter(scan_history__id=scan_id)
 				.distinct()
+				.order_by('id')
 			)
 		else:
-			endpoints = endpoints_obj.distinct()
+			endpoints = endpoints_obj.distinct().order_by('id')
 
 		if url_query:
 			endpoints = (
 				endpoints
 				.filter(Q(target_domain__name=url_query))
 				.distinct()
+				.order_by('id')
 			)
 
 		if gf_tag:
@@ -2223,7 +2406,7 @@ class EndPointViewSet(viewsets.ModelViewSet):
 			elif _order_col == '9':
 				order_col = 'response_time'
 			if _order_direction == 'desc':
-				order_col = '-{}'.format(order_col)
+				order_col = f'-{order_col}'
 			# if the search query is separated by = means, it is a specific lookup
 			# divide the search query into two half and lookup
 			if '=' in search_value or '&' in search_value or '|' in search_value or '>' in search_value or '<' in search_value or '!' in search_value:
@@ -2248,13 +2431,13 @@ class EndPointViewSet(viewsets.ModelViewSet):
 	def general_lookup(self, search_value):
 		return \
 			self.queryset.filter(Q(http_url__icontains=search_value) |
-								 Q(page_title__icontains=search_value) |
-								 Q(http_status__icontains=search_value) |
-								 Q(content_type__icontains=search_value) |
-								 Q(webserver__icontains=search_value) |
-								 Q(techs__name__icontains=search_value) |
-								 Q(content_type__icontains=search_value) |
-								 Q(matched_gf_patterns__icontains=search_value))
+								Q(page_title__icontains=search_value) |
+								Q(http_status__icontains=search_value) |
+								Q(content_type__icontains=search_value) |
+								Q(webserver__icontains=search_value) |
+								Q(techs__name__icontains=search_value) |
+								Q(content_type__icontains=search_value) |
+								Q(matched_gf_patterns__icontains=search_value))
 
 	def special_lookup(self, search_value):
 		qs = self.queryset.filter()
@@ -2381,34 +2564,43 @@ class EndPointViewSet(viewsets.ModelViewSet):
 					print(e)
 		return qs
 
-
 class DirectoryViewSet(viewsets.ModelViewSet):
-	queryset = DirectoryFile.objects.none()
-	serializer_class = DirectoryFileSerializer
+    queryset = DirectoryFile.objects.none()
+    serializer_class = DirectoryFileSerializer
+
+    def get_queryset(self):
+        req = self.request
+        scan_id = safe_int_cast(req.query_params.get('scan_history'))
+        subdomain_id = safe_int_cast(req.query_params.get('subdomain_id'))
+
+        if not (scan_id or subdomain_id):
+            return Response({
+                'status': False,
+                'message': 'Scan id or subdomain id must be provided.'
+            })
+
+        subdomains = Subdomain.objects.filter(scan_history__id=scan_id) if scan_id else \
+                     Subdomain.objects.filter(id=subdomain_id)
+        dirs_scans = DirectoryScan.objects.filter(directories__in=subdomains)
+
+        return DirectoryFile.objects.filter(directory_files__in=dirs_scans) \
+            .distinct() \
+            .order_by('id')
+
+class ProjectViewSet(viewsets.ModelViewSet):
+	serializer_class = ProjectSerializer
+	permission_classes = [IsAuthenticated]
 
 	def get_queryset(self):
-		req = self.request
-		scan_id = req.query_params.get('scan_history')
-		subdomain_id = req.query_params.get('subdomain_id')
-		subdomains = None
-		if not (scan_id or subdomain_id):
-			return Response({
-				'status': False,
-				'message': 'Scan id or subdomain id must be provided.'
-			})
-		elif scan_id:
-			subdomains = Subdomain.objects.filter(scan_history__id=scan_id)
-		elif subdomain_id:
-			subdomains = Subdomain.objects.filter(id=subdomain_id)
-		dirs_scans = DirectoryScan.objects.filter(directories__in=subdomains)
-		qs = (
-			DirectoryFile.objects
-			.filter(directory_files__in=dirs_scans)
-			.distinct()
-		)
-		self.queryset = qs
-		return self.queryset
+		return Project.objects.filter(user=self.request.user)
 
+	def perform_create(self, serializer):
+		serializer.save(user=self.request.user)
+
+	def perform_update(self, serializer):
+		if serializer.instance.user != self.request.user:
+			raise PermissionDenied("You don't have permission to modify this project.")
+		serializer.save()
 
 class VulnerabilityViewSet(viewsets.ModelViewSet):
 	queryset = Vulnerability.objects.none()
@@ -2416,11 +2608,11 @@ class VulnerabilityViewSet(viewsets.ModelViewSet):
 
 	def get_queryset(self):
 		req = self.request
-		scan_id = req.query_params.get('scan_history')
-		target_id = req.query_params.get('target_id')
+		scan_id = safe_int_cast(req.query_params.get('scan_history'))
+		target_id = safe_int_cast(req.query_params.get('target_id'))
 		domain = req.query_params.get('domain')
 		severity = req.query_params.get('severity')
-		subdomain_id = req.query_params.get('subdomain_id')
+		subdomain_id = safe_int_cast(req.query_params.get('subdomain_id'))
 		subdomain_name = req.query_params.get('subdomain')
 		vulnerability_name = req.query_params.get('vulnerability_name')
 		slug = self.request.GET.get('project', None)
@@ -2673,8 +2865,8 @@ class VulnerabilityViewSet(viewsets.ModelViewSet):
 				qs = (
 					self.queryset
 					.exclude(Q(description__icontains=lookup_content) |
-							 Q(template__icontains=lookup_content) |
-							 Q(extracted_results__icontains=lookup_content))
+							Q(template__icontains=lookup_content) |
+							Q(extracted_results__icontains=lookup_content))
 				)
 
 		elif '>' in search_value:

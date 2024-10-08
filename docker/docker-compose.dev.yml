@@ -1,0 +1,42 @@
+services:
+  db:
+    ports:
+      - "127.0.0.1:5432:5432"
+
+  redis:
+    ports:
+      - "127.0.0.1:6379:6379"
+
+  celery:
+    entrypoint: /entrypoint-dev.sh
+    environment:
+      - CELERY_DEBUG=1
+      - CELERY_REMOTE_DEBUG=0
+      - CELERY_REMOTE_DEBUG_PORT=5679
+    volumes:
+      - ./celery/entrypoint-dev.sh:/entrypoint-dev.sh:ro
+    ports:
+      - "127.0.0.1:5679:5679"
+
+  celery-beat:
+    entrypoint: /entrypoint-dev.sh
+    environment:
+      - CELERY_DEBUG=1
+    volumes:
+      - ./beat/entrypoint-dev.sh:/entrypoint-dev.sh:ro
+
+  web:
+    entrypoint: /entrypoint-dev.sh
+    environment:
+      - UI_DEBUG=1
+      - UI_REMOTE_DEBUG=0
+      - UI_REMOTE_DEBUG_PORT=5678
+    volumes:
+      - ./web/entrypoint-dev.sh:/entrypoint-dev.sh:ro
+    ports:
+      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:5678:5678"
+
+  ollama:
+    ports:
+      - "127.0.0.1:11434:11434"

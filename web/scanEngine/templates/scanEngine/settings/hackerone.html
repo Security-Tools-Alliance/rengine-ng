@@ -1,7 +1,7 @@
 {# DO NOT AUTO INDENT #}
 {% extends 'base/base.html' %}
 {% load static %}
-{% load custom_tags %}
+{% load custom_filters %}
 {% block title %}
 Hackerone Settings
 {% endblock title %}
@@ -116,7 +116,7 @@ function test_hackerone() {
     }
   }
   else{
-    const hackerone_api = 'testHackerone/';
+    const hackerone_api = '{% url 'testHackerone' %}';
     var username = $("#username").val();
     var api_key = $("#api_key").val();
     swal.queue([{

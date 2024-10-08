@@ -1,0 +1,155 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Build and Push Docker Image",
+            "type": "shell",
+            "command": "cd ./docker; docker buildx build -t ghcr.io/security-tools-alliance/rengine-ng:rengine-${image}-${version} -t ghcr.io/security-tools-alliance/rengine-ng:rengine-${image}-latest -f ./${image}/Dockerfile ./${image} && docker push ghcr.io/security-tools-alliance/rengine-ng:rengine-${image}-${version} && if [ \"${input:isLatest}\" = \"true\" ]; then docker push ghcr.io/security-tools-alliance/rengine-ng:rengine-${image}-latest; fi",
+            "problemMatcher": [],
+            "options": {
+              "env": {
+                "version": "${input:version}",
+                "image": "${input:image}"
+              }
+            }
+        },
+        {
+            "label": "Build All Docker Images",
+            "type": "shell",
+            "dependsOn": [
+                "Build CELERY",
+                "Build WEB",
+                "Build POSTGRES",
+                "Build REDIS",
+                "Build OLLAMA",
+                "Build CERTS",
+                "Build PROXY"
+            ],
+            "dependsOrder": "sequence",
+            "problemMatcher": []
+        },
+        {
+            "label": "Build and Push All Docker Images",
+            "type": "shell",
+            "dependsOn": [
+                "Build and Push CELERY",
+                "Build and Push WEB",
+                "Build and Push POSTGRES",
+                "Build and Push REDIS",
+                "Build and Push OLLAMA",
+                "Build and Push CERTS",
+                "Build and Push PROXY"
+            ],
+            "dependsOrder": "sequence",
+            "problemMatcher": []
+        },
+        {
+            "label": "Build CELERY",
+            "type": "shell",
+            "command": "cd ./docker; docker buildx build -t ghcr.io/security-tools-alliance/rengine-ng:rengine-celery-${input:globalVersion} -t ghcr.io/security-tools-alliance/rengine-ng:rengine-celery-latest -f ./celery/Dockerfile ./celery",
+            "problemMatcher": []
+        },
+        {
+            "label": "Build WEB",
+            "type": "shell",
+            "command": "cd ./docker; docker buildx build -t ghcr.io/security-tools-alliance/rengine-ng:rengine-web-${input:globalVersion} -t ghcr.io/security-tools-alliance/rengine-ng:rengine-web-latest -f ./web/Dockerfile ./web",
+            "problemMatcher": []
+        },
+        {
+            "label": "Build POSTGRES",
+            "type": "shell",
+            "command": "cd ./docker; docker buildx build -t ghcr.io/security-tools-alliance/rengine-ng:rengine-postgres-${input:globalVersion} -t ghcr.io/security-tools-alliance/rengine-ng:rengine-postgres-latest -f ./postgres/Dockerfile ./postgres",
+            "problemMatcher": []
+        },
+        {
+            "label": "Build REDIS",
+            "type": "shell",
+            "command": "cd ./docker; docker buildx build -t ghcr.io/security-tools-alliance/rengine-ng:rengine-redis-${input:globalVersion} -t ghcr.io/security-tools-alliance/rengine-ng:rengine-redis-latest -f ./redis/Dockerfile ./redis",
+            "problemMatcher": []
+        },
+        {
+            "label": "Build OLLAMA",
+            "type": "shell",
+            "command": "cd ./docker; docker buildx build -t ghcr.io/security-tools-alliance/rengine-ng:rengine-ollama-${input:globalVersion} -t ghcr.io/security-tools-alliance/rengine-ng:rengine-ollama-latest -f ./ollama/Dockerfile ./ollama",
+            "problemMatcher": []
+        },
+        {
+            "label": "Build CERTS",
+            "type": "shell",
+            "command": "cd ./docker; docker buildx build -t ghcr.io/security-tools-alliance/rengine-ng:rengine-certs-${input:globalVersion} -t ghcr.io/security-tools-alliance/rengine-ng:rengine-certs-latest -f ./certs/Dockerfile ./certs",
+            "problemMatcher": []
+        },
+        {
+            "label": "Build PROXY",
+            "type": "shell",
+            "command": "cd ./docker; docker buildx build -t ghcr.io/security-tools-alliance/rengine-ng:rengine-proxy-${input:globalVersion} -t ghcr.io/security-tools-alliance/rengine-ng:rengine-proxy-latest -f ./proxy/Dockerfile ./proxy",
+            "problemMatcher": []
+        },
+        {
+            "label": "Build and Push CELERY",
+            "type": "shell",
+            "command": "cd ./docker; docker buildx build -t ghcr.io/security-tools-alliance/rengine-ng:rengine-celery-${input:globalVersion} -t ghcr.io/security-tools-alliance/rengine-ng:rengine-celery-latest -f ./celery/Dockerfile ./celery && docker push ghcr.io/security-tools-alliance/rengine-ng:rengine-celery-${input:globalVersion} && if [ \"${input:isLatest}\" = \"true\" ]; then docker push ghcr.io/security-tools-alliance/rengine-ng:rengine-celery-latest; fi",
+            "problemMatcher": []
+        },
+        {
+            "label": "Build and Push WEB",
+            "type": "shell",
+            "command": "cd ./docker; docker buildx build -t ghcr.io/security-tools-alliance/rengine-ng:rengine-web-${input:globalVersion} -t ghcr.io/security-tools-alliance/rengine-ng:rengine-web-latest -f ./web/Dockerfile ./web && docker push ghcr.io/security-tools-alliance/rengine-ng:rengine-web-${input:globalVersion} && if [ \"${input:isLatest}\" = \"true\" ]; then docker push ghcr.io/security-tools-alliance/rengine-ng:rengine-web-latest; fi",
+            "problemMatcher": []
+        },
+        {
+            "label": "Build and Push POSTGRES",
+            "type": "shell",
+            "command": "cd ./docker; docker buildx build -t ghcr.io/security-tools-alliance/rengine-ng:rengine-postgres-${input:globalVersion} -t ghcr.io/security-tools-alliance/rengine-ng:rengine-postgres-latest -f ./postgres/Dockerfile ./postgres && docker push ghcr.io/security-tools-alliance/rengine-ng:rengine-postgres-${input:globalVersion} && if [ \"${input:isLatest}\" = \"true\" ]; then docker push ghcr.io/security-tools-alliance/rengine-ng:rengine-postgres-latest; fi",
+            "problemMatcher": []
+        },
+        {
+            "label": "Build and Push REDIS",
+            "type": "shell",
+            "command": "cd ./docker; docker buildx build -t ghcr.io/security-tools-alliance/rengine-ng:rengine-redis-${input:globalVersion} -t ghcr.io/security-tools-alliance/rengine-ng:rengine-redis-latest -f ./redis/Dockerfile ./redis && docker push ghcr.io/security-tools-alliance/rengine-ng:rengine-redis-${input:globalVersion} && if [ \"${input:isLatest}\" = \"true\" ]; then docker push ghcr.io/security-tools-alliance/rengine-ng:rengine-redis-latest; fi",
+            "problemMatcher": []
+        },
+        {
+            "label": "Build and Push OLLAMA",
+            "type": "shell",
+            "command": "cd ./docker; docker buildx build -t ghcr.io/security-tools-alliance/rengine-ng:rengine-ollama-${input:globalVersion} -t ghcr.io/security-tools-alliance/rengine-ng:rengine-ollama-latest -f ./ollama/Dockerfile ./ollama && docker push ghcr.io/security-tools-alliance/rengine-ng:rengine-ollama-${input:globalVersion} && if [ \"${input:isLatest}\" = \"true\" ]; then docker push ghcr.io/security-tools-alliance/rengine-ng:rengine-ollama-latest; fi",
+            "problemMatcher": []
+        },
+        {
+            "label": "Build and Push CERTS",
+            "type": "shell",
+            "command": "cd ./docker; docker buildx build -t ghcr.io/security-tools-alliance/rengine-ng:rengine-certs-${input:globalVersion} -t ghcr.io/security-tools-alliance/rengine-ng:rengine-certs-latest -f ./certs/Dockerfile ./certs && docker push ghcr.io/security-tools-alliance/rengine-ng:rengine-certs-${input:globalVersion} && if [ \"${input:isLatest}\" = \"true\" ]; then docker push ghcr.io/security-tools-alliance/rengine-ng:rengine-certs-latest; fi",
+            "problemMatcher": []
+        },
+        {
+            "label": "Build and Push PROXY",
+            "type": "shell",
+            "command": "cd ./docker; docker buildx build -t ghcr.io/security-tools-alliance/rengine-ng:rengine-proxy-${input:globalVersion} -t ghcr.io/security-tools-alliance/rengine-ng:rengine-proxy-latest -f ./proxy/Dockerfile ./proxy && docker push ghcr.io/security-tools-alliance/rengine-ng:rengine-proxy-${input:globalVersion} && if [ \"${input:isLatest}\" = \"true\" ]; then docker push ghcr.io/security-tools-alliance/rengine-ng:rengine-proxy-latest; fi",
+            "problemMatcher": []
+        }
+    ],
+    "inputs": [
+        {
+          "id": "version",
+          "type": "promptString",
+          "description": "Enter the version tag for the Docker image (e.g., v2.1.0)"
+        },
+        {
+          "id": "globalVersion",
+          "type": "promptString",
+          "description": "Enter the version tag for all Docker images (e.g., v2.1.0)"
+        },
+        {
+          "id": "image",
+          "type": "pickString",
+          "description": "Select the image to build",
+          "options": ["celery", "web", "postgres", "redis", "ollama", "certs", "proxy"]
+        },
+        {
+            "id": "isLatest",
+            "type": "pickString",
+            "description": "Is this the latest version (this will also push the 'latest' tag)?",
+            "options": ["true", "false"],
+            "default": "false"
+          }    ]
+}
