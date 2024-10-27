@@ -13,24 +13,27 @@ done
 
 # Check Docker installation
 check_docker_installation() {
-  log "Docker is not installed. You have two options for installation:" $COLOR_CYAN
-  log "1) Docker Desktop: A user-friendly application with a GUI, suitable for developers. It includes Docker Engine, Docker CLI, Docker Compose, and other tools." $COLOR_GREEN
-  log "2) Docker Engine: A lightweight, command-line interface suitable for servers and advanced users. It's the core of Docker without additional GUI tools." $COLOR_GREEN
-  
-  read -p "Enter your choice (1 or 2): " docker_choice
+  while true; do
+    log "Docker is not installed. You have two options for installation:" $COLOR_CYAN
+    log "1) Docker Desktop: A user-friendly application with a GUI, suitable for developers. It includes Docker Engine, Docker CLI, Docker Compose, and other tools." $COLOR_GREEN
+    log "2) Docker Engine: A lightweight, command-line interface suitable for servers and advanced users. It's the core of Docker without additional GUI tools." $COLOR_GREEN
+    
+    read -p "Enter your choice (1 or 2): " docker_choice
 
-  case $docker_choice in
-    1)
-      log "Please install Docker Desktop from: https://docs.docker.com/desktop/" $COLOR_YELLOW
-      ;;
-    2)
-      log "Please install Docker Engine from: https://docs.docker.com/engine/install/" $COLOR_YELLOW
-      ;;
-    *)
-      log "Invalid choice. Please choose 1 or 2." $COLOR_RED
-      check_docker_installation
-      ;;
-  esac
+    case $docker_choice in
+      1)
+        log "Please install Docker Desktop from: https://docs.docker.com/desktop/" $COLOR_YELLOW
+        break
+        ;;
+      2)
+        log "Please install Docker Engine from: https://docs.docker.com/engine/install/" $COLOR_YELLOW
+        break
+        ;;
+      *)
+        log "Invalid choice. Please choose 1 or 2." $COLOR_RED
+        ;;
+    esac
+  done
 
   log "After installation, please restart this script." $COLOR_CYAN
   exit 1

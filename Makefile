@@ -16,9 +16,21 @@ COMPOSE_FILE_DEV      := docker/docker-compose.dev.yml
 COMPOSE_FILE_SETUP    := docker/docker-compose.setup.yml
 SERVICES              := db web proxy redis celery celery-beat ollama
 
-# Check if 'docker compose' command is available, otherwise use 'docker-compose'
-DOCKER_COMPOSE := $(shell if command -v docker > /dev/null && docker compose version > /dev/null 2>&1; then echo "docker compose"; else echo "docker-compose"; fi)
-$(info Using: $(shell echo "$(DOCKER_COMPOSE)"))
+# Check if 'docker compose' command is available, otherwise check for 'docker-compose'
+DOCKER_COMPOSE := $(shell if command -v docker > /dev/null && docker compose version > /dev/null 2>&1; then echo "docker compose"; elif command -v docker-compose > /dev/null; then echo "docker-compose"; else echo ""; fi)
+
+ifeq ($(DOCKER_COMPOSE),)
+$(error Docker Compose not found. Please install Docker Compose)
+endif
+
+# Check if user is in docker group or is root
+DOCKER_GROUP_CHECK := $(shell id -nG | grep -qw docker || [ $$(id -u) -eq 0 ] && echo "yes" || echo "no")
+
+ifeq ($(DOCKER_GROUP_CHECK),no)
+$(error This command must be run with sudo or by a user in the docker group)
+endif
+
+$(info Using: $(DOCKER_COMPOSE))
 
 # Define common commands
 DOCKER_COMPOSE_CMD      := ${COMPOSE_PREFIX_CMD} ${DOCKER_COMPOSE}
@@ -150,10 +162,6 @@ help:			## Show this help.
 	@echo "  make <target> (default: help)"
 	@echo ""
 	@echo "Targets:"
-	@awk 'BEGIN {FS = ":.*##"; printf "  \033[36m%-15s\033[0m %s\n", "Target", "Description"}' $(MAKEFILE_LIST)
-	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z_-]+:.*?##/ { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
-	@echo ""
-	@echo "Special commands:"
 	@echo "  make restart [service1] [service2] ...  				Restart specific services in production mode"
 	@echo "  make restart DEV=1 [service1] [service2] ...  			Restart specific services in development mode"
 	@echo "  make restart                            				Restart all services in production mode"
