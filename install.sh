@@ -11,25 +11,89 @@ for ip in $internal_ips; do
     formatted_ips="${formatted_ips}https://$ip\n"
 done
 
+# Check Docker installation
+check_docker_installation() {
+  log "Docker is not installed. You have two options for installation:" $COLOR_CYAN
+  log "1) Docker Desktop: A user-friendly application with a GUI, suitable for developers. It includes Docker Engine, Docker CLI, Docker Compose, and other tools." $COLOR_GREEN
+  log "2) Docker Engine: A lightweight, command-line interface suitable for servers and advanced users. It's the core of Docker without additional GUI tools." $COLOR_GREEN
+  
+  read -p "Enter your choice (1 or 2): " docker_choice
+
+  case $docker_choice in
+    1)
+      log "Please install Docker Desktop from: https://docs.docker.com/desktop/" $COLOR_YELLOW
+      ;;
+    2)
+      log "Please install Docker Engine from: https://docs.docker.com/engine/install/" $COLOR_YELLOW
+      ;;
+    *)
+      log "Invalid choice. Please choose 1 or 2." $COLOR_RED
+      check_docker_installation
+      ;;
+  esac
+
+  log "After installation, please restart this script." $COLOR_CYAN
+  exit 1
+}
+
+# Check Docker version and status
+check_docker() {
+  local min_version="20.10.0"
+  log "Checking Docker installation (minimum required version: $min_version)..." $COLOR_CYAN
+
+  if ! command -v docker &> /dev/null; then
+    check_docker_installation
+  fi
+
+  if ! docker info &> /dev/null; then
+    log "Docker is not running. Please start Docker and try again." $COLOR_RED
+    log "You can start Docker using: sudo systemctl start docker (on most Linux systems)" $COLOR_YELLOW
+    exit 1
+  fi
+
+  local version=$(docker version --format '{{.Server.Version}}')
+
+  if ! [[ "$(printf '%s\n' "$min_version" "$version" | sort -V | head -n1)" = "$min_version" ]]; then
+    log "Docker version $version is installed, but reNgine-ng requires version $min_version or higher." $COLOR_RED
+    log "Please upgrade Docker to continue. Visit https://docs.docker.com/engine/install/ for installation instructions." $COLOR_YELLOW
+    exit 1
+  fi
+
+  log "Docker version $version is installed and running." $COLOR_GREEN
+  log "It's recommended to use the latest version of Docker. Check https://docs.docker.com/engine/release-notes/ for updates." $COLOR_YELLOW
+}
+
 # Check Docker Compose version and set the appropriate command
 check_docker_compose() {
+  local min_version="2.2.0"
+  log "Checking Docker Compose installation (minimum required version: $min_version)..." $COLOR_CYAN
+
   if command -v docker &> /dev/null && docker compose version &> /dev/null; then
     DOCKER_COMPOSE="docker compose"
   elif command -v docker-compose &> /dev/null; then
     DOCKER_COMPOSE="docker-compose"
   else
-    log "Docker Compose is not installed. Please install Docker Compose and try again." $COLOR_RED
-    exit 1
+    if docker compose version 2>&1 | grep -q "is not a docker command"; then
+      log "Docker Compose is not installed. Please install Docker Compose v$min_version or later from https://docs.docker.com/compose/install/" $COLOR_RED
+      log "After installation, please restart this script." $COLOR_CYAN
+      exit 1
+    else
+      log "An unexpected error occurred while checking for Docker Compose. Please ensure Docker and Docker Compose are correctly installed." $COLOR_RED
+      exit 1
+    fi
   fi
 
-  # Check Docker Compose version
   local version=$($DOCKER_COMPOSE version --short)
-  if [[ $(echo $version | cut -d. -f1) -lt 2 ]]; then
-    log "Docker Compose version $version is not supported. Please upgrade to version 2.0.0 or higher." $COLOR_RED
+
+  if ! [[ "$(printf '%s\n' "$min_version" "$version" | sort -V | head -n1)" = "$min_version" ]]; then
+    log "Docker Compose version $version is installed, but reNgine-ng requires version $min_version or higher." $COLOR_RED
+    log "Please upgrade Docker Compose to continue. Visit https://docs.docker.com/compose/install/ for installation instructions." $COLOR_YELLOW
+    log "After upgrade, please restart this script." $COLOR_CYAN
     exit 1
   fi
 
-  log "Using Docker Compose command: $DOCKER_COMPOSE" $COLOR_GREEN
+  log "Using Docker Compose command: $DOCKER_COMPOSE (version $version)" $COLOR_GREEN
+  log "It's recommended to use the latest version of Docker Compose. Check https://docs.docker.com/compose/release-notes/ for updates." $COLOR_YELLOW
   export DOCKER_COMPOSE
 }
 
@@ -74,40 +138,6 @@ install_make() {
   install_package "make"
 }
 
-# Install Docker
-install_docker() {
-  log "Installing Docker..." $COLOR_CYAN
-  if ! command -v docker &> /dev/null; then
-    curl -fsSL https://get.docker.com -o get-docker.sh
-    if sudo sh get-docker.sh; then
-      sudo usermod -aG docker $USER
-      rm get-docker.sh
-      log "Docker installed successfully!" $COLOR_GREEN
-    else
-      log "Failed to install Docker. Please check https://docs.docker.com/engine/install/ for manual installation instructions." $COLOR_RED
-      return 1
-    fi
-  else
-    log "Docker is already installed, skipping." $COLOR_GREEN
-  fi
-}
-
-# Install Docker Compose
-install_docker_compose() {
-  log "Installing Docker Compose..." $COLOR_CYAN
-  if ! command -v docker-compose &> /dev/null && ! (command -v docker &> /dev/null && docker compose version &> /dev/null); then
-    sudo curl -L "https://github.com/docker/compose/releases/download/latest/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-    sudo chmod +x /usr/local/bin/docker-compose
-    if docker-compose --version &> /dev/null; then
-      log "Docker Compose installed successfully!" $COLOR_GREEN
-    else
-      log "Failed to install Docker Compose. Please check https://docs.docker.com/compose/install/ for manual installation instructions." $COLOR_RED
-      return 1
-    fi
-  else
-    log "Docker Compose is already installed, skipping." $COLOR_GREEN
-  fi
-}
 
 # Check for root privileges
 if [ $EUID -eq 0 ]; then
@@ -150,7 +180,7 @@ usageFunction()
 main() {
   cat web/art/reNgine.txt
 
-  log "\r\nBefore running this script, please make sure Docker is running and you have made changes to the '.env' file." $COLOR_RED
+  log "\r\nBefore running this script, please make sure Docker is installed and running, and you have made changes to the '.env' file." $COLOR_RED
   log "Changing the PostgreSQL username & password in the '.env' is highly recommended.\r\n" $COLOR_RED
 
   log "Please note that this installation script is only intended for Linux" $COLOR_RED
@@ -169,12 +199,11 @@ main() {
      esac
   done
 
-  log "Installing reNgine-ng and its dependencies..." $COLOR_CYAN
+  log "Checking and installing reNgine-ng prerequisites..." $COLOR_CYAN
 
   install_curl
-  install_docker
-  install_docker_compose
   install_make
+  check_docker
   check_docker_compose
 
   if [ $isNonInteractive = false ]; then
@@ -227,15 +256,6 @@ main() {
 
     INSTALL_TYPE=${INSTALL_TYPE:-prebuilt}
     log "Non-interactive installation parameter set. Installation begins." $COLOR_GREEN
-  fi
-
-  log "Checking Docker status..." $COLOR_CYAN
-  if docker info >/dev/null 2>&1; then
-    log "Docker is running." $COLOR_GREEN
-  else
-    log "Docker is not running. Please run Docker and try again." $COLOR_RED
-    log "You can run Docker service using: sudo systemctl start docker" $COLOR_RED
-    exit 1
   fi
 
   if [ -z "$INSTALL_TYPE" ]; then
