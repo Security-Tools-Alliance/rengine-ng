@@ -202,13 +202,6 @@ main() {
      esac
   done
 
-  log "Checking and installing reNgine-ng prerequisites..." $COLOR_CYAN
-
-  install_curl
-  install_make
-  check_docker
-  check_docker_compose
-
   if [ $isNonInteractive = false ]; then
     read -p "Are you sure you made changes to the '.env' file (y/n)? " answer
     case ${answer:0:1} in
@@ -220,6 +213,13 @@ main() {
           nano .env
         ;;
     esac
+
+  log "Checking and installing reNgine-ng prerequisites..." $COLOR_CYAN
+
+  install_curl
+  install_make
+  check_docker
+  check_docker_compose
 
     log "Do you want to build Docker images from source or use pre-built images (recommended)? \nThis saves significant build time but requires good download speeds for it to complete fast." $COLOR_RED
     log "1) From source" $COLOR_GREEN
