@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Import common functions
-source "$(pwd)/scripts/common_functions.sh"
+source "$(pwd)/scripts/common_functions.sh" # Open the file if you want to know the meaning of each color
 
 # Fetch the internal and external IP address
 external_ip=$(curl -s https://ipecho.net/plain)
@@ -222,8 +222,8 @@ main() {
   check_docker_compose
 
     log "Do you want to build Docker images from source or use pre-built images (recommended)? \nThis saves significant build time but requires good download speeds for it to complete fast." $COLOR_RED
-    log "1) From source" $COLOR_GREEN
-    log "2) Use pre-built images (default)" $COLOR_GREEN
+    log "1) From source" $COLOR_YELLOW
+    log "2) Use pre-built images (default)" $COLOR_YELLOW
     read -p "Enter your choice (1 or 2, default is 2): " choice
 
     case $choice in
@@ -234,7 +234,7 @@ main() {
             INSTALL_TYPE="prebuilt"
             ;;
         *)
-            log "Invalid choice. Defaulting to pre-built images." $COLOR_YELLOW
+            log "Invalid choice. Defaulting to pre-built images." $COLOR_RED
             INSTALL_TYPE="prebuilt"
             ;;
     esac
