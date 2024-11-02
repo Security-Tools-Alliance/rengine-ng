@@ -24,7 +24,7 @@ $(error Docker Compose not found. Please install Docker Compose)
 endif
 
 # Check if user is in docker group or is root
-DOCKER_GROUP_CHECK := $(shell id -nG | grep -qw docker || [ $$(id -u) -eq 0 ] && echo "yes" || echo "no")
+DOCKER_GROUP_CHECK := $(shell if [ -n "$$(getent group docker)" ]; then echo "yes"; else echo "no"; fi)
 
 ifeq ($(DOCKER_GROUP_CHECK),no)
 $(error This command must be run with sudo or by a user in the docker group)
