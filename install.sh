@@ -48,7 +48,8 @@ check_docker() {
     check_docker_installation
   fi
 
-  if ! docker info &> /dev/null; then
+  if ! DOCKER_ERROR=$(docker info 2>&1); then
+    echo "Docker check failed: ${DOCKER_ERROR}"
     log "Docker is not running. Please start Docker and try again." $COLOR_RED
     log "You can start Docker using: sudo systemctl start docker (on most Linux systems)" $COLOR_YELLOW
     exit 1
