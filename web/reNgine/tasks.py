@@ -427,7 +427,7 @@ def subdomain_discovery(
             elif tool == 'amass-active':
                 use_amass_config = config.get(USE_AMASS_CONFIG, False)
                 amass_wordlist_name = config.get(AMASS_WORDLIST, AMASS_DEFAULT_WORDLIST_NAME)
-                wordlist_path = AMASS_DEFAULT_WORDLIST_PATH / f'{amass_wordlist_name}.txt'
+                wordlist_path = str(Path(AMASS_DEFAULT_WORDLIST_PATH) / f'{amass_wordlist_name}.txt')
                 cmd = f'amass enum -active -d {host} -o ' + str(Path(self.results_dir) / 'subdomains_amass_active.txt')
                 cmd += (' -config ' + str(Path.home() / '.config' / 'amass.ini')) if use_amass_config else ''
                 cmd += f' -brute -w {wordlist_path}'
@@ -1635,7 +1635,7 @@ def dir_file_fuzz(self, ctx={}, description=None):
 
     # Get wordlist
     wordlist_name = FFUF_DEFAULT_WORDLIST_NAME if wordlist_name == 'default' else wordlist_name
-    wordlist_path = FFUF_DEFAULT_WORDLIST_PATH / f'{wordlist_name}.txt'
+    wordlist_path = str(Path(FFUF_DEFAULT_WORDLIST_PATH) / f'{wordlist_name}.txt')
 
     # Build command
     cmd += f' -w {wordlist_path}'
