@@ -82,6 +82,7 @@ dir_file_fuzz: {
   'enable_http_crawl': true,
   'rate_limit': 150,
   'extensions': [],
+  # 'extensions': ['html', 'php','git','yaml','conf','cnf','config','gz','env','log','db','mysql','bak','asp','aspx','txt','conf','sql','json','yml','pdf'],
   'follow_redirect': false,
   'max_time': 0,
   'match_http_status': [200, 204],
