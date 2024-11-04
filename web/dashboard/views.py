@@ -274,7 +274,7 @@ def handle_delete_user(request, user):
         )
         return JsonResponse({'status': True})
     except (ValueError, KeyError) as e:
-        logger.error(e)
+        logger.error("Error deleting user: %s", e)
         return JsonResponse({'status': False, 'error': 'An error occurred while deleting the user'})
 
 
@@ -299,8 +299,8 @@ def handle_update_user(request, user):
         user.save()
         return JsonResponse({'status': True})
     except (ValueError, KeyError) as e:
-        logger.error(e)
-        return JsonResponse({'status': False, 'error': str(e)})
+        logger.error("Error updating user: %s", e)
+        return JsonResponse({'status': False, 'error': 'An error occurred while updating the user'})
 
 
 def handle_create_user(request):
@@ -324,8 +324,8 @@ def handle_create_user(request):
 
         return JsonResponse({'status': True})
     except (ValueError, KeyError) as e:
-        logger.error(e)
-        return JsonResponse({'status': False, 'error': str(e)})
+        logger.error("Error creating user: %s", e)
+        return JsonResponse({'status': False, 'error': 'An error occurred while creating the user'})
 
 
 @receiver(user_logged_out)

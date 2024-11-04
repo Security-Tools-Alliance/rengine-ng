@@ -953,6 +953,7 @@ function get_endpoint_modal(endpoint_url, project, scan_id, subdomain_id, subdom
 	$('#xl-modal-content').empty();
 	$('#xl-modal-footer').empty();
 
+	let url = '';
 	if (scan_id) {
 		url = `${endpoint_url}?project=${project}&scan_id=${scan_id}&subdomain_id=${subdomain_id}&format=json`
 	}
@@ -991,6 +992,7 @@ function get_directory_modal(endpoint_url, scan_id=null, subdomain_id=null, subd
 	$('#xl-modal-content').empty();
 	$('#xl-modal-footer').empty();
 
+	let url = '';
 	if (scan_id) {
 		url = `${endpoint_url}?scan_id=${scan_id}&subdomain_id=${subdomain_id}&format=json`
 	}

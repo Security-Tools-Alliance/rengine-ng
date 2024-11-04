@@ -5,8 +5,6 @@ import json
 from unittest.mock import patch, MagicMock
 from django.urls import reverse
 from utils.test_base import BaseTestCase
-from dashboard.views import admin_interface_update
-from dashboard.models import Project
 from django.contrib.auth.models import User
 from rolepermissions.checkers import has_role
 from reNgine.roles import SysAdmin, PenetrationTester

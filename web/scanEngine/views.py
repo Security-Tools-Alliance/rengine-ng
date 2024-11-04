@@ -407,6 +407,7 @@ def api_vault_delete(request):
                 handler[key].objects.first().delete()
                 response["deleted"].append(key)
             except KeyError:
+                # Ignore the KeyError if the key does not exist
                 pass
         response["status"] = "OK"
     else:

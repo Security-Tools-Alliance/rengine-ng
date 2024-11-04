@@ -569,7 +569,8 @@ def get_cms_details(url):
 	cms_json_path =  cms_dir_path + '/cms.json'
 
 	if os.path.isfile(cms_json_path):
-		cms_file_content = json.loads(open(cms_json_path, 'r').read())
+		with open(cms_json_path, 'r') as file:
+			cms_file_content = json.loads(file.read())
 		if not cms_file_content.get('cms_id'):
 			return response
 		response = {}

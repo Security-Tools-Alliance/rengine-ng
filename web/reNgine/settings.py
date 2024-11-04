@@ -32,9 +32,6 @@ RENGINE_RAISE_ON_ERROR = env.bool('RENGINE_RAISE_ON_ERROR', default=False)
 with open(Path(RENGINE_HOME) / 'reNgine' / 'version.txt', 'r', encoding="utf-8") as f:
     RENGINE_CURRENT_VERSION = f.read().strip()
 
-with open(Path(RENGINE_HOME) / 'reNgine' / 'version.txt', 'r', encoding="utf-8") as f:
-    RENGINE_CURRENT_VERSION = f.read().strip()
-
 # Debug env vars
 UI_DEBUG = bool(int(os.environ.get('UI_DEBUG', '0')))
 UI_REMOTE_DEBUG = bool(int(os.environ.get('UI_REMOTE_DEBUG', '0')))
