@@ -81,15 +81,15 @@ dir_file_fuzz: {
   'auto_calibration': true,
   'enable_http_crawl': true,
   'rate_limit': 150,
-  'extensions': ['html', 'php','git','yaml','conf','cnf','config','gz','env','log','db','mysql','bak','asp','aspx','txt','conf','sql','json','yml','pdf'],
+  'extensions': [],
   'follow_redirect': false,
   'max_time': 0,
   'match_http_status': [200, 204],
-  'recursive_level': 2,
+  'recursive_level': 0,
   'stop_on_error': false,
   'timeout': 5,
   'threads': 30,
-  'wordlist_name': 'dicc',
+  'wordlist_name': 'default', # fuzz-Bo0oM
 }
 fetch_url: {
   # 'custom_header': {

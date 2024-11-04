@@ -426,8 +426,8 @@ def subdomain_discovery(
 
             elif tool == 'amass-active':
                 use_amass_config = config.get(USE_AMASS_CONFIG, False)
-                amass_wordlist_name = config.get(AMASS_WORDLIST, 'deepmagic.com-prefixes-top50000')
-                wordlist_path = str(Path(RENGINE_WORDLISTS) / f'{amass_wordlist_name}.txt')
+                amass_wordlist_name = config.get(AMASS_WORDLIST, AMASS_DEFAULT_WORDLIST_NAME)
+                wordlist_path = AMASS_DEFAULT_WORDLIST_PATH / f'{amass_wordlist_name}.txt'
                 cmd = f'amass enum -active -d {host} -o ' + str(Path(self.results_dir) / 'subdomains_amass_active.txt')
                 cmd += (' -config ' + str(Path.home() / '.config' / 'amass.ini')) if use_amass_config else ''
                 cmd += f' -brute -w {wordlist_path}'
@@ -1629,13 +1629,13 @@ def dir_file_fuzz(self, ctx={}, description=None):
     stop_on_error = config.get(STOP_ON_ERROR, False)
     timeout = config.get(TIMEOUT) or self.yaml_configuration.get(TIMEOUT, DEFAULT_HTTP_TIMEOUT)
     threads = config.get(THREADS) or self.yaml_configuration.get(THREADS, DEFAULT_THREADS)
-    wordlist_name = config.get(WORDLIST, 'dicc')
+    wordlist_name = config.get(WORDLIST, FFUF_DEFAULT_WORDLIST_NAME)
     delay = rate_limit / (threads * 100) # calculate request pause delay from rate_limit and number of threads
     input_path = str(Path(self.results_dir) / 'input_dir_file_fuzz.txt')
 
     # Get wordlist
-    wordlist_name = 'dicc' if wordlist_name == 'default' else wordlist_name
-    wordlist_path = str(Path(RENGINE_WORDLISTS) / f'{wordlist_name}.txt')
+    wordlist_name = FFUF_DEFAULT_WORDLIST_NAME if wordlist_name == 'default' else wordlist_name
+    wordlist_path = FFUF_DEFAULT_WORDLIST_PATH / f'{wordlist_name}.txt'
 
     # Build command
     cmd += f' -w {wordlist_path}'
