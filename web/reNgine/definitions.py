@@ -1,7 +1,6 @@
 #!/usr/bin/python
 import logging
 import re
-import os.path
 from pathlib import Path
 from .settings import RENGINE_WORDLISTS
 
