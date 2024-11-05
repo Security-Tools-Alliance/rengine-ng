@@ -107,9 +107,8 @@ DEFAULT_SCAN_INTENSITY = 'normal'
 ###############################################################################
 
 # amass
-AMASS_DEFAULT_WORDLIST_PATH = (
-    'wordlist/default_wordlist/deepmagic.com-prefixes-top50000.txt'
-)
+AMASS_DEFAULT_WORDLIST_NAME = 'deepmagic.com-prefixes-top50000'
+AMASS_DEFAULT_WORDLIST_PATH = str(Path(RENGINE_WORDLISTS))
 
 # dorks
 DORKS_DEFAULT_NAMES = [
@@ -130,9 +129,10 @@ DORKS_DEFAULT_NAMES = [
 ]
 
 # ffuf
-FFUF_DEFAULT_WORDLIST_PATH = str(Path(RENGINE_WORDLISTS) / 'dicc.txt')
+FFUF_DEFAULT_WORDLIST_NAME = 'fuzz-Bo0oM'
+FFUF_DEFAULT_WORDLIST_PATH = str(Path(RENGINE_WORDLISTS))
 FFUF_DEFAULT_MATCH_HTTP_STATUS = [200, 204]
-FFUF_DEFAULT_RECURSIVE_LEVEL = 2
+FFUF_DEFAULT_RECURSIVE_LEVEL = 0
 FFUF_DEFAULT_FOLLOW_REDIRECT = False
 
 # naabu

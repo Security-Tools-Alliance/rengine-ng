@@ -2661,7 +2661,7 @@
   "model": "startScan.directoryscan",
   "pk": 1,
   "fields": {
-    "command_line": "ffuf -w /home/rengine/wordlists/dicc.txt -p 0.05 -t 30 -timeout 5 -ac -mc 200,204 -u http://rest.vulnweb.com/FUZZ -json",
+    "command_line": "ffuf -w /home/rengine/wordlists/fuzz-Bo0oM.txt -p 0.05 -t 30 -timeout 5 -ac -mc 200,204 -u http://rest.vulnweb.com/FUZZ -json",
     "scanned_date": "2024-09-03T22:02:45.119Z",
     "directory_files": [
       1,
@@ -2675,7 +2675,7 @@
   "model": "startScan.directoryscan",
   "pk": 2,
   "fields": {
-    "command_line": "ffuf -w /home/rengine/wordlists/dicc.txt -p 0.05 -t 30 -timeout 5 -ac -mc 200,204 -u http://testasp.vulnweb.com/FUZZ -json",
+    "command_line": "ffuf -w /home/rengine/wordlists/fuzz-Bo0oM.txt -p 0.05 -t 30 -timeout 5 -ac -mc 200,204 -u http://testasp.vulnweb.com/FUZZ -json",
     "scanned_date": "2024-09-03T22:05:24.142Z",
     "directory_files": [
       4,
@@ -2689,7 +2689,7 @@
   "model": "startScan.directoryscan",
   "pk": 3,
   "fields": {
-    "command_line": "ffuf -w /home/rengine/wordlists/dicc.txt -p 0.05 -t 30 -timeout 5 -ac -mc 200,204 -u http://testaspnet.vulnweb.com/FUZZ -json",
+    "command_line": "ffuf -w /home/rengine/wordlists/fuzz-Bo0oM.txt -p 0.05 -t 30 -timeout 5 -ac -mc 200,204 -u http://testaspnet.vulnweb.com/FUZZ -json",
     "scanned_date": "2024-09-03T22:06:42.524Z",
     "directory_files": [
       7,
@@ -2703,7 +2703,7 @@
   "model": "startScan.directoryscan",
   "pk": 4,
   "fields": {
-    "command_line": "ffuf -w /home/rengine/wordlists/dicc.txt -p 0.05 -t 30 -timeout 5 -ac -mc 200,204 -u http://testhtml5.vulnweb.com/FUZZ -json",
+    "command_line": "ffuf -w /home/rengine/wordlists/fuzz-Bo0oM.txt -p 0.05 -t 30 -timeout 5 -ac -mc 200,204 -u http://testhtml5.vulnweb.com/FUZZ -json",
     "scanned_date": "2024-09-03T22:07:57.153Z",
     "directory_files": [
       10,
@@ -2720,7 +2720,7 @@
   "model": "startScan.directoryscan",
   "pk": 5,
   "fields": {
-    "command_line": "ffuf -w /home/rengine/wordlists/dicc.txt -p 0.05 -t 30 -timeout 5 -ac -mc 200,204 -u http://testphp.vulnweb.com/FUZZ -json",
+    "command_line": "ffuf -w /home/rengine/wordlists/fuzz-Bo0oM.txt -p 0.05 -t 30 -timeout 5 -ac -mc 200,204 -u http://testphp.vulnweb.com/FUZZ -json",
     "scanned_date": "2024-09-03T22:09:11.505Z",
     "directory_files": [
       16,
@@ -2753,7 +2753,7 @@
   "model": "startScan.directoryscan",
   "pk": 6,
   "fields": {
-    "command_line": "ffuf -w /home/rengine/wordlists/dicc.txt -p 0.05 -t 30 -timeout 5 -ac -mc 200,204 -u http://vulnweb.com/FUZZ -json",
+    "command_line": "ffuf -w /home/rengine/wordlists/fuzz-Bo0oM.txt -p 0.05 -t 30 -timeout 5 -ac -mc 200,204 -u http://vulnweb.com/FUZZ -json",
     "scanned_date": "2024-09-03T22:10:26.882Z",
     "directory_files": [
       38
@@ -2765,7 +2765,7 @@
   "model": "startScan.directoryscan",
   "pk": 7,
   "fields": {
-    "command_line": "ffuf -w /home/rengine/wordlists/dicc.txt -p 0.05 -t 30 -timeout 5 -ac -mc 200,204 -u http://www.vulnweb.com/FUZZ -json",
+    "command_line": "ffuf -w /home/rengine/wordlists/fuzz-Bo0oM.txt -p 0.05 -t 30 -timeout 5 -ac -mc 200,204 -u http://www.vulnweb.com/FUZZ -json",
     "scanned_date": "2024-09-03T22:11:40.431Z",
     "directory_files": [
       39
