@@ -39,6 +39,10 @@ share/python-wheels/
 *.egg
 MANIFEST
 
+# IDE files
+.vscode/settings.json
+.vscode/tasks-and-contexts.json
+
 *.manifest
 *.spec
 
@@ -57,7 +61,8 @@ docs/_build/
 staticfiles/
 
 secret
-/secrets
+docker/secrets
+logs
 
 get-docker.sh
 

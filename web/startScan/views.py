@@ -1,8 +1,9 @@
-import markdown
+import markdown, json
 
 from celery import group
+from pathlib import Path
 from weasyprint import HTML
-from datetime import datetime
+from datetime import datetime, timedelta
 from django.contrib import messages
 from django.db.models import Count
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
@@ -10,16 +11,17 @@ from django.shortcuts import get_object_or_404, render
 from django.template.loader import get_template
 from django.urls import reverse
 from django.utils import timezone
-from django_celery_beat.models import (ClockedSchedule, IntervalSchedule, PeriodicTask)
+from django_celery_beat.models import ClockedSchedule, IntervalSchedule, PeriodicTask
 from rolepermissions.decorators import has_permission_decorator
 
 from reNgine.celery import app
-from reNgine.common_func import *
-from reNgine.definitions import ABORTED_TASK, SUCCESS_TASK
+from reNgine.common_func import logger, get_interesting_subdomains, create_scan_object, safe_int_cast
+from reNgine.settings import RENGINE_RESULTS
+from reNgine.definitions import ABORTED_TASK, SUCCESS_TASK, RUNNING_TASK, LIVE_SCAN, SCHEDULED_SCAN, PERM_INITATE_SCANS_SUBSCANS, PERM_MODIFY_SCAN_RESULTS, PERM_MODIFY_SCAN_REPORT, PERM_MODIFY_SYSTEM_CONFIGURATIONS, FOUR_OH_FOUR_URL
 from reNgine.tasks import create_scan_activity, initiate_scan, run_command
-from scanEngine.models import EngineType
-from startScan.models import *
-from targetApp.models import *
+from scanEngine.models import EngineType, VulnerabilityReportSetting
+from startScan.models import ScanHistory, SubScan, Email, Employee, Subdomain, EndPoint, Vulnerability, VulnerabilityTags, IpAddress, CountryISO, ScanActivity, CveId, CweId
+from targetApp.models import Domain, Organization
 
 
 def scan_history(request, slug):
@@ -33,13 +35,12 @@ def subscan_history(request, slug):
     context = {'scan_history_active': 'active', "subscans": subscans}
     return render(request, 'startScan/subscan_history.html', context)
 
-
 def detail_scan(request, id, slug):
     ctx = {}
 
     # Get scan objects
     scan = get_object_or_404(ScanHistory, id=id)
-    domain_id = scan.domain.id
+    domain_id = safe_int_cast( scan.domain.id)
     scan_engines = EngineType.objects.order_by('engine_name').all()
     recent_scans = ScanHistory.objects.filter(domain__id=domain_id)
     last_scans = (
@@ -237,12 +238,10 @@ def all_subdomains(request, slug):
 def detail_vuln_scan(request, slug, id=None):
     if id:
         history = get_object_or_404(ScanHistory, id=id)
-        history.filter(domain__project__slug=slug)
         context = {'scan_history_id': id, 'history': history}
     else:
         context = {'vuln_scan_active': 'true'}
     return render(request, 'startScan/vulnerabilities.html', context)
-
 
 def all_endpoints(request, slug):
     context = {
@@ -267,10 +266,14 @@ def start_scan_ui(request, slug, domain_id):
             filterPath = ''
 
         # Get engine type
-        engine_id = request.POST['scan_mode']
+        engine_id = safe_int_cast(request.POST['scan_mode'])
 
         # Create ScanHistory object
-        scan_history_id = create_scan_object(domain_id, engine_id)
+        scan_history_id = create_scan_object(
+            host_id=domain_id,
+            engine_id=engine_id,
+            initiated_by_id=request.user.id
+        )
         scan = ScanHistory.objects.get(pk=scan_history_id)
 
         # Start the celery task
@@ -279,10 +282,11 @@ def start_scan_ui(request, slug, domain_id):
             'domain_id': domain.id,
             'engine_id': engine_id,
             'scan_type': LIVE_SCAN,
-            'results_dir': '/usr/src/scan_results',
+            'results_dir': RENGINE_RESULTS,
             'imported_subdomains': subdomains_in,
             'out_of_scope_subdomains': subdomains_out,
-            'url_filter': filterPath
+            'url_filter': filterPath,
+            'initiated_by_id': request.user.id
         }
         initiate_scan.apply_async(kwargs=kwargs)
         scan.save()
@@ -316,14 +320,18 @@ def start_multiple_scan(request, slug):
         if request.POST.get('scan_mode', 0):
             # if scan mode is available, then start the scan
             # get engine type
-            engine_id = request.POST['scan_mode']
+            engine_id = safe_int_cast( request.POST['scan_mode'])
             list_of_domains = request.POST['list_of_domain_id']
 
             grouped_scans = []
 
             for domain_id in list_of_domains.split(","):
                 # Start the celery task
-                scan_history_id = create_scan_object(domain_id, engine_id)
+                scan_history_id = create_scan_object(
+                    host_id=domain_id,
+                    engine_id=engine_id,
+                    initiated_by_id=request.user.id
+                )
                 # domain = get_object_or_404(Domain, id=domain_id)
 
                 kwargs = {
@@ -331,7 +339,8 @@ def start_multiple_scan(request, slug):
                     'domain_id': domain_id,
                     'engine_id': engine_id,
                     'scan_type': LIVE_SCAN,
-                    'results_dir': '/usr/src/scan_results',
+                    'results_dir': RENGINE_RESULTS,
+                    'initiated_by_id': request.user.id
                     # TODO: Add this to multiple scan view
                     # 'imported_subdomains': subdomains_in,
                     # 'out_of_scope_subdomains': subdomains_out
@@ -379,7 +388,7 @@ def start_multiple_scan(request, slug):
     }
     return render(request, 'startScan/start_multiple_scan_ui.html', context)
 
-def export_subdomains(request, scan_id):
+def export_subdomains(request, slug, scan_id):
     subdomain_list = Subdomain.objects.filter(scan_history__id=scan_id)
     scan = ScanHistory.objects.get(id=scan_id)
     response_body = ""
@@ -394,7 +403,7 @@ def export_subdomains(request, scan_id):
     return response
 
 
-def export_endpoints(request, scan_id):
+def export_endpoints(request, slug, scan_id):
     endpoint_list = EndPoint.objects.filter(scan_history__id=scan_id)
     scan = ScanHistory.objects.get(id=scan_id)
     response_body = ""
@@ -409,7 +418,7 @@ def export_endpoints(request, scan_id):
     return response
 
 
-def export_urls(request, scan_id):
+def export_urls(request, slug, scan_id):
     urls_list = Subdomain.objects.filter(scan_history__id=scan_id)
     scan = ScanHistory.objects.get(id=scan_id)
     response_body = ""
@@ -426,7 +435,7 @@ def export_urls(request, scan_id):
 
 
 @has_permission_decorator(PERM_MODIFY_SCAN_RESULTS, redirect_url=FOUR_OH_FOUR_URL)
-def delete_scan(request, id):
+def delete_scan(request, slug, id):
     obj = get_object_or_404(ScanHistory, id=id)
     if request.method == "POST":
         delete_dir = obj.results_dir
@@ -449,7 +458,7 @@ def delete_scan(request, id):
 
 
 @has_permission_decorator(PERM_INITATE_SCANS_SUBSCANS, redirect_url=FOUR_OH_FOUR_URL)
-def stop_scan(request, id):
+def stop_scan(request, slug, id):
     if request.method == "POST":
         scan = get_object_or_404(ScanHistory, id=id)
         scan.scan_status = ABORTED_TASK
@@ -527,29 +536,42 @@ def schedule_scan(request, host_id, slug):
                 'scan_history_id': 1,
                 'scan_type': SCHEDULED_SCAN,
                 'imported_subdomains': subdomains_in,
-                'out_of_scope_subdomains': subdomains_out
+                'out_of_scope_subdomains': subdomains_out,
+                'initiated_by_id': request.user.id
             }
-            PeriodicTask.objects.create(interval=schedule,
-                                        name=task_name,
-                                        task='reNgine.tasks.initiate_scan',
-                                        kwargs=json.dumps(kwargs))
+            PeriodicTask.objects.create(
+                interval=schedule,
+                name=task_name,
+                task='initiate_scan',
+                kwargs=json.dumps(kwargs)
+            )
         elif scheduled_mode == 'clocked':
             schedule_time = request.POST['scheduled_time']
+            timezone_offset = int(request.POST.get('timezone_offset', 0))
+            # Convert received hour in UTC
+            local_time = datetime.strptime(schedule_time, '%Y-%m-%d %H:%M')
+            # Adjust hour to UTC
+            utc_time = local_time + timedelta(minutes=timezone_offset)
+            # Make hour "aware" in UTC
+            utc_time = timezone.make_aware(utc_time, timezone.utc)
             clock, _ = ClockedSchedule.objects.get_or_create(
-                clocked_time=schedule_time)
+                clocked_time=utc_time)
             kwargs = {
                 'scan_history_id': 0,
                 'domain_id': host_id,
                 'engine_id': engine.id,
                 'scan_type': SCHEDULED_SCAN,
                 'imported_subdomains': subdomains_in,
-                'out_of_scope_subdomains': subdomains_out
+                'out_of_scope_subdomains': subdomains_out,
+                'initiated_by_id': request.user.id
             }
-            PeriodicTask.objects.create(clocked=clock,
-                                        one_off=True,
-                                        name=task_name,
-                                        task='reNgine.tasks.initiate_scan',
-                                        kwargs=json.dumps(kwargs))
+            PeriodicTask.objects.create(
+                clocked=clock,
+                one_off=True,
+                name=task_name,
+                task='initiate_scan',
+                kwargs=json.dumps(kwargs)
+            )
         messages.add_message(
             request,
             messages.INFO,
@@ -586,7 +608,7 @@ def scheduled_scan_view(request, slug):
 
 
 @has_permission_decorator(PERM_MODIFY_SCAN_RESULTS, redirect_url=FOUR_OH_FOUR_URL)
-def delete_scheduled_task(request, id):
+def delete_scheduled_task(request, slug, id):
     task_object = get_object_or_404(PeriodicTask, id=id)
     if request.method == "POST":
         task_object.delete()
@@ -605,7 +627,7 @@ def delete_scheduled_task(request, id):
 
 
 @has_permission_decorator(PERM_MODIFY_SCAN_RESULTS, redirect_url=FOUR_OH_FOUR_URL)
-def change_scheduled_task_status(request, id):
+def change_scheduled_task_status(request, slug, id):
     if request.method == 'POST':
         task = PeriodicTask.objects.get(id=id)
         task.enabled = not task.enabled
@@ -613,7 +635,7 @@ def change_scheduled_task_status(request, id):
     return HttpResponse('')
 
 
-def change_vuln_status(request, id):
+def change_vuln_status(request, slug, id):
     if request.method == 'POST':
         vuln = Vulnerability.objects.get(id=id)
         vuln.open_status = not vuln.open_status
@@ -621,32 +643,10 @@ def change_vuln_status(request, id):
     return HttpResponse('')
 
 
-def create_scan_object(host_id, engine_id):
-    '''
-    create task with pending status so that celery task will execute when
-    threads are free
-    '''
-    # get current time
-    current_scan_time = timezone.now()
-    # fetch engine and domain object
-    engine = EngineType.objects.get(pk=engine_id)
-    domain = Domain.objects.get(pk=host_id)
-    scan = ScanHistory()
-    scan.scan_status = INITIATED_TASK
-    scan.domain = domain
-    scan.scan_type = engine
-    scan.start_scan_date = current_scan_time
-    scan.save()
-    # save last scan date for domain model
-    domain.start_scan_date = current_scan_time
-    domain.save()
-    return scan.id
-
-
 @has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
-def delete_all_scan_results(request):
+def delete_all_scan_results(request, slug):
     if request.method == 'POST':
-        ScanHistory.objects.all().delete()
+        ScanHistory.objects.filter(project__slug=slug).delete()
         messageData = {'status': 'true'}
         messages.add_message(
             request,
@@ -656,9 +656,11 @@ def delete_all_scan_results(request):
 
 
 @has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
-def delete_all_screenshots(request):
+def delete_all_screenshots(request, slug):
     if request.method == 'POST':
-        run_command('rm -rf /usr/src/scan_results/*')
+        domains = Domain.objects.filter(project__slug=slug)
+        for domain in domains:
+            run_command(f'rm -rf {str(Path(RENGINE_RESULTS) / domain.name)}')
         messageData = {'status': 'true'}
         messages.add_message(
             request,
@@ -680,11 +682,15 @@ def visualise(request, id):
 def start_organization_scan(request, id, slug):
     organization = get_object_or_404(Organization, id=id)
     if request.method == "POST":
-        engine_id = request.POST['scan_mode']
+        engine_id = safe_int_cast( request.POST['scan_mode'])
 
         # Start Celery task for each organization's domains
         for domain in organization.get_domains():
-            scan_history_id = create_scan_object(domain.id, engine_id)
+            scan_history_id = create_scan_object(
+                host_id=domain.id,
+                engine_id=engine_id,
+                initiated_by_id=request.user.id
+            )
             scan = ScanHistory.objects.get(pk=scan_history_id)
 
             kwargs = {
@@ -692,7 +698,8 @@ def start_organization_scan(request, id, slug):
                 'domain_id': domain.id,
                 'engine_id': engine_id,
                 'scan_type': LIVE_SCAN,
-                'results_dir': '/usr/src/scan_results',
+                'results_dir': RENGINE_RESULTS,
+                'initiated_by_id': request.user.id,
                 # TODO: Add this to multiple scan view
                 # 'imported_subdomains': subdomains_in,
                 # 'out_of_scope_subdomains': subdomains_out
@@ -760,12 +767,13 @@ def schedule_organization_scan(request, slug, id):
                     'engine_id': engine.id,
                     'scan_history_id': 0,
                     'scan_type': SCHEDULED_SCAN,
-                    'imported_subdomains': None
+                    'imported_subdomains': None,
+                    'initiated_by_id': request.user.id
                 })
                 PeriodicTask.objects.create(
                     interval=schedule,
                     name=task_name,
-                    task='reNgine.tasks.initiate_scan',
+                    task='initiate_scan',
                     kwargs=_kwargs
                 )
 
@@ -780,12 +788,13 @@ def schedule_organization_scan(request, slug, id):
                     'engine_id': engine.id,
                     'scan_history_id': 0,
                     'scan_type': LIVE_SCAN,
-                    'imported_subdomains': None
+                    'imported_subdomains': None,
+                    'initiated_by_id': request.user.id
                 })
                 PeriodicTask.objects.create(clocked=clock,
                     one_off=True,
                     name=task_name,
-                    task='reNgine.tasks.initiate_scan',
+                    task='initiate_scan',
                     kwargs=_kwargs
                 )
 
@@ -796,7 +805,7 @@ def schedule_organization_scan(request, slug, id):
             messages.INFO,
             f'Scan started for {ndomains} domains in organization {organization.name}'
         )
-        return HttpResponseRedirect(reverse('scheduled_scan_view', kwargs={'slug': slug, 'id': id}))
+        return HttpResponseRedirect(reverse('scheduled_scan_view', kwargs={'slug': slug}))
 
     # GET request
     engine = EngineType.objects
@@ -839,7 +848,7 @@ def customize_report(request, id):
 
 
 @has_permission_decorator(PERM_MODIFY_SCAN_REPORT, redirect_url=FOUR_OH_FOUR_URL)
-def create_report(request, id):
+def create_report(request, slug, id):
     primary_color = '#FFB74D'
     secondary_color = '#212121'
     # get report type

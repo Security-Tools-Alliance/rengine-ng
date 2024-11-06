@@ -149,7 +149,7 @@
     is_default: true
     is_subdomain_gathering: true
     is_github_cloned: true
-    github_clone_path: /usr/src/github/Sublist3r
+    github_clone_path: /home/rengine/tools/.github/Sublist3r
     subdomain_gathering_command: null
 - model: scanEngine.installedexternaltool
   pk: 9
@@ -177,14 +177,14 @@
     description: A powerful subdomain integration tool.
     github_url: https://github.com/shmilylty/OneForAll
     license_url: https://github.com/shmilylty/OneForAll/blob/master/LICENSE
-    version_lookup_command: cat /usr/src/github/OneForAll/oneforall.py
+    version_lookup_command: cat /home/rengine/tools/.github/OneForAll/oneforall.py
     update_command: git pull
     install_command: git clone https://github.com/shmilylty/OneForAll
     version_match_regex: v\d+\.\d+\.\d+\b
     is_default: true
     is_subdomain_gathering: true
     is_github_cloned: true
-    github_clone_path: /usr/src/github/OneForAll
+    github_clone_path: /home/rengine/tools/.github/OneForAll
     subdomain_gathering_command: null
 - model: scanEngine.installedexternaltool
   pk: 11
@@ -198,14 +198,14 @@
       names, subdomains, IPs and URLs using multiple public data sources.
     github_url: https://github.com/laramies/theHarvester
     license_url: https://github.com/laramies/theHarvester/blob/master/README/LICENSES
-    version_lookup_command: cat /usr/src/github/theHarvester/theHarvester/lib/version.py
+    version_lookup_command: cat /home/rengine/tools/.github/theHarvester/theHarvester/lib/version.py
     update_command: git pull
     install_command: git clone https://github.com/laramies/theHarvester
     version_match_regex: \b\d+\.\d+\.\d+\b
     is_default: true
     is_subdomain_gathering: false
     is_github_cloned: true
-    github_clone_path: /usr/src/github/theHarvester
+    github_clone_path: /home/rengine/tools/.github/theHarvester
     subdomain_gathering_command: null
 - model: scanEngine.installedexternaltool
   pk: 12
@@ -217,14 +217,14 @@
       it just abuses of Certificate Transparency logs.
     github_url: https://github.com/UnaPibaGeek/ctfr
     license_url: https://github.com/UnaPibaGeek/ctfr/blob/master/LICENSE
-    version_lookup_command: python3 /usr/src/github/ctfr/ctfr.py --help
+    version_lookup_command: python3 /home/rengine/tools/.github/ctfr/ctfr.py --help
     update_command: git pull
     install_command: git clone https://github.com/UnaPibaGeek/ctfr/
     version_match_regex: (\d+\.)?(\d+\.).
     is_default: true
     is_subdomain_gathering: true
     is_github_cloned: true
-    github_clone_path: /usr/src/github/ctfr
+    github_clone_path: /home/rengine/tools/.github/ctfr
     subdomain_gathering_command: null
 - model: scanEngine.installedexternaltool
   pk: 13

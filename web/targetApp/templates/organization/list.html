@@ -58,7 +58,7 @@ Organizations
             <td class="text-center"><span data-toggle="tooltip" data-placement="top" title="{{organization.insert_date}}">{{organization.insert_date|naturaltime}}</span></td></td>
             <td class="text-center">
               {% if user|can:'initiate_scans_subscans' %}
-              <a href="/scan/{{current_project.slug}}/start/organization/{{organization.id}}" data-toggle="tooltip" data-placement="top" title="Quick Scan Entire Organization">
+              <a href="{% url 'start_organization_scan' current_project.slug organization.id %}" data-toggle="tooltip" data-placement="top" title="Quick Scan Entire Organization">
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather table-scan feather-zap" id="myInput" value="helloworld">
                   <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
                 </svg>
@@ -70,14 +70,14 @@ Organizations
               </a>
               {% endif %}
               {% if user|can:'modify_targets' %}
-              <a href="/target/{{current_project.slug}}/update/organization/{{organization.id}}" class="text-primary open-domain" data-toggle="tooltip" data-placement="top" title="Update Organization">
+              <a href="{% url 'update_organization' current_project.slug organization.id %}" class="text-primary open-domain" data-toggle="tooltip" data-placement="top" title="Update Organization">
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather table-edit feather-edit-2">
                   <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
                 </svg>
               </a>
               {% endif %}
               {% if user|can:'modify_targets' %}
-              <a onclick="delete_organization({{ organization.id }})" class="text-danger" href="#" data-toggle="tooltip" data-placement="top" title="Delete Organization">
+              <a onclick="delete_organization('{% url 'delete_organization' current_project.slug organization.id %}')" class="text-danger" href="#" data-toggle="tooltip" data-placement="top" title="Delete Organization">
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather table-delete feather-x-circle">
                   <circle cx="12" cy="12" r="10"></circle>
                   <line x1="15" y1="9" x2="9" y2="15"></line>
@@ -128,16 +128,16 @@ function get_target_modal(organization_id){
   $('.modal-text').append(`<div class='outer-div' id="modal-loader"><span class="inner-div spinner-border text-info align-self-center loader-sm"></span></div>`);
   $.getJSON(`/api/queryTargetsInOrganization/?organization_id=${organization_id}&format=json`, function(data) {
     organization_name = htmlEncode(data['organization'][0]['name']);
-    $('#modal-loader').empty();
+    $('#modal_dialog #modal-loader').empty();
     $('.modal-title').html(`${data['domains'].length} targets in organization ${organization_name}`);
-    $('#modal-content').append(`<ul id="target-detail-modal-ul"></ul>`);
+    $('#modal_dialog .modal-text').append(`<ul id="target-detail-modal-ul"></ul>`);
     for (domain in data['domains']){
       domain_obj = data['domains'][domain];
       $("#target-detail-modal-ul").append(`<li>${domain_obj['name']}</li>`);
     }
   }).fail(function(){
-    $('#modal-loader').empty();
-    $("#modal-content").append(`<p class='text-danger'>Error loading Vulnerabilities Summary</p>`);
+    $('#modal_dialog #modal-loader').empty();
+    $("#modal_dialog .modal-text").append(`<p class='text-danger'>Error loading Vulnerabilities Summary</p>`);
   });
 }
 

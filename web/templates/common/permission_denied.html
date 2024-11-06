@@ -1,0 +1,26 @@
+{% extends 'base/base.html' %}
+{% load static %}
+
+{% block title %}
+Permission Denied
+{% endblock title %}
+
+{% block page_title %}
+Permission Denied
+{% endblock page_title %}
+
+{% block custom_js_css_link %}
+<link rel="stylesheet" type="text/css" href="{% static 'custom/custom.css' %}">
+{% endblock custom_js_css_link %}
+
+{% block main_content %}
+<div class="row justify-content-center">
+    <div class="col-lg-6">
+        <div class="text-center">
+            <h1 class="text-error mt-4">403</h1>
+            <h4 class="text-uppercase text-danger mt-3">You do not have access to this page</h4>
+            <p>Please contact the administrator to request access.</p>
+        </div>
+    </div>
+</div>
+{% endblock main_content %}

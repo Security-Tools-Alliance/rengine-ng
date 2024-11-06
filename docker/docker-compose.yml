@@ -1,0 +1,200 @@
+name: rengine
+
+services:
+  db:
+    image: ghcr.io/security-tools-alliance/rengine-ng:rengine-postgres-v${RENGINE_VERSION}
+    env_file:
+      - ../.env
+    restart: unless-stopped
+    container_name: rengine-db-1
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - rengine_network
+
+  redis:
+    image: ghcr.io/security-tools-alliance/rengine-ng:rengine-redis-v${RENGINE_VERSION}
+    env_file:
+      - ../.env
+    restart: unless-stopped
+    container_name: rengine-redis-1
+    hostname: redis
+    healthcheck:
+      test: ["CMD", "redis-cli","ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - rengine_network
+
+  celery:
+    image: ghcr.io/security-tools-alliance/rengine-ng:rengine-celery-v${RENGINE_VERSION}
+    env_file:
+      - ../.env
+    user: rengine
+    restart: unless-stopped
+    container_name: rengine-celery-1
+    entrypoint: /entrypoint.sh
+    environment:
+      - CELERY_BROKER=redis://redis:6379/0
+      - CELERY_BACKEND=redis://redis:6379/0
+    volumes:
+      - ../web:/home/rengine/rengine:rw,z
+      - ./celery/entrypoint.sh:/entrypoint.sh:ro
+      - scan_results:/home/rengine/scan_results
+      - tool_config:/home/rengine/.config
+      - nuclei_templates:/home/rengine/nuclei-templates
+      - gf_patterns:/home/rengine/.gf
+      - wordlist:/home/rengine/wordlists
+    healthcheck:
+      test: ["CMD", "poetry", "-C", "/home/rengine", "run", "celery","-A","reNgine","status"]
+      interval: 10s
+      timeout: 10s
+      retries: 60
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - rengine_network
+
+  celery-beat:
+    image: ghcr.io/security-tools-alliance/rengine-ng:rengine-celery-v${RENGINE_VERSION}
+    env_file:
+      - ../.env
+    user: rengine
+    restart: unless-stopped
+    container_name: rengine-celery-beat-1
+    entrypoint: /entrypoint.sh
+    environment:
+      - CELERY_BROKER=redis://redis:6379/0
+      - CELERY_BACKEND=redis://redis:6379/0
+    depends_on:
+      celery:
+        condition: service_healthy
+    volumes:
+      - ../web:/home/rengine/rengine:rw,z
+      - ./beat/entrypoint.sh:/entrypoint.sh:ro
+      - scan_results:/home/rengine/scan_results
+      - tool_config:/home/rengine/.config
+      - nuclei_templates:/home/rengine/nuclei-templates
+      - gf_patterns:/home/rengine/.gf
+      - wordlist:/home/rengine/wordlists
+    networks:
+      - rengine_network
+
+  web:
+    image: ghcr.io/security-tools-alliance/rengine-ng:rengine-web-v${RENGINE_VERSION}
+    env_file:
+      - ../.env
+    user: rengine
+    restart: unless-stopped
+    container_name: rengine-web-1
+    entrypoint: /entrypoint.sh
+    environment:
+      - RENGINE_HOME=/home/rengine/rengine
+      - CELERY_BROKER=redis://redis:6379/0
+      - CELERY_BACKEND=redis://redis:6379/0
+    volumes:
+      - ../web:/home/rengine/rengine:rw,z
+      - ./web/entrypoint.sh:/entrypoint.sh:ro
+      - tool_config:/home/rengine/.config
+      - nuclei_templates:/home/rengine/nuclei-templates
+      - gf_patterns:/home/rengine/.gf
+      - wordlist:/home/rengine/wordlists
+    healthcheck:
+      test: ["CMD", "curl", "-f", "-k", "http://localhost:8000"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+    depends_on:
+      db:
+        condition: service_healthy
+      celery:
+        condition: service_healthy
+      celery-beat:
+        condition: service_started
+    networks:
+      rengine_network:
+        aliases:
+          - rengine
+
+  proxy:
+    image: ghcr.io/security-tools-alliance/rengine-ng:rengine-proxy-v${RENGINE_VERSION}
+    env_file:
+      - ../.env
+    restart: unless-stopped
+    container_name: rengine-proxy-1
+    depends_on:
+      web:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    secrets:
+      - source: proxy.ca
+        target: /etc/nginx/certs/rengine_chain.pem
+      - source: proxy.cert
+        target: /etc/nginx/certs/rengine.pem
+      - source: proxy.key
+        target: /etc/nginx/certs/rengine_rsa.key
+    volumes:
+      - ./proxy/config/rengine.conf:/etc/nginx/conf.d/rengine.conf:ro
+      - ../web:/home/rengine/rengine:rw,z
+      - scan_results:/home/rengine/scan_results
+    networks:
+      - rengine_network
+    ports:
+      - 8082:8082/tcp
+      - 443:443/tcp
+
+  ollama:
+    image: ghcr.io/security-tools-alliance/rengine-ng:rengine-ollama-v${RENGINE_VERSION}
+    env_file:
+      - ../.env
+    restart: unless-stopped
+    container_name: rengine-ollama-1
+    volumes:
+      - ollama_data:/home/rengine/.ollama:rw,z
+    networks:
+      - rengine_network
+
+networks:
+  rengine_network:
+    name: rengine_network
+
+volumes:
+  tool_config:
+    name: rengine_tool_config
+  postgres_data:
+    name: rengine_postgres_data
+  gf_patterns:
+    name: rengine_gf_patterns
+  nuclei_templates:
+    name: rengine_nuclei_templates
+  github_repos:
+    name: rengine_github_repos
+  wordlist:
+    name: rengine_wordlist
+  scan_results:
+    name: rengine_scan_results
+  static_volume:
+    name: rengine_static_volume
+  ollama_data:
+    name: rengine_ollama_data
+
+
+secrets:
+  proxy.ca:
+    file: ./secrets/certs/rengine_chain.pem
+  proxy.key:
+    file: ./secrets/certs/rengine_rsa.key
+  proxy.cert:
+    file: ./secrets/certs/rengine.pem

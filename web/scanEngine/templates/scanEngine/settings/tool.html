@@ -1,6 +1,6 @@
 {% extends 'base/base.html' %}
 {% load static %}
-{% load custom_tags %}
+{% load custom_filters %}
 {% block title %}
 Settings, API Keys & Tool Settings
 {% endblock title %}
@@ -160,6 +160,22 @@ Settings, API Keys & Tool Settings
           <h4 class="header-title">Current theHarvester Configuration</h4>
           <label for="naabu_config_text_area">Double click the configuration to edit.</label>
           <textarea class="form-control" id="theharvester_config_text_area" spellcheck="false" readonly="true" name="theharvester_config_text_area"></textarea>
+        </form>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-body">
+        <h4 class="header-title">GAU</h4>
+        <p>
+          This section lets you modify <a href="https://github.com/lc/gau" class="text-primary" target="_blank">GAU</a> config file. You can find more information about the <a href="https://github.com/lc/gau/blob/master/.gau.toml" class="text-primary" target="_blank">GAU config here.</a><br>
+          <br>
+          <span class="text-danger">Please note that only TOML config is supported.</span>
+        </p>
+        <form method="post" enctype="multipart/form-data" id="gau-config-form">
+          {% csrf_token %}
+          <h4 class="header-title">Current GAU Configuration</h4>
+          <label for="gau_config_text_area">Double click the configuration to edit.</label>
+          <textarea class="form-control" id="gau_config_text_area" spellcheck="false" readonly="true" name="gau_config_text_area"></textarea>
         </form>
       </div>
     </div>

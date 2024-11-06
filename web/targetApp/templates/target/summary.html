@@ -1,7 +1,7 @@
 {% extends 'base/base.html' %}
 {% load static %}
 {% load humanize %}
-{% load custom_tags %}
+{% load custom_filters %}
 {% block title %}
 {% load mathfilters %}
 Target Summary for {{target.name}}
@@ -74,7 +74,7 @@ Target Summary
 									<ul class="list-unstyled">
 										{% for scan in recent_scans %}
 										<li class="completed">
-											<a href="/scan/{{current_project.slug}}/detail/{{scan.id}}">
+											<a href="{% url 'detail_scan' current_project.slug scan.id %}">
 												<h5 class="mt-0 mb-1">
 													{{scan.scan_type.engine_name}}
 													{% if scan.scan_status == -1 %}
@@ -149,7 +149,7 @@ Target Summary
 								</h5>
 								<div data-simplebar style="max-height: 550px;" class="p-2">
 									{% for domain in target.domain_info.related_domains.all %}
-										<span class="badge badge-soft-primary badge-link waves-effect waves-light me-1" data-toggle="tooltip" title="Add {{domain}} as target." onclick="add_target('{{domain}}')">{{domain}}</span>
+										<span class="badge badge-soft-primary badge-link waves-effect waves-light me-1" data-toggle="tooltip" title="Add {{domain}} as target." onclick="add_target('{% url 'api:addTarget' %}', '{{current_project.slug}}', '{{domain}}')">{{domain}}</span>
 									{% empty %}
 									<div class="alert alert-warning" role="alert">
 										<i class="mdi mdi-alert-outline me-2"></i> Oops! Could not identify any Related Domains.
@@ -176,7 +176,7 @@ Target Summary
 								</h5>
 								<div data-simplebar style="max-height: 450px;" class="p-2">
 									{% for domain in target.domain_info.related_tlds.all %}
-										<span class="badge badge-soft-primary badge-link waves-effect waves-light me-1" data-toggle="tooltip" title="Add {{domain}} as target." onclick="add_target('{{domain}}')">{{domain}}</span>
+										<span class="badge badge-soft-primary badge-link waves-effect waves-light me-1" data-toggle="tooltip" title="Add {{domain}} as target." onclick="add_target('{% url 'api:addTarget' %}', '{{current_project.slug}}', '{{domain}}')">{{domain}}</span>
 									{% empty %}
 									<div class="alert alert-warning" role="alert">
 										<i class="mdi mdi-alert-outline me-2"></i> Oops! Could not identify any Related TLDs.
@@ -247,7 +247,7 @@ Target Summary
 						<div class="card" style="height: 95%">
 							<div class="card-body">
 								<div class="card-widgets">
-									<a href="javascript: fetch_whois('{{target.name}}', true);" data-toggle="tooltip" title="Reload Whois"><i class="mdi mdi-refresh"></i></a>
+									<a href="javascript: fetch_whois( '{% url 'api:whois' %}', '{{target.name}}', true);" data-toggle="tooltip" title="Reload Whois"><i class="mdi mdi-refresh"></i></a>
 								</div>
 								<h4 class="header-title mb-0"><span class="text-primary"><i class="fe-activity"></i></span>&nbsp;Target Information</h4>
 								<div class="row mt-3">
@@ -266,7 +266,7 @@ Target Summary
 												{% if not target.domain_info %}
 												<div class="alert alert-danger alert-dismissible fade show" role="alert" id="whois_not_fetched_alert">
 													<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-													WHOIS Record Has not been fetched, would you like to <a href="javascript: fetch_whois('{{target}}', true);">fetch it now?</a>
+													WHOIS Record Has not been fetched, would you like to <a href="javascript: fetch_whois('{% url 'api:whois' %}', '{{target.name}}', true);">fetch it now?</a>
 												</div>
 												{% endif %}
 												<div class="alert alert-info alert-dismissible fade show" role="alert" id="whois_fetching_alert" style="display: none">
@@ -618,8 +618,8 @@ Target Summary
 						<div class="card">
 							<div class="card-body">
 								<h4 class="header-title mb-0"><span id="tasks-count"><span class="spinner-border spinner-border-sm me-1"></span></span>
-									Recon Note/Todo
-									<!--<span class="text-primary float-end" data-toggle="tooltip" data-placement="top" title="Add Recon Todo" onclick="add_todo_for_scanhistory_modal({{history.id}})">
+									Recon Note/To-do
+									<!--<span class="text-primary float-end" data-toggle="tooltip" data-placement="top" title="Add Recon to-do" onclick="add_todo_for_scanhistory_modal({{history.id}})">
 									<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-plus"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
 								</span>-->
 							</h4>
@@ -634,13 +634,13 @@ Target Summary
 										<div class="modal-body">
 											<div class="compose-box">
 												<div class="compose-content" id="addTaskModalTitle">
-													<h4 class="header-title">Add Recon Todo</h4>
+													<h4 class="header-title">Add Recon to-do</h4>
 													<form>
 														<input type="hidden" name="summary_identifier" value="{{target.id}}" id="summary_identifier_val">
 
 														<div class="mt-2">
-															<label for="todoTitle" class="form-label">Todo Title</label>
-															<input id="todoTitle" type="text" placeholder="Todo Title" class="form-control" name="task">
+															<label for="todoTitle" class="form-label">To-do Title</label>
+															<input id="todoTitle" type="text" placeholder="To-do Title" class="form-control" name="task">
 														</div>
 
 														<div class="mt-2">
@@ -652,15 +652,15 @@ Target Summary
 														</div>
 
 														<div class="">
-															<label for="todoDescription" class="form-label">Todo Description (Optional)</label>
-															<textarea class="form-control" id="todoDescription" rows="5" spellcheck="false" placeholder="Todo Description"></textarea>
+															<label for="todoDescription" class="form-label">To-do Description (Optional)</label>
+															<textarea class="form-control" id="todoDescription" rows="5" spellcheck="false" placeholder="To-do Description"></textarea>
 														</div>
 													</form>
 												</div>
 											</div>
 										</div>
 										<div class="modal-footer">
-											<button class="btn btn-primary add-scan-history-todo">Add Recon Todo</button>
+											<button class="btn btn-primary add-scan-history-todo">Add Recon to-do</button>
 										</div>
 									</div>
 								</div>
@@ -963,7 +963,7 @@ $(document).ready(function(){
 							var web_server = '';
 							var waf_badge = '';
 							if (row['technologies']){
-								tech_badge = '<div>' + parse_technology(row['technologies'], "primary", scan_id=null, domain_id=null) + '</div>';
+								tech_badge = '<div>' + parse_technology('{% url 'api:querySubdomains' %}', row['technologies'], "primary", scan_id=null, domain_id=null) + '</div>';
 							}
 							if(row['is_interesting'])
 							{
@@ -991,7 +991,7 @@ $(document).ready(function(){
 
 							endpoint_count_badge = '';
 							if (row['endpoint_count']) {
-								endpoint_count_badge = `<span class="pl-2 pr-2 me-1 badge badge-soft-primary badge-link bs-tooltip" title="Endpoints" onclick="get_endpoint_modal('{{current_project.slug}}', null, ${row['id']}, '${row['name']}')">${row['endpoint_count']} <i class=" fas fa-link"></i></span>`;
+								endpoint_count_badge = `<span class="pl-2 pr-2 me-1 badge badge-soft-primary badge-link bs-tooltip" title="Endpoints" onclick="get_endpoint_modal('{% url 'api:endpoints-list' %}', '{{current_project.slug}}', null, ${row['id']}, '${row['name']}')">${row['endpoint_count']} <i class=" fas fa-link"></i></span>`;
 							}
 
 							if(row['waf'].length){
@@ -1004,12 +1004,12 @@ $(document).ready(function(){
 							}
 
 							vuln_count_badge = '';
-							total_vuln_badge = `<span class='pl-2 pr-2 me-1 mt-1 badge badge-critical bs-tooltip badge-link' title="All Vulnerabilities" onclick="get_vulnerability_modal(scan_id=null, severity=null, subdomain_id=${row['id']}, subdomain_name='${row['name']}')">${row['info_count'] + row['low_count'] + row['high_count'] + row['medium_count'] + row['critical_count']} <i class="fas fa-bug"></i></span>`;
-							info_badge = `<span class='pl-2 pr-2 me-1 mt-1 badge badge-soft-info bs-tooltip badge-link' title="Informational Vulnerabilities" onclick="get_vulnerability_modal(scan_id=null, severity=0, subdomain_id=${row['id']}, subdomain_name='${row['name']}')">${row['info_count']} Info</span>`;
-							low_badge = `<span class='pl-2 pr-2 me-1 mt-1 badge badge-low bs-tooltip badge-link' title=" Low Severity Vulnerabilities" onclick="get_vulnerability_modal(scan_id=null, severity=1, subdomain_id=${row['id']}, subdomain_name='${row['name']}')">${row['low_count']} Low</span>`;
-							medium_badge = `<span class='pl-2 pr-2 me-1 mt-1 badge badge-soft-warning bs-tooltip badge-link' title="Medium Severity Vulnerabilities" onclick="get_vulnerability_modal(scan_id=null, severity=2, subdomain_id=${row['id']}, subdomain_name='${row['name']}')">${row['medium_count']} Med</span>`;
-							high_badge = `<span class='pl-2 pr-2 me-1 mt-1 badge badge-soft-danger bs-tooltip badge-link' title="High Severity Vulnerabilities" onclick="get_vulnerability_modal(scan_id=null, severity=3, subdomain_id=${row['id']}, subdomain_name='${row['name']}')">${row['high_count']} High</span>`;
-							critical_badge = `<span class='pl-2 pr-2 me-1 mt-1 badge badge-critical bs-tooltip badge-link' title="Critical Vulnerabilities" onclick="get_vulnerability_modal(scan_id=null, severity=4, subdomain_id=${row['id']}, subdomain_name='${row['name']}')">${row['critical_count']} Critical</span>`;
+							total_vuln_badge = `<span class='pl-2 pr-2 me-1 mt-1 badge badge-critical bs-tooltip badge-link' title="All Vulnerabilities" onclick="get_vulnerability_modal('{% url 'api:vulnerabilities-list' %}', scan_id=null, severity=null, subdomain_id=${row['id']}, subdomain_name='${row['name']}')">${row['info_count'] + row['low_count'] + row['high_count'] + row['medium_count'] + row['critical_count']} <i class="fas fa-bug"></i></span>`;
+							info_badge = `<span class='pl-2 pr-2 me-1 mt-1 badge badge-soft-info bs-tooltip badge-link' title="Informational Vulnerabilities" onclick="get_vulnerability_modal('{% url 'api:vulnerabilities-list' %}', scan_id=null, severity=0, subdomain_id=${row['id']}, subdomain_name='${row['name']}')">${row['info_count']} Info</span>`;
+							low_badge = `<span class='pl-2 pr-2 me-1 mt-1 badge badge-low bs-tooltip badge-link' title=" Low Severity Vulnerabilities" onclick="get_vulnerability_modal('{% url 'api:vulnerabilities-list' %}', scan_id=null, severity=1, subdomain_id=${row['id']}, subdomain_name='${row['name']}')">${row['low_count']} Low</span>`;
+							medium_badge = `<span class='pl-2 pr-2 me-1 mt-1 badge badge-soft-warning bs-tooltip badge-link' title="Medium Severity Vulnerabilities" onclick="get_vulnerability_modal('{% url 'api:vulnerabilities-list' %}', scan_id=null, severity=2, subdomain_id=${row['id']}, subdomain_name='${row['name']}')">${row['medium_count']} Med</span>`;
+							high_badge = `<span class='pl-2 pr-2 me-1 mt-1 badge badge-soft-danger bs-tooltip badge-link' title="High Severity Vulnerabilities" onclick="get_vulnerability_modal('{% url 'api:vulnerabilities-list' %}', scan_id=null, severity=3, subdomain_id=${row['id']}, subdomain_name='${row['name']}')">${row['high_count']} High</span>`;
+							critical_badge = `<span class='pl-2 pr-2 me-1 mt-1 badge badge-critical bs-tooltip badge-link' title="Critical Vulnerabilities" onclick="get_vulnerability_modal('{% url 'api:vulnerabilities-list' %}', scan_id=null, severity=4, subdomain_id=${row['id']}, subdomain_name='${row['name']}')">${row['critical_count']} Critical</span>`;
 							vuln_count_badge = `<div class="">` + (row['info_count'] > 0? info_badge : '') + (row['low_count'] > 0? low_badge : '') + (row['medium_count'] > 0? medium_badge : '') + (row['high_count'] > 0? high_badge : '') + (row['critical_count'] > 0? critical_badge : '') + `</div>`;
 
 							vuln_count_badge = (row['info_count'] + row['low_count'] + row['high_count'] + row['medium_count'] + row['critical_count'] > 0? total_vuln_badge : '') + vuln_count_badge;
@@ -1020,12 +1020,12 @@ $(document).ready(function(){
 
 							var directory_count_badge = '';
 							if (row['directories_count']){
-								directory_count_badge = `<span class="me-1 badge badge-soft-primary badge-link bs-tooltip" title="Directories" onclick="get_directory_modal(scan_id=null, subdomain_id=${row['id']}, subdomain_name='${row['name']}')">${row['directories_count']} <i class="far fa-folder"></i></span>`;
+								directory_count_badge = `<span class="me-1 badge badge-soft-primary badge-link bs-tooltip" title="Directories" onclick="get_directory_modal('{% url 'api:directories-list' %}', scan_id=null, subdomain_id=${row['id']}, subdomain_name='${row['name']}')">${row['directories_count']} <i class="far fa-folder"></i></span>`;
 							}
 
 							var subscan_count_badge = '';
 							if (row['subscan_count']){
-								subscan_count_badge = `<span class="badge me-1 badge-soft-blue badge-link bs-tooltip" title="SubScans" onclick="get_and_render_subscan_history(${row['id']}, '${row['name']}')">${row['subscan_count']} <i class="fas fa-history"></i></span>`;
+								subscan_count_badge = `<span class="badge me-1 badge-soft-blue badge-link bs-tooltip" title="SubScans" onclick="get_and_render_subscan_history('{% url 'api:listSubScans' %}', ${row['id']}, '${row['name']}')">${row['subscan_count']} <i class="fas fa-history"></i></span>`;
 							}
 
 							tech_badge += content_type;
@@ -1150,13 +1150,13 @@ $(document).ready(function(){
 							const cms_detector_http_url = row['http_url'] ? row['http_url'] : 'https://' + row['name'];
 							return `
 							<div class="btn-group mt-2">
-							<button type="button" data-toggle="tooltip" data-placement="top" title="Show Attack Surface" class="btn btn-primary me-1 bs-tooltip" onclick="show_attack_surface_modal(${row['id']})"><i class="fe-eye"></i></button>
+							<button type="button" data-toggle="tooltip" data-placement="top" title="Show Attack Surface" class="btn btn-primary me-1 bs-tooltip" onclick="show_attack_surface_modal('{% url 'api:gpt_get_possible_attacks' %}', ${row['id']})"><i class="fe-eye"></i></button>
 							<button type="button" data-toggle="tooltip" data-placement="top" title="Further Scan Subdomain" class="btn btn-primary btn-scan-subdomain me-1" id="${row['id']}"><i class="fe-zap"></i></button>
-							<button type="button" data-toggle="tooltip" data-placement="top" title="Add Recon Todo/Note" class="btn btn-primary me-1" id="${row['id']}" onclick="add_note_for_subdomain(${row['id']}, '${row['name']}')"><i class="fe-file-plus"></i></button>
+							<button type="button" data-toggle="tooltip" data-placement="top" title="Add Recon To-do/Note" class="btn btn-primary me-1" id="${row['id']}" onclick="add_note_for_subdomain(${row['id']}, '${row['name']}', '{{current_project.slug}}')"><i class="fe-file-plus"></i></button>
 							<button class="btn btn-primary me-1 dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false"><i class="mdi mdi-dots-horizontal"></i></button>
 							<div class="dropdown-menu dropdown-menu-end">
-							<a class="dropdown-item" href="#" onclick="mark_important_subdomain(this, ${row['id']})" id="${row['id']}"><i class="mdi mdi-alert-rhombus-outline me-2 text-muted font-18 vertical-middle"></i>Mark Important Subdomain</a>
-							<a class="dropdown-item" href="#" onclick="detect_subdomain_cms('${cms_detector_http_url}', ${row['http_status']})"><i class="fe-grid me-2 text-muted font-18 vertical-middle"></i>Detect CMS</a>
+							<a class="dropdown-item" href="#" onclick="mark_important_subdomain('{% url 'api:toggle_subdomain' %}', this, ${row['id']})" id="${row['id']}"><i class="mdi mdi-alert-rhombus-outline me-2 text-muted font-18 vertical-middle"></i>Mark Important Subdomain</a>
+							<a class="dropdown-item detect_subdomain_cms_link" href="#" data-http-status="${row['http_status']}" data-cms-url="${cms_detector_http_url}" data-url="{% url 'api:cms_detector' %}"><i class="fe-grid me-2 text-muted font-18 vertical-middle"></i>Detect CMS</a>
 							<a class="text-danger dropdown-item btn-delete-subdomain" href="#" id="${row['id']}"><i class="text-danger mdi mdi-delete-forever-outline me-2 font-18 vertical-middle"></i>Delete Subdomain</a>
 							</div>
 							</div>
@@ -1213,6 +1213,10 @@ $(document).ready(function(){
 
 		$('#subdomain-search-button').click(function() {
 			subdomain_datatables.search($("#subdomains-search").val()).draw();
+		});
+
+		$('#load_important_subdomain_table_btn').click(function() {
+			subdomain_datatables.search('is_important=true').draw();
 		});
 
 		$('input[name=sub_http_status_filter_checkbox]').change(function() {
@@ -1336,7 +1340,7 @@ $(document).ready(function(){
 	});
 
 	$("#pills-endpoints-tab").click(function() {
-		get_endpoints(project='{{current_project.slug}}', scan_history=null, domain_id={{target.id}}, gf_tags=null);
+		get_endpoints('{% url 'api:endpoints-list' %}', '{% url 'api:subdomains-list' %}', project='{{current_project.slug}}', scan_history=null, domain_id={{target.id}}, gf_tags=null);
 	});
 
 	$("#pills-vulnerabilities-tab").click(function() {
@@ -1347,7 +1351,7 @@ $(document).ready(function(){
 		}
 		var is_grouping = false;
 		var grouping_col = 3;
-		var vuln_ajax_url = '/api/listVulnerability/?target_id={{target.id}}&format=datatables';
+		var vuln_ajax_url = '{% url 'api:vulnerabilities-list' %}?target_id={{target.id}}&format=datatables';
 		var vulnerability_table = $('#vulnerability_results').DataTable({
 			"destroy": false,
 			"oLanguage": {
@@ -1392,9 +1396,9 @@ $(document).ready(function(){
 			{
 				"render": function(data, type, row) {
 					if (row['open_status']) {
-						return `<div class="form-check mb-2 form-check-primary"><input type="checkbox" name="targets_checkbox['+ e + ']" class="float-start form-check-input" onchange="vuln_status_change(this, ` + data + `);">\n<span class="new-control-indicator"></span><span style="visibility:hidden">c</span></div>`;
+						return `<div class="form-check mb-2 form-check-primary"><input type="checkbox" name="targets_checkbox['+ e + ']" class="float-start form-check-input" onchange="vuln_status_change(\'{% url 'change_vuln_status' current_project.slug 0 %}\', this, ` + data + `);">\n<span class="new-control-indicator"></span><span style="visibility:hidden">c</span></div>`;
 					} else {
-						return `<div class="form-check mb-2 form-check-primary"><input type="checkbox" checked name="targets_checkbox['+ e + ']" class="float-start form-check-input" onchange="vuln_status_change(this, ` + data + `);">\n<span class="new-control-indicator"></span><span style="visibility:hidden">c</span></div>`;
+						return `<div class="form-check mb-2 form-check-primary"><input type="checkbox" checked name="targets_checkbox['+ e + ']" class="float-start form-check-input" onchange="vuln_status_change(\'{% url 'change_vuln_status' current_project.slug 0 %}\', this, ` + data + `);">\n<span class="new-control-indicator"></span><span style="visibility:hidden">c</span></div>`;
 					}
 				},
 				"targets": 0,
@@ -1462,7 +1466,7 @@ $(document).ready(function(){
 					}
 					if (row['cve_ids']) {
 						row['cve_ids'].forEach(cve => {
-							cve_cwe_badge += `<a href="#" onclick="get_and_render_cve_details('${cve.name.toUpperCase()}')" class="badge badge-outline-primary mt-1 me-1" data-toggle="tooltip" data-placement="top" title="CVE ID">${cve.name.toUpperCase()}</a>`;
+							cve_cwe_badge += `<a href="#" onclick="get_and_render_cve_details('{% url 'api:cve_details' %}', '${cve.name.toUpperCase()}')" class="badge badge-outline-primary mt-1 me-1" data-toggle="tooltip" data-placement="top" title="CVE ID">${cve.name.toUpperCase()}</a>`;
 						});
 					}
 					if (row['cwe_ids']) {
@@ -1530,9 +1534,9 @@ $(document).ready(function(){
 									<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-more-horizontal"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg>
 									</a>
 									<div class="dropdown-menu" style="">
-									<a class="dropdown-item" href="javascript:fetch_gpt_vuln_details(${row['id']}, '${row['name']}');">Fetch GPT Vulnerability Details</a>
-									<a class="dropdown-item" href="javascript:report_hackerone(${row['id']}, '${row['severity']}');">Report to Hackerone</a>
-									<a class="text-danger dropdown-item btn-delete-vulnerability" href="#" id="${row['id']}">Delete Vulnerability</a>
+									<a class="dropdown-item" href="javascript:fetch_gpt_vuln_details('{% url 'api:gpt_vulnerability_report_generator' %}', ${row['id']}, '${row['name']}');">Fetch GPT Vulnerability Details</a>
+									<a class="dropdown-item" href="javascript:report_hackerone('{% url 'api:vulnerability_report' %}', ${row['id']}, '${row['severity']}');">Report to Hackerone</a>
+									<a class="text-danger dropdown-item btn-delete-vulnerability" href="#" id="${row['id']}" data-url="{% url 'api:delete_vulnerability' %}">Delete Vulnerability</a>
 									</div>
 									</div>`;
 					} else {
@@ -1645,7 +1649,7 @@ $(document).ready(function(){
 		});
 
 		$('#vulnerability_results').on('click', 'tr' , function (e) {
-			if ($(e.target).is('input[type="checkbox"]') || $(e.target).is('svg') || $(e.target).is('a')) {
+			if ($(e.target).is('input[type="checkbox"]') || $(e.target).is('svg') || $(e.target).is('a') || $(e.target).is('span')) {
 				return;
 			}
 			var data = vulnerability_table.row(this).data();
@@ -1654,14 +1658,14 @@ $(document).ready(function(){
 	});
 
 	// load scan history widget
-	loadSubscanHistoryWidget(scan_history_id=null, domain_id={{target.id}});
+	loadSubscanHistoryWidget('{% url 'api:listSubScans' %}', scan_history_id=null, domain_id={{target.id}});
 
-	get_important_subdomains(target_id={{target.id}}, scan_history_id=null);
-	get_recon_notes(target_id={{target.id}}, scan_history_id=null);
+	get_important_subdomains('{% url 'api:querySubdomains' %}', target_id={{target.id}}, scan_history_id=null);
+	get_recon_notes('{% url 'api:listTodoNotes' %}', target_id={{target.id}}, scan_history_id=null);
 
-	get_ips(scan_id=null, domain_id={{target.id}});
-	get_technologies(scan_id=null, domain_id={{target.id}});
-	get_ports(scan_id=null, domain_id={{target.id}});
+	get_ips('{% url 'api:listIPs' %}', scan_id=null, domain_id={{target.id}});
+	get_technologies('{% url 'api:listTechnologies' %}', scan_id=null, domain_id={{target.id}});
+	get_ports('{% url 'api:listPorts' %}', scan_id=null, domain_id={{target.id}});
 
 	var clipboard = new Clipboard('.copyable');
 	clipboard.on('success', function(e) {
@@ -1669,7 +1673,7 @@ $(document).ready(function(){
 		hideTooltip(e.trigger);
 	});
 
-	get_most_vulnerable_target(slug='{{current_project.slug}}', scan_id=null, target_id={{target.id}}, ignore_info=false);
+	get_most_vulnerable_target('{% url 'api:fetch_most_vulnerable' %}', '{% url 'all_vulns' current_project.slug %}', slug='{{current_project.slug}}', scan_id=null, target_id={{target.id}}, ignore_info=false);
 	// listener for info checkbox on most vulnerable target
 	$('#ignore_info_most_vuln_checkbox').change(function() {
 		if (this.checked) {
@@ -1678,7 +1682,7 @@ $(document).ready(function(){
 		else{
 			var text_msg = 'Informational Vulnerabilities included in Most Vulnerable Targets.';
 		}
-		get_most_vulnerable_target(slug='{{current_project.slug}}', scan_id=null, target_id={{target.id}}, ignore_info=this.checked);
+		get_most_vulnerable_target('{% url 'api:fetch_most_vulnerable' %}', '{% url 'all_vulns' current_project.slug %}', slug='{{current_project.slug}}', scan_id=null, target_id={{target.id}}, ignore_info=this.checked);
 		Snackbar.show({
 			text: text_msg,
 			pos: 'top-right',
@@ -1686,7 +1690,7 @@ $(document).ready(function(){
 		});
 	});
 
-	get_most_common_vulnerability(slug='{{current_project.slug}}', scan_id=null, target_id={{target.id}}, ignore_info=false);
+	get_most_common_vulnerability('{% url 'api:fetch_most_common_vulnerability' %}', '{% url 'all_vulns' current_project.slug %}', slug='{{current_project.slug}}', scan_id=null, target_id={{target.id}}, ignore_info=false);
 	// listener for info checkbox on most vulnerable target
 	$('#ignore_info_most_common_vuln_checkbox').change(function() {
 		if (this.checked) {
@@ -1695,7 +1699,7 @@ $(document).ready(function(){
 		else{
 			var text_msg = 'Informational Vulnerabilities included for Most Common Vulnerabilities.';
 		}
-		get_most_common_vulnerability(slug='{{current_project.slug}}', scan_id=null, target_id={{target.id}}, ignore_info=this.checked);
+		get_most_common_vulnerability('{% url 'api:fetch_most_common_vulnerability' %}', '{% url 'all_vulns' current_project.slug %}', slug='{{current_project.slug}}', scan_id=null, target_id={{target.id}}, ignore_info=this.checked);
 		Snackbar.show({
 			text: text_msg,
 			pos: 'top-right',

@@ -4,6 +4,8 @@ import pickle
 import random
 import shutil
 import traceback
+import shlex
+import subprocess
 from time import sleep
 
 import humanize
@@ -11,12 +13,16 @@ import redis
 import requests
 import tldextract
 import xmltodict
+import validators
+import ipaddress
 
 from bs4 import BeautifulSoup
 from urllib.parse import urlparse
 from celery.utils.log import get_task_logger
 from discord_webhook import DiscordEmbed, DiscordWebhook
 from django.db.models import Q
+from django.core.validators import URLValidator
+from django.core.exceptions import ValidationError
 
 from reNgine.common_serializers import *
 from reNgine.definitions import *
@@ -78,7 +84,7 @@ def get_lookup_keywords():
 		list: Lookup keywords.
 	"""
 	lookup_model = InterestingLookupModel.objects.first()
-	lookup_obj = InterestingLookupModel.objects.filter(custom_type=True).order_by('-id').first()
+	lookup_obj = InterestingLookupModel.objects.filter().order_by('-id').first()
 	custom_lookup_keywords = []
 	default_lookup_keywords = []
 	if lookup_model:
@@ -103,12 +109,9 @@ def get_subdomains(write_filepath=None, exclude_subdomains=False, ctx={}):
 	"""Get Subdomain objects from DB.
 
 	Args:
-		target_domain (startScan.models.Domain): Target Domain object.
-		scan_history (startScan.models.ScanHistory, optional): ScanHistory object.
 		write_filepath (str): Write info back to a file.
-		subdomain_id (int): Subdomain id.
 		exclude_subdomains (bool): Exclude subdomains, only return subdomain matching domain.
-		path (str): Add URL path to subdomain.
+		ctx (dict): ctx
 
 	Returns:
 		list: List of subdomains matching query.
@@ -289,11 +292,8 @@ def get_http_urls(
 	specific path.
 
 	Args:
-		target_domain (startScan.models.Domain): Target Domain object.
-		scan_history (startScan.models.ScanHistory, optional): ScanHistory object.
 		is_alive (bool): If True, select only alive urls.
 		is_uncrawled (bool): If True, select only urls that have not been crawled.
-		path (str): URL path.
 		write_filepath (str): Write info back to a file.
 		get_only_default_urls (bool):
 
@@ -375,7 +375,7 @@ def get_interesting_endpoints(scan_history=None, target=None):
 	"""
 
 	lookup_keywords = get_lookup_keywords()
-	lookup_obj = InterestingLookupModel.objects.filter(custom_type=True).order_by('-id').first()
+	lookup_obj = InterestingLookupModel.objects.filter().order_by('-id').first()
 	if not lookup_obj:
 		return EndPoint.objects.none()
 	url_lookup = lookup_obj.url_lookup
@@ -430,6 +430,12 @@ def get_subdomain_from_url(url):
 	url_obj = urlparse(url.strip())
 	return url_obj.netloc.split(':')[0]
 
+def is_valid_domain_or_subdomain(domain):
+    try:
+        URLValidator(schemes=['http', 'https'])('http://' + domain)
+        return True
+    except ValidationError:
+        return False
 
 def get_domain_from_subdomain(subdomain):
 	"""Get domain from subdomain.
@@ -440,9 +446,26 @@ def get_domain_from_subdomain(subdomain):
 	Returns:
 		str: Domain name.
 	"""
-	ext = tldextract.extract(subdomain)
-	return '.'.join(ext[1:3])
 
+	if not is_valid_domain_or_subdomain(subdomain):
+		return None
+
+	# Use tldextract to parse the subdomain
+	extracted = tldextract.extract(subdomain)
+
+	# if tldextract recognized the tld then its the final result
+	if extracted.suffix:
+		domain = f"{extracted.domain}.{extracted.suffix}"
+	else:
+		# Fallback method for unknown TLDs, like .clouds or .local etc
+		parts = subdomain.split('.')
+		if len(parts) >= 2:
+			domain = '.'.join(parts[-2:])
+		else:
+			return None
+
+	# Validate the domain before returning
+	return domain if is_valid_domain_or_subdomain(subdomain) else None
 
 def sanitize_url(http_url):
 	"""Removes HTTP ports 80 and 443 from HTTP URL because it's ugly.
@@ -457,7 +480,7 @@ def sanitize_url(http_url):
 	if "://" not in http_url:
 		http_url = "http://" + http_url
 	url = urlparse(http_url)
-	
+
 	if url.netloc.endswith(':80'):
 		url = url._replace(netloc=url.netloc.replace(':80', ''))
 	elif url.netloc.endswith(':443'):
@@ -508,10 +531,58 @@ def get_random_proxy():
 def remove_ansi_escape_sequences(text):
 	# Regular expression to match ANSI escape sequences
 	ansi_escape_pattern = r'\x1b\[.*?m'
-	
+
 	# Use re.sub() to replace the ANSI escape sequences with an empty string
 	plain_text = re.sub(ansi_escape_pattern, '', text)
 	return plain_text
+
+def get_cms_details(url):
+	"""Get CMS details using cmseek.py.
+
+	Args:
+		url (str): HTTP URL.
+
+	Returns:
+		dict: Response.
+	"""
+	# this function will fetch cms details using cms_detector
+	response = {}
+	cms_detector_command = f'python3 /home/rengine/tools/.github/CMSeeK/cmseek.py --random-agent --batch --follow-redirect -u {url}'
+	os.system(cms_detector_command)
+
+	response['status'] = False
+	response['message'] = 'Could not detect CMS!'
+
+	parsed_url = urlparse(url)
+
+	domain_name = parsed_url.hostname
+	port = parsed_url.port
+
+	find_dir = domain_name
+
+	if port:
+		find_dir += f'_{port}'
+
+	# subdomain may also have port number, and is stored in dir as _port
+
+	cms_dir_path =  f'/home/rengine/tools/.github/CMSeeK/Result/{find_dir}'
+	cms_json_path =  cms_dir_path + '/cms.json'
+
+	if os.path.isfile(cms_json_path):
+		with open(cms_json_path, 'r') as file:
+			cms_file_content = json.loads(file.read())
+		if not cms_file_content.get('cms_id'):
+			return response
+		response = {}
+		response = cms_file_content
+		response['status'] = True
+		# remove cms dir path
+		try:
+			shutil.rmtree(cms_dir_path)
+		except Exception as e:
+			print(e)
+
+	return response
 
 
 #--------------------#
@@ -556,6 +627,23 @@ def send_slack_message(message):
 	hook_url = notif.slack_hook_url
 	requests.post(url=hook_url, data=json.dumps(message), headers=headers)
 
+def send_lark_message(message):
+	"""Send lark message.
+
+	Args:
+		message (str): Message.
+	"""
+	headers = {'content-type': 'application/json'}
+	message = {"msg_type":"interactive","card":{"elements":[{"tag":"div","text":{"content":message,"tag":"lark_md"}}]}}
+	notif = Notification.objects.first()
+	do_send = (
+		notif and
+		notif.send_to_lark and
+		notif.lark_hook_url)
+	if not do_send:
+		return
+	hook_url = notif.lark_hook_url
+	requests.post(url=hook_url, data=json.dumps(message), headers=headers)
 
 def send_discord_message(
 		message,
@@ -655,7 +743,7 @@ def send_discord_message(
 
 		webhook.add_embed(embed)
 
-		# Add webhook and embed objects to cache so we can pick them up later
+		# Add webhook and embed objects to cache, so we can pick them up later
 		DISCORD_WEBHOOKS_CACHE.set(title + '_webhook', pickle.dumps(webhook))
 		DISCORD_WEBHOOKS_CACHE.set(title + '_embed', pickle.dumps(embed))
 
@@ -815,6 +903,19 @@ def fmt_traceback(exc):
 # CLI BUILDERS #
 #--------------#
 
+def _build_cmd(cmd, options, flags, sep=" "):
+	for k,v in options.items():
+		if not v:
+			continue
+		cmd += f" {k}{sep}{v}"
+
+	for flag in flags:
+		if not flag:
+			continue
+		cmd += f" --{flag}"
+
+	return cmd
+
 def get_nmap_cmd(
 		input_file,
 		cmd=None,
@@ -828,41 +929,29 @@ def get_nmap_cmd(
 		flags=[]):
 	if not cmd:
 		cmd = 'nmap'
-	cmd += f' -sV' if service_detection else ''
-	cmd += f' -p {ports}' if ports else ''
-	for flag in flags:
-		cmd += flag
-	cmd += f' --script {script}' if script else ''
-	cmd += f' --script-args {script_args}' if script_args else ''
-	cmd += f' --max-rate {max_rate}' if max_rate else ''
-	cmd += f' -oX {output_file}' if output_file else ''
-	if input_file:
-		cmd += f' -iL {input_file}'
-	elif host:
-		cmd += f' {host}'
-	return cmd
 
-# TODO: replace all cmd += ' -{proxy}' if proxy else '' by this function
-# def build_cmd(cmd, options, flags, sep=' '):
-# 	for k, v in options.items():
-# 		if v is None:
-# 			continue
-#		cmd += f' {k}{sep}{v}'
-#	for flag in flags:
-#		if not flag:
-#			continue
-#		cmd += f' --{flag}'
-# 	return cmd
-# build_cmd(cmd, proxy=proxy, option_prefix='-')
+	options = {
+		"-sV": service_detection,
+		"-p": ports,
+		"--script": script,
+		"--script-args": script_args,
+		"--max-rate": max_rate,
+		"-oX": output_file
+	}
+	cmd = _build_cmd(cmd, options, flags)
+
+	if not input_file:
+		cmd += f" {host}" if host else ""
+	else:
+		cmd += f" -iL {input_file}"
+
+	return cmd
 
 
 def xml2json(xml):
-	xmlfile = open(xml)
-	xml_content = xmlfile.read()
-	xmlfile.close()
-	xmljson = json.dumps(xmltodict.parse(xml_content), indent=4, sort_keys=True)
-	jsondata = json.loads(xmljson)
-	return jsondata
+	with open(xml) as xml_file:
+		xml_content = xml_file.read()
+	return xmltodict.parse(xml_content)
 
 
 def reverse_whois(lookup_keyword):
@@ -959,9 +1048,11 @@ def extract_between(text, pattern):
 		return match.group(1).strip()
 	return ""
 
+import re
+
 def parse_custom_header(custom_header):
     """
-    Parse the custom_header input to ensure it is a dictionary.
+    Parse the custom_header input to ensure it is a dictionary with valid header values.
 
     Args:
         custom_header (dict or str): Dictionary or string containing the custom headers.
@@ -969,6 +1060,8 @@ def parse_custom_header(custom_header):
     Returns:
         dict: Parsed dictionary of custom headers.
     """
+    def is_valid_header_value(value):
+        return bool(re.match(r'^[\w\-\s.,;:@()/+*=\'\[\]{}]+$', value))
 
     if isinstance(custom_header, str):
         header_dict = {}
@@ -977,11 +1070,19 @@ def parse_custom_header(custom_header):
             parts = header.split(':', 1)
             if len(parts) == 2:
                 key, value = parts
-                header_dict[key.strip()] = value.strip()
+                key = key.strip()
+                value = value.strip()
+                if is_valid_header_value(value):
+                    header_dict[key] = value
+                else:
+                    raise ValueError(f"Invalid header value: '{value}'")
             else:
                 raise ValueError(f"Invalid header format: '{header}'")
         return header_dict
     elif isinstance(custom_header, dict):
+        for key, value in custom_header.items():
+            if not is_valid_header_value(value):
+                raise ValueError(f"Invalid header value: '{value}'")
         return custom_header
     else:
         raise ValueError("custom_header must be a dictionary or a string")
@@ -997,6 +1098,9 @@ def generate_header_param(custom_header, tool_name=None):
     Returns:
         str: Command-line parameter for the specified tool.
     """
+    logger.debug(f"Generating header parameters for tool: {tool_name}")
+    logger.debug(f"Input custom_header: {custom_header}")
+
     # Ensure the custom_header is a dictionary
     custom_header = parse_custom_header(custom_header)
 
@@ -1013,8 +1117,12 @@ def generate_header_param(custom_header, tool_name=None):
         'gospider': generate_gospider_params(custom_header),
     }
 
+    # Get the appropriate format based on the tool name
+    result = format_mapping.get(tool_name, format_mapping.get('common'))
+    logger.debug(f"Selected format for {tool_name}: {result}")
+
     # Return the corresponding parameter for the specified tool or default to common_headers format
-    return format_mapping.get(tool_name, format_mapping.get('common'))
+    return result
 
 def generate_gospider_params(custom_header):
     """
@@ -1055,3 +1163,193 @@ def extract_columns(row, columns):
         list: Extracted values from the specified columns.
     """
     return [row[i] for i in columns]
+
+def create_scan_object(host_id, engine_id, initiated_by_id=None):
+    '''
+    create task with pending status so that celery task will execute when
+    threads are free
+    Args:
+        host_id: int: id of Domain model
+        engine_id: int: id of EngineType model
+        initiated_by_id: int : id of User model (Optional)
+    '''
+    # get current time
+    current_scan_time = timezone.now()
+    # fetch engine and domain object
+    engine = EngineType.objects.get(pk=engine_id)
+    domain = Domain.objects.get(pk=host_id)
+    scan = ScanHistory()
+    scan.scan_status = INITIATED_TASK
+    scan.domain = domain
+    scan.scan_type = engine
+    scan.start_scan_date = current_scan_time
+    if initiated_by_id:
+        user = User.objects.get(pk=initiated_by_id)
+        scan.initiated_by = user
+    scan.save()
+    # save last scan date for domain model
+    domain.start_scan_date = current_scan_time
+    domain.save()
+    return scan.id
+
+def prepare_command(cmd, shell):
+    """
+    Prepare the command for execution.
+
+    Args:
+        cmd (str): The command to prepare.
+        shell (bool): Whether to use shell execution.
+
+    Returns:
+        str or list: The prepared command, either as a string (for shell execution) or a list (for non-shell execution).
+    """
+    return cmd if shell else shlex.split(cmd)
+
+def create_command_object(cmd, scan_id, activity_id):
+    """
+    Create a Command object in the database.
+
+    Args:
+        cmd (str): The command to be executed.
+        scan_id (int): ID of the associated scan.
+        activity_id (int): ID of the associated activity.
+
+    Returns:
+        Command: The created Command object.
+    """
+    return Command.objects.create(
+        command=cmd,
+        time=timezone.now(),
+        scan_history_id=scan_id,
+        activity_id=activity_id
+    )
+
+def process_line(line, trunc_char=None):
+    """
+    Process a line of output from the command.
+
+    Args:
+        line (str): The line to process.
+        trunc_char (str, optional): Character to truncate the line. Defaults to None.
+
+    Returns:
+        str or dict: The processed line, either as a string or a JSON object if the line is valid JSON.
+    """
+    line = line.strip()
+    ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+    line = ansi_escape.sub('', line)
+    line = line.replace('\\x0d\\x0a', '\n')
+    if trunc_char and line.endswith(trunc_char):
+        line = line[:-1]
+    try:
+        return json.loads(line)
+    except json.JSONDecodeError:
+        return line
+
+def write_history(history_file, cmd, return_code, output):
+    """
+    Write command execution history to a file.
+
+    Args:
+        history_file (str): Path to the history file.
+        cmd (str): The executed command.
+        return_code (int): The return code of the command.
+        output (str): The output of the command.
+    """
+    mode = 'a' if os.path.exists(history_file) else 'w'
+    with open(history_file, mode) as f:
+        f.write(f'\n{cmd}\n{return_code}\n{output}\n------------------\n')
+
+def execute_command(command, shell, cwd):
+    """
+    Execute a command using subprocess.
+
+    Args:
+        command (str or list): The command to execute.
+        shell (bool): Whether to use shell execution.
+        cwd (str): The working directory for the command.
+
+    Returns:
+        subprocess.Popen: The Popen object for the executed command.
+    """
+    return subprocess.Popen(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        universal_newlines=True,
+        shell=shell,
+        cwd=cwd
+    )
+
+def get_data_from_post_request(request, field):
+    """
+    Get data from a POST request.
+
+    Args:
+        request (HttpRequest): The request object.
+        field (str): The field to get data from.
+    Returns:
+        list: The data from the specified field.
+    """
+    if hasattr(request.data, 'getlist'):
+        return request.data.getlist(field)
+    else:
+        return request.data.get(field, [])
+
+def safe_int_cast(value, default=None):
+    """
+    Convert a value to an integer if possible, otherwise return a default value.
+
+    Args:
+        value: The value or the array of values to convert to an integer.
+        default: The default value to return if conversion fails.
+
+    Returns:
+        int or default: The integer value if conversion is successful, otherwise the default value.
+    """
+    if isinstance(value, list):
+        return [safe_int_cast(item) for item in value]
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        return default
+
+def get_ip_info(ip_address):
+	"""
+	get_ip_info retrieves information about a given IP address, determining whether it is an IPv4 or IPv6 address. It returns an appropriate IP address object if the input is valid, or None if the input is not a valid IP address.
+
+	Args:
+		ip_address (str): The IP address to validate and retrieve information for.
+
+	Returns:
+		IPv4Address or IPv6Address or None: An IP address object if the input is valid, otherwise None.
+	"""
+	is_ipv4 = bool(validators.ipv4(ip_address))
+	is_ipv6 = bool(validators.ipv6(ip_address))
+	ip_data = None
+	if is_ipv4:
+		ip_data = ipaddress.IPv4Address(ip_address)
+	elif is_ipv6:
+		ip_data = ipaddress.IPv6Address(ip_address)
+	else:
+		return None
+	return ip_data
+
+def get_ips_from_cidr_range(target):
+    """
+    get_ips_from_cidr_range generates a list of IP addresses from a given CIDR range. It returns the list of valid IPv4 addresses or logs an error if the provided CIDR range is invalid.
+
+    Args:
+        target (str): The CIDR range from which to generate IP addresses.
+
+    Returns:
+        list of str: A list of IP addresses as strings if the CIDR range is valid; otherwise, an empty list is returned.
+        
+    Raises:
+        ValueError: If the target is not a valid CIDR range, an error is logged.
+    """
+    try:
+        return [str(ip) for ip in ipaddress.IPv4Network(target)]
+    except ValueError:
+        logger.error(f'{target} is not a valid CIDR range. Skipping.')
+        return []

@@ -1,6 +1,6 @@
 {% extends 'base/base.html' %}
 {% load static %}
-{% load custom_tags %}
+{% load custom_filters %}
 {% block title %}
 reNgine-ng Settings
 {% endblock title %}
@@ -42,7 +42,7 @@ reNgine-ng Settings
                 </p>
               </div>
               <div class="col-xl-3 col-lg-9 col-md-6 col-sm-6 col-12 mt-2">
-                <button class="btn btn-danger mt-1 float-end" onclick="delete_all_scan_results()">Delete All Scan Results</button>
+                <button class="btn btn-danger mt-1 float-end" onclick="delete_all_scan_results('{% url 'delete_all_scan_results' current_project.slug %}')">Delete All Scan Results</button>
               </div>
             </div>
             <hr>
@@ -57,7 +57,7 @@ reNgine-ng Settings
                 </p>
               </div>
               <div class="col-xl-3 col-lg-9 col-md-6 col-sm-6 col-12 mt-2 mb-2">
-                <button class="btn btn-danger mt-1 float-end" onclick="delete_all_screenshots()">Delete All Screenshots</button>
+                <button class="btn btn-danger mt-1 float-end" onclick="delete_all_screenshots('{% url 'delete_all_screenshots' current_project.slug %}')">Delete All Screenshots</button>
               </div>
             </div>
           </div>

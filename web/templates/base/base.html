@@ -61,36 +61,38 @@
     <!-- Topbar begins -->
     {% include 'base/_items/top_bar.html' %}
     {# topbar ends #}
-    {# top nav begins #}
-    {% include 'base/_items/top_nav.html' %}
-    {# top nav ends #}
-    <input type="hidden" name="current_project" value="{{current_project.slug}}">
-    <div class="content-page">
-      <div class="content">
-        <div class="container-fluid">
-          <div class="row">
-            <div class="col-12">
-              <div class="page-title-box">
-                <div class="page-title-right">
-                  <ol class="breadcrumb m-0">
-                    {% block breadcrumb_title %}
-                    {% endblock breadcrumb_title %}
-                  </ol>
+    <div id="wrapper"></div>
+      {# top nav begins #}
+      {% include 'base/_items/top_nav.html' %}
+      {# top nav ends #}
+      <div class="content-page">
+        <div class="content">
+          <div class="container-fluid">
+            <div class="row">
+              <div class="col-12">
+                <div class="page-title-box">
+                  <div class="page-title-right">
+                    <ol class="breadcrumb m-0">
+                      {% block breadcrumb_title %}
+                      {% endblock breadcrumb_title %}
+                    </ol>
+                  </div>
+                  <h4 class="page-title">{% block page_title %}{% endblock page_title %}</h4>
                 </div>
-                <h4 class="page-title">{% block page_title %}{% endblock page_title %}</h4>
               </div>
             </div>
+            {% block main_content %}
+            {% endblock main_content %}
           </div>
-          {% block main_content %}
-          {% endblock main_content %}
+          <div id="additional-content"></div>
         </div>
-        <div id="additional-content"></div>
+        {% include 'base/_items/modal.html' %}
+        {% include 'base/_items/xl_scrollable_modal.html' %}
+        {% include 'base/_items/offcanvas.html' %}
       </div>
-      {% include 'base/_items/modal.html' %}
-      {% include 'base/_items/xl_scrollable_modal.html' %}
-      {% include 'base/_items/offcanvas.html' %}
+      {% include 'base/_items/right_bar.html' %}
+      {% include 'base/_items/footer.html' %}
     </div>
-    {% include 'base/_items/right_bar.html' %}
     <script src="{% static 'assets/js/vendor.min.js' %}"></script>
     <script src="https://unpkg.com/@popperjs/core@2"></script>
     <script src="https://unpkg.com/tippy.js@6"></script>
@@ -106,12 +108,20 @@
     <script src="https://cdn.datatables.net/rowgroup/1.4.0/js/dataTables.rowGroup.min.js"></script>
     <script type="text/javascript">
       $(document).ready(function(){
+        // for tabs with urls, we need to append the hash in the url
+        $('a[data-bs-toggle="tab"]').on('shown.bs.tab', function (e) {
+          var href = $(e.target).attr('href');
+          if (href && href.startsWith('#')) {
+            history.pushState(null, null, href);
+          }
+        });
+        $(window).on('hashchange', handleHashInUrl);
         render_search_history('{{current_project.slug}}');
 
         // reNgine-ng will also check everyday if update exists for reNgine-ng
         checkDailyUpdate();
 
-        getScanStatusSidebar(project='{{current_project.slug}}', reload=false);
+        getScanStatusSidebar('{% url 'api:scan_status' %}', '{% url 'api:stop_scan' %}', '{% url 'api:fetch_subscan_results' %}', project='{{current_project.slug}}', reload=false);
         // hide badge if update does not exists
         if (window.localStorage.getItem('update_available') && window.localStorage.getItem('update_available') === 'true') {
           $('.rengine_update_available').show();
@@ -129,6 +139,7 @@
         else{
           $('#dark-mode-check').prop("checked", false).change();
         }
+        handleHashInUrl();
       });
 
       function render_search_history(slug){
@@ -138,7 +149,7 @@
           if (response.status) {
             for (var history in response.results) {
               $('#search-history-items').append(`
-                <a href="/${slug}/search?query=${response.results[history].query}" class="dropdown-item notify-item">
+                <a href="{% url 'search' %}?query=${response.results[history].query}" class="dropdown-item notify-item">
                   <span>${response.results[history].query}</span>
                 </a>
               `);

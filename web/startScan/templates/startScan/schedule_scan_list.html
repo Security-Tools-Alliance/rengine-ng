@@ -1,6 +1,6 @@
 {% extends 'base/base.html' %}
 {% load static %}
-{% load custom_tags %}
+{% load custom_filters %}
 {% load permission_tags %}
 
 {% block title %}
@@ -48,7 +48,7 @@ Scheduled Scans
               Will run exactly at {{ task.clocked.clocked_time}} UTC
               {% endif %}
             </td>
-            <td>{{ task.last_run_at|none_or_never }}</td>
+            <td>{{ task.last_run_at|none_or_never }} UTC</td>
             <td class="text-center">{{ task.total_run_count }}</td>
             <td class="text-center">
               {% if task.one_off %}
@@ -60,13 +60,13 @@ Scheduled Scans
             <td class="text-center">
               <label class="switch s-icons s-outline s-outline-info">
                 <input type="hidden" name="task_id" value="task.id" />
-                <input type="checkbox" name="task_enabled" {% if task.enabled %}checked{% endif %} onchange="change_scheduled_task_status({{task.id}}, this)" data-plugin="switchery">
+                <input type="checkbox" name="task_enabled" {% if task.enabled %}checked{% endif %} onchange="change_scheduled_task_status('{% url 'change_scheduled_task_status' current_project.slug task.id %}', this)" data-plugin="switchery">
                 <span class="slider round"></span>
               </label>
             </td>
             {% if user|can:'modify_scan_results' %}
             <td class="text-center">
-              <a onclick="deleteScheduledScan({{ task.id }})" class="text-danger btnDelTask" href="#" data-toggle="tooltip" data-placement="top" title="" data-original-title="Delete Scheduled Task">
+              <a onclick="deleteScheduledScan('{% url 'delete_scheduled_task' current_project.slug task.id %}')" class="text-danger btnDelTask" href="#" data-toggle="tooltip" data-placement="top" title="" data-original-title="Delete Scheduled Task">
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather table-delete feather-x-circle">
                   <circle cx="12" cy="12" r="10"></circle>
                   <line x1="15" y1="9" x2="9" y2="15"></line>
