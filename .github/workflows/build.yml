@@ -29,7 +29,6 @@ env:
   REGISTRY: ghcr.io
   OWNER: security-tools-alliance
   PROJECT: rengine-ng
-  BUILDX_NO_DEFAULT_ATTESTATIONS: 1
 
 jobs:
   build-and-push:
@@ -37,19 +36,23 @@ jobs:
     strategy:
       matrix:
         image: [celery, web, postgres, redis, ollama, certs, proxy]
-        platform: [linux/amd64, linux/arm64]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Get version
-        id: get_version
-        run: |
-          if [[ $GITHUB_REF == refs/tags/* ]]; then
-            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-          else
-            echo "VERSION=latest" >> $GITHUB_OUTPUT
-          fi
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ env.PROJECT }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha
+          flavor: |
+            prefix=rengine-${{ matrix.image }}-,onlatest=true
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -71,10 +74,9 @@ jobs:
           context: ./docker/${{ matrix.image }}
           file: ./docker/${{ matrix.image }}/Dockerfile
           push: ${{ github.event_name != 'pull_request' || github.event.inputs.push_image == 'true' }}
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ env.PROJECT }}:rengine-${{ matrix.image }}-${{ steps.get_version.outputs.VERSION }}
-            ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ env.PROJECT }}:rengine-${{ matrix.image }}-latest
-          platforms: ${{ matrix.platform }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          platforms: linux/amd64,linux/arm64
 
   update-release:
     needs: build-and-push
