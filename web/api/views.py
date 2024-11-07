@@ -1325,7 +1325,7 @@ class GetFileContents(APIView):
 			return Response(response)
 
 		if 'amass_config' in req.query_params:
-			path = str(Path.home() / ".config" / "amass.ini")
+			path = str(Path.home() / ".config" / "amass" / "config.ini")
 			if not os.path.exists(path):
 				run_command(f'touch {path}')
 				response['message'] = 'File Created!'

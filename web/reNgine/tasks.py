@@ -422,14 +422,14 @@ def subdomain_discovery(
             if tool == 'amass-passive':
                 use_amass_config = config.get(USE_AMASS_CONFIG, False)
                 cmd = f'amass enum -passive -d {host} -o ' + str(Path(self.results_dir) / 'subdomains_amass.txt')
-                cmd += (' -config ' + str(Path.home() / '.config' / 'amass.ini')) if use_amass_config else ''
+                cmd += (' -config ' + str(Path.home() / '.config' / 'amass' / 'config.ini')) if use_amass_config else ''
 
             elif tool == 'amass-active':
                 use_amass_config = config.get(USE_AMASS_CONFIG, False)
                 amass_wordlist_name = config.get(AMASS_WORDLIST, AMASS_DEFAULT_WORDLIST_NAME)
                 wordlist_path = str(Path(AMASS_DEFAULT_WORDLIST_PATH) / f'{amass_wordlist_name}.txt')
                 cmd = f'amass enum -active -d {host} -o ' + str(Path(self.results_dir) / 'subdomains_amass_active.txt')
-                cmd += (' -config ' + str(Path.home() / '.config' / 'amass.ini')) if use_amass_config else ''
+                cmd += (' -config ' + str(Path.home() / '.config' / 'amass' / 'config.ini')) if use_amass_config else ''
                 cmd += f' -brute -w {wordlist_path}'
 
             elif tool == 'sublist3r':

@@ -177,12 +177,15 @@ RUN cd $TOOLPATH/.github/OneForAll && mv /home/$USERNAME/oneforall-pyproject.tom
     cd /home/$USERNAME && poetry install
 
 # Create tools config files
-RUN nuclei -silent && naabu -version && subfinder -version && mkdir -p /home/$USERNAME/.config/theHarvester
+RUN nuclei -silent && naabu -version && subfinder -version && \
+    mkdir -p /home/$USERNAME/.config/theHarvester && \
+    mkdir -p /home/$USERNAME/.config/amass && \
+    mkdir -p /home/$USERNAME/.config/gau
 COPY --chown=$USERNAME:$USERNAME ./config/the-harvester-api-keys.yaml /home/$USERNAME/.config/theHarvester/api-keys.yaml
-COPY --chown=$USERNAME:$USERNAME ./config/amass.ini /home/$USERNAME/.config/amass.ini
-COPY --chown=$USERNAME:$USERNAME ./config/.gau.toml /home/$USERNAME/.config/.gau.toml
-RUN ln -s /home/$USERNAME/.config/.gau.toml /home/$USERNAME/.gau.toml
-
+COPY --chown=$USERNAME:$USERNAME ./config/amass.ini /home/$USERNAME/.config/amass/config.ini
+COPY --chown=$USERNAME:$USERNAME ./config/.gau.toml /home/$USERNAME/.config/gau/.gau.toml
+RUN ln -s /home/$USERNAME/.config/gau/.gau.toml /home/$USERNAME/.gau.toml && \
+    ln -s /home/$USERNAME/.config/theHarvester /home/$USERNAME/.theHarvester
 COPY ./entrypoint.sh /entrypoint.sh
 RUN mkdir -p /home/$USERNAME/rengine /home/$USERNAME/scan_results \
     && chown -R $USERNAME:$USERNAME /home/$USERNAME/rengine \
