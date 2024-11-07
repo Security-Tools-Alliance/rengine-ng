@@ -29,6 +29,7 @@ env:
   REGISTRY: ghcr.io
   OWNER: security-tools-alliance
   PROJECT: rengine-ng
+  BUILDX_NO_DEFAULT_ATTESTATIONS: 1
 
 jobs:
   build-and-push:
