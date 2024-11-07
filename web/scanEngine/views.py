@@ -224,7 +224,7 @@ def handle_post_request(request):
         'subfinder_config_text_area': lambda r: update_config(r, 'subfinder', 'Subfinder'),
         'naabu_config_text_area': lambda r: update_config(r, 'naabu', 'Naabu'),
         'amass_config_text_area': lambda r: update_config(r, 'amass', 'Amass', 'config', '.ini'),
-        'theharvester_config_text_area': lambda r: update_config(r, 'theHarvester', 'theHarvester', 'api-keys', '.yaml'),
+        'theHarvester_config_text_area': lambda r: update_config(r, 'theHarvester', 'theHarvester', 'api-keys', '.yaml'),
         'gau_config_text_area': lambda r: update_config(r, 'gau', 'GAU', 'config', '.toml'),
     }
     for key, handler in handlers.items():
