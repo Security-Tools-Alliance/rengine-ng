@@ -1362,7 +1362,7 @@ class GetFileContents(APIView):
 			return Response(response)
 
 		if 'gau_config' in req.query_params:
-			path = str(Path.home() / ".config" / '.gau.toml')
+			path = str(Path.home() / ".config" / 'gau' / 'config.toml')
 			if not os.path.exists(path):
 				run_command(f'touch {path}')
 				response['message'] = 'File Created!'

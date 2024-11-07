@@ -1828,11 +1828,11 @@ def fetch_url(self, urls=[], ctx={}, description=None):
 
     # Initialize command map for tools
     cmd_map = {
-        'gau': f'gau',
+        'gau': 'gau --config ' + str(Path.home() / '.config' / 'gau' / 'config.toml'),
         'hakrawler': 'hakrawler -subs -u',
         'waybackurls': 'waybackurls',
-        'gospider': f'gospider --js -d 2 --sitemap --robots -w -r -a',
-        'katana': f'katana -silent -jc -kf all -d 3 -fs rdn',
+        'gospider': 'gospider --js -d 2 --sitemap --robots -w -r -a',
+        'katana': 'katana -silent -jc -kf all -d 3 -fs rdn',
     }
     if proxy:
         cmd_map['gau'] += f' --proxy "{proxy}"'
