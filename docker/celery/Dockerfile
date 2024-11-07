@@ -112,19 +112,19 @@ RUN ARCH=$(dpkg --print-architecture) \
         && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/tomnomnom/gf@dcd4c361f9f5ba302294ed38b8ce278e8ba69006 \
         && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/tomnomnom/unfurl@v0.4.3 \
         && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/tomnomnom/waybackurls@v0.1.0 \
-        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/projectdiscovery/httpx/cmd/httpx@v1.6.0 \
-        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@v2.6.6 \
-        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@v3.2.6 \
-        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/projectdiscovery/naabu/v2/cmd/naabu@v2.3.0 \
+        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/projectdiscovery/httpx/cmd/httpx@v1.6.9 \
+        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@v2.6.7 \
+        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@v3.3.5 \
+        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/projectdiscovery/naabu/v2/cmd/naabu@v2.3.2 \
         && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/hakluke/hakrawler@latest \
-        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/lc/gau/v2/cmd/gau@v2.2.1 \
+        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/lc/gau/v2/cmd/gau@v2.2.4 \
         && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/owasp-amass/amass/v4/...@v4.2.0 \
         && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/ffuf/ffuf/v2@v2.1.0 \
-        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/projectdiscovery/tlsx/cmd/tlsx@v1.1.6 \
-        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/hahwul/dalfox/v2@v2.9.2 \
-        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/projectdiscovery/katana/cmd/katana@v1.1.0 \
+        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/projectdiscovery/tlsx/cmd/tlsx@v1.1.8 \
+        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/hahwul/dalfox/v2@v2.9.3 \
+        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/projectdiscovery/katana/cmd/katana@v1.1.1 \
         && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/dwisiswant0/crlfuzz/cmd/crlfuzz@v1.4.1 \
-        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/sa7mon/s3scanner@c544f1cf00f70cae3f2155b24d336f515b7c598b \
+        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/sa7mon/s3scanner@c544f1cf00f70cae3f2155b24d336515b7c598b \
         && chmod 700 -R $GOPATH/pkg/* \
         && rm -rf $GOPATH/pkg/* \
         && rm -rf /home/$USERNAME/.cache/go-build/*; \
