@@ -124,7 +124,7 @@ RUN ARCH=$(dpkg --print-architecture) \
         && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/hahwul/dalfox/v2@v2.9.3 \
         && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/projectdiscovery/katana/cmd/katana@v1.1.1 \
         && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/dwisiswant0/crlfuzz/cmd/crlfuzz@v1.4.1 \
-        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/sa7mon/s3scanner@c544f1cf00f70cae3f2155b24d336515b7c598b \
+        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/sa7mon/s3scanner@c544f1cf00f70cae3f2155b24d336f515b7c598b \
         && chmod 700 -R $GOPATH/pkg/* \
         && rm -rf $GOPATH/pkg/* \
         && rm -rf /home/$USERNAME/.cache/go-build/*; \
