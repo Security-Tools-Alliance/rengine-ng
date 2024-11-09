@@ -1,0 +1,23 @@
+services:
+  ollama:
+    extends:
+      file: docker-compose.yml
+      service: ollama
+    build:
+      context: ./ollama
+      dockerfile: ${GPU_TYPE:-none}.Dockerfile
+    runtime: ${DOCKER_RUNTIME:-none}
+    when: ${GPU:-0} = 1
+    environment:
+      # NVIDIA Settings
+      - NVIDIA_VISIBLE_DEVICES=${GPU_DEVICES:-all}
+      - NVIDIA_DRIVER_CAPABILITIES=${GPU_CAPABILITIES:-compute,utility}
+      # ROCm Settings
+      - HSA_OVERRIDE_GFX_VERSION=${ROCM_VERSION:-9.0.0}
+      - ROCR_VISIBLE_DEVICES=${GPU_DEVICES:-all}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [${GPU_CAPABILITIES:-none}]
+              count: all
