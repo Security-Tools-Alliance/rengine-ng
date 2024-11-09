@@ -33,7 +33,7 @@ detect_gpu_type() {
     if command -v rocminfo &> /dev/null; then
         # Check if rocminfo can detect a GPU
         if rocminfo 2>/dev/null | grep -q "GPU agent"; then
-            echo "rocm"
+            echo "amd"
             return 0
         fi
     fi
@@ -42,7 +42,7 @@ detect_gpu_type() {
     if lspci | grep -i "AMD" | grep -i "VGA\|3D\|Display" &> /dev/null; then
         # Check for AMD GPU driver
         if lsmod | grep -q "^amdgpu "; then
-            echo "rocm"
+            echo "amd"
             return 0
         fi
     fi

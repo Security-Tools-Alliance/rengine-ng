@@ -42,20 +42,27 @@ GPU ?= 0
 
 # Function to handle GPU configuration
 define gpu_config
+	$(info Checking GPU configuration...)
 	$(if $(filter 1,$(GPU)), \
+		$(info GPU=1, detecting GPU type...) \
 		$(eval GPU_TYPE := $(shell ./scripts/gpu_support.sh)) \
 		$(if $(filter nvidia,$(GPU_TYPE)), \
+			$(info Configuring for NVIDIA GPU) \
 			$(eval DOCKER_RUNTIME := nvidia) \
-			$(eval GPU_CAPABILITIES := compute,utility) \
-			$(eval COMPOSE_GPU_FILE := -f ${COMPOSE_FILE_GPU}), \
-			$(if $(filter rocm,$(GPU_TYPE)), \
-				$(eval DOCKER_RUNTIME := rocm) \
-				$(eval GPU_CAPABILITIES := gpu) \
-				$(eval COMPOSE_GPU_FILE := -f ${COMPOSE_FILE_GPU}), \
-				$(error No supported GPU detected) \
+			$(eval COMPOSE_GPU_FILE := -f ${COMPOSE_FILE_GPU} --profile gpu), \
+			$(if $(filter amd,$(GPU_TYPE)), \
+				$(info Configuring for AMD GPU) \
+				$(eval DOCKER_RUNTIME := amd) \
+				$(eval COMPOSE_GPU_FILE := -f ${COMPOSE_FILE_GPU} --profile gpu), \
+				$(info No supported GPU detected) \
+				$(eval COMPOSE_GPU_FILE :=) \
 			) \
 		), \
+		$(info GPU support disabled) \
+		$(eval COMPOSE_GPU_FILE :=) \
 	)
+	$(eval export GPU_TYPE) \
+	$(eval export DOCKER_RUNTIME)
 endef
 
 .PHONY: certs up dev_up build_up build pull superuser_create superuser_delete superuser_changepassword migrate down stop restart remove_images test logs images prune help

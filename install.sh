@@ -149,17 +149,6 @@ install_make() {
 check_gpu_support() {
     log "Checking for GPU support..." $COLOR_CYAN
     
-    if grep -q "^GPU=" .env; then
-        GPU_ENABLED=$(grep "^GPU=" .env | cut -d '=' -f2)
-        if [ "$GPU_ENABLED" = "1" ]; then
-            log "GPU support is already enabled in .env" $COLOR_GREEN
-            return 0
-        else
-            log "GPU support is already disabled in .env" $COLOR_YELLOW
-            return 0
-        fi
-    fi
-    
     # Execute GPU detection with error handling
     if ! GPU_TYPE=$(./scripts/gpu_support.sh 2>/dev/null); then
         log "GPU detection script failed, continuing with CPU-only setup" $COLOR_YELLOW
@@ -168,20 +157,18 @@ check_gpu_support() {
             echo "GPU=0"
             echo "GPU_TYPE=none"
             echo "DOCKER_RUNTIME=none"
-            echo "GPU_CAPABILITIES=none"
         } >> .env
         return 1
     fi
     
     # Validate GPU_TYPE output
-    if [[ ! "$GPU_TYPE" =~ ^(nvidia|rocm|none)$ ]]; then
+    if [[ ! "$GPU_TYPE" =~ ^(nvidia|amd|none)$ ]]; then
         log "Invalid GPU type detected: $GPU_TYPE, continuing with CPU-only setup" $COLOR_YELLOW
         # Add default GPU configuration
         {
             echo "GPU=0"
             echo "GPU_TYPE=none"
             echo "DOCKER_RUNTIME=none"
-            echo "GPU_CAPABILITIES=none"
         } >> .env
         return 1
     fi
@@ -235,7 +222,7 @@ check_gpu_support() {
             return 0
             ;;
             
-        "rocm")
+        "amd")
             log "AMD GPU detected" $COLOR_GREEN
             if ! command -v amdgpu-install &> /dev/null; then
                 log "Installing ROCm..." $COLOR_CYAN
@@ -351,12 +338,6 @@ main() {
 
   # Add GPU support check here
   if check_gpu_support; then
-    # Check if GPU configuration already exists in .env
-    if grep -q "^GPU=1" .env; then
-        log "GPU support is already configured in .env" $COLOR_GREEN
-        return 0
-    fi
-
     if [ $isNonInteractive = true ]; then
         # Load existing GPU configuration from .env
         if [ -f .env ]; then
@@ -366,18 +347,12 @@ main() {
                 sed -i '/^GPU=/d' .env
                 sed -i '/^GPU_TYPE=/d' .env
                 sed -i '/^DOCKER_RUNTIME=/d' .env
-                sed -i '/^GPU_CAPABILITIES=/d' .env
                 
                 # Add GPU configuration to environment
                 {
                     echo "GPU=1"
                     echo "GPU_TYPE=$GPU_TYPE"
                     echo "DOCKER_RUNTIME=$GPU_TYPE"
-                    if [ "$GPU_TYPE" = "nvidia" ]; then
-                        echo "GPU_CAPABILITIES=compute,utility"
-                    else
-                        echo "GPU_CAPABILITIES=gpu"
-                    fi
                 } >> .env
                 log "GPU support has been enabled from existing configuration" $COLOR_GREEN
             else
@@ -393,18 +368,12 @@ main() {
                 sed -i '/^GPU=/d' .env
                 sed -i '/^GPU_TYPE=/d' .env
                 sed -i '/^DOCKER_RUNTIME=/d' .env
-                sed -i '/^GPU_CAPABILITIES=/d' .env
                 
                 # Add GPU configuration to environment
                 {
                     echo "GPU=1"
                     echo "GPU_TYPE=$GPU_TYPE"
                     echo "DOCKER_RUNTIME=$GPU_TYPE"
-                    if [ "$GPU_TYPE" = "nvidia" ]; then
-                        echo "GPU_CAPABILITIES=compute,utility"
-                    else
-                        echo "GPU_CAPABILITIES=gpu"
-                    fi
                 } >> .env
                 log "GPU support will be enabled" $COLOR_GREEN
                 ;;
@@ -413,13 +382,11 @@ main() {
                 sed -i '/^GPU=/d' .env
                 sed -i '/^GPU_TYPE=/d' .env
                 sed -i '/^DOCKER_RUNTIME=/d' .env
-                sed -i '/^GPU_CAPABILITIES=/d' .env
                 # Add default GPU configuration
                 {
                     echo "GPU=0"
                     echo "GPU_TYPE=none"
                     echo "DOCKER_RUNTIME=none"
-                    echo "GPU_CAPABILITIES=none"
                 } >> .env
                 log "Continuing without GPU support" $COLOR_YELLOW
                 ;;

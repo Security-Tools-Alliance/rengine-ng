@@ -5,19 +5,25 @@ services:
       service: ollama
     build:
       context: ./ollama
-      dockerfile: ${GPU_TYPE:-none}.Dockerfile
-    runtime: ${DOCKER_RUNTIME:-none}
-    when: ${GPU:-0} = 1
-    environment:
-      # NVIDIA Settings
-      - NVIDIA_VISIBLE_DEVICES=${GPU_DEVICES:-all}
-      - NVIDIA_DRIVER_CAPABILITIES=${GPU_CAPABILITIES:-compute,utility}
-      # ROCm Settings
-      - HSA_OVERRIDE_GFX_VERSION=${ROCM_VERSION:-9.0.0}
-      - ROCR_VISIBLE_DEVICES=${GPU_DEVICES:-all}
+      dockerfile: ${GPU_TYPE:+${GPU_TYPE}.Dockerfile}
     deploy:
       resources:
         reservations:
           devices:
-            - capabilities: [${GPU_CAPABILITIES:-none}]
+            - driver: ${DOCKER_RUNTIME}
               count: all
+              capabilities: [gpu]
+    environment:
+      # GPU Settings
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+      - HSA_OVERRIDE_GFX_VERSION=10.3.0
+      - ROCR_VISIBLE_DEVICES=all
+    group_add:
+      - video
+      - render
+    devices:
+      - /dev/kfd:/dev/kfd  # AMD ROCm specific
+      - /dev/dri:/dev/dri  # AMD ROCm specific
+    profiles:
+      - gpu
