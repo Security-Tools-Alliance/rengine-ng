@@ -169,7 +169,6 @@ class OllamaManager(APIView):
                 defaults={
                     'selected_model': model_name,
                     'use_ollama': use_ollama,
-                    'selected': True
                 }
             )
             return Response({'status': True})
