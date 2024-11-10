@@ -3118,8 +3118,8 @@ function render_vuln_offcanvas(vuln){
 		</div>`;
 	}
 
-	if (vuln.is_gpt_used) {
-		body += `<small class="text-muted float-end">(GPT was used to generate vulnerability details.)</small>`;
+	if (vuln.is_llm_used) {
+		body += `<small class="text-muted float-end">(LLM was used to generate vulnerability details.)</small>`;
 	}
 
 
@@ -3143,7 +3143,7 @@ function showSwalLoader(title, text){
 	});
 }
 
-async function send_gpt_api_request(endpoint_url, vuln_id){
+async function send_llm_api_request(endpoint_url, vuln_id){
 	const api = `${endpoint_url}?format=json&id=${vuln_id}`;
 	try {
 		const response = await fetch(api, {
@@ -3156,23 +3156,22 @@ async function send_gpt_api_request(endpoint_url, vuln_id){
 		if (!response.ok) {
 			throw new Error('Request failed');
 		}
-		const data = await response.json();
-		return data;
+		return await response.json();
 	} catch (error) {
 		throw new Error('Request failed');
 	}
 }
 
 
-async function fetch_gpt_vuln_details(endpoint_url, id, title) {
+async function fetch_llm_vuln_details(endpoint_url, id, title) {
 	var loader_title = "Loading...";
-	var text = 'Please wait while the GPT is generating vulnerability description.'
+	var text = 'Please wait while the LLM is generating vulnerability description.'
 	try {
 		showSwalLoader(loader_title, text);
-		const data = await send_gpt_api_request(endpoint_url, id);
+		const data = await send_llm_api_request(endpoint_url, id);
 		Swal.close();
 		if (data.status) {
-			render_gpt_vuln_modal(data, title);
+			render_llm_vuln_modal(data, title);
 		}
 		else{
 			Swal.close();
@@ -3194,7 +3193,7 @@ async function fetch_gpt_vuln_details(endpoint_url, id, title) {
 }
 
 
-function render_gpt_vuln_modal(data, title){
+function render_llm_vuln_modal(data, title){
 	$('#modal_dialog .modal-title').empty();
 	$('#modal_dialog .modal-text').empty();
 	$('#modal_dialog .modal-footer').empty();
@@ -3250,7 +3249,7 @@ function endpoint_datatable_col_visibility(endpoint_table){
 }
 
 
-async function send_gpt__attack_surface_api_request(endpoint_url, subdomain_id){
+async function send_llm__attack_surface_api_request(endpoint_url, subdomain_id){
 	const api = `${endpoint_url}?format=json&subdomain_id=${subdomain_id}`;
 	try {
 		const response = await fetch(api, {
@@ -3273,10 +3272,10 @@ async function send_gpt__attack_surface_api_request(endpoint_url, subdomain_id){
 
 async function show_attack_surface_modal(endpoint_url, id){
 	var loader_title = "Loading...";
-	var text = 'Please wait while the GPT is generating attack surface.'
+	var text = 'Please wait while the LLM is generating attack surface.'
 	try {
 		showSwalLoader(loader_title, text);
-		const data = await send_gpt__attack_surface_api_request(endpoint_url,id);
+		const data = await send_llm__attack_surface_api_request(endpoint_url,id);
 		Swal.close();
 		if (data.status) {
 			$('#modal_dialog .modal-title').html(`Attack Surface Suggestion for ${data.subdomain_name} (BETA)`);

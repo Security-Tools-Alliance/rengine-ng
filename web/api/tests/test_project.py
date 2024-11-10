@@ -12,7 +12,7 @@ __all__ = [
     'TestCreateProjectApi',
     'TestAddReconNote',
     'TestListTodoNotes',
-    'TestGPTAttackSuggestion'
+    'TestLLMAttackSuggestion'
 ]
 
 class TestCreateProjectApi(BaseTestCase):
@@ -108,21 +108,21 @@ class TestListTodoNotes(BaseTestCase):
             self.data_generator.todo_note.scan_history.id,
         )
 
-class TestGPTAttackSuggestion(BaseTestCase):
-    """Tests for the GPT Attack Suggestion API."""
+class TestLLMAttackSuggestion(BaseTestCase):
+    """Tests for the LLM Attack Suggestion API."""
 
     def setUp(self):
         super().setUp()
         self.data_generator.create_project_base()
 
-    @patch("reNgine.gpt.GPTAttackSuggestionGenerator.get_attack_suggestion")
+    @patch("reNgine.llm.LLMAttackSuggestionGenerator.get_attack_suggestion")
     def test_get_attack_suggestion(self, mock_get_suggestion):
         """Test getting an attack suggestion for a subdomain."""
         mock_get_suggestion.return_value = {
             "status": True,
             "description": "Test attack suggestion",
         }
-        api_url = reverse("api:gpt_get_possible_attacks")
+        api_url = reverse("api:llm_get_possible_attacks")
         response = self.client.get(
             api_url, {"subdomain_id": self.data_generator.subdomain.id}
         )

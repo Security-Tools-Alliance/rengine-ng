@@ -23,7 +23,7 @@ ALL = 'all'
 AMASS_WORDLIST = 'amass_wordlist'
 AUTO_CALIBRATION = 'auto_calibration'
 CUSTOM_HEADER = 'custom_header'
-FETCH_GPT_REPORT = 'fetch_gpt_report'
+FETCH_LLM_REPORT = 'fetch_llm_report'
 RUN_NUCLEI = 'run_nuclei'
 RUN_CRLFUZZ = 'run_crlfuzz'
 RUN_DALFOX = 'run_dalfox'
@@ -484,7 +484,7 @@ DEFAULT_GPT_MODELS = [
 
 
 
-# GPT Vulnerability Report Generator
+# LLM Vulnerability Report Generator
 VULNERABILITY_DESCRIPTION_SYSTEM_MESSAGE = """
     You are a highly skilled penetration tester who has recently completed a penetration testing.
     You will be given with a
@@ -509,7 +509,7 @@ VULNERABILITY_DESCRIPTION_SYSTEM_MESSAGE = """
 """
 
 
-ATTACK_SUGGESTION_GPT_SYSTEM_PROMPT = """
+ATTACK_SUGGESTION_LLM_SYSTEM_PROMPT = """
     You are a highly skilled penetration tester who has recently completed a reconnaissance on a target.
     As a penetration tester, I've conducted a thorough reconnaissance on a specific subdomain.
     Based on my reconnaissance you will be given with a

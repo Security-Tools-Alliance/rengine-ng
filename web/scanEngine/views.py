@@ -462,7 +462,7 @@ def api_vault(request):
             "optional": True,
             "experimental": True,
             "name": "OpenAI",
-            "text": "OpenAI keys will be used to generate vulnerability description, remediation, impact and vulnerability report writing using ChatGPT.",
+            "text": "OpenAI keys will be used to generate vulnerability description, remediation, impact and vulnerability report writing using LLM.",
             "hasKey": OpenAiAPIKey.objects.first() is not None
         },
         {

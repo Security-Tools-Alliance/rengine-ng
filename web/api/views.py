@@ -46,7 +46,7 @@ from reNgine.settings import (
 )
 from reNgine.tasks import (
 	create_scan_activity,
-	gpt_vulnerability_description,
+	llm_vulnerability_description,
 	initiate_subscan,
 	query_ip_history,
 	query_reverse_whois,
@@ -57,7 +57,7 @@ from reNgine.tasks import (
 	run_wafw00f,
 	send_hackerone_report
 )
-from reNgine.gpt import GPTAttackSuggestionGenerator
+from reNgine.llm import LLMAttackSuggestionGenerator
 from reNgine.utilities import is_safe_path, remove_lead_and_trail_slash
 from scanEngine.models import EngineType, InstalledExternalTool
 from startScan.models import (
@@ -177,7 +177,7 @@ class OllamaManager(APIView):
             logger.error(f"Error in OllamaManager PUT: {str(e)}")
             return Response({'status': False, 'message': 'An error occurred while updating Ollama settings.'}, status=500)
 
-class GPTAttackSuggestion(APIView):
+class LLMAttackSuggestion(APIView):
 	def get(self, request):
 		req = self.request
 		subdomain_id = safe_int_cast(req.query_params.get('subdomain_id'))
@@ -216,8 +216,8 @@ class GPTAttackSuggestion(APIView):
 			Page Content Length: {subdomain.content_length}
 		'''
 		
-		gpt = GPTAttackSuggestionGenerator()
-		response = gpt.get_attack_suggestion(input_data)
+		llm = LLMAttackSuggestionGenerator()
+		response = llm.get_attack_suggestion(input_data)
 		response['subdomain_name'] = subdomain.name
 		
 		if response.get('status'):
@@ -227,7 +227,7 @@ class GPTAttackSuggestion(APIView):
 		return Response(response)
 
 
-class GPTVulnerabilityReportGenerator(APIView):
+class LLMVulnerabilityReportGenerator(APIView):
 	def get(self, request):
 		req = self.request
 		vulnerability_id = safe_int_cast(req.query_params.get('id'))
@@ -236,7 +236,7 @@ class GPTVulnerabilityReportGenerator(APIView):
 				'status': False,
 				'error': 'Missing GET param Vulnerability `id`'
 			})
-		task = gpt_vulnerability_description.apply_async(args=(vulnerability_id,))
+		task = llm_vulnerability_description.apply_async(args=(vulnerability_id,))
 		response = task.wait()
 		return Response(response)
 

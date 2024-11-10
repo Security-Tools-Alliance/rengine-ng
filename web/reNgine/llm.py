@@ -1,7 +1,7 @@
 import openai
 import re
 from reNgine.common_func import get_open_ai_key, extract_between
-from reNgine.definitions import VULNERABILITY_DESCRIPTION_SYSTEM_MESSAGE, ATTACK_SUGGESTION_GPT_SYSTEM_PROMPT, OLLAMA_INSTANCE
+from reNgine.definitions import VULNERABILITY_DESCRIPTION_SYSTEM_MESSAGE, ATTACK_SUGGESTION_LLM_SYSTEM_PROMPT, OLLAMA_INSTANCE
 from langchain_community.llms import Ollama
 
 from dashboard.models import OllamaSettings
@@ -9,7 +9,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-class GPTVulnerabilityReportGenerator:
+class LLMVulnerabilityReportGenerator:
 
 	def __init__(self):
 		selected_model = OllamaSettings.objects.first()
@@ -19,10 +19,10 @@ class GPTVulnerabilityReportGenerator:
 		self.ollama = None
 	
 	def get_vulnerability_description(self, description):
-		"""Generate Vulnerability Description using GPT.
+		"""Generate Vulnerability Description using LLM.
 
 		Args:
-			description (str): Vulnerability Description message to pass to GPT.
+			description (str): Vulnerability Description message to pass to LLM.
 
 		Returns:
 			(dict) of {
@@ -49,7 +49,7 @@ class GPTVulnerabilityReportGenerator:
 				}
 			try:
 				openai.api_key = openai_api_key
-				gpt_response = openai.ChatCompletion.create(
+				llm_response = openai.ChatCompletion.create(
 				model=self.model_name,
 				messages=[
 						{'role': 'system', 'content': VULNERABILITY_DESCRIPTION_SYSTEM_MESSAGE},
@@ -57,7 +57,7 @@ class GPTVulnerabilityReportGenerator:
 					]
 				)
 
-				response_content = gpt_response['choices'][0]['message']['content']
+				response_content = llm_response['choices'][0]['message']['content']
 			except Exception as e:
 				return {
 					'status': False,
@@ -93,7 +93,7 @@ class GPTVulnerabilityReportGenerator:
 			'references': urls,
 		}
 
-class GPTAttackSuggestionGenerator:
+class LLMAttackSuggestionGenerator:
 
 	def __init__(self):
 		self.api_key = get_open_ai_key()
@@ -103,22 +103,22 @@ class GPTAttackSuggestionGenerator:
 
 	def get_attack_suggestion(self, input):
 		'''
-			input (str): input for gpt
+			input (str): input for llm
 		'''
 		try:
 			if not self.api_key:
-				prompt = ATTACK_SUGGESTION_GPT_SYSTEM_PROMPT + "\nUser: " + input
+				prompt = ATTACK_SUGGESTION_LLM_SYSTEM_PROMPT + "\nUser: " + input
 				response_content = self.ollama(prompt)
 			else:
 				openai.api_key = self.api_key
-				gpt_response = openai.ChatCompletion.create(
+				llm_response = openai.ChatCompletion.create(
 				model=self.model_name,
 				messages=[
-						{'role': 'system', 'content': ATTACK_SUGGESTION_GPT_SYSTEM_PROMPT},
+						{'role': 'system', 'content': ATTACK_SUGGESTION_LLM_SYSTEM_PROMPT},
 						{'role': 'user', 'content': input}
 					]
 				)
-				response_content = gpt_response['choices'][0]['message']['content']
+				response_content = llm_response['choices'][0]['message']['content']
 
 			return {
 				'status': True,

@@ -159,13 +159,13 @@ urlpatterns = [
         GfList.as_view(),
         name='gf_list'),
     path(
-        'tools/gpt_vulnerability_report/',
-        GPTVulnerabilityReportGenerator.as_view(),
-        name='gpt_vulnerability_report_generator'),
+        'tools/llm_vulnerability_report/',
+        LLMVulnerabilityReportGenerator.as_view(),
+        name='llm_vulnerability_report_generator'),
     path(
-        'tools/gpt_get_possible_attacks/',
-        GPTAttackSuggestion.as_view(),
-        name='gpt_get_possible_attacks'),
+        'tools/llm_get_possible_attacks/',
+        LLMAttackSuggestion.as_view(),
+        name='llm_get_possible_attacks'),
     path(
         'github/tool/get_latest_releases/',
         GithubToolCheckGetLatestRelease.as_view(),

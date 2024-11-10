@@ -28,12 +28,12 @@ from pycvesearch import CVESearch
 from metafinder.extractor import extract_metadata_from_google_search
 
 from reNgine.celery import app
-from reNgine.gpt import GPTVulnerabilityReportGenerator
+from reNgine.llm import LLMVulnerabilityReportGenerator
 from reNgine.celery_custom_task import RengineTask
 from reNgine.common_func import *
 from reNgine.definitions import *
 from reNgine.settings import *
-from reNgine.gpt import *
+from reNgine.llm import *
 from reNgine.utilities import *
 from scanEngine.models import (EngineType, InstalledExternalTool, Notification, Proxy)
 from startScan.models import *
@@ -2108,7 +2108,7 @@ def vulnerability_scan(self, urls=[], ctx={}, description=None):
     return None
 
 @app.task(name='nuclei_individual_severity_module', queue='main_scan_queue', base=RengineTask, bind=True)
-def nuclei_individual_severity_module(self, cmd, severity, enable_http_crawl, should_fetch_gpt_report, ctx={}, description=None):
+def nuclei_individual_severity_module(self, cmd, severity, enable_http_crawl, should_fetch_llm_report, ctx={}, description=None):
     '''
         This celery task will run vulnerability scan in parallel.
         All severities supplied should run in parallel as grouped tasks.
@@ -2266,11 +2266,10 @@ def nuclei_individual_severity_module(self, cmd, severity, enable_http_crawl, sh
         }
         self.notify(fields=fields)
 
-    # after vulnerability scan is done, we need to run gpt if
-    # should_fetch_gpt_report and openapi key exists
+    # after vulnerability scan is done, we need to run llm if
+    # should_fetch_llm_report and openapi key exists
 
-    if should_fetch_gpt_report and OpenAiAPIKey.objects.all().first():
-        logger.info('Getting Vulnerability GPT Report')
+    if should_fetch_llm_report and OpenAiAPIKey.objects.exists():
         vulns = Vulnerability.objects.filter(
             scan_history__id=self.scan_id
         ).filter(
@@ -2279,7 +2278,7 @@ def nuclei_individual_severity_module(self, cmd, severity, enable_http_crawl, sh
             severity=0
         )
         # find all unique vulnerabilities based on path and title
-        # all unique vulnerability will go thru gpt function and get report
+        # all unique vulnerability will go thru llm function and get report
         # once report is got, it will be matched with other vulnerabilities and saved
         unique_vulns = set()
         for vuln in vulns:
@@ -2288,11 +2287,11 @@ def nuclei_individual_severity_module(self, cmd, severity, enable_http_crawl, sh
         unique_vulns = list(unique_vulns)
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=DEFAULT_THREADS) as executor:
-            future_to_gpt = {executor.submit(get_vulnerability_gpt_report, vuln): vuln for vuln in unique_vulns}
+            future_to_llm = {executor.submit(get_vulnerability_llm_report, vuln): vuln for vuln in unique_vulns}
 
             # Wait for all tasks to complete
-            for future in concurrent.futures.as_completed(future_to_gpt):
-                gpt = future_to_gpt[future]
+            for future in concurrent.futures.as_completed(future_to_llm):
+                llm = future_to_llm[future]
                 try:
                     future.result()
                 except Exception as e:
@@ -2301,12 +2300,12 @@ def nuclei_individual_severity_module(self, cmd, severity, enable_http_crawl, sh
         return None
 
 
-def get_vulnerability_gpt_report(vuln):
+def get_vulnerability_llm_report(vuln):
     title = vuln[0]
     path = vuln[1]
-    logger.info(f'Getting GPT Report for {title}, PATH: {path}')
+    logger.info(f'Getting LLM Report for {title}, PATH: {path}')
     # check if in db already exists
-    stored = GPTVulnerabilityReport.objects.filter(
+    stored = LLMVulnerabilityReport.objects.filter(
         url_path=path
     ).filter(
         title=title
@@ -2319,13 +2318,13 @@ def get_vulnerability_gpt_report(vuln):
             'references': [url.url for url in stored.references.all()]
         }
     else:
-        report = GPTVulnerabilityReportGenerator()
-        vulnerability_description = get_gpt_vuln_input_description(
+        report = LLMVulnerabilityReportGenerator()
+        vulnerability_description = get_llm_vuln_input_description(
             title,
             path
         )
         response = report.get_vulnerability_description(vulnerability_description)
-        add_gpt_description_db(
+        add_llm_description_db(
             title,
             path,
             response.get('description'),
@@ -2339,7 +2338,7 @@ def get_vulnerability_gpt_report(vuln):
         vuln.description = response.get('description', vuln.description)
         vuln.impact = response.get('impact')
         vuln.remediation = response.get('remediation')
-        vuln.is_gpt_used = True
+        vuln.is_llm_used = True
         vuln.save()
 
         for url in response.get('references', []):
@@ -2348,19 +2347,19 @@ def get_vulnerability_gpt_report(vuln):
             vuln.save()
 
 
-def add_gpt_description_db(title, path, description, impact, remediation, references):
-    gpt_report = GPTVulnerabilityReport()
-    gpt_report.url_path = path
-    gpt_report.title = title
-    gpt_report.description = description
-    gpt_report.impact = impact
-    gpt_report.remediation = remediation
-    gpt_report.save()
+def add_llm_description_db(title, path, description, impact, remediation, references):
+    llm_report = LLMVulnerabilityReport()
+    llm_report.url_path = path
+    llm_report.title = title
+    llm_report.description = description
+    llm_report.impact = impact
+    llm_report.remediation = remediation
+    llm_report.save()
 
     for url in references:
         ref, created = VulnerabilityReference.objects.get_or_create(url=url)
-        gpt_report.references.add(ref)
-        gpt_report.save()
+        llm_report.references.add(ref)
+        llm_report.save()
 
 @app.task(name='nuclei_scan', queue='main_scan_queue', base=RengineTask, bind=True)
 def nuclei_scan(self, urls=[], ctx={}, description=None):
@@ -2386,7 +2385,7 @@ def nuclei_scan(self, urls=[], ctx={}, description=None):
     custom_header = config.get(CUSTOM_HEADER) or self.yaml_configuration.get(CUSTOM_HEADER)
     if custom_header:
         custom_header = generate_header_param(custom_header, 'common')
-    should_fetch_gpt_report = config.get(FETCH_GPT_REPORT, DEFAULT_GET_GPT_REPORT)
+    should_fetch_llm_report = config.get(FETCH_LLM_REPORT, DEFAULT_GET_LLM_REPORT)
     proxy = get_random_proxy()
     nuclei_specific_config = config.get('nuclei', {})
     use_nuclei_conf = nuclei_specific_config.get(USE_NUCLEI_CONFIG, False)
@@ -2474,7 +2473,7 @@ def nuclei_scan(self, urls=[], ctx={}, description=None):
             cmd,
             severity,
             enable_http_crawl,
-            should_fetch_gpt_report,
+            should_fetch_llm_report,
             ctx=custom_ctx,
             description=f'Nuclei Scan with severity {severity}'
         )
@@ -2500,7 +2499,7 @@ def dalfox_xss_scan(self, urls=[], ctx={}, description=None):
         description (str, optional): Task description shown in UI.
     """
     vuln_config = self.yaml_configuration.get(VULNERABILITY_SCAN) or {}
-    should_fetch_gpt_report = vuln_config.get(FETCH_GPT_REPORT, DEFAULT_GET_GPT_REPORT)
+    should_fetch_llm_report = vuln_config.get(FETCH_LLM_REPORT, DEFAULT_GET_LLM_REPORT)
     dalfox_config = vuln_config.get(DALFOX) or {}
     custom_header = dalfox_config.get(CUSTOM_HEADER) or self.yaml_configuration.get(CUSTOM_HEADER)
     if custom_header:
@@ -2593,11 +2592,11 @@ def dalfox_xss_scan(self, urls=[], ctx={}, description=None):
         if not vuln:
             continue
 
-    # after vulnerability scan is done, we need to run gpt if
-    # should_fetch_gpt_report and openapi key exists
+    # after vulnerability scan is done, we need to run llm if
+    # should_fetch_llm_report and openapi key exists
 
-    if should_fetch_gpt_report and OpenAiAPIKey.objects.all().first():
-        logger.info('Getting Dalfox Vulnerability GPT Report')
+    if should_fetch_llm_report and OpenAiAPIKey.objects.all().first():
+        logger.info('Getting Dalfox Vulnerability LLM Report')
         vulns = Vulnerability.objects.filter(
             scan_history__id=self.scan_id
         ).filter(
@@ -2611,11 +2610,11 @@ def dalfox_xss_scan(self, urls=[], ctx={}, description=None):
             _vulns.append((vuln.name, vuln.http_url))
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=DEFAULT_THREADS) as executor:
-            future_to_gpt = {executor.submit(get_vulnerability_gpt_report, vuln): vuln for vuln in _vulns}
+            future_to_llm = {executor.submit(get_vulnerability_llm_report, vuln): vuln for vuln in _vulns}
 
             # Wait for all tasks to complete
-            for future in concurrent.futures.as_completed(future_to_gpt):
-                gpt = future_to_gpt[future]
+            for future in concurrent.futures.as_completed(future_to_llm):
+                llm = future_to_llm[future]
                 try:
                     future.result()
                 except Exception as e:
@@ -2632,7 +2631,7 @@ def crlfuzz_scan(self, urls=[], ctx={}, description=None):
         description (str, optional): Task description shown in UI.
     """
     vuln_config = self.yaml_configuration.get(VULNERABILITY_SCAN) or {}
-    should_fetch_gpt_report = vuln_config.get(FETCH_GPT_REPORT, DEFAULT_GET_GPT_REPORT)
+    should_fetch_llm_report = vuln_config.get(FETCH_LLM_REPORT, DEFAULT_GET_LLM_REPORT)
     custom_header = vuln_config.get(CUSTOM_HEADER) or self.yaml_configuration.get(CUSTOM_HEADER)
     if custom_header:
         custom_header = generate_header_param(custom_header, 'common')
@@ -2719,11 +2718,11 @@ def crlfuzz_scan(self, urls=[], ctx={}, description=None):
         if not vuln:
             continue
 
-    # after vulnerability scan is done, we need to run gpt if
-    # should_fetch_gpt_report and openapi key exists
+    # after vulnerability scan is done, we need to run llm if
+    # should_fetch_llm_report and openapi key exists
 
-    if should_fetch_gpt_report and OpenAiAPIKey.objects.all().first():
-        logger.info('Getting CRLFuzz Vulnerability GPT Report')
+    if should_fetch_llm_report and OpenAiAPIKey.objects.all().first():
+        logger.info('Getting CRLFuzz Vulnerability LLM Report')
         vulns = Vulnerability.objects.filter(
             scan_history__id=self.scan_id
         ).filter(
@@ -2737,11 +2736,11 @@ def crlfuzz_scan(self, urls=[], ctx={}, description=None):
             _vulns.append((vuln.name, vuln.http_url))
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=DEFAULT_THREADS) as executor:
-            future_to_gpt = {executor.submit(get_vulnerability_gpt_report, vuln): vuln for vuln in _vulns}
+            future_to_llm = {executor.submit(get_vulnerability_llm_report, vuln): vuln for vuln in _vulns}
 
             # Wait for all tasks to complete
-            for future in concurrent.futures.as_completed(future_to_gpt):
-                gpt = future_to_gpt[future]
+            for future in concurrent.futures.as_completed(future_to_llm):
+                llm = future_to_llm[future]
                 try:
                     future.result()
                 except Exception as e:
@@ -4836,14 +4835,14 @@ def query_ip_history(domain):
     return get_domain_historical_ip_address(domain)
 
 
-@app.task(name='gpt_vulnerability_description', bind=False, queue='gpt_queue')
-def gpt_vulnerability_description(vulnerability_id):
-    """Generate and store Vulnerability Description using GPT.
+@app.task(name='llm_vulnerability_description', bind=False, queue='llm_queue')
+def llm_vulnerability_description(vulnerability_id):
+    """Generate and store Vulnerability Description using LLM.
 
     Args:
         vulnerability_id (Vulnerability Model ID): Vulnerability ID to fetch Description.
     """
-    logger.info('Getting GPT Vulnerability Description')
+    logger.info('Getting LLM Vulnerability Description')
     try:
         lookup_vulnerability = Vulnerability.objects.get(id=vulnerability_id)
         lookup_url = urlparse(lookup_vulnerability.http_url)
@@ -4854,8 +4853,8 @@ def gpt_vulnerability_description(vulnerability_id):
             'error': str(e)
         }
 
-    # check in db GPTVulnerabilityReport model if vulnerability description and path matches
-    stored = GPTVulnerabilityReport.objects.filter(url_path=path).filter(title=lookup_vulnerability.name).first()
+    # check in db LLMVulnerabilityReport model if vulnerability description and path matches
+    stored = LLMVulnerabilityReport.objects.filter(url_path=path).filter(title=lookup_vulnerability.name).first()
     if stored:
         response = {
             'status': True,
@@ -4865,15 +4864,15 @@ def gpt_vulnerability_description(vulnerability_id):
             'references': [url.url for url in stored.references.all()]
         }
     else:
-        vulnerability_description = get_gpt_vuln_input_description(
+        vulnerability_description = get_llm_vuln_input_description(
             lookup_vulnerability.name,
             path
         )
         # one can add more description here later
 
-        gpt_generator = GPTVulnerabilityReportGenerator()
-        response = gpt_generator.get_vulnerability_description(vulnerability_description)
-        add_gpt_description_db(
+        llm_generator = LLMVulnerabilityReportGenerator()
+        response = llm_generator.get_vulnerability_description(vulnerability_description)
+        add_llm_description_db(
             lookup_vulnerability.name,
             path,
             response.get('description'),
@@ -4889,7 +4888,7 @@ def gpt_vulnerability_description(vulnerability_id):
         vuln.description = response.get('description', vuln.description)
         vuln.impact = response.get('impact')
         vuln.remediation = response.get('remediation')
-        vuln.is_gpt_used = True
+        vuln.is_llm_used = True
         vuln.save()
 
         for url in response.get('references', []):
