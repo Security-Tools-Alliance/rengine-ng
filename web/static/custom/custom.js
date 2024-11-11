@@ -3511,7 +3511,7 @@ async function deleteAttackSurfaceAnalysis(endpoint_url, id) {
 
 function showAttackSurfaceModal(data, endpoint_url, id) {
     $('#modal_dialog .modal-dialog').removeClass('modal-lg').addClass('modal-xl');
-    $('#modal_dialog .modal-title').html(`Attack Surface Suggestion for ${data.subdomain_name} (BETA)`);
+    $('#modal_dialog .modal-title').html(`Attack Surface Suggestion for ${data.subdomain_name}`);
     $('#modal_dialog .modal-text').empty();
     $('#modal_dialog .modal-text').append(
         DOMPurify.sanitize(data.description) +
