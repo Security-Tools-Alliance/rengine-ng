@@ -6,6 +6,7 @@ import socket
 from ipaddress import IPv4Network
 from collections import defaultdict
 from datetime import datetime
+from markdown import markdown
 
 import requests
 import validators
@@ -182,53 +183,72 @@ class OllamaManager(APIView):
             return Response({'status': False, 'message': 'An error occurred while updating Ollama settings.'}, status=500)
 
 class LLMAttackSuggestion(APIView):
-	def get(self, request):
-		req = request
-		subdomain_id = safe_int_cast(req.query_params.get('subdomain_id'))
-		if not subdomain_id:
-			return Response({
-				'status': False,
-				'error': 'Missing GET param Subdomain `subdomain_id`'
-			})
-		try:
-			subdomain = Subdomain.objects.get(id=subdomain_id)
-		except Subdomain.DoesNotExist:
-			return Response({
-				'status': False,
-				'error': f'Subdomain not found with id {subdomain_id}'
-			})
+    def _convert_markdown_to_html(self, markdown_text):
+        html_content = markdown(markdown_text, extensions=[
+            'fenced_code', 
+            'tables',
+            'nl2br'
+        ])
+        
+        # Add Bootstrap classes
+        html_content = (html_content
+            .replace('<pre><code>', '<pre class="bg-light p-3 rounded"><code class="text-danger">')
+            .replace('<ul>', '<ul class="list-unstyled">')
+            .replace('\n\n', '<br>')
+			.replace('\n', '')
+        )
+        
+        # La sanitization sera gérée côté client avec DOMPurify
+        return html_content
 
-		if subdomain.attack_surface:
-			return Response({
-				'status': True,
-				'subdomain_name': subdomain.name,
-				'description': subdomain.attack_surface
-			})
+    def get(self, request):
+        req = request
+        subdomain_id = safe_int_cast(req.query_params.get('subdomain_id'))
+        if not subdomain_id:
+            return Response({
+                'status': False,
+                'error': 'Missing GET param Subdomain `subdomain_id`'
+            })
+        try:
+            subdomain = Subdomain.objects.get(id=subdomain_id)
+        except Subdomain.DoesNotExist:
+            return Response({
+                'status': False,
+                'error': f'Subdomain not found with id {subdomain_id}'
+            })
 
-		ip_addrs = subdomain.ip_addresses.all()
-		open_ports = ', '.join(f'{port.number}/{port.service_name}' for ip in ip_addrs for port in ip.ports.all())
-		tech_used = ', '.join(tech.name for tech in subdomain.technologies.all())
+        if subdomain.attack_surface:
+            sanitized_html = self._convert_markdown_to_html(subdomain.attack_surface)
+            return Response({
+                'status': True,
+                'subdomain_name': subdomain.name,
+                'description': sanitized_html
+            })
 
-		input_data = f'''
-			Subdomain Name: {subdomain.name}
-			Subdomain Page Title: {subdomain.page_title}
-			Open Ports: {open_ports}
-			HTTP Status: {subdomain.http_status}
-			Technologies Used: {tech_used}
-			Content type: {subdomain.content_type}
-			Web Server: {subdomain.webserver}
-			Page Content Length: {subdomain.content_length}
-		'''
-		
-		llm = LLMAttackSuggestionGenerator()
-		response = llm.get_attack_suggestion(input_data)
-		response['subdomain_name'] = subdomain.name
-		
-		if response.get('status'):
-			subdomain.attack_surface = response.get('description')
-			subdomain.save()
-		
-		return Response(response)
+        ip_addrs = subdomain.ip_addresses.all()
+        open_ports = ', '.join(f'{port.number}/{port.service_name}' for ip in ip_addrs for port in ip.ports.all())
+        tech_used = ', '.join(tech.name for tech in subdomain.technologies.all())
+
+        input_data = f'''
+            Subdomain Name: {subdomain.name}
+            Subdomain Page Title: {subdomain.page_title}
+            Open Ports: {open_ports}
+            HTTP Status: {subdomain.http_status}
+            Technologies Used: {tech_used}
+            Content type: {subdomain.content_type}
+            Web Server: {subdomain.webserver}
+            Page Content Length: {subdomain.content_length}
+        '''
+        
+        llm = LLMAttackSuggestionGenerator()
+        response = llm.get_attack_suggestion(input_data)
+        response['subdomain_name'] = subdomain.name
+        
+        if response.get('status'):
+            subdomain.attack_surface = response.get('description')
+            subdomain.save()
+        
+        return Response(response)
 
 
 class LLMVulnerabilityReportGenerator(APIView):

@@ -1925,7 +1925,10 @@ function display_whois_on_modal(response, addTargetUrl, project_slug, show_add_t
 		</div>`
 	}
 
-	$('#whoisLookupResultModal .modal-body').append(content);
+	// Sanitize with DOMPurify before inserting into the DOM
+	$('#whoisLookupResultModal .modal-body').append(
+		DOMPurify.sanitize(content)
+	);
 	$('[data-toggle="tooltip"]').tooltip();
 
 }
@@ -2866,7 +2869,7 @@ function render_vuln_offcanvas(vuln){
 	body += `<p><b>Severity: </b>${vuln.severity}<br><b>Type: </b>${vuln.type.toUpperCase()}<br><b>Source: </b> ${vuln.source.toUpperCase()}</p>`;
 
 	if (vuln.description) {
-		description = vuln.description.replace(new RegExp('\r?\n','g'), '<br />');
+		// Sanitize with DOMPurify before inserting into the DOM
 		body += `<div class="accordion custom-accordion mt-2">
 		<h5 class="m-0 position-relative">
 		<a class="custom-accordion-title text-reset d-block"
@@ -2877,7 +2880,7 @@ function render_vuln_offcanvas(vuln){
 		</a>
 		</h5>
 		<div id="description" class="collapse show mt-2">
-		<p>${description}</p>
+		<p>${DOMPurify.sanitize(vuln.description.replace(new RegExp('\r?\n','g'), '<br />'))}</p>
 		</div>
 		</div>`;
 	}
@@ -2894,7 +2897,7 @@ function render_vuln_offcanvas(vuln){
 		</a>
 		</h5>
 		<div id="impact" class="collapse show mt-2">
-		<p>${impact}</p>
+		<p>${DOMPurify.sanitize(impact)}</p>
 		</div>
 		</div>`;
 	}
@@ -2911,7 +2914,7 @@ function render_vuln_offcanvas(vuln){
 		</a>
 		</h5>
 		<div id="remediation" class="collapse show mt-2">
-		<p>${remediation}</p>
+		<p>${DOMPurify.sanitize(remediation)}</p>
 		</div>
 		</div>`;
 	}
@@ -3216,7 +3219,10 @@ function render_llm_vuln_modal(data, title){
 
 	modal_content += '</ul></p>';
 
-	$('#modal_dialog .modal-text').append(modal_content);
+	// Sanitize with DOMPurify before inserting into the DOM
+	$('#modal_dialog .modal-text').append(
+		DOMPurify.sanitize(modal_content)
+	);
 	$('#modal_dialog').modal('show');
 }
 
@@ -3309,7 +3315,10 @@ async function show_attack_surface_modal(endpoint_url, id) {
             if (data.status) {
                 $('#modal_dialog .modal-title').html(`Attack Surface Suggestion for ${data.subdomain_name} (BETA)`);
                 $('#modal_dialog .modal-text').empty();
-                $('#modal_dialog .modal-text').append(data.description.replace(new RegExp('\r?\n','g'), '<br />'));
+                // Sanitize with DOMPurify before inserting into the DOM
+                $('#modal_dialog .modal-text').append(
+                    DOMPurify.sanitize(data.description.replace(new RegExp('\r?\n','g'), '<br />'))
+                );
                 $('#modal_dialog').modal('show');
             } else {
                 Swal.fire({
