@@ -2290,11 +2290,11 @@ def nuclei_individual_severity_module(self, cmd, severity, enable_http_crawl, sh
 
             # Wait for all tasks to complete
             for future in concurrent.futures.as_completed(future_to_llm):
-                llm = future_to_llm[future]
+                vuln = future_to_llm[future]
                 try:
                     future.result()
                 except Exception as e:
-                    logger.error(f"Exception for Vulnerability {vuln}: {e}")
+                    logger.error(f"Exception for Vulnerability {vuln[0]} - {vuln[1]}: {e}")  # Display title and path
 
         return None
 
@@ -2613,11 +2613,11 @@ def dalfox_xss_scan(self, urls=[], ctx={}, description=None):
 
             # Wait for all tasks to complete
             for future in concurrent.futures.as_completed(future_to_llm):
-                llm = future_to_llm[future]
+                vuln = future_to_llm[future]
                 try:
                     future.result()
                 except Exception as e:
-                    logger.error(f"Exception for Vulnerability {vuln}: {e}")
+                    logger.error(f"Exception for Vulnerability {vuln[0]} - {vuln[1]}: {e}")  # Display title and path
     return results
 
 
@@ -2739,11 +2739,11 @@ def crlfuzz_scan(self, urls=[], ctx={}, description=None):
 
             # Wait for all tasks to complete
             for future in concurrent.futures.as_completed(future_to_llm):
-                llm = future_to_llm[future]
+                vuln = future_to_llm[future]
                 try:
                     future.result()
                 except Exception as e:
-                    logger.error(f"Exception for Vulnerability {vuln}: {e}")
+                    logger.error(f"Exception for Vulnerability {vuln[0]} - {vuln[1]}: {e}")  # Display title and path
 
     return results
 

@@ -3165,7 +3165,7 @@ async function send_llm_api_request(endpoint_url, vuln_id){
 
 async function fetch_llm_vuln_details(endpoint_url, id, title) {
 	var loader_title = "Loading...";
-	var text = 'Please wait while the LLM is generating vulnerability description.'
+	var text = 'Please wait while the LLM is generating vulnerability description.';
 	try {
 		showSwalLoader(loader_title, text);
 		const data = await send_llm_api_request(endpoint_url, id);
@@ -3301,7 +3301,7 @@ async function show_attack_surface_modal(endpoint_url, id) {
 
             // Then proceed with attack surface analysis
             var loader_title = "Loading...";
-            var text = 'Please wait while the LLM is generating attack surface.'
+            var text = 'Please wait while the LLM is generating attack surface.';
             showSwalLoader(loader_title, text);
             const data = await send_llm__attack_surface_api_request(endpoint_url, id);
             Swal.close();
