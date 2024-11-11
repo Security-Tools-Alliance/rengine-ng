@@ -8,6 +8,7 @@ from reNgine.llm.config import LLM_CONFIG
 from reNgine.llm.utils import RegexPatterns, get_default_llm_model
 from reNgine.llm.validators import LLMProvider, LLMInputData, LLMResponse
 from reNgine.common_func import get_open_ai_key, extract_between
+from dashboard.models import OllamaSettings
 
 logger = logging.getLogger(__name__)
 
@@ -156,7 +157,18 @@ class LLMAttackSuggestionGenerator(BaseLLMGenerator):
         provider_key = self.provider.value
         return self.config['providers'][provider_key]
 
-    def get_attack_suggestion(self, input_data: str) -> dict:
+    def _validate_input(self, input_data: str, model_name: str = None) -> str:
+        """Validate the input data and model name"""
+        if not input_data or not isinstance(input_data, str):
+            raise ValueError("Input data must be a non-empty string")
+            
+        # Additional model validation if provided
+        if model_name and not isinstance(model_name, str):
+            raise ValueError("Model name must be a string")
+            
+        return input_data
+
+    def get_attack_suggestion(self, input_data: str, model_name: str = None) -> dict:
         """
         Generate attack suggestions using LLM
         
@@ -167,19 +179,20 @@ class LLMAttackSuggestionGenerator(BaseLLMGenerator):
             dict: Response containing status and description
         """
         try:
-            # Validate input
-            validated_input = self._validate_input(input_data)
+            # Validate both input data and model name
+            validated_input = self._validate_input(input_data, model_name)
             
             # Get response from appropriate provider
             if self.provider == LLMProvider.OLLAMA:
-                response_content = self._get_ollama_response(validated_input.description)
+                response_content = self._get_ollama_response(validated_input)
             else: 
-                response_content = self._get_openai_response(validated_input.description)
+                response_content = self._get_openai_response(validated_input, model_name)
 
             return {
                 'status': True,
                 'description': response_content,
-                'input': input_data
+                'input': input_data,
+                'model_name': model_name
             }
 
         except Exception as e:
@@ -187,7 +200,8 @@ class LLMAttackSuggestionGenerator(BaseLLMGenerator):
             return {
                 'status': False,
                 'error': str(e),
-                'input': input_data
+                'input': input_data,
+                'model_name': model_name
             }
 
     def _get_ollama_response(self, description: str) -> str:
@@ -195,7 +209,7 @@ class LLMAttackSuggestionGenerator(BaseLLMGenerator):
         prompt = f"{self.config['prompts']['attack']}\nUser: {description}"
         return self.ollama(prompt)
 
-    def _get_openai_response(self, description: str) -> str:
+    def _get_openai_response(self, description: str, model_name: str) -> str:
         """Get response from OpenAI"""
         if not self.api_key:
             raise ValueError("OpenAI API Key not set")
@@ -203,7 +217,7 @@ class LLMAttackSuggestionGenerator(BaseLLMGenerator):
         openai.api_key = self.api_key
         
         response = openai.ChatCompletion.create(
-            model=self.model_name,
+            model=model_name,
             messages=[
                 {'role': 'system', 'content': self.config['prompts']['attack']},
                 {'role': 'user', 'content': description}

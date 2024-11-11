@@ -2752,10 +2752,10 @@ function validURL(str) {
 	// checks for valid http url
 	var pattern = new RegExp('^(https?:\\/\\/)?'+ // protocol
 		'((([a-z\\d]([a-z\\d-]*[a-z\\d])*)\\.)+[a-z]{2,}|'+ // domain name
-		'((\\d{1,3}\\.){3}\\d{1,3}))'+ // OR ip (v4) address
-		'(\\:\\d+)?(\\/[-a-z\\d%_.~+]*)*'+ // port and path
-		'(\\?[;&a-z\\d%_.~+=-]*)?'+ // query string
-		'(\\#[-a-z\\d_]*)?$','i'); // fragment locator
+		'((\\\d{1,3}\\.){3}\\d{1,3}))'+ // OR ip (v4) address
+		'(\\\:\\d+)?(\\/[-a-z\\d%_.~+]*)*'+ // port and path
+		'(\\\?[;&a-z\\d%_.~+=-]*)?'+ // query string
+		'(\\\#[-a-z\\d_]*)?$','i'); // fragment locator
 	return !!pattern.test(str);
 }
 
@@ -3255,89 +3255,59 @@ function endpoint_datatable_col_visibility(endpoint_table){
 }
 
 
-async function send_llm__attack_surface_api_request(endpoint_url, subdomain_id){
-	const api = `${endpoint_url}?format=json&subdomain_id=${subdomain_id}`;
-	try {
-		const response = await fetch(api, {
-				method: 'GET',
-				credentials: "same-origin",
-				headers: {
-					"X-CSRFToken": getCookie("csrftoken")
-				}
-		});
-		if (!response.ok) {
-			throw new Error('Request failed');
-		}
-		const data = await response.json();
-		return data;
-	} catch (error) {
-		throw new Error('Request failed');
-	}
+async function send_llm__attack_surface_api_request(endpoint_url, id, force_regenerate = false, check_only = false, llm_model = null) {
+    const params = new URLSearchParams({
+        subdomain_id: id,
+        force_regenerate: force_regenerate,
+        check_only: check_only
+    });
+    
+    // Only add llm_model if it's not null
+    if (llm_model) {
+        params.append('llm_model', llm_model);
+    }
+    
+    const response = await fetch(`${endpoint_url}?${params}`);
+    return await response.json();
 }
 
+async function regenerateAttackSurface(endpoint_url, id) {
+    try {
+        // Show model selection dialog with force_regenerate flag
+        await showModelSelectionDialog(endpoint_url, id, true);
+    } catch (error) {
+        console.error(error);
+        Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: 'Something went wrong while regenerating the analysis.',
+        });
+    }
+}
 
 async function show_attack_surface_modal(endpoint_url, id) {
-    // Define generateAttackSurface in the global scope of the function
-    window.generateAttackSurface = async () => {
-        const selectedModel = $('input[name="llm_model"]:checked').val();
-        if (!selectedModel) {
-            Swal.fire({
-                title: 'Error',
-                text: 'Please select a model',
-                icon: 'error'
-            });
+    try {
+        // First check if we have cached results without triggering analysis
+        const initialResponse = await send_llm__attack_surface_api_request(endpoint_url, id, false, true);
+        
+        if (initialResponse.status && initialResponse.description) {
+            showAttackSurfaceModal(initialResponse, endpoint_url, id);
             return;
         }
+        
+        // If no cached results, show model selection
+        await showModelSelectionDialog(endpoint_url, id);
+    } catch (error) {
+        console.error(error);
+        Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: 'Something went wrong!',
+        });
+    }
+}
 
-        try {
-            // Update selected model in database first
-            const updateResponse = await fetch('/api/tool/ollama/', {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': getCookie('csrftoken')
-                },
-                body: JSON.stringify({ model: selectedModel })
-            });
-            
-            const updateData = await updateResponse.json();
-            if (!updateData.status) {
-                throw new Error('Failed to update selected model');
-            }
-
-            // Then proceed with attack surface analysis
-            var loader_title = "Loading...";
-            var text = 'Please wait while the LLM is generating attack surface.';
-            showSwalLoader(loader_title, text);
-            const data = await send_llm__attack_surface_api_request(endpoint_url, id);
-            Swal.close();
-            
-            if (data.status) {
-                $('#modal_dialog .modal-title').html(`Attack Surface Suggestion for ${data.subdomain_name} (BETA)`);
-                $('#modal_dialog .modal-text').empty();
-                // Sanitize with DOMPurify before inserting into the DOM
-                $('#modal_dialog .modal-text').append(
-                    DOMPurify.sanitize(data.description.replace(new RegExp('\r?\n','g'), '<br />'))
-                );
-                $('#modal_dialog').modal('show');
-            } else {
-                Swal.fire({
-                    icon: 'error',
-                    title: 'Oops...',
-                    text: data.error,
-                });
-            }
-        } catch (error) {
-            console.error(error);
-            Swal.close();
-            Swal.fire({
-                icon: 'error',
-                title: 'Oops...',
-                text: 'Something went wrong!',
-            });
-        }
-    };
-
+async function showModelSelectionDialog(endpoint_url, id, force_regenerate = false) {
     try {
         // Fetch models from the unified endpoint that combines GPT and Ollama models
         const response = await fetch('/api/tools/llm_models');
@@ -3347,9 +3317,65 @@ async function show_attack_surface_modal(endpoint_url, id) {
             throw new Error(data.error || 'Failed to fetch models');
         }
 
-		// Change modal size to xl
-		$('#modal_dialog .modal-dialog').removeClass('modal-lg').addClass('modal-xl');
+        // Change modal size to xl
+        $('#modal_dialog .modal-dialog').removeClass('modal-lg').addClass('modal-xl');
 
+        // Keep all the existing model selection code
+		window.generateAttackSurface = async () => {
+			const selectedModel = $('input[name="llm_model"]:checked').val();
+			if (!selectedModel) {
+				Swal.fire({
+					title: 'Error',
+					text: 'Please select a model',
+					icon: 'error'
+				});
+				return;
+			}
+		
+			try {
+				// Update selected model in database first
+				const updateResponse = await fetch('/api/tool/ollama/', {
+					method: 'PUT',
+					headers: {
+						'Content-Type': 'application/json',
+						'X-CSRFToken': getCookie('csrftoken')
+					},
+					body: JSON.stringify({ model: selectedModel })
+				});
+				
+				const updateData = await updateResponse.json();
+				if (!updateData.status) {
+					throw new Error('Failed to update selected model');
+				}
+		
+				// Then proceed with attack surface analysis
+				var loader_title = "Loading...";
+				var text = 'Please wait while the LLM is generating attack surface.';
+				showSwalLoader(loader_title, text);
+				const data = await send_llm__attack_surface_api_request(endpoint_url, id, force_regenerate, false, selectedModel);
+				Swal.close();
+                
+                if (data.status) {
+					showAttackSurfaceModal(data, endpoint_url, id);
+                } else {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Oops...',
+                        text: data.error,
+                    });
+                }
+            } catch (error) {
+                console.error(error);
+                Swal.close();
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Oops...',
+                    text: 'Something went wrong!',
+                });
+            }
+        };
+
+        // Continue with existing model selection UI code...
         const allModels = data.models;
         const selectedModel = data.selected_model;
 
@@ -3434,48 +3460,75 @@ async function show_attack_surface_modal(endpoint_url, id) {
     }
 }
 
-async function continueWithSelectedModel(endpoint_url, id, callback) {
-    const selectedModel = $('input[name="llm_model"]:checked').val();
-    if (!selectedModel) {
-        Swal.fire({
-            title: 'Error',
-            text: 'Please select a model',
-            icon: 'error'
-        });
-        return;
-    }
-    
+async function deleteAttackSurfaceAnalysis(endpoint_url, id) {
     try {
-        // Update selected model in database
-        const response = await fetch('/api/tool/ollama/', {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': getCookie('csrftoken')
-            },
-            body: JSON.stringify({ model: selectedModel })
+        const result = await Swal.fire({
+            title: 'Delete Analysis?',
+            text: "This will permanently delete the current attack surface analysis. This action cannot be undone.",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            cancelButtonColor: '#3085d6',
+            confirmButtonText: 'Yes, delete it!',
+            cancelButtonText: 'Cancel'
         });
-        
-        const data = await response.json();
-        if (data.status) {
-            $('#modal_dialog').modal('hide');
-            // Continue with attack surface analysis using the callback
-            if (callback) await callback();
-        } else {
-            Swal.fire({
-                title: 'Error',
-                text: 'Unable to set selected model',
-                icon: 'error'
+
+        if (result.isConfirmed) {
+            showSwalLoader("Deleting...", "Please wait while the analysis is being deleted.");
+            
+            const response = await fetch(`${endpoint_url}?subdomain_id=${id}`, {
+                method: 'DELETE',
+                headers: {
+                    'X-CSRFToken': getCookie('csrftoken')
+                }
             });
+            
+            const data = await response.json();
+            Swal.close();
+            
+            if (data.status) {
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Deleted!',
+                    text: 'The analysis has been deleted successfully.',
+                    showConfirmButton: false,
+                    timer: 1500
+                });
+                $('#modal_dialog').modal('hide');
+            } else {
+                throw new Error(data.error || 'Failed to delete analysis');
+            }
         }
     } catch (error) {
         console.error(error);
         Swal.fire({
+            icon: 'error',
             title: 'Error',
-            text: 'Something went wrong while setting the model',
-            icon: 'error'
+            text: error.message || 'Something went wrong while deleting the analysis!'
         });
     }
+}
+
+function showAttackSurfaceModal(data, endpoint_url, id) {
+    $('#modal_dialog .modal-dialog').removeClass('modal-lg').addClass('modal-xl');
+    $('#modal_dialog .modal-title').html(`Attack Surface Suggestion for ${data.subdomain_name} (BETA)`);
+    $('#modal_dialog .modal-text').empty();
+    $('#modal_dialog .modal-text').append(
+        DOMPurify.sanitize(data.description) +
+        `<div class="text-center mt-4">
+            <div class="btn-group" role="group">
+                <button class="btn btn-primary" onclick="regenerateAttackSurface('${endpoint_url}', ${id})">
+                    <i class="fe-refresh-cw me-1"></i>
+                    Generate New Analysis
+                </button>
+                <button class="btn btn-danger" onclick="deleteAttackSurfaceAnalysis('${endpoint_url}', ${id})">
+                    <i class="fe-trash-2 me-1"></i>
+                    Delete Current Analysis
+                </button>
+            </div>
+        </div>`
+    );
+    $('#modal_dialog').modal('show');
 }
 
 function convertToCamelCase(inputString) {
