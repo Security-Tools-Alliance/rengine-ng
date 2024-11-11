@@ -167,6 +167,10 @@ urlpatterns = [
         LLMAttackSuggestion.as_view(),
         name='llm_get_possible_attacks'),
     path(
+        'tools/llm_models/',
+        LLMModelsManager.as_view(),
+        name='llm_models_manager'),
+    path(
         'github/tool/get_latest_releases/',
         GithubToolCheckGetLatestRelease.as_view(),
         name='github_tool_latest_release'),

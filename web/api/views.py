@@ -5,6 +5,7 @@ from pathlib import Path
 import socket
 from ipaddress import IPv4Network
 from collections import defaultdict
+from datetime import datetime
 
 import requests
 import validators
@@ -30,15 +31,19 @@ from reNgine.common_func import (
 	get_interesting_endpoints,
 	get_interesting_subdomains,
 	get_lookup_keywords,
-	safe_int_cast
+	safe_int_cast,
+	get_open_ai_key,
 )
 from reNgine.definitions import (
 	ABORTED_TASK,
-	OLLAMA_INSTANCE,
 	NUCLEI_SEVERITY_MAP,
-	DEFAULT_GPT_MODELS,
 	RUNNING_TASK,
 	SUCCESS_TASK
+)
+from reNgine.llm.config import (
+	OLLAMA_INSTANCE,
+	DEFAULT_GPT_MODELS,
+	MODEL_REQUIREMENTS
 )
 from reNgine.settings import (
 	RENGINE_CURRENT_VERSION,
@@ -57,7 +62,7 @@ from reNgine.tasks import (
 	run_wafw00f,
 	send_hackerone_report
 )
-from reNgine.llm import LLMAttackSuggestionGenerator
+from reNgine.llm.llm import LLMAttackSuggestionGenerator
 from reNgine.utilities import is_safe_path, remove_lead_and_trail_slash
 from scanEngine.models import EngineType, InstalledExternalTool
 from startScan.models import (
@@ -169,7 +174,6 @@ class OllamaManager(APIView):
                 defaults={
                     'selected_model': model_name,
                     'use_ollama': use_ollama,
-                    'selected': True
                 }
             )
             return Response({'status': True})
@@ -179,7 +183,7 @@ class OllamaManager(APIView):
 
 class LLMAttackSuggestion(APIView):
 	def get(self, request):
-		req = self.request
+		req = request
 		subdomain_id = safe_int_cast(req.query_params.get('subdomain_id'))
 		if not subdomain_id:
 			return Response({
@@ -2892,3 +2896,55 @@ class VulnerabilityViewSet(viewsets.ModelViewSet):
 					print(e)
 
 		return qs
+
+class LLMModelsManager(APIView):
+    def get(self, request):
+        """Get all available LLM models (GPT and Ollama) and currently selected model"""
+        try:
+            # Get default GPT models
+            all_models = DEFAULT_GPT_MODELS.copy()
+            
+            # Get Ollama models
+            try:
+                response = requests.get(f'{OLLAMA_INSTANCE}/api/tags')
+                if response.status_code == 200:
+                    ollama_models = response.json().get('models', [])
+                    date_format = "%Y-%m-%dT%H:%M:%S"
+                    all_models.extend([{
+                        **model,
+                        'modified_at': datetime.strptime(model['modified_at'].split('.')[0], date_format),
+                        'is_local': True,
+                    } for model in ollama_models])
+            except Exception as e:
+                logger.error(f"Error fetching Ollama models: {str(e)}")
+
+            # Get currently selected model
+            selected_model = OllamaSettings.objects.first()
+            selected_model_name = selected_model.selected_model if selected_model else 'gpt-3.5-turbo'
+
+            # Mark selected model
+            for model in all_models:
+                if model['name'] == selected_model_name:
+                    model['selected'] = True
+
+            # Add model capabilities
+            for model in all_models:
+                # Strip tags from model name (e.g., "llama2:latest" -> "llama2")
+                base_model_name = model['name'].split(':')[0]
+                if base_model_name in MODEL_REQUIREMENTS:
+                    model['capabilities'] = MODEL_REQUIREMENTS[base_model_name]
+
+            return Response({
+                'status': True,
+                'models': all_models,
+                'selected_model': selected_model_name,
+                'openai_key_error': not get_open_ai_key() and 'gpt' in selected_model_name
+            })
+
+        except Exception as e:
+            logger.error(f"Error in LLMModelsManager GET: {str(e)}")
+            return Response({
+                'status': False,
+                'error': 'Failed to fetch LLM models',
+                'message': str(e)
+            }, status=500)

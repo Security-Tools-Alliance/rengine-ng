@@ -3270,38 +3270,189 @@ async function send_llm__attack_surface_api_request(endpoint_url, subdomain_id){
 }
 
 
-async function show_attack_surface_modal(endpoint_url, id){
-	var loader_title = "Loading...";
-	var text = 'Please wait while the LLM is generating attack surface.'
-	try {
-		showSwalLoader(loader_title, text);
-		const data = await send_llm__attack_surface_api_request(endpoint_url,id);
-		Swal.close();
-		if (data.status) {
-			$('#modal_dialog .modal-title').html(`Attack Surface Suggestion for ${data.subdomain_name} (BETA)`);
-			$('#modal_dialog .modal-text').empty();
-			$('#modal_dialog .modal-text').append(data.description.replace(new RegExp('\r?\n','g'), '<br />'));
-			$('#modal_dialog').modal('show');
-		}
-		else{
-			Swal.close();
-			Swal.fire({
-				icon: 'error',
-				title: 'Oops...',
-				text: data.error,
-			});
-		}
-	} catch (error) {
-		console.error(error);
-		Swal.close();
-		Swal.fire({
-			icon: 'error',
-			title: 'Oops...',
-			text: 'Something went wrong!',
-		});
-	}
+async function show_attack_surface_modal(endpoint_url, id) {
+    // Define generateAttackSurface in the global scope of the function
+    window.generateAttackSurface = async () => {
+        const selectedModel = $('input[name="llm_model"]:checked').val();
+        if (!selectedModel) {
+            Swal.fire({
+                title: 'Error',
+                text: 'Please select a model',
+                icon: 'error'
+            });
+            return;
+        }
+
+        try {
+            // Update selected model in database first
+            const updateResponse = await fetch('/api/tool/ollama/', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken')
+                },
+                body: JSON.stringify({ model: selectedModel })
+            });
+            
+            const updateData = await updateResponse.json();
+            if (!updateData.status) {
+                throw new Error('Failed to update selected model');
+            }
+
+            // Then proceed with attack surface analysis
+            var loader_title = "Loading...";
+            var text = 'Please wait while the LLM is generating attack surface.'
+            showSwalLoader(loader_title, text);
+            const data = await send_llm__attack_surface_api_request(endpoint_url, id);
+            Swal.close();
+            
+            if (data.status) {
+                $('#modal_dialog .modal-title').html(`Attack Surface Suggestion for ${data.subdomain_name} (BETA)`);
+                $('#modal_dialog .modal-text').empty();
+                $('#modal_dialog .modal-text').append(data.description.replace(new RegExp('\r?\n','g'), '<br />'));
+                $('#modal_dialog').modal('show');
+            } else {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Oops...',
+                    text: data.error,
+                });
+            }
+        } catch (error) {
+            console.error(error);
+            Swal.close();
+            Swal.fire({
+                icon: 'error',
+                title: 'Oops...',
+                text: 'Something went wrong!',
+            });
+        }
+    };
+
+    try {
+        // Fetch models from the unified endpoint that combines GPT and Ollama models
+        const response = await fetch('/api/tools/llm_models');
+        const data = await response.json();
+        
+        if (!data.status) {
+            throw new Error(data.error || 'Failed to fetch models');
+        }
+
+        const allModels = data.models;
+        const selectedModel = data.selected_model;
+
+        let modelOptions = '';
+        allModels.forEach(model => {
+            const modelName = model.name;
+            const capabilities = model.capabilities || {};
+            const isLocal = model.is_local || false;
+            
+            modelOptions += `
+                <div class="col-md-4">
+                    <div class="card project-box" style="min-height: 180px; cursor: pointer" 
+                         onclick="document.getElementById('${modelName}').click()">
+                        <div class="card-body p-2">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="llm_model" 
+                                    id="${modelName}" value="${modelName}" 
+                                    ${modelName === selectedModel ? 'checked' : ''}>
+                                <h5 class="mt-0">
+                                    <span class="${modelName === selectedModel ? 'text-success' : ''}">${modelName} 
+                                        ${modelName === selectedModel ? '<span class="badge bg-soft-primary text-primary ms-2">Selected</span>' : ''}
+                                    </span>
+                                </h5>
+                                <p class="mb-1 small">
+                                    <span class="pe-2 text-nowrap d-inline-block">
+                                        <i class="mdi mdi-database text-info"></i>
+                                        ${isLocal ? 'Local model' : 'OpenAI'}
+                                    </span>
+                                    ${model.details ? `
+                                        <span class="text-nowrap d-inline-block">
+                                            <i class="mdi mdi-family-tree text-success"></i>
+                                            ${model.details.family}
+                                        </span>
+                                    ` : ''}
+                                    <br>
+                                    <span class="text-muted">
+                                        ${capabilities.best_for ? capabilities.best_for.join(', ') : 'General analysis'}
+                                    </span>
+                                    ${!isLocal ? '<br><span class="badge bg-soft-warning text-warning mt-1">API Key Required</span>' : ''}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+        });
+
+        $('#modal_dialog .modal-title').html('Select LLM Model for Attack Surface Analysis');
+        $('#modal_dialog .modal-text').empty();
+        $('#modal_dialog .modal-text').append(`
+            <div class="mb-3 row">
+                <p>Select the LLM model to use:</p>
+                ${modelOptions}
+            </div>
+            <div class="mb-3 text-center">
+                <button class="btn btn-primary" type="button" onclick="window.generateAttackSurface()">
+                    Continue Analysis
+                </button>
+            </div>
+        `);
+        
+        $('#modal_dialog').modal('show');
+    } catch (error) {
+        console.error(error);
+        Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: 'Unable to fetch LLM models. Please check configuration.',
+            footer: '<a href="/scanEngine/llm_toolkit/">Configure LLM models</a>'
+        });
+    }
 }
 
+async function continueWithSelectedModel(endpoint_url, id, callback) {
+    const selectedModel = $('input[name="llm_model"]:checked').val();
+    if (!selectedModel) {
+        Swal.fire({
+            title: 'Error',
+            text: 'Please select a model',
+            icon: 'error'
+        });
+        return;
+    }
+    
+    try {
+        // Update selected model in database
+        const response = await fetch('/api/tool/ollama/', {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            body: JSON.stringify({ model: selectedModel })
+        });
+        
+        const data = await response.json();
+        if (data.status) {
+            $('#modal_dialog').modal('hide');
+            // Continue with attack surface analysis using the callback
+            if (callback) await callback();
+        } else {
+            Swal.fire({
+                title: 'Error',
+                text: 'Unable to set selected model',
+                icon: 'error'
+            });
+        }
+    } catch (error) {
+        console.error(error);
+        Swal.fire({
+            title: 'Error',
+            text: 'Something went wrong while setting the model',
+            icon: 'error'
+        });
+    }
+}
 
 function convertToCamelCase(inputString) {
 	// Converts camel case string to title
@@ -3326,4 +3477,80 @@ function handleHashInUrl(){
 			}, 100);
 		}
 	}
+}
+
+function showLLMModelSelectionModal(callback) {
+    $('#modal_dialog .modal-title').html('Select LLM Model');
+    $('#modal_dialog .modal-text').empty();
+    
+    // Get available models
+    fetch('/api/tool/ollama/')
+        .then(response => response.json())
+        .then(data => {
+            const models = data.models;
+            const selectedModel = data.selected_model;
+            
+            let modelOptions = '';
+            models.forEach(model => {
+                modelOptions += `
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="llm_model" 
+                            id="${model.name}" value="${model.name}" 
+                            ${model.name === selectedModel ? 'checked' : ''}>
+                        <label class="form-check-label" for="${model.name}">
+                            ${model.name} (${model.details.family})
+                        </label>
+                    </div>`;
+            });
+
+            $('#modal_dialog .modal-text').append(`
+                <div class="mb-3">
+                    <p>Select the LLM model to use for vulnerability analysis:</p>
+                    ${modelOptions}
+                </div>
+                <div class="mb-3 text-center">
+                    <button class="btn btn-primary float-end" type="submit" onclick="selectLLMModel()">
+                        Continue
+                    </button>
+                </div>
+            `);
+            
+            $('#modal_dialog').modal('show');
+        });
+}
+
+function selectLLMModel() {
+    const selectedModel = $('input[name="llm_model"]:checked').val();
+    if (!selectedModel) {
+        Swal.fire({
+            title: 'Error',
+            text: 'Please select a model',
+            icon: 'error'
+        });
+        return;
+    }
+    
+    // Update selected model in database
+    fetch('/api/tool/ollama/', {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: JSON.stringify({ model: selectedModel })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status) {
+            $('#modal_dialog').modal('hide');
+            // Continue with scan
+            startScan();
+        } else {
+            Swal.fire({
+                title: 'Error',
+                text: 'Unable to set selected model',
+                icon: 'error'
+            });
+        }
+    });
 }
