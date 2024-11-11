@@ -175,28 +175,28 @@ MODEL_REQUIREMENTS = {
         'min_tokens': 64,
         'max_tokens': 2048,
         'supports_functions': True,
-        'best_for': ['basic_analysis', 'general_purpose'],
+        'best_for': ['Basic analysis', 'General purpose tasks'],
         'provider': 'openai'
     },
     'gpt-3.5-turbo': {
         'min_tokens': 64,
         'max_tokens': 4096,
         'supports_functions': True,
-        'best_for': ['quick_analysis', 'basic_suggestions', 'cost_effective'],
+        'best_for': ['Quick analysis', 'Basic suggestions', 'Cost effective solutions'],
         'provider': 'openai'
     },
     'gpt-4': {
         'min_tokens': 128,
         'max_tokens': 8192,
         'supports_functions': True,
-        'best_for': ['deep_analysis', 'complex_reasoning', 'advanced_security'],
+        'best_for': ['Deep security analysis', 'Complex reasoning', 'Advanced security tasks'],
         'provider': 'openai'
     },
     'gpt-4-turbo': {
         'min_tokens': 128,
         'max_tokens': 128000,
         'supports_functions': True,
-        'best_for': ['complex_analysis', 'technical_details', 'latest_capabilities'],
+        'best_for': ['Complex analysis', 'Technical details', 'Latest AI capabilities'],
         'provider': 'openai'
     },
 
@@ -205,35 +205,35 @@ MODEL_REQUIREMENTS = {
         'min_tokens': 32,
         'max_tokens': 4096,
         'supports_functions': False,
-        'best_for': ['local_processing', 'privacy_focused', 'balanced_performance'],
+        'best_for': ['Local processing', 'Privacy focused tasks', 'Balanced performance'],
         'provider': 'ollama'
     },
     'llama2-uncensored': {
         'min_tokens': 32,
         'max_tokens': 4096,
         'supports_functions': False,
-        'best_for': ['unfiltered_analysis', 'security_research', 'red_teaming'],
+        'best_for': ['Unfiltered analysis', 'Security research', 'Red team operations'],
         'provider': 'ollama'
     },
     'llama3': {
         'min_tokens': 64,
         'max_tokens': 8192,
         'supports_functions': False,
-        'best_for': ['advanced_reasoning', 'improved_context', 'technical_analysis'],
+        'best_for': ['Advanced reasoning', 'Improved context', 'Technical analysis'],
         'provider': 'ollama'
     },
     'llama3.1': {
         'min_tokens': 64,
         'max_tokens': 8192,
         'supports_functions': False,
-        'best_for': ['enhanced_comprehension', 'security_assessment', 'detailed_analysis'],
+        'best_for': ['Enhanced comprehension', 'Security assessment', 'Detailed analysis'],
         'provider': 'ollama'
     },
     'llama3.2': {
         'min_tokens': 64,
         'max_tokens': 16384,
         'supports_functions': False,
-        'best_for': ['long_context', 'complex_security_analysis', 'advanced_reasoning'],
+        'best_for': ['Long context', 'Complex security analysis', 'Advanced reasoning'],
         'provider': 'ollama'
     },
 
@@ -242,56 +242,56 @@ MODEL_REQUIREMENTS = {
         'min_tokens': 32,
         'max_tokens': 8192,
         'supports_functions': False,
-        'best_for': ['efficient_processing', 'technical_analysis', 'good_performance_ratio'],
+        'best_for': ['Efficient processing', 'Technical analysis', 'Performance optimization'],
         'provider': 'ollama'
     },
     'mistral-medium': {
         'min_tokens': 32,
         'max_tokens': 8192,
         'supports_functions': False,
-        'best_for': ['balanced_analysis', 'improved_accuracy', 'technical_tasks'],
+        'best_for': ['Balanced analysis', 'Improved accuracy', 'Technical tasks'],
         'provider': 'ollama'
     },
     'mistral-large': {
         'min_tokens': 64,
         'max_tokens': 16384,
         'supports_functions': False,
-        'best_for': ['deep_technical_analysis', 'complex_reasoning', 'high_accuracy'],
+        'best_for': ['Deep technical analysis', 'Complex reasoning', 'High accuracy'],
         'provider': 'ollama'
     },
     'codellama': {
         'min_tokens': 32,
         'max_tokens': 4096,
         'supports_functions': False,
-        'best_for': ['code_analysis', 'vulnerability_assessment', 'technical_details'],
+        'best_for': ['Code analysis', 'Vulnerability assessment', 'Technical documentation'],
         'provider': 'ollama'
     },
     'qwen2.5': {
         'min_tokens': 64,
         'max_tokens': 8192,
         'supports_functions': False,
-        'best_for': ['multilingual_analysis', 'efficient_processing', 'technical_understanding'],
+        'best_for': ['Multilingual analysis', 'Efficient processing', 'Technical understanding'],
         'provider': 'ollama'
     },
     'gemma': {
         'min_tokens': 32,
         'max_tokens': 4096,
         'supports_functions': False,
-        'best_for': ['lightweight_analysis', 'quick_assessment', 'general_tasks'],
+        'best_for': ['Lightweight analysis', 'Quick assessment', 'General tasks'],
         'provider': 'ollama'
     },
     'solar': {
         'min_tokens': 64,
         'max_tokens': 8192,
         'supports_functions': False,
-        'best_for': ['creative_analysis', 'unique_perspectives', 'alternative_approaches'],
+        'best_for': ['Creative analysis', 'Unique perspectives', 'Alternative approaches'],
         'provider': 'ollama'
     },
     'yi': {
         'min_tokens': 64,
         'max_tokens': 8192,
         'supports_functions': False,
-        'best_for': ['comprehensive_analysis', 'detailed_explanations', 'technical_depth'],
+        'best_for': ['Comprehensive analysis', 'Detailed explanations', 'Technical depth'],
         'provider': 'ollama'
     }
 }

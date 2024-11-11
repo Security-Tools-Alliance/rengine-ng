@@ -3338,6 +3338,9 @@ async function show_attack_surface_modal(endpoint_url, id) {
             throw new Error(data.error || 'Failed to fetch models');
         }
 
+		// Change modal size to xl
+		$('#modal_dialog .modal-dialog').removeClass('modal-lg').addClass('modal-xl');
+
         const allModels = data.models;
         const selectedModel = data.selected_model;
 
@@ -3348,10 +3351,10 @@ async function show_attack_surface_modal(endpoint_url, id) {
             const isLocal = model.is_local || false;
             
             modelOptions += `
-                <div class="col-md-4">
-                    <div class="card project-box" style="min-height: 180px; cursor: pointer" 
+                <div class="col-md-4 mt-2">
+                    <div class="card project-box h-100" style="cursor: pointer" 
                          onclick="document.getElementById('${modelName}').click()">
-                        <div class="card-body p-2">
+                        <div class="card-body p-2 pt-3 d-flex flex-column">
                             <div class="form-check">
                                 <input class="form-check-input" type="radio" name="llm_model" 
                                     id="${modelName}" value="${modelName}" 
@@ -3361,7 +3364,8 @@ async function show_attack_surface_modal(endpoint_url, id) {
                                         ${modelName === selectedModel ? '<span class="badge bg-soft-primary text-primary ms-2">Selected</span>' : ''}
                                     </span>
                                 </h5>
-                                <p class="mb-1 small">
+                                <p>${!isLocal ? '<span class="badge bg-soft-warning text-warning mt-auto">Remote Model - API Key Required</span>' : '<span class="badge bg-soft-success text-success mt-auto">Locally installed model</span>'}</p>
+                                <p class="mb-1 small flex-grow-1">
                                     <span class="pe-2 text-nowrap d-inline-block">
                                         <i class="mdi mdi-database text-info"></i>
                                         ${isLocal ? 'Local model' : 'OpenAI'}
@@ -3371,12 +3375,23 @@ async function show_attack_surface_modal(endpoint_url, id) {
                                             <i class="mdi mdi-family-tree text-success"></i>
                                             ${model.details.family}
                                         </span>
+                                        <br>
+                                        <span class="text-nowrap d-inline-block">
+                                            <i class="mdi mdi-numeric text-info"></i>
+                                            <b>${model.details.parameter_size}</b> Parameters
+                                        </span>
                                     ` : ''}
                                     <br>
-                                    <span class="text-muted">
-                                        ${capabilities.best_for ? capabilities.best_for.join(', ') : 'General analysis'}
+                                    <br>
+                                    <span class="text-muted w-100 d-inline-block">
+                                        <i class="mdi mdi-star text-warning"></i>
+                                        Best for:
+                                        <ul class="list-unstyled mt-1 ms-3">
+                                            ${capabilities.best_for ? capabilities.best_for.map(cap => 
+                                                `<li><i class="mdi mdi-check-circle text-success me-1"></i>${cap}</li>`
+                                            ).join('') : '<li><i class="mdi mdi-check-circle text-success me-1"></i>General analysis</li>'}
+                                        </ul>
                                     </span>
-                                    ${!isLocal ? '<br><span class="badge bg-soft-warning text-warning mt-1">API Key Required</span>' : ''}
                                 </p>
                             </div>
                         </div>

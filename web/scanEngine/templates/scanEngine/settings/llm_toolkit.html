@@ -44,43 +44,52 @@ LLM Toolkit (Beta)
     <b>Warning:</b> GPT model is currently selected and requires API key to be set. Please set the API key in the <a href="{% url 'api_vault' %}"> API Vault.</a>
   </div>
   {% endif %}
-  <div class="row mt-2">
+  <div class="row">
     {% for model in installed_models %}
-    <div class="col-lg-4">
-      <div class="card project-box">
-        <div class="card-body">
-          <div class="dropdown float-end">
-            <a href="#" class="dropdown-toggle card-drop arrow-none" data-bs-toggle="dropdown" aria-expanded="false">
-              <i class="mdi mdi-dots-horizontal m-0 text-muted h3"></i>
-            </a>
-            <div class="dropdown-menu dropdown-menu-end">
-              {% if model.is_local %}
-                <a class="dropdown-item" href="#" onClick=deleteModel('{{model.name}}')>Delete</a>
-              {% endif %}
-              {% if not model.selected %}
-                <a class="dropdown-item" href="#" onClick=selectModel('{{model.name}}')>Use Model</a>
-              {% endif %}
+    <div class="col-lg-4 mt-4">
+      <div class="card project-box h-100">
+        <div class="card-body d-flex flex-column">
+          <div class="d-flex justify-content-between align-items-center">
+            <h4 class="mt-0 mb-0">
+              <span class="{% if model.selected %}text-success{% endif %}">
+                {{model.name}} 
+              </span>
+            </h4>
+            <div class="dropdown">
+              <a href="#" class="dropdown-toggle card-drop arrow-none" data-bs-toggle="dropdown" aria-expanded="false">
+                <i class="mdi mdi-dots-horizontal m-0 text-muted h3"></i>
+              </a>
+              <div class="dropdown-menu dropdown-menu-end">
+                {% if not model.selected %}
+                  <a class="dropdown-item" href="#" onClick=selectModel('{{model.name}}')>
+                    <i class="mdi mdi-check-circle text-success me-1"></i>Use Model
+                  </a>
+                {% endif %}
+                {% if model.is_local %}
+                  <a class="dropdown-item" href="#" onClick=deleteModel('{{model.name}}')>
+                    <i class="mdi mdi-delete text-danger me-1"></i>Delete
+                  </a>
+                {% endif %}
+              </div>
             </div>
           </div>
-          <h4 class="mt-0">
-            <span class="{% if model.selected %}text-success{% endif %}">{{model.name}} {% if model.selected %}<span class="badge bg-soft-primary text-primary ms-4">Selected Model</span>{% endif %}</span>
-          </h4>
+          <p class="mt-1">
+            {% if not model.is_local %}
+              <span class="badge bg-soft-warning text-warning mt-auto">Remote Model - API Key Required</span>
+            {% else %}
+              <span class="badge bg-soft-success text-success mt-auto">Locally installed model</span>
+            {% endif %}
+            {% if model.selected %}
+              <span class="badge bg-soft-primary text-primary ms-4 float-end">Selected Model</span>
+            {% endif %}
           </p>
-          <p class="mb-1">
+          <p class="mb-0 mt-1">
             <span class="pe-2 text-nowrap mb-2 d-inline-block">
               <i class="mdi mdi-calendar-range text-primary"></i>
               Modified <b>{% if model.modified_at %}{{model.modified_at|naturaltime}} {% else %} NA{% endif %}</b>
             </span>
             <br>
-            <span class="pe-2 text-nowrap mb-2 d-inline-block">
-              <i class="mdi mdi-database text-info"></i>
-              {% if model.is_local %}
-              Locally installed model
-              {% else %}
-              Open AI Model
-              {% endif %}
-            </span>
-            <br>
+            {% if model.details %}
             <span class="pe-2 text-nowrap mb-2 d-inline-block">
               <i class="mdi mdi-numeric text-info"></i>
               <b>{{model.details.parameter_size}}</b> Parameters 
@@ -89,6 +98,19 @@ LLM Toolkit (Beta)
               <i class="mdi mdi-family-tree text-success"></i>
               <b>{{model.details.family}}</b> Family 
             </span>
+            {% endif %}
+            {% if model.capabilities %}
+            <br>
+            <span class="mb-2 d-inline-block w-100">
+              <i class="mdi mdi-star text-warning"></i>
+              Best for:
+              <ul class="list-unstyled mt-1 ms-3">
+                {% for capability in model.capabilities.best_for %}
+                  <li><i class="mdi mdi-check-circle text-success me-1"></i>{{capability}}</li>
+                {% endfor %}
+              </ul>
+            </span>
+            {% endif %}
           </p>
         </div>
       </div>
