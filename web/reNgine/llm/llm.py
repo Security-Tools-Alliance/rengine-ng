@@ -3,12 +3,12 @@ import logging
 from abc import ABC, abstractmethod
 import openai
 from langchain_community.llms import Ollama
-
+import json
+import re
 from reNgine.llm.config import LLM_CONFIG
-from reNgine.llm.utils import RegexPatterns, get_default_llm_model
-from reNgine.llm.validators import LLMProvider, LLMInputData, LLMResponse
-from reNgine.common_func import get_open_ai_key, extract_between
-from dashboard.models import OllamaSettings
+from reNgine.llm.utils import get_default_llm_model
+from reNgine.llm.validators import LLMProvider, LLMResponse
+from reNgine.common_func import get_open_ai_key
 
 logger = logging.getLogger(__name__)
 
@@ -45,13 +45,16 @@ class BaseLLMGenerator(ABC):
             timeout=ollama_config['timeout']
         )
 
-    def _validate_input(self, input_data: str) -> LLMInputData:
+    def _validate_input(self, input_data: str, model_name: str = None) -> str:
         """Validate input data using Pydantic model"""
-        return LLMInputData(
-            description=input_data,
-            llm_model=self.model_name,
-            provider=self.provider
-        )
+        if not input_data or not isinstance(input_data, str):
+            raise ValueError("Input data must be a non-empty string")
+            
+        # Additional model validation if provided
+        if model_name and not isinstance(model_name, str):
+            raise ValueError("Model name must be a string")
+            
+        return input_data
 
 class LLMVulnerabilityReportGenerator(BaseLLMGenerator):
     """Generator for vulnerability reports using LLM"""
@@ -61,50 +64,107 @@ class LLMVulnerabilityReportGenerator(BaseLLMGenerator):
         return get_default_llm_model()
 
     def _get_default_provider(self) -> LLMProvider:
-        """Get default provider based on OllamaSettings"""
-        selected_model = OllamaSettings.objects.first()
-        return LLMProvider.OLLAMA if selected_model.use_ollama else LLMProvider.OPENAI
+        """Get default provider based on model requirements"""
+        model_name = self._get_model_name()
+        if model_name in self.config['providers']['openai']['models']:
+            return LLMProvider.OPENAI
+        return LLMProvider.OLLAMA
 
-    def get_vulnerability_description(self, description: str) -> LLMResponse:
+    def _get_provider_config(self) -> Dict[str, Any]:
+        """Get provider specific configuration"""
+        provider_key = self.provider.value
+        return self.config['providers'][provider_key]
+
+    def _validate_input(self, input_data: str, model_name: str = None) -> str:
+        """Validate the input data and model name"""
+        if not input_data or not isinstance(input_data, str):
+            raise ValueError("Input data must be a non-empty string")
+            
+        # Additional model validation if provided
+        if model_name and not isinstance(model_name, str):
+            raise ValueError("Model name must be a string")
+            
+        return input_data
+
+    def get_vulnerability_report(self, description: str, model_name: str = None) -> dict:
         """
-        Generate vulnerability description using LLM
+        Generate vulnerability report using LLM by asking specific questions for each section
         
         Args:
             description: Raw vulnerability description
-            
+            model_name: Optional model name to use
+                
         Returns:
-            LLMResponse object containing the structured response
+            dict: Response containing structured data
         """
         try:
-            # Validate input
-            validated_input = self._validate_input(description)
+            validated_input = self._validate_input(description, model_name)
+            vulnerability_prompt = LLM_CONFIG['prompts']['vulnerability']
+            context = vulnerability_prompt['context']
             
-            # Get response from appropriate provider
-            if self.provider == LLMProvider.OLLAMA:
-                response_content = self._get_ollama_response(validated_input.description)
-            else:
-                response_content = self._get_openai_response(validated_input.description)
-
-            # Extract sections from response
-            sections = self._extract_sections(response_content)
+            # Generate each section separately
+            #technical = self._get_section_response(validated_input, context + vulnerability_prompt['technical'])
+            #impact = self._get_section_response(validated_input, context + vulnerability_prompt['impact'])
+            #remediation = self._get_section_response(validated_input, context + vulnerability_prompt['remediation'])
+            technical = ""
+            impact = ""
+            remediation = ""
+            references = self._get_section_response(validated_input, context + vulnerability_prompt['references'])
+            
+            # Combine sections into a single response
+            response = {
+                "description": technical,
+                "impact": impact,
+                "remediation": remediation,
+                "references": references
+            }
+            
+            logger.debug(f'Response: {response}')
             return LLMResponse(
                 status=True,
-                **sections
-            )
+                **response
+            ).to_dict()
 
         except Exception as e:
-            logger.error(f"Error in get_vulnerability_description: {str(e)}", exc_info=True)
+            logger.error(f"Error in get_vulnerability_report: {str(e)}", exc_info=True)
             return LLMResponse(
                 status=False,
                 error=str(e)
-            )
+            ).to_dict()
 
-    def _get_ollama_response(self, description: str) -> str:
+    def _get_section_response(self, input_data: str, prompt: str) -> str:
+        """
+        Get response for a specific section using LLM
+        
+        Args:
+            input_data: Validated input data
+            prompt: Specific prompt for the section
+            
+        Returns:
+            str: Response content for the section
+        """
+        try:
+            if self.provider == LLMProvider.OLLAMA:
+                response_content = self._get_ollama_response(prompt, input_data)
+            else:
+                response_content = self._get_openai_response(prompt, input_data, model_name=None)
+            
+            # Clean and return the response
+            return response_content.strip()
+        
+        except Exception as e:
+            logger.error(f"Error in _get_section_response: {str(e)}")
+            return ""
+
+    def _get_ollama_response(self, prompt: str, description: str) -> str:
         """Get response from Ollama"""
-        prompt = f"{self.config['prompts']['vulnerability']}\nUser: {description}"
-        return self.ollama(prompt)
+        prompt = f"{prompt}\nUser: {description}"
+        logger.debug(f'Ollama Prompt: {prompt}')
+        response = self.ollama(prompt)
+        logger.debug(f'Ollama Response: {response}')
+        return str(response) if response is not None else ""
 
-    def _get_openai_response(self, description: str) -> str:
+    def _get_openai_response(self, prompt: str, description: str, model_name: str = None) -> str:
         """Get response from OpenAI"""
         if not self.api_key:
             raise ValueError("OpenAI API Key not set")
@@ -112,31 +172,14 @@ class LLMVulnerabilityReportGenerator(BaseLLMGenerator):
         openai.api_key = self.api_key
         
         response = openai.ChatCompletion.create(
-            model=self.model_name,
+            model=model_name or self.model_name,
             messages=[
-                {'role': 'system', 'content': self.config['prompts']['vulnerability']},
+                {'role': 'system', 'content': prompt},
                 {'role': 'user', 'content': description}
             ],
-            **self.config['providers']['openai']
+            **self._get_provider_config()
         )
         return response['choices'][0]['message']['content']
-
-    def _extract_sections(self, content: str) -> dict:
-        """Extract sections from LLM response"""
-        description = extract_between(content, RegexPatterns.VULN_DESCRIPTION)
-        impact = extract_between(content, RegexPatterns.IMPACT)
-        remediation = extract_between(content, RegexPatterns.REMEDIATION)
-        
-        references_start = content.find("References:")
-        references_section = content[references_start + len("References:"):].strip()
-        urls = RegexPatterns.URL.findall(references_section)
-
-        return {
-            "description": description,
-            "impact": impact,
-            "remediation": remediation,
-            "references": urls
-        }
 
 class LLMAttackSuggestionGenerator(BaseLLMGenerator):
     """Generator for attack suggestions using LLM"""

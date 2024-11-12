@@ -2,7 +2,7 @@ import markdown, json
 
 from celery import group
 from pathlib import Path
-from weasyprint import HTML
+from weasyprint import HTML, CSS
 from datetime import datetime, timedelta
 from django.contrib import messages
 from django.db.models import Count
@@ -11,6 +11,7 @@ from django.shortcuts import get_object_or_404, render
 from django.template.loader import get_template
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.html import mark_safe
 from django_celery_beat.models import ClockedSchedule, IntervalSchedule, PeriodicTask
 from rolepermissions.decorators import has_permission_decorator
 
@@ -966,9 +967,52 @@ def create_report(request, slug, id):
     data['primary_color'] = primary_color
     data['secondary_color'] = secondary_color
 
+    # Configure WeasyPrint with the necessary CSS styles
+    css = CSS(string='''
+        /* General styles */
+        body { font-family: Arial, sans-serif; }
+        
+        /* Styles for markdown */
+        h1, h2, h3, h4 { margin-top: 1em; }
+        ul, ol { margin-left: 2em; }
+        pre, code { 
+            background-color: #f5f5f5;
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+        }
+        
+        /* Styles for tables */
+        table { 
+            border-collapse: collapse;
+            width: 100%;
+            margin: 1em 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+    ''')
+
+    # Preprocess HTML/Markdown fields
+    for vuln in data['all_vulnerabilities']:
+        if vuln.description:
+            vuln.description = mark_safe(vuln.description)
+        if vuln.impact:
+            vuln.impact = mark_safe(vuln.impact)
+        if vuln.remediation:
+            vuln.remediation = mark_safe(vuln.remediation)
+        if vuln.references:
+            vuln.references = mark_safe(vuln.references)
+
     template = get_template('report/template.html')
     html = template.render(data)
-    pdf = HTML(string=html).write_pdf()
+
+    # Generate the PDF with the CSS styles
+    pdf = HTML(string=html).write_pdf(
+        stylesheets=[css],
+        presentational_hints=True
+    )
 
     if 'download' in request.GET:
         response = HttpResponse(pdf, content_type='application/octet-stream')

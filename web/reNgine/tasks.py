@@ -29,6 +29,7 @@ from metafinder.extractor import extract_metadata_from_google_search
 
 from reNgine.celery import app
 from reNgine.llm.llm import LLMVulnerabilityReportGenerator
+from reNgine.llm.utils import get_llm_vuln_input_description
 from reNgine.celery_custom_task import RengineTask
 from reNgine.common_func import *
 from reNgine.definitions import *
@@ -2286,7 +2287,7 @@ def nuclei_individual_severity_module(self, cmd, severity, enable_http_crawl, sh
         unique_vulns = list(unique_vulns)
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=DEFAULT_THREADS) as executor:
-            future_to_llm = {executor.submit(get_vulnerability_llm_report, vuln): vuln for vuln in unique_vulns}
+            future_to_llm = {executor.submit(llm_vulnerability_report, vuln): vuln for vuln in unique_vulns}
 
             # Wait for all tasks to complete
             for future in concurrent.futures.as_completed(future_to_llm):
@@ -2298,67 +2299,93 @@ def nuclei_individual_severity_module(self, cmd, severity, enable_http_crawl, sh
 
         return None
 
+@app.task(name='llm_vulnerability_report', bind=False, queue='llm_queue')
+def llm_vulnerability_report(vulnerability_id=None, vuln_tuple=None):
+    """
+    Generate and store Vulnerability Report using LLM.
+    Can be called either with a vulnerability_id or a vuln_tuple (title, path)
 
-def get_vulnerability_llm_report(vuln):
-    title = vuln[0]
-    path = vuln[1]
-    logger.info(f'Getting LLM Report for {title}, PATH: {path}')
-    # check if in db already exists
-    stored = LLMVulnerabilityReport.objects.filter(
-        url_path=path
-    ).filter(
-        title=title
-    ).first()
-    if stored:
-        response = {
-            'description': stored.description,
-            'impact': stored.impact,
-            'remediation': stored.remediation,
-            'references': [url.url for url in stored.references.all()]
-        }
-    else:
-        report = LLMVulnerabilityReportGenerator()
-        vulnerability_description = get_llm_vuln_input_description(
-            title,
-            path
+    Args:
+        vulnerability_id (int, optional): Vulnerability ID to fetch Description
+        vuln_tuple (tuple, optional): Tuple containing (title, path)
+    
+    Returns:
+        dict: LLM response containing description, impact, remediation and references
+    """
+    logger.info('Getting LLM Vulnerability Description')
+    try:
+        # Get title and path from either vulnerability_id or vuln_tuple
+        if vulnerability_id:
+            lookup_vulnerability = Vulnerability.objects.get(id=vulnerability_id)
+            lookup_url = urlparse(lookup_vulnerability.http_url)
+            title = lookup_vulnerability.name
+            path = lookup_url.path
+        elif vuln_tuple:
+            title, path = vuln_tuple
+        else:
+            raise ValueError("Either vulnerability_id or vuln_tuple must be provided")
+
+        logger.info(f'Processing vulnerability: {title}, PATH: {path}')
+
+        # Check if report already exists in database
+        stored = LLMVulnerabilityReport.objects.filter(
+            url_path=path,
+            title=title
+        ).first()
+
+        if stored:
+            response = {
+                'status': True,
+                'description': stored.formatted_description,
+                'impact': stored.formatted_impact,
+                'remediation': stored.formatted_remediation,
+                'references': stored.formatted_references,
+            }
+            logger.info(f'Found stored report: {stored}')
+        else:
+            # Generate new report
+            vulnerability_description = get_llm_vuln_input_description(title, path)
+            llm_generator = LLMVulnerabilityReportGenerator()
+            response = llm_generator.get_vulnerability_report(vulnerability_description)
+            
+            # Store new report in database
+            llm_report = LLMVulnerabilityReport()
+            llm_report.url_path = path
+            llm_report.title = title
+            llm_report.description = response.get('description')
+            llm_report.impact = response.get('impact')
+            llm_report.remediation = response.get('remediation')
+            llm_report.references = response.get('references')
+            llm_report.save()            
+            logger.info('Added new report to database')
+
+        # Update all matching vulnerabilities
+        vulnerabilities = Vulnerability.objects.filter(
+            name=title,
+            http_url__icontains=path
         )
-        response = report.get_vulnerability_description(vulnerability_description)
-        add_llm_description_db(
-            title,
-            path,
-            response.get('description'),
-            response.get('impact'),
-            response.get('remediation'),
-            response.get('references', [])
-        )
-
-
-    for vuln in Vulnerability.objects.filter(name=title, http_url__icontains=path):
-        vuln.description = response.get('description', vuln.description)
-        vuln.impact = response.get('impact')
-        vuln.remediation = response.get('remediation')
-        vuln.is_llm_used = True
-        vuln.save()
-
-        for url in response.get('references', []):
-            ref, created = VulnerabilityReference.objects.get_or_create(url=url)
-            vuln.references.add(ref)
+        
+        for vuln in vulnerabilities:
+            # Update vulnerability fields
+            vuln.description = response.get('description', vuln.description)
+            vuln.impact = response.get('impact')
+            vuln.remediation = response.get('remediation')
+            vuln.is_llm_used = True
+            vuln.references = response.get('references')
+            
             vuln.save()
+            logger.info(f'Updated vulnerability {vuln.id} with LLM report')
 
+        return response
 
-def add_llm_description_db(title, path, description, impact, remediation, references):
-    llm_report = LLMVulnerabilityReport()
-    llm_report.url_path = path
-    llm_report.title = title
-    llm_report.description = description
-    llm_report.impact = impact
-    llm_report.remediation = remediation
-    llm_report.save()
+    except Exception as e:
+        error_msg = f"Error in get_vulnerability_report: {str(e)}"
+        logger.error(error_msg)
+        return {
+            'status': False,
+            'error': error_msg
+        }
 
-    for url in references:
-        ref, created = VulnerabilityReference.objects.get_or_create(url=url)
-        llm_report.references.add(ref)
-        llm_report.save()
 
 @app.task(name='nuclei_scan', queue='main_scan_queue', base=RengineTask, bind=True)
 def nuclei_scan(self, urls=[], ctx={}, description=None):
@@ -2609,7 +2636,7 @@ def dalfox_xss_scan(self, urls=[], ctx={}, description=None):
             _vulns.append((vuln.name, vuln.http_url))
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=DEFAULT_THREADS) as executor:
-            future_to_llm = {executor.submit(get_vulnerability_llm_report, vuln): vuln for vuln in _vulns}
+            future_to_llm = {executor.submit(llm_vulnerability_report, vuln): vuln for vuln in _vulns}
 
             # Wait for all tasks to complete
             for future in concurrent.futures.as_completed(future_to_llm):
@@ -2735,7 +2762,7 @@ def crlfuzz_scan(self, urls=[], ctx={}, description=None):
             _vulns.append((vuln.name, vuln.http_url))
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=DEFAULT_THREADS) as executor:
-            future_to_llm = {executor.submit(get_vulnerability_llm_report, vuln): vuln for vuln in _vulns}
+            future_to_llm = {executor.submit(llm_vulnerability_report, vuln): vuln for vuln in _vulns}
 
             # Wait for all tasks to complete
             for future in concurrent.futures.as_completed(future_to_llm):
@@ -4530,11 +4557,9 @@ def save_vulnerability(**vuln_data):
             vuln.save()
 
     # Save vuln reference
-    for url in references or []:
-        ref, created = VulnerabilityReference.objects.get_or_create(url=url)
-        if created:
-            vuln.references.add(ref)
-            vuln.save()
+    if references:
+        vuln.references = references
+        vuln.save()
 
     # Save subscan id in vuln object
     if subscan:
@@ -4832,71 +4857,6 @@ def query_ip_history(domain):
     """
 
     return get_domain_historical_ip_address(domain)
-
-
-@app.task(name='llm_vulnerability_description', bind=False, queue='llm_queue')
-def llm_vulnerability_description(vulnerability_id):
-    """Generate and store Vulnerability Description using LLM.
-
-    Args:
-        vulnerability_id (Vulnerability Model ID): Vulnerability ID to fetch Description.
-    """
-    logger.info('Getting LLM Vulnerability Description')
-    try:
-        lookup_vulnerability = Vulnerability.objects.get(id=vulnerability_id)
-        lookup_url = urlparse(lookup_vulnerability.http_url)
-        path = lookup_url.path
-    except Exception as e:
-        return {
-            'status': False,
-            'error': str(e)
-        }
-
-    # check in db LLMVulnerabilityReport model if vulnerability description and path matches
-    stored = LLMVulnerabilityReport.objects.filter(url_path=path).filter(title=lookup_vulnerability.name).first()
-    if stored:
-        response = {
-            'status': True,
-            'description': stored.description,
-            'impact': stored.impact,
-            'remediation': stored.remediation,
-            'references': [url.url for url in stored.references.all()]
-        }
-    else:
-        vulnerability_description = get_llm_vuln_input_description(
-            lookup_vulnerability.name,
-            path
-        )
-        # one can add more description here later
-
-        llm_generator = LLMVulnerabilityReportGenerator()
-        response = llm_generator.get_vulnerability_description(vulnerability_description)
-        add_llm_description_db(
-            lookup_vulnerability.name,
-            path,
-            response.get('description'),
-            response.get('impact'),
-            response.get('remediation'),
-            response.get('references', [])
-        )
-
-    # for all vulnerabilities with the same vulnerability name this description has to be stored.
-    # also the consition is that the url must contain a part of this.
-
-    for vuln in Vulnerability.objects.filter(name=lookup_vulnerability.name, http_url__icontains=path):
-        vuln.description = response.get('description', vuln.description)
-        vuln.impact = response.get('impact')
-        vuln.remediation = response.get('remediation')
-        vuln.is_llm_used = True
-        vuln.save()
-
-        for url in response.get('references', []):
-            ref, created = VulnerabilityReference.objects.get_or_create(url=url)
-            vuln.references.add(ref)
-            vuln.save()
-
-    return response
-
 
 @app.task(name='run_wafw00f', bind=False, queue='run_command_queue')
 def run_wafw00f(url):

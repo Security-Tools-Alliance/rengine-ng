@@ -10,40 +10,51 @@ OLLAMA_INSTANCE = 'http://ollama:11434'
 # LLM SYSTEM PROMPTS
 ###############################################################################
 
-VULNERABILITY_DESCRIPTION_SYSTEM_MESSAGE = """
+VULNERABILITY_CONTEXT = """
 You are an expert penetration tester specializing in web application security assessments. Your task is to analyze the following vulnerability information:
     - Vulnerability title
     - Vulnerable URL
     - Vulnerability description
 
-Required report sections (separate each with \n\n):
+Keep the tone technical and professional. Focus on actionable insights. Avoid generic statements.
+"""
 
-1. TECHNICAL DESCRIPTION
-    - Detailed technical explanation of the vulnerability
+VULNERABILITY_TECHNICAL_DESCRIPTION_PROMPT = """
+Provide a detailed technical description of the vulnerability, including:
+    - Detailed technical explanation
     - Associated CVE IDs and CVSS scores if applicable
     - Attack vectors and exploitation methods
     - Any prerequisites or conditions required for exploitation
+I don't want to see any other information in the response.
+"""
 
-2. BUSINESS IMPACT
+VULNERABILITY_BUSINESS_IMPACT_PROMPT = """
+Describe the business impact of this vulnerability, including:
     - Direct security implications
     - Potential business consequences
     - Data exposure risks
     - Compliance implications
+I don't want to see any other information in the response.
+"""
 
-3. REMEDIATION STEPS
-    - Provide specific, actionable remediation steps
-    - Include code examples where relevant
-    - List configuration changes if needed
-    - Suggest security controls to prevent similar issues
+VULNERABILITY_REMEDIATION_STEPS_PROMPT = """
+List the remediation steps for this vulnerability, including:
+    - Specific, actionable steps
+    - Code examples where relevant
+    - Configuration changes if needed
+    - Security controls to prevent similar issues
     Format: Each step prefixed with "- " on a new line
+I don't want to see any other information in the response.
+"""
 
-4. REFERENCES
-    - Only include validated HTTP/HTTPS URLs
-    - Focus on official documentation, security advisories, and research papers
-    - Include relevant CVE details and exploit databases
+VULNERABILITY_REFERENCES_PROMPT = """
+Provide references related to this vulnerability, focusing on:
+    - Validated HTTP/HTTPS URLs
+    - Official documentation, security advisories, and research papers
+    - Relevant CVE details and exploit databases
     Format: Each reference prefixed with "- " on a new line
-
-Keep the tone technical and professional. Focus on actionable insights. Avoid generic statements.
+I don't want to see any other information in the response.
+Give me the response in json format.
 """
 
 ATTACK_SUGGESTION_LLM_SYSTEM_PROMPT = """
@@ -91,11 +102,12 @@ Avoid theoretical attacks without supporting evidence from the reconnaissance da
 LLM_CONFIG: Dict[str, Any] = {
     'providers': {
         'openai': {
-            'default_model': 'gpt-4-turbo-preview',
+            'default_model': 'gpt-4',
             'models': [
-                'gpt-4-turbo-preview',
+                'gpt-4-turbo',
                 'gpt-4',
-                'gpt-3.5-turbo'
+                'gpt-3.5-turbo',
+                'gpt-3'
             ],
             'api_version': '2024-02-15',
             'max_tokens': 2000,
@@ -117,7 +129,13 @@ LLM_CONFIG: Dict[str, Any] = {
     'timeout': 30,
     'max_retries': 3,
     'prompts': {
-        'vulnerability': VULNERABILITY_DESCRIPTION_SYSTEM_MESSAGE,
+        'vulnerability': {
+            'context': VULNERABILITY_CONTEXT,
+            'technical': VULNERABILITY_TECHNICAL_DESCRIPTION_PROMPT,
+            'impact': VULNERABILITY_BUSINESS_IMPACT_PROMPT,
+            'remediation': VULNERABILITY_REMEDIATION_STEPS_PROMPT,
+            'references': VULNERABILITY_REFERENCES_PROMPT,
+        },
         'attack': ATTACK_SUGGESTION_LLM_SYSTEM_PROMPT
     }
 }

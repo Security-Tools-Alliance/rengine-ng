@@ -41,11 +41,27 @@ class LLMInputData(BaseModel):
             }
         }
 
-class LLMResponse(BaseModel):
-    status: bool
-    description: Optional[str] = None
-    impact: Optional[str] = None
-    remediation: Optional[str] = None
-    references: Optional[List[str]] = None
-    error: Optional[str] = None
-    input: Optional[str] = None
+class LLMResponse:
+    def __init__(self, status: bool, description: str = None, impact: str = None, 
+                 remediation: str = None, references: list = None, error: str = None):
+        self.status = status
+        self.description = description
+        self.impact = impact
+        self.remediation = remediation
+        self.references = references or []
+        self.error = error
+
+    def get(self, key, default=None):
+        """Add dictionary-like get method"""
+        return getattr(self, key, default)
+
+    def to_dict(self):
+        """Convert to dictionary"""
+        return {
+            'status': self.status,
+            'description': self.description,
+            'impact': self.impact,
+            'remediation': self.remediation,
+            'references': self.references,
+            'error': self.error
+        }

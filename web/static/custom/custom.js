@@ -3098,28 +3098,19 @@ function render_vuln_offcanvas(vuln){
 	</div>
 	</div>`;
 
-	if (vuln.references.length) {
-		body += `<div class="accordion custom-accordion mt-2">
-		<h5 class="m-0 position-relative">
-		<a class="custom-accordion-title text-reset d-block"
-		data-bs-toggle="collapse" href="#references"
-		aria-expanded="true" aria-controls="collapseNine">
-		References <i
-		class="mdi mdi-chevron-down accordion-arrow"></i>
-		</a>
-		</h5>
-		<div id="references" class="collapse show mt-2">
-		<ul>`;
-
-		vuln.references.forEach(reference => {
-			body += `<li><a href="${htmlEncode(reference.url)}" target="_blank">${htmlEncode(reference.url)}</a></li>`;
-		});
-
-		body += `
-		</ul>
-		</div>
-		</div>`;
-	}
+	body += `<div class="accordion custom-accordion mt-2">
+	<h5 class="m-0 position-relative">
+	<a class="custom-accordion-title text-reset d-block"
+	data-bs-toggle="collapse" href="#references"
+	aria-expanded="true" aria-controls="collapseNine">
+	References <i
+	class="mdi mdi-chevron-down accordion-arrow"></i>
+	</a>
+	</h5>
+	<div id="references" class="collapse show mt-2">
+	${htmlEncode(vuln.references)}
+	</div>
+	</div>`;
 
 	if (vuln.is_llm_used) {
 		body += `<small class="text-muted float-end">(LLM was used to generate vulnerability details.)</small>`;
@@ -3197,6 +3188,9 @@ async function fetch_llm_vuln_details(endpoint_url, id, title) {
 
 
 function render_llm_vuln_modal(data, title){
+	// Change modal size to xl
+	$('#modal_dialog .modal-dialog').removeClass('modal-lg').addClass('modal-xl');
+
 	$('#modal_dialog .modal-title').empty();
 	$('#modal_dialog .modal-text').empty();
 	$('#modal_dialog .modal-footer').empty();
@@ -3210,14 +3204,8 @@ function render_llm_vuln_modal(data, title){
 		<h4>Remediation</h4>
 		<p>${data.remediation}</p>
 		<h4>References</h4>
-		<p><ul>
+		<p>${data.references}</p>
 	`;
-
-	data.references.forEach(reference => {
-		modal_content += `<li><a href="${reference}" target="_blank">${reference}</a></li>`;
-	});
-
-	modal_content += '</ul></p>';
 
 	// Sanitize with DOMPurify before inserting into the DOM
 	$('#modal_dialog .modal-text').append(

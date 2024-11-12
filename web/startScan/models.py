@@ -7,6 +7,7 @@ from django.utils import timezone
 from reNgine.definitions import (CELERY_TASK_STATUSES,
 								 NUCLEI_REVERSE_SEVERITY_MAP)
 from reNgine.utilities import *
+from reNgine.llm.utils import convert_markdown_to_html
 from scanEngine.models import EngineType
 from targetApp.models import Domain
 
@@ -308,6 +309,10 @@ class Subdomain(models.Model):
 			.count()
 		)
 
+	@property
+	def formatted_attack_surface(self):
+		"""Format description as HTML with proper styling"""
+		return convert_markdown_to_html(self.attack_surface)
 
 class SubScan(models.Model):
 	id = models.AutoField(primary_key=True)
@@ -387,14 +392,6 @@ class VulnerabilityTags(models.Model):
 		return self.name
 
 
-class VulnerabilityReference(models.Model):
-	id = models.AutoField(primary_key=True)
-	url = models.CharField(max_length=5000)
-
-	def __str__(self):
-		return self.url
-
-
 class CveId(models.Model):
 	id = models.AutoField(primary_key=True)
 	name = models.CharField(max_length=100)
@@ -417,11 +414,30 @@ class LLMVulnerabilityReport(models.Model):
 	description = models.TextField(null=True, blank=True)
 	impact = models.TextField(null=True, blank=True)
 	remediation = models.TextField(null=True, blank=True)
-	references = models.ManyToManyField('VulnerabilityReference', related_name='report_reference', blank=True)
+	references = models.TextField(null=True, blank=True)
 
 	def __str__(self):
 		return self.title
 
+	@property
+	def formatted_description(self):
+		"""Format description as HTML with proper styling"""
+		return convert_markdown_to_html(self.description)
+
+	@property
+	def formatted_impact(self):
+		"""Format impact as HTML with proper styling"""
+		return convert_markdown_to_html(self.impact)
+	
+	@property
+	def formatted_remediation(self):
+		"""Format remediation as HTML with proper styling"""
+		return convert_markdown_to_html(self.remediation)
+	
+	@property
+	def formatted_references(self):
+		"""Format references as HTML with proper styling"""
+		return convert_markdown_to_html(self.references)
 
 class Vulnerability(models.Model):
 	id = models.AutoField(primary_key=True)
@@ -454,7 +470,7 @@ class Vulnerability(models.Model):
 	)
 
 	tags = models.ManyToManyField('VulnerabilityTags', related_name='vuln_tags', blank=True)
-	references = models.ManyToManyField('VulnerabilityReference', related_name='vuln_reference', blank=True)
+	references = models.TextField(null=True, blank=True)
 	cve_ids = models.ManyToManyField('CveId', related_name='cve_ids', blank=True)
 	cwe_ids = models.ManyToManyField('CweId', related_name='cwe_ids', blank=True)
 
@@ -494,6 +510,26 @@ class Vulnerability(models.Model):
 
 	def get_path(self):
 		return urlparse(self.http_url).path
+
+	@property
+	def formatted_description(self):
+		"""Format description as HTML with proper styling"""
+		return convert_markdown_to_html(self.description)
+
+	@property
+	def formatted_impact(self):
+		"""Format impact as HTML with proper styling"""
+		return convert_markdown_to_html(self.impact)
+	
+	@property
+	def formatted_remediation(self):
+		"""Format remediation as HTML with proper styling"""
+		return convert_markdown_to_html(self.remediation)
+	
+	@property
+	def formatted_references(self):
+		"""Format references as HTML with proper styling"""
+		return convert_markdown_to_html(self.references)
 
 
 class ScanActivity(models.Model):
