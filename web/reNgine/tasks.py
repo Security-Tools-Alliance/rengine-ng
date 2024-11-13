@@ -2379,7 +2379,7 @@ def llm_vulnerability_report(vulnerability_id=None, vuln_tuple=None):
         response['description'] = convert_markdown_to_html(response.get('description', ''))
         response['impact'] = convert_markdown_to_html(response.get('impact', ''))
         response['remediation'] = convert_markdown_to_html(response.get('remediation', ''))
-        response['references'] = [convert_markdown_to_html(ref) for ref in response.get('references', [])]
+        response['references'] = convert_markdown_to_html(response.get('references', ''))
 
         return response
 
