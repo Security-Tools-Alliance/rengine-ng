@@ -422,14 +422,14 @@ def subdomain_discovery(
             if tool == 'amass-passive':
                 use_amass_config = config.get(USE_AMASS_CONFIG, False)
                 cmd = f'amass enum -passive -d {host} -o ' + str(Path(self.results_dir) / 'subdomains_amass.txt')
-                cmd += (' -config ' + str(Path.home() / '.config' / 'amass.ini')) if use_amass_config else ''
+                cmd += (' -config ' + str(Path.home() / '.config' / 'amass' / 'config.ini')) if use_amass_config else ''
 
             elif tool == 'amass-active':
                 use_amass_config = config.get(USE_AMASS_CONFIG, False)
                 amass_wordlist_name = config.get(AMASS_WORDLIST, AMASS_DEFAULT_WORDLIST_NAME)
                 wordlist_path = str(Path(AMASS_DEFAULT_WORDLIST_PATH) / f'{amass_wordlist_name}.txt')
                 cmd = f'amass enum -active -d {host} -o ' + str(Path(self.results_dir) / 'subdomains_amass_active.txt')
-                cmd += (' -config ' + str(Path.home() / '.config' / 'amass.ini')) if use_amass_config else ''
+                cmd += (' -config ' + str(Path.home() / '.config' / 'amass' / 'config.ini')) if use_amass_config else ''
                 cmd += f' -brute -w {wordlist_path}'
 
             elif tool == 'sublist3r':
@@ -1027,7 +1027,7 @@ def theHarvester(config, host, scan_history_id, activity_id, results_dir, ctx={}
     output_path_json = str(Path(results_dir) / 'theHarvester.json')
     theHarvester_dir = str(Path.home() / ".config"  / 'theHarvester')
     history_file = str(Path(results_dir) / 'commands.txt')
-    cmd  = f'theHarvester -d {host} -b all -f {output_path_json}'
+    cmd  = f'theHarvester -d {host} -f {output_path_json} -b anubis,baidu,bevigil,binaryedge,bing,bingapi,bufferoverun,brave,censys,certspotter,criminalip,crtsh,dnsdumpster,duckduckgo,fullhunt,hackertarget,hunter,hunterhow,intelx,netlas,onyphe,otx,pentesttools,projectdiscovery,rapiddns,rocketreach,securityTrails,sitedossier,subdomaincenter,subdomainfinderc99,threatminer,tomba,urlscan,virustotal,yahoo,zoomeye'
 
     # Update proxies.yaml
     proxy_query = Proxy.objects.all()
@@ -1828,11 +1828,11 @@ def fetch_url(self, urls=[], ctx={}, description=None):
 
     # Initialize command map for tools
     cmd_map = {
-        'gau': f'gau',
+        'gau': 'gau --config ' + str(Path.home() / '.config' / 'gau' / 'config.toml'),
         'hakrawler': 'hakrawler -subs -u',
         'waybackurls': 'waybackurls',
-        'gospider': f'gospider --js -d 2 --sitemap --robots -w -r -a',
-        'katana': f'katana -silent -jc -kf all -d 3 -fs rdn',
+        'gospider': 'gospider --js -d 2 --sitemap --robots -w -r -a',
+        'katana': 'katana -silent -jc -kf all -d 3 -fs rdn',
     }
     if proxy:
         cmd_map['gau'] += f' --proxy "{proxy}"'
