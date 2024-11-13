@@ -506,7 +506,7 @@ class Vulnerability(models.Model):
 		return ', '.join(f'`{tag.name}`' for tag in self.tags.all())
 
 	def get_refs_str(self):
-		return '•' + '\n• '.join(f'`{ref.url}`' for ref in self.references.all())
+		return self.references
 
 	def get_path(self):
 		return urlparse(self.http_url).path

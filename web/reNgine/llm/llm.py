@@ -104,9 +104,6 @@ class LLMVulnerabilityReportGenerator(BaseLLMGenerator):
             technical = self._get_section_response(validated_input, context + vulnerability_prompt['technical'])
             impact = self._get_section_response(validated_input, context + vulnerability_prompt['impact'])
             remediation = self._get_section_response(validated_input, context + vulnerability_prompt['remediation'])
-            technical = ""
-            impact = ""
-            remediation = ""
             references = self._get_section_response(validated_input, context + vulnerability_prompt['references'])
             
             # Combine sections into a single response

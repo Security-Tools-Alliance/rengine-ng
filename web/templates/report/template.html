@@ -1020,15 +1020,19 @@
                     {% endfor %}
                   {% endfor %}
                 </ul> -->
-                {% if vulnerability.references.all %}
+                {% if vulnerability.references %}
                   <span class="mini-heading">References</span><br>
-                  <ul>
-                    {% for ref in vulnerability.references.all %}
-                    <li>
-                      <span class="text-blue"><a href="{{ref}}" target="_blank" rel="noopener noreferrer">{{ref}}</a></span>
-                    </li>
-                    {% endfor %}
-                  </ul>
+                  {% if vulnerability.references|length > 0 and vulnerability.references.0 %}
+                      <ul>
+                          {% for reference in vulnerability.references %}
+                              <li>
+                                  <a href="{{ reference }}" target="_blank" rel="noopener noreferrer">{{ reference }}</a>
+                              </li>
+                          {% endfor %}
+                      </ul>
+                  {% else %}
+                      <p>{{ vulnerability.references }}</p>
+                  {% endif %}
                 {% endif %}
                 <br>
                 <br>

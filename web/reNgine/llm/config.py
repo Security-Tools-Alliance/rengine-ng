@@ -54,7 +54,6 @@ Provide references related to this vulnerability, focusing on:
     - Relevant CVE details and exploit databases
     Format: Each reference prefixed with "- " on a new line
 I don't want to see any other information in the response.
-Give me the response in json format.
 """
 
 ATTACK_SUGGESTION_LLM_SYSTEM_PROMPT = """

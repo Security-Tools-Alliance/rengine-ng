@@ -29,7 +29,7 @@ from metafinder.extractor import extract_metadata_from_google_search
 
 from reNgine.celery import app
 from reNgine.llm.llm import LLMVulnerabilityReportGenerator
-from reNgine.llm.utils import get_llm_vuln_input_description
+from reNgine.llm.utils import get_llm_vuln_input_description, convert_markdown_to_html
 from reNgine.celery_custom_task import RengineTask
 from reNgine.common_func import *
 from reNgine.definitions import *
@@ -2375,6 +2375,11 @@ def llm_vulnerability_report(vulnerability_id=None, vuln_tuple=None):
             
             vuln.save()
             logger.info(f'Updated vulnerability {vuln.id} with LLM report')
+
+        response['description'] = convert_markdown_to_html(response.get('description', ''))
+        response['impact'] = convert_markdown_to_html(response.get('impact', ''))
+        response['remediation'] = convert_markdown_to_html(response.get('remediation', ''))
+        response['references'] = [convert_markdown_to_html(ref) for ref in response.get('references', [])]
 
         return response
 

@@ -2528,16 +2528,30 @@ function get_and_render_cve_details(endpoint_url, cve_id){
 				</div>
 				`;
 
-				content += `<div class="tab-pane fade" id="v-pills-cve-references" role="tabpanel" aria-labelledby="v-pills-cve-references-tab" data-simplebar style="max-height: 600px; min-height: 600px;">
-				<ul>`;
+				let references = response.result.references;
 
-				for (var reference in response.result.references) {
-					content += `<li><a href="${response.result.references[reference]}" target="_blank">${response.result.references[reference]}</a></li>`;
+				// Check if references is a string representation of an array
+				if (typeof references === 'string' && references.startsWith('[') && references.endsWith(']')) {
+					// Remove the brackets and split by comma
+					references = references.slice(1, -1).split(',').map(ref => ref.trim().replace(/^'|'$/g, ''));
 				}
-
-				content += `</ul></div>`;
-
-
+				
+				// Generate HTML content
+				let referencesContent = '';
+				if (Array.isArray(references)) {
+					referencesContent = '<ul>';
+					references.forEach(ref => {
+						referencesContent += `<li><a href="${ref}" target="_blank" rel="noopener noreferrer">${ref}</a></li>`;
+					});
+					referencesContent += '</ul>';
+				} else {
+					referencesContent = `<p>${references}</p>`;
+				}
+				
+				content += `<div class="tab-pane fade" id="v-pills-cve-references" role="tabpanel" aria-labelledby="v-pills-cve-references-tab" data-simplebar style="max-height: 600px; min-height: 600px;">
+					${referencesContent}
+				</div>`;
+				
 				content += `<div class="tab-pane fade" id="v-pills-affected-products" role="tabpanel" aria-labelledby="v-pills-affected-products-tab" data-simplebar style="max-height: 600px; min-height: 600px;">
 				<ul>`;
 
@@ -3098,19 +3112,38 @@ function render_vuln_offcanvas(vuln){
 	</div>
 	</div>`;
 
+	let references = vuln.references;
+
+	// Check if references is a string representation of an array
+	if (typeof references === 'string' && references.startsWith('[') && references.endsWith(']')) {
+		// Remove the brackets and split by comma
+		references = references.slice(1, -1).split(',').map(ref => ref.trim().replace(/^'|'$/g, ''));
+	}
+
+	// Generate HTML content
+	let referencesContent = '';
+	if (Array.isArray(references)) {
+		referencesContent = '<ul>';
+		references.forEach(ref => {
+			referencesContent += `<li><a href="${ref}" target="_blank" rel="noopener noreferrer">${ref}</a></li>`;
+		});
+		referencesContent += '</ul>';
+	} else {
+		referencesContent = `<p>${references}</p>`;
+	}
+
 	body += `<div class="accordion custom-accordion mt-2">
-	<h5 class="m-0 position-relative">
-	<a class="custom-accordion-title text-reset d-block"
-	data-bs-toggle="collapse" href="#references"
-	aria-expanded="true" aria-controls="collapseNine">
-	References <i
-	class="mdi mdi-chevron-down accordion-arrow"></i>
-	</a>
-	</h5>
-	<div id="references" class="collapse show mt-2">
-	${htmlEncode(vuln.references)}
-	</div>
-	</div>`;
+    <h5 class="m-0 position-relative">
+        <a class="custom-accordion-title text-reset d-block"
+           data-bs-toggle="collapse" href="#references"
+           aria-expanded="true" aria-controls="collapseNine">
+           References <i class="mdi mdi-chevron-down accordion-arrow"></i>
+        </a>
+    </h5>
+    <div id="references" class="collapse show mt-2">
+        ${referencesContent}
+    </div>
+</div>`;
 
 	if (vuln.is_llm_used) {
 		body += `<small class="text-muted float-end">(LLM was used to generate vulnerability details.)</small>`;
