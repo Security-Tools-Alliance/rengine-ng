@@ -7,12 +7,15 @@ from ipaddress import IPv4Network
 from collections import defaultdict
 from datetime import datetime
 
+import json
 import requests
 import validators
 from django.urls import reverse
+from django.core.cache import cache
 from dashboard.models import OllamaSettings, Project, SearchHistory
 from django.db.models import CharField, Count, F, Q, Value
 from django.shortcuts import get_object_or_404
+from django.http import StreamingHttpResponse
 from django.utils import timezone
 from packaging import version
 from django.template.defaultfilters import slugify
@@ -43,7 +46,8 @@ from reNgine.definitions import (
 from reNgine.llm.config import (
     OLLAMA_INSTANCE,
     DEFAULT_GPT_MODELS,
-    MODEL_REQUIREMENTS
+    MODEL_REQUIREMENTS,
+    RECOMMENDED_MODELS
 )
 from reNgine.settings import (
     RENGINE_CURRENT_VERSION,
@@ -132,55 +136,151 @@ class OllamaManager(APIView):
             return Response({'status': False, 'message': 'Model name is required'}, status=400)
 
         try:
+            # Create a session with timeout
+            session = requests.Session()
+            session.timeout = 30
+
             pull_model_api = f'{OLLAMA_INSTANCE}/api/pull'
-            _response = requests.post(
+            response = session.post(
                 pull_model_api,
-                json={'name': model_name, 'stream': False}
-            ).json()
-            if _response.get('error'):
-                return Response({'status': False, 'message': _response.get('error')}, status=400)
-            return Response({'status': True})
+                json={'name': model_name, 'stream': True},
+                stream=True
+            )
+
+            def event_stream():
+                try:
+                    # Check if client disconnected
+                    if request.META.get('wsgi.input_terminated', False):
+                        logger.info("Client disconnected, stopping download")
+                        response.close()
+                        session.close()
+                        return
+
+                    for line in response.iter_lines():
+                        # Check again for client disconnection
+                        if request.META.get('wsgi.input_terminated', False):
+                            logger.info("Client disconnected during streaming")
+                            break
+
+                        if line:
+                            try:
+                                data = json.loads(line.decode('utf-8'))
+                                logger.debug(f"Ollama response: {data}")
+                                
+                                if 'error' in data:
+                                    yield json.dumps({
+                                        'status': 'error',
+                                        'error': data['error']
+                                    }) + '\n'
+                                    break
+
+                                if 'status' in data:
+                                    yield json.dumps({
+                                        'status': 'downloading',
+                                        'progress': data.get('completed', 0),
+                                        'total': data.get('total', 100),
+                                        'message': data.get('status', ''),
+                                    }) + '\n'
+                                elif 'completed' in data:
+                                    yield json.dumps({
+                                        'status': 'downloading',
+                                        'progress': data['completed'],
+                                        'total': data.get('total', 100),
+                                        'message': 'Downloading model...',
+                                    }) + '\n'
+                                
+                            except json.JSONDecodeError as e:
+                                logger.error(f"JSON decode error: {e}, Raw line: {line}")
+                                yield json.dumps({
+                                    'status': 'error',
+                                    'error': 'Invalid response format from Ollama'
+                                }) + '\n'
+                                break
+
+                except Exception as e:
+                    logger.error(f"Stream error: {e}")
+                    yield json.dumps({
+                        'status': 'error',
+                        'error': str(e)
+                    }) + '\n'
+                finally:
+                    response.close()
+                    session.close()
+
+            streaming_response = StreamingHttpResponse(
+                event_stream(),
+                content_type='text/event-stream'
+            )
+            streaming_response['X-Accel-Buffering'] = 'no'
+            streaming_response['Cache-Control'] = 'no-cache'
+            return streaming_response
+
         except Exception as e:
             logger.error(f"Error in OllamaManager GET: {str(e)}")
-            return Response({'status': False, 'message': 'An error occurred while pulling the model.'}, status=500)
-    
-    def delete(self, request):
-        model_name = get_data_from_post_request(request, 'model')
-        if not model_name:
-            return Response({'status': False, 'message': 'Model name is required'}, status=400)
+            return Response({
+                'status': False,
+                'error': str(e)
+            }, status=500)
 
+class AvailableOllamaModels(APIView):
+    def get(self, request):
         try:
-            delete_model_api = f'{OLLAMA_INSTANCE}/api/delete'
-            _response = requests.delete(
-                delete_model_api,
-                json={'name': model_name}
-            ).json()
-            if _response.get('error'):
-                return Response({'status': False, 'message': _response.get('error')}, status=400)
-            return Response({'status': True})
-        except Exception as e:
-            logger.error(f"Error in OllamaManager DELETE: {str(e)}")
-            return Response({'status': False, 'message': 'An error occurred while deleting the model.'}, status=500)
-    
-    def put(self, request):
-        model_name = request.data.get('model')
-        if not model_name:
-            return Response({'status': False, 'message': 'Model name is required'}, status=400)
+            cache_key = 'ollama_available_models'
+            cached_data = cache.get(cache_key)
+            
+            if cached_data:
+                return Response(cached_data)
 
-        use_ollama = all(model['name'] != model_name for model in DEFAULT_GPT_MODELS)
+            # Use recommended models from config
+            recommended_models = list(RECOMMENDED_MODELS.values())
 
-        try:
-            OllamaSettings.objects.update_or_create(
-                id=1,
-                defaults={
-                    'selected_model': model_name,
-                    'use_ollama': use_ollama,
-                }
-            )
-            return Response({'status': True})
+            # Check installed models
+            try:
+                response = requests.get(f'{OLLAMA_INSTANCE}/api/tags', timeout=5)
+                if response.status_code == 200:
+                    installed_models = {
+                        model['name']: model 
+                        for model in response.json().get('models', [])
+                    }
+                    
+                    # Mark installed models and add their details
+                    for model in recommended_models:
+                        base_name = model['name']
+                        model['installed_versions'] = [
+                            name.replace(f"{base_name}:", "") 
+                            for name in installed_models.keys() 
+                            if name.startswith(base_name)
+                        ]
+                        model['installed'] = len(model['installed_versions']) > 0
+                        
+                        # Add capabilities from MODEL_REQUIREMENTS if available
+                        if base_name in MODEL_REQUIREMENTS:
+                            model['capabilities'] = MODEL_REQUIREMENTS[base_name]
+                else:
+                    logger.warning(f"Ollama API returned status {response.status_code}")
+                    for model in recommended_models:
+                        model['installed'] = False
+                        model['installed_versions'] = []
+            except requests.exceptions.RequestException as e:
+                logger.error(f"Error connecting to Ollama API: {str(e)}")
+                for model in recommended_models:
+                    model['installed'] = False
+                    model['installed_versions'] = []
+
+            response_data = {
+                'status': True,
+                'models': recommended_models
+            }
+
+            cache.set(cache_key, response_data, 300)
+            return Response(response_data)
+
         except Exception as e:
-            logger.error(f"Error in OllamaManager PUT: {str(e)}")
-            return Response({'status': False, 'message': 'An error occurred while updating Ollama settings.'}, status=500)
+            logger.error(f"Error in AvailableOllamaModels: {str(e)}")
+            return Response({
+                'status': False,
+                'error': str(e)
+            }, status=500)
 
 class LLMAttackSuggestion(APIView):
     def get(self, request):

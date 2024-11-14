@@ -414,7 +414,7 @@ def api_vault_delete(request):
 
 def llm_toolkit_section(request):
     try:
-        # Appel direct de l'API
+        # Direct call to the API
         api_response = LLMModelsManager().get(request)
         data = api_response.data
         

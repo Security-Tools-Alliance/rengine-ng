@@ -312,3 +312,83 @@ MODEL_REQUIREMENTS = {
         'provider': 'ollama'
     }
 }
+
+###############################################################################
+# RECOMMENDED MODELS
+###############################################################################
+
+RECOMMENDED_MODELS = {
+    'llama2-uncensored': {
+        'name': 'llama2-uncensored',
+        'description': 'Optimized for security research and penetration testing, unrestricted responses',
+        'tags': ['7b', '70b'],
+        'size_options': {
+            '7b': '~4GB RAM',
+            '70b': '~35GB RAM'
+        }
+    },
+    'llama3.1': {
+        'name': 'llama3.1',
+        'description': 'Advanced model with enhanced security analysis capabilities and better context understanding',
+        'tags': ['8b', '70b', '405b'],
+        'size_options': {
+            '8b': '~4GB RAM',
+            '70b': '~35GB RAM',
+            '405b': '~200GB RAM'
+        }
+    },
+    'llama3.2': {
+        'name': 'llama3.2',
+        'description': 'Latest LLaMA model with improved reasoning for complex security scenarios and vulnerability analysis',
+        'tags': ['1b', '3b'],
+        'size_options': {
+            '1b': '~1GB RAM',
+            '3b': '~2GB RAM'
+        }
+    },
+    'codellama': {
+        'name': 'codellama',
+        'description': 'Specialized for code analysis, vulnerability assessment, and secure coding practices',
+        'tags': ['7b', '13b', '34b', '70b'],
+        'size_options': {
+            '7b': '~4GB RAM',
+            '13b': '~8GB RAM',
+            '34b': '~18GB RAM',
+            '70b': '~35GB RAM'
+        }
+    },
+    'mistral': {
+        'name': 'mistral',
+        'description': 'Excellent for technical security analysis and threat modeling',
+        'tags': ['7b'],
+        'size_options': {
+            '7b': '~4GB RAM'
+        }
+    },
+    'dolphin-phi': {
+        'name': 'dolphin-phi',
+        'description': 'Fast and efficient for real-time security analysis, good balance of performance and accuracy',
+        'tags': ['2.7b'],
+        'size_options': {
+            '2.7b': '~2GB RAM'
+        }
+    },
+    'openchat': {
+        'name': 'openchat',
+        'description': 'Strong reasoning capabilities for complex security scenarios and attack chain analysis',
+        'tags': ['7b'],
+        'size_options': {
+            '7b': '~4GB RAM'
+        }
+    },
+    'solar': {
+        'name': 'solar',
+        'description': 'Advanced reasoning for security implications and vulnerability impact assessment',
+        'tags': ['10.7b'],
+        'size_options': {
+            '10.7b': '~6GB RAM'
+        }
+    }
+}
+
+LLM_CONFIG['providers']['ollama']['recommended_models'] = RECOMMENDED_MODELS

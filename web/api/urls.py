@@ -171,6 +171,10 @@ urlpatterns = [
         LLMModelsManager.as_view(),
         name='llm_models_manager'),
     path(
+        'tools/available_ollama_models/',
+        AvailableOllamaModels.as_view(),
+        name='available_ollama_models'),
+    path(
         'github/tool/get_latest_releases/',
         GithubToolCheckGetLatestRelease.as_view(),
         name='github_tool_latest_release'),

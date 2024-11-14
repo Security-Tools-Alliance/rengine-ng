@@ -124,6 +124,35 @@ LLM Toolkit
     {% endfor %}
   </div>
 </div>
+<div class="modal fade" id="addModelModal" tabindex="-1" role="dialog">
+  <div class="modal-dialog">
+      <div class="modal-content">
+          <div class="modal-header">
+              <h4 class="modal-title">Add New Model</h4>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <p>You can find the list of supported models in <a href="https://ollama.com/library" target="_blank">Ollama Library</a></p>
+            <div class="mb-3">
+              <label class="form-label">Recommended Models</label>
+              <div id="recommended-models" class="mb-3">
+                  <!-- Models will be loaded here -->
+              </div>
+              <div class="mb-3">
+                  <label class="form-label">Or Enter Model Name Manually</label>
+                  <input type="text" class="form-control" id="model_name" placeholder="Enter model name">
+                  <small class="form-text text-muted">
+                      Example: llama2, codellama, mistral, etc.
+                  </small>
+              </div>
+          </div>
+          <div class="modal-footer">
+              <button type="button" class="btn btn-light" data-bs-dismiss="modal">Close</button>
+              <button type="button" class="btn btn-primary" onclick="download_model($('#model_name').val())">Download</button>
+          </div>
+      </div>
+  </div>
+</div>
 {% endblock main_content %}
 
 
@@ -181,81 +210,266 @@ LLM Toolkit
     }])
   }
 
-  function showAddNewModelModal(){
-    $('#modal_dialog .modal-title').html('Add new LLM Model');
-    $('#modal_dialog .modal-text').empty();
-    $('#modal_dialog .modal-text').append(`
-      <p>You can find the list of supported models in <a href="https://ollama.com/library" target="_blank">Ollama Library</a></p>
-      <p>We recommend using llama2-uncensored model for better results.</p>
-      <div class="mb-3">
-        <label for="model_name" class="form-label">Model name</label>
-        <input class="form-control" type="text" id="model_name" required="" placeholder="llama2">
-      </div>
-      <div class="mb-3 text-center">
-        <button class="btn btn-primary float-end" type="submit" onclick="download_model()">Download Model</button>
-      </div>
-    `);
-    $('#modal_dialog').modal('show');
+  async function showAddNewModelModal() {
+    try {
+        const response = await fetch('/api/tools/available_ollama_models/');
+        const data = await response.json();
+        
+        if (!data.status) {
+            throw new Error(data.error || 'Failed to fetch models');
+        }
+
+        $('#addModelModal .modal-dialog').removeClass('modal-lg').addClass('modal-xl');
+        
+        // Ajout du warning sur les tailles de modèles
+        const warningHtml = `
+            <div class="alert alert-warning mb-3">
+                <i class="mdi mdi-alert me-2"></i>
+                <strong>Model Size Guide:</strong>
+                <ul class="mb-0 mt-2">
+                    <li>7b-13b models: ~4-8GB RAM (Recommended for most users)</li>
+                    <li>34b models: ~18GB RAM (Requires high-end hardware)</li>
+                    <li>70b models: ~35GB RAM (Requires powerful hardware)</li>
+                    <li>405b models: ~200GB RAM (Requires enterprise-grade hardware)</li>
+                </ul>
+                <small class="d-block mt-2">
+                    <i class="mdi mdi-information-outline me-1"></i>
+                    Hover over model sizes to see RAM requirements. Clicking the model card will download the default version (usually the smallest).
+                </small>
+            </div>
+        `;
+        
+        let modelOptions = '';
+        data.models.forEach(model => {
+            const modelName = model.name;
+            const tags = model.tags || [];
+            const sizeOptions = model.size_options || {};
+            const defaultTag = tags[0]; // Premier tag = version par défaut
+            
+            modelOptions += `
+                <div class="col-md-4 mt-2">
+                    <div class="card project-box" style="cursor: pointer; min-height: 180px;" 
+                         onclick="download_model('${modelName}:${defaultTag}')">
+                        <div class="card-body p-2">
+                            <div class="d-flex flex-column">
+                                <h5 class="mt-0 mb-1">
+                                    <span class="${model.installed ? 'text-success' : ''}">${modelName}
+                                        ${model.installed ? '<span class="badge bg-soft-primary text-primary ms-2">Installed</span>' : ''}
+                                    </span>
+                                </h5>
+                                <p class="text-muted mb-2" style="font-size: 0.9rem;">${model.description}</p>
+                                <div class="mt-auto">
+                                    <div class="d-flex flex-wrap gap-1">
+                                        ${tags.map(tag => `
+                                            <button class="btn btn-xs ${tag === defaultTag ? 'btn-primary' : 'btn-outline-primary'} ${model.installed_versions?.includes(tag) ? 'btn-success' : ''}"
+                                                    onclick="event.stopPropagation(); download_model('${modelName}:${tag}')"
+                                                    title="Requires ${sizeOptions[tag]}"
+                                                    style="padding: 0.2rem 0.5rem; font-size: 0.8rem;">
+                                                ${tag} ${tag === defaultTag ? '(default)' : ''} ${model.installed_versions?.includes(tag) ? '✓' : ''}
+                                            </button>
+                                        `).join('')}
+                                    </div>
+                                    <div class="mt-1">
+                                        <small class="text-muted">
+                                            <i class="mdi mdi-memory"></i>
+                                            RAM: ${Object.values(sizeOptions)[0]}
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+        });
+
+        $('#recommended-models').html(`
+            ${warningHtml}
+            <div class="row">
+                ${modelOptions}
+            </div>
+        `);
+
+        $('#addModelModal').modal('show');
+
+    } catch (error) {
+        console.error('Error loading models:', error);
+        Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: 'Unable to fetch available models. Please try again.',
+        });
+    }
+}
+
+  // Clean up when modal is closed
+  $('#addModelModal').on('hidden.bs.modal', function () {
+      window.isLoadingModels = false;
+  });
+
+  // Remove any existing event listeners
+  $('#addModelModal').off('show.bs.modal');
+
+  // Add modal event listener
+  $('#addModelModal').on('show.bs.modal', function (e) {
+      if (window.isLoadingModels) {
+          e.preventDefault();
+      }
+  });
+
+  function selectModel(modelName) {
+    document.getElementById('model_name').value = modelName;
   }
 
-  function download_model(){
-    var model_name = $('#model_name').val();
-    if (model_name == ""){
-      Swal.fire({
-        title: 'Oops!',
-        text: 'Model name is required',
-        icon: 'error'
-      });
-      return;
+  function processStreamData(text) {
+    try {
+        const data = JSON.parse(text);
+        
+        // Handle error status
+        if (data.status === 'error') {
+            throw new Error(data.error);
+        }
+
+        // Update progress only if we have valid numbers
+        if (typeof data.progress === 'number' && typeof data.total === 'number') {
+            const progress = Math.round((data.progress / data.total) * 100);
+            $('#download-progress').css('width', `${progress}%`);
+            $('#download-status').text(data.message || `Downloading: ${progress}%`);
+        }
+        
+        return data;
+    } catch (e) {
+        console.error('Stream data parsing error:', e, 'Raw text:', text);
+        throw e;
     }
-    var url = "/api/tool/ollama/?model=" + model_name;
-    swal.queue([{
-      title: 'Are you sure you want to download this model?',
-      text: "Downloading models can take a long time, sometimes a few minutes. Please be patient.",
-      icon: 'info',
-      showCancelButton: true,
-      confirmButtonText: 'Download',
-      padding: '2em',
-      showLoaderOnConfirm: true,
-      preConfirm: function() {
-        return fetch(url, {
-          method: 'GET',
-          credentials: "same-origin",
-          headers: {
-            "X-CSRFToken": getCookie("csrftoken")
-          }
-        }).then(function(response) {
-          return response.json();
-        }).then(function(data) {
-          if (!data.status){
-            swal.insertQueueStep({
-              icon: 'error',
-              title: 'Oops! Unable to download the model, model does not exist!'
-            })
-          }
-          else{
-            swal.queue([{
-              title: 'Model Successfully downloaded!',
-              icon: 'success',
-              showCancelButton: false,
-              confirmButtonText: 'Okay',
-              padding: '2em',
-              showLoaderOnConfirm: true,
-              preConfirm: function() {
-                location.reload();
-              }
-            }]);
-          }
-          //return location.reload();
-        }).catch(function() {
-          swal.insertQueueStep({
+}
+
+async function download_model(modelName) {
+    try {
+        const result = await Swal.fire({
+            title: 'Download Model?',
+            text: `Are you sure you want to download ${modelName}? This might take several minutes depending on your connection speed.`,
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonText: 'Yes, download it!',
+            cancelButtonText: 'Cancel'
+        });
+
+        if (result.isConfirmed) {
+            window.downloadAbortController = new AbortController();
+            const signal = window.downloadAbortController.signal;
+
+            Swal.fire({
+                title: 'Downloading Model',
+                html: `
+                    <div class="text-start mb-3">
+                        <p id="download-status" class="mb-2">Starting download...</p>
+                        <div class="progress mb-2">
+                            <div id="download-progress" 
+                                 class="progress-bar progress-bar-striped progress-bar-animated" 
+                                 role="progressbar" 
+                                 style="width: 0%">
+                            </div>
+                        </div>
+                        <p id="download-step" class="text-muted small mb-3">Initializing...</p>
+                        <button id="cancel-download" 
+                                class="btn btn-danger btn-sm">
+                            <i class="fas fa-times me-1"></i>Cancel Download
+                        </button>
+                    </div>
+                `,
+                showConfirmButton: false,
+                allowOutsideClick: false,
+                didOpen: () => {
+                    document.getElementById('cancel-download').addEventListener('click', () => {
+                        if (window.downloadAbortController) {
+                            window.downloadAbortController.abort();
+                            Swal.close();
+                        }
+                    });
+                }
+            });
+
+            try {
+                const response = await fetch(`/api/tool/ollama/?model=${encodeURIComponent(modelName)}`, {
+                    method: 'GET',
+                    headers: {
+                        'X-CSRFToken': getCookie('csrftoken')
+                    },
+                    signal: signal
+                });
+
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+
+                const reader = response.body.getReader();
+
+                while (true) {
+                    const {done, value} = await reader.read();
+                    
+                    if (done) {
+                        break;
+                    }
+
+                    const chunk = new TextDecoder().decode(value);
+                    const lines = chunk.split('\n');
+                    
+                    for (const line of lines) {
+                        if (line.trim()) {
+                            try {
+                                const data = JSON.parse(line);
+                                if (data.status === 'downloading') {
+                                    const completed = parseInt(data.progress);
+                                    const total = parseInt(data.total);
+                                    if (!isNaN(completed) && !isNaN(total) && total > 0) {
+                                        const progress = Math.round((completed / total) * 100);
+                                        $('#download-progress').css('width', `${progress}%`);
+                                        $('#download-status').text(`Downloading: ${progress}%`);
+                                        $('#download-step').text(data.message || 'Downloading model files...');
+                                    }
+                                } else if (data.status === 'processing') {
+                                    $('#download-status').text('Processing...');
+                                    $('#download-step').text(data.message || 'Processing model files...');
+                                }
+                            } catch (e) {
+                                console.error('Error parsing chunk:', e);
+                            }
+                        }
+                    }
+                }
+
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Download Complete',
+                    text: `${modelName} has been successfully downloaded!`,
+                    showConfirmButton: true
+                }).then(() => {
+                    location.reload();
+                });
+
+            } catch (error) {
+                if (error.name === 'AbortError') {
+                    Swal.fire({
+                        icon: 'info',
+                        title: 'Download Cancelled',
+                        text: 'The download was cancelled by user.'
+                    });
+                } else {
+                    throw error;
+                }
+            } finally {
+                delete window.downloadAbortController;
+            }
+        }
+    } catch (error) {
+        console.error('Download error:', error);
+        Swal.fire({
             icon: 'error',
-            title: 'Oops! Unable to download the model!'
-          })
-        })
-      }
-    }])
-  }
+            title: 'Download Failed',
+            text: error.message || 'Unable to download the model!'
+        });
+    }
+}
 
   function selectModel(model_name){
     var url = "/api/tool/ollama/";
