@@ -55,23 +55,25 @@ LLM Toolkit
                 {{model.name}} 
               </span>
             </h4>
-            <div class="dropdown">
-              <a href="#" class="dropdown-toggle card-drop arrow-none" data-bs-toggle="dropdown" aria-expanded="false">
-                <i class="mdi mdi-dots-horizontal m-0 text-muted h3"></i>
-              </a>
-              <div class="dropdown-menu dropdown-menu-end">
-                {% if not model.selected %}
-                  <a class="dropdown-item" href="#" onClick=selectModel('{{model.name}}')>
-                    <i class="mdi mdi-check-circle text-success me-1"></i>Use Model
-                  </a>
-                {% endif %}
-                {% if model.is_local %}
-                  <a class="dropdown-item" href="#" onClick=deleteModel('{{model.name}}')>
-                    <i class="mdi mdi-delete text-danger me-1"></i>Delete
-                  </a>
-                {% endif %}
+            {% if not model.selected %}
+              <div class="dropdown">
+                <a href="#" class="dropdown-toggle card-drop arrow-none" data-bs-toggle="dropdown" aria-expanded="false">
+                  <i class="mdi mdi-dots-horizontal m-0 text-muted h3"></i>
+                </a>
+                <div class="dropdown-menu dropdown-menu-end">
+                  {% if not model.selected %}
+                    <a class="dropdown-item" href="#" onClick=selectModel('{{model.name}}')>
+                      <i class="mdi mdi-check-circle text-success me-1"></i>Use Model
+                    </a>
+                  {% endif %}
+                  {% if model.is_local %}
+                    <a class="dropdown-item" href="#" onClick=deleteModel('{{model.name}}')>
+                      <i class="mdi mdi-delete text-danger me-1"></i>Delete
+                    </a>
+                  {% endif %}
+                </div>
               </div>
-            </div>
+            {% endif %}
           </div>
           <p class="mt-1">
             {% if not model.is_local %}
