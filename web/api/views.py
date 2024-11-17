@@ -274,6 +274,7 @@ class OllamaManager(APIView):
                 'status': False,
                 'error': str(e)
             }, status=500)
+
 class OllamaDetailManager(APIView):
     def delete(self, request, model_name):
         if not model_name:

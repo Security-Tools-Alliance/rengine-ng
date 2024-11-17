@@ -373,9 +373,6 @@ async function download_model(modelName) {
                             </div>
                         </div>
                         <p id="download-step" class="text-muted small mb-3">Initializing...</p>
-                        <button id="cancel-download" class="btn btn-danger btn-sm">
-                            <i class="fas fa-times me-1"></i>Cancel Download
-                        </button>
                     </div>
                 `,
                 showConfirmButton: false,
@@ -446,19 +443,6 @@ async function download_model(modelName) {
                     });
                 }
             };
-
-            // Handle cancel button
-            document.getElementById('cancel-download').addEventListener('click', () => {
-                if (socket) {
-                    socket.close();
-                    Swal.close();
-                    Swal.fire({
-                        icon: 'info',
-                        title: 'Download Cancelled',
-                        text: 'The download was cancelled by user.'
-                    });
-                }
-            });
         }
     } catch (error) {
         console.error('Download error:', error);
