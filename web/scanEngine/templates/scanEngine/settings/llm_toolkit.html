@@ -159,55 +159,61 @@ LLM Toolkit
 {% block page_level_script %}
 <script type="text/javascript">
   function deleteModel(model_name) {
-    // split model name by : and only use first part
-    model_name = model_name.split(':')[0];
-    var url = "/api/tool/ollama/?model=" + model_name;
-    swal.queue([{
-      title: 'Are you sure you want to delete this model?',
-      text: "This action can not be undone.",
-      icon: 'warning',
-      showCancelButton: true,
-      confirmButtonText: 'Delete',
-      padding: '2em',
-      showLoaderOnConfirm: true,
-      preConfirm: function() {
-        return fetch(url, {
-          method: 'DELETE',
-          credentials: "same-origin",
-          headers: {
-            "X-CSRFToken": getCookie("csrftoken")
-          }
-        }).then(function(response) {
-          return response.json();
-        }).then(function(data) {
-          if (data.status){
-            swal.insertQueueStep({
-              icon: 'error',
-              title: 'Oops! Unable to delete the model!'
+    const url = `/api/tool/ollama/${encodeURIComponent(model_name)}/`;
+    
+    Swal.fire({
+        title: 'Are you sure?',
+        text: "You won't be able to revert this!",
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#3085d6',
+        cancelButtonColor: '#d33',
+        confirmButtonText: 'Yes, delete it!'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            Swal.fire({
+                title: 'Deleting...',
+                text: 'Please wait while we delete the model',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+
+            fetch(url, {
+                method: 'DELETE',
+                credentials: "same-origin",
+                headers: {
+                    "X-CSRFToken": getCookie("csrftoken")
+                }
             })
-          }
-          else{
-            swal.queue([{
-              title: 'Model Successfully deleted!',
-              icon: 'success',
-              showCancelButton: false,
-              confirmButtonText: 'Okay',
-              padding: '2em',
-              showLoaderOnConfirm: true,
-              preConfirm: function() {
-                location.reload();
-              }
-            }]);
-          }
-          //return location.reload();
-        }).catch(function() {
-          swal.insertQueueStep({
-            icon: 'error',
-            title: 'Oops! Unable to delete the model!'
-          })
-        })
-      }
-    }])
+            .then(response => response.json().then(data => ({
+                ok: response.ok,
+                status: response.status,
+                data: data
+            })))
+            .then(({ok, status, data}) => {
+                if (ok && data.status) {
+                    Swal.fire({
+                        title: 'Deleted!',
+                        text: 'The model has been deleted.',
+                        icon: 'success'
+                    }).then(() => {
+                        location.reload();
+                    });
+                } else {
+                    throw new Error(data.message || 'Failed to delete model');
+                }
+            })
+            .catch(error => {
+                Swal.fire({
+                    title: 'Error!',
+                    text: error.message || 'Failed to delete model',
+                    icon: 'error'
+                });
+            });
+        }
+    });
   }
 
   async function showAddNewModelModal() {
@@ -316,10 +322,6 @@ LLM Toolkit
       }
   });
 
-  function selectModel(modelName) {
-    document.getElementById('model_name').value = modelName;
-  }
-
   function processStreamData(text) {
     try {
         const data = JSON.parse(text);
@@ -347,7 +349,7 @@ async function download_model(modelName) {
     try {
         const result = await Swal.fire({
             title: 'Download Model?',
-            text: `Are you sure you want to download ${modelName}? This might take several minutes depending on your connection speed.`,
+            text: `Are you sure you want to download ${modelName}?`,
             icon: 'question',
             showCancelButton: true,
             confirmButtonText: 'Yes, download it!',
@@ -355,9 +357,7 @@ async function download_model(modelName) {
         });
 
         if (result.isConfirmed) {
-            window.downloadAbortController = new AbortController();
-            const signal = window.downloadAbortController.signal;
-
+            // Show progress popup first
             Swal.fire({
                 title: 'Downloading Model',
                 html: `
@@ -371,95 +371,92 @@ async function download_model(modelName) {
                             </div>
                         </div>
                         <p id="download-step" class="text-muted small mb-3">Initializing...</p>
-                        <button id="cancel-download" 
-                                class="btn btn-danger btn-sm">
+                        <button id="cancel-download" class="btn btn-danger btn-sm">
                             <i class="fas fa-times me-1"></i>Cancel Download
                         </button>
                     </div>
                 `,
                 showConfirmButton: false,
                 allowOutsideClick: false,
-                didOpen: () => {
-                    document.getElementById('cancel-download').addEventListener('click', () => {
-                        if (window.downloadAbortController) {
-                            window.downloadAbortController.abort();
-                            Swal.close();
-                        }
-                    });
+                willClose: () => {
+                    if (window.downloadSocket) {
+                        window.downloadSocket.close();
+                    }
                 }
             });
 
-            try {
-                const response = await fetch(`/api/tool/ollama/?model=${encodeURIComponent(modelName)}`, {
-                    method: 'GET',
-                    headers: {
-                        'X-CSRFToken': getCookie('csrftoken')
-                    },
-                    signal: signal
-                });
+            // Connect to WebSocket first
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const cleanModelName = modelName.replace(/[^a-zA-Z0-9\-\.]/g, '-');
+            const wsUrl = `${wsProtocol}//${window.location.host}/ws/ollama/download/${cleanModelName}/`;            
+            const socket = new WebSocket(wsUrl);
+            window.downloadSocket = socket;
 
-                if (!response.ok) {
-                    throw new Error('Network response was not ok');
+            socket.onopen = async (event) => {
+                // Start the download after WebSocket connection is established
+                try {
+                    const response = await fetch(`/api/tool/ollama/?model=${encodeURIComponent(modelName)}`);
+                    const data = await response.json();
+
+                    if (!data.status) {
+                        throw new Error(data.error || 'Failed to start download');
+                    }
+                    
+                } catch (error) {
+                    console.error('Failed to start download:', error);
+                    socket.close();
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Download Failed',
+                        text: error.message || 'Failed to start the download'
+                    });
+                }
+            };
+
+            socket.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+
+                if (data.status === 'error') {
+                    socket.close();
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Download Failed',
+                        text: data.error || 'Unknown error occurred'
+                    });
+                    return;
                 }
 
-                const reader = response.body.getReader();
-
-                while (true) {
-                    const {done, value} = await reader.read();
-                    
-                    if (done) {
-                        break;
-                    }
-
-                    const chunk = new TextDecoder().decode(value);
-                    const lines = chunk.split('\n');
-                    
-                    for (const line of lines) {
-                        if (line.trim()) {
-                            try {
-                                const data = JSON.parse(line);
-                                if (data.status === 'downloading') {
-                                    const completed = parseInt(data.progress);
-                                    const total = parseInt(data.total);
-                                    if (!isNaN(completed) && !isNaN(total) && total > 0) {
-                                        const progress = Math.round((completed / total) * 100);
-                                        $('#download-progress').css('width', `${progress}%`);
-                                        $('#download-status').text(`Downloading: ${progress}%`);
-                                        $('#download-step').text(data.message || 'Downloading model files...');
-                                    }
-                                } else if (data.status === 'processing') {
-                                    $('#download-status').text('Processing...');
-                                    $('#download-step').text(data.message || 'Processing model files...');
-                                }
-                            } catch (e) {
-                                console.error('Error parsing chunk:', e);
-                            }
-                        }
-                    }
+                if (data.status === 'downloading') {
+                    const progress = Math.round((data.progress / data.total) * 100);
+                    $('#download-progress').css('width', `${progress}%`);
+                    $('#download-status').text(`Downloading: ${progress}%`);
+                    $('#download-step').text(data.message || 'Downloading model files...');
                 }
 
-                Swal.fire({
-                    icon: 'success',
-                    title: 'Download Complete',
-                    text: `${modelName} has been successfully downloaded!`,
-                    showConfirmButton: true
-                }).then(() => {
-                    location.reload();
-                });
+                if (data.status === 'complete') {
+                    socket.close();
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Download Complete',
+                        text: `${modelName} has been successfully downloaded!`
+                    }).then(() => {
+                        location.reload();
+                    });
+                }
+            };
 
-            } catch (error) {
-                if (error.name === 'AbortError') {
+            // Handle cancel button
+            document.getElementById('cancel-download').addEventListener('click', () => {
+                if (socket) {
+                    socket.close();
+                    Swal.close();
                     Swal.fire({
                         icon: 'info',
                         title: 'Download Cancelled',
                         text: 'The download was cancelled by user.'
                     });
-                } else {
-                    throw error;
                 }
-            } finally {
-                delete window.downloadAbortController;
-            }
+            });
         }
     } catch (error) {
         console.error('Download error:', error);
@@ -471,55 +468,51 @@ async function download_model(modelName) {
     }
 }
 
-  function selectModel(model_name){
-    var url = "/api/tool/ollama/";
-    swal.queue([{
-      title: 'Are you sure you want to select this model?',
-      text: "This model will be used to generate Scan Reports and Attack Suggestions.",
-      icon: 'info',
-      showCancelButton: true,
-      confirmButtonText: 'Select',
-      padding: '2em',
-      showLoaderOnConfirm: true,
-      preConfirm: function() {
-        return fetch(url, {
-          method: 'PUT',
-          credentials: "same-origin",
-          headers: {
+  function selectModel(model_name) {
+    const url = `/api/tool/ollama/${encodeURIComponent(model_name)}/`;
+    
+    Swal.fire({
+        title: 'Updating...',
+        text: 'Please wait while we update the model selection',
+        allowOutsideClick: false,
+        didOpen: () => {
+            Swal.showLoading();
+        }
+    });
+
+    fetch(url, {
+        method: 'PUT',
+        credentials: "same-origin",
+        headers: {
             "X-CSRFToken": getCookie("csrftoken"),
             "Content-Type": "application/json"
-          },
-          body: JSON.stringify({ model: model_name })
-        }).then(function(response) {
-          return response.json();
-        }).then(function(data) {
-          if (!data.status){
-            swal.insertQueueStep({
-              icon: 'error',
-              title: 'Oops! Unable to select the model!'
-            })
-          }
-          else{
-            swal.queue([{
-              title: 'Model Successfully selected!',
-              icon: 'success',
-              showCancelButton: false,
-              confirmButtonText: 'Okay',
-              padding: '2em',
-              showLoaderOnConfirm: true,
-              preConfirm: function() {
+        }
+    })
+    .then(response => response.json().then(data => ({
+        ok: response.ok,
+        status: response.status,
+        data: data
+    })))
+    .then(({ok, status, data}) => {
+        if (ok && data.status) {
+            Swal.fire({
+                title: 'Success!',
+                text: data.message || 'Model selected successfully',
+                icon: 'success'
+            }).then(() => {
                 location.reload();
-              }
-            }]);
-          }
-        }).catch(function() {
-          swal.insertQueueStep({
-            icon: 'error',
-            title: 'Oops! Unable to select the model!'
-          })
-        })
-      }
-    }])
+            });
+        } else {
+            throw new Error(data.message || 'Failed to select model');
+        }
+    })
+    .catch(error => {
+        Swal.fire({
+            title: 'Error!',
+            text: error.message || 'Failed to select model',
+            icon: 'error'
+        });
+    });
   }
 </script>
 {% endblock page_level_script %}

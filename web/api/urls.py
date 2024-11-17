@@ -195,6 +195,10 @@ urlpatterns = [
         OllamaManager.as_view(),
         name='ollama_manager'),
     path(
+        'tool/ollama/<str:model_name>/',
+        OllamaDetailManager.as_view(),
+        name='ollama_detail_manager'),        
+    path(
         'rengine/update/',
         RengineUpdateCheck.as_view(),
         name='check_rengine_update'),

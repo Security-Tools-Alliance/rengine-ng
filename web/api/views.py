@@ -15,7 +15,6 @@ from django.core.cache import cache
 from dashboard.models import OllamaSettings, Project, SearchHistory
 from django.db.models import CharField, Count, F, Q, Value
 from django.shortcuts import get_object_or_404
-from django.http import StreamingHttpResponse
 from django.utils import timezone
 from packaging import version
 from django.template.defaultfilters import slugify
@@ -26,6 +25,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.status import HTTP_400_BAD_REQUEST
 from rest_framework.parsers import JSONParser
+from rest_framework.decorators import api_view
 
 from recon_note.models import TodoNote
 from reNgine.celery import app
@@ -113,7 +113,7 @@ from .serializers import (
     OrganizationSerializer,
     OrganizationTargetsSerializer,
     PortSerializer,
-     ProjectSerializer,
+    ProjectSerializer,
     ReconNoteSerializer,
     ScanHistorySerializer,
     SearchHistorySerializer,
@@ -126,100 +126,213 @@ from .serializers import (
     VulnerabilitySerializer
 )
 
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
+import threading
+
 logger = logging.getLogger(__name__)
 
 
 class OllamaManager(APIView):
+    def clean_channel_name(self, name):
+        """Clean channel name to only contain valid characters"""
+        # Replace any non-alphanumeric characters with hyphens
+        clean_name = re.sub(r'[^a-zA-Z0-9\-\.]', '-', name)
+        return clean_name
+
     def get(self, request):
         model_name = request.query_params.get('model')
         if not model_name:
-            return Response({'status': False, 'message': 'Model name is required'}, status=400)
+            return Response({'status': False, 'message': 'Model name is required'})
 
         try:
-            # Create a session with timeout
-            session = requests.Session()
-            session.timeout = 30
+            # Create safe channel name
+            channel_name = f"ollama-download-{self.clean_channel_name(model_name)}"
+            channel_layer = get_channel_layer()
 
-            pull_model_api = f'{OLLAMA_INSTANCE}/api/pull'
-            response = session.post(
-                pull_model_api,
-                json={'name': model_name, 'stream': True},
-                stream=True
-            )
-
-            def event_stream():
+            def download_task():
+                response = None
+                session = None
                 try:
-                    # Check if client disconnected
-                    if request.META.get('wsgi.input_terminated', False):
-                        logger.info("Client disconnected, stopping download")
-                        response.close()
-                        session.close()
-                        return
+                    session = requests.Session()
+                    
+                    # Send initial progress
+                    async_to_sync(channel_layer.group_send)(
+                        channel_name,
+                        {
+                            'type': 'download_progress',
+                            'message': {
+                                'status': 'downloading',
+                                'progress': 0,
+                                'total': 100,
+                                'message': 'Starting download...'
+                            }
+                        }
+                    )
+
+                    response = session.post(
+                        f'{OLLAMA_INSTANCE}/api/pull',
+                        json={'name': model_name, 'stream': True},
+                        stream=True
+                    )
 
                     for line in response.iter_lines():
-                        # Check again for client disconnection
-                        if request.META.get('wsgi.input_terminated', False):
-                            logger.info("Client disconnected during streaming")
-                            break
-
                         if line:
                             try:
                                 data = json.loads(line.decode('utf-8'))
                                 logger.debug(f"Ollama response: {data}")
                                 
                                 if 'error' in data:
-                                    yield json.dumps({
-                                        'status': 'error',
-                                        'error': data['error']
-                                    }) + '\n'
+                                    async_to_sync(channel_layer.group_send)(
+                                        channel_name,
+                                        {
+                                            'type': 'download_progress',
+                                            'message': {
+                                                'status': 'error',
+                                                'error': data['error']
+                                            }
+                                        }
+                                    )
                                     break
 
-                                if 'status' in data:
-                                    yield json.dumps({
-                                        'status': 'downloading',
-                                        'progress': data.get('completed', 0),
-                                        'total': data.get('total', 100),
-                                        'message': data.get('status', ''),
-                                    }) + '\n'
-                                elif 'completed' in data:
-                                    yield json.dumps({
-                                        'status': 'downloading',
-                                        'progress': data['completed'],
-                                        'total': data.get('total', 100),
-                                        'message': 'Downloading model...',
-                                    }) + '\n'
+                                status_data = {
+                                    'status': 'downloading',
+                                    'progress': data.get('completed', 0),
+                                    'total': data.get('total', 100),
+                                    'message': data.get('status', 'Downloading...')
+                                }
                                 
+                                async_to_sync(channel_layer.group_send)(
+                                    channel_name,
+                                    {
+                                        'type': 'download_progress',
+                                        'message': status_data
+                                    }
+                                )
+
+                                if data.get('status') == 'success':
+                                    async_to_sync(channel_layer.group_send)(
+                                        channel_name,
+                                        {
+                                            'type': 'download_progress',
+                                            'message': {
+                                                'status': 'complete',
+                                                'message': 'Download complete!'
+                                            }
+                                        }
+                                    )
+                                    break
+
                             except json.JSONDecodeError as e:
-                                logger.error(f"JSON decode error: {e}, Raw line: {line}")
-                                yield json.dumps({
-                                    'status': 'error',
-                                    'error': 'Invalid response format from Ollama'
-                                }) + '\n'
+                                logger.error(f"JSON decode error: {e}")
+                                async_to_sync(channel_layer.group_send)(
+                                    channel_name,
+                                    {
+                                        'type': 'download_progress',
+                                        'message': {
+                                            'status': 'error',
+                                            'error': 'Invalid response format'
+                                        }
+                                    }
+                                )
                                 break
 
                 except Exception as e:
-                    logger.error(f"Stream error: {e}")
-                    yield json.dumps({
-                        'status': 'error',
-                        'error': str(e)
-                    }) + '\n'
+                    logger.error(f"Download error: {e}")
+                    try:
+                        async_to_sync(channel_layer.group_send)(
+                            channel_name,
+                            {
+                                'type': 'download_progress',
+                                'message': {
+                                    'status': 'error',
+                                    'error': str(e)
+                                }
+                            }
+                        )
+                    except Exception as e2:
+                        logger.error(f"Error sending error message: {e2}")
                 finally:
-                    response.close()
-                    session.close()
+                    if response:
+                        response.close()
+                    if session:
+                        session.close()
 
-            streaming_response = StreamingHttpResponse(
-                event_stream(),
-                content_type='text/event-stream'
-            )
-            streaming_response['X-Accel-Buffering'] = 'no'
-            streaming_response['Cache-Control'] = 'no-cache'
-            return streaming_response
+            thread = threading.Thread(target=download_task)
+            thread.daemon = True
+            thread.start()
+
+            return Response({
+                'status': True,
+                'channel': channel_name,
+                'message': 'Download started'
+            })
 
         except Exception as e:
-            logger.error(f"Error in OllamaManager GET: {str(e)}")
+            logger.error(f"Error in OllamaManager: {e}")
             return Response({
                 'status': False,
                 'error': str(e)
+            }, status=500)
+class OllamaDetailManager(APIView):
+    def delete(self, request, model_name):
+        if not model_name:
+            return Response({'status': False, 'message': 'Model name is required'}, status=400)
+
+        try:
+            delete_model_api = f'{OLLAMA_INSTANCE}/api/delete'
+            response = requests.delete(
+                delete_model_api,
+                json={'name': model_name}
+            )
+            
+            # Ollama sends a 200 status code on success
+            if response.status_code == 200:
+                return Response({'status': True})
+            
+            # Try to parse the JSON response if it exists
+            try:
+                error_data = response.json()
+                error_message = error_data.get('error', 'Unknown error occurred')
+            except ValueError:
+                error_message = response.text or 'Unknown error occurred'
+                
+            return Response(
+                {'status': False, 'message': error_message}, 
+                status=response.status_code
+            )
+            
+        except Exception as e:
+            logger.error(f"Error in OllamaDetailManager DELETE: {str(e)}")
+            return Response(
+                {'status': False, 'message': 'An error occurred while deleting the model.'}, 
+                status=500
+            )
+    
+    def put(self, request, model_name):
+        if not model_name:
+            return Response({'status': False, 'message': 'Model name is required'}, status=400)
+
+        try:
+            use_ollama = all(model['name'] != model_name for model in DEFAULT_GPT_MODELS)
+            
+            OllamaSettings.objects.update_or_create(
+                id=1,
+                defaults={
+                    'selected_model': model_name,
+                    'use_ollama': use_ollama,
+                    'selected': True
+                }
+            )
+            return Response({
+                'status': True,
+                'message': 'Model selected successfully'
+            })
+        except Exception as e:
+            logger.error(f"Error in OllamaDetailManager PUT: {str(e)}")
+            return Response({
+                'status': False, 
+                'message': 'An error occurred while updating the model selection.'
             }, status=500)
 
 class AvailableOllamaModels(APIView):
@@ -3097,3 +3210,21 @@ class LLMModelsManager(APIView):
                 'error': 'Failed to fetch LLM models',
                 'message': str(e)
             }, status=500)
+
+@api_view(['GET'])
+def websocket_status(request):
+    """Check if WebSocket server is available"""
+    try:
+        channel_layer = get_channel_layer()
+        return Response({
+            'status': True,
+            'websocket_enabled': bool(channel_layer),
+            'websocket_endpoints': {
+                'ollama_download': '/ws/ollama/download/{model_name}/',
+            }
+        })
+    except Exception as e:
+        return Response({
+            'status': False,
+            'error': str(e)
+        }, status=500)
