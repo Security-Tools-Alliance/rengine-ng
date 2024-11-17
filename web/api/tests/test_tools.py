@@ -2,7 +2,7 @@
 This file contains the test cases for the API views.
 """
 
-from unittest.mock import patch, AsyncMock, Mock
+from unittest.mock import patch
 from django.urls import reverse
 from rest_framework import status
 from startScan.models import SubScan

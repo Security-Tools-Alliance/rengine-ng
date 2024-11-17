@@ -361,7 +361,7 @@ async function download_model(modelName) {
         if (result.isConfirmed) {
             // Show progress popup first
             Swal.fire({
-                title: 'Downloading Model',
+                title: `Downloading Model ${modelName}`,
                 html: `
                     <div class="text-start mb-3">
                         <p id="download-status" class="mb-2">Starting download...</p>
