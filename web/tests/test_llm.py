@@ -1,10 +1,11 @@
 from unittest.mock import patch
 from django.test import TestCase
 from rest_framework import status
+from django.urls import reverse
 
 from reNgine.llm.config import MODEL_REQUIREMENTS
 from reNgine.llm.llm import LLMVulnerabilityReportGenerator, LLMAttackSuggestionGenerator
-from reNgine.llm.validators import LLMProvider, LLMInputData
+from reNgine.llm.validators import LLMProvider
 from utils.test_base import BaseTestCase
 
 
@@ -30,30 +31,34 @@ class TestLLMVulnerabilityReport(TestLLMBase):
         super().setUp()
         self.generator = LLMVulnerabilityReportGenerator()
 
-    @patch('reNgine.llm.LLMVulnerabilityReportGenerator._get_openai_response')
-    def test_get_vulnerability_description_success(self, mock_get_response):
-        """Test successful vulnerability description generation."""
-        mock_get_response.return_value = "Test vulnerability description"
+    @patch('reNgine.llm.llm.LLMVulnerabilityReportGenerator._get_openai_response')
+    def test_get_vulnerability_report_success(self, mock_get_response):
+        """Test successful vulnerability report generation."""
+        mock_get_response.return_value = "Test section content"
         
-        response = self.generator.get_vulnerability_description("Test input")
-        self.assertTrue(response.status)
-        self.assertIsNotNone(response.description)
+        response = self.generator.get_vulnerability_report("Test input")
+        self.assertTrue(response["status"])
+        self.assertIsNotNone(response["description"])
+        self.assertIsNotNone(response["impact"])
+        self.assertIsNotNone(response["remediation"])
+        self.assertIsNotNone(response["references"])
 
     def test_validate_input_success(self):
         """Test input validation success."""
         input_data = "Detailed vulnerability description for testing"
         validated = self.generator._validate_input(input_data)
-        self.assertIsInstance(validated, LLMInputData)
-        self.assertEqual(validated.description, input_data)
+        self.assertEqual(validated, input_data)
 
-    @patch('reNgine.llm.LLMVulnerabilityReportGenerator._get_openai_response')
-    def test_get_vulnerability_description_failure(self, mock_get_response):
-        """Test vulnerability description generation failure."""
-        mock_get_response.side_effect = Exception("API Error")
+    @patch('reNgine.llm.llm.LLMVulnerabilityReportGenerator._get_section_response')
+    def test_get_vulnerability_report_failure(self, mock_get_section):
+        """Test vulnerability report generation failure."""
+        # Mock section response to raise an exception
+        mock_get_section.side_effect = Exception("API Error")
         
-        response = self.generator.get_vulnerability_description("Test input")
-        self.assertFalse(response.status)
-        self.assertIsNotNone(response.error)
+        response = self.generator.get_vulnerability_report("Test input")
+        self.assertFalse(response["status"])
+        self.assertIsNotNone(response["error"])
+        self.assertEqual(response["error"], "API Error")
 
 
 class TestLLMAttackSuggestion(TestLLMBase):
@@ -63,12 +68,15 @@ class TestLLMAttackSuggestion(TestLLMBase):
         super().setUp()
         self.generator = LLMAttackSuggestionGenerator()
 
-    @patch('reNgine.llm.LLMAttackSuggestionGenerator.get_attack_suggestion')
+    @patch('reNgine.llm.llm.LLMAttackSuggestionGenerator.get_attack_suggestion')
     def test_get_attack_suggestion_success(self, mock_get_suggestion):
         """Test successful attack suggestion generation."""
+        mock_suggestion = "Test attack suggestion"
         mock_get_suggestion.return_value = {
             "status": True,
-            "description": "Test attack suggestion"
+            "description": mock_suggestion,
+            "input": "Test input",
+            "model_name": None
         }
         
         api_url = reverse("api:llm_get_possible_attacks")
@@ -79,23 +87,23 @@ class TestLLMAttackSuggestion(TestLLMBase):
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data["status"])
-        self.assertEqual(response.data["description"], "Test attack suggestion")
+        # Check if the suggestion is part of the formatted HTML response
+        self.assertIn(mock_suggestion, response.data["description"])
 
     def test_validate_input_success(self):
         """Test input validation success."""
         input_data = "Detailed reconnaissance data for testing"
         validated = self.generator._validate_input(input_data)
-        self.assertIsInstance(validated, LLMInputData)
-        self.assertEqual(validated.description, input_data)
+        self.assertEqual(validated, input_data)
 
-    @patch('reNgine.llm.LLMAttackSuggestionGenerator._get_openai_response')
+    @patch('reNgine.llm.llm.LLMAttackSuggestionGenerator._get_openai_response')
     def test_get_attack_suggestion_failure(self, mock_get_response):
         """Test attack suggestion generation failure."""
         mock_get_response.side_effect = Exception("API Error")
         
         response = self.generator.get_attack_suggestion("Test input")
-        self.assertFalse(response.status)
-        self.assertIsNotNone(response.error)
+        self.assertFalse(response["status"])
+        self.assertIsNotNone(response["error"])
 
     def test_get_provider_config(self):
         """Test provider configuration retrieval"""

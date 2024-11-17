@@ -5,7 +5,7 @@ websocket_urlpatterns = [
     path('ollama/download/<str:model_name>/', consumers.OllamaDownloadConsumer.as_asgi()),
 ]
 
-# URLs HTTP normales pour la découverte des WebSockets
+# Normal HTTP URLs for WebSocket discovery
 urlpatterns = [
     path('status/', views.websocket_status, name='websocket_status'),
 ]

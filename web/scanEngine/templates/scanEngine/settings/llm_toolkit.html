@@ -86,10 +86,12 @@ LLM Toolkit
             {% endif %}
           </p>
           <p class="mb-0 mt-1">
+            {% if model.is_local %}
             <span class="pe-2 text-nowrap mb-2 d-inline-block">
               <i class="mdi mdi-calendar-range text-primary"></i>
               Modified <b>{% if model.modified_at %}{{model.modified_at|naturaltime}} {% else %} NA{% endif %}</b>
             </span>
+            {% endif %}
             <br>
             {% if model.details %}
             <span class="pe-2 text-nowrap mb-2 d-inline-block">

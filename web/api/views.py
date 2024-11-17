@@ -320,8 +320,7 @@ class OllamaDetailManager(APIView):
                 id=1,
                 defaults={
                     'selected_model': model_name,
-                    'use_ollama': use_ollama,
-                    'selected': True
+                    'use_ollama': use_ollama
                 }
             )
             return Response({
