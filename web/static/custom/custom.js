@@ -3355,7 +3355,8 @@ async function showModelSelectionDialog(endpoint_url, id, force_regenerate = fal
 		
 			try {
 				// Update selected model in database first
-				const updateResponse = await fetch(`/api/tool/ollama/${selectedModel}`, {
+				const encoded_model = encodeURIComponent(selectedModel);
+				const updateResponse = await fetch(`/api/tool/ollama/${encoded_model}/`, {
 					method: 'PUT',
 					headers: {
 						'Content-Type': 'application/json',
@@ -3629,7 +3630,8 @@ function selectLLMModel() {
     }
     
     // Update selected model in database
-    fetch(`/api/tool/ollama/${selectedModel}`, {
+	const encoded_model = encodeURIComponent(selectedModel);
+    fetch(`/api/tool/ollama/${encoded_model}/`, {
         method: 'PUT',
         headers: {
             'Content-Type': 'application/json',

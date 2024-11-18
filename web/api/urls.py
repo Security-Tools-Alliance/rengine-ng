@@ -195,7 +195,7 @@ urlpatterns = [
         OllamaManager.as_view(),
         name='ollama_manager'),
     path(
-        'tool/ollama/<str:model_name>/',
+        'tool/ollama/<path:model_name>/',
         OllamaDetailManager.as_view(),
         name='ollama_detail_manager'),        
     path(

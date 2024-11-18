@@ -161,7 +161,8 @@ LLM Toolkit
 {% block page_level_script %}
 <script type="text/javascript">
   function deleteModel(model_name) {
-    const url = `/api/tool/ollama/${encodeURIComponent(model_name)}/`;
+    const encoded_model = encodeURIComponent(model_name);
+    const url = `/api/tool/ollama/${encoded_model}/`;
     
     Swal.fire({
         title: 'Are you sure?',
@@ -455,7 +456,8 @@ async function download_model(modelName) {
 }
 
   function selectModel(model_name) {
-    const url = `/api/tool/ollama/${encodeURIComponent(model_name)}/`;
+    const encoded_model = encodeURIComponent(model_name); 
+    const url = `/api/tool/ollama/${encoded_model}/`;
     
     Swal.fire({
         title: 'Updating...',
