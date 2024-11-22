@@ -33,7 +33,7 @@ class TestNmapParsing(unittest.TestCase):
 
     def test_nmap_parse(self):
         for xml_file in self.all_xml:
-            vulns = parse_nmap_results(self.nmap_vuln_single_xml)
+            vulns = parse_nmap_results(xml_file, parse_type='vulnerabilities')
             self.assertGreater(len(vulns), 0)  # Fixed to use len(vulns)
 
     def test_nmap_vuln_single(self):

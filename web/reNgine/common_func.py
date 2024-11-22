@@ -506,6 +506,45 @@ def extract_path_from_url(url):
 
 	return reconstructed_url
 
+def is_valid_url(url):
+    """Check if a URL is valid, including both full URLs and domain:port format.
+    
+    Args:
+        url (str): URL to validate (https://domain.com or domain.com:port)
+        
+    Returns:
+        bool: True if valid URL, False otherwise
+    """
+    logger.debug(f'Validating URL: {url}')
+    
+    # Handle URLs with scheme (http://, https://)
+    if url.startswith(('http://', 'https://')):
+        return validators.url(url)
+    
+    # Handle domain:port format
+    try:
+        if ':' in url:
+            domain, port = url.rsplit(':', 1)
+            # Validate port
+            port = int(port)
+            if not 1 <= port <= 65535:
+                logger.debug(f'Invalid port number: {port}')
+                return False
+        else:
+            domain = url
+            
+        # Validate domain
+        if validators.domain(domain) or validators.ipv4(domain) or validators.ipv6(domain):
+            logger.debug(f'Valid domain/IP found: {domain}')
+            return True
+            
+        logger.debug(f'Invalid domain/IP: {domain}')
+        return False
+        
+    except (ValueError, ValidationError) as e:
+        logger.debug(f'Validation error: {str(e)}')
+        return False
+
 #-------#
 # Utils #
 #-------#
@@ -878,7 +917,7 @@ def get_task_cache_key(func_name, *args, **kwargs):
 
 
 def get_output_file_name(scan_history_id, subscan_id, filename):
-	title = f'#{scan_history_id}'
+	title = f'{scan_history_id}'
 	if subscan_id:
 		title += f'-{subscan_id}'
 	title += f'_{filename}'
@@ -925,21 +964,28 @@ def get_nmap_cmd(
 		script=None,
 		script_args=None,
 		max_rate=None,
-		service_detection=True,
 		flags=[]):
-	if not cmd:
-		cmd = 'nmap'
 
+	# Initialize base options
 	options = {
-		"-sV": service_detection,
-		"-p": ports,
+		"--max-rate": max_rate,
+		"-oX": output_file,
 		"--script": script,
 		"--script-args": script_args,
-		"--max-rate": max_rate,
-		"-oX": output_file
 	}
+
+	if not cmd:
+		cmd = 'nmap'
+		# Update options with nmap specific parameters
+		options.update({
+			"-sV": "",
+			"-p": ports,
+		})
+	
+	# Build command with options
 	cmd = _build_cmd(cmd, options, flags)
 
+	# Add input source
 	if not input_file:
 		cmd += f" {host}" if host else ""
 	else:
@@ -1353,3 +1399,22 @@ def get_ips_from_cidr_range(target):
     except ValueError:
         logger.error(f'{target} is not a valid CIDR range. Skipping.')
         return []
+
+def get_http_crawl_value(engine, config):
+    """Get HTTP crawl value from config.
+    
+    Args:
+        engine: EngineType object
+        config: Configuration dictionary or None
+        
+    Returns:
+        bool: True if HTTP crawl is enabled
+    """
+    # subscan engine value
+    enable_http_crawl = config.get(ENABLE_HTTP_CRAWL) if config else None
+    if enable_http_crawl is None:
+        # scan engine value
+        yaml_config = yaml.safe_load(engine.yaml_configuration)
+        enable_http_crawl = yaml_config.get(ENABLE_HTTP_CRAWL, DEFAULT_ENABLE_HTTP_CRAWL)
+    logger.debug(f'Enable HTTP crawl: {enable_http_crawl}')
+    return enable_http_crawl
