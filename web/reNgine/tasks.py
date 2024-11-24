@@ -30,7 +30,6 @@ from metafinder.extractor import extract_metadata_from_google_search
 from reNgine.celery import app
 from reNgine.gpt import GPTVulnerabilityReportGenerator
 from reNgine.celery_custom_task import RengineTask
-from reNgine.exceptions import NmapScanError
 from reNgine.common_func import *
 from reNgine.definitions import *
 from reNgine.settings import *
