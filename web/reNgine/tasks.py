@@ -1508,7 +1508,6 @@ def run_nmap(self, ctx, **nmap_args):
     """
     sigs = []
     for host, port_list in nmap_args.get('ports_data', {}).items():
-        ports_str = '_'.join([str(p) for p in port_list])
         ctx_nmap = ctx.copy()
         ctx_nmap['description'] = get_task_title(f'nmap_{host}', self.scan_id, self.subscan_id)
         ctx_nmap['track'] = False
@@ -1523,7 +1522,7 @@ def run_nmap(self, ctx, **nmap_args):
         sigs.append(sig)
     task = group(sigs).apply_async()
     with allow_join_result():
-        results = task.get()
+        task.get()
 
 
 @app.task(name='nmap', queue='main_scan_queue', base=RengineTask, bind=True)
@@ -1627,7 +1626,6 @@ def waf_detection(self, ctx={}, description=None):
     """
     input_path = str(Path(self.results_dir) / 'input_endpoints_waf_detection.txt')
     config = self.yaml_configuration.get(WAF_DETECTION) or {}
-    enable_http_crawl = get_http_crawl_value(self, config)
 
     # Get alive endpoints from DB
     urls = get_http_urls(
