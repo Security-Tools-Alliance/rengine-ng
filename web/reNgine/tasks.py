@@ -125,15 +125,25 @@ def initiate_scan(
         scan.domain = domain
         scan.start_scan_date = timezone.now()
         scan.tasks = engine.tasks
-        uuid_scan = uuid.uuid1()
-        scan.results_dir = f'{results_dir}/{domain.name}/scans/{uuid_scan}'
+
+        # Create results directory
+        try:
+            uuid_scan = uuid.uuid1()
+            scan.results_dir = SafePath.create_safe_path(
+                base_dir=RENGINE_RESULTS,
+                components=[domain.name, 'scans', str(uuid_scan)]
+            )
+        except (ValueError, OSError) as e:
+            logger.error(f"Failed to create results directory: {str(e)}")
+            scan.scan_status = FAILED_TASK
+            scan.error_message = "Failed to create results directory, scan failed"
+            scan.save()
+            return {'success': False, 'error': scan.error_message}
+
         add_gf_patterns = gf_patterns and 'fetch_url' in engine.tasks
         if add_gf_patterns and is_iterable(gf_patterns):
             scan.used_gf_patterns = ','.join(gf_patterns)
         scan.save()
-
-        # Create scan results dir
-        os.makedirs(scan.results_dir, exist_ok=True)
 
         # Build task context
         ctx = {
@@ -286,9 +296,21 @@ def initiate_subscan(
         subscan.save()
 
         # Create results directory
-        uuid_scan = uuid.uuid1()
-        results_dir = f'{results_dir}/{domain.name}/subscans/{uuid_scan}'
-        os.makedirs(results_dir, exist_ok=True)
+        try:
+            uuid_scan = uuid.uuid1()
+            results_dir = SafePath.create_safe_path(
+                base_dir=RENGINE_RESULTS,
+                components=[domain.name, 'subscans', str(uuid_scan)]
+            )
+        except (ValueError, OSError) as e:
+            logger.error(f"Failed to create results directory: {str(e)}")
+            subscan.scan_status = FAILED_TASK
+            subscan.error_message = "Failed to create results directory, scan failed"
+            subscan.save()
+            return {
+                'success': False,
+                'error': subscan.error_message
+            }
 
         # Run task
         method = globals().get(scan_type)
@@ -5178,7 +5200,15 @@ def get_nmap_http_datas(host, ctx):
     """
     results_dir = ctx.get('results_dir', '/tmp')
     filename = ctx.get('filename', 'nmap.xml')
-    xml_file = f'{results_dir}/{host}_{filename}'
+    try:
+        xml_file = SafePath.create_safe_path(
+            base_dir=results_dir,
+            components=[f"{host}_{filename}"],
+            create_dir=False
+        )
+    except (ValueError, OSError) as e:
+        logger.error(f"Failed to create safe path for XML file: {str(e)}")
+        return None
     
     # Basic nmap scan for HTTP ports only
     nmap_args = {
@@ -5203,10 +5233,12 @@ def get_nmap_http_datas(host, ctx):
         except Exception as e:
             logger.error(f"Attempt {attempt + 1}/{max_retries}: Nmap scan failed: {str(e)}")
             if attempt == max_retries - 1:
-                raise NmapScanError(f"Nmap scan failed after {max_retries} attempts: {str(e)}")
+                logger.error(f"Nmap scan failed after {max_retries} attempts: {str(e)}")
+                return None
             time.sleep(retry_delay)
     else:
-        raise NmapScanError(f"Failed to generate output file after {max_retries} retries")
+        logger.error(f"Failed to generate output file after {max_retries} retries")
+        return None
     
     # Parse results to get open ports
     results = parse_nmap_results(xml_file, parse_type='ports')
@@ -5266,7 +5298,7 @@ def create_first_endpoint_from_nmap_data(hosts_data, domain, subdomain, ctx):
             host_url,
             ctx=ctx,
             crawl=True,
-            is_default=(hostname == domain.name),
+            is_default=True,
             subdomain=current_subdomain
         )
 
