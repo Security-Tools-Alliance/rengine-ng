@@ -15,7 +15,6 @@ import uuid
 import shutil
 from pathlib import Path
 
-from datetime import datetime
 from urllib.parse import urlparse
 from api.serializers import SubdomainSerializer
 from celery import chain, chord, group
@@ -168,7 +167,7 @@ def initiate_scan(
         http_url = f'{domain.name}{url_filter}' if url_filter else domain.name
         endpoint = None
 
-        # Use Nmap to find web services and create HTTP endpoints
+        # Use Nmap to find web services ports
         logger.warning(f'Using Nmap to find web services on {http_url}')
         hosts_data = get_nmap_http_datas(http_url, ctx)
         logger.debug(f'Identified hosts: {hosts_data}')
@@ -178,59 +177,16 @@ def initiate_scan(
             scan.scan_status = FAILED_TASK
             scan.error_message = "Sorry, host does not seems to have any web service"
             scan.save()
-            return {
-                'success': False,
-                'error': scan.error_message
-            }
+            return {'success': False, 'error': scan.error_message}
 
-        # Process each host found by Nmap
-        for hostname, data in hosts_data.items():
-            if data['scheme']:
-                host_url = f"{data['scheme']}://{hostname}"
-                logger.debug(f'Processing HTTP URL: {host_url}')
-                
-                # Create subdomain for rDNS hostnames if different from original
-                if hostname != domain.name:
-                    logger.debug(f'Creating subdomain for rDNS hostname: {hostname}')
-                    rdns_subdomain, created = save_subdomain(hostname, ctx=ctx)
-                    if rdns_subdomain is None:
-                        logger.warning(f'Could not create subdomain for rDNS hostname: {hostname}. Skipping this host.')
-                        continue
-                    current_subdomain = rdns_subdomain
-                else:
-                    current_subdomain = subdomain
-
-                # Create endpoint
-                current_endpoint, _ = save_endpoint(
-                    host_url,
-                    ctx=ctx,
-                    crawl=True,
-                    is_default=(hostname == domain.name),  # is_default only for original hostname
-                    subdomain=current_subdomain
-                )
-
-                # Save metadata for the first endpoint or the main domain endpoint
-                if not endpoint or hostname == domain.name:
-                    endpoint = current_endpoint
-                    if endpoint:
-                        save_subdomain_metadata(
-                            current_subdomain, 
-                            endpoint, 
-                            extra_datas={
-                                'http_url': host_url,
-                                'open_ports': data['ports']
-                            }
-                        )
-
+        # Create first HTTP endpoint
+        endpoint = create_first_endpoint_from_nmap_data(hosts_data, domain, subdomain, ctx)
         if not endpoint:
             logger.warning(f'Could not create any valid endpoints for {http_url}. Scan failed.')
-            scan.scan_status = FAILED_TASK
+            scan.scan_status = FAILED_TASK 
             scan.error_message = "Failed to create valid endpoints"
             scan.save()
-            return {
-                'success': False,
-                'error': scan.error_message
-            }
+            return {'success': False, 'error': scan.error_message}
 
         # Build Celery tasks, crafted according to the dependency graph below:
         # subdomain_discovery --> port_scan --> fetch_url --> dir_file_fuzz
@@ -3041,7 +2997,8 @@ def http_crawl(
             logger.error(line)
             continue
 
-        logger.debug(line)
+        line_str = json.dumps(line, indent=2)
+        logger.debug(line_str)
         
         # No response from endpoint
         if line.get('failed', False):
@@ -4441,7 +4398,7 @@ def stream_command(cmd, cwd=None, shell=False, history_file=None, encoding='utf-
     return_code = process.returncode
     command_obj.return_code = return_code
     command_obj.save()
-    logger.info(f'Command returned exit code: {return_code}')
+    logger.debug(f'Command returned exit code: {return_code}')
 
     if history_file:
         write_history(history_file, cmd, return_code, output)
@@ -5203,7 +5160,7 @@ def run_gf_list():
         }
 
 def get_nmap_http_datas(host, ctx):
-    """Check if port 80 or 443 is open and get HTTP status code for given hosts.
+    """Check if port 80 or 443 are opened and get HTTP status code for given hosts.
     
     Args:
         host (str): Initial hostname to scan
@@ -5253,7 +5210,8 @@ def get_nmap_http_datas(host, ctx):
     
     # Parse results to get open ports
     results = parse_nmap_results(xml_file, parse_type='ports')
-    logger.debug(f'Raw nmap results: {results}')
+    results_str = json.dumps(results, indent=2)
+    logger.debug(f'Raw nmap results: {results_str}')
     
     # Group results by host using atomic transaction
     hosts_data = {}
@@ -5265,7 +5223,7 @@ def get_nmap_http_datas(host, ctx):
                 
             if result['state'] == 'open':
                 port = int(result['port'])
-                logger.debug(f'Found open port {port} for host {hostname}')
+                logger.info(f'Found open port {port} for host {hostname}')
                 if port not in hosts_data[hostname]['ports']:
                     hosts_data[hostname]['ports'].append(port)
         
@@ -5281,6 +5239,53 @@ def get_nmap_http_datas(host, ctx):
             logger.debug(f'Host {hostname} - scheme: {data["scheme"]}, ports: {data["ports"]}')
     
     return hosts_data
+
+def create_first_endpoint_from_nmap_data(hosts_data, domain, subdomain, ctx):
+    """Create endpoints from Nmap service detection results.
+    Returns the first created endpoint or None if failed."""
+    endpoint = None
+
+    for hostname, data in hosts_data.items():
+        if not data['scheme']:
+            continue
+
+        host_url = f"{data['scheme']}://{hostname}"
+        current_subdomain = subdomain
+        logger.debug(f'Processing HTTP URL: {host_url}')
+
+        # Create subdomain for rDNS hostnames
+        if hostname != domain.name:
+            logger.info(f'Creating subdomain for rDNS hostname: {hostname}')
+            current_subdomain, _ = save_subdomain(hostname, ctx=ctx)
+            if not current_subdomain:
+                logger.warning(f'Could not create subdomain for rDNS hostname: {hostname}. Skipping this host.')
+                continue
+
+        # Create endpoint
+        current_endpoint, _ = save_endpoint(
+            host_url,
+            ctx=ctx,
+            crawl=True,
+            is_default=(hostname == domain.name),
+            subdomain=current_subdomain
+        )
+
+        # Save metadata for all endpoints (including rDNS)
+        if current_endpoint:
+            save_subdomain_metadata(
+                current_subdomain,
+                current_endpoint,
+                extra_datas={
+                    'http_url': host_url,
+                    'open_ports': data['ports']
+                }
+            )
+
+            # Keep track of first endpoint (prioritizing main domain)
+            if not endpoint or hostname == domain.name:
+                endpoint = current_endpoint
+
+    return endpoint
 
 #----------------------#
 #     Remote debug     #
