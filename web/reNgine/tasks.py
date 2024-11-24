@@ -21,6 +21,7 @@ from api.serializers import SubdomainSerializer
 from celery import chain, chord, group
 from celery.result import allow_join_result
 from celery.utils.log import get_task_logger
+from django.db import transaction
 from django.db.models import Count
 from dotted_dict import DottedDict
 from django.utils import timezone, html
@@ -30,6 +31,7 @@ from metafinder.extractor import extract_metadata_from_google_search
 from reNgine.celery import app
 from reNgine.gpt import GPTVulnerabilityReportGenerator
 from reNgine.celery_custom_task import RengineTask
+from reNgine.exceptions import NmapScanError
 from reNgine.common_func import *
 from reNgine.definitions import *
 from reNgine.settings import *
@@ -3437,7 +3439,7 @@ def parse_nmap_results(xml_file, output_file=None, parse_type='vulnerabilities')
         try:
             nmap_results = xmltodict.parse(content)
         except Exception as e:
-            logger.debug(e)
+            logger.warning(e)
             logger.error(f'Cannot parse {xml_file} to valid JSON. Skipping.')
             return []
 
@@ -5213,6 +5215,9 @@ def get_nmap_http_datas(host, ctx):
                 'host1': {'scheme': 'https', 'ports': [80, 443]},
                 'host2': {'scheme': 'http', 'ports': [80]}
             }
+            
+    Raises:
+        NmapScanError: If scan fails after max retries
     """
     results_dir = ctx.get('results_dir', '/tmp')
     filename = ctx.get('filename', 'nmap.xml')
@@ -5227,39 +5232,53 @@ def get_nmap_http_datas(host, ctx):
         'ports_data': {host: [80, 443]},
     }
     
-    run_nmap(ctx, **nmap_args)
+    # Add retry logic for nmap scan
+    max_retries = 3
+    retry_delay = 2
     
-    if not os.path.exists(xml_file):
-        logger.error(f"Nmap output file not found: {xml_file}")
-        return {}
+    for attempt in range(max_retries):
+        try:
+            run_nmap(ctx, **nmap_args)
+            if os.path.exists(xml_file):
+                break
+            logger.warning(f"Attempt {attempt + 1}/{max_retries}: Nmap output file not found, retrying in {retry_delay}s...")
+            time.sleep(retry_delay)
+        except Exception as e:
+            logger.error(f"Attempt {attempt + 1}/{max_retries}: Nmap scan failed: {str(e)}")
+            if attempt == max_retries - 1:
+                raise NmapScanError(f"Nmap scan failed after {max_retries} attempts: {str(e)}")
+            time.sleep(retry_delay)
+    else:
+        raise NmapScanError(f"Failed to generate output file after {max_retries} retries")
     
     # Parse results to get open ports
     results = parse_nmap_results(xml_file, parse_type='ports')
     logger.debug(f'Raw nmap results: {results}')
     
-    # Group results by host
+    # Group results by host using atomic transaction
     hosts_data = {}
-    for result in results:
-        hostname = result['host']
-        if hostname not in hosts_data:
-            hosts_data[hostname] = {'ports': []}
-            
-        if result['state'] == 'open':
-            port = int(result['port'])
-            logger.debug(f'Found open port {port} for host {hostname}')
-            if port not in hosts_data[hostname]['ports']:
-                hosts_data[hostname]['ports'].append(port)
-    
-    # Determine scheme for each host
-    for hostname, data in hosts_data.items():
-        # Prefer HTTPS over HTTP if both are available
-        if 443 in data['ports']:
-            data['scheme'] = 'https'
-        elif 80 in data['ports']:
-            data['scheme'] = 'http'
-        else:
-            data['scheme'] = None
-        logger.debug(f'Host {hostname} - scheme: {data["scheme"]}, ports: {data["ports"]}')
+    with transaction.atomic():
+        for result in results:
+            hostname = result['host']
+            if hostname not in hosts_data:
+                hosts_data[hostname] = {'ports': []}
+                
+            if result['state'] == 'open':
+                port = int(result['port'])
+                logger.debug(f'Found open port {port} for host {hostname}')
+                if port not in hosts_data[hostname]['ports']:
+                    hosts_data[hostname]['ports'].append(port)
+        
+        # Determine scheme for each host
+        for hostname, data in hosts_data.items():
+            # Prefer HTTPS over HTTP if both are available
+            if 443 in data['ports']:
+                data['scheme'] = 'https'
+            elif 80 in data['ports']:
+                data['scheme'] = 'http'
+            else:
+                data['scheme'] = None
+            logger.debug(f'Host {hostname} - scheme: {data["scheme"]}, ports: {data["ports"]}')
     
     return hosts_data
 
