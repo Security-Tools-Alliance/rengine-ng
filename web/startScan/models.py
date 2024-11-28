@@ -575,7 +575,7 @@ class Port(models.Model):
 	is_uncommon = models.BooleanField(default=False)
 
 	def __str__(self):
-		return str(self.service_name)
+		return str(self.number)
 
 
 class DirectoryFile(models.Model):
