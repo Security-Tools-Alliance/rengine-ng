@@ -4703,6 +4703,7 @@ def save_endpoint(
         ctx={},
         crawl=False,
         is_default=False,
+        http_status=None,
         **endpoint_data):
     """Get or create EndPoint object. If crawl is True, also crawl the endpoint
     HTTP URL with httpx.
@@ -4717,7 +4718,6 @@ def save_endpoint(
     Returns:
         tuple: (EndPoint, created) or (None, False) if invalid
     """
-    # Remove nulls and validate basic inputs
     # Remove nulls and validate basic inputs
     endpoint_data = replace_nulls(endpoint_data)
     scheme = urlparse(http_url).scheme
@@ -4782,14 +4782,20 @@ def save_endpoint(
         endpoint.save()
         created = endpoint_data['endpoint_created']
     else:
-        endpoint = EndPoint.objects.create(
-            scan_history=scan,
-            target_domain=domain,
-            http_url=http_url,
-            is_default=is_default,
-            discovered_date=timezone.now(),
-            **endpoint_data
-        )
+        create_data = {
+            'scan_history': scan,
+            'target_domain': domain,
+            'http_url': http_url,
+            'is_default': is_default,
+            'discovered_date': timezone.now(),
+        }
+        
+        if http_status is not None:
+            create_data['http_status'] = http_status
+            
+        create_data.update(endpoint_data)
+
+        endpoint = EndPoint.objects.create(**create_data)
         created = True
     
     # Add subscan relation if needed
@@ -5272,6 +5278,12 @@ def get_nmap_http_datas(host, ctx):
 def create_first_endpoint_from_nmap_data(hosts_data, domain, subdomain, ctx):
     """Create endpoints from Nmap service detection results.
     Returns the first created endpoint or None if failed."""
+    
+    # Return None if no nmap data
+    if not hosts_data:
+        logger.warning("No Nmap data provided. Skipping endpoint creation.")
+        return None
+
     endpoint = None
 
     for hostname, data in hosts_data.items():
@@ -5290,7 +5302,7 @@ def create_first_endpoint_from_nmap_data(hosts_data, domain, subdomain, ctx):
                 logger.warning(f'Could not create subdomain for rDNS hostname: {hostname}. Skipping this host.')
                 continue
 
-        # Create endpoint
+        # Try to create endpoint with crawling first
         current_endpoint, _ = save_endpoint(
             host_url,
             ctx=ctx,
@@ -5299,20 +5311,54 @@ def create_first_endpoint_from_nmap_data(hosts_data, domain, subdomain, ctx):
             subdomain=current_subdomain
         )
 
-        # Save metadata for all endpoints (including rDNS)
+        # If crawling failed, try without crawling as fallback
+        if not current_endpoint and data.get('ports'):
+            logger.info(f'Crawling failed for {host_url}, creating endpoint without crawling')
+            current_endpoint, _ = save_endpoint(
+                host_url,
+                ctx=ctx,
+                crawl=False,
+                is_default=True,
+                subdomain=current_subdomain,
+                http_status=0,  # Unknown status
+            )
+
+        # Save metadata for all endpoints
         if current_endpoint:
             save_subdomain_metadata(
                 current_subdomain,
                 current_endpoint,
                 extra_datas={
                     'http_url': host_url,
-                    'open_ports': data['ports']
                 }
             )
 
             # Keep track of first endpoint (prioritizing main domain)
             if not endpoint or hostname == domain.name:
                 endpoint = current_endpoint
+        else:
+            # Keep track of hostname data even if endpoint creation failed
+            save_subdomain_metadata(
+                current_subdomain,
+                None,
+                extra_datas={
+                    'http_url': host_url,
+                }
+            )
+
+    # If no endpoint was created but we have nmap data, create one for the main domain
+    if not endpoint and hosts_data.get(domain.name):
+        data = hosts_data[domain.name]
+        host_url = f"{data['scheme']}://{domain.name}"
+        logger.info(f'Creating fallback endpoint for main domain: {host_url}')
+        endpoint, _ = save_endpoint(
+            host_url,
+            ctx=ctx,
+            crawl=False,
+            is_default=True,
+            subdomain=subdomain,
+            http_status=0,  # Unknown status
+        )
 
     return endpoint
 
