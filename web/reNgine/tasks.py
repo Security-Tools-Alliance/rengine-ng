@@ -5347,18 +5347,19 @@ def create_first_endpoint_from_nmap_data(hosts_data, domain, subdomain, ctx):
             )
 
     # If no endpoint was created but we have nmap data, create one for the main domain
-    if not endpoint and hosts_data.get(domain.name):
+    if not endpoint and domain.name in hosts_data:
         data = hosts_data[domain.name]
-        host_url = f"{data['scheme']}://{domain.name}"
-        logger.info(f'Creating fallback endpoint for main domain: {host_url}')
-        endpoint, _ = save_endpoint(
-            host_url,
-            ctx=ctx,
-            crawl=False,
-            is_default=True,
-            subdomain=subdomain,
-            http_status=0,  # Unknown status
-        )
+        if data.get('scheme'):
+            host_url = f"{data['scheme']}://{domain.name}"
+            logger.info(f'Creating fallback endpoint for main domain: {host_url}')
+            endpoint, _ = save_endpoint(
+                host_url,
+                ctx=ctx,
+                crawl=False,
+                is_default=True,
+                subdomain=subdomain,
+                http_status=0,  # Unknown status
+            )
 
     return endpoint
 
