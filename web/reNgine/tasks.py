@@ -101,6 +101,15 @@ def initiate_scan(
         domain.last_scan_date = timezone.now()
         domain.save()
 
+        # Check if scanning an IP address
+        is_ip_scan = validators.ip_address.ipv4(domain.name) or validators.ip_address.ipv6(domain.name)
+        
+        if is_ip_scan:
+            # Filter out irrelevant tasks for an IP
+            allowed_tasks = ['port_scan', 'fetch_url', 'dir_file_fuzz', 'vulnerability_scan', 'screenshot', 'waf_detection']
+            engine.tasks = [task for task in engine.tasks if task in allowed_tasks]
+            logger.info(f'IP scan detected - Limited available tasks to: {engine.tasks}')
+
         logger.warning(f'Initiating scan for domain {domain.name} on celery')
 
         # Get path filter
@@ -4739,7 +4748,11 @@ def save_endpoint(
         logger.error('Missing scan or domain information')
         return None, False
         
-    if domain.name not in http_url:
+    # Check if we're scanning an IP
+    is_ip_scan = validators.ipv4(domain.name) or validators.ipv6(domain.name)
+        
+    # For regular domain scans, validate URL belongs to domain
+    if not is_ip_scan and domain.name not in http_url:
         logger.error(f"{http_url} is not a URL of domain {domain.name}. Skipping.")
         return None, False
     
@@ -4811,7 +4824,7 @@ def save_subdomain(subdomain_name, ctx={}):
 
     Args:
         subdomain_name (str): Subdomain name.
-        scan_history (startScan.models.ScanHistory): ScanHistory object.
+        ctx (dict): Context containing scan information and settings.
 
     Returns:
         tuple: (startScan.models.Subdomain, created) where `created` is a
@@ -4821,37 +4834,51 @@ def save_subdomain(subdomain_name, ctx={}):
     subscan_id = ctx.get('subscan_id')
     out_of_scope_subdomains = ctx.get('out_of_scope_subdomains', [])
     subdomain_name = subdomain_name.lower()
+
+    # Validate domain/IP format
     valid_domain = (
         validators.domain(subdomain_name) or
         validators.ipv4(subdomain_name) or
         validators.ipv6(subdomain_name)
     )
     if not valid_domain:
-        logger.error(f'{subdomain_name} is not a valid domain. Skipping.')
+        logger.error(f'{subdomain_name} is not a valid domain/IP. Skipping.')
         return None, False
 
+    # Check if subdomain is in scope
     if subdomain_name in out_of_scope_subdomains:
         logger.error(f'{subdomain_name} is out-of-scope. Skipping.')
         return None, False
 
-    if ctx.get('domain_id'):
-        domain = Domain.objects.get(id=ctx.get('domain_id'))
+    # Get domain object and check if we're scanning an IP
+    scan = ScanHistory.objects.filter(pk=scan_id).first()
+    domain = scan.domain if scan else None
+    
+    if not domain:
+        logger.error('No domain found in scan history. Skipping.')
+        return None, False
+        
+    is_ip_scan = validators.ipv4(domain.name) or validators.ipv6(domain.name)
+
+    # For regular domain scans, validate subdomain belongs to domain
+    if not is_ip_scan and ctx.get('domain_id'):
         if domain.name not in subdomain_name:
             logger.error(f"{subdomain_name} is not a subdomain of domain {domain.name}. Skipping.")
             return None, False
 
-    scan = ScanHistory.objects.filter(pk=scan_id).first()
-    domain = scan.domain if scan else None
+    # Create or get subdomain object
     subdomain, created = Subdomain.objects.get_or_create(
         scan_history=scan,
         target_domain=domain,
         name=subdomain_name)
+
     if created:
-        logger.info(f'Found new subdomain {subdomain_name}')
+        logger.info(f'Found new subdomain/rDNS: {subdomain_name}')
         subdomain.discovered_date = timezone.now()
         if subscan_id:
             subdomain.subdomain_subscan_ids.add(subscan_id)
         subdomain.save()
+
     return subdomain, created
 
 def save_subdomain_metadata(subdomain, endpoint, extra_datas={}):
@@ -5279,12 +5306,20 @@ def create_first_endpoint_from_nmap_data(hosts_data, domain, subdomain, ctx):
     """Create endpoints from Nmap service detection results.
     Returns the first created endpoint or None if failed."""
     
-    # Return None if no nmap data
     if not hosts_data:
         logger.warning("No Nmap data provided. Skipping endpoint creation.")
         return None
 
     endpoint = None
+    is_ip_scan = validators.ipv4(domain.name) or validators.ipv6(domain.name)
+
+    # For IP scans, ensure we have an entry for the IP itself
+    if is_ip_scan and domain.name not in hosts_data:
+        # Create entry for IP with data from rDNS if available
+        rdns_hostname = next(iter(hosts_data.keys()), None)
+        if rdns_hostname and hosts_data[rdns_hostname]:
+            hosts_data[domain.name] = hosts_data[rdns_hostname].copy()
+            logger.info(f"Created IP endpoint data from rDNS {rdns_hostname}")
 
     for hostname, data in hosts_data.items():
         if not data['scheme']:
@@ -5294,72 +5329,107 @@ def create_first_endpoint_from_nmap_data(hosts_data, domain, subdomain, ctx):
         current_subdomain = subdomain
         logger.debug(f'Processing HTTP URL: {host_url}')
 
-        # Create subdomain for rDNS hostnames
-        if hostname != domain.name:
-            logger.info(f'Creating subdomain for rDNS hostname: {hostname}')
-            current_subdomain, _ = save_subdomain(hostname, ctx=ctx)
-            if not current_subdomain:
-                logger.warning(f'Could not create subdomain for rDNS hostname: {hostname}. Skipping this host.')
-                continue
+        # For IP scans, create endpoints for both IP and rDNS
+        if is_ip_scan:
+            if hostname != domain.name:
+                # Create subdomain for rDNS
+                logger.info(f'Creating subdomain for rDNS hostname: {hostname}')
+                rdns_subdomain, _ = save_subdomain(hostname, ctx=ctx)
+                if rdns_subdomain:
+                    # Create endpoint for rDNS
+                    rdns_endpoint, _ = save_endpoint(
+                        f"{data['scheme']}://{hostname}",
+                        ctx=ctx,
+                        crawl=False,
+                        is_default=True,
+                        subdomain=rdns_subdomain,
+                        http_status=0
+                    )
+                    if rdns_endpoint:
+                        save_subdomain_metadata(
+                            rdns_subdomain,
+                            rdns_endpoint,
+                            extra_datas={
+                                'http_url': host_url,
+                                'open_ports': data['ports']
+                            }
+                        )
+            
+            # Always try to create endpoint for IP itself
+            if hostname == domain.name or not endpoint:
+                current_endpoint, _ = save_endpoint(
+                    f"{data['scheme']}://{domain.name}",
+                    ctx=ctx,
+                    crawl=False,
+                    is_default=True,
+                    subdomain=current_subdomain,
+                    http_status=0
+                )
+                if current_endpoint:
+                    save_subdomain_metadata(
+                        current_subdomain,
+                        current_endpoint,
+                        extra_datas={
+                            'http_url': f"{data['scheme']}://{domain.name}",
+                            'open_ports': data['ports']
+                        }
+                    )
+                    endpoint = current_endpoint
 
-        # Try to create endpoint with crawling first
-        current_endpoint, _ = save_endpoint(
-            host_url,
-            ctx=ctx,
-            crawl=True,
-            is_default=True,
-            subdomain=current_subdomain
-        )
+        # For regular domain scans, keep existing behavior
+        else:
+            if hostname != domain.name:
+                logger.info(f'Creating subdomain for hostname: {hostname}')
+                current_subdomain, _ = save_subdomain(hostname, ctx=ctx)
+                if not current_subdomain:
+                    logger.warning(f'Could not create subdomain for hostname: {hostname}. Skipping this host.')
+                    continue
 
-        # If crawling failed, try without crawling as fallback
-        if not current_endpoint and data.get('ports'):
-            logger.info(f'Crawling failed for {host_url}, creating endpoint without crawling')
+            # Try to create endpoint with crawling first
             current_endpoint, _ = save_endpoint(
                 host_url,
                 ctx=ctx,
-                crawl=False,
+                crawl=True,
                 is_default=True,
-                subdomain=current_subdomain,
-                http_status=0,  # Unknown status
+                subdomain=current_subdomain
             )
 
-        # Save metadata for all endpoints
-        if current_endpoint:
-            save_subdomain_metadata(
-                current_subdomain,
-                current_endpoint,
-                extra_datas={
-                    'http_url': host_url,
-                }
-            )
+            # If crawling failed, try without crawling as fallback
+            if not current_endpoint and data.get('ports'):
+                logger.info(f'Creating endpoint without crawling for {host_url}')
+                current_endpoint, _ = save_endpoint(
+                    host_url,
+                    ctx=ctx,
+                    crawl=False,
+                    is_default=True,
+                    subdomain=current_subdomain,
+                    http_status=0  # Unknown status
+                )
 
-            # Keep track of first endpoint (prioritizing main domain)
-            if not endpoint or hostname == domain.name:
-                endpoint = current_endpoint
-        else:
-            # Keep track of hostname data even if endpoint creation failed
-            save_subdomain_metadata(
-                current_subdomain,
-                None,
-                extra_datas={
-                    'http_url': host_url,
-                }
-            )
+            # Save metadata for all endpoints
+            if current_endpoint:
+                save_subdomain_metadata(
+                    current_subdomain,
+                    current_endpoint,
+                    extra_datas={
+                        'http_url': host_url,
+                        'open_ports': data['ports']
+                    }
+                )
 
-    # If no endpoint was created but we have nmap data, create one for the main domain
-    if not endpoint and domain.name in hosts_data:
-        data = hosts_data[domain.name]
-        if data.get('scheme'):
-            host_url = f"{data['scheme']}://{domain.name}"
-            logger.info(f'Creating fallback endpoint for main domain: {host_url}')
-            endpoint, _ = save_endpoint(
-                host_url,
-                ctx=ctx,
-                crawl=False,
-                is_default=True,
-                subdomain=subdomain,
-                http_status=0,  # Unknown status
-            )
+                # Keep track of first endpoint (prioritizing main domain)
+                if not endpoint or hostname == domain.name:
+                    endpoint = current_endpoint
+            else:
+                # Keep track of hostname data even if endpoint creation failed
+                save_subdomain_metadata(
+                    current_subdomain,
+                    None,
+                    extra_datas={
+                        'http_url': host_url,
+                        'open_ports': data['ports']
+                    }
+                )
 
     return endpoint
 
