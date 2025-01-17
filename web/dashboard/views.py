@@ -207,20 +207,43 @@ def admin_interface(request):
 
 @has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
 def admin_interface_update(request):
-    user = get_user_from_request(request)
-    
+    mode = request.GET.get('mode')
+    method = request.method
+
+    if mode and mode != 'create':
+        target_user = get_user_from_request(request)
+        if not target_user:
+            return JsonResponse({'status': False, 'error': 'User ID not provided'}, status=404)
+
+        try:
+            current_user = request.user
+        except get_user_model().DoesNotExist:
+            return JsonResponse({'status': False, 'error': 'User not found'}, status=404)
+
+        # Security checks for superusers
+        if target_user.is_superuser:
+            # Only a superuser can modify another superuser
+            if not current_user.is_superuser:
+                return JsonResponse({
+                    'status': False, 
+                    'error': 'Only superadmin can modify another superadmin'
+                }, status=403)
+            # A superuser cannot deactivate/delete themselves
+            if current_user == target_user and mode in ['delete', 'change_status']:
+                return JsonResponse({
+                    'status': False, 
+                    'error': 'Superadmin cannot delete or deactivate themselves'
+                }, status=403)
+
     # Check if the request is for user creation
-    if request.method == 'POST' and request.GET.get('mode') == 'create':
+    if method == 'POST' and mode == 'create':
         # Skip user check for user creation
-        return handle_post_request(request, None)  # Pass None for user
+        return handle_post_request(request, mode, None)  # Pass None for user
 
-    if not user:
-        return JsonResponse({'status': False, 'error': 'User not found'}, status=404)
-
-    if request.method == 'GET':
-        return handle_get_request(request, user)
-    elif request.method == 'POST':
-        return handle_post_request(request, user)
+    if method == 'GET':
+        return handle_get_request(request, mode, target_user)
+    elif method == 'POST':
+        return handle_post_request(request, mode, target_user)
 
     return HttpResponseRedirect(reverse('admin_interface'))
 
@@ -232,8 +255,7 @@ def get_user_from_request(request):
     return None
 
 
-def handle_get_request(request, user):
-    mode = request.GET.get('mode')
+def handle_get_request(request, mode, user):
     if mode == 'change_status':
         user.is_active = not user.is_active
         user.save()
@@ -253,8 +275,7 @@ def handle_get_request(request, user):
     return HttpResponseBadRequest(reverse('admin_interface'), status=400)
 
 
-def handle_post_request(request, user):
-    mode = request.GET.get('mode')
+def handle_post_request(request, mode, user):
     if mode == 'delete':
         return handle_delete_user(request, user)
     elif mode == 'update':
