@@ -6,7 +6,7 @@ RENGINE_VERSION := $(shell cat web/reNgine/version.txt)
 export RENGINE_VERSION
 
 # Define RENGINE_FOLDER
-RENGINE_FOLDER := /home/$USERNAME/rengine
+RENGINE_FOLDER := /home/rengine/rengine
 export RENGINE_FOLDER
 
 # Credits: https://github.com/sherifabdlnaby/elastdocker/
