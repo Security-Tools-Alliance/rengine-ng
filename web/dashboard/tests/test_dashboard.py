@@ -5,8 +5,10 @@ import json
 from unittest.mock import patch, MagicMock
 from django.urls import reverse
 from utils.test_base import BaseTestCase
+from django.contrib.auth import get_user_model
 from django.contrib.auth.models import User
 from django.utils import timezone
+from rolepermissions.checkers import has_role
 from rolepermissions.roles import assign_role
 import uuid
 
@@ -33,9 +35,9 @@ class TestDashboardViews(BaseTestCase):
 
     def test_profile_view(self):
         """Test the profile view."""
-        response = self.client.get(reverse('profile'))  # Suppression du paramètre 'slug'
+        response = self.client.get(reverse('profile'))
         self.assertEqual(response.status_code, 200)
-        self.assertTemplateUsed(response, 'dashboard/profile.html')  # Vérification du modèle utilisé
+        self.assertTemplateUsed(response, 'dashboard/profile.html')
 
     @patch('dashboard.views.get_user_model')
     def test_admin_interface_view(self, mock_get_user_model):
@@ -114,30 +116,47 @@ class AdminInterfaceUpdateTests(BaseTestCase):
         assign_role(self.target_user, 'penetration_tester')
 
     def test_user_creation_permissions(self):
+        User = get_user_model()
+        
+        # Test with superuser
         unique_username = f'newuser_{uuid.uuid4().hex[:8]}'
         data = {'username': unique_username, 'password': 'newpass', 'role': 'penetration_tester'}
         
-        # Test with superuser
         self.client.force_login(self.superuser)
         response = self.client.post(reverse('admin_interface_update') + '?mode=create',
-                                  data=data, content_type='application/json')
+                                  data=json.dumps(data), content_type='application/json')
         self.assertEqual(response.status_code, 200)
         
-        # Use new unique username for each test
+        # Verify user creation
+        created_user = User.objects.filter(username=unique_username).first()
+        self.assertIsNotNone(created_user)
+        self.assertTrue(has_role(created_user, 'penetration_tester'))
+        
+        # Test with sys_admin
         unique_username = f'newuser_{uuid.uuid4().hex[:8]}'
         data['username'] = unique_username
         
-        # Test with sys_admin
         self.client.force_login(self.sys_admin)
         response = self.client.post(reverse('admin_interface_update') + '?mode=create',
-                                  data=data, content_type='application/json')
+                                  data=json.dumps(data), content_type='application/json')
         self.assertEqual(response.status_code, 200)
         
+        # Verify user creation by sys_admin
+        created_user = User.objects.filter(username=unique_username).first()
+        self.assertIsNotNone(created_user)
+        self.assertTrue(has_role(created_user, 'penetration_tester'))
+        
         # Test with normal user
+        unique_username = f'newuser_{uuid.uuid4().hex[:8]}'
+        data['username'] = unique_username
+        
         self.client.force_login(self.normal_user)
         response = self.client.post(reverse('admin_interface_update') + '?mode=create',
-                                  data=data, content_type='application/json')
+                                  data=json.dumps(data), content_type='application/json')
         self.assertEqual(response.status_code, 302)
+        
+        # Verify user was not created
+        self.assertFalse(User.objects.filter(username=unique_username).exists())
 
     def test_superuser_modification_permissions(self):
         url = reverse('admin_interface_update') + f'?user={self.target_superuser.id}'
@@ -169,7 +188,7 @@ class AdminInterfaceUpdateTests(BaseTestCase):
         response = self.client.get(f'{url}&mode=change_status')
         self.target_superuser.refresh_from_db()
         
-        # Check if the status has not changed and we have a 403
+        # Check if the status has not changed and we have a 302
         self.assertEqual(response.status_code, 302)
         self.assertEqual(initial_status, self.target_superuser.is_active)
 
