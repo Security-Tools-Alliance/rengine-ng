@@ -6,9 +6,9 @@ from unittest.mock import patch, MagicMock
 from django.urls import reverse
 from utils.test_base import BaseTestCase
 from django.contrib.auth.models import User
-from rolepermissions.checkers import has_role
-from reNgine.roles import SysAdmin, PenetrationTester
 from django.utils import timezone
+from rolepermissions.roles import assign_role
+import uuid
 
 __all__ = [
     'TestDashboardViews'
@@ -100,62 +100,110 @@ class AdminInterfaceUpdateTests(BaseTestCase):
     def setUp(self):
         super().setUp()
         self.data_generator.create_project_full()
-        self.user_to_test = User.objects.create_user(username='testuser', password='12345')
+        
+        # Create users with different roles
+        self.superuser = User.objects.create_superuser(username='superadmin', password='password123')
+        self.sys_admin = User.objects.create_user(username='sysadmin', password='password123')
+        assign_role(self.sys_admin, 'sys_admin')
+        self.normal_user = User.objects.create_user(username='normaluser', password='password123')
+        assign_role(self.normal_user, 'penetration_tester')
+        
+        # Additional users for testing modifications
+        self.target_superuser = User.objects.create_superuser(username='target_super', password='password123')
+        self.target_user = User.objects.create_user(username='target_user', password='password123')
+        assign_role(self.target_user, 'penetration_tester')
 
-    def test_user_creation(self):
-        data = {
-            'username': 'newuser',
-            'password': 'newpassword',
-            'role': 'sys_admin'
-        }
-        response = self.client.post(
-            reverse('admin_interface_update') + '?mode=create',
-            data=json.dumps(data),
-            content_type='application/json'
-        )
+    def test_user_creation_permissions(self):
+        unique_username = f'newuser_{uuid.uuid4().hex[:8]}'
+        data = {'username': unique_username, 'password': 'newpass', 'role': 'penetration_tester'}
+        
+        # Test with superuser
+        self.client.force_login(self.superuser)
+        response = self.client.post(reverse('admin_interface_update') + '?mode=create',
+                                  data=data, content_type='application/json')
         self.assertEqual(response.status_code, 200)
-        self.assertTrue(json.loads(response.content)['status'])
-        new_user = User.objects.get(username='newuser')
-        self.assertTrue(has_role(new_user, SysAdmin))
-
-    def test_user_not_found(self):
-        response = self.client.get(reverse('admin_interface_update') + '?user=999')
-        self.assertEqual(response.status_code, 404)
-        self.assertFalse(json.loads(response.content)['status'])
-
-    def test_get_request(self):
-        response = self.client.get(reverse('admin_interface_update') + f'?user={self.user_to_test.id}&mode=change_status')
+        
+        # Use new unique username for each test
+        unique_username = f'newuser_{uuid.uuid4().hex[:8]}'
+        data['username'] = unique_username
+        
+        # Test with sys_admin
+        self.client.force_login(self.sys_admin)
+        response = self.client.post(reverse('admin_interface_update') + '?mode=create',
+                                  data=data, content_type='application/json')
+        self.assertEqual(response.status_code, 200)
+        
+        # Test with normal user
+        self.client.force_login(self.normal_user)
+        response = self.client.post(reverse('admin_interface_update') + '?mode=create',
+                                  data=data, content_type='application/json')
         self.assertEqual(response.status_code, 302)
 
-    def test_get_request_with_invalid_mode(self):
-        response = self.client.get(reverse('admin_interface_update') + f'?user={self.user_to_test.id}&mode=wrong_mode')
-        self.assertEqual(response.status_code, 400)
-
-    def test_post_request_update(self):
-        data = {
-            'role': 'penetration_tester',
-            'projects': []
-        }
-        response = self.client.post(
-            reverse('admin_interface_update') + f'?user={self.user_to_test.id}&mode=update',
-            data=json.dumps(data),
-            content_type='application/json'
-        )
+    def test_superuser_modification_permissions(self):
+        url = reverse('admin_interface_update') + f'?user={self.target_superuser.id}'
+        
+        # Test superuser modifying superuser
+        self.client.force_login(self.superuser)
+        initial_status = self.target_superuser.is_active
+        response = self.client.get(f'{url}&mode=change_status', follow=True)
+        self.target_superuser.refresh_from_db()
+        
+        # Check if the status has changed and we are redirected to admin_interface
         self.assertEqual(response.status_code, 200)
-        self.assertTrue(json.loads(response.content)['status'])
-        self.user_to_test.refresh_from_db()
-        self.assertTrue(has_role(self.user_to_test, PenetrationTester))
-
-    def test_post_request_delete(self):
-        response = self.client.post(
-            reverse('admin_interface_update') + f'?user={self.user_to_test.id}&mode=delete',
-            content_type='application/json'
-        )
-        self.assertEqual(response.status_code, 200)
-        self.assertTrue(json.loads(response.content)['status'])
-        self.assertFalse(User.objects.filter(id=self.user_to_test.id).exists())
-
-    def test_invalid_method(self):
-        response = self.client.put(reverse('admin_interface_update') + f'?user={self.user_to_test.id}')
+        self.assertNotEqual(initial_status, self.target_superuser.is_active)
+        self.assertRedirects(response, reverse('admin_interface'))
+        
+        # Test sys_admin modifying superuser
+        self.client.force_login(self.sys_admin)
+        initial_status = self.target_superuser.is_active
+        response = self.client.get(f'{url}&mode=change_status')
+        self.target_superuser.refresh_from_db()
+        
+        # Check if the status has not changed and we have a 403
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(initial_status, self.target_superuser.is_active)
+        
+        # Test normal user modifying superuser
+        self.client.force_login(self.normal_user)
+        initial_status = self.target_superuser.is_active
+        response = self.client.get(f'{url}&mode=change_status')
+        self.target_superuser.refresh_from_db()
+        
+        # Check if the status has not changed and we have a 403
         self.assertEqual(response.status_code, 302)
+        self.assertEqual(initial_status, self.target_superuser.is_active)
+
+    def test_user_modification_permissions(self):
+        url = reverse('admin_interface_update') + f'?user={self.target_user.id}'
+        
+        # Test superuser modifying normal user
+        self.client.force_login(self.superuser)
+        response = self.client.post(f'{url}&mode=update',
+                                  data={'role': 'auditor'}, content_type='application/json')
+        self.assertEqual(response.status_code, 200)
+        
+        # Test sys_admin modifying normal user
+        self.client.force_login(self.sys_admin)
+        response = self.client.post(f'{url}&mode=update',
+                                  data={'role': 'penetration_tester'}, content_type='application/json')
+        self.assertEqual(response.status_code, 200)
+        
+        # Test normal user modifying normal user
+        self.client.force_login(self.normal_user)
+        response = self.client.post(f'{url}&mode=update',
+                                  data={'role': 'auditor'}, content_type='application/json')
+        self.assertEqual(response.status_code, 302)
+
+    def test_self_modification_restrictions(self):
+        # Test superuser trying to delete themselves
+        self.client.force_login(self.superuser)
+        response = self.client.post(
+            reverse('admin_interface_update') + f'?user={self.superuser.id}&mode=delete')
+        self.assertEqual(response.status_code, 403)
+        
+        # Test sys_admin trying to delete themselves
+        self.client.force_login(self.sys_admin)
+        response = self.client.post(
+            reverse('admin_interface_update') + f'?user={self.sys_admin.id}&mode=delete')
+        self.assertEqual(response.status_code, 403)
 

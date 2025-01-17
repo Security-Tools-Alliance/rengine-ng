@@ -19,7 +19,7 @@ from django.template.defaultfilters import slugify
 from rolepermissions.roles import assign_role, clear_roles
 from rolepermissions.decorators import has_permission_decorator
 
-from dashboard.utils import get_user_projects
+from dashboard.utils import get_user_projects, get_user_groups
 from targetApp.models import Domain
 from startScan.models import (
     EndPoint, ScanHistory, Subdomain, Vulnerability, ScanActivity,
@@ -220,20 +220,19 @@ def admin_interface_update(request):
         except get_user_model().DoesNotExist:
             return JsonResponse({'status': False, 'error': 'User not found'}, status=404)
 
-        # Security checks for superusers
-        if target_user.is_superuser:
-            # Only a superuser can modify another superuser
-            if not current_user.is_superuser:
-                return JsonResponse({
-                    'status': False, 
-                    'error': 'Only superadmin can modify another superadmin'
-                }, status=403)
-            # A superuser cannot deactivate/delete themselves
-            if current_user == target_user and mode in ['delete', 'change_status']:
-                return JsonResponse({
-                    'status': False, 
-                    'error': 'Superadmin cannot delete or deactivate themselves'
-                }, status=403)
+        # Security checks for superusers and sys_admins
+        if target_user.is_superuser and not current_user.is_superuser:
+            return JsonResponse({
+                'status': False, 
+                'error': 'Only superadmin can modify another superadmin'
+            }, status=403)
+        
+        # Prevent self-modification for both superusers and sys_admins
+        if current_user == target_user and mode in ['delete', 'change_status'] and (current_user.is_superuser or get_user_groups(current_user) == 'sys_admin'):
+            return JsonResponse({
+                'status': False, 
+                'error': 'Administrators cannot delete or deactivate themselves'
+            }, status=403)
 
     # Check if the request is for user creation
     if method == 'POST' and mode == 'create':
@@ -402,9 +401,6 @@ def delete_project(request, id):
     return JsonResponse(responseData)
 
 def onboarding(request):
-    context = {}
-    error = ''
-
     if request.method == "POST":
         project_name = request.POST.get('project_name')
         slug = slugify(project_name)
@@ -416,6 +412,7 @@ def onboarding(request):
 
         insert_date = timezone.now()
 
+        error = ''
         try:
             Project.objects.create(
                 name=project_name,
@@ -423,7 +420,8 @@ def onboarding(request):
                 insert_date=insert_date
             )
         except Exception as e:
-            error = ' Could not create project, Error: ' + str(e)
+            logger.error(f' Could not create project, Error: {e}')
+            error = ' Could not create project, check logs for more details'
 
 
         try:
@@ -435,7 +433,8 @@ def onboarding(request):
                 )
                 assign_role(user, create_user_role)
         except Exception as e:
-            error = ' Could not create User, Error: ' + str(e)
+            logger.error(f' Could not create User, Error: {e}')
+            error = ' Could not create User, check logs for more details'
 
 
 
@@ -455,6 +454,7 @@ def onboarding(request):
             else:
                 NetlasAPIKey.objects.create(key=key_netlas)
 
+    context = {}
     context['error'] = error
 
     # Get first available project
