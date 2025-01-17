@@ -405,6 +405,7 @@ def delete_project(request, id):
     return JsonResponse(responseData)
 
 def onboarding(request):
+    error = ''
     if request.method == "POST":
         project_name = request.POST.get('project_name')
         slug = slugify(project_name)
@@ -416,7 +417,6 @@ def onboarding(request):
 
         insert_date = timezone.now()
 
-        error = ''
         try:
             Project.objects.create(
                 name=project_name,
