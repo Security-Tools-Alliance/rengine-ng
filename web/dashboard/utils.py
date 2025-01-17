@@ -11,15 +11,6 @@ def get_user_projects(user):
     # Return only projects where user is a member
     return Project.objects.filter(users=user)
 
-def user_has_project_access_by_id(user, project_id):
-    if user.is_superuser or get_user_groups(user) == 'sys_admin':
-        return Project.objects.all()
-    try:
-        project = Project.objects.get(id=project_id)
-        return project in get_user_projects(user)
-    except Project.DoesNotExist:
-        return False
-
 def user_has_project_access(view_func):
     @wraps(view_func)
     def _wrapped_view(request, *args, **kwargs):
