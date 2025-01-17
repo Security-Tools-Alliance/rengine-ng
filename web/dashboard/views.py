@@ -205,44 +205,48 @@ def admin_interface(request):
         }
     )
 
+class UserModificationError(Exception):
+    def __init__(self, message, status_code=403):
+        self.message = message
+        self.status_code = status_code
+        super().__init__(self.message)
+
+def check_user_modification_permissions(current_user, target_user, mode):
+    """Check if current user has permission to modify target user."""
+    if not target_user:
+        raise UserModificationError('User ID not provided', 404)
+
+    # Security checks for superusers and sys_admins
+    if target_user.is_superuser and not current_user.is_superuser:
+        raise UserModificationError('Only superadmin can modify another superadmin')
+    
+    # Prevent self-modification for both superusers and sys_admins
+    if (current_user == target_user and 
+        mode in ['delete', 'change_status'] and 
+        (current_user.is_superuser or get_user_groups(current_user) == 'sys_admin')):
+        raise UserModificationError('Administrators cannot delete or deactivate themselves')
+
 @has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
 def admin_interface_update(request):
     mode = request.GET.get('mode')
     method = request.method
     target_user = get_user_from_request(request)
 
-    if mode and mode != 'create':
-        if not target_user:
-            return JsonResponse({'status': False, 'error': 'User ID not provided'}, status=404)
+    try:
+        if mode and mode != 'create':
+            check_user_modification_permissions(request.user, target_user, mode)
 
-        try:
-            current_user = request.user
-        except get_user_model().DoesNotExist:
-            return JsonResponse({'status': False, 'error': 'User not found'}, status=404)
+        # Check if the request is for user creation
+        if method == 'POST' and mode == 'create':
+            return handle_post_request(request, mode, None)
 
-        # Security checks for superusers and sys_admins
-        if target_user.is_superuser and not current_user.is_superuser:
-            return JsonResponse({
-                'status': False, 
-                'error': 'Only superadmin can modify another superadmin'
-            }, status=403)
-        
-        # Prevent self-modification for both superusers and sys_admins
-        if current_user == target_user and mode in ['delete', 'change_status'] and (current_user.is_superuser or get_user_groups(current_user) == 'sys_admin'):
-            return JsonResponse({
-                'status': False, 
-                'error': 'Administrators cannot delete or deactivate themselves'
-            }, status=403)
+        if method == 'GET':
+            return handle_get_request(request, mode, target_user)
+        elif method == 'POST':
+            return handle_post_request(request, mode, target_user)
 
-    # Check if the request is for user creation
-    if method == 'POST' and mode == 'create':
-        # Skip user check for user creation
-        return handle_post_request(request, mode, None)  # Pass None for user
-
-    if method == 'GET':
-        return handle_get_request(request, mode, target_user)
-    elif method == 'POST':
-        return handle_post_request(request, mode, target_user)
+    except UserModificationError as e:
+        return JsonResponse({'status': False, 'error': e.message}, status=e.status_code)
 
     return HttpResponseRedirect(reverse('admin_interface'))
 
