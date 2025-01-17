@@ -1,7 +1,7 @@
 from urllib.parse import urlparse
 
 from django import template
-
+from dashboard.utils import get_user_groups
 register = template.Library()
 
 
@@ -57,11 +57,4 @@ def previous(some_list, current_index):
 
 @register.filter(name='get_user_role')
 def get_user_role(user):
-    if user.groups.filter(name='sys_admin').exists():
-        return 'sys_admin'
-    elif user.groups.filter(name='auditor').exists():
-        return 'auditor'
-    elif user.groups.filter(name='penetration_tester').exists():
-        return 'penetration_tester'
-    else:
-        return 'unknown'
+    return get_user_groups(user)

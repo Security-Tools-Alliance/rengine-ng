@@ -435,12 +435,9 @@ def onboarding(request):
                 NetlasAPIKey.objects.create(key=key_netlas)
 
     context['error'] = error
-    if request.user.is_superuser:
-        # if super user, redirect to the first project
-        project = Project.objects.first()
-    else:
-        # check is any projects exists for the current user
-        project = Project.objects.filter(users=request.user).first()
+
+    # Get first available project
+    project = get_user_projects(request.user).first()
 
     context['openai_key'] = OpenAiAPIKey.objects.first()
     context['netlas_key'] = NetlasAPIKey.objects.first()
