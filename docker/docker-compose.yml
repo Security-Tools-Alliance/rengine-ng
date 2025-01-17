@@ -52,7 +52,7 @@ services:
       - gf_patterns:/home/rengine/.gf
       - wordlist:/home/rengine/wordlists
     healthcheck:
-      test: ["CMD", "poetry", "-C", "/home/rengine", "run", "celery","-A","reNgine","status"]
+      test: ["CMD", "poetry", "-C", "/home/rengine/rengine", "run", "celery","-A","reNgine","status"]
       interval: 10s
       timeout: 10s
       retries: 60
