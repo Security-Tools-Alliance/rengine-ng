@@ -209,9 +209,9 @@ def admin_interface(request):
 def admin_interface_update(request):
     mode = request.GET.get('mode')
     method = request.method
+    target_user = get_user_from_request(request)
 
     if mode and mode != 'create':
-        target_user = get_user_from_request(request)
         if not target_user:
             return JsonResponse({'status': False, 'error': 'User ID not provided'}, status=404)
 
