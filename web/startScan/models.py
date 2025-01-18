@@ -308,7 +308,7 @@ class Subdomain(models.Model):
 			.count()
 		)
 
-	@property 
+	@property
 	def get_ports(self):
 		"""Get all ports associated with this subdomain's IP addresses"""
 		ports = []
@@ -318,17 +318,19 @@ class Subdomain(models.Model):
 
 	@property
 	def get_ports_by_ip(self):
-		"""Get ports grouped by IP address"""
+		"""Get ports grouped by IP address with their specific service information"""
 		return {
 			ip.address: {
 				'ports': [
 					{
-						'number': port.number,
-						'service_name': port.service_name,
-						'description': port.description,
-						'is_uncommon': port.is_uncommon,
+						'number': port_info.port.number,
+						'service_name': port_info.service_name,
+						'description': port_info.description,
+						'is_uncommon': port_info.port.is_uncommon,
 					}
-					for port in ip.ports.all()
+					for port_info in PortInfo.objects.filter(
+						ip_address=ip
+					).select_related('port').order_by('port__number')
 				],
 				'is_cdn': ip.is_cdn,
 			}
@@ -580,7 +582,7 @@ class IpAddress(models.Model):
 	id = models.AutoField(primary_key=True)
 	address = models.CharField(max_length=100, blank=True, null=True)
 	is_cdn = models.BooleanField(default=False)
-	ports = models.ManyToManyField('Port', related_name='ports')
+	ports = models.ManyToManyField('Port', through='PortInfo', related_name='ip_addresses')
 	geo_iso = models.ForeignKey(
 		CountryISO, on_delete=models.CASCADE, null=True, blank=True)
 	version = models.IntegerField(blank=True, null=True)
@@ -596,13 +598,20 @@ class IpAddress(models.Model):
 class Port(models.Model):
 	id = models.AutoField(primary_key=True)
 	number = models.IntegerField(default=0)
-	service_name = models.CharField(max_length=100, blank=True, null=True)
-	description = models.CharField(max_length=1000, blank=True, null=True)
 	is_uncommon = models.BooleanField(default=False)
 
 	def __str__(self):
 		return str(self.number)
 
+class PortInfo(models.Model):
+	id = models.AutoField(primary_key=True)
+	ip_address = models.ForeignKey('IpAddress', on_delete=models.CASCADE)
+	port = models.ForeignKey('Port', on_delete=models.CASCADE)
+	service_name = models.CharField(max_length=100, blank=True, null=True)
+	description = models.CharField(max_length=1000, blank=True, null=True)
+	
+	class Meta:
+		unique_together = ('ip_address', 'port')
 
 class DirectoryFile(models.Model):
 	id = models.AutoField(primary_key=True)

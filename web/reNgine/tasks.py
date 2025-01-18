@@ -5487,51 +5487,47 @@ def update_port_service_info(xml_file):
             logger.error(f"Failed to update port {service['port']}: {str(e)}")
 
 def create_or_update_port_with_service(port_number, service_info, ip_address=None):
-    """Create or update port with service information from nmap.
-    
-    Args:
-        port_number (int): Port number
-        service_info (dict): Service information from nmap
-        ip_address (IpAddress, optional): IpAddress model instance to associate with port
-        
-    Returns:
-        tuple: (Port instance, bool created)
-    """
-    # Build service description
-    description_parts = []
-    if service_info.get('service_product'):
-        description_parts.append(service_info['service_product'])
-    if service_info.get('service_version'):
-        description_parts.append(service_info['service_version'])
-    if service_info.get('service_extrainfo'):
-        description_parts.append(service_info['service_extrainfo'])
-    
-    # Create or update port
-    port, created = Port.objects.get_or_create(
+    """Create or update port with service information from nmap for specific IP."""
+    # Create base port if doesn't exist
+    port, _ = Port.objects.get_or_create(
         number=port_number,
         defaults={
-            'service_name': service_info.get('service_name', 'unknown'),
-            'description': ' '.join(description_parts) if description_parts else '',
             'is_uncommon': int(port_number) not in [80, 443, 8080, 8443]
         }
     )
     
-    # Update existing port if service info changed
-    if not created:
-        updated = False
-        if port.service_name != service_info.get('service_name', 'unknown'):
-            port.service_name = service_info.get('service_name', 'unknown')
-            updated = True
-        if port.description != ' '.join(description_parts):
-            port.description = ' '.join(description_parts) if description_parts else ''
-            updated = True
-        if updated:
-            port.save()
-            logger.info(f'Updated service info for port {port_number}: {port.service_name} - {port.description}')
-    
-    # Associate with IP if provided
     if ip_address:
-        ip_address.ports.add(port)
+        # Build service description
+        description_parts = []
+        if service_info.get('service_product'):
+            description_parts.append(service_info['service_product'])
+        if service_info.get('service_version'):
+            description_parts.append(service_info['service_version'])
+        if service_info.get('service_extrainfo'):
+            description_parts.append(service_info['service_extrainfo'])
+        
+        # Create or update port info for this IP
+        port_info, created = PortInfo.objects.get_or_create(
+            ip_address=ip_address,
+            port=port,
+            defaults={
+                'service_name': service_info.get('service_name', 'unknown'),
+                'description': ' '.join(description_parts) if description_parts else ''
+            }
+        )
+        
+        # Update if service info changed
+        if not created:
+            updated = False
+            if port_info.service_name != service_info.get('service_name', 'unknown'):
+                port_info.service_name = service_info.get('service_name', 'unknown')
+                updated = True
+            if port_info.description != ' '.join(description_parts):
+                port_info.description = ' '.join(description_parts) if description_parts else ''
+                updated = True
+            if updated:
+                port_info.save()
+                logger.info(f'Updated service info for IP {ip_address.address} port {port_number}: {port_info.service_name} - {port_info.description}')
     
     return port, created
 
