@@ -1444,15 +1444,12 @@ def port_scan(self, hosts=[], ctx={}, description=None):
             urls.append(http_url)
 
         # Add Port in DB
-        port_details = whatportis.get_ports(str(port_number))
-        service_name = port_details[0].name if len(port_details) > 0 else 'unknown'
-        description = port_details[0].description if len(port_details) > 0 else ''
-
-        # get or create port
         port, created = Port.objects.get_or_create(
             number=port_number,
-            service_name=service_name,
-            description=description
+            defaults={
+                'service_name': 'unknown',  # Will be updated by nmap
+                'description': ''  # Will be updated by nmap
+            }
         )
         if port_number in UNCOMMON_WEB_PORTS:
             port.is_uncommon = True
@@ -1584,6 +1581,9 @@ def nmap(
         history_file=self.history_file,
         scan_id=self.scan_id,
         activity_id=self.activity_id)
+
+    # Update port service information
+    update_port_service_info(output_file_xml)
 
     # Get nmap XML results and convert to JSON
     vulns = parse_nmap_results(output_file_xml, output_file, parse_type='vulnerabilities')
@@ -3523,7 +3523,6 @@ def parse_nmap_results(xml_file, output_file=None, parse_type='vulnerabilities')
 
     return results
 
-
 def parse_nmap_http_csrf_output(script_output):
     pass
 
@@ -5243,10 +5242,10 @@ def get_nmap_http_datas(host, ctx):
     # Basic nmap scan for HTTP ports only
     nmap_args = {
         'rate_limit': 150,
-        'nmap_cmd': 'nmap -Pn -p 80,443',
+        'nmap_cmd': 'nmap -Pn -p 80,443,8000,8008,8080-8089,8443,3000,4000-4001,5000,7001,9000,9090,2082-2083,2086-2087,10000 --open',
         'nmap_script': None,
         'nmap_script_args': None,
-        'ports_data': {host: [80, 443]},
+        'ports_data': {host: [80,443,8000,8008,8080-8089,8443,3000,4000-4001,5000,7001,9000,9090,2082-2083,2086-2087,10000]},
     }
     
     # Add retry logic for nmap scan
@@ -5270,34 +5269,75 @@ def get_nmap_http_datas(host, ctx):
         logger.error(f"Failed to generate output file after {max_retries} retries")
         return None
     
-    # Parse results to get open ports
-    results = parse_nmap_results(xml_file, parse_type='ports')
-    results_str = json.dumps(results, indent=2)
-    logger.debug(f'Raw nmap results: {results_str}')
+    # Parse results to get open ports and services
+    port_results = parse_nmap_results(xml_file, parse_type='ports')
+    service_results = parse_nmap_results(xml_file, parse_type='services')
+    
+    # Create service lookup dict for efficiency
+    service_lookup = {
+        f"{service['host']}:{service['port']}": service 
+        for service in service_results
+    }
     
     # Group results by host using atomic transaction
     hosts_data = {}
     with transaction.atomic():
-        for result in results:
+        for result in port_results:
             hostname = result['host']
             if hostname not in hosts_data:
-                hosts_data[hostname] = {'ports': []}
+                hosts_data[hostname] = {
+                    'ports': [],
+                    'schemes': set()
+                }
                 
             if result['state'] == 'open':
-                port = int(result['port'])
-                logger.info(f'Found open port {port} for host {hostname}')
-                if port not in hosts_data[hostname]['ports']:
-                    hosts_data[hostname]['ports'].append(port)
+                port_number = int(result['port'])
+                logger.info(f'Found open port {port_number} for host {hostname}')
+                
+                # Get service info if available
+                service_info = service_lookup.get(f"{hostname}:{port_number}", {})
+                service_name = service_info.get('service_name', '').lower()
+                
+                # Detect scheme from service
+                if service_name in ['http', 'http-proxy', 'http-alt']:
+                    hosts_data[hostname]['schemes'].add('http')
+                elif service_name in ['https', 'https-alt', 'ssl/http', 'ssl/https']:
+                    hosts_data[hostname]['schemes'].add('https')
+                
+                # Get or create IP address
+                ip_address, _ = IpAddress.objects.get_or_create(
+                    address=result.get('ip', hostname)
+                )
+                
+                # Create or update port with service info
+                create_or_update_port_with_service(
+                    port_number=port_number,
+                    service_info=service_info,
+                    ip_address=ip_address
+                )
+                
+                # Add port to hosts_data
+                if port_number not in hosts_data[hostname]['ports']:
+                    hosts_data[hostname]['ports'].append(port_number)
         
-        # Determine scheme for each host
+        # Determine final scheme for each host
         for hostname, data in hosts_data.items():
-            # Prefer HTTPS over HTTP if both are available
-            if 443 in data['ports']:
+            # Prefer HTTPS over HTTP if both are detected
+            if 'https' in data['schemes']:
                 data['scheme'] = 'https'
-            elif 80 in data['ports']:
+            elif 'http' in data['schemes']:
                 data['scheme'] = 'http'
             else:
-                data['scheme'] = None
+                # Fallback to port-based detection if no service info
+                if 443 in data['ports']:
+                    data['scheme'] = 'https'
+                elif 80 in data['ports']:
+                    data['scheme'] = 'http'
+                else:
+                    data['scheme'] = None
+            
+            # Clean up the data structure
+            del data['schemes']
             logger.debug(f'Host {hostname} - scheme: {data["scheme"]}, ports: {data["ports"]}')
     
     return hosts_data
@@ -5432,6 +5472,68 @@ def create_first_endpoint_from_nmap_data(hosts_data, domain, subdomain, ctx):
                 )
 
     return endpoint
+
+def update_port_service_info(xml_file):
+    """Update port information with nmap service detection results"""
+    services = parse_nmap_results(xml_file, parse_type='services')
+    
+    for service in services:
+        try:
+            create_or_update_port_with_service(
+                port_number=int(service['port']),
+                service_info=service
+            )
+        except Exception as e:
+            logger.error(f"Failed to update port {service['port']}: {str(e)}")
+
+def create_or_update_port_with_service(port_number, service_info, ip_address=None):
+    """Create or update port with service information from nmap.
+    
+    Args:
+        port_number (int): Port number
+        service_info (dict): Service information from nmap
+        ip_address (IpAddress, optional): IpAddress model instance to associate with port
+        
+    Returns:
+        tuple: (Port instance, bool created)
+    """
+    # Build service description
+    description_parts = []
+    if service_info.get('service_product'):
+        description_parts.append(service_info['service_product'])
+    if service_info.get('service_version'):
+        description_parts.append(service_info['service_version'])
+    if service_info.get('service_extrainfo'):
+        description_parts.append(service_info['service_extrainfo'])
+    
+    # Create or update port
+    port, created = Port.objects.get_or_create(
+        number=port_number,
+        defaults={
+            'service_name': service_info.get('service_name', 'unknown'),
+            'description': ' '.join(description_parts) if description_parts else '',
+            'is_uncommon': int(port_number) not in [80, 443, 8080, 8443]
+        }
+    )
+    
+    # Update existing port if service info changed
+    if not created:
+        updated = False
+        if port.service_name != service_info.get('service_name', 'unknown'):
+            port.service_name = service_info.get('service_name', 'unknown')
+            updated = True
+        if port.description != ' '.join(description_parts):
+            port.description = ' '.join(description_parts) if description_parts else ''
+            updated = True
+        if updated:
+            port.save()
+            logger.info(f'Updated service info for port {port_number}: {port.service_name} - {port.description}')
+    
+    # Associate with IP if provided
+    if ip_address:
+        ip_address.ports.add(port)
+    
+    return port, created
 
 #----------------------#
 #     Remote debug     #

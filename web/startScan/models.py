@@ -308,6 +308,32 @@ class Subdomain(models.Model):
 			.count()
 		)
 
+	@property 
+	def get_ports(self):
+		"""Get all ports associated with this subdomain's IP addresses"""
+		ports = []
+		for ip in self.ip_addresses.all():
+			ports.extend(ip.ports.all())
+		return sorted(list(set(ports)), key=lambda x: x.number)
+
+	@property
+	def get_ports_by_ip(self):
+		"""Get ports grouped by IP address"""
+		return {
+			ip.address: {
+				'ports': [
+					{
+						'number': port.number,
+						'service_name': port.service_name,
+						'description': port.description,
+						'is_uncommon': port.is_uncommon,
+					}
+					for port in ip.ports.all()
+				],
+				'is_cdn': ip.is_cdn,
+			}
+			for ip in self.ip_addresses.all()
+		}
 
 class SubScan(models.Model):
 	id = models.AutoField(primary_key=True)
