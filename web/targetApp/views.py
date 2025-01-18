@@ -204,8 +204,11 @@ def add_target(request, slug):
                         if created:
                             logger.warning('Added new IP %s', ip)
 
-                    for port in ports:
-                        port, created = Port.objects.get_or_create(number=port_number)
+                    for port_number in ports:
+                        port, created = Port.objects.get_or_create(
+                            number=port_number,
+                            defaults={'is_uncommon': port_number not in [80, 443, 8080, 8443]}
+                        )
                         if created:
                             logger.warning('Added new port %s', port.number)
 

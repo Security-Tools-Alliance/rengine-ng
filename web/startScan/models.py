@@ -313,7 +313,7 @@ class Subdomain(models.Model):
 		"""Get all ports associated with this subdomain's IP addresses"""
 		ports = []
 		for ip in self.ip_addresses.all():
-			ports.extend(ip.ports.all())
+			ports.extend(port_info.port for port_info in PortInfo.objects.filter(ip_address=ip).select_related('port'))
 		return sorted(list(set(ports)), key=lambda x: x.number)
 
 	@property

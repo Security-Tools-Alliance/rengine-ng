@@ -4,17 +4,14 @@ def migrate_port_data(apps, schema_editor):
     IpAddress = apps.get_model('startScan', 'IpAddress')
     PortInfo = apps.get_model('startScan', 'PortInfo')
     
-    # Pour chaque IP
     for ip in IpAddress.objects.all():
-        # Pour chaque port associé à cette IP via l'ancienne relation
-        for port in ip.ports.through.objects.filter(ipaddress=ip):
-            # Créer une entrée PortInfo
+        for port in ip.ports.all():
             PortInfo.objects.get_or_create(
                 ip_address=ip,
                 port=port,
                 defaults={
-                    'service_name': 'unknown',
-                    'description': ''
+                    'service_name': getattr(port, 'service_name', 'unknown'),
+                    'description': getattr(port, 'description', '')
                 }
             )
 

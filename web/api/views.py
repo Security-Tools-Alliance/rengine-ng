@@ -71,6 +71,7 @@ from startScan.models import (
 	IpAddress,
 	MetaFinderDocument,
 	Port,
+	PortInfo,
 	ScanActivity,
 	ScanHistory,
 	Subdomain,
@@ -201,7 +202,11 @@ class GPTAttackSuggestion(APIView):
 			})
 
 		ip_addrs = subdomain.ip_addresses.all()
-		open_ports = ', '.join(f'{port.number}/{port.service_name}' for ip in ip_addrs for port in ip.ports.all())
+		open_ports = ', '.join(
+			f'{port_info.port.number}/{port_info.service_name}' 
+			for ip in ip_addrs 
+			for port_info in PortInfo.objects.filter(ip_address=ip).select_related('port')
+		)
 		tech_used = ', '.join(tech.name for tech in subdomain.technologies.all())
 
 		input_data = f'''
@@ -507,14 +512,14 @@ class FetchMostVulnerable(APIView):
 					.exclude(vuln_count=0)[:limit]
 				)
 
-				if most_vulnerable_subdomains:
-					response['status'] = True
-					response['result'] = (
-						SubdomainSerializer(
-							most_vulnerable_subdomains,
-							many=True)
-						.data
-					)
+			if most_vulnerable_subdomains:
+				response['status'] = True
+				response['result'] = (
+					SubdomainSerializer(
+						most_vulnerable_subdomains,
+						many=True)
+					.data
+				)
 
 		elif target_id:
 			subdomain_query = subdomains.filter(target_domain__id=target_id)
@@ -1591,21 +1596,21 @@ class ListPorts(APIView):
 
 		if target_id:
 			port = Port.objects.filter(
-				ports__in=IpAddress.objects.filter(
+				portinfo__ip_address__in=IpAddress.objects.filter(
 					ip_addresses__in=Subdomain.objects.filter(
 						target_domain__id=target_id))).distinct()
 		elif scan_id:
 			port = Port.objects.filter(
-				ports__in=IpAddress.objects.filter(
+				portinfo__ip_address__in=IpAddress.objects.filter(
 					ip_addresses__in=Subdomain.objects.filter(
 						scan_history__id=scan_id))).distinct()
 		else:
 			port = Port.objects.filter(
-				ports__in=IpAddress.objects.filter(
+				portinfo__ip_address__in=IpAddress.objects.filter(
 					ip_addresses__in=Subdomain.objects.all())).distinct()
 
 		if ip_address:
-			port = port.filter(ports__address=ip_address).distinct()
+			port = port.filter(portinfo__ip_address__address=ip_address).distinct()
 
 		serializer = PortSerializer(port, many=True)
 		return Response({"ports": serializer.data})

@@ -38,6 +38,7 @@ from startScan.models import (
     Technology,
     Vulnerability,
     Port,
+    PortInfo,
     CountryISO,
     MetaFinderDocument,
 )
@@ -386,7 +387,14 @@ class TestDataGenerator:
     def create_port(self):
         """Create and return a test port."""
         self.port = Port.objects.create(
-            number=80, service_name="http", description="open", is_uncommon=True
+            number=80,
+            is_uncommon=True
+        )
+        self.port_info = PortInfo.objects.create(
+            port=self.port,
+            ip_address=self.ip_address,
+            service_name="http",
+            description="open"
         )
         return self.port
 

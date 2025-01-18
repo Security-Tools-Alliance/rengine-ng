@@ -5479,9 +5479,13 @@ def update_port_service_info(xml_file):
     
     for service in services:
         try:
+            ip_address, _ = IpAddress.objects.get_or_create(
+                address=service.get('ip', '')
+            )
             create_or_update_port_with_service(
                 port_number=int(service['port']),
-                service_info=service
+                service_info=service,
+                ip_address=ip_address
             )
         except Exception as e:
             logger.error(f"Failed to update port {service['port']}: {str(e)}")

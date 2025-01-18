@@ -274,19 +274,16 @@ class VisualiseVulnerabilitySerializer(serializers.ModelSerializer):
 
 class VisualisePortSerializer(serializers.ModelSerializer):
 
-	description = serializers.SerializerMethodField('get_description')
-	title = serializers.SerializerMethodField('get_title')
+	description = serializers.SerializerMethodField()
+	title = serializers.SerializerMethodField()
 
 	class Meta:
 		model = Port
-		fields = [
-			'description',
-			'is_uncommon',
-			'title',
-		]
+		fields = ['description', 'is_uncommon', 'title']
 
 	def get_description(self, port):
-		return str(port.number) + "/" + str(port.service_name)
+		port_info = PortInfo.objects.filter(port=port).first()
+		return f"{port.number}/{port_info.service_name if port_info else 'unknown'}"
 
 	def get_title(self, port):
 		if port.is_uncommon:
@@ -977,3 +974,11 @@ class ProjectSerializer(serializers.ModelSerializer):
     class Meta:
         model = Project
         fields = ['id', 'name', 'slug', 'description', 'insert_date']
+
+class PortInfoSerializer(serializers.ModelSerializer):
+    number = serializers.IntegerField(source='port.number')
+    is_uncommon = serializers.BooleanField(source='port.is_uncommon')
+
+    class Meta:
+        model = PortInfo
+        fields = ['number', 'service_name', 'description', 'is_uncommon']
