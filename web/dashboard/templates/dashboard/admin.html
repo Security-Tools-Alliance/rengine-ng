@@ -58,7 +58,9 @@ Admin Settings
               {% for muser in users %}
               <tr>
                 <th>
-                  {% if muser|has_role:'admin' %}
+                  {% if muser.is_superuser %}
+                    <span class="badge bg-soft-danger text-danger p-1">{{muser.username}}</span>
+                  {% elif muser|has_role:'sys_admin' %}
                     <span class="badge bg-soft-success text-success p-1">{{muser.username}}</span>
                   {% elif muser|has_role:'auditor' %}
                     <span class="badge bg-soft-pink text-pink p-1">{{muser.username}}</span>
@@ -74,12 +76,14 @@ Admin Settings
                   {% endif %}
                 </th>
                 <th>
-                  {% if muser|has_role:'sys_admin' %}
+                  {% if muser.is_superuser %}
+                    <span class="badge bg-soft-danger text-danger p-1">Super Admin</span>
+                  {% elif muser|has_role:'sys_admin' %}
                     <span class="badge bg-soft-success text-success p-1">Sys Admin</span>
                   {% elif muser|has_role:'auditor' %}
                     <span class="badge bg-soft-pink text-pink p-1">Auditor</span>
                   {% else %}
-                  <span class="badge bg-soft-primary text-primary p-1">Penetration Tester</span>
+                    <span class="badge bg-soft-primary text-primary p-1">Penetration Tester</span>
                   {% endif %}
                 </th>
                 <td>{{muser.date_joined|naturaltime}}</td>
@@ -99,34 +103,37 @@ Admin Settings
                 </td>
                 <td>
                   {% if user != muser %}
-                    {% if muser.is_active %}
-                    <a href="./update?mode=change_status&user={{ muser.id }}" class="action-icon" 
-                       data-bs-toggle="tooltip" data-bs-placement="bottom" title="Disable Account"> 
-                       <i class="mdi mdi-account-cancel"></i>
-                    </a>
+                    {% if user.is_superuser and muser.is_superuser or user|has_role:'sys_admin' and not muser.is_superuser %}
+                      {# Show action buttons for: superuser->superuser or sys_admin->non-superuser #}
+                      {% if muser.is_active %}
+                        <a href="./update?mode=change_status&user={{ muser.id }}" class="action-icon" 
+                           data-bs-toggle="tooltip" data-bs-placement="bottom" title="Disable Account"> 
+                           <i class="mdi mdi-account-cancel"></i>
+                        </a>
+                      {% else %}
+                        <a href="./update?mode=change_status&user={{ muser.id }}" class="action-icon" 
+                           data-bs-toggle="tooltip" data-bs-placement="bottom" title="Enable Account"> 
+                           <i class="mdi mdi-account-check"></i>
+                        </a>
+                      {% endif %}
+                      {% with user_role=muser|get_user_role %}
+                      {% with user_projects=muser.projects.all|map:'id'|join:',' %}
+                        <a href="#" onclick="update_user_modal({{ muser.id }}, '{{ user_role }}', [{{ user_projects }}])" 
+                          class="action-icon" id="change_user_details_btn" title="Update User Detail" 
+                          data-bs-toggle="tooltip" data-bs-placement="bottom"> 
+                          <i class="mdi mdi-account-edit"></i>
+                        </a>
+                      {% endwith %}
+                      {% endwith %}
+                      <a href="#" onclick="delete_user({{ muser.id }}, '{{ muser.username }}')" class="action-icon" 
+                        data-bs-toggle="tooltip" data-bs-placement="bottom" title="Delete Account"> 
+                        <i class="mdi mdi-trash-can"></i>
+                      </a>
                     {% else %}
-                    <a href="./update?mode=change_status&user={{ muser.id }}" class="action-icon" 
-                       data-bs-toggle="tooltip" data-bs-placement="bottom" title="Enable Account"> 
-                       <i class="mdi mdi-account-check"></i>
-                    </a>
+                      &nbsp;
                     {% endif %}
                   {% else %}
-                  &nbsp;
-                  {% endif %}
-                  {% with user_role=muser|get_user_role %}
-                  {% with user_projects=muser.projects.all|map:'id'|join:',' %}
-                  <a href="#" onclick="update_user_modal({{ muser.id }}, '{{ user_role }}', [{{ user_projects }}])" 
-                     class="action-icon" id="change_user_details_btn" title="Update User Detail" 
-                     data-bs-toggle="tooltip" data-bs-placement="bottom"> 
-                     <i class="mdi mdi-account-edit"></i>
-                  </a>
-                  {% endwith %}
-                  {% endwith %}
-                  {% if user != muser %}
-                  <a href="#" onclick="delete_user({{ muser.id }}, '{{ muser.username }}')" class="action-icon" 
-                     data-bs-toggle="tooltip" data-bs-placement="bottom" title="Delete Account"> 
-                     <i class="mdi mdi-trash-can"></i>
-                  </a>
+                    &nbsp;
                   {% endif %}
                 </td>
               </tr>

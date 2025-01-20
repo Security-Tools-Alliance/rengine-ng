@@ -19,7 +19,7 @@ from django.template.defaultfilters import slugify
 from rolepermissions.roles import assign_role, clear_roles
 from rolepermissions.decorators import has_permission_decorator
 
-from dashboard.utils import get_user_projects
+from dashboard.utils import get_user_projects, get_user_groups
 from targetApp.models import Domain
 from startScan.models import (
     EndPoint, ScanHistory, Subdomain, Vulnerability, ScanActivity,
@@ -205,22 +205,48 @@ def admin_interface(request):
         }
     )
 
+class UserModificationError(Exception):
+    def __init__(self, message, status_code=403):
+        self.message = message
+        self.status_code = status_code
+        super().__init__(self.message)
+
+def check_user_modification_permissions(current_user, target_user, mode):
+    """Check if current user has permission to modify target user."""
+    if not target_user:
+        raise UserModificationError('User ID not provided', 404)
+
+    # Security checks for superusers and sys_admins
+    if target_user.is_superuser and not current_user.is_superuser:
+        raise UserModificationError('Only superadmin can modify another superadmin')
+    
+    # Prevent self-modification for both superusers and sys_admins
+    if (current_user == target_user and 
+        mode in ['delete', 'change_status'] and 
+        (current_user.is_superuser or get_user_groups(current_user) == 'sys_admin')):
+        raise UserModificationError('Administrators cannot delete or deactivate themselves')
+
 @has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
 def admin_interface_update(request):
-    user = get_user_from_request(request)
-    
-    # Check if the request is for user creation
-    if request.method == 'POST' and request.GET.get('mode') == 'create':
-        # Skip user check for user creation
-        return handle_post_request(request, None)  # Pass None for user
+    mode = request.GET.get('mode')
+    method = request.method
+    target_user = get_user_from_request(request)
 
-    if not user:
-        return JsonResponse({'status': False, 'error': 'User not found'}, status=404)
+    try:
+        if mode and mode != 'create':
+            check_user_modification_permissions(request.user, target_user, mode)
 
-    if request.method == 'GET':
-        return handle_get_request(request, user)
-    elif request.method == 'POST':
-        return handle_post_request(request, user)
+        # Check if the request is for user creation
+        if method == 'POST' and mode == 'create':
+            return handle_post_request(request, mode, None)
+
+        if method == 'GET':
+            return handle_get_request(request, mode, target_user)
+        elif method == 'POST':
+            return handle_post_request(request, mode, target_user)
+
+    except UserModificationError as e:
+        return JsonResponse({'status': False, 'error': e.message}, status=e.status_code)
 
     return HttpResponseRedirect(reverse('admin_interface'))
 
@@ -232,8 +258,7 @@ def get_user_from_request(request):
     return None
 
 
-def handle_get_request(request, user):
-    mode = request.GET.get('mode')
+def handle_get_request(request, mode, user):
     if mode == 'change_status':
         user.is_active = not user.is_active
         user.save()
@@ -253,8 +278,7 @@ def handle_get_request(request, user):
     return HttpResponseBadRequest(reverse('admin_interface'), status=400)
 
 
-def handle_post_request(request, user):
-    mode = request.GET.get('mode')
+def handle_post_request(request, mode, user):
     if mode == 'delete':
         return handle_delete_user(request, user)
     elif mode == 'update':
@@ -381,9 +405,7 @@ def delete_project(request, id):
     return JsonResponse(responseData)
 
 def onboarding(request):
-    context = {}
     error = ''
-
     if request.method == "POST":
         project_name = request.POST.get('project_name')
         slug = slugify(project_name)
@@ -402,7 +424,8 @@ def onboarding(request):
                 insert_date=insert_date
             )
         except Exception as e:
-            error = ' Could not create project, Error: ' + str(e)
+            logger.error(f' Could not create project, Error: {e}')
+            error = 'Could not create project, check logs for more details'
 
 
         try:
@@ -414,7 +437,8 @@ def onboarding(request):
                 )
                 assign_role(user, create_user_role)
         except Exception as e:
-            error = ' Could not create User, Error: ' + str(e)
+            logger.error(f'Could not create User, Error: {e}')
+            error = 'Could not create User, check logs for more details'
 
 
 
@@ -434,13 +458,11 @@ def onboarding(request):
             else:
                 NetlasAPIKey.objects.create(key=key_netlas)
 
+    context = {}
     context['error'] = error
-    if request.user.is_superuser:
-        # if super user, redirect to the first project
-        project = Project.objects.first()
-    else:
-        # check is any projects exists for the current user
-        project = Project.objects.filter(users=request.user).first()
+
+    # Get first available project
+    project = get_user_projects(request.user).first()
 
     context['openai_key'] = OpenAiAPIKey.objects.first()
     context['netlas_key'] = NetlasAPIKey.objects.first()
