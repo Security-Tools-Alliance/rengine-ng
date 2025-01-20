@@ -425,7 +425,7 @@ def onboarding(request):
             )
         except Exception as e:
             logger.error(f' Could not create project, Error: {e}')
-            error = ' Could not create project, check logs for more details'
+            error = 'Could not create project, check logs for more details'
 
 
         try:
@@ -437,8 +437,8 @@ def onboarding(request):
                 )
                 assign_role(user, create_user_role)
         except Exception as e:
-            logger.error(f' Could not create User, Error: {e}')
-            error = ' Could not create User, check logs for more details'
+            logger.error(f'Could not create User, Error: {e}')
+            error = 'Could not create User, check logs for more details'
 
 
 
