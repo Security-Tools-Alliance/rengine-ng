@@ -1,6 +1,9 @@
 include .env
 .DEFAULT_GOAL:=help
 
+# Export GID (Group ID)
+export GID=$(shell id -g)
+
 # Define RENGINE_VERSION
 RENGINE_VERSION := $(shell cat web/reNgine/version.txt)
 export RENGINE_VERSION
@@ -48,7 +51,7 @@ images:			## Show all Docker images for reNgine services.
 
 build:			## Build all Docker images locally.
 	@make remove_images
-	${DOCKER_COMPOSE_FILE_CMD} -f ${COMPOSE_FILE_BUILD} build ${SERVICES}
+	${DOCKER_COMPOSE_FILE_CMD} -f ${COMPOSE_FILE_BUILD} build --build-arg GID=$(GID) ${SERVICES}
 
 build_up:		## Build and start all services.
 	@make down
