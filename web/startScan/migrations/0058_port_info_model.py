@@ -16,10 +16,28 @@ class Migration(migrations.Migration):
                 ('id', models.AutoField(primary_key=True, serialize=False)),
                 ('service_name', models.CharField(max_length=100, blank=True, null=True)),
                 ('description', models.CharField(max_length=1000, blank=True, null=True)),
+                ('ip_address', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='startScan.ipaddress')),
+                ('port', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='startScan.port')),
             ],
+            options={
+                'unique_together': {('ip_address', 'port')},
+            },
         ),
         
-        # 2. Remove the fields from the Port model that are moved to PortInfo
+        # 2. Remove the old M2M field
+        migrations.RemoveField(
+            model_name='ipaddress',
+            name='ports',
+        ),
+        
+        # 3. Add new M2M field with through
+        migrations.AddField(
+            model_name='ipaddress',
+            name='ports',
+            field=models.ManyToManyField(through='startScan.PortInfo', related_name='ip_addresses', to='startScan.port'),
+        ),
+        
+        # 4. Remove old fields from Port
         migrations.RemoveField(
             model_name='Port',
             name='service_name',
@@ -27,30 +45,5 @@ class Migration(migrations.Migration):
         migrations.RemoveField(
             model_name='Port',
             name='description',
-        ),
-        
-        # 3. Add the ForeignKey relationships for PortInfo
-        migrations.AddField(
-            model_name='PortInfo',
-            name='ip_address',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='startScan.ipaddress'),
-        ),
-        migrations.AddField(
-            model_name='PortInfo',
-            name='port',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='startScan.port'),
-        ),
-        
-        # 4. Modify the ManyToMany relationship to use the through model
-        migrations.AlterField(
-            model_name='IpAddress',
-            name='ports',
-            field=models.ManyToManyField(through='startScan.PortInfo', related_name='ip_addresses', to='startScan.Port'),
-        ),
-        
-        # 5. Add the unique_together constraint
-        migrations.AlterUniqueTogether(
-            name='PortInfo',
-            unique_together={('ip_address', 'port')},
         ),
     ] 

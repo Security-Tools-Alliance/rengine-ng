@@ -215,10 +215,10 @@ $(document).ready(function() {
 						{
 							Object.entries(data).forEach(([key, value]) => {
 								if (value['is_cdn']) {
-									ip_badge += `<span class='m-1 badge badge-soft-warning badge-link' title="CDN IP Address" onclick="get_ip_details('${value.address}', scan_id=null, domain_id=null)">${value.address}</span>`
+									ip_badge += `<span class='m-1 badge badge-soft-warning badge-link' title="CDN IP Address" onclick="'{% url 'api:listPorts' %}', '{% url 'api:subdomains-list' %}', '${value.address}', scan_id=null, domain_id=null)">${value.address}</span>`
 								}
 								else{
-									ip_badge += `<span class='m-1 badge badge-soft-primary badge-link' onclick="get_ip_details('${value.address}', scan_id=null, domain_id=null)">${value.address}</span>`
+									ip_badge += `<span class='m-1 badge badge-soft-primary badge-link' onclick="'{% url 'api:listPorts' %}', '{% url 'api:subdomains-list' %}', '${value.address}', scan_id=null, domain_id=null)">${value.address}</span>`
 								}
 							});
 							return ip_badge;
@@ -230,21 +230,13 @@ $(document).ready(function() {
 				// open ports
 				{
 					"render": function ( data, type, row ) {
-						port_badge = ''
-						if (row['ports_by_ip']){
-							for (ip in row['ports_by_ip']){
-								ports = row['ports_by_ip'][ip]['ports']
-								for (port in ports){
-									port_obj = ports[port]
-									badge_color = port_obj['is_uncommon'] ? 'danger' : 'primary';
-									title = port_obj['is_uncommon'] ? 'Uncommon Port - ' + port_obj['description'] : port_obj['description'];
-									port_badge += `<span class='m-1 badge badge-soft-${badge_color} bs-tooltip badge-link' title='${title}' onclick="get_port_details(${port_obj['number']}, scan_id=null, domain_id=null)">${port_obj['number']}/${port_obj['service_name']}</span>`
-								}
-							}
-							return port_badge;
-						}
-						return "";
-					},
+						return renderPortBadge(data, {
+							api_ips_url: '{% url 'api:listIPs' %}',
+							api_subdomains_url: '{% url 'api:querySubdomains' %}',
+							scan_id: {{scan_history_id}},
+							domain_id: null
+						});
+				},
 					"targets": 7,
 				},
 				{

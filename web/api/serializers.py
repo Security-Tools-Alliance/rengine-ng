@@ -272,24 +272,6 @@ class VisualiseVulnerabilitySerializer(serializers.ModelSerializer):
 		return vulnerability.name
 
 
-class VisualisePortSerializer(serializers.ModelSerializer):
-
-	description = serializers.SerializerMethodField()
-	title = serializers.SerializerMethodField()
-
-	class Meta:
-		model = Port
-		fields = ['description', 'is_uncommon', 'title']
-
-	def get_description(self, port):
-		port_info = PortInfo.objects.filter(port=port).first()
-		return f"{port.number}/{port_info.service_name if port_info else 'unknown'}"
-
-	def get_title(self, port):
-		if port.is_uncommon:
-			return "Uncommon Port"
-
-
 class VisualiseTechnologySerializer(serializers.ModelSerializer):
 
 	description = serializers.SerializerMethodField('get_description')
@@ -303,29 +285,46 @@ class VisualiseTechnologySerializer(serializers.ModelSerializer):
 	def get_description(self, tech):
 		return tech.name
 
+class VisualisePortSerializer(serializers.ModelSerializer):
+    description = serializers.SerializerMethodField()
+    title = serializers.SerializerMethodField()
+    is_uncommon = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PortInfo
+        fields = ['description', 'title', 'is_uncommon']
+
+    def get_description(self, port_info):
+        return f"{port_info.port.number}/{port_info.service_name}"
+
+    def get_title(self, port_info):
+        if port_info.port.is_uncommon:
+            return "Uncommon Port"
+        return "Port"
+
+    def get_is_uncommon(self, port_info):
+        return port_info.port.is_uncommon
 
 class VisualiseIpSerializer(serializers.ModelSerializer):
+    description = serializers.SerializerMethodField('get_description')
+    children = serializers.SerializerMethodField('get_children')
 
-	description = serializers.SerializerMethodField('get_description')
-	children = serializers.SerializerMethodField('get_children')
+    class Meta:
+        model = IpAddress
+        fields = ['description', 'children']
 
-	class Meta:
-		model = IpAddress
-		fields = [
-			'description',
-			'children'
-		]
+    def get_description(self, ip):
+        return ip.address
 
-	def get_description(self, Ip):
-		return Ip.address
-
-	def get_children(self, ip):
-		port = Port.objects.filter(
-			ports__in=IpAddress.objects.filter(
-				address=ip))
-		serializer = VisualisePortSerializer(port, many=True)
-		return serializer.data
-
+    def get_children(self, ip):
+        port_infos = (
+            PortInfo.objects
+            .filter(ip_address=ip)
+            .select_related('port')
+            .order_by('port__number')
+        )
+        serializer = VisualisePortSerializer(port_infos, many=True)
+        return serializer.data
 
 class VisualiseEndpointSerializer(serializers.ModelSerializer):
 
@@ -812,9 +811,19 @@ class PortSerializer(serializers.ModelSerializer):
 		fields = '__all__'
 
 
-class IpSerializer(serializers.ModelSerializer):
+class PortInfoSerializer(serializers.ModelSerializer):
+	number = serializers.IntegerField(source='port.number')
+	service_name = serializers.CharField()
+	description = serializers.CharField()
+	is_uncommon = serializers.BooleanField(source='port.is_uncommon')
 
-	ports = PortSerializer(many=True)
+	class Meta:
+		model = PortInfo
+		fields = ['number', 'service_name', 'description', 'is_uncommon']
+
+
+class IpSerializer(serializers.ModelSerializer):
+	ports = PortInfoSerializer(source='portinfo_set', many=True)
 
 	class Meta:
 		model = IpAddress
@@ -974,11 +983,3 @@ class ProjectSerializer(serializers.ModelSerializer):
     class Meta:
         model = Project
         fields = ['id', 'name', 'slug', 'description', 'insert_date']
-
-class PortInfoSerializer(serializers.ModelSerializer):
-    number = serializers.IntegerField(source='port.number')
-    is_uncommon = serializers.BooleanField(source='port.is_uncommon')
-
-    class Meta:
-        model = PortInfo
-        fields = ['number', 'service_name', 'description', 'is_uncommon']

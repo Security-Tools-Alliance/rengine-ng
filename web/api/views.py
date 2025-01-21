@@ -1588,32 +1588,41 @@ class ListEmployees(APIView):
 
 
 class ListPorts(APIView):
-	def get(self, request, format=None):
-		req = self.request
-		scan_id = safe_int_cast(req.query_params.get('scan_id'))
-		target_id = safe_int_cast(req.query_params.get('target_id'))
-		ip_address = req.query_params.get('ip_address')
+    def get(self, request, format=None):
+        req = self.request
+        scan_id = safe_int_cast(req.query_params.get('scan_id'))
+        target_id = safe_int_cast(req.query_params.get('target_id'))
+        ip_address = req.query_params.get('ip_address')
 
-		if target_id:
-			port = Port.objects.filter(
-				portinfo__ip_address__in=IpAddress.objects.filter(
-					ip_addresses__in=Subdomain.objects.filter(
-						target_domain__id=target_id))).distinct()
-		elif scan_id:
-			port = Port.objects.filter(
-				portinfo__ip_address__in=IpAddress.objects.filter(
-					ip_addresses__in=Subdomain.objects.filter(
-						scan_history__id=scan_id))).distinct()
-		else:
-			port = Port.objects.filter(
-				portinfo__ip_address__in=IpAddress.objects.filter(
-					ip_addresses__in=Subdomain.objects.all())).distinct()
+        # Build the base query
+        port_info_query = PortInfo.objects.select_related('port', 'ip_address')
 
-		if ip_address:
-			port = port.filter(portinfo__ip_address__address=ip_address).distinct()
+        # Filter based on parameters
+        if target_id:
+            port_info_query = port_info_query.filter(
+                ip_address__ip_addresses__target_domain__id=target_id
+            )
+        elif scan_id:
+            port_info_query = port_info_query.filter(
+                ip_address__ip_addresses__scan_history__id=scan_id
+            )
 
-		serializer = PortSerializer(port, many=True)
-		return Response({"ports": serializer.data})
+        if ip_address:
+            port_info_query = port_info_query.filter(
+                ip_address__address=ip_address
+            )
+
+        # Grouping information
+        ports_data = []
+        for port_info in port_info_query.distinct():
+            ports_data.append({
+                'number': port_info.port.number,
+                'service_name': port_info.service_name,
+                'description': port_info.description,
+                'is_uncommon': port_info.port.is_uncommon,
+            })
+
+        return Response({"ports": ports_data})
 
 
 class ListSubdomains(APIView):
@@ -1643,9 +1652,8 @@ class ListSubdomains(APIView):
 
 		if port:
 			subdomain_query = subdomain_query.filter(
-				ip_addresses__in=IpAddress.objects.filter(
-					ports__in=Port.objects.filter(
-						number=port)))
+				ip_addresses__portinfo__port__number=port
+			).distinct('name')
 
 		if 'only_important' in req.query_params:
 			subdomain_query = subdomain_query.filter(is_important=True)
@@ -2057,6 +2065,13 @@ class SubdomainDatatableViewSet(viewsets.ModelViewSet):
 		if name:
 			self.queryset = self.queryset.filter(name=name)
 
+		# Prefetching necessary relations for get_ports_by_ip
+		self.queryset = self.queryset.prefetch_related(
+			'ip_addresses',
+			'ip_addresses__portinfo_set',
+			'ip_addresses__portinfo_set__port'
+		)
+		
 		return self.queryset
 
 	def filter_queryset(self, qs):

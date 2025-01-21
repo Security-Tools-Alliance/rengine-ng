@@ -870,7 +870,7 @@ Scan Findings
 							<div class="card-body">
 								<h4 class="header-title mb-0"><span id="ip-address-count"><span class="spinner-border spinner-border-sm me-1"></span></span> IP Addresses</h4>
 								<span class="text-warning float-end">*IP Addresses highlighted with yellow are CDN IP</span>
-								<div class="p-2" data-simplebar style="max-height: 235px; min-height: 235px;">
+								<div class="w-100 p-2" data-simplebar style="max-height: 235px; min-height: 235px;">
 									<div id="ip-address" class="mt-2"></div>
 								</div>
 							</div>
@@ -881,7 +881,7 @@ Scan Findings
 							<div class="card-body">
 								<h4 class="header-title mb-0"><span id="ports-count"><span class="spinner-border spinner-border-sm me-1"></span></span> Discovered Ports</h4>
 								<span class="text-danger float-end">*Ports highlighted with red are uncommon Ports</span>
-								<div class="p-2" data-simplebar style="max-height: 235px; min-height: 235px;">
+								<div class="w-100 p-2" data-simplebar style="max-height: 235px; min-height: 235px;">
 									<div id="ports" class="mt-2"></div>
 								</div>
 							</div>
@@ -892,7 +892,7 @@ Scan Findings
 							<div class="card-body">
 								<h4 class="header-title mb-0"><span id="technologies-count"><span class="spinner-border spinner-border-sm me-1"></span></span> Discovered Technologies</h4>
 								<span class="text-warning float-end">&nbsp;</span>
-								<div class="p-2" data-simplebar style="max-height: 235px; min-height: 235px;">
+								<div class="w-100 p-2" data-simplebar style="max-height: 235px; min-height: 235px;">
 									<div id="technologies" class="mt-2"></div>
 								</div>
 							</div>
@@ -1587,10 +1587,10 @@ $(document).ready(function() {
 					{
 						"render": function ( data, type, row ) {
 							if(row['open_status']){
-								return `<div class="form-check mb-2 form-check-primary"><input type="checkbox" name="targets_checkbox['+ e + ']" class="float-start form-check-input" onchange="vuln_status_change(\'{% url 'change_vuln_status' current_project.slug 0 %}\', this, `+data+`);">\n<span class="new-control-indicator"></span><span style="visibility:hidden">c</span></div>`;
+								return `<div class="form-check mb-2 form-check-primary"><input type="checkbox" name="targets_checkbox['+ e + ']" class="float-start form-check-input" onchange="vuln_status_change('{% url 'change_vuln_status' current_project.slug 0 %}\', this, `+data+`);">\n<span class="new-control-indicator"></span><span style="visibility:hidden">c</span></div>`;
 							}
 							else{
-								return `<div class="form-check mb-2 form-check-primary"><input type="checkbox" checked name="targets_checkbox['+ e + ']" class="float-start form-check-input" onchange="vuln_status_change(\'{% url 'change_vuln_status' current_project.slug 0 %}\', this, `+data+`);">\n<span class="new-control-indicator"></span><span style="visibility:hidden">c</span></div>`;
+								return `<div class="form-check mb-2 form-check-primary"><input type="checkbox" checked name="targets_checkbox['+ e + ']" class="float-start form-check-input" onchange="vuln_status_change('{% url 'change_vuln_status' current_project.slug 0 %}\', this, `+data+`);">\n<span class="new-control-indicator"></span><span style="visibility:hidden">c</span></div>`;
 							}
 						},
 						"targets": 0,
@@ -2041,7 +2041,7 @@ $(document).ready(function() {
 
 	get_ips('{% url 'api:listIPs' %}', scan_id={{scan_history_id}}, domain_id=null);
 	get_technologies('{% url 'api:listTechnologies' %}', scan_id={{scan_history_id}}, domain_id=null);
-	get_ports('{% url 'api:listPorts' %}', scan_id={{scan_history_id}}, domain_id=null);
+	get_ports('{{ ip_addresses }}', '{% url 'api:listIPs' %}', '{% url 'api:querySubdomains' %}', scan_id={{scan_history_id}}, domain_id=null);
 
 	get_subdomain_changes('{% url 'api:subdomain-changes-list' %}', {{scan_history_id}});
 	get_endpoint_changes('{% url 'api:endpoint-changes-list' %}', {{scan_history_id}});
@@ -2319,20 +2319,12 @@ $(document).ready(function() {
 					// open ports
 					{
 						"render": function ( data, type, row ) {
-							port_badge = ''
-							if (data){
-								for (ip in data){
-									ports = data[ip]['ports']
-									for (port in ports){
-										port_obj = data[ip]['ports'][port]
-										badge_color = port_obj['is_uncommon'] ? 'danger' : 'primary';
-										title = port_obj['is_uncommon'] ? 'Uncommon Port - ' + port_obj['description'] : port_obj['description'];
-										port_badge += `<span class='m-1 badge badge-soft-${badge_color} bs-tooltip badge-link' title='${title}' onclick="get_port_details('{% url 'api:listPorts' %}', '{% url 'api:subdomains-list' %}', ${port_obj['number']}, {{scan_history_id}})">${port_obj['number']}/${port_obj['service_name']}</span>`
-									}
-								}
-								return port_badge;
-							}
-							return "";
+							return renderPortBadge(data, {
+								api_ips_url: '{% url 'api:listIPs' %}',
+								api_subdomains_url: '{% url 'api:querySubdomains' %}',
+								scan_id: {{scan_history_id}},
+								domain_id: null
+							});
 						},
 						"targets": 7,
 					},

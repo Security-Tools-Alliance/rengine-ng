@@ -26,6 +26,7 @@ from dotted_dict import DottedDict
 from django.utils import timezone, html
 from pycvesearch import CVESearch
 from metafinder.extractor import extract_metadata_from_google_search
+import xml.etree.ElementTree as ET
 
 from reNgine.celery import app
 from reNgine.gpt import GPTVulnerabilityReportGenerator
@@ -1444,11 +1445,23 @@ def port_scan(self, hosts=[], ctx={}, description=None):
             urls.append(http_url)
 
         # Add Port in DB
+        if any(c.isalpha() for c in ip_address):
+            logger.warning(f"Skipping hostname, not a valid IP: {ip_address}")
+            continue
+
         port, created = Port.objects.get_or_create(
             number=port_number,
             defaults={
-                'service_name': 'unknown',  # Will be updated by nmap
-                'description': ''  # Will be updated by nmap
+                'is_uncommon': port_number in UNCOMMON_WEB_PORTS
+            }
+        )
+        ip, _ = IpAddress.objects.get_or_create(address=ip_address)
+        port_info, _ = PortInfo.objects.get_or_create(
+            ip_address=ip,
+            port=port,
+            defaults={
+                'service_name': 'unknown',
+                'description': ''
             }
         )
         if port_number in UNCOMMON_WEB_PORTS:
@@ -5479,8 +5492,30 @@ def update_port_service_info(xml_file):
     
     for service in services:
         try:
+            # Get IP from host address node
+            ip = service.get('ip', '')
+            host = service.get('host', '')
+            
+            # If IP is empty, try to get it from the host
+            if not ip and host:
+                # Parse XML to get IP for this host
+                tree = ET.parse(xml_file)
+                root = tree.getroot()
+                for host_elem in root.findall('.//host'):
+                    hostnames = host_elem.find('hostnames')
+                    if hostnames is not None:
+                        for hostname in hostnames.findall('hostname'):
+                            if hostname.get('name') == host:
+                                ip = host_elem.find('address').get('addr')
+                                break
+            
+            # Skip if still empty or if it's a hostname
+            if not ip or any(c.isalpha() for c in ip):
+                logger.warning(f"Skipping invalid IP address: {ip} for host {host}")
+                continue
+                
             ip_address, _ = IpAddress.objects.get_or_create(
-                address=service.get('ip', '')
+                address=ip
             )
             create_or_update_port_with_service(
                 port_number=int(service['port']),
@@ -5500,6 +5535,7 @@ def create_or_update_port_with_service(port_number, service_info, ip_address=Non
         }
     )
     
+    created = False
     if ip_address:
         # Build service description
         description_parts = []
@@ -5549,3 +5585,4 @@ def debug():
             debugpy.wait_for_client()
     except Exception as e:
         logger.error(e)
+
