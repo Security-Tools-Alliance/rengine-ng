@@ -182,17 +182,16 @@ def initiate_scan(
         subdomain_name = domain.name
         subdomain, _ = save_subdomain(subdomain_name, ctx=ctx)
 
-        # Create initial HTTP URL
-        http_url = f'{domain.name}{url_filter}' if url_filter else domain.name
-        endpoint = None
-
+        # Create initial host
+        host = domain.name
+        
         # Use Nmap to find web services ports
-        logger.warning(f'Using Nmap to find web services on {http_url}')
-        hosts_data = get_nmap_http_datas(http_url, ctx)
+        logger.warning(f'Using Nmap to find web services on {host}')
+        hosts_data = get_nmap_http_datas(host, ctx)
         logger.debug(f'Identified hosts: {hosts_data}')
 
         if not hosts_data:
-            logger.warning(f'Nmap found no web services on host {http_url}. Scan failed.')
+            logger.warning(f'Nmap found no web services on host {host}. Scan failed.')
             scan.scan_status = FAILED_TASK
             scan.error_message = "Sorry, host does not seems to have any web service"
             scan.save()
@@ -201,7 +200,7 @@ def initiate_scan(
         # Create first HTTP endpoint
         endpoint = create_first_endpoint_from_nmap_data(hosts_data, domain, subdomain, ctx)
         if not endpoint:
-            logger.warning(f'Could not create any valid endpoints for {http_url}. Scan failed.')
+            logger.warning(f'Could not create any valid endpoints for {host}. Scan failed.')
             scan.scan_status = FAILED_TASK 
             scan.error_message = "Failed to create valid endpoints"
             scan.save()
@@ -1574,7 +1573,7 @@ def nmap(
     output_file = self.output_path
     output_file_xml = f'{self.results_dir}/{host}_{self.filename}'
     vulns_file = f'{self.results_dir}/{host}_{filename_vulns}'
-    logger.warning(f'Running nmap on {host}:{ports}')
+    logger.warning(f'Running nmap on {host}:common_ports')
 
     # Build cmd
     nmap_cmd = get_nmap_cmd(
@@ -3454,11 +3453,31 @@ def parse_nmap_results(xml_file, output_file=None, parse_type='vulnerabilities')
     for host in hosts:
         # Get hostname/IP
         hostnames_dict = host.get('hostnames', {})
+        address = host.get('address')
+
+        if not address:
+            logger.warning("No address found in host data, skipping...")
+            continue
+
+        # If address is a list, take the first
+        if isinstance(address, list):
+            address = address[0]
+
+        # Check that address contains an @addr attribute
+        if not isinstance(address, dict) or '@addr' not in address:
+            logger.warning("Invalid address format in host data, skipping...")
+            continue
+
         if hostnames_dict:
-            hostnames_list = hostnames_dict['hostname'] if isinstance(hostnames_dict['hostname'], list) else [hostnames_dict['hostname']]
-            hostnames = [entry.get('@name') for entry in hostnames_list]
+            if not (hostname_data := hostnames_dict.get('hostname', [])):
+                hostnames = [address['@addr']]
+            else:
+                # Convert to list if it's a unique dictionary
+                if isinstance(hostname_data, dict):
+                    hostname_data = [hostname_data]
+                hostnames = [entry.get('@name') for entry in hostname_data if entry.get('@name')] or [address['@addr']]
         else:
-            hostnames = [host.get('address')['@addr']]
+            hostnames = [address['@addr']]
 
         # Process each hostname
         for hostname in hostnames:
@@ -5365,6 +5384,7 @@ def create_first_endpoint_from_nmap_data(hosts_data, domain, subdomain, ctx):
 
     endpoint = None
     is_ip_scan = validators.ipv4(domain.name) or validators.ipv6(domain.name)
+    url_filter = ctx.get('url_filter', '').rstrip('/')
 
     # For IP scans, ensure we have an entry for the IP itself
     if is_ip_scan and domain.name not in hosts_data:
@@ -5378,7 +5398,7 @@ def create_first_endpoint_from_nmap_data(hosts_data, domain, subdomain, ctx):
         if not data['scheme']:
             continue
 
-        host_url = f"{data['scheme']}://{hostname}"
+        host_url = f"{data['scheme']}://{hostname}{url_filter}"
         current_subdomain = subdomain
         logger.debug(f'Processing HTTP URL: {host_url}')
 
@@ -5391,7 +5411,7 @@ def create_first_endpoint_from_nmap_data(hosts_data, domain, subdomain, ctx):
                 if rdns_subdomain:
                     # Create endpoint for rDNS
                     rdns_endpoint, _ = save_endpoint(
-                        f"{data['scheme']}://{hostname}",
+                        f"{data['scheme']}://{hostname}{url_filter}",
                         ctx=ctx,
                         crawl=False,
                         is_default=True,
@@ -5411,7 +5431,7 @@ def create_first_endpoint_from_nmap_data(hosts_data, domain, subdomain, ctx):
             # Always try to create endpoint for IP itself
             if hostname == domain.name or not endpoint:
                 current_endpoint, _ = save_endpoint(
-                    f"{data['scheme']}://{domain.name}",
+                    f"{data['scheme']}://{domain.name}{url_filter}",
                     ctx=ctx,
                     crawl=False,
                     is_default=True,
@@ -5423,7 +5443,7 @@ def create_first_endpoint_from_nmap_data(hosts_data, domain, subdomain, ctx):
                         current_subdomain,
                         current_endpoint,
                         extra_datas={
-                            'http_url': f"{data['scheme']}://{domain.name}",
+                            'http_url': f"{data['scheme']}://{domain.name}{url_filter}",
                             'open_ports': data['ports']
                         }
                     )
@@ -5531,7 +5551,7 @@ def create_or_update_port_with_service(port_number, service_info, ip_address=Non
     port, _ = Port.objects.get_or_create(
         number=port_number,
         defaults={
-            'is_uncommon': int(port_number) not in [80, 443, 8080, 8443]
+            'is_uncommon': port_number in UNCOMMON_WEB_PORTS
         }
     )
     
