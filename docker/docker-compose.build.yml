@@ -6,10 +6,16 @@ services:
     build: ./redis
 
   celery:
-    build: ./celery
+    build:
+      context: ./celery
+      args:
+        GID: ${GID}
 
   web:
-    build: ./web
+    build:
+      context: ./web
+      args:
+        GID: ${GID}
 
   proxy:
     build: ./proxy
