@@ -113,9 +113,6 @@ def initiate_scan(
 
         logger.warning(f'Initiating scan for domain {domain.name} on celery')
 
-        # Get path filter
-        url_filter = url_filter.rstrip('/')
-
         # for live scan scan history id is passed as scan_history_id 
         # and no need to create scan_history object
 
@@ -5243,7 +5240,7 @@ def run_gf_list():
         }
 
 def get_nmap_http_datas(host, ctx):
-    """Check if port 80 or 443 are opened and get HTTP status code for given hosts.
+    """Check if standard and non-standard HTTP ports are open for given hosts.
     
     Args:
         host (str): Initial hostname to scan
@@ -5252,12 +5249,9 @@ def get_nmap_http_datas(host, ctx):
     Returns:
         dict: Dictionary of results per host:
             {
-                'host1': {'scheme': 'https', 'ports': [80, 443]},
-                'host2': {'scheme': 'http', 'ports': [80]}
+                'host1': {'scheme': 'https', 'ports': [80, 443, 8080]},
+                'host2': {'scheme': 'http', 'ports': [80, 8000]}
             }
-            
-    Raises:
-        NmapScanError: If scan fails after max retries
     """
     results_dir = ctx.get('results_dir', '/tmp')
     filename = ctx.get('filename', 'nmap.xml')
@@ -5271,14 +5265,21 @@ def get_nmap_http_datas(host, ctx):
         logger.error(f"Failed to create safe path for XML file: {str(e)}")
         return None
     
-    # Basic nmap scan for HTTP ports only
+    # Combine standard (80,443) and uncommon web ports
+    all_ports = [80, 443] + UNCOMMON_WEB_PORTS
+    # Convert ports list to nmap format (e.g. "80,443,8000-8089,...")
+    ports_str = ','.join(str(p) for p in sorted(set(all_ports)))
+    
+    # Basic nmap scan for all HTTP ports
     nmap_args = {
         'rate_limit': 150,
-        'nmap_cmd': 'nmap -Pn -p 80,443,8000,8008,8080-8089,8443,3000,4000-4001,5000,7001,9000,9090,2082-2083,2086-2087,10000 --open',
+        'nmap_cmd': f'nmap -Pn -p {ports_str} --open',
         'nmap_script': None,
         'nmap_script_args': None,
-        'ports_data': {host: [80,443,8000,8008,8080-8089,8443,3000,4000-4001,5000,7001,9000,9090,2082-2083,2086-2087,10000]},
+        'ports_data': {host: all_ports},
     }
+    
+    logger.info(f'Scanning ports: {ports_str}')
     
     # Add retry logic for nmap scan
     max_retries = 3
@@ -5388,121 +5389,125 @@ def create_first_endpoint_from_nmap_data(hosts_data, domain, subdomain, ctx):
 
     # For IP scans, ensure we have an entry for the IP itself
     if is_ip_scan and domain.name not in hosts_data:
-        # Create entry for IP with data from rDNS if available
         rdns_hostname = next(iter(hosts_data.keys()), None)
         if rdns_hostname and hosts_data[rdns_hostname]:
             hosts_data[domain.name] = hosts_data[rdns_hostname].copy()
             logger.info(f"Created IP endpoint data from rDNS {rdns_hostname}")
 
     for hostname, data in hosts_data.items():
-        if not data['scheme']:
-            continue
-
-        host_url = f"{data['scheme']}://{hostname}{url_filter}"
         current_subdomain = subdomain
-        logger.debug(f'Processing HTTP URL: {host_url}')
+        schemes_to_try = []
+        
+        # If scheme is detected, try it first
+        if data['scheme']:
+            schemes_to_try.append(data['scheme'])
+        
+        # Add any missing schemes to try
+        for scheme in ['https', 'http']:
+            if scheme not in schemes_to_try:
+                schemes_to_try.append(scheme)
 
-        # For IP scans, create endpoints for both IP and rDNS
-        if is_ip_scan:
-            if hostname != domain.name:
-                # Create subdomain for rDNS
-                logger.info(f'Creating subdomain for rDNS hostname: {hostname}')
-                rdns_subdomain, _ = save_subdomain(hostname, ctx=ctx)
-                if rdns_subdomain:
-                    # Create endpoint for rDNS
-                    rdns_endpoint, _ = save_endpoint(
-                        f"{data['scheme']}://{hostname}{url_filter}",
+        # Try each port with each scheme
+        successful_endpoint = None
+        for port in data['ports']:
+            for scheme in schemes_to_try:
+                host_url = f"{scheme}://{hostname}:{port}{url_filter}"
+                logger.debug(f'Processing HTTP URL: {host_url}')
+
+                # For IP scans, create endpoints for both IP and rDNS
+                if is_ip_scan:
+                    if hostname != domain.name:
+                        # Create subdomain for rDNS
+                        logger.info(f'Creating subdomain for rDNS hostname: {hostname}')
+                        rdns_subdomain, _ = save_subdomain(hostname, ctx=ctx)
+                        if rdns_subdomain:
+                            # Try to create endpoint for rDNS
+                            rdns_endpoint, _ = save_endpoint(
+                                host_url,
+                                ctx=ctx,
+                                crawl=True,
+                                is_default=True,
+                                subdomain=rdns_subdomain
+                            )
+                            if rdns_endpoint:
+                                successful_endpoint = rdns_endpoint
+                                save_subdomain_metadata(
+                                    rdns_subdomain,
+                                    rdns_endpoint,
+                                    extra_datas={
+                                        'http_url': host_url,
+                                        'open_ports': data['ports']
+                                    }
+                                )
+                                break  # Found working scheme, try next port
+                    
+                    # Always try to create endpoint for IP itself
+                    if hostname == domain.name or not endpoint:
+                        current_endpoint, _ = save_endpoint(
+                            f"{scheme}://{domain.name}:{port}{url_filter}",
+                            ctx=ctx,
+                            crawl=True,
+                            is_default=True,
+                            subdomain=current_subdomain
+                        )
+                        if current_endpoint:
+                            successful_endpoint = current_endpoint
+                            save_subdomain_metadata(
+                                current_subdomain,
+                                current_endpoint,
+                                extra_datas={
+                                    'http_url': f"{scheme}://{domain.name}:{port}{url_filter}",
+                                    'open_ports': data['ports']
+                                }
+                            )
+                            break  # Found working scheme, try next port
+
+                # For regular domain scans
+                else:
+                    if hostname != domain.name:
+                        logger.info(f'Creating subdomain for hostname: {hostname}')
+                        current_subdomain, _ = save_subdomain(hostname, ctx=ctx)
+                        if not current_subdomain:
+                            logger.warning(f'Could not create subdomain for hostname: {hostname}. Skipping this host.')
+                            continue
+
+                    # Try to create endpoint with crawling
+                    current_endpoint, _ = save_endpoint(
+                        host_url,
                         ctx=ctx,
-                        crawl=False,
+                        crawl=True,
                         is_default=True,
-                        subdomain=rdns_subdomain,
-                        http_status=0
+                        subdomain=current_subdomain
                     )
-                    if rdns_endpoint:
+
+                    if current_endpoint:
+                        successful_endpoint = current_endpoint
                         save_subdomain_metadata(
-                            rdns_subdomain,
-                            rdns_endpoint,
+                            current_subdomain,
+                            current_endpoint,
                             extra_datas={
                                 'http_url': host_url,
                                 'open_ports': data['ports']
                             }
                         )
-            
-            # Always try to create endpoint for IP itself
-            if hostname == domain.name or not endpoint:
-                current_endpoint, _ = save_endpoint(
-                    f"{data['scheme']}://{domain.name}{url_filter}",
-                    ctx=ctx,
-                    crawl=False,
-                    is_default=True,
-                    subdomain=current_subdomain,
-                    http_status=0
-                )
-                if current_endpoint:
-                    save_subdomain_metadata(
-                        current_subdomain,
-                        current_endpoint,
-                        extra_datas={
-                            'http_url': f"{data['scheme']}://{domain.name}{url_filter}",
-                            'open_ports': data['ports']
-                        }
-                    )
-                    endpoint = current_endpoint
+                        break  # Found working scheme, try next port
 
-        # For regular domain scans, keep existing behavior
-        else:
-            if hostname != domain.name:
-                logger.info(f'Creating subdomain for hostname: {hostname}')
-                current_subdomain, _ = save_subdomain(hostname, ctx=ctx)
-                if not current_subdomain:
-                    logger.warning(f'Could not create subdomain for hostname: {hostname}. Skipping this host.')
-                    continue
+            if successful_endpoint:
+                break  # Found working port, stop trying others
 
-            # Try to create endpoint with crawling first
-            current_endpoint, _ = save_endpoint(
-                host_url,
-                ctx=ctx,
-                crawl=True,
-                is_default=True,
-                subdomain=current_subdomain
+        # Keep track of hostname data even if no endpoint was created
+        if not successful_endpoint:
+            save_subdomain_metadata(
+                current_subdomain,
+                None,
+                extra_datas={
+                    'http_url': f"unknown://{hostname}{url_filter}",
+                    'open_ports': data['ports']
+                }
             )
-
-            # If crawling failed, try without crawling as fallback
-            if not current_endpoint and data.get('ports'):
-                logger.info(f'Creating endpoint without crawling for {host_url}')
-                current_endpoint, _ = save_endpoint(
-                    host_url,
-                    ctx=ctx,
-                    crawl=False,
-                    is_default=True,
-                    subdomain=current_subdomain,
-                    http_status=0  # Unknown status
-                )
-
-            # Save metadata for all endpoints
-            if current_endpoint:
-                save_subdomain_metadata(
-                    current_subdomain,
-                    current_endpoint,
-                    extra_datas={
-                        'http_url': host_url,
-                        'open_ports': data['ports']
-                    }
-                )
-
-                # Keep track of first endpoint (prioritizing main domain)
-                if not endpoint or hostname == domain.name:
-                    endpoint = current_endpoint
-            else:
-                # Keep track of hostname data even if endpoint creation failed
-                save_subdomain_metadata(
-                    current_subdomain,
-                    None,
-                    extra_datas={
-                        'http_url': host_url,
-                        'open_ports': data['ports']
-                    }
-                )
+        # Update main endpoint if needed
+        elif not endpoint or hostname == domain.name:
+            endpoint = successful_endpoint
 
     return endpoint
 
