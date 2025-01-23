@@ -2,7 +2,7 @@ include .env
 .DEFAULT_GOAL:=help
 
 # Export GID (Group ID)
-export GID=$(shell id -g $(SUDO_USER))
+export GID=$(if $(SUDO_USER),$(shell id -g $(SUDO_USER)),$(shell id -g))
 
 # Define RENGINE_VERSION
 RENGINE_VERSION := $(shell cat web/reNgine/version.txt)
