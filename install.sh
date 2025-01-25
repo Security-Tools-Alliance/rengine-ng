@@ -195,12 +195,25 @@ main() {
   tput setaf 1;
 
   isNonInteractive=false
-  while getopts nh opt; do
-     case $opt in
-        n) isNonInteractive=true ;;
-        h) usageFunction ;;
-        ?) usageFunction ;;
-     esac
+  # Get args from sudo or directly
+  args="${@:-${SUDO_COMMAND#*/install.sh }}"
+  for arg in $args
+  do
+    case $arg in
+      -n|--non-interactive)
+        isNonInteractive=true
+        ;;
+      -h|--help)
+        usageFunction
+        ;;
+      ./install.sh)
+        # Skip the script name
+        ;;
+      *)
+        log "Unknown argument: $arg" $COLOR_RED
+        usageFunction
+        ;;
+    esac
   done
 
   if [ $isNonInteractive = false ]; then
@@ -214,6 +227,7 @@ main() {
           nano .env
         ;;
     esac
+  fi
 
   log "Checking and installing reNgine-ng prerequisites..." $COLOR_CYAN
 
@@ -222,6 +236,7 @@ main() {
   check_docker
   check_docker_compose
 
+  if [ $isNonInteractive = false ]; then
     log "Do you want to build Docker images from source or use pre-built images (recommended)? \nThis saves significant build time but requires good download speeds for it to complete fast." $COLOR_RED
     log "1) From source" $COLOR_YELLOW
     log "2) Use pre-built images (default)" $COLOR_YELLOW
