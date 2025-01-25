@@ -10,7 +10,8 @@ LABEL \
 ENV DEBIAN_FRONTEND="noninteractive" \
     DATABASE="postgres"
 ENV USERNAME="rengine"
-ARG GID
+ARG HOST_UID
+ARG HOST_GID
 
 RUN apt update -y && apt install -y      \
     build-essential     \
@@ -42,9 +43,9 @@ RUN fc-cache -f && \
     fc-list | sort
 
 ENV USERNAME="rengine"
-RUN addgroup --gid $GID --system $USERNAME && \
+RUN addgroup --gid $HOST_GID --system $USERNAME && \
     mkdir -p /home/$USERNAME && \
-    adduser --gid $GID --system --shell /bin/false --disabled-password --uid $GID --home /home/$USERNAME $USERNAME && \
+    adduser --gid $HOST_GID --system --shell /bin/false --disabled-password --uid $HOST_UID --home /home/$USERNAME $USERNAME && \
     chown $USERNAME:$USERNAME /home/$USERNAME
 
 # Download and install geckodriver
