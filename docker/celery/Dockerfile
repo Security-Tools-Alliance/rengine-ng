@@ -11,6 +11,12 @@ ENV DEBIAN_FRONTEND="noninteractive" \
     DATABASE="postgres"
 ENV USERNAME="rengine"
 
+RUN apt update -y && apt install -y \
+    gcc-11 \
+    g++-11 \
+    && update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 100 \
+    && update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-11 100
+
 RUN apt update -y && apt install -y      \
     build-essential     \
     zlib1g-dev          \
@@ -82,11 +88,11 @@ RUN ARCH=$(dpkg --print-architecture) && \
     fi
 
 # Install python 3.10
-RUN cd /root && wget https://www.python.org/ftp/python/3.10.0/Python-3.10.0.tgz && \
-    tar -xvf Python-3.10.0.tgz && \
-    rm Python-3.10.0.tgz && \
-    cd Python-3.10.0 && \
-    ./configure && \
+RUN cd /root && wget https://www.python.org/ftp/python/3.10.13/Python-3.10.13.tgz && \
+    tar -xvf Python-3.10.13.tgz && \
+    rm Python-3.10.13.tgz && \
+    cd Python-3.10.13 && \
+    ./configure --enable-optimmizations && \
     make -j4 && \
     make altinstall
 
