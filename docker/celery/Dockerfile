@@ -112,17 +112,17 @@ RUN ARCH=$(dpkg --print-architecture) \
         && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/tomnomnom/gf@dcd4c361f9f5ba302294ed38b8ce278e8ba69006 \
         && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/tomnomnom/unfurl@v0.4.3 \
         && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/tomnomnom/waybackurls@v0.1.0 \
-        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/projectdiscovery/httpx/cmd/httpx@v1.6.0 \
-        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@v2.6.6 \
-        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@v3.2.6 \
-        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/projectdiscovery/naabu/v2/cmd/naabu@v2.3.0 \
+        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/projectdiscovery/httpx/cmd/httpx@v1.6.9 \
+        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@v2.6.7 \
+        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@v3.3.5 \
+        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/projectdiscovery/naabu/v2/cmd/naabu@v2.3.2 \
         && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/hakluke/hakrawler@latest \
-        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/lc/gau/v2/cmd/gau@v2.2.1 \
+        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/lc/gau/v2/cmd/gau@v2.2.4 \
         && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/owasp-amass/amass/v4/...@v4.2.0 \
         && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/ffuf/ffuf/v2@v2.1.0 \
-        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/projectdiscovery/tlsx/cmd/tlsx@v1.1.6 \
-        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/hahwul/dalfox/v2@v2.9.2 \
-        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/projectdiscovery/katana/cmd/katana@v1.1.0 \
+        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/projectdiscovery/tlsx/cmd/tlsx@v1.1.8 \
+        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/hahwul/dalfox/v2@v2.9.3 \
+        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/projectdiscovery/katana/cmd/katana@v1.1.1 \
         && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/dwisiswant0/crlfuzz/cmd/crlfuzz@v1.4.1 \
         && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/sa7mon/s3scanner@c544f1cf00f70cae3f2155b24d336f515b7c598b \
         && chmod 700 -R $GOPATH/pkg/* \
@@ -177,12 +177,14 @@ RUN cd $TOOLPATH/.github/OneForAll && mv /home/$USERNAME/oneforall-pyproject.tom
     cd /home/$USERNAME && poetry install
 
 # Create tools config files
-RUN nuclei -silent && naabu -version && subfinder -version && mkdir -p /home/$USERNAME/.config/theHarvester
+RUN nuclei -silent && naabu -version && subfinder -version && \
+    mkdir -p /home/$USERNAME/.config/theHarvester && \
+    mkdir -p /home/$USERNAME/.config/amass && \
+    mkdir -p /home/$USERNAME/.config/gau
 COPY --chown=$USERNAME:$USERNAME ./config/the-harvester-api-keys.yaml /home/$USERNAME/.config/theHarvester/api-keys.yaml
-COPY --chown=$USERNAME:$USERNAME ./config/amass.ini /home/$USERNAME/.config/amass.ini
-COPY --chown=$USERNAME:$USERNAME ./config/.gau.toml /home/$USERNAME/.config/.gau.toml
-RUN ln -s /home/$USERNAME/.config/.gau.toml /home/$USERNAME/.gau.toml
-
+COPY --chown=$USERNAME:$USERNAME ./config/amass.ini /home/$USERNAME/.config/amass/config.ini
+COPY --chown=$USERNAME:$USERNAME ./config/gau.toml /home/$USERNAME/.config/gau/config.toml
+RUN ln -s /home/$USERNAME/.config/theHarvester /home/$USERNAME/.theHarvester
 COPY ./entrypoint.sh /entrypoint.sh
 RUN mkdir -p /home/$USERNAME/rengine /home/$USERNAME/scan_results \
     && chown -R $USERNAME:$USERNAME /home/$USERNAME/rengine \
