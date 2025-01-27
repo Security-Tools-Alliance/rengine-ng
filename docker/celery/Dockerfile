@@ -10,12 +10,8 @@ LABEL \
 ENV DEBIAN_FRONTEND="noninteractive" \
     DATABASE="postgres"
 ENV USERNAME="rengine"
-
-RUN apt update -y && apt install -y \
-    gcc-11 \
-    g++-11 \
-    && update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 100 \
-    && update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-11 100
+ARG HOST_UID
+ARG HOST_GID
 
 RUN apt update -y && apt install -y      \
     build-essential     \
@@ -47,9 +43,9 @@ RUN fc-cache -f && \
     fc-list | sort
 
 ENV USERNAME="rengine"
-RUN addgroup --gid 1000 --system $USERNAME && \
+RUN addgroup --gid $HOST_GID --system $USERNAME && \
     mkdir -p /home/$USERNAME && \
-    adduser --gid 1000 --system --shell /bin/false --disabled-password --uid 1000 --home /home/$USERNAME $USERNAME && \
+    adduser --gid $HOST_GID --system --shell /bin/false --disabled-password --uid $HOST_UID --home /home/$USERNAME $USERNAME && \
     chown $USERNAME:$USERNAME /home/$USERNAME
 
 # Download and install geckodriver
@@ -88,11 +84,11 @@ RUN ARCH=$(dpkg --print-architecture) && \
     fi
 
 # Install python 3.10
-RUN cd /root && wget https://www.python.org/ftp/python/3.10.13/Python-3.10.13.tgz && \
-    tar -xvf Python-3.10.13.tgz && \
-    rm Python-3.10.13.tgz && \
-    cd Python-3.10.13 && \
-    ./configure --enable-optimmizations && \
+RUN cd /root && wget https://www.python.org/ftp/python/3.10.0/Python-3.10.0.tgz && \
+    tar -xvf Python-3.10.0.tgz && \
+    rm Python-3.10.0.tgz && \
+    cd Python-3.10.0 && \
+    ./configure --enable-optimizations && \
     make -j4 && \
     make altinstall
 
