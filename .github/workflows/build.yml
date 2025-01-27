@@ -32,7 +32,7 @@ env:
 
 jobs:
   build-and-push:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     strategy:
       matrix:
         image: [celery, web, postgres, redis, ollama, certs, proxy]
@@ -91,7 +91,7 @@ jobs:
   update-release:
     needs: build-and-push
     if: github.event_name == 'release' && github.event.action == 'published'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
