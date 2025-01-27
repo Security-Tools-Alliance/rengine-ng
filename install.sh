@@ -236,27 +236,46 @@ main() {
   check_docker
   check_docker_compose
 
-  if [ $isNonInteractive = false ]; then
-    log "Do you want to build Docker images from source or use pre-built images (recommended)? \nThis saves significant build time but requires good download speeds for it to complete fast." $COLOR_RED
-    log "1) From source" $COLOR_YELLOW
-    log "2) Use pre-built images (default)" $COLOR_YELLOW
-    read -p "Enter your choice (1 or 2, default is 2): " choice
+if [ -n "$SUDO_USER" ]; then
+    current_id=$(id -u "$SUDO_USER")
+else
+    current_id=$(id -u)
+fi
 
-    case $choice in
-        1)
-            INSTALL_TYPE="source"
-            ;;
-        2|"")
-            INSTALL_TYPE="prebuilt"
-            ;;
-        *)
-            log "Invalid choice. Defaulting to pre-built images." $COLOR_RED
-            INSTALL_TYPE="prebuilt"
-            ;;
-    esac
+if [ "$current_id" -ne 1000 ]; then
+    INSTALL_TYPE="source"
+    log "Build has been forced because your user ID is not the same as the pre-built images. If you want to use pre-built images, your current user installing reNgine-ng must be 1000." $COLOR_RED
+else
+    if [ $isNonInteractive = false ]; then
+        log "Do you want to build Docker images from source or use pre-built images (recommended)? \nThis saves significant build time but requires good download speeds for it to complete fast." $COLOR_RED
+        log "1) From source" $COLOR_YELLOW
+        log "2) Use pre-built images (default)" $COLOR_YELLOW
+        read -p "Enter your choice (1 or 2, default is 2): " choice
 
-    log "Selected installation type: $INSTALL_TYPE" $COLOR_CYAN
-  fi
+        case $choice in
+            1)
+                INSTALL_TYPE="source"
+                ;;
+            2|"")
+                INSTALL_TYPE="prebuilt"
+                ;;
+            *)
+                log "Invalid choice. Defaulting to pre-built images." $COLOR_RED
+                INSTALL_TYPE="prebuilt"
+                ;;
+        esac
+    fi
+fi
+
+if [ -z "$INSTALL_TYPE" ]; then
+    log "Error: INSTALL_TYPE is not set" $COLOR_RED
+    exit 1
+elif [ "$INSTALL_TYPE" != "prebuilt" ] && [ "$INSTALL_TYPE" != "source" ]; then
+    log "Error: INSTALL_TYPE must be either 'prebuilt' or 'source'" $COLOR_RED
+    exit 1
+fi
+
+log "Selected installation type: $INSTALL_TYPE" $COLOR_CYAN
 
   # Non-interactive install
   if [ $isNonInteractive = true ]; then

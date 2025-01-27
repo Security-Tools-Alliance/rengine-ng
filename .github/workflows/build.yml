@@ -81,6 +81,9 @@ jobs:
           context: ./docker/${{ matrix.image }}
           file: ./docker/${{ matrix.image }}/Dockerfile
           push: ${{ github.event_name != 'pull_request' || github.event.inputs.push_image == 'true' }}
+          build-args: |
+            HOST_UID=1000
+            HOST_GID=1000
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           platforms: linux/amd64,linux/arm64
