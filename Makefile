@@ -1,8 +1,10 @@
 include .env
 .DEFAULT_GOAL:=help
 
-# Export GID (Group ID)
-export GID=$(shell id -g)
+# Export host UID & GID
+export HOST_UID=$(if $(SUDO_USER),$(shell id -u $(SUDO_USER)),$(shell id -u))
+export HOST_GID=$(if $(SUDO_USER),$(shell id -g $(SUDO_USER)),$(shell id -g))
+
 
 # Define RENGINE_VERSION
 RENGINE_VERSION := $(shell cat web/reNgine/version.txt)
@@ -55,7 +57,7 @@ images:			## Show all Docker images for reNgine services.
 
 build:			## Build all Docker images locally.
 	@make remove_images
-	${DOCKER_COMPOSE_FILE_CMD} -f ${COMPOSE_FILE_BUILD} build --build-arg GID=$(GID) ${SERVICES}
+	${DOCKER_COMPOSE_FILE_CMD} -f ${COMPOSE_FILE_BUILD} build --build-arg HOST_UID=$(HOST_UID) --build-arg HOST_GID=$(HOST_GID) ${SERVICES}
 
 build_up:		## Build and start all services.
 	@make down

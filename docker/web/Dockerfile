@@ -10,15 +10,16 @@ LABEL \
 ENV DEBIAN_FRONTEND="noninteractive" \
     DATABASE="postgres"
 ENV USERNAME="rengine"
-ARG GID
+ARG HOST_UID
+ARG HOST_GID
 
 RUN apk add --no-cache bash postgresql-libs curl fontconfig ttf-freefont font-noto terminus-font net-tools htop vim && \
     apk add --no-cache py3-pip gcc musl-dev python3-dev pango zlib-dev jpeg-dev openjpeg-dev g++ libffi-dev && \
     apk add --no-cache --virtual .build-deps gcc python3-dev musl-dev postgresql-dev && \
     fc-cache -f && \ 
     fc-list | sort && \
-    addgroup --gid $GID -S $USERNAME && \
-    adduser -g $GID -u $GID -S --shell /bin/bash --ingroup $USERNAME $USERNAME
+    addgroup --gid $HOST_GID -S $USERNAME && \
+    adduser -g $HOST_GID -u $HOST_UID -S --shell /bin/bash --ingroup $USERNAME $USERNAME
 
 USER $USERNAME
 ENV PATH=/home/$USERNAME/.local/bin:${PATH}
