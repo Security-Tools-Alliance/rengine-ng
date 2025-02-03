@@ -35,6 +35,7 @@ RUN apt update -y && apt install -y      \
     gettext             \
     nmap                \
     net-tools           \
+    geoip-bin           \
     htop                \
     firefox-esr         \
     fontconfig fonts-freefont-ttf fonts-noto fonts-terminus
