@@ -71,7 +71,6 @@ from startScan.models import (
 	IpAddress,
 	MetaFinderDocument,
 	Port,
-	PortInfo,
 	ScanActivity,
 	ScanHistory,
 	Subdomain,
@@ -203,9 +202,9 @@ class GPTAttackSuggestion(APIView):
 
 		ip_addrs = subdomain.ip_addresses.all()
 		open_ports = ', '.join(
-			f'{port_info.port.number}/{port_info.service_name}' 
-			for ip in ip_addrs 
-			for port_info in PortInfo.objects.filter(ip_address=ip).select_related('port')
+			f'{port.number}/{port.service_name}'
+			for ip in ip_addrs
+			for port in ip.ports.all()
 		)
 		tech_used = ', '.join(tech.name for tech in subdomain.technologies.all())
 
@@ -1595,33 +1594,34 @@ class ListPorts(APIView):
         ip_address = req.query_params.get('ip_address')
 
         # Build the base query
-        port_info_query = PortInfo.objects.select_related('port', 'ip_address')
+        port_query = Port.objects.all()
 
         # Filter based on parameters
         if target_id:
-            port_info_query = port_info_query.filter(
+            port_query = port_query.filter(
                 ip_address__ip_addresses__target_domain__id=target_id
             )
         elif scan_id:
-            port_info_query = port_info_query.filter(
+            port_query = port_query.filter(
                 ip_address__ip_addresses__scan_history__id=scan_id
             )
 
         if ip_address:
-            port_info_query = port_info_query.filter(
+            port_query = port_query.filter(
                 ip_address__address=ip_address
             )
 
         # Grouping information
         ports_data = []
-        for port_info in port_info_query.distinct():
-            ports_data.append({
-                'number': port_info.port.number,
-                'service_name': port_info.service_name,
-                'description': port_info.description,
-                'is_uncommon': port_info.port.is_uncommon,
-            })
-
+        ports_data.extend(
+            {
+                'number': port.number,
+                'service_name': port.service_name,
+                'description': port.description,
+                'is_uncommon': port.is_uncommon,
+            }
+            for port in port_query.distinct()
+        )
         return Response({"ports": ports_data})
 
 
@@ -1652,7 +1652,7 @@ class ListSubdomains(APIView):
 
 		if port:
 			subdomain_query = subdomain_query.filter(
-				ip_addresses__portinfo__port__number=port
+				ip_addresses__ports__number=port
 			).distinct('name')
 
 		if 'only_important' in req.query_params:
@@ -2068,8 +2068,7 @@ class SubdomainDatatableViewSet(viewsets.ModelViewSet):
 		# Prefetching necessary relations for get_ports_by_ip
 		self.queryset = self.queryset.prefetch_related(
 			'ip_addresses',
-			'ip_addresses__portinfo_set',
-			'ip_addresses__portinfo_set__port'
+			'ip_addresses__ports',
 		)
 		
 		return self.queryset

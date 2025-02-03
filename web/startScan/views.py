@@ -916,8 +916,7 @@ def create_report(request, slug, id):
         IpAddress.objects
         .filter(ip_addresses__in=subdomains)
         .prefetch_related(
-            'portinfo_set',
-            'portinfo_set__port'
+            'ports',
         )
         .distinct()
     )

@@ -771,8 +771,8 @@
                   {{ip.address}}
                 </div>
                 <div class="cell" style="width: 38%">
-                  {% for port_info in ip.portinfo_set.all %}
-                    {{port_info.port.number}}/{{port_info.service_name}}{% if not forloop.last %},{% endif %}
+                  {% for port in ip.ports.all %}
+                    {{port.number}}/{{port.service_name}}{% if not forloop.last %},{% endif %}
                   {% endfor %}
                 </div>
                 {% if ip.is_cdn %}
@@ -823,14 +823,14 @@
                   <ul>
                     {% for ip in subdomain.ip_addresses.all %}
                       <li>{{ip.address}}
-                        {% if ip.portinfo_set.all %}
+                        {% if ip.ports.all %}
                           <ul>
-                            {% for port_info in ip.portinfo_set.all %}
+                            {% for port in ip.ports.all %}
                               <li>
-                                {{port_info.port.number}}/{{port_info.service_name}}
-                                {% if port_info.description %}
+                                {{port.number}}/{{port.service_name}}
+                                {% if port.description %}
                                   <br>
-                                  <span style="padding-left: 20px; color: #666;">Description: {{port_info.description}}</span>
+                                  <span style="padding-left: 20px; color: #666;">Description: {{port.description}}</span>
                                 {% endif %}
                               </li>
                             {% endfor %}

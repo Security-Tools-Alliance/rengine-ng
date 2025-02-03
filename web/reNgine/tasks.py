@@ -1445,24 +1445,14 @@ def port_scan(self, hosts=[], ctx={}, description=None):
             logger.warning(f"Skipping hostname, not a valid IP: {ip_address}")
             continue
 
-        port, created = Port.objects.get_or_create(
+        port = Port.objects.create(
             number=port_number,
-            defaults={
-                'is_uncommon': port_number in UNCOMMON_WEB_PORTS
-            }
+            service_name='unknown',
+            description='',
+            is_uncommon=port_number in UNCOMMON_WEB_PORTS
         )
+
         ip, _ = IpAddress.objects.get_or_create(address=ip_address)
-        port_info, _ = PortInfo.objects.get_or_create(
-            ip_address=ip,
-            port=port,
-            defaults={
-                'service_name': 'unknown',
-                'description': ''
-            }
-        )
-        if port_number in UNCOMMON_WEB_PORTS:
-            port.is_uncommon = True
-            port.save()
         ip.ports.add(port)
         ip.save()
         if host in ports_data:
@@ -1473,7 +1463,7 @@ def port_scan(self, hosts=[], ctx={}, description=None):
         # Send notification
         logger.warning(f'Found opened port {port_number} on {ip_address} ({host})')
 
-    if len(ports_data) == 0:
+    if not ports_data:
         logger.info('Finished running naabu port scan - No open ports found.')
         if nmap_enabled:
             logger.info('Nmap scans skipped')
@@ -1515,7 +1505,7 @@ def run_nmap(self, ctx, **nmap_args):
         self: RengineTask instance
         ctx: Scan context
         nmap_args: Dictionary containing nmap configuration
-            - nmap_cmd: Custom nmap command
+            - nmap_cmd: Custom nmap args
             - nmap_script: NSE scripts to run
             - nmap_script_args: NSE script arguments
             - ports_data: Dictionary mapping hosts to their open ports
@@ -1526,7 +1516,7 @@ def run_nmap(self, ctx, **nmap_args):
         ctx_nmap['description'] = get_task_title(f'nmap_{host}', self.scan_id, self.subscan_id)
         ctx_nmap['track'] = False
         sig = nmap.si(
-                cmd=nmap_args.get('nmap_cmd'),
+                args=nmap_args.get('nmap_cmd'),
                 ports=port_list,
                 host=host,
                 script=nmap_args.get('nmap_script'),
@@ -1542,7 +1532,7 @@ def run_nmap(self, ctx, **nmap_args):
 @app.task(name='nmap', queue='main_scan_queue', base=RengineTask, bind=True)
 def nmap(
         self,
-        cmd=None,
+        args=None,
         ports=[],
         host=None,
         input_file=None,
@@ -1554,7 +1544,7 @@ def nmap(
     """Run nmap on a host.
 
     Args:
-        cmd (str, optional): Existing nmap command to complete.
+        args (str, optional): Existing nmap args to complete.
         ports (list, optional): List of ports to scan.
         host (str, optional): Host to scan.
         input_file (str, optional): Input hosts file.
@@ -1571,10 +1561,11 @@ def nmap(
     output_file_xml = f'{self.results_dir}/{host}_{self.filename}'
     vulns_file = f'{self.results_dir}/{host}_{filename_vulns}'
     logger.warning(f'Running nmap on {host}:common_ports')
+    logger.debug(f'Scan Engine args: {args}')
 
     # Build cmd
     nmap_cmd = get_nmap_cmd(
-        cmd=cmd,
+        args=args,
         ports=ports_str,
         script=script,
         script_args=script_args,
@@ -5273,7 +5264,7 @@ def get_nmap_http_datas(host, ctx):
     # Basic nmap scan for all HTTP ports
     nmap_args = {
         'rate_limit': 150,
-        'nmap_cmd': f'nmap -Pn -p {ports_str} --open',
+        'nmap_cmd': f'-Pn -p {ports_str} --open',
         'nmap_script': None,
         'nmap_script_args': None,
         'ports_data': {host: all_ports},
@@ -5496,7 +5487,7 @@ def create_first_endpoint_from_nmap_data(hosts_data, domain, subdomain, ctx):
                 break  # Found working port, stop trying others
 
         # Keep track of hostname data even if no endpoint was created
-        if not successful_endpoint:
+        if not successful_endpoint and current_subdomain:  # Added check for current_subdomain
             save_subdomain_metadata(
                 current_subdomain,
                 None,
@@ -5552,15 +5543,20 @@ def update_port_service_info(xml_file):
 
 def create_or_update_port_with_service(port_number, service_info, ip_address=None):
     """Create or update port with service information from nmap for specific IP."""
-    # Create base port if doesn't exist
-    port, _ = Port.objects.get_or_create(
-        number=port_number,
-        defaults={
-            'is_uncommon': port_number in UNCOMMON_WEB_PORTS
-        }
-    )
+    ports = Port.objects.filter(number=port_number)
     
-    created = False
+    if ports.count() > 1:
+        kept_port = ports.first()
+        ports.exclude(id=kept_port.id).delete()
+        port = kept_port
+    elif ports.exists():
+        port = ports.first()
+    else:
+        port = Port.objects.create(
+            number=port_number,
+            is_uncommon=port_number in UNCOMMON_WEB_PORTS
+        )
+    
     if ip_address:
         # Build service description
         description_parts = []
@@ -5571,30 +5567,17 @@ def create_or_update_port_with_service(port_number, service_info, ip_address=Non
         if service_info.get('service_extrainfo'):
             description_parts.append(service_info['service_extrainfo'])
         
-        # Create or update port info for this IP
-        port_info, created = PortInfo.objects.get_or_create(
-            ip_address=ip_address,
-            port=port,
-            defaults={
-                'service_name': service_info.get('service_name', 'unknown'),
-                'description': ' '.join(description_parts) if description_parts else ''
-            }
-        )
+        # Update port info
+        port.service_name = service_info.get('service_name', 'unknown')
+        port.description = ' '.join(description_parts) if description_parts else ''
+        port.save()
         
-        # Update if service info changed
-        if not created:
-            updated = False
-            if port_info.service_name != service_info.get('service_name', 'unknown'):
-                port_info.service_name = service_info.get('service_name', 'unknown')
-                updated = True
-            if port_info.description != ' '.join(description_parts):
-                port_info.description = ' '.join(description_parts) if description_parts else ''
-                updated = True
-            if updated:
-                port_info.save()
-                logger.info(f'Updated service info for IP {ip_address.address} port {port_number}: {port_info.service_name} - {port_info.description}')
+        # Add M2M relation with IP
+        ip_address.ports.add(port)
+        
+        logger.info(f'Updated service info for IP {ip_address.address} port {port_number}: {port.service_name} - {port.description}')
     
-    return port, created
+    return port
 
 #----------------------#
 #     Remote debug     #

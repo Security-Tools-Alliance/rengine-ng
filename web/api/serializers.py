@@ -291,19 +291,19 @@ class VisualisePortSerializer(serializers.ModelSerializer):
     is_uncommon = serializers.SerializerMethodField()
 
     class Meta:
-        model = PortInfo
+        model = Port
         fields = ['description', 'title', 'is_uncommon']
 
-    def get_description(self, port_info):
-        return f"{port_info.port.number}/{port_info.service_name}"
+    def get_description(self, port):
+        return f"{port.number}/{port.service_name}"
 
-    def get_title(self, port_info):
-        if port_info.port.is_uncommon:
+    def get_title(self, port):
+        if port.is_uncommon:
             return "Uncommon Port"
         return "Port"
 
-    def get_is_uncommon(self, port_info):
-        return port_info.port.is_uncommon
+    def get_is_uncommon(self, port):
+        return port.is_uncommon
 
 class VisualiseIpSerializer(serializers.ModelSerializer):
     description = serializers.SerializerMethodField('get_description')
@@ -317,13 +317,12 @@ class VisualiseIpSerializer(serializers.ModelSerializer):
         return ip.address
 
     def get_children(self, ip):
-        port_infos = (
-            PortInfo.objects
+        ports = (
+            Port.objects
             .filter(ip_address=ip)
-            .select_related('port')
-            .order_by('port__number')
+            .order_by('number')
         )
-        serializer = VisualisePortSerializer(port_infos, many=True)
+        serializer = VisualisePortSerializer(ports, many=True)
         return serializer.data
 
 class VisualiseEndpointSerializer(serializers.ModelSerializer):
@@ -811,23 +810,12 @@ class PortSerializer(serializers.ModelSerializer):
 		fields = '__all__'
 
 
-class PortInfoSerializer(serializers.ModelSerializer):
-	number = serializers.IntegerField(source='port.number')
-	service_name = serializers.CharField()
-	description = serializers.CharField()
-	is_uncommon = serializers.BooleanField(source='port.is_uncommon')
-
-	class Meta:
-		model = PortInfo
-		fields = ['number', 'service_name', 'description', 'is_uncommon']
-
-
 class IpSerializer(serializers.ModelSerializer):
-	ports = PortInfoSerializer(source='portinfo_set', many=True)
+    ports = PortSerializer(many=True)
 
-	class Meta:
-		model = IpAddress
-		fields = '__all__'
+    class Meta:
+        model = IpAddress
+        fields = '__all__'
 
 
 class DirectoryFileSerializer(serializers.ModelSerializer):
