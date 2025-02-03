@@ -1646,37 +1646,32 @@ def waf_detection(self, ctx={}, description=None):
         logger.error(f'No URLs to check for WAF. Skipping.')
         return
 
-    cmd = f'wafw00f -i {input_path} -o {self.output_path}'
+    cmd = f'wafw00f -i {input_path} -o {self.output_path} -f json'
     run_command(
         cmd,
         history_file=self.history_file,
         scan_id=self.scan_id,
         activity_id=self.activity_id)
+        
     if not os.path.isfile(self.output_path):
         logger.error(f'Could not find {self.output_path}')
         return
 
     with open(self.output_path) as file:
-        wafs = file.readlines()
+        wafs = json.load(file)
 
-    for line in wafs:
-        line = " ".join(line.split())
-        splitted = line.split(' ', 1)
-        waf_info = splitted[1].strip()
-        waf_name = waf_info[:waf_info.find('(')].strip()
-        waf_manufacturer = waf_info[waf_info.find('(')+1:waf_info.find(')')].strip().replace('.', '')
-        http_url = sanitize_url(splitted[0].strip())
-        if not waf_name or waf_name == 'None':
+    for waf_data in wafs:
+        if not waf_data.get('detected') or not waf_data.get('firewall'):
             continue
 
         # Add waf to db
         waf, _ = Waf.objects.get_or_create(
-            name=waf_name,
-            manufacturer=waf_manufacturer
+            name=waf_data['firewall'],
+            manufacturer=waf_data.get('manufacturer', '')
         )
 
         # Add waf info to Subdomain in DB
-        subdomain_name = get_subdomain_from_url(http_url)
+        subdomain_name = get_subdomain_from_url(waf_data['url'])
         logger.info(f'Wafw00f Subdomain : {subdomain_name}')
 
         try:
@@ -1684,12 +1679,13 @@ def waf_detection(self, ctx={}, description=None):
                 name=subdomain_name,
                 scan_history=self.scan,
             )
-        except:
-            logger.warning(f'Subdomain {subdomain_name} was not found in the db, skipping waf detection for this domain.')
-            continue
+            # Clear existing WAFs and set the new one
+            subdomain.waf.clear()
+            subdomain.waf.add(waf)
+            subdomain.save()
+        except Subdomain.DoesNotExist:
+            logger.warning(f'Subdomain {subdomain_name} was not found in the db, skipping waf detection.')
 
-        subdomain.waf.add(waf)
-        subdomain.save()
     return wafs
 
 
