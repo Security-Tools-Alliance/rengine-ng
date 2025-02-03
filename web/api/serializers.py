@@ -295,7 +295,7 @@ class VisualisePortSerializer(serializers.ModelSerializer):
         fields = ['description', 'title', 'is_uncommon']
 
     def get_description(self, port):
-        return f"{port.number}/{port.service_name}"
+        return f"{port.number}/{port.service_name}/{port.service_name}"
 
     def get_title(self, port):
         if port.is_uncommon:
@@ -317,11 +317,7 @@ class VisualiseIpSerializer(serializers.ModelSerializer):
         return ip.address
 
     def get_children(self, ip):
-        ports = (
-            Port.objects
-            .filter(ip_address=ip)
-            .order_by('number')
-        )
+        ports = ip.ports.all()
         serializer = VisualisePortSerializer(ports, many=True)
         return serializer.data
 
