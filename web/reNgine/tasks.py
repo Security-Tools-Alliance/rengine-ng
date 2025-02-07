@@ -4413,7 +4413,7 @@ def run_command(cmd, cwd=None, shell=False, history_file=None, scan_id=None, act
     return_code = process.returncode
 
     if output:
-        output = output if not remove_ansi_sequence else re.sub(r'\x1b\[[0-9;]*[mGKH]', '', output)
+        output = re.sub(r'\x1b\[[0-9;]*[mGKH]', '', output) if remove_ansi_sequence else output 
     
     if return_code != 0:
         error_msg = f"Command failed with exit code {return_code}"
@@ -4421,8 +4421,8 @@ def run_command(cmd, cwd=None, shell=False, history_file=None, scan_id=None, act
             error_msg += f"\nError output:\n{error_output}"
         logger.error(error_msg)
         
-    command_obj.output = output if output else None
-    command_obj.error_output = error_output if error_output else None
+    command_obj.output = output or None
+    command_obj.error_output = error_output or None
     command_obj.return_code = return_code
     command_obj.save()
     
@@ -4485,8 +4485,8 @@ def stream_command(cmd, cwd=None, shell=False, history_file=None, encoding='utf-
             error_msg += f"\nError output:\n{error_output}"
         logger.error(error_msg)
         
-    command_obj.output = output if output else None
-    command_obj.error_output = error_output if error_output else None
+    command_obj.output = output or None
+    command_obj.error_output = error_output or None
     command_obj.return_code = return_code
     command_obj.save()
     
