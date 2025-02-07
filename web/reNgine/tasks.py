@@ -2518,7 +2518,12 @@ def nuclei_scan(self, urls=[], ctx={}, description=None):
         return
 
     if intensity == 'normal': # reduce number of endpoints to scan
+        if not os.path.exists(input_path):
+            with open(input_path, 'w') as f:
+                f.write('\n'.join(urls))
+
         unfurl_filter = str(Path(self.results_dir) / 'urls_unfurled.txt')
+        
         run_command(
             f"cat {input_path} | unfurl -u format %s://%d%p |uro > {unfurl_filter}",
             shell=True,
@@ -2526,15 +2531,20 @@ def nuclei_scan(self, urls=[], ctx={}, description=None):
             scan_id=self.scan_id,
             activity_id=self.activity_id)
         run_command(
-            f'sort -u {unfurl_filter} -o  {unfurl_filter}',
+            f'sort -u {unfurl_filter} -o {unfurl_filter}',
             shell=True,
             history_file=self.history_file,
             scan_id=self.scan_id,
             activity_id=self.activity_id)
+            
+        if not os.path.exists(unfurl_filter) or os.path.getsize(unfurl_filter) == 0:
+            logger.error(f"Failed to create or empty unfurled URLs file at {unfurl_filter}")
+            unfurl_filter = input_path
+            
         input_path = unfurl_filter
 
     # Build templates
-    # logger.info('Updating Nuclei templates ...')
+    logger.info('Updating Nuclei templates ...')
     run_command(
         'nuclei -update-templates',
         shell=True,
@@ -2553,8 +2563,11 @@ def nuclei_scan(self, urls=[], ctx={}, description=None):
             templates.extend(nuclei_templates)
 
     if custom_nuclei_templates:
-        custom_nuclei_template_paths = [f'{str(elem)}.yaml' for elem in custom_nuclei_templates]
-        template = templates.extend(custom_nuclei_template_paths)
+        custom_nuclei_template_paths = [
+            str(Path(NUCLEI_DEFAULT_TEMPLATES_PATH) / f'{str(elem)}.yaml') 
+            for elem in custom_nuclei_templates
+        ]
+        templates.extend(custom_nuclei_template_paths)
 
     # Build CMD
     cmd = 'nuclei -j'
@@ -2598,7 +2611,6 @@ def nuclei_scan(self, urls=[], ctx={}, description=None):
     logger.info('Vulnerability scan with all severities completed...')
 
     return None
-
 @app.task(name='dalfox_xss_scan', queue='main_scan_queue', base=RengineTask, bind=True)
 def dalfox_xss_scan(self, urls=[], ctx={}, description=None):
     """XSS Scan using dalfox
@@ -3789,12 +3801,51 @@ def record_exists(model, data, exclude_keys=[]):
     Returns:
         bool: True if the record exists, False otherwise.
     """
+    def clean_request(request_str):
+        if not request_str:
+            return request_str
+        request_lines = request_str.split('\r\n')
+        cleaned_lines = [line for line in request_lines if not line.startswith('User-Agent:')]
+        return '\r\n'.join(cleaned_lines)
 
     # Extract the keys that will be used for the lookup
-    lookup_fields = {key: data[key] for key in data if key not in exclude_keys}
+    lookup_fields = data.copy()
+    
+    # Clean the request field if it contains a User-Agent line
+    if 'request' in lookup_fields:
+        lookup_fields['request'] = clean_request(lookup_fields['request'])
 
-    # Return True if a record exists based on the lookup fields, False otherwise
-    return model.objects.filter(**lookup_fields).exists()
+    # Remove the fields to exclude
+    lookup_fields = {key: lookup_fields[key] for key in lookup_fields if key not in exclude_keys}
+
+    # Get all existing records that might match
+    base_query = {key: value for key, value in lookup_fields.items() if key != 'request'}
+    existing_records = model.objects.filter(**base_query)
+    
+    if not existing_records.exists():
+        logger.debug(f"No existing records found with lookup fields: {lookup_fields}")
+        return False
+    
+    # For each existing record, log the differences
+    for record in existing_records:
+        differences = {}
+        for key, value in lookup_fields.items():
+            existing_value = getattr(record, key)
+            if key == 'request':
+                existing_value = clean_request(existing_value)
+            if existing_value != value:
+                differences[key] = {
+                    'existing': existing_value,
+                    'new': value
+                }
+        
+        if differences:
+            logger.debug(f"Record {record.id} has differences: {differences}")
+        else:
+            logger.debug(f"Record {record.id} matches exactly with lookup fields: {lookup_fields}")
+            return True
+            
+    return False
 
 @app.task(name='geo_localize', bind=False, queue='geo_localize_queue')
 def geo_localize(host, ip_id=None):
@@ -4352,30 +4403,31 @@ def run_command(cmd, cwd=None, shell=False, history_file=None, scan_id=None, act
     Returns:
         tuple: A tuple containing the return code and output of the command.
     """
-    logger.info(f"Executing command: {cmd}")
+    logger.info(f"Starting execution of command: {cmd}")
     command_obj = create_command_object(cmd, scan_id, activity_id)
     command = prepare_command(cmd, shell)
     logger.debug(f"Prepared run command: {command}")
-
-    process = execute_command(command, shell, cwd)
-    output = ''
-    for stdout_line in iter(process.stdout.readline, ""):
-        item = stdout_line.strip()
-        output += '\n' + item
-        logger.debug(item)
     
-    process.stdout.close()
-    process.wait()
+    process = execute_command(command, shell, cwd)
+    output, error_output = process.communicate()
     return_code = process.returncode
-    command_obj.output = output
+
+    if output:
+        output = output if not remove_ansi_sequence else re.sub(r'\x1b\[[0-9;]*[mGKH]', '', output)
+    
+    if return_code != 0:
+        error_msg = f"Command failed with exit code {return_code}"
+        if error_output:
+            error_msg += f"\nError output:\n{error_output}"
+        logger.error(error_msg)
+        
+    command_obj.output = output if output else None
+    command_obj.error_output = error_output if error_output else None
     command_obj.return_code = return_code
     command_obj.save()
-
+    
     if history_file:
         write_history(history_file, cmd, return_code, output)
-    
-    if remove_ansi_sequence:
-        output = remove_ansi_escape_sequences(output)
     
     return return_code, output
 
@@ -4403,20 +4455,41 @@ def stream_command(cmd, cwd=None, shell=False, history_file=None, encoding='utf-
     
     process = execute_command(command, shell, cwd)
     output = ""
+    error_output = ""
 
-    for line in iter(process.stdout.readline, b''):
-        if not line:
+    while True:
+        stdout_data = process.stdout.readline()
+        stderr_data = process.stderr.readline()
+        
+        if not stdout_data and not stderr_data and process.poll() is not None:
             break
-        item = process_line(line, trunc_char)
-        yield item
-        output += line
-        command_obj.output = output
-        command_obj.save()
+            
+        if stdout_data:
+            output += stdout_data
+            try:
+                item = process_line(stdout_data, trunc_char)
+                if item:
+                    yield item
+            except Exception as e:
+                logger.error(f"Error processing output line: {e}")
+                
+        if stderr_data:
+            error_output += stderr_data
 
     process.wait()
     return_code = process.returncode
+    
+    if return_code != 0:
+        error_msg = f"Command failed with exit code {return_code}"
+        if error_output:
+            error_msg += f"\nError output:\n{error_output}"
+        logger.error(error_msg)
+        
+    command_obj.output = output if output else None
+    command_obj.error_output = error_output if error_output else None
     command_obj.return_code = return_code
     command_obj.save()
+    
     logger.debug(f'Command returned exit code: {return_code}')
 
     if history_file:

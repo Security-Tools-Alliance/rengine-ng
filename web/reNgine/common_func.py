@@ -1321,10 +1321,12 @@ def execute_command(command, shell, cwd):
     return subprocess.Popen(
         command,
         stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        universal_newlines=True,
+        stderr=subprocess.PIPE,
         shell=shell,
-        cwd=cwd
+        cwd=cwd,
+        bufsize=-1,
+        universal_newlines=True,
+        encoding='utf-8'
     )
 
 def get_data_from_post_request(request, field):
