@@ -2039,9 +2039,9 @@ $(document).ready(function() {
 	get_important_subdomains('{% url 'api:querySubdomains' %}', target_id=null, scan_history_id={{scan_history_id}});
 	get_recon_notes('{% url 'api:listTodoNotes' %}', target_id=null, scan_history_id={{scan_history_id}});
 
-	get_ips('{% url 'api:listIPs' %}', scan_id={{scan_history_id}}, domain_id=null);
+	get_ips('{{ ip_addresses|safe }}', '{% url 'api:getIpDetails' %}', '{% url 'api:querySubdomains' %}', scan_id={{scan_history_id}}, domain_id=null);
 	get_technologies('{% url 'api:listTechnologies' %}', scan_id={{scan_history_id}}, domain_id=null);
-	get_ports('{{ ip_addresses }}', '{% url 'api:listIPs' %}', '{% url 'api:querySubdomains' %}', scan_id={{scan_history_id}}, domain_id=null);
+	get_ports('{{ ip_addresses|safe }}', '{% url 'api:listIPs' %}', '{% url 'api:querySubdomains' %}', scan_id={{scan_history_id}}, domain_id=null);
 
 	get_subdomain_changes('{% url 'api:subdomain-changes-list' %}', {{scan_history_id}});
 	get_endpoint_changes('{% url 'api:endpoint-changes-list' %}', {{scan_history_id}});
@@ -2303,10 +2303,10 @@ $(document).ready(function() {
 							{
 								Object.entries(data).forEach(([key, value]) => {
 									if (value['is_cdn']) {
-										ip_badge += `<span class='m-1 badge badge-soft-warning badge-link' title="CDN IP Address" onclick="get_ip_details('{% url 'api:listPorts' %}', '{% url 'api:subdomains-list' %}', '${value.address}', {{scan_history_id}})">${value.address}</span>`
+										ip_badge += `<span class='m-1 badge badge-soft-warning badge-link' title="CDN IP Address" onclick="get_ip_details('{% url 'api:getIpDetails' %}', '{% url 'api:querySubdomains' %}', '${value.address}', {{scan_history_id}})">${value.address}</span>`
 									}
 									else{
-										ip_badge += `<span class='m-1 badge badge-soft-primary badge-link' onclick="get_ip_details('{% url 'api:listPorts' %}', '{% url 'api:subdomains-list' %}', '${value.address}', {{scan_history_id}})">${value.address}</span>`
+											ip_badge += `<span class='m-1 badge badge-soft-primary badge-link' onclick="get_ip_details('{% url 'api:getIpDetails' %}', '{% url 'api:querySubdomains' %}', '${value.address}', {{scan_history_id}})">${value.address}</span>`
 									}
 								});
 								return ip_badge;
@@ -2318,7 +2318,7 @@ $(document).ready(function() {
 					// open ports
 					{
 						"render": function ( data, type, row ) {
-							return renderPortBadge(data, {
+							return renderBadge(data, {
 								api_ips_url: '{% url 'api:listIPs' %}',
 								api_subdomains_url: '{% url 'api:querySubdomains' %}',
 								scan_id: {{scan_history_id}},

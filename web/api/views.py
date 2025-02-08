@@ -2910,3 +2910,38 @@ class VulnerabilityViewSet(viewsets.ModelViewSet):
 					print(e)
 
 		return qs
+
+class GetIpDetails(APIView):
+    def get(self, request, format=None):
+        req = self.request
+        ip_address = req.query_params.get('ip_address')
+        scan_id = safe_int_cast(req.query_params.get('scan_id'))
+        target_id = safe_int_cast(req.query_params.get('target_id'))
+
+        if not ip_address:
+            return Response({"error": "IP address is required"}, status=400)
+
+        # Build the base query
+        ip_query = IpAddress.objects.filter(address=ip_address)
+
+        if scan_id:
+            ip_query = ip_query.filter(
+                ip_addresses__scan_history__id=scan_id
+            )
+        elif target_id:
+            ip_query = ip_query.filter(
+                ip_addresses__target_domain__id=target_id
+            )
+
+        # Preloading relations to optimize performance
+        ip_query = ip_query.prefetch_related(
+            'ports',
+            'ip_addresses',
+        ).distinct()
+
+
+        if not ip_query.exists():
+            return Response({"error": "IP not found"}, status=404)
+
+        serializer = IpSerializer(ip_query.first())
+        return Response(serializer.data)

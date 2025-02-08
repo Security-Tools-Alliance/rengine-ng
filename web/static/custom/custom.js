@@ -2094,39 +2094,6 @@ function loadSubscanHistoryWidget(endpoint, scan_history_id = null, domain_id = 
 	});
 }
 
-function get_ips(endpoint, scan_id=null, domain_id=null){
-	// this function will fetch and render ips in widget
-	var url = `${endpoint}?`;
-
-	if (scan_id) {
-		url += `scan_id=${scan_id}`;
-	}
-
-	if (domain_id) {
-		url += `target_id=${domain_id}`;
-	}
-
-	url += `&format=json`;
-
-	$.getJSON(url, function(data) {
-		$('#ip-address-count').empty();
-		for (var val in data['ips']){
-			ip = data['ips'][val]
-			badge_color = ip['is_cdn'] ? 'warning' : 'primary';
-			if (scan_id) {
-				$("#ip-address").append(`<span class='badge badge-soft-${badge_color}  m-1 badge-link' data-toggle="tooltip" title="${ip['ports'].length} Ports Open." onclick="'{% url 'api:listPorts' %}', '{% url 'api:subdomains-list' %}', '${ip['address']}', scan_id=${scan_id}, domain_id=null)">${ip['address']}</span>`);
-			}
-			else if (domain_id) {
-				$("#ip-address").append(`<span class='badge badge-soft-${badge_color}  m-1 badge-link' data-toggle="tooltip" title="${ip['ports'].length} Ports Open." onclick="'{% url 'api:listPorts' %}', '{% url 'api:subdomains-list' %}', '${ip['address']}', scan_id=null, domain_id=${domain_id})">${ip['address']}</span>`);
-			}
-			// $("#ip-address").append(`<span class='badge badge-soft-${badge_color}  m-1' data-toggle="modal" data-target="#tabsModal">${ip['address']}</span>`);
-		}
-		$('#ip-address-count').html(`<span class="badge badge-soft-primary me-1">${data['ips'].length}</span>`);
-		$("body").tooltip({ selector: '[data-toggle=tooltip]' });
-	});
-}
-
-
 function get_technologies(endpoint_url, scan_id=null, domain_id=null){
 	// this function will fetch and render tech in widget
 	var url = `${endpoint_url}?`;
@@ -2406,7 +2373,7 @@ function get_most_vulnerable_target(endpoint_url, endpoint_vuln_url, slug=null, 
 				</tr>
 				</thead>
 				<tbody id="most_vulnerable_target_tbody">
-				</tbody>²
+				</tbody>
 				</table>
 				`);
 

@@ -808,10 +808,14 @@ class PortSerializer(serializers.ModelSerializer):
 
 class IpSerializer(serializers.ModelSerializer):
     ports = PortSerializer(many=True)
+    subdomain_count = serializers.SerializerMethodField()
 
     class Meta:
         model = IpAddress
         fields = '__all__'
+
+    def get_subdomain_count(self, obj):
+        return obj.ip_addresses.count()
 
 
 class DirectoryFileSerializer(serializers.ModelSerializer):

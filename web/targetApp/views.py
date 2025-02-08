@@ -583,9 +583,10 @@ def target_summary(request, slug, id):
 
     # Country ISOs
     subdomains = Subdomain.objects.filter(target_domain__id=id)
-    ip_addresses = IpAddress.objects.filter(ip_addresses__in=subdomains)
+    ip_addresses = IpAddress.objects.filter(ip_addresses__in=subdomains).distinct('address')
     ip_serializer = IpSerializer(ip_addresses.all(), many=True)
     context['ip_addresses'] = json.dumps(ip_serializer.data, cls=DjangoJSONEncoder)
+
     context['asset_countries'] = (
         CountryISO.objects
         .filter(ipaddress__in=ip_addresses)

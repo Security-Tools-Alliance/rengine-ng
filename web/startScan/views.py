@@ -60,7 +60,9 @@ def detail_scan(request, id, slug):
     endpoints = EndPoint.objects.filter(scan_history=scan)
     vulns = Vulnerability.objects.filter(scan_history=scan)
     vulns_tags = VulnerabilityTags.objects.filter(vuln_tags__in=vulns)
-    ip_addresses = IpAddress.objects.filter(ip_addresses__in=subdomains)
+    ip_addresses = IpAddress.objects.filter(
+        ip_addresses__in=subdomains
+    ).distinct('address')
     ip_serializer = IpSerializer(ip_addresses.all(), many=True)
     geo_isos = CountryISO.objects.filter(ipaddress__in=ip_addresses)
     scan_activity = ScanActivity.objects.filter(scan_of__id=id).order_by('time')

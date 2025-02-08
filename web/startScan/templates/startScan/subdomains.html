@@ -211,14 +211,12 @@ $(document).ready(function() {
 				{
 					"render": function ( data, type, row ) {
 						ip_badge = ''
-						if (data)
-						{
+						if (data) {
 							Object.entries(data).forEach(([key, value]) => {
 								if (value['is_cdn']) {
-									ip_badge += `<span class='m-1 badge badge-soft-warning badge-link' title="CDN IP Address" onclick="'{% url 'api:listPorts' %}', '{% url 'api:subdomains-list' %}', '${value.address}', scan_id=null, domain_id=null)">${value.address}</span>`
-								}
-								else{
-									ip_badge += `<span class='m-1 badge badge-soft-primary badge-link' onclick="'{% url 'api:listPorts' %}', '{% url 'api:subdomains-list' %}', '${value.address}', scan_id=null, domain_id=null)">${value.address}</span>`
+									ip_badge += `<span class='m-1 badge badge-soft-warning badge-link' title="CDN IP Address" onclick="get_ip_details('{% url 'api:getIpDetails' %}', '{% url 'api:querySubdomains' %}', '${value.address}', {{scan_history_id}})">${value.address}</span>`
+								} else {
+									ip_badge += `<span class='m-1 badge badge-soft-primary badge-link' onclick="get_ip_details('{% url 'api:getIpDetails' %}', '{% url 'api:querySubdomains' %}', '${value.address}', {{scan_history_id}})">${value.address}</span>`
 								}
 							});
 							return ip_badge;
@@ -230,13 +228,13 @@ $(document).ready(function() {
 				// open ports
 				{
 					"render": function ( data, type, row ) {
-						return renderPortBadge(data, {
+						return renderBadge(data, {
 							api_ips_url: '{% url 'api:listIPs' %}',
 							api_subdomains_url: '{% url 'api:querySubdomains' %}',
 							scan_id: {{scan_history_id}},
 							domain_id: null
 						});
-				},
+					},
 					"targets": 7,
 				},
 				{
