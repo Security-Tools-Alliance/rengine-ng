@@ -4,7 +4,7 @@ function renderPortBadge(port_data, settings) {
     try {
         if (typeof port_data === 'string') {
             const decoded = new DOMParser().parseFromString(port_data, "text/html").documentElement.textContent;
-            port_data = JSON.parse(decoded);
+            const port_data = JSON.parse(decoded);
         }
 
         for (const ip of port_data) {
@@ -54,7 +54,7 @@ function renderPortBadge(port_data, settings) {
 
 function get_ips(endpoint, scan_id=null, domain_id=null){
 	// this function will fetch and render ips in widget
-	var url = `${endpoint}?`;
+	const url = `${endpoint}?`;
 
 	if (scan_id) {
 		url += `scan_id=${scan_id}`;
@@ -68,9 +68,9 @@ function get_ips(endpoint, scan_id=null, domain_id=null){
 
 	$.getJSON(url, function(data) {
 		$('#ip-address-count').empty();
-		for (var val in data['ips']){
-			ip = data['ips'][val]
-			badge_color = ip['is_cdn'] ? 'warning' : 'primary';
+		for (const val in data['ips']){
+			const ip = data['ips'][val]
+			const badge_color = ip['is_cdn'] ? 'warning' : 'primary';
 			if (scan_id) {
 				$("#ip-address").append(`<span class='badge badge-soft-${badge_color}  m-1 badge-link' data-toggle="tooltip" title="${ip['ports'].length} Ports Open." onclick="'{% url 'api:listPorts' %}', '{% url 'api:subdomains-list' %}', '${ip['address']}', scan_id=${scan_id}, domain_id=null)">${ip['address']}</span>`);
 			}
@@ -144,8 +144,8 @@ function get_ports(ip_addresses, ip_url, subdomain_url, scan_id=null, domain_id=
 
 function get_port_details(endpoint_ip_url, endpoint_subdomain_url, port, scan_id=null, domain_id=null){
 
-	var ip_url = `${endpoint_ip_url}?port=${port}`;
-	var subdomain_url = `${endpoint_subdomain_url}?port=${port}`;
+	const ip_url = `${endpoint_ip_url}?port=${port}`;
+	const subdomain_url = `${endpoint_subdomain_url}?port=${port}`;
 
 	if (scan_id) {
 		ip_url += `&scan_id=${scan_id}`;
@@ -159,9 +159,9 @@ function get_port_details(endpoint_ip_url, endpoint_subdomain_url, port, scan_id
 	ip_url += `&format=json`;
 	subdomain_url += `&format=json`;
 
-	var interesting_badge = `<span class="m-1 badge  badge-soft-danger bs-tooltip" title="Interesting Subdomain">Interesting</span>`;
-	var ip_spinner = `<span class="spinner-border spinner-border-sm me-1" id="ip-modal-loader"></span>`;
-	var subdomain_spinner = `<span class="spinner-border spinner-border-sm me-1" id="subdomain-modal-loader"></span>`;
+	const interesting_badge = `<span class="m-1 badge  badge-soft-danger bs-tooltip" title="Interesting Subdomain">Interesting</span>`;
+	const ip_spinner = `<span class="spinner-border spinner-border-sm me-1" id="ip-modal-loader"></span>`;
+	const subdomain_spinner = `<span class="spinner-border spinner-border-sm me-1" id="subdomain-modal-loader"></span>`;
 
 	$('#modal_dialog .modal-title').html('Details for Port: <b>' + port + '</b>');
 
@@ -172,7 +172,7 @@ function get_port_details(endpoint_ip_url, endpoint_subdomain_url, port, scan_id
 	$('#modal_dialog .modal-text').append(`<ul class='nav nav-tabs nav-bordered' id="modal_tab_nav"></ul><div id="modal_tab_content" class="tab-content"></div>`);
 
 	$('#modal_tab_nav').append(`<li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#modal_content_ip" aria-expanded="true"><span id="modal-ip-count"></span>IP Address&nbsp;${ip_spinner}</a></li>`);
-	$('#modal_tab_nav').append(`<li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#modal_content_subdomain" aria-expanded="false"><span id="modal-subdomain-count"></span>Subdomains&nbsp;${subdomain_spinner}</a></li>`)
+	$('#modal_tab_nav').append(`<li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#modal_content_subdomain" aria-expanded="false"><span id="modal-subdomain-count"></span>Subdomains&nbsp;${subdomain_spinner}</a></li>`);
 
 	// add content area
 	$('#modal_tab_content').append(`<div class="tab-pane show active" id="modal_content_ip"></div><div class="tab-pane" id="modal_content_subdomain"></div>`);
@@ -186,9 +186,9 @@ function get_port_details(endpoint_ip_url, endpoint_subdomain_url, port, scan_id
 		$('#modal_ip_ul').empty();
 		$('#modal_ip_ul').append(`<p>${data['ips'].length} IP Addresses have Port ${port} Open`);
 		$('#modal-ip-count').html(`<b>${data['ips'].length}</b>&nbsp;&nbsp;`);
-		for (ip in data['ips']){
-			ip_obj = data['ips'][ip];
-			text_color = ip_obj['is_cdn'] ? 'warning' : '';
+		for (const ip in data['ips']){
+			const ip_obj = data['ips'][ip];
+			const text_color = ip_obj['is_cdn'] ? 'warning' : '';
 			$("#modal_ip_ul").append(`<li class='mt-1 text-${text_color}'>${ip_obj['address']}</li>`)
 		}
 		$('#modal_ip_ul').append(`<span class="float-end text-warning">*IP Address highlighted are CDN IP Address</span>`);
@@ -200,10 +200,10 @@ function get_port_details(endpoint_ip_url, endpoint_subdomain_url, port, scan_id
 		$('#modal_subdomain_ul').empty();
 		$('#modal_subdomain_ul').append(`<p>${data['subdomains'].length} Subdomains have Port ${port} Open`);
 		$('#modal-subdomain-count').html(`<b>${data['subdomains'].length}</b>&nbsp;&nbsp;`);
-		for (subdomain in data['subdomains']){
-			subdomain_obj = data['subdomains'][subdomain];
-			badge_color = subdomain_obj['http_status'] >= 400 ? 'danger' : '';
-			li_id = get_randid();
+		for (const subdomain in data['subdomains']){
+			const subdomain_obj = data['subdomains'][subdomain];
+			const badge_color = subdomain_obj['http_status'] >= 400 ? 'danger' : '';
+			const li_id = get_randid();
 			if (subdomain_obj['http_url']) {
 				$("#modal_subdomain_ul").append(`<li id="${li_id}" class="mt-1"><a href='${subdomain_obj['http_url']}' target="_blank" class="text-${badge_color}">${subdomain_obj['name']}</a></li>`)
 			}
@@ -227,8 +227,8 @@ function get_port_details(endpoint_ip_url, endpoint_subdomain_url, port, scan_id
 }
 
 function get_ip_details(endpoint_port_url, endpoint_subdomain_url, ip_address, scan_id=null, domain_id=null){
-	var port_url = `${endpoint_port_url}?ip_address=${ip_address}`;
-	var subdomain_url = `${endpoint_subdomain_url}?ip_address=${ip_address}`;
+	const port_url = `${endpoint_port_url}?ip_address=${ip_address}`;
+	const subdomain_url = `${endpoint_subdomain_url}?ip_address=${ip_address}`;
 
 	if (scan_id) {
 		port_url += `&scan_id=${scan_id}`;
@@ -242,10 +242,10 @@ function get_ip_details(endpoint_port_url, endpoint_subdomain_url, ip_address, s
 	port_url += `&format=json`;
 	subdomain_url += `&format=json`;
 
-	var interesting_badge = `<span class="m-1 badge  badge-soft-danger bs-tooltip" title="Interesting Subdomain">Interesting</span>`;
+	const interesting_badge = `<span class="m-1 badge  badge-soft-danger bs-tooltip" title="Interesting Subdomain">Interesting</span>`;
 
-	var port_loader = `<span class="inner-div spinner-border text-primary align-self-center loader-sm" id="port-modal-loader"></span>`;
-	var subdomain_loader = `<span class="inner-div spinner-border text-primary align-self-center loader-sm" id="subdomain-modal-loader"></span>`;
+	const port_loader = `<span class="inner-div spinner-border text-primary align-self-center loader-sm" id="port-modal-loader"></span>`;
+	const subdomain_loader = `<span class="inner-div spinner-border text-primary align-self-center loader-sm" id="subdomain-modal-loader"></span>`;
 
 	// add tab modal title
 	$('#modal_dialog .modal-title').html('Details for IP: <b>' + ip_address + '</b>');
@@ -256,7 +256,7 @@ function get_ip_details(endpoint_port_url, endpoint_subdomain_url, ip_address, s
 	$('#modal_dialog .modal-text').append(`<ul class='nav nav-tabs nav-bordered' id="modal_tab_nav"></ul><div id="modal_tab_content" class="tab-content"></div>`);
 
 	$('#modal_tab_nav').append(`<li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#modal_content_port" aria-expanded="true"><span id="modal-open-ports-count"></span>Open Ports &nbsp;${port_loader}</a></li>`);
-	$('#modal_tab_nav').append(`<li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#modal_content_subdomain" aria-expanded="false"><span id="modal-subdomain-count"></span>Subdomains &nbsp;${subdomain_loader}</a></li>`)
+	$('#modal_tab_nav').append(`<li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#modal_content_subdomain" aria-expanded="false"><span id="modal-subdomain-count"></span>Subdomains &nbsp;${subdomain_loader}</a></li>`);
 
 	// add content area
 	$('#modal_tab_content').empty();
@@ -272,9 +272,9 @@ function get_ip_details(endpoint_port_url, endpoint_subdomain_url, ip_address, s
 		$('#modal_content_port').empty();
 		$('#modal_content_port').append(`<p> IP Addresses ${ip_address} has ${data['ports'].length} Open Ports`);
 		$('#modal-open-ports-count').html(`<b>${data['ports'].length}</b>&nbsp;&nbsp;`);
-		for (port in data['ports']){
-			port_obj = data['ports'][port];
-			badge_color = port_obj['is_uncommon'] ? 'danger' : 'info';
+		for (const port in data['ports']){
+			const port_obj = data['ports'][port];
+			const badge_color = port_obj['is_uncommon'] ? 'danger' : 'info';
 			$("#modal_content_port").append(`<li class="mt-1">${port_obj['description']} <b class="text-${badge_color}">(${port_obj['number']}/${port_obj['service_name']})</b></li>`)
 		}
 		$("#port-modal-loader").remove();
@@ -287,10 +287,10 @@ function get_ip_details(endpoint_port_url, endpoint_subdomain_url, ip_address, s
 		$('#modal_content_subdomain').empty();
 		$('#modal_content_subdomain').append(`<p>${data['subdomains'].length} Subdomains are associated with IP ${ip_address}`);
 		$('#modal-subdomain-count').html(`<b>${data['subdomains'].length}</b>&nbsp;&nbsp;`);
-		for (subdomain in data['subdomains']){
-			subdomain_obj = data['subdomains'][subdomain];
-			badge_color = subdomain_obj['http_status'] >= 400 ? 'danger' : '';
-			li_id = get_randid();
+		for (const subdomain in data['subdomains']){
+			const subdomain_obj = data['subdomains'][subdomain];
+			const badge_color = subdomain_obj['http_status'] >= 400 ? 'danger' : '';
+			const li_id = get_randid();
 			if (subdomain_obj['http_url']) {
 				$("#modal_content_subdomain").append(`<li class="mt-1" id="${li_id}"><a href='${subdomain_obj['http_url']}' target="_blank" class="text-${badge_color}">${subdomain_obj['name']}</a></li>`)
 			}
