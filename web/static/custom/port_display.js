@@ -1,15 +1,17 @@
 function renderPortBadge(port_data, settings) {
     let port_badge = '';
+	let ip = [];
     
     try {
+		const port_data_obj = {};
         if (typeof port_data === 'string') {
             const decoded = new DOMParser().parseFromString(port_data, "text/html").documentElement.textContent;
-            const port_data = JSON.parse(decoded);
+            port_data_obj = JSON.parse(decoded);
         }
 
-        for (const ip of port_data) {
+        for (ip of port_data_obj) {
             const ports = ip.ports || [];
-            for (const port of ports) {
+            for (port of ports) {
                 const badge_color = port.is_uncommon ? 'danger' : 'primary';
                 let title = `Port ${port.number}`;
                 
@@ -54,7 +56,7 @@ function renderPortBadge(port_data, settings) {
 
 function get_ips(endpoint, scan_id=null, domain_id=null){
 	// this function will fetch and render ips in widget
-	const url = `${endpoint}?`;
+	let url = `${endpoint}?`;
 
 	if (scan_id) {
 		url += `scan_id=${scan_id}`;
@@ -68,9 +70,11 @@ function get_ips(endpoint, scan_id=null, domain_id=null){
 
 	$.getJSON(url, function(data) {
 		$('#ip-address-count').empty();
+		let ip = [];
+		let badge_color = '';
 		for (const val in data['ips']){
-			const ip = data['ips'][val]
-			const badge_color = ip['is_cdn'] ? 'warning' : 'primary';
+			ip = data['ips'][val]
+			badge_color = ip['is_cdn'] ? 'warning' : 'primary';
 			if (scan_id) {
 				$("#ip-address").append(`<span class='badge badge-soft-${badge_color}  m-1 badge-link' data-toggle="tooltip" title="${ip['ports'].length} Ports Open." onclick="'{% url 'api:listPorts' %}', '{% url 'api:subdomains-list' %}', '${ip['address']}', scan_id=${scan_id}, domain_id=null)">${ip['address']}</span>`);
 			}
@@ -144,8 +148,8 @@ function get_ports(ip_addresses, ip_url, subdomain_url, scan_id=null, domain_id=
 
 function get_port_details(endpoint_ip_url, endpoint_subdomain_url, port, scan_id=null, domain_id=null){
 
-	const ip_url = `${endpoint_ip_url}?port=${port}`;
-	const subdomain_url = `${endpoint_subdomain_url}?port=${port}`;
+	let ip_url = `${endpoint_ip_url}?port=${port}`;
+	let subdomain_url = `${endpoint_subdomain_url}?port=${port}`;
 
 	if (scan_id) {
 		ip_url += `&scan_id=${scan_id}`;
@@ -186,10 +190,15 @@ function get_port_details(endpoint_ip_url, endpoint_subdomain_url, port, scan_id
 		$('#modal_ip_ul').empty();
 		$('#modal_ip_ul').append(`<p>${data['ips'].length} IP Addresses have Port ${port} Open`);
 		$('#modal-ip-count').html(`<b>${data['ips'].length}</b>&nbsp;&nbsp;`);
-		for (const ip in data['ips']){
-			const ip_obj = data['ips'][ip];
-			const text_color = ip_obj['is_cdn'] ? 'warning' : '';
-			$("#modal_ip_ul").append(`<li class='mt-1 text-${text_color}'>${ip_obj['address']}</li>`)
+		let ip = '';
+		let text_color = '';
+		let li_id = '';
+		let ip_array = [];
+		for (ip in data['ips']){
+			ip_array = data['ips'][ip];
+			text_color = ip_array['is_cdn'] ? 'warning' : '';
+			li_id = get_randid();
+			$("#modal_ip_ul").append(`<li class='mt-1 text-${text_color}' id="${li_id}">${ip_array['address']}</li>`)
 		}
 		$('#modal_ip_ul').append(`<span class="float-end text-warning">*IP Address highlighted are CDN IP Address</span>`);
 		$("#ip-modal-loader").remove();
@@ -200,23 +209,27 @@ function get_port_details(endpoint_ip_url, endpoint_subdomain_url, port, scan_id
 		$('#modal_subdomain_ul').empty();
 		$('#modal_subdomain_ul').append(`<p>${data['subdomains'].length} Subdomains have Port ${port} Open`);
 		$('#modal-subdomain-count').html(`<b>${data['subdomains'].length}</b>&nbsp;&nbsp;`);
-		for (const subdomain in data['subdomains']){
-			const subdomain_obj = data['subdomains'][subdomain];
-			const badge_color = subdomain_obj['http_status'] >= 400 ? 'danger' : '';
-			const li_id = get_randid();
-			if (subdomain_obj['http_url']) {
-				$("#modal_subdomain_ul").append(`<li id="${li_id}" class="mt-1"><a href='${subdomain_obj['http_url']}' target="_blank" class="text-${badge_color}">${subdomain_obj['name']}</a></li>`)
+		let subdomain = '';
+		let text_color = '';
+		let li_id = '';
+		let subdomain_array = [];
+		for (subdomain in data['subdomains']){
+			subdomain_array = data['subdomains'][subdomain];
+			text_color = subdomain_array['http_status'] >= 400 ? 'danger' : '';
+			li_id = get_randid();
+			if (subdomain_array['http_url']) {
+				$("#modal_subdomain_ul").append(`<li id="${li_id}" class="mt-1"><a href='${subdomain_array['http_url']}' target="_blank" class="text-${text_color}">${subdomain_array['name']}</a></li>`)
 			}
 			else {
-				$("#modal_subdomain_ul").append(`<li class="mt-1 text-${badge_color}" id="${li_id}">${subdomain_obj['name']}</li>`);
+				$("#modal_subdomain_ul").append(`<li class="mt-1 text-${text_color}" id="${li_id}">${subdomain_array['name']}</li>`);
 			}
 
-			if (subdomain_obj['http_status']) {
-				$("#"+li_id).append(get_http_badge(subdomain_obj['http_status']));
+			if (subdomain_array['http_status']) {
+				$("#"+li_id).append(get_http_badge(subdomain_array['http_status']));
 				$('.bs-tooltip').tooltip();
 			}
 
-			if (subdomain_obj['is_interesting']) {
+			if (subdomain_array['is_interesting']) {
 				$("#"+li_id).append(interesting_badge)
 			}
 
@@ -227,8 +240,8 @@ function get_port_details(endpoint_ip_url, endpoint_subdomain_url, port, scan_id
 }
 
 function get_ip_details(endpoint_port_url, endpoint_subdomain_url, ip_address, scan_id=null, domain_id=null){
-	const port_url = `${endpoint_port_url}?ip_address=${ip_address}`;
-	const subdomain_url = `${endpoint_subdomain_url}?ip_address=${ip_address}`;
+	let port_url = `${endpoint_port_url}?ip_address=${ip_address}`;
+	let subdomain_url = `${endpoint_subdomain_url}?ip_address=${ip_address}`;
 
 	if (scan_id) {
 		port_url += `&scan_id=${scan_id}`;
@@ -272,10 +285,12 @@ function get_ip_details(endpoint_port_url, endpoint_subdomain_url, ip_address, s
 		$('#modal_content_port').empty();
 		$('#modal_content_port').append(`<p> IP Addresses ${ip_address} has ${data['ports'].length} Open Ports`);
 		$('#modal-open-ports-count').html(`<b>${data['ports'].length}</b>&nbsp;&nbsp;`);
-		for (const port in data['ports']){
-			const port_obj = data['ports'][port];
-			const badge_color = port_obj['is_uncommon'] ? 'danger' : 'info';
-			$("#modal_content_port").append(`<li class="mt-1">${port_obj['description']} <b class="text-${badge_color}">(${port_obj['number']}/${port_obj['service_name']})</b></li>`)
+		let port = '';
+		let port_array = [];
+		for (port in data['ports']){
+			port_array = data['ports'][port];
+			const badge_color = port_array['is_uncommon'] ? 'danger' : 'info';
+			$("#modal_content_port").append(`<li class="mt-1">${port_array['description']} <b class="text-${badge_color}">(${port_array['number']}/${port_array['service_name']})</b></li>`)
 		}
 		$("#port-modal-loader").remove();
 	});
@@ -287,23 +302,25 @@ function get_ip_details(endpoint_port_url, endpoint_subdomain_url, ip_address, s
 		$('#modal_content_subdomain').empty();
 		$('#modal_content_subdomain').append(`<p>${data['subdomains'].length} Subdomains are associated with IP ${ip_address}`);
 		$('#modal-subdomain-count').html(`<b>${data['subdomains'].length}</b>&nbsp;&nbsp;`);
-		for (const subdomain in data['subdomains']){
-			const subdomain_obj = data['subdomains'][subdomain];
-			const badge_color = subdomain_obj['http_status'] >= 400 ? 'danger' : '';
+		let subdomain = '';
+		let subdomain_array = [];
+		for (subdomain in data['subdomains']){
+			subdomain_array = data['subdomains'][subdomain];
+			const badge_color = subdomain_array['http_status'] >= 400 ? 'danger' : '';
 			const li_id = get_randid();
-			if (subdomain_obj['http_url']) {
-				$("#modal_content_subdomain").append(`<li class="mt-1" id="${li_id}"><a href='${subdomain_obj['http_url']}' target="_blank" class="text-${badge_color}">${subdomain_obj['name']}</a></li>`)
+			if (subdomain_array['http_url']) {
+				$("#modal_content_subdomain").append(`<li class="mt-1" id="${li_id}"><a href='${subdomain_array['http_url']}' target="_blank" class="text-${badge_color}">${subdomain_array['name']}</a></li>`)
 			}
 			else {
-				$("#modal_content_subdomain").append(`<li class="mt-1 text-${badge_color}" id="${li_id}">${subdomain_obj['name']}</li>`);
+				$("#modal_content_subdomain").append(`<li class="mt-1 text-${badge_color}" id="${li_id}">${subdomain_array['name']}</li>`);
 			}
 
-			if (subdomain_obj['http_status']) {
-				$("#"+li_id).append(get_http_badge(subdomain_obj['http_status']));
+			if (subdomain_array['http_status']) {
+				$("#"+li_id).append(get_http_badge(subdomain_array['http_status']));
 				$('.bs-tooltip').tooltip();
 			}
 
-			if (subdomain_obj['is_interesting']) {
+			if (subdomain_array['is_interesting']) {
 				$("#"+li_id).append(interesting_badge)
 			}
 
