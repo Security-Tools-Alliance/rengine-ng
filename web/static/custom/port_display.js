@@ -183,7 +183,7 @@ function get_port_details(endpoint_ip_url, endpoint_subdomain_url, port, scan_id
 			ip_array = data['ips'][ip];
 			text_color = ip_array['is_cdn'] ? 'warning' : '';
 			li_id = get_randid();
-			$("#modal_ip_ul").append(`<li class='mt-1 text-${text_color}' id="${li_id}">${ip_array['address']}</li>`)
+			$("#modal_ip_ul").append(`<li class='mt-1 text-${text_color}' id="${li_id}">${ip_array['address']}</li>`);
 		}
 		$('#modal_ip_ul').append(`<span class="float-end text-warning">*IP Address highlighted are CDN IP Address</span>`);
 		$("#ip-modal-loader").remove();
