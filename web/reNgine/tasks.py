@@ -5324,10 +5324,23 @@ def get_nmap_http_datas(host, ctx):
                 elif service_name in ['https', 'https-alt', 'ssl/http', 'ssl/https']:
                     hosts_data[hostname]['schemes'].add('https')
                 
-                # Get or create IP address
-                ip_address, _ = IpAddress.objects.get_or_create(
-                    address=result.get('ip', hostname)
-                )
+                # Get IP address from nmap XML result
+                ip = None
+                if 'addresses' in result and result['addresses']:
+                    for addr in result['addresses']:
+                        if addr.get('type') == 'ipv4':
+                            ip = addr.get('addr')
+                            break
+                        elif addr.get('type') == 'ipv6':
+                            ip = addr.get('addr')
+                
+                if ip:
+                    ip_address, _ = IpAddress.objects.get_or_create(
+                        address=ip
+                    )
+                else:
+                    logger.warning(f'No IP address found in nmap results for {hostname}')
+                    ip_address = None
                 
                 # Create or update port with service info
                 create_or_update_port_with_service(
