@@ -983,6 +983,8 @@ def get_nmap_cmd(
 		cmd = f'{cmd} -p {ports}'
 	if '-sV' not in cmd:
 		cmd = f'{cmd} -sV'
+	if '-Pn' not in cmd:
+		cmd = f'{cmd} -Pn'
 
 	# Add input source
 	if not input_file:
