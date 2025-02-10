@@ -247,6 +247,10 @@ urlpatterns = [
         'action/create/project',
         CreateProjectApi.as_view(),
         name='create_project'),
+    path(
+        'uncommon-web-ports/', 
+         UncommonWebPortsView.as_view(), 
+         name='uncommonWebPorts'),
 ]
 
 urlpatterns += router.urls

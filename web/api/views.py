@@ -2942,6 +2942,17 @@ class GetIpDetails(APIView):
 
         if not ip_query.exists():
             return Response({"error": "IP not found"}, status=404)
-
-        serializer = IpSerializer(ip_query.first())
+            
+        serializer = IpSerializer(
+            ip_query.first(), 
+            context={'scan_id': scan_id}
+        )
         return Response(serializer.data)
+
+class UncommonWebPortsView(APIView):
+    def get(self, request):
+        from reNgine.definitions import UNCOMMON_WEB_PORTS
+        return Response({
+            'uncommon_web_ports': UNCOMMON_WEB_PORTS,
+            'common_web_ports': [80, 443]
+        })

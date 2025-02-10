@@ -63,7 +63,14 @@ def detail_scan(request, id, slug):
     ip_addresses = IpAddress.objects.filter(
         ip_addresses__in=subdomains
     ).distinct('address')
-    ip_serializer = IpSerializer(ip_addresses.all(), many=True)
+    ip_serializer = IpSerializer(
+        ip_addresses.all(), 
+        many=True, 
+        context={
+            'scan_id': id,
+            'target_id': domain_id
+        }
+    )
     geo_isos = CountryISO.objects.filter(ipaddress__in=ip_addresses)
     scan_activity = ScanActivity.objects.filter(scan_of__id=id).order_by('time')
     cves = CveId.objects.filter(cve_ids__in=vulns)

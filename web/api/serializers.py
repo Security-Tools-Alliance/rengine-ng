@@ -367,7 +367,11 @@ class VisualiseSubdomainSerializer(serializers.ModelSerializer):
 		)
 
 		ips = IpAddress.objects.filter(ip_addresses__in=subdomains)
-		ip_serializer = VisualiseIpSerializer(ips, many=True)
+		ip_serializer = VisualiseIpSerializer(
+			ips, 
+			many=True,
+			context={'scan_id': scan_history.id}
+		)
 
 		# endpoint = EndPoint.objects.filter(
 		#     scan_history=self.context.get('scan_history')).filter(
@@ -809,13 +813,29 @@ class PortSerializer(serializers.ModelSerializer):
 class IpSerializer(serializers.ModelSerializer):
     ports = PortSerializer(many=True)
     subdomain_count = serializers.SerializerMethodField()
+    subdomain_names = serializers.SerializerMethodField()
 
     class Meta:
         model = IpAddress
         fields = '__all__'
 
+    def get_base_subdomain_query(self, obj):
+        query = Subdomain.objects.filter(ip_addresses=obj)
+        scan_id = self.context.get('scan_id')
+        target_id = self.context.get('target_id')
+        
+        if scan_id:
+            query = query.filter(scan_history_id=scan_id)
+        elif target_id:
+            query = query.filter(target_domain_id=target_id)
+            
+        return query.distinct('name')
+
     def get_subdomain_count(self, obj):
-        return obj.ip_addresses.count()
+        return self.get_base_subdomain_query(obj).count()
+
+    def get_subdomain_names(self, obj):
+        return list(self.get_base_subdomain_query(obj).values_list('name', flat=True))
 
 
 class DirectoryFileSerializer(serializers.ModelSerializer):
