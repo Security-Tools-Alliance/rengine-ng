@@ -1,10 +1,9 @@
 from typing import Dict, Any
+from reNgine.definitions import OLLAMA_INSTANCE
 
 ###############################################################################
 # OLLAMA DEFINITIONS
 ###############################################################################
-
-OLLAMA_INSTANCE = 'http://ollama:11434'
 
 ###############################################################################
 # LLM SYSTEM PROMPTS
