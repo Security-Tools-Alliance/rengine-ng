@@ -438,10 +438,10 @@ class LLMAttackSuggestion(APIView):
         # Generate new analysis
         ip_addrs = subdomain.ip_addresses.all()
         open_ports = ', '.join(
-			f'{port.number}/{port.service_name}'
-			for ip in ip_addrs
-			for port in ip.ports.all()
-		)
+            f'{port.number}/{port.service_name}'
+            for ip in ip_addrs
+            for port in ip.ports.all()
+        )
         tech_used = ', '.join(tech.name for tech in subdomain.technologies.all())
 
         input_data = f'''
@@ -778,14 +778,14 @@ class FetchMostVulnerable(APIView):
                     .exclude(vuln_count=0)[:limit]
                 )
 
-			if most_vulnerable_subdomains:
-				response['status'] = True
-				response['result'] = (
-					SubdomainSerializer(
-						most_vulnerable_subdomains,
-						many=True)
-					.data
-				)
+            if most_vulnerable_subdomains:
+                response['status'] = True
+                response['result'] = (
+                    SubdomainSerializer(
+                        most_vulnerable_subdomains,
+                        many=True)
+                    .data
+                )
 
         elif target_id:
             subdomain_query = subdomains.filter(target_domain__id=target_id)
@@ -1594,15 +1594,15 @@ class GetFileContents(APIView):
                 response['content'] = f.read()
             return Response(response)
 
-		if 'amass_config' in req.query_params:
-			path = str(Path.home() / ".config" / "amass" / "config.ini")
-			if not os.path.exists(path):
-				run_command(f'touch {path}')
-				response['message'] = 'File Created!'
-			with open(path, "r") as f:
-				response['status'] = True
-				response['content'] = f.read()
-			return Response(response)
+        if 'amass_config' in req.query_params:
+            path = str(Path.home() / ".config" / "amass" / "config.ini")
+            if not os.path.exists(path):
+                run_command(f'touch {path}')
+                response['message'] = 'File Created!'
+            with open(path, "r") as f:
+                response['status'] = True
+                response['content'] = f.read()
+            return Response(response)
 
         if 'gf_pattern' in req.query_params:
             basedir = str(Path.home() / '.gf')
@@ -1631,15 +1631,15 @@ class GetFileContents(APIView):
                 response['status'] = False
             return Response(response)
 
-		if 'gau_config' in req.query_params:
-			path = str(Path.home() / ".config" / 'gau' / 'config.toml')
-			if not os.path.exists(path):
-				run_command(f'touch {path}')
-				response['message'] = 'File Created!'
-			with open(path, "r") as f:
-				response['status'] = True
-				response['content'] = f.read()
-			return Response(response)
+        if 'gau_config' in req.query_params:
+            path = str(Path.home() / ".config" / 'gau' / 'config.toml')
+            if not os.path.exists(path):
+                run_command(f'touch {path}')
+                response['message'] = 'File Created!'
+            with open(path, "r") as f:
+                response['status'] = True
+                response['content'] = f.read()
+            return Response(response)
 
         response['message'] = 'Invalid Query Params'
         return Response(response)
@@ -1922,10 +1922,10 @@ class ListSubdomains(APIView):
         if tech:
             subdomain_query = subdomain_query.filter(technologies__name=tech)
 
-		if port:
-			subdomain_query = subdomain_query.filter(
-				ip_addresses__ports__number=port
-			).distinct('name')
+        if port:
+            subdomain_query = subdomain_query.filter(
+                ip_addresses__ports__number=port
+            ).distinct('name')
 
         if 'only_important' in req.query_params:
             subdomain_query = subdomain_query.filter(is_important=True)
@@ -2334,16 +2334,16 @@ class SubdomainDatatableViewSet(viewsets.ModelViewSet):
         if ip_address:
             self.queryset = self.queryset.filter(ip_addresses__address__icontains=ip_address)
 
-		if name:
-			self.queryset = self.queryset.filter(name=name)
+        if name:
+            self.queryset = self.queryset.filter(name=name)
 
-		# Prefetching necessary relations for get_ports_by_ip
-		self.queryset = self.queryset.prefetch_related(
-			'ip_addresses',
-			'ip_addresses__ports',
-		)
-		
-		return self.queryset
+        # Prefetching necessary relations for get_ports_by_ip
+        self.queryset = self.queryset.prefetch_related(
+            'ip_addresses',
+            'ip_addresses__ports',
+        )
+        
+        return self.queryset
 
     def filter_queryset(self, qs):
         qs = self.queryset.filter()
@@ -2660,10 +2660,10 @@ class EndPointViewSet(viewsets.ModelViewSet):
 
         # Filter status code 404 and 0
         # endpoints = (
-        # 	endpoints
-        # 	.exclude(http_status=0)
-        # 	.exclude(http_status=None)
-        # 	.exclude(http_status=404)
+        #     endpoints
+        #     .exclude(http_status=0)
+        #     .exclude(http_status=None)
+        #     .exclude(http_status=404)
         # )
 
         self.queryset = endpoints
