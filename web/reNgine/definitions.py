@@ -3,6 +3,7 @@ import logging
 import re
 from pathlib import Path
 from .settings import RENGINE_WORDLISTS
+import os
 
 ###############################################################################
 # TOOLS DEFINITIONS
@@ -439,3 +440,13 @@ FOUR_OH_FOUR_URL = '/404/'
 
 # OSINT GooFuzz Path
 GOFUZZ_EXEC_PATH = 'GooFuzz'
+
+###############################################################################
+# LLM DEFINITIONS
+###############################################################################
+
+# Default Ollama instance URL if not set in environment
+DEFAULT_OLLAMA_INSTANCE = 'http://ollama:11434'
+
+# Get Ollama instance URL from environment or use default
+OLLAMA_INSTANCE = os.getenv('OLLAMA_INSTANCE', DEFAULT_OLLAMA_INSTANCE)

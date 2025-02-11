@@ -3196,7 +3196,10 @@ class LLMModelsManager(APIView):
                                 continue
                         
                         # If no format matches, log error and return current time
-                        logger.error(f"Could not parse date: {date_str}")
+                        logger.error(f"Could not parse timestamp: {date_str}", extra={
+                            "timestamp": date_str,
+                            "parsing_formats": formats
+                        })
                         return datetime.now()
                     
                     all_models.extend([{
