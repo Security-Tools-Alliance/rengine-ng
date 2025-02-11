@@ -38,7 +38,7 @@ class BaseLLMGenerator(ABC):
         """Setup Ollama client with configuration"""
         ollama_config = self.config['providers']['ollama']
         self.ollama = Ollama(
-            base_url=self.config['ollama_url'],
+            base_url=ollama_config['url'],
             model=self.model_name,
             timeout=ollama_config['timeout']
         )
