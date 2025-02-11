@@ -112,6 +112,7 @@ LLM_CONFIG: Dict[str, Any] = {
             'temperature': 0.7,
         },
         'ollama': {
+            'url': OLLAMA_INSTANCE,
             'default_model': 'llama2',
             'models': [
                 'llama2',
@@ -119,13 +120,10 @@ LLM_CONFIG: Dict[str, Any] = {
                 'codellama',
                 'gemma'
             ],
-            'timeout': 30,
+            'timeout': 120,
             'max_retries': 3,
         }
     },
-    'ollama_url': OLLAMA_INSTANCE,
-    'timeout': 30,
-    'max_retries': 3,
     'prompts': {
         'vulnerability': {
             'context': VULNERABILITY_CONTEXT,
