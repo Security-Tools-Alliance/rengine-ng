@@ -70,16 +70,6 @@ class RengineTaskFormatter(ColorFormatter):
 			record.__dict__.setdefault('task_id', '')
 		return super().format(record)
 
-
-def get_gpt_vuln_input_description(title, path):
-	vulnerability_description = ''
-	vulnerability_description += f'Vulnerability Title: {title}'
-	# gpt gives concise vulnerability description when a vulnerable URL is provided
-	vulnerability_description += f'\nVulnerable URL: {path}'
-
-	return vulnerability_description
-
-
 def replace_nulls(obj):
 	if isinstance(obj, str):
 		return obj.replace("\x00", "")

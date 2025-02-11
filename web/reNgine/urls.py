@@ -62,5 +62,6 @@ urlpatterns = [
         'page_not_found/',
         page_not_found,
         name='page_not_found'),
+    path('ws/', include('api.ws_urls')),
 ] + static(settings.MEDIA_URL, document_root=settings.RENGINE_RESULTS) + \
     static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

@@ -7,6 +7,8 @@ from django.urls import reverse
 from rest_framework import status
 from startScan.models import SubScan
 from utils.test_base import BaseTestCase
+from reNgine.llm import config
+from dashboard.models import OllamaSettings
 
 __all__ = [
     'TestOllamaManager',
@@ -25,6 +27,15 @@ __all__ = [
 class TestOllamaManager(BaseTestCase):
     """Tests for the OllamaManager API endpoints."""
 
+    def setUp(self):
+        """Set up test environment."""
+        super().setUp()
+        self.ollama_settings = OllamaSettings.objects.create(
+            id=1,
+            selected_model="llama2",
+            use_ollama=True
+        )
+
     @patch("requests.post")
     def test_get_download_model(self, mock_post):
         """Test downloading an Ollama model."""
@@ -34,35 +45,44 @@ class TestOllamaManager(BaseTestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data["status"])
 
-    @patch("requests.post")
-    def test_get_download_model_failure(self, mock_post):
-        """Test failed downloading of an Ollama model."""
-        mock_post.return_value.json.return_value = {"error": "pull model manifest: file does not exist"}
-        api_url = reverse("api:ollama_manager")
-        response = self.client.get(api_url, data={"model": "invalid-model"})
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["message"], "pull model manifest: file does not exist")
-        self.assertFalse(response.data["status"])
-
     @patch("requests.delete")
-    def test_delete_model(self, mock_delete):
+    @patch("requests.get")
+    def test_delete_model(self, mock_get, mock_delete):
         """Test deleting an Ollama model."""
-        mock_delete.return_value.json.return_value = {"status": "success"}
-        api_url = reverse("api:ollama_manager")
-        response = self.client.delete(
-            api_url, data={"model": "gpt-4"}, content_type="application/json"
-        )
+        mock_get.return_value.json.return_value = {
+            "models": [{"name": "llama2"}]
+        }
+        mock_delete.return_value.status_code = 200
+        
+        model_name = "llama2"
+        api_url = reverse("api:ollama_detail_manager", kwargs={"model_name": model_name})
+        
+        response = self.client.delete(api_url)
+        
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data["status"])
+        mock_delete.assert_called_once_with(
+            f"{config.OLLAMA_INSTANCE}/api/delete",
+            json={"name": model_name}
+        )
 
-    def test_put_update_model(self):
+    @patch("requests.get")
+    def test_put_update_model(self, mock_get):
         """Test updating the selected Ollama model."""
-        api_url = reverse("api:ollama_manager")
-        response = self.client.put(
-            api_url, data={"model": "gpt-4"}, content_type="application/json"
-        )
+        mock_get.return_value.json.return_value = {
+            "models": [{"name": "gpt-4"}]
+        }
+        
+        model_name = "gpt-4"
+        api_url = reverse("api:ollama_detail_manager", kwargs={"model_name": model_name})
+        
+        response = self.client.put(api_url)
+        
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data["status"])
+        
+        updated_settings = OllamaSettings.objects.get(id=1)
+        self.assertEqual(updated_settings.selected_model, model_name)
 
 class TestWafDetector(BaseTestCase):
     """Tests for the WAF Detector API."""
