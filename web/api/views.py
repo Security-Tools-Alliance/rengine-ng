@@ -3171,10 +3171,37 @@ class LLMModelsManager(APIView):
                 response = requests.get(f'{OLLAMA_INSTANCE}/api/tags')
                 if response.status_code == 200:
                     ollama_models = response.json().get('models', [])
-                    date_format = "%Y-%m-%dT%H:%M:%S"
+                    
+                    def parse_date(date_str):
+                        # First try to handle nanoseconds by truncating to microseconds
+                        if '.' in date_str:
+                            parts = date_str.split('.')
+                            # Truncate nanoseconds to microseconds (6 digits)
+                            micros = parts[1].rstrip('Z')[:6]
+                            date_str = f"{parts[0]}.{micros}"
+                            if 'Z' in parts[1]:
+                                date_str += 'Z'
+                        
+                        formats = [
+                            "%Y-%m-%dT%H:%M:%S.%fZ",  # Format with microseconds and Z
+                            "%Y-%m-%dT%H:%M:%S.%f",   # Format with microseconds only
+                            "%Y-%m-%dT%H:%M:%SZ",     # Format with Z
+                            "%Y-%m-%dT%H:%M:%S"       # Basic format
+                        ]
+                        
+                        for date_format in formats:
+                            try:
+                                return datetime.strptime(date_str, date_format)
+                            except ValueError:
+                                continue
+                        
+                        # If no format matches, log error and return current time
+                        logger.error(f"Could not parse date: {date_str}")
+                        return datetime.now()
+                    
                     all_models.extend([{
                         **model,
-                        'modified_at': datetime.strptime(model['modified_at'].split('.')[0], date_format),
+                        'modified_at': parse_date(model['modified_at']),
                         'is_local': True,
                     } for model in ollama_models])
             except Exception as e:
