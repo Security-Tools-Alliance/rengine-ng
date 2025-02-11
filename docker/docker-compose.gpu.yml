@@ -1,0 +1,21 @@
+services:
+  ollama:
+    extends:
+      file: docker-compose.yml
+      service: ollama
+    build:
+      context: ./ollama
+      dockerfile: ${GPU_TYPE:+${GPU_TYPE}.Dockerfile}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    environment:
+      # NVIDIA Settings
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+    profiles:
+      - gpu

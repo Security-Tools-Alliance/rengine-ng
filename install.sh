@@ -3,6 +3,9 @@
 # Import common functions
 source "$(pwd)/scripts/common_functions.sh" # Open the file if you want to know the meaning of each color
 
+# Import GPU support script
+source "$(pwd)/scripts/gpu_support.sh"
+
 # Fetch the internal and external IP address
 external_ip=$(curl -s https://ipecho.net/plain)
 internal_ips=$(ip -4 -br addr | awk '$2 == "UP" {print $3} /^lo/ {print $3}' | cut -d'/' -f1)
@@ -142,6 +145,129 @@ install_make() {
   install_package "make"
 }
 
+# Check GPU support and install required dependencies
+check_gpu_support() {
+    log "Checking for GPU support..." $COLOR_CYAN
+    
+    # Execute GPU detection with error handling
+    if ! GPU_TYPE=$(./scripts/gpu_support.sh 2>/dev/null); then
+        log "GPU detection script failed, continuing with CPU-only setup" $COLOR_YELLOW
+        # Add default GPU configuration
+        {
+            echo "GPU=0"
+            echo "GPU_TYPE=none"
+            echo "DOCKER_RUNTIME=none"
+        } >> .env
+        return 1
+    fi
+    
+    # Validate GPU_TYPE output
+    if [[ ! "$GPU_TYPE" =~ ^(nvidia|amd|none)$ ]]; then
+        log "Invalid GPU type detected: $GPU_TYPE, continuing with CPU-only setup" $COLOR_YELLOW
+        # Add default GPU configuration
+        {
+            echo "GPU=0"
+            echo "GPU_TYPE=none"
+            echo "DOCKER_RUNTIME=none"
+        } >> .env
+        return 1
+    fi
+    
+    case $GPU_TYPE in
+        "nvidia")
+            log "NVIDIA GPU detected" $COLOR_GREEN
+            if ! command -v nvidia-container-toolkit &> /dev/null; then
+                log "Installing NVIDIA Container Toolkit..." $COLOR_CYAN
+                
+                # Add NVIDIA repository key
+                if ! curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg; then
+                    log "Failed to add NVIDIA repository key" $COLOR_RED
+                    return 1
+                fi
+                
+                # Add NVIDIA repository
+                if ! curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
+                    sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
+                    sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list > /dev/null; then
+                    log "Failed to add NVIDIA repository" $COLOR_RED
+                    return 1
+                fi
+                
+                # Update package list
+                if ! sudo apt-get update; then
+                    log "Failed to update package list" $COLOR_RED
+                    return 1
+                fi
+                
+                # Install NVIDIA Container Toolkit
+                if ! sudo apt-get install -y nvidia-container-toolkit; then
+                    log "Failed to install NVIDIA Container Toolkit" $COLOR_RED
+                    return 1
+                fi
+                
+                # Configure Docker runtime
+                if ! sudo nvidia-ctk runtime configure --runtime=docker; then
+                    log "Failed to configure Docker runtime for NVIDIA" $COLOR_RED
+                    return 1
+                fi
+                
+                # Restart Docker service
+                if ! sudo systemctl restart docker; then
+                    log "Failed to restart Docker service" $COLOR_RED
+                    return 1
+                fi
+                
+                log "NVIDIA Container Toolkit installed successfully" $COLOR_GREEN
+            fi
+            return 0
+            ;;
+            
+        "amd")
+            log "AMD GPU detected" $COLOR_GREEN
+            if ! command -v amdgpu-install &> /dev/null; then
+                log "Installing ROCm..." $COLOR_CYAN
+                
+                # Add ROCm repository key
+                if ! curl -fsSL https://repo.radeon.com/rocm/rocm.gpg.key | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/rocm.gpg; then
+                    log "Failed to add ROCm repository key" $COLOR_RED
+                    return 1
+                fi
+                
+                # Add ROCm repository
+                if ! echo "deb [arch=amd64] https://repo.radeon.com/rocm/apt/debian ubuntu main" | sudo tee /etc/apt/sources.list.d/rocm.list > /dev/null; then
+                    log "Failed to add ROCm repository" $COLOR_RED
+                    return 1
+                fi
+                
+                # Update package list
+                if ! sudo apt-get update; then
+                    log "Failed to update package list" $COLOR_RED
+                    return 1
+                fi
+                
+                # Install ROCm
+                if ! sudo apt-get install -y rocm-dev; then
+                    log "Failed to install ROCm" $COLOR_RED
+                    return 1
+                fi
+                
+                # Configure user groups
+                if ! sudo usermod -aG render $USER || ! sudo usermod -aG video $USER; then
+                    log "Failed to configure user groups" $COLOR_RED
+                    return 1
+                fi
+                
+                log "ROCm installed successfully" $COLOR_GREEN
+            fi
+            return 0
+            ;;
+            
+        *)
+            log "No supported GPU detected, continuing with CPU-only setup" $COLOR_YELLOW
+            return 1
+            ;;
+    esac
+}
 
 # Check for root privileges
 if [ $EUID -eq 0 ]; then
@@ -215,6 +341,71 @@ main() {
         ;;
     esac
   done
+
+  log "Checking and installing reNgine-ng prerequisites..." $COLOR_CYAN
+
+  install_curl
+  install_make
+  check_docker
+  check_docker_compose
+
+  # Add GPU support check here
+  if check_gpu_support; then
+    if [ $isNonInteractive = true ]; then
+        # Load existing GPU configuration from .env
+        if [ -f .env ]; then
+            GPU_ENABLED=$(grep "^GPU=" .env | cut -d '=' -f2)
+            if [ "$GPU_ENABLED" = "1" ]; then
+                # Remove existing GPU-related configurations
+                sed -i '/^GPU=/d' .env
+                sed -i '/^GPU_TYPE=/d' .env
+                sed -i '/^DOCKER_RUNTIME=/d' .env
+                
+                # Add GPU configuration to environment
+                {
+                    echo "GPU=1"
+                    echo "GPU_TYPE=$GPU_TYPE"
+                    echo "DOCKER_RUNTIME=$GPU_TYPE"
+                } >> .env
+                log "GPU support has been enabled from existing configuration" $COLOR_GREEN
+            else
+                log "GPU support is disabled in .env" $COLOR_YELLOW
+            fi
+        fi
+    else
+        log "Do you want to enable GPU support for Ollama? (recommended for better LLM performance) [y/n] " $COLOR_CYAN
+        read -p "" gpu_choice
+        case $gpu_choice in
+            [Yy]* )
+                # Remove existing GPU-related configurations
+                sed -i '/^GPU=/d' .env
+                sed -i '/^GPU_TYPE=/d' .env
+                sed -i '/^DOCKER_RUNTIME=/d' .env
+                
+                # Add GPU configuration to environment
+                {
+                    echo "GPU=1"
+                    echo "GPU_TYPE=$GPU_TYPE"
+                    echo "DOCKER_RUNTIME=$GPU_TYPE"
+                } >> .env
+                log "GPU support will be enabled" $COLOR_GREEN
+                ;;
+            * )
+                # Remove existing GPU-related configurations
+                sed -i '/^GPU=/d' .env
+                sed -i '/^GPU_TYPE=/d' .env
+                sed -i '/^DOCKER_RUNTIME=/d' .env
+                # Add default GPU configuration
+                {
+                    echo "GPU=0"
+                    echo "GPU_TYPE=none"
+                    echo "DOCKER_RUNTIME=none"
+                } >> .env
+                log "Continuing without GPU support" $COLOR_YELLOW
+                ;;
+        esac
+    fi
+  fi
 
   if [ $isNonInteractive = false ]; then
     read -p "Are you sure you made changes to the '.env' file (y/n)? " answer

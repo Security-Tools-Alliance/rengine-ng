@@ -26,6 +26,6 @@ poetry run -C $RENGINE_FOLDER uvicorn reNgine.asgi:application \
     --log-level info \
     --ws-ping-interval 20 \
     --ws-ping-timeout 30 \
-    --timeout-keep-alive 65
+    --timeout-keep-alive 120
 
 exec "$@"
