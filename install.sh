@@ -248,7 +248,7 @@ main() {
       INSTALL_TYPE="source"
       log "Build has been forced because your user ID is not the same as the pre-built images. If you want to use pre-built images, your current user installing reNgine-ng must be 1000." $COLOR_RED
   else
-      if [ $isNonInteractive = false ]; then
+      if [ "$isNonInteractive" = false ]; then
           log "Do you want to build Docker images from source or use pre-built images (recommended)? \nThis saves significant build time but requires good download speeds for it to complete fast." $COLOR_RED
           log "1) From source" $COLOR_YELLOW
           log "2) Use pre-built images (default)" $COLOR_YELLOW
@@ -266,13 +266,13 @@ main() {
                   INSTALL_TYPE="prebuilt"
                   ;;
           esac
-      elif [ $isNonInteractive = true ]; then
+      elif [ "$isNonInteractive" = true ]; then
         INSTALL_TYPE="${INSTALL_TYPE:-prebuilt}"
       fi
   fi
 
   # Non-interactive install
-  if [ $isNonInteractive = true ]; then
+  if [ "$isNonInteractive" = true ]; then
     # Load and verify .env file
     if [ -f .env ]; then
         export $(grep -v '^#' .env | xargs)
