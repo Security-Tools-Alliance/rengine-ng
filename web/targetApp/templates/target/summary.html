@@ -316,7 +316,7 @@ Target Summary
 														<h5>{{target.domain_info.registrar.name}}</h5>
 													</div>
 													<div class="col-4">
-														<smal class="sub-header"l>Registrar Phone</small>
+														<small class="sub-header">Registrar Phone</small>
 														<h5>{{target.domain_info.registrar.phone}}</h5>
 													</div>
 													<div class="col-4">
@@ -379,8 +379,8 @@ Target Summary
 																			{% endif %}
 																			{% if target.domain_info.registrant.fax %}
 																			<span class="fe-printer"></span>&nbsp;{{target.domain_info.registrant.fax}}
+																			{% endif %}
 																		</td>
-																		{% endif %}
 																	</tr>
 																	<tr class="">
 																		<td><b>Address</b></td>
@@ -673,7 +673,7 @@ Target Summary
 						<div class="card-body">
 							<h4 class="header-title mb-0"><span id="ip-address-count"><span class="spinner-border spinner-border-sm me-1"></span></span> IP Addresses</h4>
 							<span class="text-warning float-end">*IP Addresses highlighted with yellow are CDN IP</span>
-							<div class="p-2" data-simplebar style="max-height: 235px; min-height: 235px;">
+							<div class="w-100 p-2" data-simplebar style="max-height: 235px; min-height: 235px;">
 								<div id="ip-address" class="mt-2"></div>
 							</div>
 						</div>
@@ -684,7 +684,7 @@ Target Summary
 						<div class="card-body">
 							<h4 class="header-title mb-0"><span id="ports-count"><span class="spinner-border spinner-border-sm me-1"></span></span> Discovered Ports</h4>
 							<span class="text-danger float-end">*Ports highlighted with red are uncommon Ports</span>
-							<div class="p-2" data-simplebar style="max-height: 235px; min-height: 235px;">
+							<div class="w-100 p-2" data-simplebar style="max-height: 235px; min-height: 235px;">
 								<div id="ports" class="mt-2"></div>
 							</div>
 						</div>
@@ -695,7 +695,7 @@ Target Summary
 						<div class="card-body">
 							<h4 class="header-title mb-0"><span id="technologies-count"><span class="spinner-border spinner-border-sm me-1"></span></span> Discovered Technologies</h4>
 							<span class="text-warning float-end">&nbsp;</span>
-							<div class="p-2" data-simplebar style="max-height: 235px; min-height: 235px;">
+							<div class="w-100 p-2" data-simplebar style="max-height: 235px; min-height: 235px;">
 								<div id="technologies" class="mt-2"></div>
 							</div>
 						</div>
@@ -1081,10 +1081,10 @@ $(document).ready(function(){
 							{
 								Object.entries(data).forEach(([key, value]) => {
 									if (value['is_cdn']) {
-										ip_badge += `<span class='m-1 badge badge-soft-warning badge-link' title="CDN IP Address" onclick="get_ip_details('${value.address}', {{target.id}})">${value.address}</span>`
+										ip_badge += `<span class='m-1 badge badge-soft-warning badge-link' title="CDN IP Address" onclick="get_ip_details('{% url 'api:getIpDetails' %}', '{% url 'api:querySubdomains' %}', '${value.address}', null, {{target.id}})">${value.address}</span>`
 									}
 									else{
-										ip_badge += `<span class='m-1 badge badge-soft-primary badge-link' onclick="get_ip_details('${value.address}', {{target.id}})">${value.address}</span>`
+											ip_badge += `<span class='m-1 badge badge-soft-primary badge-link' onclick="get_ip_details('{% url 'api:getIpDetails' %}', '{% url 'api:querySubdomains' %}', '${value.address}', null, {{target.id}})">${value.address}</span>`
 									}
 								});
 								return ip_badge;
@@ -1096,20 +1096,12 @@ $(document).ready(function(){
 					// open ports
 					{
 						"render": function ( data, type, row ) {
-							port_badge = ''
-							if (data){
-								for (ip in data){
-									ports = data[ip]['ports']
-									for (port in ports){
-										port_obj = data[ip]['ports'][port]
-										badge_color = port_obj['is_uncommon'] ? 'danger' : 'primary';
-										title = port_obj['is_uncommon'] ? 'Uncommon Port - ' + port_obj['description'] : port_obj['description'];
-										port_badge += `<span class='m-1 badge badge-soft-${badge_color} bs-tooltip badge-link' title='${title}' onclick="get_port_details(${port_obj['number']}, {{target.id}})">${port_obj['number']}/${port_obj['service_name']}</span>`
-									}
-								}
-								return port_badge;
-							}
-							return "";
+							return renderBadge(data, {
+								api_ips_url: '{% url 'api:listIPs' %}',
+								api_subdomains_url: '{% url 'api:querySubdomains' %}',
+								scan_id: null,
+								domain_id: {{target.id}}
+							});
 						},
 						"targets": 7,
 					},
@@ -1396,9 +1388,9 @@ $(document).ready(function(){
 			{
 				"render": function(data, type, row) {
 					if (row['open_status']) {
-						return `<div class="form-check mb-2 form-check-primary"><input type="checkbox" name="targets_checkbox['+ e + ']" class="float-start form-check-input" onchange="vuln_status_change(\'{% url 'change_vuln_status' current_project.slug 0 %}\', this, ` + data + `);">\n<span class="new-control-indicator"></span><span style="visibility:hidden">c</span></div>`;
+						return `<div class="form-check mb-2 form-check-primary"><input type="checkbox" name="targets_checkbox['+ e + ']" class="float-start form-check-input" onchange="vuln_status_change('{% url 'change_vuln_status' current_project.slug 0 %}\', this, ` + data + `);">\n<span class="new-control-indicator"></span><span style="visibility:hidden">c</span></div>`;
 					} else {
-						return `<div class="form-check mb-2 form-check-primary"><input type="checkbox" checked name="targets_checkbox['+ e + ']" class="float-start form-check-input" onchange="vuln_status_change(\'{% url 'change_vuln_status' current_project.slug 0 %}\', this, ` + data + `);">\n<span class="new-control-indicator"></span><span style="visibility:hidden">c</span></div>`;
+						return `<div class="form-check mb-2 form-check-primary"><input type="checkbox" checked name="targets_checkbox['+ e + ']" class="float-start form-check-input" onchange="vuln_status_change('{% url 'change_vuln_status' current_project.slug 0 %}\', this, ` + data + `);">\n<span class="new-control-indicator"></span><span style="visibility:hidden">c</span></div>`;
 					}
 				},
 				"targets": 0,
@@ -1663,9 +1655,9 @@ $(document).ready(function(){
 	get_important_subdomains('{% url 'api:querySubdomains' %}', target_id={{target.id}}, scan_history_id=null);
 	get_recon_notes('{% url 'api:listTodoNotes' %}', target_id={{target.id}}, scan_history_id=null);
 
-	get_ips('{% url 'api:listIPs' %}', scan_id=null, domain_id={{target.id}});
+	get_ips('{{ ip_addresses|safe }}', '{% url 'api:getIpDetails' %}', '{% url 'api:querySubdomains' %}', scan_id=null, domain_id={{target.id}});
 	get_technologies('{% url 'api:listTechnologies' %}', scan_id=null, domain_id={{target.id}});
-	get_ports('{% url 'api:listPorts' %}', scan_id=null, domain_id={{target.id}});
+	get_ports('{{ ip_addresses }}', '{% url 'api:listIPs' %}', '{% url 'api:querySubdomains' %}', scan_id=null, domain_id={{target.id}});
 
 	var clipboard = new Clipboard('.copyable');
 	clipboard.on('success', function(e) {

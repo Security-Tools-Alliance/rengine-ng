@@ -39,11 +39,11 @@ $(document).ready(function() {
 	var is_subd_grouping = false;
 	var subd_grouping_col = 8;
 	{% if request.GET.ip_address %}
-	var url = '/api/listDatatableSubdomain/?&project={{current_project.slug}}&format=datatables&ip_address={{request.GET.ip_address}}';
+	var url = '/api/listDatatableSubdomain/?project={{current_project.slug}}&format=datatables&ip_address={{request.GET.ip_address}}';
 	{% elif request.GET.name %}
-	var url = '/api/listDatatableSubdomain/?&project={{current_project.slug}}&format=datatables&name={{request.GET.name}}';
+	var url = '/api/listDatatableSubdomain/?project={{current_project.slug}}&format=datatables&name={{request.GET.name}}';
 	{% else %}
-	var url = '/api/listDatatableSubdomain/?&project={{current_project.slug}}&format=datatables';
+	var url = '/api/listDatatableSubdomain/?project={{current_project.slug}}&format=datatables';
 	{% endif %}
 	var subdomain_datatables = $('#subdomain_scan_results').DataTable({
 		"headerCallback": function(e, a, t, n, s) {
@@ -211,14 +211,12 @@ $(document).ready(function() {
 				{
 					"render": function ( data, type, row ) {
 						ip_badge = ''
-						if (data)
-						{
+						if (data) {
 							Object.entries(data).forEach(([key, value]) => {
 								if (value['is_cdn']) {
-									ip_badge += `<span class='m-1 badge badge-soft-warning badge-link' title="CDN IP Address" onclick="get_ip_details('${value.address}', scan_id=null, domain_id=null)">${value.address}</span>`
-								}
-								else{
-									ip_badge += `<span class='m-1 badge badge-soft-primary badge-link' onclick="get_ip_details('${value.address}', scan_id=null, domain_id=null)">${value.address}</span>`
+									ip_badge += `<span class='m-1 badge badge-soft-warning badge-link' title="CDN IP Address" onclick="get_ip_details('{% url 'api:getIpDetails' %}', '{% url 'api:querySubdomains' %}', '${value.address}', {{scan_history_id}})">${value.address}</span>`
+								} else {
+									ip_badge += `<span class='m-1 badge badge-soft-primary badge-link' onclick="get_ip_details('{% url 'api:getIpDetails' %}', '{% url 'api:querySubdomains' %}', '${value.address}', {{scan_history_id}})">${value.address}</span>`
 								}
 							});
 							return ip_badge;
@@ -230,20 +228,12 @@ $(document).ready(function() {
 				// open ports
 				{
 					"render": function ( data, type, row ) {
-						port_badge = ''
-						if (data){
-							for (ip in data){
-								ports = data[ip]['ports']
-								for (port in ports){
-									port_obj = data[ip]['ports'][port]
-									badge_color = port_obj['is_uncommon'] ? 'danger' : 'primary';
-									title = port_obj['is_uncommon'] ? 'Uncommon Port - ' + port_obj['description'] : port_obj['description'];
-									port_badge += `<span class='m-1 badge badge-soft-${badge_color} bs-tooltip badge-link' title='${title}' onclick="get_port_details(${port_obj['number']}, scan_id=null, domain_id=null)">${port_obj['number']}/${port_obj['service_name']}</span>`
-								}
-							}
-							return port_badge;
-						}
-						return "";
+						return renderBadge(data, {
+							api_ips_url: '{% url 'api:listIPs' %}',
+							api_subdomains_url: '{% url 'api:querySubdomains' %}',
+							scan_id: null,
+							domain_id: null
+						});
 					},
 					"targets": 7,
 				},

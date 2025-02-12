@@ -189,7 +189,14 @@ Quick Scan History
                           <div class="dropdown-divider"></div>
                         {% endif %}
                         {% if scan.scan_status != -1%}
-                          <a href="#" class="dropdown-item text-dark" onclick="initiate_report('{% url 'create_report' current_project.slug scan_history.id %}', {{scan_history.id}}, '{% if 'subdomain_discovery' in scan_history.scan_type.tasks %}True{% endif %}', '{% if 'vulnerability_scan' in scan_history.scan_type.tasks %}True{% endif %}', '{{ scan_history.domain.name }}')">
+                          <a href="#" class="dropdown-item text-dark" onclick="initiate_report(
+                              '{% url 'create_report' current_project.slug scan_history.id %}',
+                              {{scan_history.id}},
+                              '{% if 'subdomain_discovery' in scan_history.tasks %}True{% endif %}',
+                              '{% if 'vulnerability_scan' in scan_history.tasks %}True{% endif %}',
+                              '{% if 'port_scan' in scan_history.tasks %}True{% endif %}',
+                              '{{ scan_history.domain.name }}'
+                          )">
                           <i class="fe-download"></i>&nbsp;Scan Report</a>
                         {% endif %}
                         </div>
@@ -489,13 +496,13 @@ Quick Scan History
     }
 });
 
-  function initiate_report(url, id, is_subdomain_scan, is_vulnerability_scan, domain_name) {
+  function initiate_report(url, id, is_subdomain_scan, is_vulnerability_scan, is_port_scan, domain_name) {
     $('#generateReportModal').modal('show');
     $('#report_alert_message').empty();
     $('#report_type_select').empty();
-    if (is_subdomain_scan == 'True'  && is_vulnerability_scan == 'True') {
+    if (is_subdomain_scan == 'True'  && is_vulnerability_scan == 'True' && is_port_scan == 'True') {
       $('#report_alert_message').append(`
-        <b>Full Scan</b> will include both Reconnaissance and Vulnerability Report.<br>
+        <b>Full Scan</b> will include both Reconnaissance, Vulnerability and Port Scan Reports.<br>
         `);
 
         $('#report_type_select').append($('<option>', {
@@ -518,11 +525,22 @@ Quick Scan History
     if (is_vulnerability_scan == 'True'){
       // eligible for vulnerability report
       $('#report_alert_message').append(`
-        <b>Vulnerability Report</b> will only include details of Vulnerabilities Identified.
+        <b>Vulnerability Report</b> will only include details of Vulnerabilities Identified.<br>
         `);
         $('#report_type_select').append($('<option>', {
           value: 'vulnerability',
           text: 'Vulnerability Report'
+        }));
+    }
+
+    if (is_port_scan == 'True'){
+      // eligible for port scan report
+      $('#report_alert_message').append(`
+        <b>Port Scan Report</b> will only include details of Ports Scanned.
+        `);
+        $('#report_type_select').append($('<option>', {
+          value: 'port_scan',
+          text: 'Port Scan Report'
         }));
     }
     $('#generateReportButton').attr('onClick', `generate_report('${url}', ${id}, '${domain_name}')`);

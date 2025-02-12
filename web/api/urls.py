@@ -43,6 +43,10 @@ urlpatterns = [
         ListIPs.as_view(),
         name='listIPs'),
     path(
+        'queryIp/',
+        GetIpDetails.as_view(),
+        name='getIpDetails'),
+    path(
         'queryInterestingSubdomains/',
         QueryInterestingSubdomains.as_view(),
         name='queryInterestingSubdomains'),
@@ -243,6 +247,10 @@ urlpatterns = [
         'action/create/project',
         CreateProjectApi.as_view(),
         name='create_project'),
+    path(
+        'uncommon-web-ports/', 
+         UncommonWebPortsView.as_view(), 
+         name='uncommonWebPorts'),
 ]
 
 urlpatterns += router.urls

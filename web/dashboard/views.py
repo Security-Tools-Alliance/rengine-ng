@@ -162,8 +162,16 @@ def index(request, slug):
     ip_addresses = IpAddress.objects.filter(ip_addresses__in=subdomains)
 
     context['total_ips'] = ip_addresses.count()
-    context['most_used_port'] = Port.objects.filter(ports__in=ip_addresses).annotate(count=Count('ports')).order_by('-count')[:7]
-    context['most_used_ip'] = ip_addresses.annotate(count=Count('ip_addresses')).order_by('-count').exclude(ip_addresses__isnull=True)[:7]
+    context['most_used_port'] = Port.objects.filter(
+        ports__in=ip_addresses
+    ).annotate(
+        count=Count('ports')
+    ).order_by('-count')[:7]
+    context['most_used_ip'] = ip_addresses.annotate(
+        count=Count('ip_addresses')
+    ).order_by('-count').exclude(
+        ip_addresses__isnull=True
+    )[:7]
     context['most_used_tech'] = Technology.objects.filter(technologies__in=subdomains).annotate(count=Count('technologies')).order_by('-count')[:7]
 
     context['most_common_cve'] = CveId.objects.filter(cve_ids__in=vulnerabilities).annotate(nused=Count('cve_ids')).order_by('-nused').values('name', 'nused')[:7]

@@ -26,6 +26,7 @@ from dotted_dict import DottedDict
 from django.utils import timezone, html
 from pycvesearch import CVESearch
 from metafinder.extractor import extract_metadata_from_google_search
+import xml.etree.ElementTree as ET
 
 from reNgine.celery import app
 from reNgine.gpt import GPTVulnerabilityReportGenerator
@@ -101,10 +102,16 @@ def initiate_scan(
         domain.last_scan_date = timezone.now()
         domain.save()
 
-        logger.warning(f'Initiating scan for domain {domain.name} on celery')
+        # Check if scanning an IP address
+        is_ip_scan = validators.ip_address.ipv4(domain.name) or validators.ip_address.ipv6(domain.name)
+        
+        if is_ip_scan:
+            # Filter out irrelevant tasks for an IP
+            allowed_tasks = ['port_scan', 'fetch_url', 'dir_file_fuzz', 'vulnerability_scan', 'screenshot', 'waf_detection']
+            engine.tasks = [task for task in engine.tasks if task in allowed_tasks]
+            logger.info(f'IP scan detected - Limited available tasks to: {engine.tasks}')
 
-        # Get path filter
-        url_filter = url_filter.rstrip('/')
+        logger.warning(f'Initiating scan for domain {domain.name} on celery')
 
         # for live scan scan history id is passed as scan_history_id 
         # and no need to create scan_history object
@@ -172,17 +179,16 @@ def initiate_scan(
         subdomain_name = domain.name
         subdomain, _ = save_subdomain(subdomain_name, ctx=ctx)
 
-        # Create initial HTTP URL
-        http_url = f'{domain.name}{url_filter}' if url_filter else domain.name
-        endpoint = None
-
+        # Create initial host
+        host = domain.name
+        
         # Use Nmap to find web services ports
-        logger.warning(f'Using Nmap to find web services on {http_url}')
-        hosts_data = get_nmap_http_datas(http_url, ctx)
+        logger.warning(f'Using Nmap to find web services on {host}')
+        hosts_data = get_nmap_http_datas(host, ctx)
         logger.debug(f'Identified hosts: {hosts_data}')
 
         if not hosts_data:
-            logger.warning(f'Nmap found no web services on host {http_url}. Scan failed.')
+            logger.warning(f'Nmap found no web services on host {host}. Scan failed.')
             scan.scan_status = FAILED_TASK
             scan.error_message = "Sorry, host does not seems to have any web service"
             scan.save()
@@ -191,7 +197,7 @@ def initiate_scan(
         # Create first HTTP endpoint
         endpoint = create_first_endpoint_from_nmap_data(hosts_data, domain, subdomain, ctx)
         if not endpoint:
-            logger.warning(f'Could not create any valid endpoints for {http_url}. Scan failed.')
+            logger.warning(f'Could not create any valid endpoints for {host}. Scan failed.')
             scan.scan_status = FAILED_TASK 
             scan.error_message = "Failed to create valid endpoints"
             scan.save()
@@ -1435,19 +1441,18 @@ def port_scan(self, hosts=[], ctx={}, description=None):
             urls.append(http_url)
 
         # Add Port in DB
-        port_details = whatportis.get_ports(str(port_number))
-        service_name = port_details[0].name if len(port_details) > 0 else 'unknown'
-        description = port_details[0].description if len(port_details) > 0 else ''
+        if any(c.isalpha() for c in ip_address):
+            logger.warning(f"Skipping hostname, not a valid IP: {ip_address}")
+            continue
 
-        # get or create port
-        port, created = Port.objects.get_or_create(
+        port = Port.objects.create(
             number=port_number,
-            service_name=service_name,
-            description=description
+            service_name='unknown',
+            description='',
+            is_uncommon=port_number in UNCOMMON_WEB_PORTS
         )
-        if port_number in UNCOMMON_WEB_PORTS:
-            port.is_uncommon = True
-            port.save()
+
+        ip, _ = IpAddress.objects.get_or_create(address=ip_address)
         ip.ports.add(port)
         ip.save()
         if host in ports_data:
@@ -1458,7 +1463,7 @@ def port_scan(self, hosts=[], ctx={}, description=None):
         # Send notification
         logger.warning(f'Found opened port {port_number} on {ip_address} ({host})')
 
-    if len(ports_data) == 0:
+    if not ports_data:
         logger.info('Finished running naabu port scan - No open ports found.')
         if nmap_enabled:
             logger.info('Nmap scans skipped')
@@ -1500,7 +1505,7 @@ def run_nmap(self, ctx, **nmap_args):
         self: RengineTask instance
         ctx: Scan context
         nmap_args: Dictionary containing nmap configuration
-            - nmap_cmd: Custom nmap command
+            - nmap_cmd: Custom nmap args
             - nmap_script: NSE scripts to run
             - nmap_script_args: NSE script arguments
             - ports_data: Dictionary mapping hosts to their open ports
@@ -1511,7 +1516,7 @@ def run_nmap(self, ctx, **nmap_args):
         ctx_nmap['description'] = get_task_title(f'nmap_{host}', self.scan_id, self.subscan_id)
         ctx_nmap['track'] = False
         sig = nmap.si(
-                cmd=nmap_args.get('nmap_cmd'),
+                args=nmap_args.get('nmap_cmd'),
                 ports=port_list,
                 host=host,
                 script=nmap_args.get('nmap_script'),
@@ -1527,7 +1532,7 @@ def run_nmap(self, ctx, **nmap_args):
 @app.task(name='nmap', queue='main_scan_queue', base=RengineTask, bind=True)
 def nmap(
         self,
-        cmd=None,
+        args=None,
         ports=[],
         host=None,
         input_file=None,
@@ -1539,7 +1544,7 @@ def nmap(
     """Run nmap on a host.
 
     Args:
-        cmd (str, optional): Existing nmap command to complete.
+        args (str, optional): Existing nmap args to complete.
         ports (list, optional): List of ports to scan.
         host (str, optional): Host to scan.
         input_file (str, optional): Input hosts file.
@@ -1555,11 +1560,12 @@ def nmap(
     output_file = self.output_path
     output_file_xml = f'{self.results_dir}/{host}_{self.filename}'
     vulns_file = f'{self.results_dir}/{host}_{filename_vulns}'
-    logger.warning(f'Running nmap on {host}:{ports}')
+    logger.warning(f'Running nmap on {host}:common_ports')
+    logger.debug(f'Scan Engine args: {args}')
 
     # Build cmd
     nmap_cmd = get_nmap_cmd(
-        cmd=cmd,
+        args=args,
         ports=ports_str,
         script=script,
         script_args=script_args,
@@ -1575,6 +1581,9 @@ def nmap(
         history_file=self.history_file,
         scan_id=self.scan_id,
         activity_id=self.activity_id)
+
+    # Update port service information
+    update_port_service_info(output_file_xml)
 
     # Get nmap XML results and convert to JSON
     vulns = parse_nmap_results(output_file_xml, output_file, parse_type='vulnerabilities')
@@ -1637,37 +1646,32 @@ def waf_detection(self, ctx={}, description=None):
         logger.error(f'No URLs to check for WAF. Skipping.')
         return
 
-    cmd = f'wafw00f -i {input_path} -o {self.output_path}'
+    cmd = f'wafw00f -i {input_path} -o {self.output_path} -f json'
     run_command(
         cmd,
         history_file=self.history_file,
         scan_id=self.scan_id,
         activity_id=self.activity_id)
+        
     if not os.path.isfile(self.output_path):
         logger.error(f'Could not find {self.output_path}')
         return
 
     with open(self.output_path) as file:
-        wafs = file.readlines()
+        wafs = json.load(file)
 
-    for line in wafs:
-        line = " ".join(line.split())
-        splitted = line.split(' ', 1)
-        waf_info = splitted[1].strip()
-        waf_name = waf_info[:waf_info.find('(')].strip()
-        waf_manufacturer = waf_info[waf_info.find('(')+1:waf_info.find(')')].strip().replace('.', '')
-        http_url = sanitize_url(splitted[0].strip())
-        if not waf_name or waf_name == 'None':
+    for waf_data in wafs:
+        if not waf_data.get('detected') or not waf_data.get('firewall'):
             continue
 
         # Add waf to db
         waf, _ = Waf.objects.get_or_create(
-            name=waf_name,
-            manufacturer=waf_manufacturer
+            name=waf_data['firewall'],
+            manufacturer=waf_data.get('manufacturer', '')
         )
 
         # Add waf info to Subdomain in DB
-        subdomain_name = get_subdomain_from_url(http_url)
+        subdomain_name = get_subdomain_from_url(waf_data['url'])
         logger.info(f'Wafw00f Subdomain : {subdomain_name}')
 
         try:
@@ -1675,12 +1679,13 @@ def waf_detection(self, ctx={}, description=None):
                 name=subdomain_name,
                 scan_history=self.scan,
             )
-        except:
-            logger.warning(f'Subdomain {subdomain_name} was not found in the db, skipping waf detection for this domain.')
-            continue
+            # Clear existing WAFs and set the new one
+            subdomain.waf.clear()
+            subdomain.waf.add(waf)
+            subdomain.save()
+        except Subdomain.DoesNotExist:
+            logger.warning(f'Subdomain {subdomain_name} was not found in the db, skipping waf detection.')
 
-        subdomain.waf.add(waf)
-        subdomain.save()
     return wafs
 
 
@@ -3444,11 +3449,31 @@ def parse_nmap_results(xml_file, output_file=None, parse_type='vulnerabilities')
     for host in hosts:
         # Get hostname/IP
         hostnames_dict = host.get('hostnames', {})
+        address = host.get('address')
+
+        if not address:
+            logger.warning("No address found in host data, skipping...")
+            continue
+
+        # If address is a list, take the first
+        if isinstance(address, list):
+            address = address[0]
+
+        # Check that address contains an @addr attribute
+        if not isinstance(address, dict) or '@addr' not in address:
+            logger.warning("Invalid address format in host data, skipping...")
+            continue
+
         if hostnames_dict:
-            hostnames_list = hostnames_dict['hostname'] if isinstance(hostnames_dict['hostname'], list) else [hostnames_dict['hostname']]
-            hostnames = [entry.get('@name') for entry in hostnames_list]
+            if not (hostname_data := hostnames_dict.get('hostname', [])):
+                hostnames = [address['@addr']]
+            else:
+                # Convert to list if it's a unique dictionary
+                if isinstance(hostname_data, dict):
+                    hostname_data = [hostname_data]
+                hostnames = [entry.get('@name') for entry in hostname_data if entry.get('@name')] or [address['@addr']]
         else:
-            hostnames = [host.get('address')['@addr']]
+            hostnames = [address['@addr']]
 
         # Process each hostname
         for hostname in hostnames:
@@ -3525,7 +3550,6 @@ def parse_nmap_results(xml_file, output_file=None, parse_type='vulnerabilities')
                         results.append(vuln)
 
     return results
-
 
 def parse_nmap_http_csrf_output(script_output):
     pass
@@ -4776,6 +4800,7 @@ def save_endpoint(
         ctx={},
         crawl=False,
         is_default=False,
+        http_status=None,
         **endpoint_data):
     """Get or create EndPoint object. If crawl is True, also crawl the endpoint
     HTTP URL with httpx.
@@ -4790,7 +4815,6 @@ def save_endpoint(
     Returns:
         tuple: (EndPoint, created) or (None, False) if invalid
     """
-    # Remove nulls and validate basic inputs
     # Remove nulls and validate basic inputs
     endpoint_data = replace_nulls(endpoint_data)
     scheme = urlparse(http_url).scheme
@@ -4812,7 +4836,11 @@ def save_endpoint(
         logger.error('Missing scan or domain information')
         return None, False
         
-    if domain.name not in http_url:
+    # Check if we're scanning an IP
+    is_ip_scan = validators.ipv4(domain.name) or validators.ipv6(domain.name)
+        
+    # For regular domain scans, validate URL belongs to domain
+    if not is_ip_scan and domain.name not in http_url:
         logger.error(f"{http_url} is not a URL of domain {domain.name}. Skipping.")
         return None, False
     
@@ -4855,14 +4883,20 @@ def save_endpoint(
         endpoint.save()
         created = endpoint_data['endpoint_created']
     else:
-        endpoint = EndPoint.objects.create(
-            scan_history=scan,
-            target_domain=domain,
-            http_url=http_url,
-            is_default=is_default,
-            discovered_date=timezone.now(),
-            **endpoint_data
-        )
+        create_data = {
+            'scan_history': scan,
+            'target_domain': domain,
+            'http_url': http_url,
+            'is_default': is_default,
+            'discovered_date': timezone.now(),
+        }
+        
+        if http_status is not None:
+            create_data['http_status'] = http_status
+            
+        create_data.update(endpoint_data)
+
+        endpoint = EndPoint.objects.create(**create_data)
         created = True
     
     # Add subscan relation if needed
@@ -4878,7 +4912,7 @@ def save_subdomain(subdomain_name, ctx={}):
 
     Args:
         subdomain_name (str): Subdomain name.
-        scan_history (startScan.models.ScanHistory): ScanHistory object.
+        ctx (dict): Context containing scan information and settings.
 
     Returns:
         tuple: (startScan.models.Subdomain, created) where `created` is a
@@ -4888,37 +4922,51 @@ def save_subdomain(subdomain_name, ctx={}):
     subscan_id = ctx.get('subscan_id')
     out_of_scope_subdomains = ctx.get('out_of_scope_subdomains', [])
     subdomain_name = subdomain_name.lower()
+
+    # Validate domain/IP format
     valid_domain = (
         validators.domain(subdomain_name) or
         validators.ipv4(subdomain_name) or
         validators.ipv6(subdomain_name)
     )
     if not valid_domain:
-        logger.error(f'{subdomain_name} is not a valid domain. Skipping.')
+        logger.error(f'{subdomain_name} is not a valid domain/IP. Skipping.')
         return None, False
 
+    # Check if subdomain is in scope
     if subdomain_name in out_of_scope_subdomains:
         logger.error(f'{subdomain_name} is out-of-scope. Skipping.')
         return None, False
 
-    if ctx.get('domain_id'):
-        domain = Domain.objects.get(id=ctx.get('domain_id'))
+    # Get domain object and check if we're scanning an IP
+    scan = ScanHistory.objects.filter(pk=scan_id).first()
+    domain = scan.domain if scan else None
+    
+    if not domain:
+        logger.error('No domain found in scan history. Skipping.')
+        return None, False
+        
+    is_ip_scan = validators.ipv4(domain.name) or validators.ipv6(domain.name)
+
+    # For regular domain scans, validate subdomain belongs to domain
+    if not is_ip_scan and ctx.get('domain_id'):
         if domain.name not in subdomain_name:
             logger.error(f"{subdomain_name} is not a subdomain of domain {domain.name}. Skipping.")
             return None, False
 
-    scan = ScanHistory.objects.filter(pk=scan_id).first()
-    domain = scan.domain if scan else None
+    # Create or get subdomain object
     subdomain, created = Subdomain.objects.get_or_create(
         scan_history=scan,
         target_domain=domain,
         name=subdomain_name)
+
     if created:
-        logger.info(f'Found new subdomain {subdomain_name}')
+        logger.info(f'Found new subdomain/rDNS: {subdomain_name}')
         subdomain.discovered_date = timezone.now()
         if subscan_id:
             subdomain.subdomain_subscan_ids.add(subscan_id)
         subdomain.save()
+
     return subdomain, created
 
 def save_subdomain_metadata(subdomain, endpoint, extra_datas={}):
@@ -5252,7 +5300,7 @@ def run_gf_list():
         }
 
 def get_nmap_http_datas(host, ctx):
-    """Check if port 80 or 443 are opened and get HTTP status code for given hosts.
+    """Check if standard and non-standard HTTP ports are open for given hosts.
     
     Args:
         host (str): Initial hostname to scan
@@ -5261,12 +5309,9 @@ def get_nmap_http_datas(host, ctx):
     Returns:
         dict: Dictionary of results per host:
             {
-                'host1': {'scheme': 'https', 'ports': [80, 443]},
-                'host2': {'scheme': 'http', 'ports': [80]}
+                'host1': {'scheme': 'https', 'ports': [80, 443, 8080]},
+                'host2': {'scheme': 'http', 'ports': [80, 8000]}
             }
-            
-    Raises:
-        NmapScanError: If scan fails after max retries
     """
     results_dir = ctx.get('results_dir', '/tmp')
     filename = ctx.get('filename', 'nmap.xml')
@@ -5280,14 +5325,21 @@ def get_nmap_http_datas(host, ctx):
         logger.error(f"Failed to create safe path for XML file: {str(e)}")
         return None
     
-    # Basic nmap scan for HTTP ports only
+    # Combine standard (80,443) and uncommon web ports
+    all_ports = [80, 443] + UNCOMMON_WEB_PORTS
+    # Convert ports list to nmap format (e.g. "80,443,8000-8089,...")
+    ports_str = ','.join(str(p) for p in sorted(set(all_ports)))
+    
+    # Basic nmap scan for all HTTP ports
     nmap_args = {
         'rate_limit': 150,
-        'nmap_cmd': 'nmap -Pn -p 80,443',
+        'nmap_cmd': f'-Pn -p {ports_str} --open',
         'nmap_script': None,
         'nmap_script_args': None,
-        'ports_data': {host: [80, 443]},
+        'ports_data': {host: all_ports},
     }
+    
+    logger.info(f'Scanning ports: {ports_str}')
     
     # Add retry logic for nmap scan
     max_retries = 3
@@ -5310,34 +5362,88 @@ def get_nmap_http_datas(host, ctx):
         logger.error(f"Failed to generate output file after {max_retries} retries")
         return None
     
-    # Parse results to get open ports
-    results = parse_nmap_results(xml_file, parse_type='ports')
-    results_str = json.dumps(results, indent=2)
-    logger.debug(f'Raw nmap results: {results_str}')
+    # Parse results to get open ports and services
+    port_results = parse_nmap_results(xml_file, parse_type='ports')
+    service_results = parse_nmap_results(xml_file, parse_type='services')
+    
+    # Create service lookup dict for efficiency
+    service_lookup = {
+        f"{service['host']}:{service['port']}": service 
+        for service in service_results
+    }
     
     # Group results by host using atomic transaction
     hosts_data = {}
     with transaction.atomic():
-        for result in results:
+        for result in port_results:
             hostname = result['host']
             if hostname not in hosts_data:
-                hosts_data[hostname] = {'ports': []}
+                hosts_data[hostname] = {
+                    'ports': [],
+                    'schemes': set()
+                }
                 
             if result['state'] == 'open':
-                port = int(result['port'])
-                logger.info(f'Found open port {port} for host {hostname}')
-                if port not in hosts_data[hostname]['ports']:
-                    hosts_data[hostname]['ports'].append(port)
+                port_number = int(result['port'])
+                logger.info(f'Found open port {port_number} for host {hostname}')
+                
+                # Get service info if available
+                service_info = service_lookup.get(f"{hostname}:{port_number}", {})
+                service_name = service_info.get('service_name', '').lower()
+                
+                # Detect scheme from service
+                if service_name in ['http', 'http-proxy', 'http-alt']:
+                    hosts_data[hostname]['schemes'].add('http')
+                elif service_name in ['https', 'https-alt', 'ssl/http', 'ssl/https']:
+                    hosts_data[hostname]['schemes'].add('https')
+                
+                # Get IP address from nmap XML result
+                ip = None
+                if 'addresses' in result and result['addresses']:
+                    for addr in result['addresses']:
+                        if addr.get('type') == 'ipv4':
+                            ip = addr.get('addr')
+                            break
+                        elif addr.get('type') == 'ipv6':
+                            ip = addr.get('addr')
+                
+                if ip:
+                    ip_address, _ = IpAddress.objects.get_or_create(
+                        address=ip
+                    )
+                else:
+                    logger.warning(f'No IP address found in nmap results for {hostname}')
+                    ip_address = None
+                
+                # Create or update port with service info
+                create_or_update_port_with_service(
+                    port_number=port_number,
+                    service_info=service_info,
+                    ip_address=ip_address
+                )
+                
+                # Add port to hosts_data
+                if port_number not in hosts_data[hostname]['ports']:
+                    hosts_data[hostname]['ports'].append(port_number)
         
-        # Determine scheme for each host
+        # Determine final scheme for each host
         for hostname, data in hosts_data.items():
-            # Prefer HTTPS over HTTP if both are available
-            if 443 in data['ports']:
+            # Prefer HTTPS over HTTP if both are detected
+            if 'https' in data['schemes']:
                 data['scheme'] = 'https'
-            elif 80 in data['ports']:
+            elif 'http' in data['schemes']:
                 data['scheme'] = 'http'
             else:
-                data['scheme'] = None
+                # Fallback to port-based detection if no service info
+                if 443 in data['ports']:
+                    data['scheme'] = 'https'
+                elif 80 in data['ports']:
+                    data['scheme'] = 'http'
+                else:
+                    data['scheme'] = None
+            
+            # Clean up the data structure
+            del data['schemes']
             logger.debug(f'Host {hostname} - scheme: {data["scheme"]}, ports: {data["ports"]}')
     
     return hosts_data
@@ -5345,49 +5451,215 @@ def get_nmap_http_datas(host, ctx):
 def create_first_endpoint_from_nmap_data(hosts_data, domain, subdomain, ctx):
     """Create endpoints from Nmap service detection results.
     Returns the first created endpoint or None if failed."""
+    
+    if not hosts_data:
+        logger.warning("No Nmap data provided. Skipping endpoint creation.")
+        return None
+
     endpoint = None
+    is_ip_scan = validators.ipv4(domain.name) or validators.ipv6(domain.name)
+    url_filter = ctx.get('url_filter', '').rstrip('/')
+
+    # For IP scans, ensure we have an entry for the IP itself
+    if is_ip_scan and domain.name not in hosts_data:
+        rdns_hostname = next(iter(hosts_data.keys()), None)
+        if rdns_hostname and hosts_data[rdns_hostname]:
+            hosts_data[domain.name] = hosts_data[rdns_hostname].copy()
+            logger.info(f"Created IP endpoint data from rDNS {rdns_hostname}")
 
     for hostname, data in hosts_data.items():
-        if not data['scheme']:
-            continue
-
-        host_url = f"{data['scheme']}://{hostname}"
         current_subdomain = subdomain
-        logger.debug(f'Processing HTTP URL: {host_url}')
+        schemes_to_try = []
+        
+        # If scheme is detected, try it first
+        if data['scheme']:
+            schemes_to_try.append(data['scheme'])
+        
+        # Add any missing schemes to try
+        for scheme in ['https', 'http']:
+            if scheme not in schemes_to_try:
+                schemes_to_try.append(scheme)
 
-        # Create subdomain for rDNS hostnames
-        if hostname != domain.name:
-            logger.info(f'Creating subdomain for rDNS hostname: {hostname}')
-            current_subdomain, _ = save_subdomain(hostname, ctx=ctx)
-            if not current_subdomain:
-                logger.warning(f'Could not create subdomain for rDNS hostname: {hostname}. Skipping this host.')
-                continue
+        # Try each port with each scheme
+        successful_endpoint = None
+        for port in data['ports']:
+            for scheme in schemes_to_try:
+                host_url = f"{scheme}://{hostname}:{port}{url_filter}"
+                logger.debug(f'Processing HTTP URL: {host_url}')
 
-        # Create endpoint
-        current_endpoint, _ = save_endpoint(
-            host_url,
-            ctx=ctx,
-            crawl=True,
-            is_default=True,
-            subdomain=current_subdomain
-        )
+                # For IP scans, create endpoints for both IP and rDNS
+                if is_ip_scan:
+                    if hostname != domain.name:
+                        # Create subdomain for rDNS
+                        logger.info(f'Creating subdomain for rDNS hostname: {hostname}')
+                        rdns_subdomain, _ = save_subdomain(hostname, ctx=ctx)
+                        if rdns_subdomain:
+                            # Try to create endpoint for rDNS
+                            rdns_endpoint, _ = save_endpoint(
+                                host_url,
+                                ctx=ctx,
+                                crawl=True,
+                                is_default=True,
+                                subdomain=rdns_subdomain
+                            )
+                            if rdns_endpoint:
+                                successful_endpoint = rdns_endpoint
+                                save_subdomain_metadata(
+                                    rdns_subdomain,
+                                    rdns_endpoint,
+                                    extra_datas={
+                                        'http_url': host_url,
+                                        'open_ports': data['ports']
+                                    }
+                                )
+                                break  # Found working scheme, try next port
+                    
+                    # Always try to create endpoint for IP itself
+                    if hostname == domain.name or not endpoint:
+                        current_endpoint, _ = save_endpoint(
+                            f"{scheme}://{domain.name}:{port}{url_filter}",
+                            ctx=ctx,
+                            crawl=True,
+                            is_default=True,
+                            subdomain=current_subdomain
+                        )
+                        if current_endpoint:
+                            successful_endpoint = current_endpoint
+                            save_subdomain_metadata(
+                                current_subdomain,
+                                current_endpoint,
+                                extra_datas={
+                                    'http_url': f"{scheme}://{domain.name}:{port}{url_filter}",
+                                    'open_ports': data['ports']
+                                }
+                            )
+                            break  # Found working scheme, try next port
 
-        # Save metadata for all endpoints (including rDNS)
-        if current_endpoint:
+                # For regular domain scans
+                else:
+                    if hostname != domain.name:
+                        logger.info(f'Creating subdomain for hostname: {hostname}')
+                        current_subdomain, _ = save_subdomain(hostname, ctx=ctx)
+                        if not current_subdomain:
+                            logger.warning(f'Could not create subdomain for hostname: {hostname}. Skipping this host.')
+                            continue
+
+                    # Try to create endpoint with crawling
+                    current_endpoint, _ = save_endpoint(
+                        host_url,
+                        ctx=ctx,
+                        crawl=True,
+                        is_default=True,
+                        subdomain=current_subdomain
+                    )
+
+                    if current_endpoint:
+                        successful_endpoint = current_endpoint
+                        save_subdomain_metadata(
+                            current_subdomain,
+                            current_endpoint,
+                            extra_datas={
+                                'http_url': host_url,
+                                'open_ports': data['ports']
+                            }
+                        )
+                        break  # Found working scheme, try next port
+
+            if successful_endpoint:
+                break  # Found working port, stop trying others
+
+        # Keep track of hostname data even if no endpoint was created
+        if not successful_endpoint and current_subdomain:  # Added check for current_subdomain
             save_subdomain_metadata(
                 current_subdomain,
-                current_endpoint,
+                None,
                 extra_datas={
-                    'http_url': host_url,
+                    'http_url': f"unknown://{hostname}{url_filter}",
                     'open_ports': data['ports']
                 }
             )
-
-            # Keep track of first endpoint (prioritizing main domain)
-            if not endpoint or hostname == domain.name:
-                endpoint = current_endpoint
+        # Update main endpoint if needed
+        elif not endpoint or hostname == domain.name:
+            endpoint = successful_endpoint
 
     return endpoint
+
+def update_port_service_info(xml_file):
+    """Update port information with nmap service detection results"""
+    services = parse_nmap_results(xml_file, parse_type='services')
+    
+    for service in services:
+        try:
+            # Get IP from host address node
+            ip = service.get('ip', '')
+            host = service.get('host', '')
+            
+            # If IP is empty, try to get it from the host
+            if not ip and host:
+                # Parse XML to get IP for this host
+                tree = ET.parse(xml_file)
+                root = tree.getroot()
+                for host_elem in root.findall('.//host'):
+                    hostnames = host_elem.find('hostnames')
+                    if hostnames is not None:
+                        for hostname in hostnames.findall('hostname'):
+                            if hostname.get('name') == host:
+                                ip = host_elem.find('address').get('addr')
+                                break
+            
+            # Skip if still empty or if it's a hostname
+            if not ip or any(c.isalpha() for c in ip):
+                logger.warning(f"Skipping invalid IP address: {ip} for host {host}")
+                continue
+                
+            ip_address, _ = IpAddress.objects.get_or_create(
+                address=ip
+            )
+            create_or_update_port_with_service(
+                port_number=int(service['port']),
+                service_info=service,
+                ip_address=ip_address
+            )
+        except Exception as e:
+            logger.error(f"Failed to update port {service['port']}: {str(e)}")
+
+def create_or_update_port_with_service(port_number, service_info, ip_address=None):
+    """Create or update port with service information from nmap for specific IP."""
+    ports = Port.objects.filter(number=port_number)
+    
+    if ports.count() > 1:
+        kept_port = ports.first()
+        ports.exclude(id=kept_port.id).delete()
+        port = kept_port
+    elif ports.exists():
+        port = ports.first()
+    else:
+        port = Port.objects.create(
+            number=port_number,
+            is_uncommon=port_number in UNCOMMON_WEB_PORTS
+        )
+    
+    if ip_address:
+        # Build service description
+        description_parts = []
+        if service_info.get('service_product'):
+            description_parts.append(service_info['service_product'])
+        if service_info.get('service_version'):
+            description_parts.append(service_info['service_version'])
+        if service_info.get('service_extrainfo'):
+            description_parts.append(service_info['service_extrainfo'])
+        
+        # Update port info
+        port.service_name = service_info.get('service_name', 'unknown')
+        port.description = ' '.join(description_parts) if description_parts else ''
+        port.save()
+        
+        # Add M2M relation with IP
+        ip_address.ports.add(port)
+        
+        logger.info(f'Updated service info for IP {ip_address.address} port {port_number}: {port.service_name} - {port.description}')
+    
+    return port
 
 #----------------------#
 #     Remote debug     #
@@ -5403,3 +5675,4 @@ def debug():
             debugpy.wait_for_client()
     except Exception as e:
         logger.error(e)
+

@@ -308,6 +308,32 @@ class Subdomain(models.Model):
 			.count()
 		)
 
+	@property
+	def get_ports(self):
+		"""Get all ports associated with this subdomain's IP addresses"""
+		ports = []
+		for ip in self.ip_addresses.all():
+			ports.extend(port.number for port in ip.ports.all())
+		return sorted(list(set(ports)))
+
+	@property
+	def get_ports_by_ip(self):
+		"""Get ports grouped by IP address with their specific service information"""
+		return {
+			ip.address: {
+				'ports': [
+					{
+						'number': port.number,
+						'service_name': port.service_name,
+						'description': port.description,
+						'is_uncommon': port.is_uncommon,
+					}
+					for port in ip.ports.all().order_by('number')
+				],
+				'is_cdn': ip.is_cdn,
+			}
+			for ip in self.ip_addresses.all()
+		}
 
 class SubScan(models.Model):
 	id = models.AutoField(primary_key=True)
@@ -570,13 +596,12 @@ class IpAddress(models.Model):
 class Port(models.Model):
 	id = models.AutoField(primary_key=True)
 	number = models.IntegerField(default=0)
+	is_uncommon = models.BooleanField(default=False)
 	service_name = models.CharField(max_length=100, blank=True, null=True)
 	description = models.CharField(max_length=1000, blank=True, null=True)
-	is_uncommon = models.BooleanField(default=False)
 
 	def __str__(self):
 		return str(self.number)
-
 
 class DirectoryFile(models.Model):
 	id = models.AutoField(primary_key=True)
