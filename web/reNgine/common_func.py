@@ -957,7 +957,7 @@ def _build_cmd(cmd, options, flags, sep=" "):
 
 def get_nmap_cmd(
 		input_file,
-		cmd=None,
+		args=None,
 		host=None,
 		ports=None,
 		output_file=None,
@@ -974,16 +974,17 @@ def get_nmap_cmd(
 		"--script-args": script_args,
 	}
 
-	if not cmd:
-		cmd = 'nmap'
-		# Update options with nmap specific parameters
-		options.update({
-			"-sV": "",
-			"-p": ports,
-		})
-	
 	# Build command with options
+	cmd = 'nmap'
 	cmd = _build_cmd(cmd, options, flags)
+ 
+	# Add ports and service detection
+	if ports and '-p' not in cmd:
+		cmd = f'{cmd} -p {ports}'
+	if '-sV' not in cmd:
+		cmd = f'{cmd} -sV'
+	if '-Pn' not in cmd:
+		cmd = f'{cmd} -Pn'
 
 	# Add input source
 	if not input_file:
@@ -992,13 +993,6 @@ def get_nmap_cmd(
 		cmd += f" -iL {input_file}"
 
 	return cmd
-
-
-def xml2json(xml):
-	with open(xml) as xml_file:
-		xml_content = xml_file.read()
-	return xmltodict.parse(xml_content)
-
 
 def reverse_whois(lookup_keyword):
 	domains = []

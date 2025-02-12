@@ -5,6 +5,7 @@ from pathlib import Path
 from weasyprint import HTML
 from datetime import datetime, timedelta
 from django.contrib import messages
+from django.core.serializers.json import DjangoJSONEncoder
 from django.db.models import Count
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, render
@@ -14,6 +15,7 @@ from django.utils import timezone
 from django_celery_beat.models import ClockedSchedule, IntervalSchedule, PeriodicTask
 from rolepermissions.decorators import has_permission_decorator
 
+from api.serializers import IpSerializer
 from reNgine.celery import app
 from reNgine.common_func import logger, get_interesting_subdomains, create_scan_object, safe_int_cast
 from reNgine.settings import RENGINE_RESULTS
@@ -58,7 +60,17 @@ def detail_scan(request, id, slug):
     endpoints = EndPoint.objects.filter(scan_history=scan)
     vulns = Vulnerability.objects.filter(scan_history=scan)
     vulns_tags = VulnerabilityTags.objects.filter(vuln_tags__in=vulns)
-    ip_addresses = IpAddress.objects.filter(ip_addresses__in=subdomains)
+    ip_addresses = IpAddress.objects.filter(
+        ip_addresses__in=subdomains
+    ).distinct('address')
+    ip_serializer = IpSerializer(
+        ip_addresses.all(), 
+        many=True, 
+        context={
+            'scan_id': id,
+            'target_id': domain_id
+        }
+    )
     geo_isos = CountryISO.objects.filter(ipaddress__in=ip_addresses)
     scan_activity = ScanActivity.objects.filter(scan_of__id=id).order_by('time')
     cves = CveId.objects.filter(cve_ids__in=vulns)
@@ -167,6 +179,7 @@ def detail_scan(request, id, slug):
         'scan_history_id': id,
         'history': scan,
         'scan_activity': scan_activity,
+        'ip_addresses': json.dumps(ip_serializer.data, cls=DjangoJSONEncoder),
         'subdomain_count': subdomain_count,
         'alive_count': alive_count,
         'important_count': important_count,
@@ -911,8 +924,12 @@ def create_report(request, slug, id):
     ip_addresses = (
         IpAddress.objects
         .filter(ip_addresses__in=subdomains)
+        .prefetch_related(
+            'ports',
+        )
         .distinct()
     )
+    
     data = {
         'scan_object': scan,
         'unique_vulnerabilities': unique_vulns,
@@ -922,6 +939,7 @@ def create_report(request, slug, id):
         'interesting_subdomains': interesting_subdomains,
         'subdomains': subdomains,
         'ip_addresses': ip_addresses,
+        'ip_addresses_count': ip_addresses.count(),
         'show_recon': show_recon,
         'show_vuln': show_vuln,
         'report_name': report_name,

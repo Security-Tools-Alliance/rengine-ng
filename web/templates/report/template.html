@@ -825,11 +825,15 @@
                       <li>{{ip.address}}
                         {% if ip.ports.all %}
                           <ul>
-                            <li>Open Ports: &nbsp;
-                              {% for port in ip.ports.all %}
-                                {{port.number}}/{{port.service_name}}{% if not forloop.last %},{% endif %}
-                              {% endfor %}
-                            </li>
+                            {% for port in ip.ports.all %}
+                              <li>
+                                {{port.number}}/{{port.service_name}}
+                                {% if port.description %}
+                                  <br>
+                                  <span style="padding-left: 20px; color: #666;">Description: {{port.description}}</span>
+                                {% endif %}
+                              </li>
+                            {% endfor %}
                           </ul>
                         {% endif %}
                       </li>
