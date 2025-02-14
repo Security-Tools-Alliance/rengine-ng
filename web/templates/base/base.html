@@ -120,7 +120,7 @@
         render_search_history('{{current_project.slug}}');
 
         // reNgine-ng will also check everyday if update exists for reNgine-ng
-        checkForUpdates();
+        checkForUpdates(false);
 
         getScanStatusSidebar('{% url 'api:scan_status' %}', '{% url 'api:stop_scan' %}', '{% url 'api:fetch_subscan_results' %}', project='{{current_project.slug}}', reload=false);
         if (localStorage.getItem('rengine-theme') == "dark") {
@@ -153,15 +153,21 @@
         });
       }
 
-      // Fonction principale de vérification des mises à jour
-      function checkForUpdates() {
+      // main function to check for updates
+      function checkForUpdates(showUI = false) {
         const updateAvailable = window.localStorage.getItem('update_available') === 'true';
         
+        // Hide the default badge
+        $('.rengine_update_available').hide();
+        
         if (updateAvailable) {
-          // Si une mise à jour était marquée comme disponible, vérifions si c'est toujours le cas
-          checkUpdateFromAPI(false);
+          // if an update was marked as available, check if it's still the case
+          checkUpdateFromAPI(showUI);
         } else if (hasOneDayPassed()) {
-          // Pas de mise à jour connue, vérifions une fois par jour
+          // no update known, check once per day
+          checkUpdateFromAPI(showUI);
+        } else if (showUI) {
+          // if we force the check via the menu
           checkUpdateFromAPI(true);
         }
       }
@@ -198,7 +204,9 @@
               window.localStorage.setItem('latest_version', response['latest_version']);
               window.localStorage.setItem('changelog', response['changelog']);
               $('.rengine_update_available').show();
-              showUpdateAvailable(response['latest_version'], response['changelog']);
+              if (showLoadingScreen) {
+                showUpdateAvailable(response['latest_version'], response['changelog']);
+              }
             }
             else {
               if (showLoadingScreen) {
