@@ -438,10 +438,14 @@ class LLMAttackSuggestion(APIView):
         # Generate new analysis
         ip_addrs = subdomain.ip_addresses.all()
         open_ports = ', '.join(
-            f'{port.number}/{port.service_name}'
-            for ip in ip_addrs
-            for port in ip.ports.all()
-        )
+            
+			f'{port.number}/{port.service_name}'
+           
+			for ip in ip_addrs
+           
+			for port in ip.ports.all()
+        
+		)
         tech_used = ', '.join(tech.name for tech in subdomain.technologies.all())
 
         input_data = f'''
@@ -1859,11 +1863,6 @@ class ListPorts(APIView):
         scan_id = safe_int_cast(req.query_params.get('scan_id'))
         target_id = safe_int_cast(req.query_params.get('target_id'))
         ip_address = req.query_params.get('ip_address')
-    def get(self, request, format=None):
-        req = self.request
-        scan_id = safe_int_cast(req.query_params.get('scan_id'))
-        target_id = safe_int_cast(req.query_params.get('target_id'))
-        ip_address = req.query_params.get('ip_address')
 
         # Build the base query
         port_query = Port.objects.all()
@@ -3182,6 +3181,52 @@ class VulnerabilityViewSet(viewsets.ModelViewSet):
                     print(e)
 
         return qs
+
+class GetIpDetails(APIView):
+    def get(self, request, format=None):
+        req = self.request
+        ip_address = req.query_params.get('ip_address')
+        scan_id = safe_int_cast(req.query_params.get('scan_id'))
+        target_id = safe_int_cast(req.query_params.get('target_id'))
+
+        if not ip_address:
+            return Response({"error": "IP address is required"}, status=400)
+
+        # Build the base query
+        ip_query = IpAddress.objects.filter(address=ip_address)
+
+        if scan_id:
+            ip_query = ip_query.filter(
+                ip_addresses__scan_history__id=scan_id
+            )
+        elif target_id:
+            ip_query = ip_query.filter(
+                ip_addresses__target_domain__id=target_id
+            )
+
+        # Preloading relations to optimize performance
+        ip_query = ip_query.prefetch_related(
+            'ports',
+            'ip_addresses',
+        ).distinct()
+
+
+        if not ip_query.exists():
+            return Response({"error": "IP not found"}, status=404)
+            
+        serializer = IpSerializer(
+            ip_query.first(), 
+            context={'scan_id': scan_id}
+        )
+        return Response(serializer.data)
+
+class UncommonWebPortsView(APIView):
+    def get(self, request):
+        from reNgine.definitions import UNCOMMON_WEB_PORTS
+        return Response({
+            'uncommon_web_ports': UNCOMMON_WEB_PORTS,
+            'common_web_ports': [80, 443]
+        })
 
 class LLMModelsManager(APIView):
     def get(self, request):

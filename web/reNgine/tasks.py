@@ -14,6 +14,7 @@ import base64
 import uuid
 import shutil
 from pathlib import Path
+from copy import deepcopy
 
 from urllib.parse import urlparse
 from api.serializers import SubdomainSerializer
@@ -627,8 +628,9 @@ def subdomain_discovery(
 
     # Bulk crawl subdomains
     if enable_http_crawl:
-        ctx['track'] = True
-        http_crawl(urls, ctx=ctx, update_subdomain_metadatas=True)
+        custom_ctx = deepcopy(ctx)
+        custom_ctx['track'] = True
+        http_crawl(urls, ctx=custom_ctx, update_subdomain_metadatas=True)
     else:
         url_filter = ctx.get('url_filter')
         # Find root subdomain endpoints
@@ -687,14 +689,15 @@ def osint(self, host=None, ctx={}, description=None):
 
     if 'discover' in config:
         logger.info('Starting OSINT Discovery')
-        ctx['track'] = False
+        custom_ctx = deepcopy(ctx)
+        custom_ctx['track'] = False
         _task = osint_discovery.si(
             config=config,
             host=self.scan.domain.name,
             scan_history_id=self.scan.id,
             activity_id=self.activity_id,
             results_dir=self.results_dir,
-            ctx=ctx
+            ctx=custom_ctx
         )
         grouped_tasks.append(_task)
 
@@ -780,14 +783,15 @@ def osint_discovery(config, host, scan_history_id, activity_id, results_dir, ctx
 
     if 'employees' in osint_lookup:
         logger.info('Lookup for employees')
-        ctx['track'] = False
+        custom_ctx = deepcopy(ctx)
+        custom_ctx['track'] = False
         _task = theHarvester.si(
             config=config,
             host=host,
             scan_history_id=scan_history_id,
             activity_id=activity_id,
             results_dir=results_dir,
-            ctx=ctx
+            ctx=custom_ctx
         )
         grouped_tasks.append(_task)
 
@@ -1170,8 +1174,9 @@ def theHarvester(config, host, scan_history_id, activity_id, results_dir, ctx={}
             # self.notify(fields={'Hosts': f'• {endpoint.http_url}'})
 
     # if enable_http_crawl:
-    # 	ctx['track'] = False
-    # 	http_crawl(urls, ctx=ctx)
+    # 	custom_ctx = deepcopy(ctx)
+    # 	custom_ctx['track'] = False
+    # 	http_crawl(urls, ctx=custom_ctx)
 
     # TODO: Lots of ips unrelated with our domain are found, disabling
     # this for now.
@@ -1512,9 +1517,9 @@ def run_nmap(self, ctx, **nmap_args):
     """
     sigs = []
     for host, port_list in nmap_args.get('ports_data', {}).items():
-        ctx_nmap = ctx.copy()
-        ctx_nmap['description'] = get_task_title(f'nmap_{host}', self.scan_id, self.subscan_id)
-        ctx_nmap['track'] = False
+        custom_ctx = deepcopy(ctx)
+        custom_ctx['description'] = get_task_title(f'nmap_{host}', self.scan_id, self.subscan_id)
+        custom_ctx['track'] = False
         sig = nmap.si(
                 args=nmap_args.get('nmap_cmd'),
                 ports=port_list,
@@ -1522,7 +1527,7 @@ def run_nmap(self, ctx, **nmap_args):
                 script=nmap_args.get('nmap_script'),
                 script_args=nmap_args.get('nmap_script_args'),
                 max_rate=nmap_args.get('rate_limit'),
-                ctx=ctx_nmap)
+                ctx=custom_ctx)
         sigs.append(sig)
     task = group(sigs).apply_async()
     with allow_join_result():
@@ -1861,8 +1866,9 @@ def dir_file_fuzz(self, ctx={}, description=None):
 
     # Crawl discovered URLs
     if enable_http_crawl:
-        ctx['track'] = False
-        http_crawl(urls, ctx=ctx)
+        custom_ctx = deepcopy(ctx)
+        custom_ctx['track'] = False
+        http_crawl(urls, ctx=custom_ctx)
 
     return results
 
@@ -2072,10 +2078,11 @@ def fetch_url(self, urls=[], ctx={}, description=None):
 
     # Crawl discovered URLs
     if enable_http_crawl:
-        ctx['track'] = False
+        custom_ctx = deepcopy(ctx)
+        custom_ctx['track'] = False
         http_crawl(
             all_urls,
-            ctx=ctx,
+            ctx=custom_ctx,
             should_remove_duplicate_endpoints=should_remove_duplicate_endpoints,
             duplicate_removal_fields=duplicate_removal_fields
         )
@@ -4899,8 +4906,9 @@ def save_endpoint(
     
     # Create new endpoint
     if crawl:
-        ctx['track'] = False
-        results = http_crawl(urls=[http_url], ctx=ctx)
+        custom_ctx = deepcopy(ctx)
+        custom_ctx['track'] = False
+        results = http_crawl(urls=[http_url], ctx=custom_ctx)
         if not results or results[0]['failed']:
             logger.error(f'Endpoint for {http_url} does not seem to be up. Skipping.')
             return None, False
