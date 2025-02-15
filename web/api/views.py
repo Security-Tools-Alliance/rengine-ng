@@ -1599,16 +1599,16 @@ class ListPorts(APIView):
         # Filter based on parameters
         if target_id:
             port_query = port_query.filter(
-                ip_address__ip_addresses__target_domain__id=target_id
+                ports__ip_subscan_ids__target_domain__id=target_id
             )
         elif scan_id:
             port_query = port_query.filter(
-                ip_address__ip_addresses__scan_history__id=scan_id
+                ports__ip_subscan_ids__scan_history__id=scan_id
             )
 
         if ip_address:
             port_query = port_query.filter(
-                ip_address__address=ip_address
+                ports__address=ip_address
             )
 
         # Grouping information
