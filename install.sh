@@ -249,7 +249,7 @@ main() {
       log "Build has been forced because your user ID is not the same as the pre-built images. If you want to use pre-built images, your current user installing reNgine-ng must be 1000." $COLOR_RED
   else
       if [ "$isNonInteractive" = false ]; then
-          log "Do you want to build Docker images from source or use pre-built images (recommended)? \nThis saves significant build time but requires good download speeds for it to complete fast." $COLOR_RED
+          log "Do you want to build Docker images from source or use pre-built images (recommended)?\nThis saves significant build time but requires good download speeds for it to complete fast." $COLOR_RED
           log "1) From source" $COLOR_YELLOW
           log "2) Use pre-built images (default)" $COLOR_YELLOW
           read -p "Enter your choice (1 or 2, default is 2): " choice
