@@ -5079,10 +5079,13 @@ def save_imported_subdomains(subdomains, ctx={}):
     results_dir = ctx.get('results_dir', RENGINE_RESULTS)
 
     # Validate each subdomain and de-duplicate entries
-    subdomains = list(set([
-        subdomain for subdomain in subdomains
-        if domain.name == get_domain_from_subdomain(subdomain)
-    ]))
+    subdomains = list(
+        {
+            subdomain
+            for subdomain in subdomains
+            if domain.name == get_domain_from_subdomain(subdomain)
+        }
+    )
     if not subdomains:
         return
 
@@ -5093,24 +5096,40 @@ def save_imported_subdomains(subdomains, ctx={}):
         for subdomain in subdomains:
             # Save valid imported subdomains
             subdomain_name = subdomain.strip()
-            subdomain, _ = save_subdomain(subdomain_name, ctx=ctx)
-            if not isinstance(subdomain, Subdomain):
+            subdomain_obj, _ = save_subdomain(subdomain_name, ctx=ctx)
+            if not isinstance(subdomain_obj, Subdomain):
                 logger.error(f"Invalid subdomain encountered: {subdomain}")
                 continue
-            subdomain.is_imported_subdomain = True
-            subdomain.save()
+            subdomain_obj.is_imported_subdomain = True
+            subdomain_obj.save()
             output_file.write(f'{subdomain}\n')
 
             # Create base endpoint (for scan)
-            http_url = f'{subdomain.name}{url_filter}' if url_filter else subdomain.name
+            http_url = f'{subdomain_obj.name}{url_filter}' if url_filter else subdomain_obj.name
             endpoint, _ = save_endpoint(
                 http_url,
                 ctx=ctx,
                 crawl=enable_http_crawl,
                 is_default=True,
-                subdomain=subdomain
+                subdomain=subdomain_obj
             )
-            save_subdomain_metadata(subdomain, endpoint)
+            save_subdomain_metadata(subdomain_obj, endpoint)
+
+            # New Nmap scan for imported subdomain
+            try:
+                logger.info(f'Initiating Nmap scan for imported subdomain: {subdomain_name}')
+                if hosts_data := get_nmap_http_datas(subdomain_name, ctx):
+                    # Create endpoints from Nmap results
+                    create_first_endpoint_from_nmap_data(
+                        hosts_data,
+                        domain=domain,
+                        subdomain=subdomain_obj,
+                        ctx=ctx
+                    )
+                    logger.debug(f"Nmap scan completed successfully for {subdomain_name}")
+            except Exception as e:
+                logger.error(f"Nmap scan failed for {subdomain_name}: {str(e)}")
+                continue
 
 
 @app.task(name='query_reverse_whois', bind=False, queue='query_reverse_whois_queue')
