@@ -1450,23 +1450,31 @@ def port_scan(self, hosts=[], ctx={}, description=None):
             logger.warning(f"Skipping hostname, not a valid IP: {ip_address}")
             continue
 
-        port = Port.objects.create(
-            number=port_number,
-            service_name='unknown',
-            description='',
-            is_uncommon=port_number in UNCOMMON_WEB_PORTS
-        )
-
+        # Get or create IP address first
         ip, _ = IpAddress.objects.get_or_create(address=ip_address)
-        ip.ports.add(port)
-        ip.save()
+        
+        # Check if port already exists for this IP
+        existing_port = ip.ports.filter(number=port_number).first()
+        
+        if existing_port:
+            logger.warning(f"Port {port_number} already exists for {ip_address}")
+            port = existing_port
+        else:
+            port = Port.objects.create(
+                number=port_number,
+                service_name='unknown',
+                description='',
+                is_uncommon=port_number in UNCOMMON_WEB_PORTS
+            )
+            ip.ports.add(port)
+            ip.save()
+            logger.warning(f'Found opened port {port_number} on {ip_address} ({host})')
+
         if host in ports_data:
-            ports_data[host].append(port_number)
+            if port_number not in ports_data[host]:
+                ports_data[host].append(port_number)
         else:
             ports_data[host] = [port_number]
-
-        # Send notification
-        logger.warning(f'Found opened port {port_number} on {ip_address} ({host})')
 
     if not ports_data:
         logger.info('Finished running naabu port scan - No open ports found.')
@@ -1565,7 +1573,7 @@ def nmap(
     output_file = self.output_path
     output_file_xml = f'{self.results_dir}/{host}_{self.filename}'
     vulns_file = f'{self.results_dir}/{host}_{filename_vulns}'
-    logger.warning(f'Running nmap on {host}:common_ports')
+    logger.warning(f'Running nmap on {host}')
     logger.debug(f'Scan Engine args: {args}')
 
     # Build cmd
