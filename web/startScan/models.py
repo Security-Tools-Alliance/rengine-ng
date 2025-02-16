@@ -580,11 +580,6 @@ class IpAddress(models.Model):
 	id = models.AutoField(primary_key=True)
 	address = models.CharField(max_length=100, blank=True, null=True)
 	is_cdn = models.BooleanField(default=False)
-	ports = models.ManyToManyField(
-		'Port', 
-		related_name='ports', 
-		db_index=True  # Added for performance
-	)
 	geo_iso = models.ForeignKey(
 		CountryISO, on_delete=models.CASCADE, null=True, blank=True)
 	version = models.IntegerField(blank=True, null=True)
@@ -603,6 +598,16 @@ class Port(models.Model):
 	is_uncommon = models.BooleanField(default=False)
 	service_name = models.CharField(max_length=100, blank=True, null=True)
 	description = models.CharField(max_length=1000, blank=True, null=True)
+	ip_address = models.ForeignKey(
+		'IpAddress', 
+		on_delete=models.CASCADE, 
+		related_name='ports',
+		null=True,
+		blank=True
+	)
+
+	class Meta:
+		unique_together = ('ip_address', 'number')
 
 	def __str__(self):
 		return str(self.number)

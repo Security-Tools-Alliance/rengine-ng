@@ -5,7 +5,6 @@ import pprint
 import subprocess
 import time
 import validators
-import whatportis
 import xmltodict
 import yaml
 import tldextract
@@ -1452,11 +1451,8 @@ def port_scan(self, hosts=[], ctx={}, description=None):
 
         # Get or create IP address first
         ip, _ = IpAddress.objects.get_or_create(address=ip_address)
-        
-        # Check if port already exists for this IP
-        existing_port = ip.ports.filter(number=port_number).first()
-        
-        if existing_port:
+
+        if existing_port := ip.ports.filter(number=port_number).first():
             logger.warning(f"Port {port_number} already exists for {ip_address}")
             port = existing_port
         else:
@@ -1596,7 +1592,7 @@ def nmap(
         activity_id=self.activity_id)
 
     # Update port service information
-    update_port_service_info(output_file_xml)
+    process_nmap_service_results(output_file_xml)
 
     # Get nmap XML results and convert to JSON
     vulns = parse_nmap_results(output_file_xml, output_file, parse_type='vulnerabilities')
@@ -3465,31 +3461,29 @@ def parse_nmap_results(xml_file, output_file=None, parse_type='vulnerabilities')
     for host in hosts:
         # Get hostname/IP
         hostnames_dict = host.get('hostnames', {})
-        address = host.get('address')
-
-        if not address:
-            logger.warning("No address found in host data, skipping...")
-            continue
-
-        # If address is a list, take the first
-        if isinstance(address, list):
-            address = address[0]
-
-        # Check that address contains an @addr attribute
-        if not isinstance(address, dict) or '@addr' not in address:
-            logger.warning("Invalid address format in host data, skipping...")
-            continue
+        
+        # Get all IP addresses of the host
+        addresses = []
+        host_addresses = host.get('address', [])
+        if isinstance(host_addresses, dict):
+            host_addresses = [host_addresses]
+        for addr in host_addresses:
+            if addr.get('@addrtype') in ['ipv4', 'ipv6']:
+                addresses.append({
+                    'addr': addr.get('@addr'),
+                    'type': addr.get('@addrtype')
+                })
 
         if hostnames_dict:
             if not (hostname_data := hostnames_dict.get('hostname', [])):
-                hostnames = [address['@addr']]
+                hostnames = [addresses[0]['addr'] if addresses else 'unknown']
             else:
                 # Convert to list if it's a unique dictionary
                 if isinstance(hostname_data, dict):
                     hostname_data = [hostname_data]
-                hostnames = [entry.get('@name') for entry in hostname_data if entry.get('@name')] or [address['@addr']]
+                hostnames = [entry.get('@name') for entry in hostname_data if entry.get('@name')] or [addresses[0]['addr'] if addresses else 'unknown']
         else:
-            hostnames = [address['@addr']]
+            hostnames = [addresses[0]['addr'] if addresses else 'unknown']
 
         # Process each hostname
         for hostname in hostnames:
@@ -3512,12 +3506,13 @@ def parse_nmap_results(xml_file, output_file=None, parse_type='vulnerabilities')
                 url = sanitize_url(f'{hostname}:{port_number}')
 
                 if parse_type == 'ports':
-                    # Return only open ports info
+                    # Return only open ports info with addresses
                     results.append({
                         'host': hostname,
                         'port': port_number,
                         'protocol': port_protocol,
-                        'state': port_state
+                        'state': port_state,
+                        'addresses': addresses
                     })
                     continue
 
@@ -5601,7 +5596,7 @@ def create_first_endpoint_from_nmap_data(hosts_data, domain, subdomain, ctx):
 
     return endpoint
 
-def update_port_service_info(xml_file):
+def process_nmap_service_results(xml_file):
     """Update port information with nmap service detection results"""
     services = parse_nmap_results(xml_file, parse_type='services')
     
@@ -5638,44 +5633,13 @@ def update_port_service_info(xml_file):
                 ip_address=ip_address
             )
         except Exception as e:
-            logger.error(f"Failed to update port {service['port']}: {str(e)}")
+            logger.error(f"Failed to process port {service['port']}: {str(e)}")
 
 def create_or_update_port_with_service(port_number, service_info, ip_address=None):
     """Create or update port with service information from nmap for specific IP."""
-    ports = Port.objects.filter(number=port_number)
-    
-    if ports.count() > 1:
-        kept_port = ports.first()
-        ports.exclude(id=kept_port.id).delete()
-        port = kept_port
-    elif ports.exists():
-        port = ports.first()
-    else:
-        port = Port.objects.create(
-            number=port_number,
-            is_uncommon=port_number in UNCOMMON_WEB_PORTS
-        )
-    
-    if ip_address:
-        # Build service description
-        description_parts = []
-        if service_info.get('service_product'):
-            description_parts.append(service_info['service_product'])
-        if service_info.get('service_version'):
-            description_parts.append(service_info['service_version'])
-        if service_info.get('service_extrainfo'):
-            description_parts.append(service_info['service_extrainfo'])
-        
-        # Update port info
-        port.service_name = service_info.get('service_name', 'unknown')
-        port.description = ' '.join(description_parts) if description_parts else ''
-        port.save()
-        
-        # Add M2M relation with IP
-        ip_address.ports.add(port)
-        
-        logger.info(f'Updated service info for IP {ip_address.address} port {port_number}: {port.service_name} - {port.description}')
-    
+    port = get_or_create_port(ip_address, port_number)
+    if ip_address and service_info:
+        update_port_service_info(port, service_info)
     return port
 
 #----------------------#
