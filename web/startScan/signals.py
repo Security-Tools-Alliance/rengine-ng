@@ -66,10 +66,24 @@ def handle_ip_port_changes(sender, instance, action, pk_set, **kwargs):
     if action == "post_remove" and pk_set:
         try:
             with transaction.atomic():
-                removed_ports = Port.objects.filter(id__in=pk_set)
-                for port in removed_ports:
-                    if not IpAddress.objects.filter(ports=port).exists():
-                        logger.warning(f"Deleting orphaned port {port.number} after M2M change")
-                        port.delete()
+                # Bulk fetch all removed ports
+                removed_port_ids = list(pk_set)
+
+                # Find ports that are not referenced by any IP
+                used_ports = set(
+                    IpAddress.objects.filter(ports__in=removed_port_ids)
+                    .values_list('ports', flat=True)
+                    .distinct()
+                )
+
+                if orphaned_port_ids := list(
+                    set(removed_port_ids) - used_ports
+                ):
+                    # Bulk delete orphaned ports
+                    deleted_count, _ = Port.objects.filter(id__in=orphaned_port_ids).delete()
+                    logger.warning(
+                        f"Deleted {deleted_count} orphaned ports in bulk "
+                        f"from IP {instance.address}"
+                    )
         except Exception as e:
             logger.error(f"Error during M2M port cleanup: {str(e)}") 

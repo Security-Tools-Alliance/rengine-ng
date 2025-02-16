@@ -580,7 +580,11 @@ class IpAddress(models.Model):
 	id = models.AutoField(primary_key=True)
 	address = models.CharField(max_length=100, blank=True, null=True)
 	is_cdn = models.BooleanField(default=False)
-	ports = models.ManyToManyField('Port', related_name='ports')
+	ports = models.ManyToManyField(
+		'Port', 
+		related_name='ports', 
+		db_index=True  # Added for performance
+	)
 	geo_iso = models.ForeignKey(
 		CountryISO, on_delete=models.CASCADE, null=True, blank=True)
 	version = models.IntegerField(blank=True, null=True)
