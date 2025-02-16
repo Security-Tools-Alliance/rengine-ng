@@ -65,7 +65,7 @@ Settings, API Keys & Tool Settings
         <h4 class="header-title">Amass</h4>
         <p>
           This section lets you modify <a href="https://github.com/owasp-amass/amass/" class="text-primary" target="_blank">Amass</a> config file. You can find more information about the <a href="https://github.com/owasp-amass/amass/blob/master/examples/config.yaml" class="text-primary" target="_blank">Amass config here.</a><br>
-          <span class="text-danger">Please note that only YAML config is supported.</span>
+          <span class="text-danger">Please note that only INI config is supported.</span>
         </p>
         <form method="post" enctype="multipart/form-data" id="amass-config-form">
           {% csrf_token %}
@@ -159,7 +159,7 @@ Settings, API Keys & Tool Settings
           {% csrf_token %}
           <h4 class="header-title">Current theHarvester Configuration</h4>
           <label for="naabu_config_text_area">Double click the configuration to edit.</label>
-          <textarea class="form-control" id="theharvester_config_text_area" spellcheck="false" readonly="true" name="theharvester_config_text_area"></textarea>
+          <textarea class="form-control" id="theHarvester_config_text_area" spellcheck="false" readonly="true" name="theHarvester_config_text_area"></textarea>
         </form>
       </div>
     </div>

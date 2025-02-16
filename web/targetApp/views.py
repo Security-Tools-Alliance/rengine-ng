@@ -4,10 +4,12 @@ import logging
 from datetime import timedelta
 from urllib.parse import urlparse
 import validators
+import json
 
 from django import http
 from django.conf import settings
 from django.contrib import messages
+from django.core.serializers.json import DjangoJSONEncoder
 from django.db.models import Count
 from django.http import Http404
 from django.shortcuts import get_object_or_404, render
@@ -19,6 +21,8 @@ from reNgine.definitions import (
     PERM_MODIFY_TARGETS,
     FOUR_OH_FOUR_URL,
 )
+
+from api.serializers import IpSerializer
 
 from reNgine.common_func import (
     get_ip_info,
@@ -204,8 +208,11 @@ def add_target(request, slug):
                         if created:
                             logger.warning('Added new IP %s', ip)
 
-                    for port in ports:
-                        port, created = Port.objects.get_or_create(number=port_number)
+                    for port_number in ports:
+                        port, created = Port.objects.get_or_create(
+                            number=port_number,
+                            defaults={'is_uncommon': port_number not in [80, 443, 8080, 8443]}
+                        )
                         if created:
                             logger.warning('Added new port %s', port.number)
 
@@ -482,7 +489,7 @@ def target_summary(request, slug, id):
     )
     context['subdomain_count'] = subdomains.count()
     context['alive_count'] = subdomains.filter(http_status__gt=0).count()
-
+ 
     # Endpoints
     endpoints = (
         EndPoint.objects
@@ -576,7 +583,16 @@ def target_summary(request, slug, id):
 
     # Country ISOs
     subdomains = Subdomain.objects.filter(target_domain__id=id)
-    ip_addresses = IpAddress.objects.filter(ip_addresses__in=subdomains)
+    ip_addresses = IpAddress.objects.filter(ip_addresses__in=subdomains).distinct('address')
+    ip_serializer = IpSerializer(
+        ip_addresses.all(), 
+        many=True,
+        context={'target_id': id}
+    )
+    context['ip_addresses'] = json.dumps(ip_serializer.data, cls=DjangoJSONEncoder)
+
+
+
     context['asset_countries'] = (
         CountryISO.objects
         .filter(ipaddress__in=ip_addresses)

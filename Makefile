@@ -1,9 +1,18 @@
 include .env
 .DEFAULT_GOAL:=help
 
+# Export host UID & GID
+export HOST_UID=$(if $(SUDO_USER),$(shell id -u $(SUDO_USER)),$(shell id -u))
+export HOST_GID=$(if $(SUDO_USER),$(shell id -g $(SUDO_USER)),$(shell id -g))
+
+
 # Define RENGINE_VERSION
 RENGINE_VERSION := $(shell cat web/reNgine/version.txt)
 export RENGINE_VERSION
+
+# Define RENGINE_FOLDER
+RENGINE_FOLDER := /home/rengine/rengine
+export RENGINE_FOLDER
 
 # Credits: https://github.com/sherifabdlnaby/elastdocker/
 
@@ -48,7 +57,7 @@ images:			## Show all Docker images for reNgine services.
 
 build:			## Build all Docker images locally.
 	@make remove_images
-	${DOCKER_COMPOSE_FILE_CMD} -f ${COMPOSE_FILE_BUILD} build ${SERVICES}
+	${DOCKER_COMPOSE_FILE_CMD} -f ${COMPOSE_FILE_BUILD} build --build-arg HOST_UID=$(HOST_UID) --build-arg HOST_GID=$(HOST_GID) ${SERVICES}
 
 build_up:		## Build and start all services.
 	@make down
@@ -67,23 +76,23 @@ dev_up:			## Pull and start all services with development configuration (more de
 
 superuser_create:		## Generate username (use only after `make up`).
 ifeq ($(isNonInteractive), true)
-	${DOCKER_COMPOSE_FILE_CMD} exec web poetry -C /home/rengine run python3 manage.py createsuperuser --username ${DJANGO_SUPERUSER_USERNAME} --email ${DJANGO_SUPERUSER_EMAIL} --noinput
+	${DOCKER_COMPOSE_FILE_CMD} exec web poetry -C ${RENGINE_FOLDER} run python3 manage.py createsuperuser --username ${DJANGO_SUPERUSER_USERNAME} --email ${DJANGO_SUPERUSER_EMAIL} --noinput
 else
-	${DOCKER_COMPOSE_FILE_CMD} exec web poetry -C /home/rengine run python3 manage.py createsuperuser
+	${DOCKER_COMPOSE_FILE_CMD} exec web poetry -C ${RENGINE_FOLDER} run python3 manage.py createsuperuser
 endif
 
 superuser_delete:		## Delete username (use only after `make up`).
-	${DOCKER_COMPOSE_FILE_CMD} exec -T web poetry -C /home/rengine run python3 manage.py shell -c "from django.contrib.auth import get_user_model; User = get_user_model(); User.objects.filter(username='${DJANGO_SUPERUSER_USERNAME}').delete()"
+	${DOCKER_COMPOSE_FILE_CMD} exec -T web poetry -C ${RENGINE_FOLDER} run python3 manage.py shell -c "from django.contrib.auth import get_user_model; User = get_user_model(); User.objects.filter(username='${DJANGO_SUPERUSER_USERNAME}').delete()"
 
 superuser_changepassword:	## Change password for user (use only after `make up` & `make username`).
 ifeq ($(isNonInteractive), true)
-	${DOCKER_COMPOSE_FILE_CMD} exec -T web poetry -C /home/rengine run python3 manage.py shell -c "from django.contrib.auth import get_user_model; User = get_user_model(); u = User.objects.get(username='${DJANGO_SUPERUSER_USERNAME}'); u.set_password('${DJANGO_SUPERUSER_PASSWORD}'); u.save()"
+	${DOCKER_COMPOSE_FILE_CMD} exec -T web poetry -C ${RENGINE_FOLDER} run python3 manage.py shell -c "from django.contrib.auth import get_user_model; User = get_user_model(); u = User.objects.get(username='${DJANGO_SUPERUSER_USERNAME}'); u.set_password('${DJANGO_SUPERUSER_PASSWORD}'); u.save()"
 else
-	${DOCKER_COMPOSE_FILE_CMD} exec web poetry -C /home/rengine run python3 manage.py changepassword
+	${DOCKER_COMPOSE_FILE_CMD} exec web poetry -C ${RENGINE_FOLDER} run python3 manage.py changepassword
 endif
 
 migrate:		## Apply Django migrations
-	${DOCKER_COMPOSE_FILE_CMD} exec web poetry -C /home/rengine run python3 manage.py migrate
+	${DOCKER_COMPOSE_FILE_CMD} exec web poetry -C ${RENGINE_FOLDER} run python3 manage.py migrate
 
 down:			## Down all services and remove containers.
 	${DOCKER_COMPOSE_FILE_CMD} down
@@ -144,7 +153,7 @@ remove_images:	## Remove all Docker images for reNgine-ng services.
 	fi
 
 test:
-	${DOCKER_COMPOSE_FILE_CMD} exec celery poetry -C /home/rengine run python3 -m unittest tests/test_scan.py
+	${DOCKER_COMPOSE_FILE_CMD} exec celery poetry -C ${RENGINE_FOLDER} run python3 -m unittest tests/test_scan.py
 
 logs:			## Tail all containers logs with -n 1000 (useful for debug).
 	${DOCKER_COMPOSE_FILE_CMD} logs --follow --tail=1000 ${SERVICES}

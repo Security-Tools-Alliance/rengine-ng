@@ -223,9 +223,9 @@ def handle_post_request(request):
         'nuclei_config_text_area': lambda r: update_config(r, 'nuclei', 'Nuclei'),
         'subfinder_config_text_area': lambda r: update_config(r, 'subfinder', 'Subfinder'),
         'naabu_config_text_area': lambda r: update_config(r, 'naabu', 'Naabu'),
-        'amass_config_text_area': lambda r: update_config(r, 'amass', 'Amass', '.ini'),
-        'theharvester_config_text_area': lambda r: update_config(r, 'theHarvester/api-keys', 'theHarvester'),
-        'gau_config_text_area': lambda r: update_config(r, '.gau', 'GAU', '.toml'),
+        'amass_config_text_area': lambda r: update_config(r, 'amass', 'Amass', 'config', '.ini'),
+        'theHarvester_config_text_area': lambda r: update_config(r, 'theHarvester', 'theHarvester', 'api-keys', '.yaml'),
+        'gau_config_text_area': lambda r: update_config(r, 'gau', 'GAU', 'config', '.toml'),
     }
     for key, handler in handlers.items():
         if key in request.FILES or key in request.POST:
@@ -250,8 +250,8 @@ def handle_file_upload(request, file_key, directory, expected_extension, pattern
             file.write(uploaded_file.read().decode("utf-8"))
         messages.info(request, f'{pattern_name} {uploaded_file.name[:4]} successfully uploaded')
 
-def update_config(request, tool_name, display_name, file_extension='.yaml'):
-    config_path = Path.home() / '.config' / tool_name / f'config{file_extension}'
+def update_config(request, tool_name, display_name, file_name='config', file_extension='.yaml'):
+    config_path = Path.home() / '.config' / tool_name / f'{file_name}{file_extension}'
     with open(config_path, "w", encoding='utf-8') as fhandle:
         fhandle.write(request.POST.get(f'{tool_name}_config_text_area'))
     messages.info(request, f'{display_name} config updated!')

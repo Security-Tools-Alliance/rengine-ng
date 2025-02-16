@@ -109,7 +109,10 @@ class RengineTask(Task):
 
 			# Create ScanActivity for this task and send start scan notifs
 			if self.track:
-				logger.warning(f'Task {self.task_name} is RUNNING')
+				if self.domain:
+					logger.warning(f'Task {self.task_name} for {self.subdomain.name if self.subdomain else self.domain.name} is RUNNING')
+				else:
+					logger.warning(f'Task {self.task_name} is RUNNING')
 				self.create_scan_activity()
 
 		if RENGINE_CACHE_ENABLED:
@@ -119,7 +122,10 @@ class RengineTask(Task):
 			if result and result != b'null':
 				self.status = SUCCESS_TASK
 				if RENGINE_RECORD_ENABLED and self.track:
-					logger.warning(f'Task {self.task_name} status is SUCCESS (CACHED)')
+					if self.domain:
+						logger.warning(f'Task {self.task_name} for {self.subdomain.name if self.subdomain else self.domain.name} status is SUCCESS (CACHED)')
+					else:
+						logger.warning(f'Task {self.task_name} status is SUCCESS (CACHED)')
 					self.update_scan_activity()
 				return json.loads(result)
 
@@ -150,7 +156,10 @@ class RengineTask(Task):
 			self.write_results()
 
 			if RENGINE_RECORD_ENABLED and self.track:
-				msg = f'Task {self.task_name} status is {self.status_str}'
+				if self.domain:
+					msg = f'Task {self.task_name} for {self.subdomain.name if self.subdomain else self.domain.name} status is {self.status_str}'
+				else:
+					msg = f'Task {self.task_name} status is {self.status_str}'
 				msg += f' | Error: {self.error}' if self.error else ''
 				logger.warning(msg)
 				self.update_scan_activity()

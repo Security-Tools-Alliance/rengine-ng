@@ -47,12 +47,13 @@ services:
       - ../web:/home/rengine/rengine:rw,z
       - ./celery/entrypoint.sh:/entrypoint.sh:ro
       - scan_results:/home/rengine/scan_results
+      - github_repos:/home/rengine/github_repos
       - tool_config:/home/rengine/.config
       - nuclei_templates:/home/rengine/nuclei-templates
       - gf_patterns:/home/rengine/.gf
       - wordlist:/home/rengine/wordlists
     healthcheck:
-      test: ["CMD", "poetry", "-C", "/home/rengine", "run", "celery","-A","reNgine","status"]
+      test: ["CMD", "poetry", "-C", "/home/rengine/rengine", "run", "celery","-A","reNgine","status"]
       interval: 10s
       timeout: 10s
       retries: 60
@@ -82,6 +83,7 @@ services:
       - ../web:/home/rengine/rengine:rw,z
       - ./beat/entrypoint.sh:/entrypoint.sh:ro
       - scan_results:/home/rengine/scan_results
+      - github_repos:/home/rengine/github_repos
       - tool_config:/home/rengine/.config
       - nuclei_templates:/home/rengine/nuclei-templates
       - gf_patterns:/home/rengine/.gf
@@ -185,8 +187,6 @@ volumes:
     name: rengine_wordlist
   scan_results:
     name: rengine_scan_results
-  static_volume:
-    name: rengine_static_volume
   ollama_data:
     name: rengine_ollama_data
 

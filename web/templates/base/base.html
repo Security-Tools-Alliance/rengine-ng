@@ -101,6 +101,7 @@
     <script src="{% static 'custom/custom.js' %}"></script>
     <script src="{% static 'custom/toolbox.js' %}"></script>
     <script src="{% static 'custom/right_sidebar.js' %}"></script>
+    <script src="{% static 'custom/port_display.js' %}"></script>
     <script src="{% static 'plugins/snackbar/snackbar.min.js' %}"></script>
     <script src="{% static 'plugins/sweetalert2/sweetalert2.all.min.js' %}"></script>
     <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
@@ -119,20 +120,9 @@
         render_search_history('{{current_project.slug}}');
 
         // reNgine-ng will also check everyday if update exists for reNgine-ng
-        checkDailyUpdate();
+        checkForUpdates(false);
 
         getScanStatusSidebar('{% url 'api:scan_status' %}', '{% url 'api:stop_scan' %}', '{% url 'api:fetch_subscan_results' %}', project='{{current_project.slug}}', reload=false);
-        // hide badge if update does not exists
-        if (window.localStorage.getItem('update_available') && window.localStorage.getItem('update_available') === 'true') {
-          $('.rengine_update_available').show();
-        }
-        else{
-          $('.rengine_update_available').hide();
-        }
-        // tippy for notification or scan acitivity
-        tippy('.top-activity-counter', {
-          content: 'Scan Activity',
-        });
         if (localStorage.getItem('rengine-theme') == "dark") {
           $('#dark-mode-check').prop("checked", true).change();
         }
@@ -163,49 +153,78 @@
         });
       }
 
-      function check_rengine_update(){
-        if (window.localStorage.getItem('update_available') && window.localStorage.getItem('update_available') === 'true') {
-          update_available();
+      // main function to check for updates
+      function checkForUpdates(showUI = false) {
+        const updateAvailable = window.localStorage.getItem('update_available') === 'true';
+        
+        // Hide the default badge
+        $('.rengine_update_available').hide();
+        
+        if (updateAvailable) {
+          // if an update was marked as available, check if it's still the case
+          checkUpdateFromAPI(showUI);
+        } else if (hasOneDayPassed()) {
+          // no update known, check once per day
+          checkUpdateFromAPI(showUI);
+        } else if (showUI) {
+          // if we force the check via the menu
+          checkUpdateFromAPI(true);
         }
-        else{
+      }
+
+      function checkUpdateFromAPI(showLoadingScreen) {
+        if (showLoadingScreen) {
           Swal.fire({
             title: 'Checking reNgine-ng latest version...',
             allowOutsideClick: false
           });
           swal.showLoading();
-          fetch('/api/rengine/update/')
+        }
+        
+        fetch('/api/rengine/update/')
           .then(response => response.json())
           .then(function (response) {
-            console.log(response);
-            swal.close();
+            if (showLoadingScreen) {
+              swal.close();
+            }
+            
             if (response['description'] == 'RateLimited') {
-              Swal.fire({
-                title: 'Oops!',
-                text: 'Github rate limit exceeded, please try again in an hour!',
-                icon: 'error'
-              });
+              if (showLoadingScreen) {
+                Swal.fire({
+                  title: 'Oops!',
+                  text: 'Github rate limit exceeded, please try again in an hour!',
+                  icon: 'error'
+                });
+              }
               window.localStorage.setItem('update_available', false);
               $('.rengine_update_available').hide();
             }
-            else if (response['update_available']){
+            else if (response['update_available']) {
               window.localStorage.setItem('update_available', true);
+              window.localStorage.setItem('latest_version', response['latest_version']);
+              window.localStorage.setItem('changelog', response['changelog']);
               $('.rengine_update_available').show();
-              update_available(response['latest_version'], response['changelog']);
+              if (showLoadingScreen) {
+                showUpdateAvailable(response['latest_version'], response['changelog']);
+              }
             }
-            else{
+            else {
+              if (showLoadingScreen) {
+                Swal.fire({
+                  title: 'Update not available',
+                  text: 'You are running the latest version of reNgine-ng!',
+                  icon: 'info'
+                });
+              }
               window.localStorage.setItem('update_available', false);
+              window.localStorage.removeItem('latest_version');
+              window.localStorage.removeItem('changelog');
               $('.rengine_update_available').hide();
-              Swal.fire({
-                title: 'Update not available',
-                text: 'You are running the latest version of reNgine-ng!',
-                icon: 'info'
-              });
             }
           });
-        }
       }
 
-      function update_available(latest_version_number, changelog){
+      function showUpdateAvailable(latest_version_number, changelog) {
         Swal.fire({
           title: 'Update Available!',
           html: `<h5>reNgine-ng's new update ${latest_version_number} is available, please follow the update instructions.</h5><pre>${changelog}</pre>`,
@@ -216,39 +235,27 @@
           width: '60%',
         }).then((result) => {
           if (result.isConfirmed) {
-            window.open("https://github.com/Security-Tools-Alliance/rengine-ng/wiki/Installation#updating-rengine-ng","_blank")
+            window.open("https://github.com/Security-Tools-Alliance/rengine-ng/wiki/Installation#-updating-rengine-ng","_blank")
           }
         });
       }
 
-      // Source : https://stackoverflow.com/a/32428268
-      function checkDailyUpdate(){
-        if( !hasOneDayPassed() ) return false;
-        console.log('Checking Daily Update...')
-        fetch('/api/rengine/update/')
-        .then(response => response.json())
-        .then(function (response) {
-          if (response['update_available']){
-            window.localStorage.setItem('update_available', true);
-            $('.rengine_update_available').show();
-            update_available(response['latest_version'], response['changelog'])
-          }
-          else{
-            window.localStorage.setItem('update_available', false);
-            $('.rengine_update_available').hide();
-          }
-        });
-      }
-
-      // Source: https://stackoverflow.com/a/32428268
-      function hasOneDayPassed(){
-        var date = new Date().toLocaleDateString();
-        if(window.localStorage.getItem('last_update_checked') == date){
+      function hasOneDayPassed() {
+        const date = new Date().toLocaleDateString();
+        const lastChecked = window.localStorage.getItem('last_update_checked');
+        
+        if (lastChecked === date) {
           return false;
         }
+        
         window.localStorage.setItem('last_update_checked', date);
         return true;
       }
+
+      // tippy for notification or scan activity
+      tippy('.top-activity-counter', {
+        content: 'Scan Activity',
+      });
     </script>
     {% if messages %}
       {% for message in messages %}

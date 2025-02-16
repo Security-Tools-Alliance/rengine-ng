@@ -45,7 +45,7 @@ function visualise_scan_results(scan_id)
 
     // Check if treeData exists and has children
     if (!treeData || !treeData.children || treeData.children.length === 0) {
-      $('#visualisation-loader').html('<p>Aucune donnée à visualiser.</p>');
+      $('#visualisation-loader').html('<p>No data to visualise.</p>');
       return;
     }
 

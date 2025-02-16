@@ -42,6 +42,7 @@ MANIFEST
 # IDE files
 .vscode/settings.json
 .vscode/tasks-and-contexts.json
+.idea/
 
 *.manifest
 *.spec
