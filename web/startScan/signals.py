@@ -8,23 +8,26 @@ logger = logging.getLogger(__name__)
 
 @receiver(pre_delete, sender=Subdomain)
 def handle_subdomain_deletion(sender, instance, **kwargs):
-    """Handle cleanup when a subdomain is deleted."""
+    """Cleanup orphaned IPs after subdomain deletion."""
     try:
-        with transaction.atomic():
-            # Store IPs before deletion
-            ips_to_check = list(instance.ip_addresses.all())
-            logger.warning(f"Found {len(ips_to_check)} IPs for subdomain {instance.name}")
-            
-            # Let the subdomain be deleted (this will remove the M2M relationships)
-            # Then check each stored IP
+        ips_to_check = list(instance.ip_addresses.all())
+        logger.info(f"Checking IPs associated with subdomain {instance.name}")
+        
+        def post_deletion_cleanup():
+            """Callback executed after transaction validation."""
             for ip in ips_to_check:
-                # Check if this IP will still be used by other subdomains after deletion
-                other_subdomains = Subdomain.objects.filter(ip_addresses=ip).exclude(id=instance.id)
-                if not other_subdomains.exists():
-                    logger.warning(f"Deleting orphaned IP {ip.address} after subdomain deletion")
+                # Final check after complete deletion
+                if not Subdomain.objects.filter(ip_addresses=ip).exists():
+                    logger.warning(f"Deleting orphaned IP {ip.address}")
                     ip.delete()
+                else:
+                    logger.info(f"IP {ip.address} still in use")
+        
+        # Defer the check after the transaction
+        transaction.on_commit(post_deletion_cleanup)
+        
     except Exception as e:
-        logger.error(f"Error during subdomain deletion cleanup: {str(e)}")
+        logger.error(f"Error during post-deletion cleanup: {str(e)}")
 
 @receiver(m2m_changed, sender=Subdomain.ip_addresses.through)
 def handle_subdomain_ip_changes(sender, instance, action, pk_set, **kwargs):

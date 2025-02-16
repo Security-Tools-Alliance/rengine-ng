@@ -1394,9 +1394,9 @@ def port_scan(self, hosts=[], ctx={}, description=None):
     cmd += f' -c {threads}' if threads else ''
     cmd += f' -rate {rate_limit}' if rate_limit > 0 else ''
     cmd += f' -timeout {timeout*1000}' if timeout > 0 else ''
-    cmd += f' -passive' if passive else ''
+    cmd += ' -passive' if passive else ''
     cmd += f' -exclude-ports {exclude_ports_str}' if exclude_ports else ''
-    cmd += f' -silent'
+    cmd += ' -silent'
 
     # Execute cmd and gather results
     results = []
@@ -1432,17 +1432,15 @@ def port_scan(self, hosts=[], ctx={}, description=None):
             ip.save()
 
         # Add endpoint to DB
-        # port 80 and 443 not needed as http crawl already does that.
-        if port_number not in [80, 443]:
-            http_url = f'{host}:{port_number}'
-            endpoint, _ = save_endpoint(
-                http_url,
-                crawl=enable_http_crawl,
-                ctx=ctx,
-                subdomain=subdomain)
-            if endpoint:
-                http_url = endpoint.http_url
-            urls.append(http_url)
+        http_url = f'{host}:{port_number}'
+        endpoint, _ = save_endpoint(
+            http_url,
+            crawl=enable_http_crawl,
+            ctx=ctx,
+            subdomain=subdomain)
+        if endpoint:
+            http_url = endpoint.http_url
+        urls.append(http_url)
 
         # Add Port in DB
         if any(c.isalpha() for c in ip_address):
@@ -2997,12 +2995,10 @@ def http_crawl(
             ctx=ctx
         )
         if not http_urls:
-            logger.error(f'No URLs to crawl. Skipping.')
+            logger.error('No URLs to crawl. Skipping.')
             return
 
-        # Append endpoints
-        if http_urls:
-            urls.append()
+        urls.append(http_urls)
 
         logger.debug(urls)
 
@@ -3039,7 +3035,7 @@ def http_crawl(
 
         if not line or not isinstance(line, dict):
             continue
-        
+
         # Check if the http request has an error
         if 'error' in line:
             logger.error(line)
@@ -3047,7 +3043,7 @@ def http_crawl(
 
         line_str = json.dumps(line, indent=2)
         logger.debug(line_str)
-        
+
         # No response from endpoint
         if line.get('failed', False):
             continue
