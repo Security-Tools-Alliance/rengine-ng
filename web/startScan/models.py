@@ -5,7 +5,8 @@ from django.contrib.postgres.fields import ArrayField
 from django.db import models
 from django.utils import timezone
 from reNgine.definitions import (CELERY_TASK_STATUSES,
-								 NUCLEI_REVERSE_SEVERITY_MAP)
+								 NUCLEI_REVERSE_SEVERITY_MAP,
+								 ENGINE_DISPLAY_NAMES)
 from reNgine.utilities import *
 from scanEngine.models import EngineType
 from targetApp.models import Domain
@@ -360,17 +361,7 @@ class SubScan(models.Model):
 		return get_time_taken(timezone.now(), self.start_scan_date)
 
 	def get_task_name_str(self):
-		taskmap = {
-			'subdomain_discovery': 'Subdomain discovery',
-			'dir_file_fuzz': 'Directory and File fuzzing',
-			'port_scan': 'Port Scan',
-			'fetch_url': 'Fetch URLs',
-			'vulnerability_scan': 'Vulnerability Scan',
-			'screenshot': 'Screenshot',
-			'waf_detection': 'Waf Detection',
-			'osint': 'Open-Source Intelligence'
-		}
-		return taskmap.get(self.type, 'Unknown')
+		return dict(ENGINE_DISPLAY_NAMES).get(self.type, 'Unknown')
 
 class EndPoint(models.Model):
 	id = models.AutoField(primary_key=True)

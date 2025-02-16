@@ -9,6 +9,7 @@ from scanEngine.models import *
 from startScan.models import *
 from targetApp.models import *
 from dashboard.models import *
+import yaml
 
 
 class SearchHistorySerializer(serializers.ModelSerializer):
@@ -232,20 +233,18 @@ class OrganizationSerializer(serializers.ModelSerializer):
 
 class EngineSerializer(serializers.ModelSerializer):
 
-	tasks = serializers.SerializerMethodField('get_tasks')
+	tasks = serializers.SerializerMethodField()
 
-	def get_tasks(self, instance):
-		return instance.tasks
+	def get_tasks(self, obj):
+		yaml_config = yaml.safe_load(obj.yaml_configuration)
+		return sorted([
+			task for task in yaml_config.keys() 
+			if task in ENGINE_NAMES
+		])
 
 	class Meta:
 		model = EngineType
-		fields = [
-			'id',
-			'default_engine',
-			'engine_name',
-			'yaml_configuration',
-			'tasks'
-		]
+		fields = ['id', 'engine_name', 'tasks']
 
 
 class OrganizationTargetsSerializer(serializers.ModelSerializer):

@@ -38,7 +38,8 @@ from reNgine.definitions import (
 	NUCLEI_SEVERITY_MAP,
 	DEFAULT_GPT_MODELS,
 	RUNNING_TASK,
-	SUCCESS_TASK
+	SUCCESS_TASK,
+	ENGINE_NAMES
 )
 from reNgine.settings import (
 	RENGINE_CURRENT_VERSION,
@@ -1426,11 +1427,14 @@ class ListScanHistory(APIView):
 
 
 class ListEngines(APIView):
-	def get(self, request, format=None):
-		req = self.request
-		engines = EngineType.objects.order_by('engine_name').all()
-		engine_serializer = EngineSerializer(engines, many=True)
-		return Response({'engines': engine_serializer.data})
+    def get(self, request):
+        if engine_id := request.GET.get('engine_id'):
+            engines = EngineType.objects.filter(id=engine_id)
+        else:
+            engines = EngineType.objects.all()
+
+        serializer = EngineSerializer(engines.order_by('engine_name'), many=True)
+        return Response({'engines': serializer.data})
 
 
 class ListOrganizations(APIView):

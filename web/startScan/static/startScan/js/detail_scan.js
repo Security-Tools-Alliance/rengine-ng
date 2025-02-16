@@ -1530,39 +1530,57 @@ $('#btn-initiate-subtask').on('click', function(){
 
 
 // Load engine tasks on modal load and engine input change
-function load_engine_tasks(engine_name){
-	var tasks = []
-	var html = ''
-	var url = `/api/listEngines/?format=json`;
-	$.getJSON(url, function(data) {
-		var engines = data.engines
-		$.each(engines, function(i, engine){
-			if (engine.engine_name === engine_name){
-				tasks = engine.tasks
-			}
-		})
-		$.each(tasks, function(i, task){
-			html += `
-			<div class="mt-1">
-				<div class="form-check">
-					<input type="checkbox" class="form-check-input" id="${task}">
-					<label class="form-check-label" for="${task}">${task}</label>
-				</div>
-			</div>`
+function load_engine_tasks(engine_id){
+    const url = `/api/listEngines/?engine_id=${engine_id}`;
+    
+    $.getJSON(url)
+    .done(function(data) {
+        if(data.engines.length > 0) {
+            const {tasks} = data.engines[0];
+            
+            if (tasks.length === 0) {
+                $('#engineTasks').html('');
+                Swal.fire({
+                    title: 'No tasks available',
+                    text: 'This engine does not contain any valid tasks. Please select another engine.',
+                    icon: 'warning',
+                });
+                return;
+            }
+
+            const html = tasks.map(task => `
+                <div class="mt-1">
+                    <div class="form-check">
+                        <input type="checkbox" class="form-check-input" id="${task}">
+                        <label class="form-check-label" for="${task}">${task}</label>
+                    </div>
+                </div>`
+            ).join('');
+            $('#engineTasks').html(html);
+        } else {
+            Swal.fire({
+				title: 'No engine found. Please select another one.',
+				icon: 'warning',
+			});
+        }
+    })
+    .fail(function() {
+        Swal.fire({
+			title: 'Error loading tasks',
+			icon: 'error',
 		});
-		$('#engineTasks').html(html);
-	})
+    });
 }
 
-$('#subscan-modal').on('shown.bs.modal', function () {
-	var engine_name = $('#subtaskScanEngine option:selected').text();
-	load_engine_tasks(engine_name);
-})
+$('#subscan-modal').on('shown.bs.modal', function() {
+    const engine_id = $('#subtaskScanEngine').val();
+    load_engine_tasks(engine_id);
+});
 
 $('#subtaskScanEngine').on('change', function(){
-	var engine_name = $('#subtaskScanEngine option:selected').text();
-	load_engine_tasks(engine_name);
-})
+    const engine_id = $(this).val();
+    load_engine_tasks(engine_id);
+});
 
 // download subdomains
 function downloadSelectedSubdomains(domain_name){
