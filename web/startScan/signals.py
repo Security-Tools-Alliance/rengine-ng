@@ -38,7 +38,15 @@ def handle_subdomain_ip_changes(sender, instance, action, pk_set, **kwargs):
                 removed_ips = IpAddress.objects.filter(id__in=pk_set)
                 for ip in removed_ips:
                     if not Subdomain.objects.filter(ip_addresses=ip).exists():
-                        logger.warning(f"Deleting orphaned IP {ip.address} after M2M change")
+                        # Validation and cleanup of the IP address
+                        cleaned_ip = ip.address.strip()[:45]  # Limit the length
+                        logger.warning(
+                            'Deleting orphaned IP', 
+                            extra={
+                                'ip_address': cleaned_ip,
+                                'subdomain': instance.name[:255]
+                            }
+                        )
                         ip.delete()
         except Exception as e:
             logger.error(f"Error during M2M IP cleanup: {str(e)}")

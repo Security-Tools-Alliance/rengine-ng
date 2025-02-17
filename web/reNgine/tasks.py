@@ -1334,7 +1334,7 @@ def screenshot(self, ctx={}, description=None):
 
 
 @app.task(name='port_scan', queue='main_scan_queue', base=RengineTask, bind=True)
-def port_scan(self, hosts=[], ctx={}, description=None):
+def port_scan(self, hosts=None, ctx=None, description=None):
     """Run port scan.
 
     Args:
@@ -1344,6 +1344,10 @@ def port_scan(self, hosts=[], ctx={}, description=None):
     Returns:
         list: List of open ports (dict).
     """
+    # Initialize mutable parameters
+    hosts = hosts or []
+    ctx = ctx or {}
+
     input_file = str(Path(self.results_dir) / 'input_subdomains_port_scan.txt')
     proxy = get_random_proxy()
 
@@ -1447,22 +1451,21 @@ def port_scan(self, hosts=[], ctx={}, description=None):
             logger.warning(f"Skipping hostname, not a valid IP: {ip_address}")
             continue
 
-        # Get or create IP address first
-        ip, _ = IpAddress.objects.get_or_create(address=ip_address)
+        # Update or create port with service info
+        port, created = Port.objects.update_or_create(
+            ip_address=ip,
+            number=port_number,
+            defaults={
+                'service_name': 'unknown',
+                'description': '',
+                'is_uncommon': port_number in UNCOMMON_WEB_PORTS
+            }
+        )
 
-        if existing_port := ip.ports.filter(number=port_number).first():
-            logger.warning(f"Port {port_number} already exists for {ip_address}")
-            port = existing_port
-        else:
-            port = Port.objects.create(
-                number=port_number,
-                service_name='unknown',
-                description='',
-                is_uncommon=port_number in UNCOMMON_WEB_PORTS
-            )
-            ip.ports.add(port)
-            ip.save()
+        if created:
             logger.warning(f'Found opened port {port_number} on {ip_address} ({host})')
+        else:
+            logger.debug(f'Port {port_number} already exists for {ip_address}')
 
         if host in ports_data:
             if port_number not in ports_data[host]:
@@ -2976,6 +2979,7 @@ def http_crawl(
     if urls and is_iterable(urls): # direct passing URLs to check
         if self.url_filter:
             urls = [u for u in urls if self.url_filter in u]
+        urls = [url for url in urls if url is not None]
         with open(input_path, 'w') as f:
             f.write('\n'.join(urls))
     else:
@@ -2998,7 +3002,7 @@ def http_crawl(
             logger.error('No URLs to crawl. Skipping.')
             return
 
-        urls.append(http_urls)
+        urls.extend(http_urls)
 
         logger.debug(urls)
 
