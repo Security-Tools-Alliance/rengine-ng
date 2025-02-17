@@ -359,7 +359,7 @@ def get_http_urls(
 
 	if write_filepath:
 		with open(write_filepath, 'w') as f:
-			f.write('\n'.join(endpoints))
+			f.write('\n'.join([url for url in endpoints if url is not None]))
 
 	return endpoints
 
@@ -1442,13 +1442,13 @@ def update_port_service_info(port, service_info):
                 description_parts.append(value)
         
         port.service_name = service_info.get('service_name', 'unknown').strip() or 'unknown'
-        port.description = ' - '.join(filter(None, description_parts))[:1000]  # Limite la longueur
+        port.description = ' - '.join(filter(None, description_parts))[:1000]
         
-        if port.ip_address:  # Sécurité supplémentaire
+        if port.ip_address:
             logger.debug(f'Updating service info for {port.ip_address.address}:{port.number}')
             
         port.save(update_fields=['service_name', 'description'])
         
     except Exception as e:
         logger.error(f"Error updating port {port.number}: {str(e)}")
-        raise  # Propagation pour traçage complet
+        raise
