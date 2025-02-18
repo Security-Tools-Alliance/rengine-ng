@@ -39,12 +39,13 @@ def handle_subdomain_ip_changes(sender, instance, action, pk_set, **kwargs):
                 for ip in removed_ips:
                     if not Subdomain.objects.filter(ip_addresses=ip).exists():
                         # Validation and cleanup of the IP address
-                        cleaned_ip = ip.address.strip()[:45]  # Limit the length
+                        cleaned_ip = ip.address.strip()[:45].replace('\r\n', '').replace('\n', '')  # Limit the length and sanitize
+                        sanitized_subdomain = instance.name[:255].replace('\r\n', '').replace('\n', '')
                         logger.warning(
                             'Deleting orphaned IP', 
                             extra={
                                 'ip_address': cleaned_ip,
-                                'subdomain': instance.name[:255]
+                                'subdomain': sanitized_subdomain
                             }
                         )
                         ip.delete()

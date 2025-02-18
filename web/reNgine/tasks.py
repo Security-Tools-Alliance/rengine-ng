@@ -2941,7 +2941,7 @@ def s3scanner(self, ctx={}, description=None):
 @app.task(name='http_crawl', queue='main_scan_queue', base=RengineTask, bind=True)
 def http_crawl(
         self,
-        urls=[],
+        urls=None,  # Changed from urls=[]
         method=None,
         recrawl=False,
         ctx={},
@@ -2966,6 +2966,11 @@ def http_crawl(
         list: httpx results.
     """
     logger.info('Initiating HTTP Crawl')
+
+    # Initialize urls as empty list if None
+    if urls is None:
+        urls = []
+    
     cmd = 'httpx'
     config = self.yaml_configuration.get(HTTP_CRAWL) or {}
     custom_header = config.get(CUSTOM_HEADER) or self.yaml_configuration.get(CUSTOM_HEADER)
@@ -2976,7 +2981,7 @@ def http_crawl(
     self.output_path = None
     input_path = f'{self.results_dir}/httpx_input.txt'
     history_file = f'{self.results_dir}/commands.txt'
-    if urls and is_iterable(urls): # direct passing URLs to check
+    if urls and is_iterable(urls):
         if self.url_filter:
             urls = [u for u in urls if self.url_filter in u]
         urls = [url for url in urls if url is not None]
@@ -2985,12 +2990,13 @@ def http_crawl(
     else:
         # No url provided, so it's a subscan launched from subdomain list
         update_subdomain_metadatas = True
+        all_urls = []
 
         # Append the base subdomain to get subdomain info if task is launched directly from subscan
         subdomain_id = ctx.get('subdomain_id')
         if subdomain_id:
             subdomain = Subdomain.objects.filter(id=ctx.get('subdomain_id')).first()
-            urls.append(subdomain.name)
+            all_urls.append(subdomain.name)
 
         # Get subdomain endpoints to crawl the entire list
         http_urls = get_http_urls(
@@ -3002,7 +3008,10 @@ def http_crawl(
             logger.error('No URLs to crawl. Skipping.')
             return
 
-        urls.extend(http_urls)
+        if http_urls:
+            all_urls.extend(http_urls)
+            
+        urls = all_urls
 
         logger.debug(urls)
 
