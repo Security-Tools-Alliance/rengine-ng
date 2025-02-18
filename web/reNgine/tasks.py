@@ -3159,12 +3159,18 @@ def http_crawl(
         )
 
     # Remove input file
-    run_command(
-        f'rm {input_path}',
-        shell=True,
-        history_file=self.history_file,
-        scan_id=self.scan_id,
-        activity_id=self.activity_id)
+    if os.path.exists(input_path):
+        try:
+            run_command(
+                f'rm {input_path}',
+                shell=True,
+                history_file=self.history_file,
+                scan_id=self.scan_id,
+                activity_id=self.activity_id)
+        except Exception as e:
+            logger.error(f"Failed to delete input file {input_path}: {str(e)}")
+    else:
+        logger.warning(f"Input file {input_path} does not exist, skipping deletion")
 
     return results
 
