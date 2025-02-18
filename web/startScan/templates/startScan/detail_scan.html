@@ -2550,13 +2550,6 @@ $(document).ready(function() {
 				$('#btn-initiate-subtask').attr('multiple-subscan', false);
 			});
 
-			// if port scanning is not done, remove port row
-			var column = subdomain_datatables.column('7');
-			{% if 'port_scan' in history.tasks %}
-			column.visible(true);
-			{% else %}
-			column.visible(false);
-			{% endif %}
 			// if screenshot is not taken remove screenshot row
 			var column = subdomain_datatables.column('9');
 			{% if 'screenshot' in history.tasks %}

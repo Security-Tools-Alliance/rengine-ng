@@ -525,3 +525,21 @@ ATTACK_SUGGESTION_GPT_SYSTEM_PROMPT = """
 
 # OSINT GooFuzz Path
 GOFUZZ_EXEC_PATH = 'GooFuzz'
+
+###############################################################################
+# SCAN ENGINES DEFINITIONS
+###############################################################################
+
+ENGINE_DISPLAY_NAMES = [
+    ('subdomain_discovery', 'Subdomain Discovery'),
+    ('port_scan', 'Port Scan'),
+    ('fetch_url', 'Fetch URLs'),
+    ('dir_file_fuzz', 'Directory and File Fuzzing'),
+    ('vulnerability_scan', 'Vulnerability Scan'),
+    ('osint', 'Open-Source Intelligence'),
+    ('screenshot', 'Screenshot'),
+    ('waf_detection', 'WAF Detection')
+]
+
+# Engine names for internal use
+ENGINE_NAMES = [engine[0] for engine in ENGINE_DISPLAY_NAMES]

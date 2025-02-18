@@ -5,7 +5,8 @@ from django.contrib.postgres.fields import ArrayField
 from django.db import models
 from django.utils import timezone
 from reNgine.definitions import (CELERY_TASK_STATUSES,
-								 NUCLEI_REVERSE_SEVERITY_MAP)
+								 NUCLEI_REVERSE_SEVERITY_MAP,
+								 ENGINE_DISPLAY_NAMES)
 from reNgine.utilities import *
 from scanEngine.models import EngineType
 from targetApp.models import Domain
@@ -360,17 +361,7 @@ class SubScan(models.Model):
 		return get_time_taken(timezone.now(), self.start_scan_date)
 
 	def get_task_name_str(self):
-		taskmap = {
-			'subdomain_discovery': 'Subdomain discovery',
-			'dir_file_fuzz': 'Directory and File fuzzing',
-			'port_scan': 'Port Scan',
-			'fetch_url': 'Fetch URLs',
-			'vulnerability_scan': 'Vulnerability Scan',
-			'screenshot': 'Screenshot',
-			'waf_detection': 'Waf Detection',
-			'osint': 'Open-Source Intelligence'
-		}
-		return taskmap.get(self.type, 'Unknown')
+		return dict(ENGINE_DISPLAY_NAMES).get(self.type, 'Unknown')
 
 class EndPoint(models.Model):
 	id = models.AutoField(primary_key=True)
@@ -580,7 +571,6 @@ class IpAddress(models.Model):
 	id = models.AutoField(primary_key=True)
 	address = models.CharField(max_length=100, blank=True, null=True)
 	is_cdn = models.BooleanField(default=False)
-	ports = models.ManyToManyField('Port', related_name='ports')
 	geo_iso = models.ForeignKey(
 		CountryISO, on_delete=models.CASCADE, null=True, blank=True)
 	version = models.IntegerField(blank=True, null=True)
@@ -599,6 +589,16 @@ class Port(models.Model):
 	is_uncommon = models.BooleanField(default=False)
 	service_name = models.CharField(max_length=100, blank=True, null=True)
 	description = models.CharField(max_length=1000, blank=True, null=True)
+	ip_address = models.ForeignKey(
+		'IpAddress', 
+		on_delete=models.CASCADE, 
+		related_name='ports',
+		null=True,
+		blank=True
+	)
+
+	class Meta:
+		unique_together = ('ip_address', 'number')
 
 	def __str__(self):
 		return str(self.number)

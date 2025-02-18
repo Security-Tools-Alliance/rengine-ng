@@ -79,8 +79,8 @@ class TestDataGenerator:
         self.create_scan_history()
         self.create_subdomain()
         self.create_endpoint()
-        self.create_port()
         self.create_ip_address()
+        self.create_port()
 
     def create_project_full(self):
         """Create a full project setup with all related objects."""
@@ -379,20 +379,16 @@ class TestDataGenerator:
     def create_ip_address(self):
         """Create and return a test IP address."""
         self.ip_address = IpAddress.objects.create(address="1.1.1.1")
-        self.ip_address.ports.add(self.port)
         self.subdomain.ip_addresses.add(self.ip_address)
         return self.ip_address
 
     def create_port(self):
         """Create and return a test port."""
         self.port = Port.objects.create(
-            number=80,
-            is_uncommon=True,
-            service_name="http",
-            description="open"
+            number=80, service_name="http", description="open", is_uncommon=True
         )
-        self.ip_address.ports.add(self.port)
-        self.ip_address.save()
+        if hasattr(self, 'ip_address'):
+            self.ip_address.ports.add(self.port)
         return self.port
 
     def create_metafinder_document(self):

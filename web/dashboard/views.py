@@ -7,7 +7,7 @@ from django.contrib import messages
 from django.contrib.auth import get_user_model, update_session_auth_hash
 from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib.auth.signals import user_logged_in, user_logged_out
-from django.db.models import Count
+from django.db.models import Count, Q
 from django.db.models.functions import TruncDay
 from django.dispatch import receiver
 from django.shortcuts import redirect, render, get_object_or_404
@@ -163,22 +163,56 @@ def index(request, slug):
 
     context['total_ips'] = ip_addresses.count()
     context['most_used_port'] = Port.objects.filter(
-        ports__in=ip_addresses
-    ).annotate(
-        count=Count('ports')
+        ip_address__in=ip_addresses
+    ).values(
+        'number', 'service_name'
+    ).distinct().annotate(
+        count=Count('number')
     ).order_by('-count')[:7]
-    context['most_used_ip'] = ip_addresses.annotate(
-        count=Count('ip_addresses')
-    ).order_by('-count').exclude(
-        ip_addresses__isnull=True
-    )[:7]
-    context['most_used_tech'] = Technology.objects.filter(technologies__in=subdomains).annotate(count=Count('technologies')).order_by('-count')[:7]
+    context['most_used_ip'] = IpAddress.objects.filter(
+        id__in=ip_addresses
+    ).values(
+        'address', 'is_cdn'
+    ).distinct().annotate(
+        count=Count('ip_addresses', filter=Q(ip_addresses__in=subdomains))
+    ).order_by('-count')[:7]
+    context['most_used_tech'] = Technology.objects.filter(
+        technologies__in=subdomains
+    ).values(
+        'name'
+    ).distinct().annotate(
+        count=Count('technologies', filter=Q(technologies__in=subdomains))
+    ).order_by('-count')[:7]
 
-    context['most_common_cve'] = CveId.objects.filter(cve_ids__in=vulnerabilities).annotate(nused=Count('cve_ids')).order_by('-nused').values('name', 'nused')[:7]
-    context['most_common_cwe'] = CweId.objects.filter(cwe_ids__in=vulnerabilities).annotate(nused=Count('cwe_ids')).order_by('-nused').values('name', 'nused')[:7]
-    context['most_common_tags'] = VulnerabilityTags.objects.filter(vuln_tags__in=vulnerabilities).annotate(nused=Count('vuln_tags')).order_by('-nused').values('name', 'nused')[:7]
+    context['most_common_cve'] = CveId.objects.filter(
+        cve_ids__in=vulnerabilities
+    ).values(
+        'name'
+    ).distinct().annotate(
+        nused=Count('cve_ids', filter=Q(cve_ids__in=vulnerabilities))
+    ).order_by('-nused')[:7]
+    context['most_common_cwe'] = CweId.objects.filter(
+        cwe_ids__in=vulnerabilities
+    ).values(
+        'name'
+    ).distinct().annotate(
+        nused=Count('cwe_ids', filter=Q(cwe_ids__in=vulnerabilities))
+    ).order_by('-nused')[:7]
+    context['most_common_tags'] = VulnerabilityTags.objects.filter(
+        vuln_tags__in=vulnerabilities
+    ).values(
+        'name'
+    ).distinct().annotate(
+        nused=Count('vuln_tags', filter=Q(vuln_tags__in=vulnerabilities))
+    ).order_by('-nused')[:7]
 
-    context['asset_countries'] = CountryISO.objects.filter(ipaddress__in=ip_addresses).annotate(count=Count('ipaddress')).order_by('-count')
+    context['asset_countries'] = CountryISO.objects.filter(
+        ipaddress__in=ip_addresses
+    ).values(
+        'iso', 'name'
+    ).distinct().annotate(
+        count=Count('ipaddress', filter=Q(ipaddress__in=ip_addresses))
+    ).order_by('-count')
 
     return render(request, 'dashboard/index.html', context)
 
@@ -255,8 +289,6 @@ def admin_interface_update(request):
 
     except UserModificationError as e:
         return JsonResponse({'status': False, 'error': e.message}, status=e.status_code)
-
-    return HttpResponseRedirect(reverse('admin_interface'))
 
 
 def get_user_from_request(request):

@@ -140,8 +140,8 @@ div.dataTables_wrapper button:hover {
   transform: none; }
 
 div.dataTables_wrapper .table-responsive {
-  overflow-x: auto;
-  overflow-y: hidden; }
+  overflow-x: inherit;
+  overflow-y: inherit; }
 
 .dataTables_wrapper .form-control::-webkit-input-placeholder, .dataTables_wrapper .form-control::-ms-input-placeholder, .dataTables_wrapper .form-control::-moz-placeholder {
   color: #bfc9d4;
