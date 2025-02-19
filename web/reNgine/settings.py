@@ -282,7 +282,10 @@ LOGGING = {
         'simple': {
             'format': '%(levelname)s %(message)s',
             'datefmt': '%y %b %d, %H:%M:%S',
-        }
+        },
+        'migration': {
+            'format': '%(asctime)s [%(levelname)s] %(app)s: %(message)s (Migrations: %(migration_count)s)'
+        },
     },
     'loggers': {
         'django': {
@@ -336,6 +339,12 @@ LOGGING = {
             'handlers': ['celery_beat', 'console'],
             'level': 'DEBUG',
             'propagate': True,
+        },
+        'migrations': {
+            'handlers': ['console', 'file'],
+            'level': 'DEBUG' if CELERY_DEBUG else 'INFO',
+            'formatter': 'migration',
+            'propagate': False,
         },
     },
     'root': {

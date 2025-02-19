@@ -5,7 +5,6 @@ import pprint
 import subprocess
 import time
 import validators
-import whatportis
 import xmltodict
 import yaml
 import tldextract
@@ -13,6 +12,7 @@ import concurrent.futures
 import base64
 import uuid
 import shutil
+import glob
 from pathlib import Path
 from copy import deepcopy
 
@@ -1308,19 +1308,25 @@ def screenshot(self, ctx={}, description=None):
                 subdomain.save()
                 logger.warning(f'Added screenshot for {protocol}://{subdomain.name}:{port} to DB')
 
+
     # Remove all db, html extra files in screenshot results
-    run_command(
-        f'rm -rf {screenshots_path}/*.csv {screenshots_path}/*.db {screenshots_path}/*.js {screenshots_path}/*.html {screenshots_path}/*.css',
-        shell=True,
+    patterns = ['*.csv', '*.db', '*.js', '*.html', '*.css']
+    for pattern in patterns:
+        remove_file_or_pattern(
+            screenshots_path,
+            pattern=pattern,
+            history_file=self.history_file,
+            scan_id=self.scan_id,
+            activity_id=self.activity_id
+        )
+
+    # Delete source folder
+    remove_file_or_pattern(
+        str(Path(screenshots_path) / 'source'),
         history_file=self.history_file,
         scan_id=self.scan_id,
-        activity_id=self.activity_id)
-    run_command(
-        f'rm -rf ' + str(Path(screenshots_path) / 'source'),
-        shell=True,
-        history_file=self.history_file,
-        scan_id=self.scan_id,
-        activity_id=self.activity_id)
+        activity_id=self.activity_id
+    )
 
     # Send finish notifs
     screenshots_str = '• ' + '\n• '.join([f'`{path}`' for path in screenshot_paths])
@@ -1335,7 +1341,7 @@ def screenshot(self, ctx={}, description=None):
 
 
 @app.task(name='port_scan', queue='main_scan_queue', base=RengineTask, bind=True)
-def port_scan(self, hosts=[], ctx={}, description=None):
+def port_scan(self, hosts=None, ctx=None, description=None):
     """Run port scan.
 
     Args:
@@ -1345,6 +1351,10 @@ def port_scan(self, hosts=[], ctx={}, description=None):
     Returns:
         list: List of open ports (dict).
     """
+    # Initialize mutable parameters
+    hosts = hosts or []
+    ctx = ctx or {}
+
     input_file = str(Path(self.results_dir) / 'input_subdomains_port_scan.txt')
     proxy = get_random_proxy()
 
@@ -1395,9 +1405,9 @@ def port_scan(self, hosts=[], ctx={}, description=None):
     cmd += f' -c {threads}' if threads else ''
     cmd += f' -rate {rate_limit}' if rate_limit > 0 else ''
     cmd += f' -timeout {timeout*1000}' if timeout > 0 else ''
-    cmd += f' -passive' if passive else ''
+    cmd += ' -passive' if passive else ''
     cmd += f' -exclude-ports {exclude_ports_str}' if exclude_ports else ''
-    cmd += f' -silent'
+    cmd += ' -silent'
 
     # Execute cmd and gather results
     results = []
@@ -1433,40 +1443,42 @@ def port_scan(self, hosts=[], ctx={}, description=None):
             ip.save()
 
         # Add endpoint to DB
-        # port 80 and 443 not needed as http crawl already does that.
-        if port_number not in [80, 443]:
-            http_url = f'{host}:{port_number}'
-            endpoint, _ = save_endpoint(
-                http_url,
-                crawl=enable_http_crawl,
-                ctx=ctx,
-                subdomain=subdomain)
-            if endpoint:
-                http_url = endpoint.http_url
-            urls.append(http_url)
+        http_url = f'{host}:{port_number}'
+        endpoint, _ = save_endpoint(
+            http_url,
+            crawl=enable_http_crawl,
+            ctx=ctx,
+            subdomain=subdomain)
+        if endpoint:
+            http_url = endpoint.http_url
+        urls.append(http_url)
 
         # Add Port in DB
         if any(c.isalpha() for c in ip_address):
             logger.warning(f"Skipping hostname, not a valid IP: {ip_address}")
             continue
 
-        port = Port.objects.create(
+        # Update or create port with service info
+        port, created = Port.objects.update_or_create(
+            ip_address=ip,
             number=port_number,
-            service_name='unknown',
-            description='',
-            is_uncommon=port_number in UNCOMMON_WEB_PORTS
+            defaults={
+                'service_name': 'unknown',
+                'description': '',
+                'is_uncommon': port_number in UNCOMMON_WEB_PORTS
+            }
         )
 
-        ip, _ = IpAddress.objects.get_or_create(address=ip_address)
-        ip.ports.add(port)
-        ip.save()
+        if created:
+            logger.warning(f'Found opened port {port_number} on {ip_address} ({host})')
+        else:
+            logger.debug(f'Port {port_number} already exists for {ip_address}')
+
         if host in ports_data:
-            ports_data[host].append(port_number)
+            if port_number not in ports_data[host]:
+                ports_data[host].append(port_number)
         else:
             ports_data[host] = [port_number]
-
-        # Send notification
-        logger.warning(f'Found opened port {port_number} on {ip_address} ({host})')
 
     if not ports_data:
         logger.info('Finished running naabu port scan - No open ports found.')
@@ -1565,7 +1577,7 @@ def nmap(
     output_file = self.output_path
     output_file_xml = f'{self.results_dir}/{host}_{self.filename}'
     vulns_file = f'{self.results_dir}/{host}_{filename_vulns}'
-    logger.warning(f'Running nmap on {host}:common_ports')
+    logger.warning(f'Running nmap on {host}')
     logger.debug(f'Scan Engine args: {args}')
 
     # Build cmd
@@ -1588,7 +1600,7 @@ def nmap(
         activity_id=self.activity_id)
 
     # Update port service information
-    update_port_service_info(output_file_xml)
+    process_nmap_service_results(output_file_xml)
 
     # Get nmap XML results and convert to JSON
     vulns = parse_nmap_results(output_file_xml, output_file, parse_type='vulnerabilities')
@@ -2936,7 +2948,7 @@ def s3scanner(self, ctx={}, description=None):
 @app.task(name='http_crawl', queue='main_scan_queue', base=RengineTask, bind=True)
 def http_crawl(
         self,
-        urls=[],
+        urls=None,  # Changed from urls=[]
         method=None,
         recrawl=False,
         ctx={},
@@ -2961,6 +2973,11 @@ def http_crawl(
         list: httpx results.
     """
     logger.info('Initiating HTTP Crawl')
+
+    # Initialize urls as empty list if None
+    if urls is None:
+        urls = []
+    
     cmd = 'httpx'
     config = self.yaml_configuration.get(HTTP_CRAWL) or {}
     custom_header = config.get(CUSTOM_HEADER) or self.yaml_configuration.get(CUSTOM_HEADER)
@@ -2971,20 +2988,22 @@ def http_crawl(
     self.output_path = None
     input_path = f'{self.results_dir}/httpx_input.txt'
     history_file = f'{self.results_dir}/commands.txt'
-    if urls and is_iterable(urls): # direct passing URLs to check
+    if urls and is_iterable(urls):
         if self.url_filter:
             urls = [u for u in urls if self.url_filter in u]
+        urls = [url for url in urls if url is not None]
         with open(input_path, 'w') as f:
             f.write('\n'.join(urls))
     else:
         # No url provided, so it's a subscan launched from subdomain list
         update_subdomain_metadatas = True
+        all_urls = []
 
         # Append the base subdomain to get subdomain info if task is launched directly from subscan
         subdomain_id = ctx.get('subdomain_id')
         if subdomain_id:
             subdomain = Subdomain.objects.filter(id=ctx.get('subdomain_id')).first()
-            urls.append(subdomain.name)
+            all_urls.append(subdomain.name)
 
         # Get subdomain endpoints to crawl the entire list
         http_urls = get_http_urls(
@@ -2993,12 +3012,13 @@ def http_crawl(
             ctx=ctx
         )
         if not http_urls:
-            logger.error(f'No URLs to crawl. Skipping.')
+            logger.error('No URLs to crawl. Skipping.')
             return
 
-        # Append endpoints
         if http_urls:
-            urls.append()
+            all_urls.extend(http_urls)
+            
+        urls = all_urls
 
         logger.debug(urls)
 
@@ -3035,7 +3055,7 @@ def http_crawl(
 
         if not line or not isinstance(line, dict):
             continue
-        
+
         # Check if the http request has an error
         if 'error' in line:
             logger.error(line)
@@ -3043,7 +3063,7 @@ def http_crawl(
 
         line_str = json.dumps(line, indent=2)
         logger.debug(line_str)
-        
+
         # No response from endpoint
         if line.get('failed', False):
             continue
@@ -3155,12 +3175,13 @@ def http_crawl(
         )
 
     # Remove input file
-    run_command(
-        f'rm {input_path}',
-        shell=True,
+    if not remove_file_or_pattern(
+        input_path,
         history_file=self.history_file,
         scan_id=self.scan_id,
-        activity_id=self.activity_id)
+        activity_id=self.activity_id
+    ):
+        logger.error(f"Failed to clean up input file {input_path}")
 
     return results
 
@@ -3457,31 +3478,29 @@ def parse_nmap_results(xml_file, output_file=None, parse_type='vulnerabilities')
     for host in hosts:
         # Get hostname/IP
         hostnames_dict = host.get('hostnames', {})
-        address = host.get('address')
-
-        if not address:
-            logger.warning("No address found in host data, skipping...")
-            continue
-
-        # If address is a list, take the first
-        if isinstance(address, list):
-            address = address[0]
-
-        # Check that address contains an @addr attribute
-        if not isinstance(address, dict) or '@addr' not in address:
-            logger.warning("Invalid address format in host data, skipping...")
-            continue
+        
+        # Get all IP addresses of the host
+        addresses = []
+        host_addresses = host.get('address', [])
+        if isinstance(host_addresses, dict):
+            host_addresses = [host_addresses]
+        for addr in host_addresses:
+            if addr.get('@addrtype') in ['ipv4', 'ipv6']:
+                addresses.append({
+                    'addr': addr.get('@addr'),
+                    'type': addr.get('@addrtype')
+                })
 
         if hostnames_dict:
             if not (hostname_data := hostnames_dict.get('hostname', [])):
-                hostnames = [address['@addr']]
+                hostnames = [addresses[0]['addr'] if addresses else 'unknown']
             else:
                 # Convert to list if it's a unique dictionary
                 if isinstance(hostname_data, dict):
                     hostname_data = [hostname_data]
-                hostnames = [entry.get('@name') for entry in hostname_data if entry.get('@name')] or [address['@addr']]
+                hostnames = [entry.get('@name') for entry in hostname_data if entry.get('@name')] or [addresses[0]['addr'] if addresses else 'unknown']
         else:
-            hostnames = [address['@addr']]
+            hostnames = [addresses[0]['addr'] if addresses else 'unknown']
 
         # Process each hostname
         for hostname in hostnames:
@@ -3504,12 +3523,13 @@ def parse_nmap_results(xml_file, output_file=None, parse_type='vulnerabilities')
                 url = sanitize_url(f'{hostname}:{port_number}')
 
                 if parse_type == 'ports':
-                    # Return only open ports info
+                    # Return only open ports info with addresses
                     results.append({
                         'host': hostname,
                         'port': port_number,
                         'protocol': port_protocol,
-                        'state': port_state
+                        'state': port_state,
+                        'addresses': addresses
                     })
                     continue
 
@@ -5080,10 +5100,13 @@ def save_imported_subdomains(subdomains, ctx={}):
     results_dir = ctx.get('results_dir', RENGINE_RESULTS)
 
     # Validate each subdomain and de-duplicate entries
-    subdomains = list(set([
-        subdomain for subdomain in subdomains
-        if domain.name == get_domain_from_subdomain(subdomain)
-    ]))
+    subdomains = list(
+        {
+            subdomain
+            for subdomain in subdomains
+            if domain.name == get_domain_from_subdomain(subdomain)
+        }
+    )
     if not subdomains:
         return
 
@@ -5094,24 +5117,40 @@ def save_imported_subdomains(subdomains, ctx={}):
         for subdomain in subdomains:
             # Save valid imported subdomains
             subdomain_name = subdomain.strip()
-            subdomain, _ = save_subdomain(subdomain_name, ctx=ctx)
-            if not isinstance(subdomain, Subdomain):
+            subdomain_obj, _ = save_subdomain(subdomain_name, ctx=ctx)
+            if not isinstance(subdomain_obj, Subdomain):
                 logger.error(f"Invalid subdomain encountered: {subdomain}")
                 continue
-            subdomain.is_imported_subdomain = True
-            subdomain.save()
+            subdomain_obj.is_imported_subdomain = True
+            subdomain_obj.save()
             output_file.write(f'{subdomain}\n')
 
             # Create base endpoint (for scan)
-            http_url = f'{subdomain.name}{url_filter}' if url_filter else subdomain.name
+            http_url = f'{subdomain_obj.name}{url_filter}' if url_filter else subdomain_obj.name
             endpoint, _ = save_endpoint(
                 http_url,
                 ctx=ctx,
                 crawl=enable_http_crawl,
                 is_default=True,
-                subdomain=subdomain
+                subdomain=subdomain_obj
             )
-            save_subdomain_metadata(subdomain, endpoint)
+            save_subdomain_metadata(subdomain_obj, endpoint)
+
+            # New Nmap scan for imported subdomain
+            try:
+                logger.info(f'Initiating Nmap scan for imported subdomain: {subdomain_name}')
+                if hosts_data := get_nmap_http_datas(subdomain_name, ctx):
+                    # Create endpoints from Nmap results
+                    create_first_endpoint_from_nmap_data(
+                        hosts_data,
+                        domain=domain,
+                        subdomain=subdomain_obj,
+                        ctx=ctx
+                    )
+                    logger.debug(f"Nmap scan completed successfully for {subdomain_name}")
+            except Exception as e:
+                logger.error(f"Nmap scan failed for {subdomain_name}: {str(e)}")
+                continue
 
 
 @app.task(name='query_reverse_whois', bind=False, queue='query_reverse_whois_queue')
@@ -5593,7 +5632,7 @@ def create_first_endpoint_from_nmap_data(hosts_data, domain, subdomain, ctx):
 
     return endpoint
 
-def update_port_service_info(xml_file):
+def process_nmap_service_results(xml_file):
     """Update port information with nmap service detection results"""
     services = parse_nmap_results(xml_file, parse_type='services')
     
@@ -5630,44 +5669,13 @@ def update_port_service_info(xml_file):
                 ip_address=ip_address
             )
         except Exception as e:
-            logger.error(f"Failed to update port {service['port']}: {str(e)}")
+            logger.error(f"Failed to process port {service['port']}: {str(e)}")
 
 def create_or_update_port_with_service(port_number, service_info, ip_address=None):
     """Create or update port with service information from nmap for specific IP."""
-    ports = Port.objects.filter(number=port_number)
-    
-    if ports.count() > 1:
-        kept_port = ports.first()
-        ports.exclude(id=kept_port.id).delete()
-        port = kept_port
-    elif ports.exists():
-        port = ports.first()
-    else:
-        port = Port.objects.create(
-            number=port_number,
-            is_uncommon=port_number in UNCOMMON_WEB_PORTS
-        )
-    
-    if ip_address:
-        # Build service description
-        description_parts = []
-        if service_info.get('service_product'):
-            description_parts.append(service_info['service_product'])
-        if service_info.get('service_version'):
-            description_parts.append(service_info['service_version'])
-        if service_info.get('service_extrainfo'):
-            description_parts.append(service_info['service_extrainfo'])
-        
-        # Update port info
-        port.service_name = service_info.get('service_name', 'unknown')
-        port.description = ' '.join(description_parts) if description_parts else ''
-        port.save()
-        
-        # Add M2M relation with IP
-        ip_address.ports.add(port)
-        
-        logger.info(f'Updated service info for IP {ip_address.address} port {port_number}: {port.service_name} - {port.description}')
-    
+    port = get_or_create_port(ip_address, port_number)
+    if ip_address and service_info:
+        update_port_service_info(port, service_info)
     return port
 
 #----------------------#
@@ -5684,4 +5692,44 @@ def debug():
             debugpy.wait_for_client()
     except Exception as e:
         logger.error(e)
+
+def remove_file_or_pattern(path, pattern=None, shell=True, history_file=None, scan_id=None, activity_id=None):
+    """
+    Safely removes a file/directory or pattern matching files
+    Args:
+        path: Path to file/directory to remove
+        pattern: Optional pattern for multiple files (e.g. "*.csv")
+        shell: Whether to use shell=True in run_command
+        history_file: History file for logging
+        scan_id: Scan ID for logging
+        activity_id: Activity ID for logging
+    Returns:
+        bool: True if successful, False if error occurred
+    """
+    try:
+        if pattern:
+            # Check for files matching the pattern
+            match_count = len(glob.glob(os.path.join(path, pattern)))
+            if match_count == 0:
+                logger.warning(f"No files matching pattern '{pattern}' in {path}")
+                return True
+            full_path = os.path.join(path, pattern)
+        else:
+            if not os.path.exists(path):
+                logger.warning(f"Path {path} does not exist")
+                return True
+            full_path = path
+
+        # Execute secure command
+        run_command(
+            f'rm -rf {full_path}',
+            shell=shell,
+            history_file=history_file,
+            scan_id=scan_id,
+            activity_id=activity_id
+        )
+        return True
+    except Exception as e:
+        logger.error(f"Failed to delete {full_path}: {str(e)}")
+        return False
 
