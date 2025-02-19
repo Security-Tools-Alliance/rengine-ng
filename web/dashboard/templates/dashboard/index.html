@@ -81,6 +81,22 @@ Dashboard
 </div>
 <div class="row">
 	<div class="col-xl-3 col-lg-3 col-md-2 col-sm-12 col-12">
+		<div class="card" id="tooltip-container">
+			<div class="card-body">
+				<i class="fa fa-info-circle text-muted float-end" data-bs-container="#tooltip-container" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Total Number of Scans for all targets"></i>
+				<h4 class="mt-0 font-16">Total Scans</h4>
+				<h2 class="text-primary my-3 text-center"><span data-plugin="counterup">{{scan_count.total|intcomma}}</span></h2>
+				<div id="scans_chart"></div>
+			</div>
+		</div>
+		<div class="card" id="tooltip-container">
+			<div class="card-body">
+				<i class="fa fa-info-circle text-muted float-end" data-bs-container="#tooltip-container" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Total Number of Subscans for subdomains"></i>
+				<h4 class="mt-0 font-16">Total Subscans</h4>
+				<h2 class="text-primary my-3 text-center"><span data-plugin="counterup">{{subscan_count.total|intcomma}}</span></h2>
+				<div id="subscans_chart"></div>
+			</div>
+		</div>
 		<div class="card">
 			<div class="card-body">
 				<div class="d-flex align-items-start mb-3">
@@ -105,9 +121,9 @@ Dashboard
 								<div class="w-100">
 									<a class="mt-1 font-14 text-reset">
 										<strong>{{item.title}}</strong>
-										</br>
+										<br>
 										<span class="text-muted">
-											{% if item.status == 2 %} {% if item.title != 'Scan Completed' %} Completed {% endif %}{% elif item.status == 1 %} Initiated {% elif item.status == 0 %} {% if item.title != 'Scan aborted' %} Aborted {% endif %} {% endif %}</b>for <span class="badge badge-soft-info">{{item.scan_of.domain.name}}</span>
+											<b>{% if item.status == 2 %} {% if item.title != 'Scan Completed' %} Completed {% endif %}{% elif item.status == 1 %} Initiated {% elif item.status == 0 %} {% if item.title != 'Scan aborted' %} Aborted {% endif %} {% endif %}</b>for <span class="badge badge-soft-info">{{item.scan_of.domain.name}}</span>
 										</span>
 										<br>
 										<span>{{item.time|naturaltime}}</span>
@@ -329,10 +345,10 @@ $(document).ready(function() {
 
 	{% include 'base/_items/most_common_cve_cwe_tags.js' %}
 
-	{% with dates=last_7_dates|slice:":7" %}
+	{% with targets_in_last_week=targets_in_last_week subdomains_in_last_week=subdomains_in_last_week vulns_in_last_week=vulns_in_last_week endpoints_in_last_week=endpoints_in_last_week scans_in_last_week=scans_in_last_week subscans_in_last_week=subscans_in_last_week %}
 		var label_dates = [
-			{% for date in dates reversed %}
-				'{{ date }}'{% if not forloop.last %},{% endif %}
+			{% for i in "6543210" %}
+				`Day -${6 - {{ forloop.counter0 }} }`{% if not forloop.last %},{% endif %}
 			{% endfor %}
 		];
 
@@ -353,11 +369,7 @@ $(document).ready(function() {
 			},
 			series: [{
 				name: "Targets Added",
-				data: [
-					{% for target in targets_in_last_week|slice:":7" reversed %}
-						{{ target }}{% if not forloop.last %},{% endif %}
-					{% endfor %}
-				]
+				data: {{ targets_in_last_week|safe }}.reverse()
 			}],
 			yaxis: {
 				min: 0
@@ -383,6 +395,16 @@ $(document).ready(function() {
 				},
 			},
 			labels: label_dates,
+			xaxis: {
+				type: 'category',
+				categories: label_dates,
+				labels: {
+					show: true,
+					formatter: function(value) {
+						return value;
+					}
+				}
+			},
 		};
 		new ApexCharts(document.querySelector("#targets_chart"), target_chart_option).render();
 
@@ -403,11 +425,7 @@ $(document).ready(function() {
 			},
 			series: [{
 				name: "Subdomains Discovered",
-				data: [
-					{% for subdomain in subdomains_in_last_week|slice:":7" reversed %}
-						{{ subdomain }}{% if not forloop.last %},{% endif %}
-					{% endfor %}
-				]
+				data: {{ subdomains_in_last_week|safe }}.reverse()
 			}],
 			yaxis: {
 				min: 0
@@ -433,6 +451,16 @@ $(document).ready(function() {
 				},
 			},
 			labels: label_dates,
+			xaxis: {
+				type: 'category',
+				categories: label_dates,
+				labels: {
+					show: true,
+					formatter: function(value) {
+						return value;
+					}
+				}
+			},
 		};
 		new ApexCharts(document.querySelector("#subdomains_chart"), subdomains_chart_options).render();
 
@@ -453,11 +481,7 @@ $(document).ready(function() {
 			},
 			series: [{
 				name: "Endpoints Discovered",
-				data: [
-					{% for endpoint in endpoints_in_last_week|slice:":7" reversed %}
-						{{ endpoint }}{% if not forloop.last %},{% endif %}
-					{% endfor %}
-				]
+				data: {{ endpoints_in_last_week|safe }}.reverse()
 			}],
 			yaxis: {
 				min: 0
@@ -483,6 +507,16 @@ $(document).ready(function() {
 				},
 			},
 			labels: label_dates,
+			xaxis: {
+				type: 'category',
+				categories: label_dates,
+				labels: {
+					show: true,
+					formatter: function(value) {
+						return value;
+					}
+				}
+			},
 		};
 		new ApexCharts(document.querySelector("#endpoint_chart"), endpoint_chart_options).render();
 
@@ -503,11 +537,7 @@ $(document).ready(function() {
 			},
 			series: [{
 				name: "Vulnerabilities Discovered",
-				data: [
-					{% for vuln in vulns_in_last_week|slice:":7" reversed %}
-						{{ vuln }}{% if not forloop.last %},{% endif %}
-					{% endfor %}
-				]
+				data: {{ vulns_in_last_week|safe }}.reverse()
 			}],
 			yaxis: {
 				min: 0
@@ -533,8 +563,156 @@ $(document).ready(function() {
 				},
 			},
 			labels: label_dates,
+			xaxis: {
+				type: 'category',
+				categories: label_dates,
+				labels: {
+					show: true,
+					formatter: function(value) {
+						return value;
+					}
+				}
+			},
 		};
 		new ApexCharts(document.querySelector("#vuln_chart"), vuln_chart_options).render();
+
+		var scansOptions = {
+			chart: {
+				type: 'area',
+				height: 350
+			},
+			series: [
+				{
+					name: 'Pending',
+					data: {{ scans_in_last_week.pending|safe }}.reverse()
+				},
+				{
+					name: 'Running',
+					data: {{ scans_in_last_week.running|safe }}.reverse()
+				},
+				{
+					name: 'Completed', 
+					data: {{ scans_in_last_week.completed|safe }}.reverse()
+				},
+				{
+					name: 'Failed',
+					data: {{ scans_in_last_week.failed|safe }}.reverse()
+				}
+			],
+			xaxis: {
+				type: 'category',
+				categories: label_dates,
+				labels: {
+					show: true,
+					formatter: function(value) {
+						return value;
+					}
+				}
+			},
+			tooltip: {
+				x: {
+					formatter: function(value, { series, dataPointIndex }) {
+						const realDate = new Date({{ last_7_dates|last|date:"Y-m-d" }});
+						realDate.setDate(realDate.getDate() - (6 - dataPointIndex));
+						return `${realDate.toLocaleDateString()}`;
+					}
+				}
+			},
+			stroke: {
+				curve: 'smooth'
+			},
+			fill: {
+				opacity: .2
+			},
+			yaxis: {
+				min: 0,
+				max: Math.max(5, Math.max(...{{ scans_in_last_week.completed|safe }})),
+				tickAmount: 5,
+				labels: {
+					formatter: function(val) {
+						return val.toFixed(0);
+					}
+				}
+			},
+			colors: ['#ffc107', '#2196f3', '#0acf97', '#fa5c7c'],
+			legend: {
+				position: 'bottom',
+				horizontalAlign: 'right'
+			},
+			dataLabels: {
+				enabled: false
+			},
+		};
+		new ApexCharts(document.querySelector("#scans_chart"), scansOptions).render();
+
+		var subscansOptions = {
+			chart: {
+				type: 'area',
+				height: 350
+			},
+			series: [
+				{
+					name: 'Pending',
+					data: {{ subscans_in_last_week.pending|safe }}.reverse()
+				},
+				{
+					name: 'Running',
+					data: {{ subscans_in_last_week.running|safe }}.reverse()
+				},
+				{
+					name: 'Completed',
+					data: {{ subscans_in_last_week.completed|safe }}.reverse()
+				},
+				{
+					name: 'Failed',
+					data: {{ subscans_in_last_week.failed|safe }}.reverse()
+				}
+			],
+			xaxis: {
+				type: 'category',
+				categories: label_dates,
+				labels: {
+					show: true,
+					formatter: function(value) {
+						return value;
+					}
+				}
+			},
+			tooltip: {
+				x: {
+					formatter: function(value, { series, dataPointIndex }) {
+						const realDate = new Date({{ last_7_dates|last|date:"Y-m-d" }});
+						realDate.setDate(realDate.getDate() - (6 - dataPointIndex));
+						return `${realDate.toLocaleDateString()}`;
+					}
+				}
+			},
+			stroke: {
+				curve: 'smooth'
+			},
+			fill: {
+				opacity: .2
+			},
+			yaxis: {
+				min: 0,
+				max: Math.max(5, Math.max(...{{ subscans_in_last_week.completed|safe }})),
+				tickAmount: 5,
+				labels: {
+					formatter: function(val) {
+						return val.toFixed(0);
+					}
+				}
+			},
+			colors: ['#ffc107', '#2196f3', '#0acf97', '#fa5c7c'],
+			legend: {
+				position: 'bottom',
+				horizontalAlign: 'right'
+			},
+			dataLabels: {
+				enabled: false
+			},
+		};
+		new ApexCharts(document.querySelector("#subscans_chart"), subscansOptions).render();
 	{% endwith %}
 
 	// vulnerability summary pie chart
@@ -793,7 +971,6 @@ $(document).ready(function() {
 			}
 		}
 	});
-
 });
 </script>
 {% endblock page_level_script %}
