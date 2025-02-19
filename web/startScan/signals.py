@@ -11,14 +11,19 @@ def handle_subdomain_deletion(sender, instance, **kwargs):
     """Cleanup orphaned IPs after subdomain deletion."""
     try:
         ips_to_check = list(instance.ip_addresses.all())
-        logger.info(f"Checking IPs associated with subdomain {instance.name}")
+        logger.info(f"Handling deletion of subdomain {instance.name} (ID: {instance.id}). Checking its associated IPs")
+        if ips_to_check:
+            logger.info(f"Found {len(ips_to_check)} IPs associated with subdomain {instance.name}")
+        else:
+            logger.info(f"No IPs associated with subdomain {instance.name}")
+            return
         
         def post_deletion_cleanup():
             """Callback executed after transaction validation."""
             for ip in ips_to_check:
                 # Final check after complete deletion
                 if not Subdomain.objects.filter(ip_addresses=ip).exists():
-                    logger.warning(f"Deleting orphaned IP {ip.address}")
+                    logger.warning(f"Deleting orphaned IP {ip.address} as it is orphaned after deletion of subdomain {instance.name} (ID: {instance.id})")
                     ip.delete()
                 else:
                     logger.info(f"IP {ip.address} still in use")

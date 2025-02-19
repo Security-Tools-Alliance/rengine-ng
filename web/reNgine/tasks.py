@@ -12,6 +12,7 @@ import concurrent.futures
 import base64
 import uuid
 import shutil
+import glob
 from pathlib import Path
 from copy import deepcopy
 
@@ -1307,19 +1308,25 @@ def screenshot(self, ctx={}, description=None):
                 subdomain.save()
                 logger.warning(f'Added screenshot for {protocol}://{subdomain.name}:{port} to DB')
 
+
     # Remove all db, html extra files in screenshot results
-    run_command(
-        f'rm -rf {screenshots_path}/*.csv {screenshots_path}/*.db {screenshots_path}/*.js {screenshots_path}/*.html {screenshots_path}/*.css',
-        shell=True,
+    patterns = ['*.csv', '*.db', '*.js', '*.html', '*.css']
+    for pattern in patterns:
+        remove_file_or_pattern(
+            screenshots_path,
+            pattern=pattern,
+            history_file=self.history_file,
+            scan_id=self.scan_id,
+            activity_id=self.activity_id
+        )
+
+    # Delete source folder
+    remove_file_or_pattern(
+        str(Path(screenshots_path) / 'source'),
         history_file=self.history_file,
         scan_id=self.scan_id,
-        activity_id=self.activity_id)
-    run_command(
-        f'rm -rf ' + str(Path(screenshots_path) / 'source'),
-        shell=True,
-        history_file=self.history_file,
-        scan_id=self.scan_id,
-        activity_id=self.activity_id)
+        activity_id=self.activity_id
+    )
 
     # Send finish notifs
     screenshots_str = '• ' + '\n• '.join([f'`{path}`' for path in screenshot_paths])
@@ -3168,18 +3175,13 @@ def http_crawl(
         )
 
     # Remove input file
-    if os.path.exists(input_path):
-        try:
-            run_command(
-                f'rm {input_path}',
-                shell=True,
-                history_file=self.history_file,
-                scan_id=self.scan_id,
-                activity_id=self.activity_id)
-        except Exception as e:
-            logger.error(f"Failed to delete input file {input_path}: {str(e)}")
-    else:
-        logger.warning(f"Input file {input_path} does not exist, skipping deletion")
+    if not remove_file_or_pattern(
+        input_path,
+        history_file=self.history_file,
+        scan_id=self.scan_id,
+        activity_id=self.activity_id
+    ):
+        logger.error(f"Failed to clean up input file {input_path}")
 
     return results
 
@@ -5690,4 +5692,44 @@ def debug():
             debugpy.wait_for_client()
     except Exception as e:
         logger.error(e)
+
+def remove_file_or_pattern(path, pattern=None, shell=True, history_file=None, scan_id=None, activity_id=None):
+    """
+    Safely removes a file/directory or pattern matching files
+    Args:
+        path: Path to file/directory to remove
+        pattern: Optional pattern for multiple files (e.g. "*.csv")
+        shell: Whether to use shell=True in run_command
+        history_file: History file for logging
+        scan_id: Scan ID for logging
+        activity_id: Activity ID for logging
+    Returns:
+        bool: True if successful, False if error occurred
+    """
+    try:
+        if pattern:
+            # Check for files matching the pattern
+            match_count = len(glob.glob(os.path.join(path, pattern)))
+            if match_count == 0:
+                logger.warning(f"No files matching pattern '{pattern}' in {path}")
+                return True
+            full_path = os.path.join(path, pattern)
+        else:
+            if not os.path.exists(path):
+                logger.warning(f"Path {path} does not exist")
+                return True
+            full_path = path
+
+        # Execute secure command
+        run_command(
+            f'rm -rf {full_path}',
+            shell=shell,
+            history_file=history_file,
+            scan_id=scan_id,
+            activity_id=activity_id
+        )
+        return True
+    except Exception as e:
+        logger.error(f"Failed to delete {full_path}: {str(e)}")
+        return False
 

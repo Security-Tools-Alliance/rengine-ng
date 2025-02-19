@@ -236,9 +236,14 @@ class EngineSerializer(serializers.ModelSerializer):
 	tasks = serializers.SerializerMethodField()
 
 	def get_tasks(self, obj):
-		yaml_config = yaml.safe_load(obj.yaml_configuration)
+		try:
+			yaml_config = yaml.safe_load(obj.yaml_configuration)
+			if not isinstance(yaml_config, dict):
+				return []
+		except Exception:
+			return []
 		return sorted([
-			task for task in yaml_config.keys() 
+			task for task in yaml_config.keys()
 			if task in ENGINE_NAMES
 		])
 
