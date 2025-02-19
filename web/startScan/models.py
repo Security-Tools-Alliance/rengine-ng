@@ -5,7 +5,7 @@ from django.contrib.postgres.fields import ArrayField
 from django.db import models
 from django.db.models import Count, Q
 from django.db.models.functions import TruncDay
-from datetime import timedelta, datetime
+from datetime import datetime
 from django.utils import timezone
 from reNgine.definitions import (CELERY_TASK_STATUSES,
 								 NUCLEI_REVERSE_SEVERITY_MAP,
