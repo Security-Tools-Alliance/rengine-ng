@@ -8,6 +8,9 @@ print_msg() {
 }
 
 RENGINE_FOLDER="/home/$USERNAME/rengine"
+MAX_CONCURRENCY=${MAX_CONCURRENCY:-20}
+MIN_CONCURRENCY=${MIN_CONCURRENCY:-5}
+CELERY_LOGLEVEL=${CELERY_LOGLEVEL:-info}
 
 print_msg "Generate Django migrations files"
 poetry run -C $RENGINE_FOLDER python3 manage.py makemigrations
@@ -24,31 +27,63 @@ poetry run -C $RENGINE_FOLDER python3 manage.py loaddata fixtures/default_keywor
 print_msg "Load default external tools"
 poetry run -C $RENGINE_FOLDER python3 manage.py loaddata fixtures/external_tools.yaml --app scanEngine.InstalledExternalTool
 
-if [ ! "$CELERY_LOGLEVEL" ]; then
-  export CELERY_LOGLEVEL='info'
-fi
+worker_command() {
+    local queue=$1
+    local worker_name=$2
+    
+    if [ "$CELERY_DEBUG" = "1" ]; then
+        echo "watchmedo auto-restart --recursive --pattern=\"*.py\" --directory=\"$RENGINE_FOLDER\" -- \
+            poetry run -C $RENGINE_FOLDER celery -A reNgine.tasks worker \
+            --pool=prefork \
+            --loglevel=$CELERY_LOGLEVEL \
+            --concurrency=1 \
+            -Q $queue -n $worker_name"
+    else
+        echo "poetry run -C $RENGINE_FOLDER celery -A reNgine.tasks worker \
+            --pool=gevent \
+            --loglevel=$CELERY_LOGLEVEL \
+            --autoscale=$MAX_CONCURRENCY,$MIN_CONCURRENCY \
+            -Q $queue -n $worker_name"
+    fi
+}
 
-print_msg "Start celery workers"
-watchmedo auto-restart --recursive --pattern="*.py" --directory="$RENGINE_FOLDER" -- poetry run -C $RENGINE_FOLDER celery -A reNgine.tasks worker --loglevel=$CELERY_LOGLEVEL --autoscale=$MAX_CONCURRENCY,$MIN_CONCURRENCY -Q main_scan_queue &
-watchmedo auto-restart --recursive --pattern="*.py" --directory="$RENGINE_FOLDER" -- poetry run -C $RENGINE_FOLDER celery -A reNgine.tasks worker --pool=gevent --concurrency=30 --loglevel=$CELERY_LOGLEVEL -Q initiate_scan_queue -n initiate_scan_worker &
-watchmedo auto-restart --recursive --pattern="*.py" --directory="$RENGINE_FOLDER" -- poetry run -C $RENGINE_FOLDER celery -A reNgine.tasks worker --pool=gevent --concurrency=30 --loglevel=$CELERY_LOGLEVEL -Q subscan_queue -n subscan_worker &
-watchmedo auto-restart --recursive --pattern="*.py" --directory="$RENGINE_FOLDER" -- poetry run -C $RENGINE_FOLDER celery -A reNgine.tasks worker --pool=gevent --concurrency=20 --loglevel=$CELERY_LOGLEVEL -Q report_queue -n report_worker &
-watchmedo auto-restart --recursive --pattern="*.py" --directory="$RENGINE_FOLDER" -- poetry run -C $RENGINE_FOLDER celery -A reNgine.tasks worker --pool=gevent --concurrency=10 --loglevel=$CELERY_LOGLEVEL -Q send_notif_queue -n send_notif_worker &
-watchmedo auto-restart --recursive --pattern="*.py" --directory="$RENGINE_FOLDER" -- poetry run -C $RENGINE_FOLDER celery -A reNgine.tasks worker --pool=gevent --concurrency=10 --loglevel=$CELERY_LOGLEVEL -Q send_scan_notif_queue -n send_scan_notif_worker &
-watchmedo auto-restart --recursive --pattern="*.py" --directory="$RENGINE_FOLDER" -- poetry run -C $RENGINE_FOLDER celery -A reNgine.tasks worker --pool=gevent --concurrency=10 --loglevel=$CELERY_LOGLEVEL -Q send_task_notif_queue -n send_task_notif_worker &
-watchmedo auto-restart --recursive --pattern="*.py" --directory="$RENGINE_FOLDER" -- poetry run -C $RENGINE_FOLDER celery -A reNgine.tasks worker --pool=gevent --concurrency=5 --loglevel=$CELERY_LOGLEVEL -Q send_file_to_discord_queue -n send_file_to_discord_worker &
-watchmedo auto-restart --recursive --pattern="*.py" --directory="$RENGINE_FOLDER" -- poetry run -C $RENGINE_FOLDER celery -A reNgine.tasks worker --pool=gevent --concurrency=5 --loglevel=$CELERY_LOGLEVEL -Q send_hackerone_report_queue -n send_hackerone_report_worker &
-watchmedo auto-restart --recursive --pattern="*.py" --directory="$RENGINE_FOLDER" -- poetry run -C $RENGINE_FOLDER celery -A reNgine.tasks worker --pool=gevent --concurrency=10 --loglevel=$CELERY_LOGLEVEL -Q parse_nmap_results_queue -n parse_nmap_results_worker &
-watchmedo auto-restart --recursive --pattern="*.py" --directory="$RENGINE_FOLDER" -- poetry run -C $RENGINE_FOLDER celery -A reNgine.tasks worker --pool=gevent --concurrency=20 --loglevel=$CELERY_LOGLEVEL -Q geo_localize_queue -n geo_localize_worker &
-watchmedo auto-restart --recursive --pattern="*.py" --directory="$RENGINE_FOLDER" -- poetry run -C $RENGINE_FOLDER celery -A reNgine.tasks worker --pool=gevent --concurrency=10 --loglevel=$CELERY_LOGLEVEL -Q query_whois_queue -n query_whois_worker &
-watchmedo auto-restart --recursive --pattern="*.py" --directory="$RENGINE_FOLDER" -- poetry run -C $RENGINE_FOLDER celery -A reNgine.tasks worker --pool=gevent --concurrency=30 --loglevel=$CELERY_LOGLEVEL -Q remove_duplicate_endpoints_queue -n remove_duplicate_endpoints_worker &
-watchmedo auto-restart --recursive --pattern="*.py" --directory="$RENGINE_FOLDER" -- poetry run -C $RENGINE_FOLDER celery -A reNgine.tasks worker --pool=gevent --concurrency=50 --loglevel=$CELERY_LOGLEVEL -Q run_command_queue -n run_command_worker &
-watchmedo auto-restart --recursive --pattern="*.py" --directory="$RENGINE_FOLDER" -- poetry run -C $RENGINE_FOLDER celery -A reNgine.tasks worker --pool=gevent --concurrency=10 --loglevel=$CELERY_LOGLEVEL -Q query_reverse_whois_queue -n query_reverse_whois_worker &
-watchmedo auto-restart --recursive --pattern="*.py" --directory="$RENGINE_FOLDER" -- poetry run -C $RENGINE_FOLDER celery -A reNgine.tasks worker --pool=gevent --concurrency=10 --loglevel=$CELERY_LOGLEVEL -Q query_ip_history_queue -n query_ip_history_worker &
-watchmedo auto-restart --recursive --pattern="*.py" --directory="$RENGINE_FOLDER" -- poetry run -C $RENGINE_FOLDER celery -A reNgine.tasks worker --pool=gevent --concurrency=30 --loglevel=$CELERY_LOGLEVEL -Q gpt_queue -n gpt_worker &
-watchmedo auto-restart --recursive --pattern="*.py" --directory="$RENGINE_FOLDER" -- poetry run -C $RENGINE_FOLDER celery -A reNgine.tasks worker --pool=gevent --concurrency=10 --loglevel=$CELERY_LOGLEVEL -Q dorking_queue -n dorking_worker &
-watchmedo auto-restart --recursive --pattern="*.py" --directory="$RENGINE_FOLDER" -- poetry run -C $RENGINE_FOLDER celery -A reNgine.tasks worker --pool=gevent --concurrency=10 --loglevel=$CELERY_LOGLEVEL -Q osint_discovery_queue -n osint_discovery_worker &
-watchmedo auto-restart --recursive --pattern="*.py" --directory="$RENGINE_FOLDER" -- poetry run -C $RENGINE_FOLDER celery -A reNgine.tasks worker --pool=gevent --concurrency=10 --loglevel=$CELERY_LOGLEVEL -Q h8mail_queue -n h8mail_worker &
-watchmedo auto-restart --recursive --pattern="*.py" --directory="$RENGINE_FOLDER" -- poetry run -C $RENGINE_FOLDER celery -A reNgine.tasks worker --pool=gevent --concurrency=10 --loglevel=$CELERY_LOGLEVEL -Q theHarvester_queue -n theHarvester_worker
+queues=(
+    "main_scan_queue:main_scan_worker"
+    "subscan_queue:subscan_worker"
+    "subdomain_discovery_queue:subdomain_discovery_worker"
+    "osint_discovery_queue:osint_discovery_worker"
+    "port_scan_queue:port_scan_worker"
+    "vulnerability_scan_queue:vulnerability_scan_worker"
+    "nuclei_queue:nuclei_worker"
+    "dalfox_queue:dalfox_worker"
+    "dir_fuzzing_queue:dir_fuzzing_worker"
+    "screenshot_queue:screenshot_worker"
+    "waf_detection_queue:waf_detection_worker"
+    "http_crawl_queue:http_crawl_worker"
+    "crlfuzz_queue:crlfuzz_worker"
+    "s3scanner_queue:s3scanner_worker"
+    "report_queue:report_worker"
+    "send_notif_queue:send_notif_worker"
+    "send_scan_notif_queue:send_scan_notif_worker"
+    "send_task_notif_queue:send_task_notif_worker"
+    "parse_nmap_results_queue:parse_nmap_results_worker"
+    "geo_localize_queue:geo_localize_worker"
+    "query_whois_queue:query_whois_worker"
+    "query_reverse_whois_queue:query_reverse_whois_worker"
+    "gpt_queue:gpt_worker"
+    "dorking_queue:dorking_worker"
+    "h8mail_queue:h8mail_worker"
+    "theHarvester_queue:theHarvester_worker"
+)
+
+commands=""
+for queue in "${queues[@]}"; do
+    IFS=':' read -r queue worker_name <<< "$queue"
+    commands+="$(worker_command "$queue" "$worker_name") &"$'\n'
+done
+
+eval "$commands"
+
+wait
 
 exec "$@"

@@ -13,10 +13,13 @@ services:
       - CELERY_DEBUG=1
       - CELERY_REMOTE_DEBUG=0
       - CELERY_REMOTE_DEBUG_PORT=5679
+      - CELERY_ALWAYS_EAGER=0
+      - CELERY_TASK_EAGER_PROPAGATES=0
     volumes:
       - ./celery/entrypoint-dev.sh:/entrypoint-dev.sh:ro
     ports:
       - "127.0.0.1:5679:5679"
+      - "127.0.0.1:5555:5555"
 
   celery-beat:
     entrypoint: /entrypoint-dev.sh
