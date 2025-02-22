@@ -103,8 +103,13 @@ class RengineTask(Task):
 					'nuclei_individual_severity_module': 'vulnerability_scan',
 					's3scanner': 'vulnerability_scan',
 				}
-				if self.track and self.task_name not in self.engine.tasks and dependent_tasks.get(self.task_name) not in self.engine.tasks:
-					logger.debug(f'Task {self.name} is not part of engine "{self.engine.engine_name}" tasks. Skipping.')
+				if (
+					self.track and 
+					self.task_name not in self.engine.tasks and 
+					dependent_tasks.get(self.task_name) not in self.engine.tasks and
+					self.task_name.lower() != 'http_crawl'
+				):
+					logger.debug(f'Task {self.task_name} is not part of engine "{self.engine.engine_name}" tasks. Skipping.')
 					return
 
 			# Create ScanActivity for this task and send start scan notifs
