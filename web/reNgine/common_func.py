@@ -12,7 +12,6 @@ import humanize
 import redis
 import requests
 import tldextract
-import xmltodict
 import validators
 import ipaddress
 
@@ -977,6 +976,10 @@ def get_nmap_cmd(
 	# Build command with options
 	cmd = 'nmap'
 	cmd = _build_cmd(cmd, options, flags)
+    
+	# Add existing arguments if provided
+	if args:
+		cmd += f' {args}'
  
 	# Add ports and service detection
 	if ports and '-p' not in cmd:
@@ -1231,97 +1234,6 @@ def create_scan_object(host_id, engine_id, initiated_by_id=None):
     domain.start_scan_date = current_scan_time
     domain.save()
     return scan.id
-
-def prepare_command(cmd, shell):
-    """
-    Prepare the command for execution.
-
-    Args:
-        cmd (str): The command to prepare.
-        shell (bool): Whether to use shell execution.
-
-    Returns:
-        str or list: The prepared command, either as a string (for shell execution) or a list (for non-shell execution).
-    """
-    return cmd if shell else shlex.split(cmd)
-
-def create_command_object(cmd, scan_id, activity_id):
-    """
-    Create a Command object in the database.
-
-    Args:
-        cmd (str): The command to be executed.
-        scan_id (int): ID of the associated scan.
-        activity_id (int): ID of the associated activity.
-
-    Returns:
-        Command: The created Command object.
-    """
-    return Command.objects.create(
-        command=cmd,
-        time=timezone.now(),
-        scan_history_id=scan_id,
-        activity_id=activity_id
-    )
-
-def process_line(line, trunc_char=None):
-    """
-    Process a line of output from the command.
-
-    Args:
-        line (str): The line to process.
-        trunc_char (str, optional): Character to truncate the line. Defaults to None.
-
-    Returns:
-        str or dict: The processed line, either as a string or a JSON object if the line is valid JSON.
-    """
-    line = line.strip()
-    ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
-    line = ansi_escape.sub('', line)
-    line = line.replace('\\x0d\\x0a', '\n')
-    if trunc_char and line.endswith(trunc_char):
-        line = line[:-1]
-    try:
-        return json.loads(line)
-    except json.JSONDecodeError:
-        return line
-
-def write_history(history_file, cmd, return_code, output):
-    """
-    Write command execution history to a file.
-
-    Args:
-        history_file (str): Path to the history file.
-        cmd (str): The executed command.
-        return_code (int): The return code of the command.
-        output (str): The output of the command.
-    """
-    mode = 'a' if os.path.exists(history_file) else 'w'
-    with open(history_file, mode) as f:
-        f.write(f'\n{cmd}\n{return_code}\n{output}\n------------------\n')
-
-def execute_command(command, shell, cwd):
-    """
-    Execute a command using subprocess.
-
-    Args:
-        command (str or list): The command to execute.
-        shell (bool): Whether to use shell execution.
-        cwd (str): The working directory for the command.
-
-    Returns:
-        subprocess.Popen: The Popen object for the executed command.
-    """
-    return subprocess.Popen(
-        command,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        shell=shell,
-        cwd=cwd,
-        bufsize=-1,
-        universal_newlines=True,
-        encoding='utf-8'
-    )
 
 def get_data_from_post_request(request, field):
     """

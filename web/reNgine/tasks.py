@@ -13,6 +13,8 @@ import base64
 import uuid
 import shutil
 import glob
+import signal
+from select import select
 from pathlib import Path
 from copy import deepcopy
 
@@ -28,11 +30,13 @@ from django.utils import timezone, html
 from pycvesearch import CVESearch
 from metafinder.extractor import extract_metadata_from_google_search
 import xml.etree.ElementTree as ET
+import re
 
 from reNgine.celery import app
 from reNgine.gpt import GPTVulnerabilityReportGenerator
 from reNgine.celery_custom_task import RengineTask
 from reNgine.common_func import *
+from reNgine.utils.command_executor import CommandExecutor
 from reNgine.definitions import *
 from reNgine.settings import *
 from reNgine.gpt import *
@@ -56,7 +60,7 @@ logger = get_task_logger(__name__)
 #----------------------#
 
 
-@app.task(name='initiate_scan', bind=False, queue='initiate_scan_queue')
+@app.task(name='initiate_scan', bind=False, queue='main_scan_queue')
 def initiate_scan(
         scan_history_id,
         domain_id,
@@ -81,8 +85,8 @@ def initiate_scan(
 		initiated_by (int): User ID initiating the scan.
     """
 
-    if CELERY_REMOTE_DEBUG:
-        debug()
+    # if CELERY_REMOTE_DEBUG:
+    #     debug()
 
     scan = None
     try:
@@ -269,8 +273,8 @@ def initiate_subscan(
         url_filter (str): URL path. Default: ''
     """
 
-    if CELERY_REMOTE_DEBUG:
-        debug()
+    # if CELERY_REMOTE_DEBUG:
+    #     debug()
 
     subscan = None
     try:
@@ -436,7 +440,7 @@ def report(ctx={}, description=None):
 # Tracked reNgine tasks    #
 #--------------------------#
 
-@app.task(name='subdomain_discovery', queue='main_scan_queue', base=RengineTask, bind=True)
+@app.task(name='subdomain_discovery', queue='subdomain_discovery_queue', base=RengineTask, bind=True)
 def subdomain_discovery(
         self,
         host=None,
@@ -672,7 +676,7 @@ def subdomain_discovery(
 
     return SubdomainSerializer(subdomains, many=True).data
 
-@app.task(name='osint', queue='main_scan_queue', base=RengineTask, bind=True)
+@app.task(name='osint', queue='osint_discovery_queue', base=RengineTask, bind=True)
 def osint(self, host=None, ctx={}, description=None):
     """Run Open-Source Intelligence tools on selected domain.
 
@@ -1240,7 +1244,7 @@ def h8mail(config, host, scan_history_id, activity_id, results_dir, ctx={}):
     return creds
 
 
-@app.task(name='screenshot', queue='main_scan_queue', base=RengineTask, bind=True)
+@app.task(name='screenshot', queue='screenshot_queue', base=RengineTask, bind=True)
 def screenshot(self, ctx={}, description=None):
     """Uses EyeWitness to gather screenshot of a domain and/or url.
 
@@ -1340,7 +1344,7 @@ def screenshot(self, ctx={}, description=None):
             send_file_to_discord.delay(path, title)
 
 
-@app.task(name='port_scan', queue='main_scan_queue', base=RengineTask, bind=True)
+@app.task(name='port_scan', queue='port_scan_queue', base=RengineTask, bind=True)
 def port_scan(self, hosts=None, ctx=None, description=None):
     """Run port scan.
 
@@ -1514,7 +1518,7 @@ def port_scan(self, hosts=None, ctx=None, description=None):
 
     return ports_data
 
-@app.task(name='run_nmap', queue='main_scan_queue', base=RengineTask, bind=True)
+@app.task(name='run_nmap', queue='port_scan_queue', base=RengineTask, bind=True)
 def run_nmap(self, ctx, **nmap_args):
     """Run nmap scans in parallel for each host.
     
@@ -1546,7 +1550,7 @@ def run_nmap(self, ctx, **nmap_args):
         task.get()
 
 
-@app.task(name='nmap', queue='main_scan_queue', base=RengineTask, bind=True)
+@app.task(name='nmap', queue='port_scan_queue', base=RengineTask, bind=True)
 def nmap(
         self,
         args=None,
@@ -1578,7 +1582,6 @@ def nmap(
     output_file_xml = f'{self.results_dir}/{host}_{self.filename}'
     vulns_file = f'{self.results_dir}/{host}_{filename_vulns}'
     logger.warning(f'Running nmap on {host}')
-    logger.debug(f'Scan Engine args: {args}')
 
     # Build cmd
     nmap_cmd = get_nmap_cmd(
@@ -1638,7 +1641,7 @@ def save_vulns(self, notif, vulns_file, vulns):
         self.notify(fields={'CVEs': vulns_str})
 
 
-@app.task(name='waf_detection', queue='main_scan_queue', base=RengineTask, bind=True)
+@app.task(name='waf_detection', queue='waf_detection_queue', base=RengineTask, bind=True)
 def waf_detection(self, ctx={}, description=None):
     """
     Uses wafw00f to check for the presence of a WAF.
@@ -1649,6 +1652,10 @@ def waf_detection(self, ctx={}, description=None):
     Returns:
         list: List of startScan.models.Waf objects.
     """
+    if CELERY_REMOTE_DEBUG:
+        debug()
+
+
     input_path = str(Path(self.results_dir) / 'input_endpoints_waf_detection.txt')
     config = self.yaml_configuration.get(WAF_DETECTION) or {}
 
@@ -1706,7 +1713,7 @@ def waf_detection(self, ctx={}, description=None):
     return wafs
 
 
-@app.task(name='dir_file_fuzz', queue='main_scan_queue', base=RengineTask, bind=True)
+@app.task(name='dir_file_fuzz', queue='dir_fuzzing_queue', base=RengineTask, bind=True)
 def dir_file_fuzz(self, ctx={}, description=None):
     """Perform directory scan, and currently uses `ffuf` as a default tool.
 
@@ -1885,7 +1892,7 @@ def dir_file_fuzz(self, ctx={}, description=None):
     return results
 
 
-@app.task(name='fetch_url', queue='main_scan_queue', base=RengineTask, bind=True)
+@app.task(name='fetch_url', queue='fetch_url_queue', base=RengineTask, bind=True)
 def fetch_url(self, urls=[], ctx={}, description=None):
     """Fetch URLs using different tools like gauplus, gau, gospider, waybackurls ...
 
@@ -2177,12 +2184,15 @@ def parse_curl_output(response):
         'http_status': http_status,
     }
 
-@app.task(name='vulnerability_scan', queue='main_scan_queue', bind=True, base=RengineTask)
+@app.task(name='vulnerability_scan', queue='vulnerability_scan_queue', bind=True, base=RengineTask)
 def vulnerability_scan(self, urls=[], ctx={}, description=None):
     """
         This function will serve as an entrypoint to vulnerability scan.
         All other vulnerability scan will be run from here including nuclei, crlfuzz, etc
     """
+    # if CELERY_REMOTE_DEBUG:
+    #     debug()
+
     logger.info('Running Vulnerability Scan Queue')
     config = self.yaml_configuration.get(VULNERABILITY_SCAN) or {}
     should_run_nuclei = config.get(RUN_NUCLEI, True)
@@ -2234,12 +2244,15 @@ def vulnerability_scan(self, urls=[], ctx={}, description=None):
     # return results
     return None
 
-@app.task(name='nuclei_individual_severity_module', queue='main_scan_queue', base=RengineTask, bind=True)
+@app.task(name='nuclei_individual_severity_module', queue='nuclei_queue', base=RengineTask, bind=True)
 def nuclei_individual_severity_module(self, cmd, severity, enable_http_crawl, should_fetch_gpt_report, ctx={}, description=None):
     '''
         This celery task will run vulnerability scan in parallel.
         All severities supplied should run in parallel as grouped tasks.
     '''
+    # if CELERY_REMOTE_DEBUG:
+    #     debug()
+
     results = []
     logger.info(f'Running vulnerability scan with severity: {severity}')
     cmd += f' -severity {severity}'
@@ -2276,7 +2289,7 @@ def nuclei_individual_severity_module(self, cmd, severity, enable_http_crawl, sh
             continue
 
         # Look for duplicate vulnerabilities by excluding records that might change but are irrelevant.
-        object_comparison_exclude = ['response', 'curl_command', 'tags', 'references', 'cve_ids', 'cwe_ids']
+        object_comparison_exclude = ['request','response', 'curl_command', 'tags', 'references', 'cve_ids', 'cwe_ids']
 
         # Add subdomain and target domain to the duplicate check
         vuln_data_copy = vuln_data.copy()
@@ -2489,7 +2502,7 @@ def add_gpt_description_db(title, path, description, impact, remediation, refere
         gpt_report.references.add(ref)
         gpt_report.save()
 
-@app.task(name='nuclei_scan', queue='main_scan_queue', base=RengineTask, bind=True)
+@app.task(name='nuclei_scan', queue='vulnerability_scan_queue', base=RengineTask, bind=True)
 def nuclei_scan(self, urls=[], ctx={}, description=None):
     """HTTP vulnerability scan using Nuclei
 
@@ -2636,7 +2649,7 @@ def nuclei_scan(self, urls=[], ctx={}, description=None):
 
     return None
 
-@app.task(name='dalfox_xss_scan', queue='main_scan_queue', base=RengineTask, bind=True)
+@app.task(name='dalfox_xss_scan', queue='dalfox_queue', base=RengineTask, bind=True)
 def dalfox_xss_scan(self, urls=[], ctx={}, description=None):
     """XSS Scan using dalfox
 
@@ -2772,7 +2785,7 @@ def dalfox_xss_scan(self, urls=[], ctx={}, description=None):
     return results
 
 
-@app.task(name='crlfuzz_scan', queue='main_scan_queue', base=RengineTask, bind=True)
+@app.task(name='crlfuzz_scan', queue='crlfuzz_queue', base=RengineTask, bind=True)
 def crlfuzz_scan(self, urls=[], ctx={}, description=None):
     """CRLF Fuzzing with CRLFuzz
 
@@ -2903,7 +2916,7 @@ def crlfuzz_scan(self, urls=[], ctx={}, description=None):
     return results
 
 
-@app.task(name='s3scanner', queue='main_scan_queue', base=RengineTask, bind=True)
+@app.task(name='s3scanner', queue='s3scanner_queue', base=RengineTask, bind=True)
 def s3scanner(self, ctx={}, description=None):
     """Bucket Scanner
 
@@ -2945,7 +2958,7 @@ def s3scanner(self, ctx={}, description=None):
                 logger.info(f"s3 bucket added {result['provider']}-{result['name']}-{result['region']}")
 
 
-@app.task(name='http_crawl', queue='main_scan_queue', base=RengineTask, bind=True)
+@app.task(name='http_crawl', queue='http_crawl_queue', base=RengineTask, bind=True)
 def http_crawl(
         self,
         urls=None,  # Changed from urls=[]
@@ -3060,9 +3073,6 @@ def http_crawl(
         if 'error' in line:
             logger.error(line)
             continue
-
-        line_str = json.dumps(line, indent=2)
-        logger.debug(line_str)
 
         # No response from endpoint
         if line.get('failed', False):
@@ -4439,113 +4449,33 @@ def remove_duplicate_endpoints(
 
 
 @app.task(name='run_command', bind=False, queue='run_command_queue')
-def run_command(cmd, cwd=None, shell=False, history_file=None, scan_id=None, activity_id=None, remove_ansi_sequence=False):
-    """
-    Execute a command and return its output.
+def run_command(cmd, **kwargs):
+    context = {
+        'shell': kwargs.get('shell', False),
+        'cwd': kwargs.get('cwd'),
+        'history_file': kwargs.get('history_file'),
+        'scan_id': kwargs.get('scan_id'),
+        'activity_id': kwargs.get('activity_id'),
+        'remove_ansi': kwargs.get('remove_ansi_sequence', False),
+        'encoding': kwargs.get('encoding', 'utf-8'),
+        'trunc_char': kwargs.get('trunc_char')
+    }
+    executor = CommandExecutor(cmd, context)
+    return executor.execute(stream=False)
 
-    Args:
-        cmd (str): The command to execute.
-        cwd (str, optional): The working directory for the command. Defaults to None.
-        shell (bool, optional): Whether to use shell execution. Defaults to False.
-        history_file (str, optional): File to write command history. Defaults to None.
-        scan_id (int, optional): ID of the associated scan. Defaults to None.
-        activity_id (int, optional): ID of the associated activity. Defaults to None.
-        remove_ansi_sequence (bool, optional): Whether to remove ANSI escape sequences from output. Defaults to False.
 
-    Returns:
-        tuple: A tuple containing the return code and output of the command.
-    """
-    logger.info(f"Starting execution of command: {cmd}")
-    command_obj = create_command_object(cmd, scan_id, activity_id)
-    command = prepare_command(cmd, shell)
-    logger.debug(f"Prepared run command: {command}")
-    
-    process = execute_command(command, shell, cwd)
-    output, error_output = process.communicate()
-    return_code = process.returncode
-
-    if output:
-        output = re.sub(r'\x1b\[[0-9;]*[mGKH]', '', output) if remove_ansi_sequence else output 
-    
-    if return_code != 0:
-        error_msg = f"Command failed with exit code {return_code}"
-        if error_output:
-            error_msg += f"\nError output:\n{error_output}"
-        logger.error(error_msg)
-        
-    command_obj.output = output or None
-    command_obj.error_output = error_output or None
-    command_obj.return_code = return_code
-    command_obj.save()
-    
-    if history_file:
-        write_history(history_file, cmd, return_code, output)
-    
-    return return_code, output
-
-def stream_command(cmd, cwd=None, shell=False, history_file=None, encoding='utf-8', scan_id=None, activity_id=None, trunc_char=None):
-    """
-    Execute a command and yield its output line by line.
-
-    Args:
-        cmd (str): The command to execute.
-        cwd (str, optional): The working directory for the command. Defaults to None.
-        shell (bool, optional): Whether to use shell execution. Defaults to False.
-        history_file (str, optional): File to write command history. Defaults to None.
-        encoding (str, optional): Encoding for the command output. Defaults to 'utf-8'.
-        scan_id (int, optional): ID of the associated scan. Defaults to None.
-        activity_id (int, optional): ID of the associated activity. Defaults to None.
-        trunc_char (str, optional): Character to truncate lines. Defaults to None.
-
-    Yields:
-        str: Each line of the command output.
-    """
-    logger.info(f"Starting execution of command: {cmd}")
-    command_obj = create_command_object(cmd, scan_id, activity_id)
-    command = prepare_command(cmd, shell)
-    logger.debug(f"Prepared stream command: {command}")
-    
-    process = execute_command(command, shell, cwd)
-    output = ""
-    error_output = ""
-
-    while True:
-        stdout_data = process.stdout.readline()
-        stderr_data = process.stderr.readline()
-        
-        if not stdout_data and not stderr_data and process.poll() is not None:
-            break
-            
-        if stdout_data:
-            output += stdout_data
-            try:
-                item = process_line(stdout_data, trunc_char)
-                if item:
-                    yield item
-            except Exception as e:
-                logger.error(f"Error processing output line: {e}")
-                
-        if stderr_data:
-            error_output += stderr_data
-
-    process.wait()
-    return_code = process.returncode
-    
-    if return_code != 0:
-        error_msg = f"Command failed with exit code {return_code}"
-        if error_output:
-            error_msg += f"\nError output:\n{error_output}"
-        logger.error(error_msg)
-        
-    command_obj.output = output or None
-    command_obj.error_output = error_output or None
-    command_obj.return_code = return_code
-    command_obj.save()
-    
-    logger.debug(f'Command returned exit code: {return_code}')
-
-    if history_file:
-        write_history(history_file, cmd, return_code, output)
+def stream_command(cmd, **kwargs):
+    context = {
+        'shell': kwargs.get('shell', False),
+        'cwd': kwargs.get('cwd'),
+        'history_file': kwargs.get('history_file'),
+        'scan_id': kwargs.get('scan_id'),
+        'activity_id': kwargs.get('activity_id'),
+        'encoding': kwargs.get('encoding', 'utf-8'),
+        'trunc_char': kwargs.get('trunc_char')
+    }
+    executor = CommandExecutor(cmd, context)
+    return executor.execute(stream=True)
 
 def process_httpx_response(line):
     """TODO: implement this"""
@@ -5687,13 +5617,14 @@ def debug():
         # Activate remote debug for scan worker
         if CELERY_REMOTE_DEBUG:
             logger.info(f"\n⚡ Debugger started on port "+ str(CELERY_REMOTE_DEBUG_PORT) +", task is waiting IDE (VSCode ...) to be attached to continue ⚡\n")
-            os.environ['GEVENT_SUPPORT'] = 'True'
-            debugpy.listen(('0.0.0.0',CELERY_REMOTE_DEBUG_PORT))
+            # os.environ['GEVENT_SUPPORT'] = 'True'
+            if not debugpy.is_client_connected():
+                debugpy.listen(('0.0.0.0',CELERY_REMOTE_DEBUG_PORT))
             debugpy.wait_for_client()
     except Exception as e:
         logger.error(e)
 
-def remove_file_or_pattern(path, pattern=None, shell=True, history_file=None, scan_id=None, activity_id=None):
+def remove_file_or_pattern(path, pattern=None, history_file=None, scan_id=None, activity_id=None):
     """
     Safely removes a file/directory or pattern matching files
     Args:
@@ -5723,7 +5654,7 @@ def remove_file_or_pattern(path, pattern=None, shell=True, history_file=None, sc
         # Execute secure command
         run_command(
             f'rm -rf {full_path}',
-            shell=shell,
+            shell=True,
             history_file=history_file,
             scan_id=scan_id,
             activity_id=activity_id
@@ -5732,4 +5663,13 @@ def remove_file_or_pattern(path, pattern=None, shell=True, history_file=None, sc
     except Exception as e:
         logger.error(f"Failed to delete {full_path}: {str(e)}")
         return False
+
+def check_process_status(pid):
+    try:
+        os.kill(pid, 0)  # Check if process exists
+        with open(f"/proc/{pid}/status") as f:
+            status = f.read()
+            return 'running' if 'R (running)' in status else 'sleeping'
+    except (ProcessLookupError, FileNotFoundError):
+        return 'dead'
 

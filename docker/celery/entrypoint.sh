@@ -34,9 +34,8 @@ worker_command() {
     if [ "$CELERY_DEBUG" = "1" ]; then
         echo "watchmedo auto-restart --recursive --pattern=\"*.py\" --directory=\"$RENGINE_FOLDER\" -- \
             poetry run -C $RENGINE_FOLDER celery -A reNgine.tasks worker \
-            --pool=prefork \
+            --pool=solo \
             --loglevel=$CELERY_LOGLEVEL \
-            --concurrency=1 \
             -Q $queue -n $worker_name"
     else
         echo "poetry run -C $RENGINE_FOLDER celery -A reNgine.tasks worker \

@@ -255,7 +255,7 @@ LOGGING = {
             'maxBytes': 1024,
             'backupCount': 3
         },
-        'celery': {
+        'celery_file': {
             'class': 'logging.handlers.RotatingFileHandler',
             'formatter': 'simple',
             'filename': 'celery.log',
@@ -317,7 +317,7 @@ LOGGING = {
         'reNgine': {
             'handlers': ['task'],
             'level': 'DEBUG' if CELERY_DEBUG else 'INFO',
-            'propagate': True  # Allow log messages to propagate to root logger
+            'propagate': False
         },
         'kombu.pidbox': {
             'handlers': ['null'],
@@ -346,6 +346,11 @@ LOGGING = {
             'formatter': 'migration',
             'propagate': False,
         },
+        'celery': {
+            'handlers': ['celery_file'],
+            'level': 'DEBUG' if CELERY_DEBUG else 'INFO',
+            'propagate': False
+        },       
     },
     'root': {
         'handlers': ['console'],
