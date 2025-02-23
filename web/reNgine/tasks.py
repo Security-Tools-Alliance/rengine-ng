@@ -13,8 +13,6 @@ import base64
 import uuid
 import shutil
 import glob
-import signal
-from select import select
 from pathlib import Path
 from copy import deepcopy
 
@@ -1775,6 +1773,11 @@ def dir_file_fuzz(self, ctx={}, description=None):
         ctx=ctx
     )
     logger.warning(urls)
+    logger.warning(ctx)
+
+    subdomain = None
+    if ctx.get('subdomain_id') and ctx['subdomain_id'] > 0:
+        subdomain = Subdomain.objects.get(id=ctx['subdomain_id'])
 
     # Loop through URLs and run command
     results = []
@@ -1795,7 +1798,7 @@ def dir_file_fuzz(self, ctx={}, description=None):
         # Build final cmd
         fcmd = cmd
         fcmd += f' -x {proxy}' if proxy else ''
-        fcmd += f' -u {url} -json'
+        fcmd += f' -u {url} -json -s'
 
         # Initialize DirectoryScan object
         dirscan = DirectoryScan()
@@ -1803,8 +1806,14 @@ def dir_file_fuzz(self, ctx={}, description=None):
         dirscan.command_line = fcmd
         dirscan.save()
 
+        # Get subdomain
+        if not subdomain:
+            subdomain_name = get_subdomain_from_url(url)
+            subdomain = Subdomain.objects.get(name=subdomain_name, scan_history=self.scan)
+
         # Loop through results and populate EndPoint and DirectoryFile in DB
         results = []
+        crawl_urls = []
         for line in stream_command(
                 fcmd,
                 shell=True,
@@ -1836,7 +1845,7 @@ def dir_file_fuzz(self, ctx={}, description=None):
                 continue
 
             # Get or create endpoint from URL
-            endpoint, created = save_endpoint(url, crawl=False, ctx=ctx)
+            endpoint, created = save_endpoint(url, crawl=False, ctx=ctx, subdomain=subdomain)
 
             # Continue to next line if endpoint returned is None
             if endpoint == None:
@@ -1874,20 +1883,17 @@ def dir_file_fuzz(self, ctx={}, description=None):
             # Save dirscan datas
             dirscan.save()
 
-            # Get subdomain and add dirscan
-            if ctx.get('subdomain_id') and ctx['subdomain_id'] > 0:
-                subdomain = Subdomain.objects.get(id=ctx['subdomain_id'])
-            else:
-                subdomain_name = get_subdomain_from_url(endpoint.http_url)
-                subdomain = Subdomain.objects.get(name=subdomain_name, scan_history=self.scan)
+            # Add dirscan to subdomain
             subdomain.directories.add(dirscan)
             subdomain.save()
+
+            crawl_urls.append(endpoint.http_url)
 
     # Crawl discovered URLs
     if enable_http_crawl:
         custom_ctx = deepcopy(ctx)
         custom_ctx['track'] = False
-        http_crawl(urls, ctx=custom_ctx)
+        http_crawl(crawl_urls, ctx=custom_ctx)
 
     return results
 
@@ -4845,6 +4851,7 @@ def save_endpoint(
         create_data = {
             'scan_history': scan,
             'target_domain': domain,
+            'subdomain': subdomain,
             'http_url': http_url,
             'is_default': is_default,
             'discovered_date': timezone.now(),
@@ -5620,7 +5627,7 @@ def debug():
             # os.environ['GEVENT_SUPPORT'] = 'True'
             if not debugpy.is_client_connected():
                 debugpy.listen(('0.0.0.0',CELERY_REMOTE_DEBUG_PORT))
-            debugpy.wait_for_client()
+            debugpy.wait_for_client(timeout=30)
     except Exception as e:
         logger.error(e)
 

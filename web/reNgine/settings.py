@@ -335,6 +335,10 @@ LOGGING = {
             'handlers': ['null'],
             'propagate': False,
         },
+        'py.warnings': {
+            'handlers': ['null'],
+            'propagate': False,
+        },
         'django_celery_beat': {
             'handlers': ['celery_beat', 'console'],
             'level': 'DEBUG',
