@@ -10,7 +10,7 @@ os.environ['CELERY_ALWAYS_EAGER'] = 'True'
 
 from celery.utils.log import get_task_logger
 from reNgine.settings import CELERY_DEBUG
-from reNgine.tasks import parse_nmap_results 
+from reNgine.utils.parsers import parse_nmap_results 
 
 logger = get_task_logger(__name__)
 DOMAIN_NAME = os.environ['DOMAIN_NAME']

@@ -9,9 +9,7 @@ class hybrid_property:
         self.exp = None
 
     def __get__(self, instance, owner):
-        if instance is None:
-            return self
-        return self.func(instance)
+        return self if instance is None else self.func(instance)
 
     def __set__(self, instance, value):
         pass

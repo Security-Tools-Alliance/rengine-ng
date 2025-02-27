@@ -1,5 +1,5 @@
 from django.core.management.base import BaseCommand
-from reNgine.common_func import load_custom_scan_engines
+from reNgine.utils.db import load_custom_scan_engines
 from reNgine.settings import RENGINE_CUSTOM_ENGINES
 
 

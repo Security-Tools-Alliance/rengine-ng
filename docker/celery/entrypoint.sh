@@ -33,12 +33,12 @@ worker_command() {
     
     if [ "$CELERY_DEBUG" = "1" ]; then
         echo "watchmedo auto-restart --recursive --pattern=\"*.py\" --directory=\"$RENGINE_FOLDER\" -- \
-            poetry run -C $RENGINE_FOLDER celery -A reNgine.tasks worker \
+            poetry run -C $RENGINE_FOLDER celery -A reNgine worker \
             --pool=solo \
             --loglevel=$CELERY_LOGLEVEL \
             -Q $queue -n $worker_name"
     else
-        echo "poetry run -C $RENGINE_FOLDER celery -A reNgine.tasks worker \
+        echo "poetry run -C $RENGINE_FOLDER celery -A reNgine worker \
             --pool=gevent \
             --loglevel=$CELERY_LOGLEVEL \
             --autoscale=$MAX_CONCURRENCY,$MIN_CONCURRENCY \
@@ -49,9 +49,11 @@ worker_command() {
 queues=(
     "main_scan_queue:main_scan_worker"
     "subscan_queue:subscan_worker"
+    "run_command_queue:run_command_worker"
     "subdomain_discovery_queue:subdomain_discovery_worker"
     "osint_discovery_queue:osint_discovery_worker"
     "port_scan_queue:port_scan_worker"
+    "fetch_url_queue:fetch_url_worker"
     "vulnerability_scan_queue:vulnerability_scan_worker"
     "nuclei_queue:nuclei_worker"
     "dalfox_queue:dalfox_worker"
@@ -65,7 +67,6 @@ queues=(
     "send_notif_queue:send_notif_worker"
     "send_scan_notif_queue:send_scan_notif_worker"
     "send_task_notif_queue:send_task_notif_worker"
-    "parse_nmap_results_queue:parse_nmap_results_worker"
     "geo_localize_queue:geo_localize_worker"
     "query_whois_queue:query_whois_worker"
     "query_reverse_whois_queue:query_reverse_whois_worker"

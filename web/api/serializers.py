@@ -3,13 +3,14 @@ from dashboard.models import *
 from django.contrib.humanize.templatetags.humanize import (naturalday, naturaltime)
 from django.db.models import F, JSONField, Value
 from recon_note.models import *
-from reNgine.common_func import *
 from rest_framework import serializers
 from scanEngine.models import *
 from startScan.models import *
 from targetApp.models import *
 from dashboard.models import *
 import yaml
+
+from reNgine.definitions import ENGINE_NAMES
 
 
 class SearchHistorySerializer(serializers.ModelSerializer):
@@ -359,6 +360,7 @@ class VisualiseSubdomainSerializer(serializers.ModelSerializer):
 		return subdomain.name
 
 	def get_title(self, subdomain):
+		from reNgine.utils.db import get_interesting_subdomains
 		if get_interesting_subdomains(subdomain.scan_history.id).filter(name=subdomain.name).exists():
 			return "Interesting"
 
@@ -724,6 +726,7 @@ class SubdomainChangesSerializer(serializers.ModelSerializer):
 		return Subdomain.change
 
 	def get_is_interesting(self, Subdomain):
+		from reNgine.utils.db import get_interesting_subdomains
 		return (
 			get_interesting_subdomains(Subdomain.scan_history.id)
 			.filter(name=Subdomain.name)
@@ -905,6 +908,7 @@ class SubdomainSerializer(serializers.ModelSerializer):
 		fields = '__all__'
 
 	def get_is_interesting(self, subdomain):
+		from reNgine.utils.db import get_interesting_subdomains
 		scan_id = subdomain.scan_history.id if subdomain.scan_history else None
 		return (
 			get_interesting_subdomains(scan_id)

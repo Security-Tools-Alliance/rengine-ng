@@ -10,9 +10,9 @@ from django.utils import timezone
 from reNgine.definitions import (CELERY_TASK_STATUSES,
 								 NUCLEI_REVERSE_SEVERITY_MAP,
 								 ENGINE_DISPLAY_NAMES)
-from reNgine.utilities import *
 from scanEngine.models import EngineType
 from targetApp.models import Domain
+from reNgine.utils.utils import get_time_taken
 
 
 class hybrid_property:
@@ -22,9 +22,7 @@ class hybrid_property:
 		self.exp = None
 
 	def __get__(self, instance, owner):
-		if instance is None:
-			return self
-		return self.func(instance)
+		return self if instance is None else self.func(instance)
 
 	def __set__(self, instance, value):
 		pass

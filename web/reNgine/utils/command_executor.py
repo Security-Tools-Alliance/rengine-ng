@@ -7,7 +7,7 @@ import select
 import subprocess
 import logging
 from django.utils import timezone
-from startScan.models import Command
+from django.apps import apps
 import shlex
 import json
 import os
@@ -46,6 +46,9 @@ class CommandExecutor:
         
         return self._finalize_output(stream)
 
+    def _get_command_model(self):
+        return apps.get_model('startScan', 'Command')
+
     def _calculate_timeout(self):
         """Determine timeout based on command type"""
         return 3600 if 'nuclei' in self.cmd.lower() else 1800
@@ -53,6 +56,7 @@ class CommandExecutor:
     def _pre_execution_setup(self):
         """Prepare execution environment"""
         logger.info(f"Initializing command execution: {self.cmd}")
+        Command = self._get_command_model()
         self.command_obj = Command.objects.create(
             command=self.cmd,
             time=timezone.now(),
@@ -63,15 +67,12 @@ class CommandExecutor:
     def _handle_execution(self, stream):
         """Core execution logic"""
         self.process = self._launch_process()
-        
+
         try:
-            if stream:
-                result = self._stream_output()
-            else:
-                result = self._buffer_output()
+            result = self._stream_output() if stream else self._buffer_output()
         finally:
             self._save_return_code()
-        
+
         return result
 
     def _launch_process(self):
@@ -103,30 +104,32 @@ class CommandExecutor:
         """Collect all output before returning"""
         logger.debug("📦 Starting buffer output")
         try:
-            # Wait for process completion and get output
-            stdout, stderr = self.process.communicate()
-            
-            # Decode output
-            output = stdout.decode('utf-8', errors='replace') if stdout else ''
-            error_output = stderr.decode('utf-8', errors='replace') if stderr else ''
-            
-            # Log and save full output
-            full_output = output + error_output
-            if full_output:
-                logger.debug(f"📥 Raw buffer data:\n{full_output}")
-                self._update_command_object(full_output, is_stream=False)
-            else:
-                logger.debug("📭 No output to save")
-            
-            # Split into lines for processing
-            output_lines = full_output.split('\n')
-            logger.debug(f"📦 Buffer line count: {len(output_lines)}")
-            
-            return self.process.returncode, full_output
-            
+            return self._extracted_from__buffer_output()
         except Exception as e:
             logger.error(f"🔥 Buffer processing failed: {str(e)}")
             return self.process.returncode, ''
+
+    def _extracted_from__buffer_output(self):
+        # Wait for process completion and get output
+        stdout, stderr = self.process.communicate()
+
+        # Decode output
+        output = stdout.decode('utf-8', errors='replace') if stdout else ''
+        error_output = stderr.decode('utf-8', errors='replace') if stderr else ''
+
+        # Log and save full output
+        full_output = output + error_output
+        if full_output:
+            logger.debug(f"📥 Raw buffer data:\n{full_output}")
+            self._update_command_object(full_output, is_stream=False)
+        else:
+            logger.debug("📭 No output to save")
+
+        # Split into lines for processing
+        output_lines = full_output.split('\n')
+        logger.debug(f"📦 Buffer line count: {len(output_lines)}")
+
+        return self.process.returncode, full_output
 
     def _read_process_output(self):
         """Read process output with timeout handling"""
@@ -142,7 +145,7 @@ class CommandExecutor:
                 continue
                 
             raw_line = self._read_ready_stream(ready)
-            logger.debug(f"📥 Raw line from stream: {raw_line if raw_line else None}...")
+            logger.debug(f"📥 Raw line from stream: {raw_line or None}...")
             
             if raw_line:
                 line = self._process_line(raw_line)
@@ -201,16 +204,16 @@ class CommandExecutor:
     def _process_line(self, line):
         """Process individual output line"""
         logger.debug(f"📥 Processing raw line: {line[:100]}...")
-        
+
         # Final ANSI cleanup
         line = re.sub(r'\x1b\[[0-9;]*[mGKH]', '', line)
-        
+
         # Truncation logic
         if self.trunc_char and len(line) > self.trunc_char:
-            truncated = line[:self.trunc_char] + '...'
+            truncated = f'{line[:self.trunc_char]}...'
             logger.debug(f"✂️ Truncated from {len(line)} to {len(truncated)} chars")
             line = truncated
-        
+
         processed = line.strip()
         logger.debug(f"✅ Processed line: {processed[:100]}...")
         return processed
@@ -221,23 +224,20 @@ class CommandExecutor:
             # Read binary data directly
             raw_data = b''
             for stream in ready:
-                if stream == self.process.stdout:
+                if stream in [self.process.stdout, self.process.stderr]:
                     raw_data += os.read(stream.fileno(), 4096)
-                elif stream == self.process.stderr:
-                    raw_data += os.read(stream.fileno(), 4096)
-            
             if not raw_data:
                 logger.debug("📭 No data in stream")
                 return None
-            
+
             logger.debug(f"🔠 Raw binary data: {raw_data[:200]}...")
-            
+
             # Decode with error handling
             decoded = raw_data.decode('utf-8', errors='replace')
             logger.debug(f"📖 Decoded data: {decoded[:200]}...")
-            
+
             return decoded
-        
+
         except Exception as e:
             logger.error(f"🚨 Stream read failed: {str(e)}")
             return None
@@ -246,36 +246,44 @@ class CommandExecutor:
         """Update command object in database with proper output handling"""
         if not self.command_obj:
             return
-        
+
         try:
             logger.debug("💾 Updating command object table with data...")
             # Force string type for output field
             current_output = self.command_obj.output or ''
-            
+
             # Buffer mode: direct assignment
             if not is_stream:
                 logger.debug(f"📦 Saving buffer output ({len(data)} chars)")
-                self.command_obj.output = current_output + data
-                self.command_obj.save(update_fields=['output'])
-                logger.debug("✅ Command object updated successfully with buffer mode")
+                self._extracted_from__update_command_object(
+                    current_output,
+                    data,
+                    "✅ Command object updated successfully with buffer mode",
+                )
                 return
-                
+
             # Stream mode: handle JSON properly
             logger.debug(f"🔁 Appending stream data: {str(data)[:100]}...")
-            
+
             if isinstance(data, dict):  # Already parsed JSON
                 output_line = json.dumps(data) + '\n'
             else:
                 output_line = f"{data}\n"
-            
-            self.command_obj.output = current_output + output_line
-            self.command_obj.save(update_fields=['output'])
-            logger.debug("✅ Command object updated successfully with stream mode")
-            
+
+            self._extracted_from__update_command_object(
+                current_output,
+                output_line,
+                "✅ Command object updated successfully with stream mode",
+            )
         except Exception as e:
             logger.error(f"❌ Output update failed: {str(e)}")
             self.command_obj.output = f"Error: {str(e)}"
             self.command_obj.save(update_fields=['output'])
+
+    def _extracted_from__update_command_object(self, current_output, arg1, arg2):
+        self.command_obj.output = current_output + arg1
+        self.command_obj.save(update_fields=['output'])
+        logger.debug(arg2)
 
     def _handle_execution_error(self, error):
         """Handle execution errors"""
@@ -339,4 +347,31 @@ class CommandExecutor:
             except Exception as e:
                 logger.error(f"❌ Failed to save return code: {str(e)}")
                 self.command_obj.return_code = -1
-                self.command_obj.save(update_fields=['return_code']) 
+                self.command_obj.save(update_fields=['return_code'])
+
+def stream_command(cmd, **kwargs):
+    context = {
+        'shell': kwargs.get('shell', False),
+        'cwd': kwargs.get('cwd'),
+        'history_file': kwargs.get('history_file'),
+        'scan_id': kwargs.get('scan_id'),
+        'activity_id': kwargs.get('activity_id'),
+        'encoding': kwargs.get('encoding', 'utf-8'),
+        'trunc_char': kwargs.get('trunc_char')
+    }
+    executor = CommandExecutor(cmd, context)
+    return executor.execute(stream=True)
+
+def run_command(cmd, **kwargs):
+    context = {
+        'shell': kwargs.get('shell', False),
+        'cwd': kwargs.get('cwd'),
+        'history_file': kwargs.get('history_file'),
+        'scan_id': kwargs.get('scan_id'),
+        'activity_id': kwargs.get('activity_id'),
+        'remove_ansi': kwargs.get('remove_ansi_sequence', False),
+        'encoding': kwargs.get('encoding', 'utf-8'),
+        'trunc_char': kwargs.get('trunc_char')
+    }
+    executor = CommandExecutor(cmd, context)
+    return executor.execute(stream=False)

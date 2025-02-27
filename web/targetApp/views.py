@@ -24,14 +24,14 @@ from reNgine.definitions import (
 
 from api.serializers import IpSerializer
 
-from reNgine.common_func import (
+from reNgine.utils.ip import (
     get_ip_info,
     get_ips_from_cidr_range,
 )
-from reNgine.tasks import (
-    run_command,
+from reNgine.utils.http import (
     sanitize_url,
 )
+from reNgine.tasks.command import run_command_line
 from startScan.models import (
     EndPoint,
     IpAddress,
@@ -58,11 +58,8 @@ from targetApp.forms import (
     AddOrganizationForm,
     UpdateOrganizationForm,
 )
-from scanEngine.models import EngineType
-
 
 logger = logging.getLogger(__name__)
-
 
 def index(request):
     """
@@ -380,8 +377,8 @@ def delete_target(request, slug, id):
     if request.method == "POST":
         try:
             target = get_object_or_404(Domain, id=id)
-            run_command(f'rm -rf {settings.RENGINE_RESULTS}/{target.name}')
-            run_command(f'rm -rf {settings.RENGINE_RESULTS}/{target.name}*') # for backward compatibility
+            run_command_line(f'rm -rf {settings.RENGINE_RESULTS}/{target.name}')
+            run_command_line(f'rm -rf {settings.RENGINE_RESULTS}/{target.name}*') # for backward compatibility
             target.delete()
             responseData = {'status': 'true'}
             messages.add_message(

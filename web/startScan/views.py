@@ -18,14 +18,18 @@ from django.db.models.functions import Lower
 
 from api.serializers import IpSerializer
 from reNgine.celery import app
-from reNgine.common_func import logger, get_interesting_subdomains, create_scan_object, safe_int_cast
+from reNgine.utils.db import create_scan_object, create_scan_activity, get_interesting_subdomains
+from reNgine.utils.logger import Logger
+from reNgine.utils.utils import safe_int_cast
 from reNgine.settings import RENGINE_RESULTS
 from reNgine.definitions import ABORTED_TASK, SUCCESS_TASK, RUNNING_TASK, LIVE_SCAN, SCHEDULED_SCAN, PERM_INITATE_SCANS_SUBSCANS, PERM_MODIFY_SCAN_RESULTS, PERM_MODIFY_SCAN_REPORT, PERM_MODIFY_SYSTEM_CONFIGURATIONS, FOUR_OH_FOUR_URL
-from reNgine.tasks import create_scan_activity, initiate_scan, run_command
+from reNgine.tasks.scan import initiate_scan
+from reNgine.tasks.command import run_command_line
 from scanEngine.models import EngineType, VulnerabilityReportSetting
 from startScan.models import ScanHistory, SubScan, Email, Employee, Subdomain, EndPoint, Vulnerability, VulnerabilityTags, IpAddress, CountryISO, ScanActivity, CveId, CweId
 from targetApp.models import Domain, Organization
 
+logger = Logger(True)
 
 def scan_history(request, slug):
     host = ScanHistory.objects.filter(domain__project__slug=slug).order_by('-start_scan_date')
@@ -335,7 +339,6 @@ def start_scan_ui(request, slug, domain_id):
 
 @has_permission_decorator(PERM_INITATE_SCANS_SUBSCANS, redirect_url=FOUR_OH_FOUR_URL)
 def start_multiple_scan(request, slug):
-    # domain = get_object_or_404(Domain, id=host_id)
     if request.method == "POST":
         if request.POST.get('scan_mode', 0):
             # if scan mode is available, then start the scan
@@ -386,7 +389,10 @@ def start_multiple_scan(request, slug):
             list_of_domain_name = []
             list_of_domain_id = []
             for key, value in request.POST.items():
-                if key != "list_target_table_length" and key != "csrfmiddlewaretoken":
+                if key not in [
+                    "list_target_table_length",
+                    "csrfmiddlewaretoken",
+                ]:
                     domain = get_object_or_404(Domain, id=value)
                     list_of_domain_name.append(domain.name)
                     list_of_domain_id.append(value)
@@ -426,9 +432,7 @@ def export_subdomains(request, slug, scan_id):
 def export_endpoints(request, slug, scan_id):
     endpoint_list = EndPoint.objects.filter(scan_history__id=scan_id)
     scan = ScanHistory.objects.get(id=scan_id)
-    response_body = ""
-    for endpoint in endpoint_list:
-        response_body += endpoint.http_url + "\n"
+    response_body = "".join(endpoint.http_url + "\n" for endpoint in endpoint_list)
     scan_start_date_str = str(scan.start_scan_date.date())
     domain_name = scan.domain.name
     response = HttpResponse(response_body, content_type='text/plain')
@@ -459,7 +463,7 @@ def delete_scan(request, slug, id):
     obj = get_object_or_404(ScanHistory, id=id)
     if request.method == "POST":
         delete_dir = obj.results_dir
-        run_command('rm -rf ' + delete_dir)
+        run_command_line(f'rm -rf {delete_dir}')
         obj.delete()
         messageData = {'status': 'true'}
         messages.add_message(
@@ -479,40 +483,40 @@ def delete_scan(request, slug, id):
 
 @has_permission_decorator(PERM_INITATE_SCANS_SUBSCANS, redirect_url=FOUR_OH_FOUR_URL)
 def stop_scan(request, slug, id):
-    if request.method == "POST":
-        scan = get_object_or_404(ScanHistory, id=id)
-        scan.scan_status = ABORTED_TASK
-        scan.save()
-        try:
-            for task_id in scan.celery_ids:
-                app.control.revoke(task_id, terminate=True, signal='SIGKILL')
-            tasks = (
-                ScanActivity.objects
-                .filter(scan_of=scan)
-                .filter(status=RUNNING_TASK)
-                .order_by('-pk')
-            )
-            for task in tasks:
-                task.status = ABORTED_TASK
-                task.time = timezone.now()
-                task.save()
-            create_scan_activity(scan.id, "Scan aborted", SUCCESS_TASK)
-            response = {'status': True}
-            messages.add_message(
-                request,
-                messages.INFO,
-                'Scan successfully stopped!'
-            )
-        except Exception as e:
-            logger.error(e)
-            response = {'status': False}
-            messages.add_message(
-                request,
-                messages.ERROR,
-                f'Scan failed to stop ! Error: {str(e)}'
-            )
-        return JsonResponse(response)
-    return scan_history(request)
+    if request.method != "POST":
+        return scan_history(request)
+    scan = get_object_or_404(ScanHistory, id=id)
+    scan.scan_status = ABORTED_TASK
+    scan.save()
+    try:
+        for task_id in scan.celery_ids:
+            app.control.revoke(task_id, terminate=True, signal='SIGKILL')
+        tasks = (
+            ScanActivity.objects
+            .filter(scan_of=scan)
+            .filter(status=RUNNING_TASK)
+            .order_by('-pk')
+        )
+        for task in tasks:
+            task.status = ABORTED_TASK
+            task.time = timezone.now()
+            task.save()
+        create_scan_activity(scan.id, "Scan aborted", SUCCESS_TASK)
+        response = {'status': True}
+        messages.add_message(
+            request,
+            messages.INFO,
+            'Scan successfully stopped!'
+        )
+    except Exception as e:
+        logger.error(e)
+        response = {'status': False}
+        messages.add_message(
+            request,
+            messages.ERROR,
+            f'Scan failed to stop ! Error: {str(e)}'
+        )
+    return JsonResponse(response)
 
 
 @has_permission_decorator(PERM_INITATE_SCANS_SUBSCANS, redirect_url=FOUR_OH_FOUR_URL)
@@ -680,7 +684,7 @@ def delete_all_screenshots(request, slug):
     if request.method == 'POST':
         domains = Domain.objects.filter(project__slug=slug)
         for domain in domains:
-            run_command(f'rm -rf {str(Path(RENGINE_RESULTS) / domain.name)}')
+            run_command_line(f'rm -rf {str(Path(RENGINE_RESULTS) / domain.name)}')
         messageData = {'status': 'true'}
         messages.add_message(
             request,
@@ -764,43 +768,7 @@ def schedule_organization_scan(request, slug, id):
             task_name = f'{engine.engine_name} for {domain.name}: {timestr}'
 
             # Period task
-            if scheduled_mode == 'periodic':
-                frequency_value = int(request.POST['frequency'])
-                frequency_type = request.POST['frequency_type']
-                if frequency_type == 'minutes':
-                    period = IntervalSchedule.MINUTES
-                elif frequency_type == 'hours':
-                    period = IntervalSchedule.HOURS
-                elif frequency_type == 'days':
-                    period = IntervalSchedule.DAYS
-                elif frequency_type == 'weeks':
-                    period = IntervalSchedule.DAYS
-                    frequency_value *= 7
-                elif frequency_type == 'months':
-                    period = IntervalSchedule.DAYS
-                    frequency_value *= 30
-
-                schedule, _ = IntervalSchedule.objects.get_or_create(
-                    every=frequency_value,
-                    period=period
-                )
-                _kwargs = json.dumps({
-                    'domain_id': domain.id,
-                    'engine_id': engine.id,
-                    'scan_history_id': 0,
-                    'scan_type': SCHEDULED_SCAN,
-                    'imported_subdomains': None,
-                    'initiated_by_id': request.user.id
-                })
-                PeriodicTask.objects.create(
-                    interval=schedule,
-                    name=task_name,
-                    task='initiate_scan',
-                    kwargs=_kwargs
-                )
-
-            # Clocked task
-            elif scheduled_mode == 'clocked':
+            if scheduled_mode == 'clocked':
                 schedule_time = request.POST['scheduled_time']
                 clock, _ = ClockedSchedule.objects.get_or_create(
                     clocked_time=schedule_time
@@ -815,6 +783,41 @@ def schedule_organization_scan(request, slug, id):
                 })
                 PeriodicTask.objects.create(clocked=clock,
                     one_off=True,
+                    name=task_name,
+                    task='initiate_scan',
+                    kwargs=_kwargs
+                )
+
+            elif scheduled_mode == 'periodic':
+                frequency_value = int(request.POST['frequency'])
+                frequency_type = request.POST['frequency_type']
+                if frequency_type == 'days':
+                    period = IntervalSchedule.DAYS
+                elif frequency_type == 'hours':
+                    period = IntervalSchedule.HOURS
+                elif frequency_type == 'minutes':
+                    period = IntervalSchedule.MINUTES
+                elif frequency_type == 'months':
+                    period = IntervalSchedule.DAYS
+                    frequency_value *= 30
+
+                elif frequency_type == 'weeks':
+                    period = IntervalSchedule.DAYS
+                    frequency_value *= 7
+                schedule, _ = IntervalSchedule.objects.get_or_create(
+                    every=frequency_value,
+                    period=period
+                )
+                _kwargs = json.dumps({
+                    'domain_id': domain.id,
+                    'engine_id': engine.id,
+                    'scan_history_id': 0,
+                    'scan_type': SCHEDULED_SCAN,
+                    'imported_subdomains': None,
+                    'initiated_by_id': request.user.id
+                })
+                PeriodicTask.objects.create(
+                    interval=schedule,
                     name=task_name,
                     task='initiate_scan',
                     kwargs=_kwargs
@@ -848,11 +851,11 @@ def schedule_organization_scan(request, slug, id):
 def delete_scans(request, slug):
     if request.method == "POST":
         for key, value in request.POST.items():
-            if key == 'scan_history_table_length' or key == 'csrfmiddlewaretoken':
+            if key in ['scan_history_table_length', 'csrfmiddlewaretoken']:
                 continue
             scan = get_object_or_404(ScanHistory, id=value)
             delete_dir = scan.results_dir
-            run_command('rm -rf ' + delete_dir)
+            run_command_line(f'rm -rf {delete_dir}')
             scan.delete()
         messages.add_message(
             request,
@@ -877,7 +880,7 @@ def create_report(request, slug, id):
     secondary_color = '#212121'
     # get report type
     report_type = request.GET['report_type'] if 'report_type' in request.GET  else 'full'
-    is_ignore_info_vuln = True if 'ignore_info_vuln' in request.GET else False
+    is_ignore_info_vuln = 'ignore_info_vuln' in request.GET
     if report_type == 'recon':
         show_recon = True
         show_vuln = False
@@ -894,29 +897,29 @@ def create_report(request, slug, id):
 
     scan = ScanHistory.objects.get(id=id)
     vulns = (
-        Vulnerability.objects
-        .filter(scan_history=scan)
-        .order_by('-severity')
-    ) if not is_ignore_info_vuln else (
-        Vulnerability.objects
-        .filter(scan_history=scan)
-        .exclude(severity=0)
-        .order_by('-severity')
-    )
+                Vulnerability.objects
+                .filter(scan_history=scan)
+                .exclude(severity=0)
+                .order_by('-severity')
+            ) if is_ignore_info_vuln else (
+                Vulnerability.objects
+                .filter(scan_history=scan)
+                .order_by('-severity')
+            )
     unique_vulns = (
-        Vulnerability.objects
-        .filter(scan_history=scan)
-        .values("name", "severity")
-        .annotate(count=Count('name'))
-        .order_by('-severity', '-count')
-    ) if not is_ignore_info_vuln else (
-        Vulnerability.objects
-        .filter(scan_history=scan)
-        .exclude(severity=0)
-        .values("name", "severity")
-        .annotate(count=Count('name'))
-        .order_by('-severity', '-count')
-    )
+                        Vulnerability.objects
+                        .filter(scan_history=scan)
+                        .exclude(severity=0)
+                        .values("name", "severity")
+                        .annotate(count=Count('name'))
+                        .order_by('-severity', '-count')
+                    ) if is_ignore_info_vuln else (
+                        Vulnerability.objects
+                        .filter(scan_history=scan)
+                        .values("name", "severity")
+                        .annotate(count=Count('name'))
+                        .order_by('-severity', '-count')
+                    )
 
     subdomains = (
         Subdomain.objects
@@ -940,7 +943,7 @@ def create_report(request, slug, id):
         )
         .distinct()
     )
-    
+
     data = {
         'scan_object': scan,
         'unique_vulnerabilities': unique_vulns,

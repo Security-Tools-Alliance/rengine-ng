@@ -1,3 +1,4 @@
+import os
 import json
 
 from celery import Task
@@ -5,10 +6,24 @@ from celery.utils.log import get_task_logger
 from celery.worker.request import Request
 from django.utils import timezone
 from redis import Redis
-from reNgine.common_func import (fmt_traceback, get_output_file_name,
-								 get_task_cache_key, get_traceback_path)
-from reNgine.definitions import *
-from reNgine.settings import *
+from reNgine.utils.formatters import (
+	fmt_traceback,
+	get_output_file_name,
+	get_task_cache_key,
+	get_traceback_path
+)
+from reNgine.definitions import (
+    CELERY_TASK_STATUS_MAP,
+    FAILED_TASK,
+    RUNNING_TASK,
+    SUCCESS_TASK,
+)
+from reNgine.settings import (
+    RENGINE_CACHE_ENABLED,
+    RENGINE_RECORD_ENABLED,
+    RENGINE_RAISE_ON_ERROR,
+    RENGINE_RESULTS,
+)
 from scanEngine.models import EngineType
 from startScan.models import ScanActivity, ScanHistory, SubScan
 
@@ -107,7 +122,10 @@ class RengineTask(Task):
 					self.track and 
 					self.task_name not in self.engine.tasks and 
 					dependent_tasks.get(self.task_name) not in self.engine.tasks and
-					self.task_name.lower() != 'http_crawl'
+					self.task_name.lower() != 'http_crawl' and
+					self.task_name.lower() != 'scan_http_ports' and
+					self.task_name.lower() != 'run_nmap' and
+					self.task_name.lower() != 'nmap'
 				):
 					logger.debug(f'Task {self.task_name} is not part of engine "{self.engine.engine_name}" tasks. Skipping.')
 					return
@@ -179,7 +197,7 @@ class RengineTask(Task):
 	def write_results(self):
 		if not self.result:
 			return False
-		is_json_results = isinstance(self.result, dict) or isinstance(self.result, list)
+		is_json_results = isinstance(self.result, (dict, list))
 		if not self.output_path:
 			return False
 		if not os.path.exists(self.output_path):
@@ -221,7 +239,7 @@ class RengineTask(Task):
 		# Trim error before saving to DB
 		error_message = self.error
 		if self.error and len(self.error) > 300:
-			error_message = self.error[:288] + '...[trimmed]'
+			error_message = f'{self.error[:288]}...[trimmed]'
 
 		self.activity.status = self.status
 		self.activity.error_message = error_message
@@ -230,9 +248,11 @@ class RengineTask(Task):
 		self.activity.save()
 		self.notify()
 
-	def notify(self, name=None, severity=None, fields={}, add_meta_info=True):
+	def notify(self, name=None, severity=None, fields=None, add_meta_info=True):
+		if fields is None:
+			fields = {}
 		# Import here to avoid Celery circular import and be able to use `delay`
-		from reNgine.tasks import send_task_notif
+		from reNgine.tasks.notification import send_task_notif
 		return send_task_notif.delay(
 			name or self.task_name,
 			status=self.status_str,
@@ -249,3 +269,29 @@ class RengineTask(Task):
 	def s(self, *args, **kwargs):
 		# TODO: set task status to INIT when creating a signature.
 		return super().s(*args, **kwargs)
+
+	def get_from_cache(self, *args, **kwargs):
+		"""Get task result from cache if RENGINE_CACHE_ENABLED is True.
+		
+		Returns:
+			dict/list/None: Cached result if found and valid, None otherwise
+		"""
+		if not RENGINE_CACHE_ENABLED:
+			return None
+			
+		# Use the common cache key generator
+		cache_key = get_task_cache_key(self.name, *args, **kwargs)
+		result = cache.get(cache_key)
+		
+		if result and result != b'null':
+			self.status = SUCCESS_TASK
+			if RENGINE_RECORD_ENABLED and self.track:
+				target = self.subdomain.name if self.subdomain else self.domain.name if self.domain else None
+				msg = f'Task {self.task_name}'
+				if target:
+					msg += f' for {target}'
+				msg += ' status is SUCCESS (CACHED)'
+				logger.warning(msg)
+				self.update_scan_activity()
+			return json.loads(result)
+		return None

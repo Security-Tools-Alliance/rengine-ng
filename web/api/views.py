@@ -25,11 +25,10 @@ from rest_framework.parsers import JSONParser
 
 from recon_note.models import TodoNote
 from reNgine.celery import app
-from reNgine.common_func import (
-	get_data_from_post_request,
-	get_interesting_endpoints,
-	get_interesting_subdomains,
+from reNgine.utils.db import (
 	get_lookup_keywords,
+)
+from reNgine.utils.utils import (
 	safe_int_cast
 )
 from reNgine.definitions import (
@@ -39,27 +38,31 @@ from reNgine.definitions import (
 	DEFAULT_GPT_MODELS,
 	RUNNING_TASK,
 	SUCCESS_TASK,
-	ENGINE_NAMES
 )
 from reNgine.settings import (
 	RENGINE_CURRENT_VERSION,
 	RENGINE_TOOL_GITHUB_PATH
 )
-from reNgine.tasks import (
-	create_scan_activity,
-	gpt_vulnerability_description,
+from reNgine.tasks.scan import (
 	initiate_subscan,
+)
+from reNgine.tasks.command import run_command_line
+from reNgine.tasks.detect import (
+	run_cmseek,
+	run_wafw00f,
+)
+from reNgine.tasks.dns import (
 	query_ip_history,
 	query_reverse_whois,
 	query_whois,
-	run_cmseek,
-	run_command,
+)
+from reNgine.tasks.llm import llm_vulnerability_description
+from reNgine.tasks.notification import send_hackerone_report
+from reNgine.tasks.url import (
 	run_gf_list,
-	run_wafw00f,
-	send_hackerone_report
 )
 from reNgine.gpt import GPTAttackSuggestionGenerator
-from reNgine.utilities import is_safe_path, remove_lead_and_trail_slash
+from reNgine.utils.utils import is_safe_path, remove_lead_and_trail_slash
 from scanEngine.models import EngineType, InstalledExternalTool
 from startScan.models import (
 	Command,
@@ -80,6 +83,13 @@ from startScan.models import (
 	Vulnerability,
 )
 from targetApp.models import Domain, Organization
+from reNgine.utils.command_executor import run_command
+from reNgine.utils.http import get_data_from_post_request
+from reNgine.utils.db import (
+	create_scan_activity,
+	get_interesting_endpoints,
+	get_interesting_subdomains
+)
 
 from .serializers import (
 	CommandSerializer,
@@ -103,7 +113,6 @@ from .serializers import (
 	OnlySubdomainNameSerializer,
 	OrganizationSerializer,
 	OrganizationTargetsSerializer,
-	PortSerializer,
  	ProjectSerializer,
 	ReconNoteSerializer,
 	ScanHistorySerializer,
@@ -240,7 +249,7 @@ class GPTVulnerabilityReportGenerator(APIView):
 				'status': False,
 				'error': 'Missing GET param Vulnerability `id`'
 			})
-		task = gpt_vulnerability_description.apply_async(args=(vulnerability_id,))
+		task = llm_vulnerability_description.apply_async(args=(vulnerability_id,))
 		response = task.wait()
 		return Response(response)
 
@@ -1015,8 +1024,8 @@ class UninstallTool(APIView):
 		else:
 			return Response({'status': False, 'message': 'Cannot uninstall tool!'})
 
-		run_command(uninstall_command)
-		run_command.apply_async(args=(uninstall_command,))
+		run_command_line(uninstall_command)
+		run_command_line.apply_async(args=(uninstall_command,))
 
 		tool.delete()
 
@@ -1047,7 +1056,6 @@ class UpdateTool(APIView):
 			update_command = 'cd ' + str(Path(RENGINE_TOOL_GITHUB_PATH) / tool_name) + ' && git pull && cd -'
 
 		run_command(update_command)
-		run_command.apply_async(args=(update_command,))
 		return Response({'status': True, 'message': tool.name + ' updated successfully.'})
 
 

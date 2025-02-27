@@ -1,3 +1,4 @@
+import contextlib
 import glob
 import json
 import os
@@ -11,9 +12,16 @@ from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from rolepermissions.decorators import has_permission_decorator
 
-from reNgine.common_func import get_open_ai_key
+from reNgine.utils.api import get_open_ai_key
 from reNgine.definitions import OLLAMA_INSTANCE, DEFAULT_GPT_MODELS
-from reNgine.tasks import run_command, send_discord_message, send_slack_message, send_lark_message, send_telegram_message, run_gf_list
+from reNgine.tasks.command import run_command_line
+from reNgine.tasks.notification import (
+    send_discord_message,
+    send_slack_message,
+    send_lark_message,
+    send_telegram_message
+)
+from reNgine.tasks.url import run_gf_list
 from scanEngine.forms import AddEngineForm, UpdateEngineForm, AddWordlistForm, ExternalToolForm, InterestingLookupForm, NotificationForm, ProxyForm, HackeroneForm, ReportForm
 from scanEngine.models import EngineType, Wordlist, InstalledExternalTool, InterestingLookupModel, Notification, Hackerone, Proxy, VulnerabilityReportSetting
 from dashboard.models import OpenAiAPIKey, NetlasAPIKey, OllamaSettings
@@ -46,7 +54,7 @@ def add_engine(request):
     form = AddEngineForm()
 
     # load default yaml config
-    with open(RENGINE_HOME + '/config/default_yaml_config.yaml', 'r', encoding='utf-8') as yaml_file:
+    with open(f'{RENGINE_HOME}/config/default_yaml_config.yaml', 'r', encoding='utf-8') as yaml_file:
         default_config = yaml_file.read()
 
     if request.method == "POST":
@@ -126,30 +134,32 @@ def wordlist_list(request):
 
 @has_permission_decorator(PERM_MODIFY_WORDLISTS, redirect_url=FOUR_OH_FOUR_URL)
 def add_wordlist(request):
-    context = {'scan_engine_nav_active': 'active', 'wordlist_li': 'active'}
     form = AddWordlistForm(request.POST or None, request.FILES or None)
-    if request.method == "POST":
-        if form.is_valid() and 'upload_file' in request.FILES:
-            txt_file = request.FILES['upload_file']
-            if txt_file.content_type == 'text/plain':
-                wordlist_content = txt_file.read().decode('UTF-8', "ignore")
-                wordlist_file = open(
-                    Path(RENGINE_WORDLISTS) / f"{form.cleaned_data['short_name']}.txt",
-                    'w',
-                    encoding='utf-8',
-                )
-                wordlist_file.write(wordlist_content)
-                Wordlist.objects.create(
-                    name=form.cleaned_data['name'],
-                    short_name=form.cleaned_data['short_name'],
-                    count=wordlist_content.count('\n'))
-                messages.add_message(
-                    request,
-                    messages.INFO,
-                    'Wordlist ' + form.cleaned_data['name'] +
-                    ' added successfully')
-                return http.HttpResponseRedirect(reverse('wordlist_list'))
-    context['form'] = form
+    if request.method == "POST" and (form.is_valid() and 'upload_file' in request.FILES):
+        txt_file = request.FILES['upload_file']
+        if txt_file.content_type == 'text/plain':
+            wordlist_content = txt_file.read().decode('UTF-8', "ignore")
+            wordlist_file = open(
+                Path(RENGINE_WORDLISTS) / f"{form.cleaned_data['short_name']}.txt",
+                'w',
+                encoding='utf-8',
+            )
+            wordlist_file.write(wordlist_content)
+            Wordlist.objects.create(
+                name=form.cleaned_data['name'],
+                short_name=form.cleaned_data['short_name'],
+                count=wordlist_content.count('\n'))
+            messages.add_message(
+                request,
+                messages.INFO,
+                'Wordlist ' + form.cleaned_data['name'] +
+                ' added successfully')
+            return http.HttpResponseRedirect(reverse('wordlist_list'))
+    context = {
+        'scan_engine_nav_active': 'active',
+        'wordlist_li': 'active',
+        'form': form,
+    }
     return render(request, 'scanEngine/wordlist/add.html', context)
 
 @has_permission_decorator(PERM_MODIFY_WORDLISTS, redirect_url=FOUR_OH_FOUR_URL)
@@ -160,7 +170,7 @@ def delete_wordlist(request, id):
         try:
             os.remove(Path(RENGINE_WORDLISTS) / f'{obj.short_name}.txt')
             responseData = {'status': True}
-        except Exception as e:
+        except Exception:
             responseData = {'status': False}
         messages.add_message(
             request,
@@ -403,12 +413,9 @@ def api_vault_delete(request):
         handler = {"key_openai": OpenAiAPIKey, "key_netlas": NetlasAPIKey}
         response["deleted"] = []
         for key in json.loads(request.body.decode("utf-8"))["keys"]:
-            try:
+            with contextlib.suppress(KeyError):
                 handler[key].objects.first().delete()
                 response["deleted"].append(key)
-            except KeyError:
-                # Ignore the KeyError if the key does not exist
-                pass
         response["status"] = "OK"
     else:
         response["message"] = "Method not allowed"
@@ -490,8 +497,8 @@ def add_tool(request):
                 install_command = f'{install_command} {RENGINE_TOOL_GITHUB_PATH}/{project_name} && pip install -r {RENGINE_TOOL_GITHUB_PATH}/{project_name}/requirements.txt'
                 github_clone_path = f'{RENGINE_TOOL_GITHUB_PATH}/{project_name}'
 
-            run_command(install_command)
-            run_command.apply_async(args=(install_command,))
+            run_command_line(install_command)
+            run_command_line.apply_async(args=(install_command,))
             saved_form = form.save()
 
             if github_clone_path:
