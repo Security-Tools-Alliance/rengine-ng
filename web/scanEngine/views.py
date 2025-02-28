@@ -139,12 +139,12 @@ def add_wordlist(request):
         txt_file = request.FILES['upload_file']
         if txt_file.content_type == 'text/plain':
             wordlist_content = txt_file.read().decode('UTF-8', "ignore")
-            wordlist_file = open(
+            with open(
                 Path(RENGINE_WORDLISTS) / f"{form.cleaned_data['short_name']}.txt",
                 'w',
                 encoding='utf-8',
-            )
-            wordlist_file.write(wordlist_content)
+            ) as wordlist_file:
+                wordlist_file.write(wordlist_content)
             Wordlist.objects.create(
                 name=form.cleaned_data['name'],
                 short_name=form.cleaned_data['short_name'],

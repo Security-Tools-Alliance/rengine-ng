@@ -16,6 +16,7 @@ from startScan.models import (
     Waf,
     Subdomain,
 )
+from reNgine.utils.command_builder import CommandBuilder
 
 """
 Celery tasks.
@@ -24,7 +25,7 @@ Celery tasks.
 logger = Logger(is_task_logger=True)  # Use task logger for Celery tasks
 
 
-@app.task(name='waf_detection', queue='waf_detection_queue', base=RengineTask, bind=True)
+@app.task(name='waf_detection', queue='io_queue', base=RengineTask, bind=True)
 def waf_detection(self, ctx=None, description=None):
     """
     Uses wafw00f to check for the presence of a WAF.
@@ -51,12 +52,18 @@ def waf_detection(self, ctx=None, description=None):
         logger.error('No URLs to check for WAF. Skipping.')
         return
 
-    cmd = f'wafw00f -i {input_path} -o {self.output_path} -f json'
+    # wafw00f command builder
+    cmd_builder = CommandBuilder('wafw00f')
+    cmd_builder.add_option('-i', input_path)
+    cmd_builder.add_option('-o', self.output_path)
+    cmd_builder.add_option('-f', 'json')
     run_command_line.delay(
-        cmd,
+        cmd_builder.build_list(),
+        shell=False,
         history_file=self.history_file,
         scan_id=self.scan_id,
-        activity_id=self.activity_id)
+        activity_id=self.activity_id
+    )
 
     if not os.path.isfile(self.output_path):
         logger.error(f'Could not find {self.output_path}')
@@ -96,11 +103,16 @@ def waf_detection(self, ctx=None, description=None):
 @app.task(name='run_cmseek', queue='run_command_queue')
 def run_cmseek(url):
     try:
-        # Prepare CMSeeK command
-        cms_detector_command = f'cmseek --random-agent --batch --follow-redirect -u {url}'
+        # cmseek command builder
+        cms_builder = CommandBuilder('cmseek')
+        cms_builder.add_option('--random-agent')
+        cms_builder.add_option('--batch')
+        cms_builder.add_option('--follow-redirect')
+        cms_builder.add_option('-u', url)
+        cms_cmd = cms_builder.build_list()
 
         # Run CMSeeK
-        _, output = run_command_line.delay(cms_detector_command, remove_ansi_sequence=True)
+        _, output = run_command_line(cms_cmd, remove_ansi_sequence=True)
 
         # Parse CMSeeK output
         base_path = f"{RENGINE_TOOL_PATH}/.github/CMSeeK/Result"
@@ -135,11 +147,12 @@ def run_cmseek(url):
 def run_wafw00f(url):
     try:
         logger.info(f"Starting WAF detection for URL: {url}")
-        wafw00f_command = f'wafw00f {url}'
-        return_code, output = run_command_line.delay(
-            cmd=wafw00f_command,
-            shell=True,
-            remove_ansi_sequence=True
+        # wafw00f command builder
+        wafw_builder = CommandBuilder('wafw00f')
+        wafw_builder.add_option(url)
+        return_code, output = run_command_line(
+            wafw_builder.build_list(),
+            shell=False,
         )
 
         logger.info(f"Raw output from wafw00f: {output}")

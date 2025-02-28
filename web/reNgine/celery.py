@@ -14,7 +14,7 @@ app.config_from_object('django.conf:settings', namespace='CELERY')
 # Default configuration for all tasks
 app.conf.update(
     task_track_started=True,
-    task_default_queue='main_scan_queue',
+    task_default_queue='orchestrator_queue',
     task_acks_late=True,
     worker_prefetch_multiplier=1,
 )

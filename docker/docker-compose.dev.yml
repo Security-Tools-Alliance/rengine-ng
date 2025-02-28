@@ -13,8 +13,9 @@ services:
       - CELERY_DEBUG=1
       - CELERY_REMOTE_DEBUG=0
       - CELERY_REMOTE_DEBUG_PORT=5679
-      - CELERY_ALWAYS_EAGER=0
+      - CELERY_TASK_ALWAYS_EAGER=0
       - CELERY_TASK_EAGER_PROPAGATES=0
+      - COMMAND_EXECUTOR_DRY_RUN=1
     volumes:
       - ./celery/entrypoint-dev.sh:/entrypoint-dev.sh:ro
     ports:

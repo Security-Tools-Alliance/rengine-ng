@@ -17,29 +17,19 @@ from reNgine.definitions import (
     FFUF_DEFAULT_WORDLIST_PATH,
     MATCH_HTTP_STATUS,
     MAX_TIME,
-    RATE_LIMIT,
     RECURSIVE_LEVEL,
     STOP_ON_ERROR,
-    THREADS,
-    TIMEOUT,
-    CUSTOM_HEADER,
-    FOLLOW_REDIRECT,
     WORDLIST,
 )
 from reNgine.settings import (
     CELERY_DEBUG,
-    DEFAULT_HTTP_TIMEOUT,
-    DEFAULT_RATE_LIMIT,
-    DEFAULT_THREADS,
 )
 from reNgine.celery import app
 from reNgine.celery_custom_task import RengineTask
 from reNgine.utils.logger import Logger
-from reNgine.utils.formatters import generate_header_param
 from reNgine.utils.command_executor import stream_command
 from reNgine.utils.http import (
     extract_path_from_url,
-    get_http_crawl_value,
     get_subdomain_from_url,
 )
 from startScan.models import (
@@ -47,6 +37,8 @@ from startScan.models import (
     DirectoryScan,
     Subdomain,
 )
+from reNgine.utils.command_builder import CommandBuilder
+from reNgine.utils.task_config import TaskConfig
 
 """
 Celery tasks.
@@ -55,7 +47,7 @@ Celery tasks.
 logger = Logger(is_task_logger=True)  # Use task logger for Celery tasks
 
 
-@app.task(name='dir_file_fuzz', queue='dir_fuzzing_queue', base=RengineTask, bind=True)
+@app.task(name='dir_file_fuzz', queue='io_queue', base=RengineTask, bind=True)
 def dir_file_fuzz(self, ctx={}, description=None):
     """Perform directory scan, and currently uses `ffuf` as a default tool.
 
@@ -68,47 +60,50 @@ def dir_file_fuzz(self, ctx={}, description=None):
     from reNgine.tasks.http import http_crawl
     from reNgine.utils.db import get_http_urls, get_random_proxy, save_endpoint
 
-    # Config
-    cmd = 'ffuf'
-    config = self.yaml_configuration.get(DIR_FILE_FUZZ) or {}
-    custom_header = config.get(CUSTOM_HEADER) or self.yaml_configuration.get(CUSTOM_HEADER)
-    if custom_header:
-        custom_header = generate_header_param(custom_header,'common')
-    auto_calibration = config.get(AUTO_CALIBRATION, True)
-    enable_http_crawl = get_http_crawl_value(self, config)
-    rate_limit = config.get(RATE_LIMIT) or self.yaml_configuration.get(RATE_LIMIT, DEFAULT_RATE_LIMIT)
-    extensions = config.get(EXTENSIONS, DEFAULT_DIR_FILE_FUZZ_EXTENSIONS)
+    # Initialize the task configuration
+    config = TaskConfig(self.yaml_configuration, self.results_dir, self.scan_id, self.filename)
+    
+    # Get the configurations
+    fuzz_config = config.get_config(DIR_FILE_FUZZ)
+    custom_header = config.get_custom_header(DIR_FILE_FUZZ)
+    auto_calibration = config.get_value(DIR_FILE_FUZZ, AUTO_CALIBRATION, True)
+    enable_http_crawl = config.get_http_crawl_enabled(DIR_FILE_FUZZ)
+    rate_limit = config.get_rate_limit(DIR_FILE_FUZZ)
+    extensions = fuzz_config.get(EXTENSIONS, DEFAULT_DIR_FILE_FUZZ_EXTENSIONS)
     extensions = [ext if ext.startswith('.') else f'.{ext}' for ext in extensions]
     extensions_str = ','.join(map(str, extensions))
-    follow_redirect = config.get(FOLLOW_REDIRECT, FFUF_DEFAULT_FOLLOW_REDIRECT)
-    max_time = config.get(MAX_TIME, 0)
-    match_http_status = config.get(MATCH_HTTP_STATUS, FFUF_DEFAULT_MATCH_HTTP_STATUS)
+    follow_redirect = config.get_follow_redirect(DIR_FILE_FUZZ, FFUF_DEFAULT_FOLLOW_REDIRECT)
+    max_time = config.get_value(DIR_FILE_FUZZ, MAX_TIME, 0)
+    match_http_status = fuzz_config.get(MATCH_HTTP_STATUS, FFUF_DEFAULT_MATCH_HTTP_STATUS)
     mc = ','.join([str(c) for c in match_http_status])
-    recursive_level = config.get(RECURSIVE_LEVEL, FFUF_DEFAULT_RECURSIVE_LEVEL)
-    stop_on_error = config.get(STOP_ON_ERROR, False)
-    timeout = config.get(TIMEOUT) or self.yaml_configuration.get(TIMEOUT, DEFAULT_HTTP_TIMEOUT)
-    threads = config.get(THREADS) or self.yaml_configuration.get(THREADS, DEFAULT_THREADS)
-    wordlist_name = config.get(WORDLIST, FFUF_DEFAULT_WORDLIST_NAME)
-    delay = rate_limit / (threads * 100) # calculate request pause delay from rate_limit and number of threads
-    input_path = str(Path(self.results_dir) / 'input_dir_file_fuzz.txt')
+    recursive_level = config.get_value(DIR_FILE_FUZZ, RECURSIVE_LEVEL, FFUF_DEFAULT_RECURSIVE_LEVEL)
+    stop_on_error = config.get_value(DIR_FILE_FUZZ, STOP_ON_ERROR, False)
+    timeout = config.get_timeout(DIR_FILE_FUZZ)
+    threads = config.get_threads(DIR_FILE_FUZZ)
+    wordlist_name = fuzz_config.get(WORDLIST, FFUF_DEFAULT_WORDLIST_NAME)
+    delay = config.calculate_delay(rate_limit, threads)
+    input_path = config.get_input_path('dir_file_fuzz')
 
     # Get wordlist
     wordlist_name = FFUF_DEFAULT_WORDLIST_NAME if wordlist_name == 'default' else wordlist_name
     wordlist_path = str(Path(FFUF_DEFAULT_WORDLIST_PATH) / f'{wordlist_name}.txt')
 
     # Build command
-    cmd += f' -w {wordlist_path}'
-    cmd += f' -e {extensions_str}' if extensions else ''
-    cmd += f' -maxtime {max_time}' if max_time > 0 else ''
-    cmd += f' -p {delay}' if delay > 0 else ''
-    cmd += f' -recursion -recursion-depth {recursive_level} ' if recursive_level > 0 else ''
-    cmd += f' -t {threads}' if threads and threads > 0 else ''
-    cmd += f' -timeout {timeout}' if timeout and timeout > 0 else ''
-    cmd += ' -se' if stop_on_error else ''
-    cmd += ' -fr' if follow_redirect else ''
-    cmd += ' -ac' if auto_calibration else ''
-    cmd += f' -mc {mc}' if mc else ''
-    cmd += f' {custom_header}' if custom_header else ''
+    cmd_builder = CommandBuilder('ffuf')
+    cmd_builder.add_option('-w', wordlist_path)
+    cmd_builder.add_option('-e', extensions_str, condition=bool(extensions))
+    cmd_builder.add_option('-maxtime', max_time, condition=max_time > 0)
+    cmd_builder.add_option('-p', delay, condition=delay > 0)
+    if recursive_level > 0:
+        cmd_builder.add_option('-recursion')
+        cmd_builder.add_option('-recursion-depth', recursive_level)
+    cmd_builder.add_option('-t', threads, condition=threads and threads > 0)
+    cmd_builder.add_option('-timeout', timeout, condition=timeout and timeout > 0)
+    cmd_builder.add_option('-se', condition=stop_on_error)
+    cmd_builder.add_option('-fr', condition=follow_redirect)
+    cmd_builder.add_option('-ac', condition=auto_calibration)
+    cmd_builder.add_option('-mc', mc, condition=bool(mc))
+    cmd_builder.add_option(custom_header, condition=bool(custom_header))
 
     # Grab URLs to fuzz
     urls = get_http_urls(
@@ -140,14 +135,15 @@ def dir_file_fuzz(self, ctx={}, description=None):
         proxy = get_random_proxy()
 
         # Build final cmd
-        fcmd = cmd
-        fcmd += f' -x {proxy}' if proxy else ''
-        fcmd += f' -u {url} -json -s'
+        cmd_builder.add_option('-u', url, condition=bool(url))
+        cmd_builder.add_option('-json')
+        cmd_builder.add_option('-s')
+        cmd_builder.add_option('-x', proxy, condition=bool(proxy))
 
         # Initialize DirectoryScan object
         dirscan = DirectoryScan()
         dirscan.scanned_date = timezone.now()
-        dirscan.command_line = fcmd
+        dirscan.command_line = cmd_builder.build_list()
         dirscan.save()
 
         # Get subdomain
@@ -159,8 +155,8 @@ def dir_file_fuzz(self, ctx={}, description=None):
         results = []
         crawl_urls = []
         for line in stream_command(
-                fcmd,
-                shell=True,
+                cmd_builder.build_list(),
+                shell=False,
                 history_file=self.history_file,
                 scan_id=self.scan_id,
                 activity_id=self.activity_id):
@@ -237,6 +233,6 @@ def dir_file_fuzz(self, ctx={}, description=None):
     if enable_http_crawl:
         custom_ctx = deepcopy(ctx)
         custom_ctx['track'] = False
-        http_crawl(crawl_urls, ctx=custom_ctx)
+        http_crawl.delay(crawl_urls, ctx=custom_ctx)
 
     return results

@@ -8,7 +8,6 @@ from reNgine.utils.formatters import SafePath
 from reNgine.utils.ip import save_ip_address
 from reNgine.utils.nmap_service import create_or_update_port_with_service
 from reNgine.utils.parsers import parse_nmap_results
-from celery.result import allow_join_result
 
 logger = Logger(True)
 
@@ -50,29 +49,19 @@ def get_nmap_http_datas(host, ctx):
 
     logger.info(f'Scanning ports: {ports_str}')
 
-    # Add retry logic for nmap scan
-    max_retries = 3
-    retry_delay = 2
+    try:
+        # Launch Celery task and wait for result
+        task = run_nmap.delay(ctx, **nmap_args)
+        while not task.ready():
+            # wait for all jobs to complete
+            time.sleep(5)
 
-    for attempt in range(max_retries):
-        try:
-            # Launch Celery task and wait for result
-            task = run_nmap.delay(ctx, **nmap_args)
-            with allow_join_result():
-                task.get()  # Wait for task completion
-                
-            if os.path.exists(xml_file):
-                break
-            logger.warning(f"Attempt {attempt + 1}/{max_retries}: Nmap output file not found, retrying in {retry_delay}s...")
-            time.sleep(retry_delay)
-        except Exception as e:
-            logger.error(f"Attempt {attempt + 1}/{max_retries}: Nmap scan failed: {str(e)}")
-            if attempt == max_retries - 1:
-                logger.error(f"Nmap scan failed after {max_retries} attempts: {str(e)}")
-                return None
-            time.sleep(retry_delay)
-    else:
-        logger.error(f"Failed to generate output file after {max_retries} retries")
+        if not os.path.exists(xml_file):
+            logger.error(f"Nmap output file not found: {xml_file}")
+            return None
+            
+    except Exception as e:
+        logger.error(f"Nmap scan failed: {str(e)}")
         return None
 
     # Parse results to get open ports and services

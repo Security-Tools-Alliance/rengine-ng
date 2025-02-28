@@ -6,29 +6,19 @@ from urllib.parse import urlparse
 
 from reNgine.definitions import (
     ALL,
-    AMASS_WORDLIST,
-    THREADS,
-    TIMEOUT,
     SUBDOMAIN_DISCOVERY,
     SUBDOMAIN_SCAN_DEFAULT_TOOLS,
-    USE_AMASS_CONFIG,
-    AMASS_DEFAULT_WORDLIST_NAME,
-    AMASS_DEFAULT_WORDLIST_PATH,
-    USE_SUBFINDER_CONFIG,
     USES_TOOLS,
-)
-from reNgine.settings import (
-    DEFAULT_HTTP_TIMEOUT,
-    DEFAULT_THREADS,
-    RENGINE_TOOL_GITHUB_PATH,
 )
 from reNgine.celery import app
 from reNgine.celery_custom_task import RengineTask
 from reNgine.utils.logger import Logger
+from reNgine.utils.subdomain_tools import build_subdomain_tool_command
 from reNgine.tasks.command import run_command_line
 from reNgine.tasks.http import http_crawl
-from reNgine.utils.api import get_netlas_key
-from reNgine.utils.http import get_http_crawl_value
+from reNgine.utils.command_builder import CommandBuilder, build_piped_command
+from reNgine.utils.task_config import TaskConfig
+
 from scanEngine.models import (
     InstalledExternalTool,
     Notification,
@@ -39,8 +29,8 @@ from startScan.models import (
 
 logger = Logger(True)
 
-@app.task(name='subdomain_discovery', queue='subdomain_discovery_queue', base=RengineTask, bind=True)
-@app.task(name='subdomain_discovery', queue='subdomain_discovery_queue', base=RengineTask, bind=True)
+
+@app.task(name='subdomain_discovery', queue='io_queue', base=RengineTask, bind=True)
 def subdomain_discovery(
         self,
         host=None,
@@ -73,11 +63,12 @@ def subdomain_discovery(
         return
 
     # Config
-    config = self.yaml_configuration.get(SUBDOMAIN_DISCOVERY) or {}
-    enable_http_crawl = get_http_crawl_value(self, config)
-    threads = config.get(THREADS) or self.yaml_configuration.get(THREADS, DEFAULT_THREADS)
-    timeout = config.get(TIMEOUT) or self.yaml_configuration.get(TIMEOUT, DEFAULT_HTTP_TIMEOUT)
-    tools = config.get(USES_TOOLS, SUBDOMAIN_SCAN_DEFAULT_TOOLS)
+    config = TaskConfig(self.yaml_configuration, self.results_dir, self.scan_id, self.filename)
+    subdomain_config = config.get_config(SUBDOMAIN_DISCOVERY)
+    enable_http_crawl = config.get_http_crawl_enabled(SUBDOMAIN_DISCOVERY)
+    threads = config.get_threads(SUBDOMAIN_DISCOVERY)
+    timeout = config.get_timeout(SUBDOMAIN_DISCOVERY)
+    tools = subdomain_config.get(USES_TOOLS, SUBDOMAIN_SCAN_DEFAULT_TOOLS)
     default_subdomain_tools = [tool.name.lower() for tool in InstalledExternalTool.objects.filter(is_default=True).filter(is_subdomain_gathering=True)]
     custom_subdomain_tools = [tool.name.lower() for tool in InstalledExternalTool.objects.filter(is_default=False).filter(is_subdomain_gathering=True)]
     send_subdomain_changes, send_interesting = False, False
@@ -93,111 +84,66 @@ def subdomain_discovery(
     default_subdomain_tools.extend(('amass-passive', 'amass-active'))
     # Run tools
     for tool in tools:
-        cmd = None
-        logger.info(f'Scanning subdomains for {host} with {tool}')
-        proxy = get_random_proxy()
-        if tool in default_subdomain_tools:
-            if tool == 'amass-passive':
-                use_amass_config = config.get(USE_AMASS_CONFIG, False)
-                cmd = f'amass enum -passive -d {host} -o ' + str(Path(self.results_dir) / 'subdomains_amass.txt')
-                cmd += (' -config ' + str(Path.home() / '.config' / 'amass' / 'config.ini')) if use_amass_config else ''
+        cmd, use_shell, error_msg = build_subdomain_tool_command(
+            tool, host, self.results_dir, config, get_random_proxy(), timeout, threads, custom_subdomain_tools)
 
-            elif tool == 'amass-active':
-                use_amass_config = config.get(USE_AMASS_CONFIG, False)
-                amass_wordlist_name = config.get(AMASS_WORDLIST, AMASS_DEFAULT_WORDLIST_NAME)
-                wordlist_path = str(Path(AMASS_DEFAULT_WORDLIST_PATH) / f'{amass_wordlist_name}.txt')
-                cmd = f'amass enum -active -d {host} -o ' + str(Path(self.results_dir) / 'subdomains_amass_active.txt')
-                cmd += (' -config ' + str(Path.home() / '.config' / 'amass' / 'config.ini')) if use_amass_config else ''
-                cmd += f' -brute -w {wordlist_path}'
-
-            elif tool == 'sublist3r':
-                cmd = f'sublist3r -d {host} -t {threads} -o ' + str(Path(self.results_dir) / 'subdomains_sublister.txt')
-
-            elif tool == 'subfinder':
-                cmd = f'subfinder -d {host} -o ' + str(Path(self.results_dir) / 'subdomains_subfinder.txt')
-                use_subfinder_config = config.get(USE_SUBFINDER_CONFIG, False)
-                cmd += (' -config ' + str(Path.home() / '.config' / 'subfinder' / 'config.yaml')) if use_subfinder_config else ''
-                cmd += f' -proxy {proxy}' if proxy else ''
-                cmd += f' -timeout {timeout}' if timeout else ''
-                cmd += f' -t {threads}' if threads else ''
-                cmd += ' -silent'
-
-            elif tool == 'oneforall':
-                cmd = f'oneforall --target {host} run'
-                cmd_extract = 'cut -d\',\' -f6 ' + str(Path(RENGINE_TOOL_GITHUB_PATH) / 'OneForAll' / 'results' / f'{host}.csv') + ' | tail -n +2 > ' + str(Path(self.results_dir) / 'subdomains_oneforall.txt')
-                cmd_rm = 'rm -rf ' + str(Path(RENGINE_TOOL_GITHUB_PATH) / 'OneForAll' / 'results'/ f'{host}.csv')
-                cmd += f' && {cmd_extract} && {cmd_rm}'
-
-            elif tool == 'ctfr':
-                results_file = str(Path(self.results_dir) / 'subdomains_ctfr.txt')
-                cmd = f'ctfr -d {host} -o {results_file}'
-                cmd_extract = f"cat {results_file} | sed 's/\*.//g' | tail -n +12 | uniq | sort > {results_file}"
-                cmd += f' && {cmd_extract}'
-
-            elif tool == 'tlsx':
-                results_file = str(Path(self.results_dir) / 'subdomains_tlsx.txt')
-                cmd = f'tlsx -san -cn -silent -ro -host {host}'
-                cmd += f" | sed -n '/^\([a-zA-Z0-9]\([-a-zA-Z0-9]*[a-zA-Z0-9]\)\?\.\)\+{host}$/p' | uniq | sort"
-                cmd += f' > {results_file}'
-
-            elif tool == 'netlas':
-                results_file = str(Path(self.results_dir) / 'subdomains_netlas.txt')
-                cmd = f'netlas search -d domain -i domain domain:"*.{host}" -f json'
-                netlas_key = get_netlas_key()
-                cmd += f' -a {netlas_key}' if netlas_key else ''
-                cmd_extract = f"grep -oE '([a-zA-Z0-9]([-a-zA-Z0-9]*[a-zA-Z0-9])?\.)+{host}'"
-                cmd += f' | {cmd_extract} > {results_file}'
-
-        elif tool in custom_subdomain_tools:
-            tool_query = InstalledExternalTool.objects.filter(name__icontains=tool.lower())
-            if not tool_query.exists():
-                logger.error(f'{tool} configuration does not exists. Skipping.')
-                continue
-            custom_tool = tool_query.first()
-            cmd = custom_tool.subdomain_gathering_command
-            if '{TARGET}' not in cmd:
-                logger.error(f'Missing {{TARGET}} placeholders in {tool} configuration. Skipping.')
-                continue
-            if '{OUTPUT}' not in cmd:
-                logger.error(f'Missing {{OUTPUT}} placeholders in {tool} configuration. Skipping.')
-                continue
-
-
-            cmd = cmd.replace('{TARGET}', host)
-            cmd = cmd.replace('{OUTPUT}', str(Path(self.results_dir) / f'subdomains_{tool}.txt'))
-            cmd = cmd.replace('{PATH}', custom_tool.github_clone_path) if '{PATH}' in cmd else cmd
-        else:
-            logger.warning(
-                f'Subdomain discovery tool "{tool}" is not supported by reNgine. Skipping.')
+        if error_msg:
+            logger.error(error_msg)
             continue
 
         # Run tool
-        try:
-            run_command_line.delay(
-                cmd,
-                shell=True,
-                history_file=self.history_file,
-                scan_id=self.scan_id,
-                activity_id=self.activity_id)
-        except Exception as e:
-            logger.error(
-                f'Subdomain discovery tool "{tool}" raised an exception')
-            logger.exception(e)
+        if cmd:
+            try:
+                run_command_line.delay(
+                    cmd,
+                    shell=use_shell,
+                    history_file=self.history_file,
+                    scan_id=self.scan_id,
+                    activity_id=self.activity_id
+                )
+            except Exception as e:
+                logger.error(f'Error running command: {cmd}, error: {e}')
+                continue
 
     # Gather all the tools' results in one single file. Write subdomains into
     # separate files, and sort all subdomains.
+    input_path = str(Path(self.results_dir) / "subdomains_*.txt")
+    output_path = self.output_path
+
+    cat_cmd = CommandBuilder('cat')
+    cat_cmd.add_option(input_path)
+
+    piped_cmd = build_piped_command(
+        [cat_cmd], 
+        output_file=output_path,
+        append=False
+    )
+
     run_command_line.delay(
-        f'cat {str(Path(self.results_dir) / "subdomains_*.txt")} > {self.output_path}',
+        cmd=piped_cmd.build_string(),
         shell=True,
         history_file=self.history_file,
         scan_id=self.scan_id,
-        activity_id=self.activity_id)
+        activity_id=self.activity_id
+    )
+
+    sort_cmd = CommandBuilder('sort')
+    sort_cmd.add_option('-u')
+    sort_cmd.add_option(output_path)
+
+    piped_cmd = build_piped_command(
+        [sort_cmd], 
+        output_file=output_path,
+        append=False
+    )
+
     run_command_line.delay(
-        f'sort -u {self.output_path} -o {self.output_path}',
+        cmd=piped_cmd.build_string(),
         shell=True,
         history_file=self.history_file,
         scan_id=self.scan_id,
-        activity_id=self.activity_id)
+        activity_id=self.activity_id
+    )
 
     with open(self.output_path) as f:
         lines = f.readlines()
@@ -240,7 +186,7 @@ def subdomain_discovery(
     if enable_http_crawl:
         custom_ctx = deepcopy(ctx)
         custom_ctx['track'] = True
-        http_crawl(urls, ctx=custom_ctx, update_subdomain_metadatas=True)
+        http_crawl.delay(urls, ctx=custom_ctx, update_subdomain_metadatas=True)
     else:
         url_filter = ctx.get('url_filter')
         # Find root subdomain endpoints
@@ -275,8 +221,9 @@ def subdomain_discovery(
             self.notify(fields={'Removed subdomains': subdomains_str})
 
     if send_interesting and self.scan_id and self.domain_id:
-        interesting_subdomains = get_interesting_subdomains(self.scan_id, self.domain_id)
-        if interesting_subdomains:
+        if interesting_subdomains := get_interesting_subdomains(
+            self.scan_id, self.domain_id
+        ):
             subdomains_str = '\n'.join([f'• `{subdomain}`' for subdomain in interesting_subdomains])
             self.notify(fields={'Interesting subdomains': subdomains_str})
 

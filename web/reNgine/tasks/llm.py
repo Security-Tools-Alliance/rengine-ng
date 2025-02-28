@@ -13,10 +13,11 @@ from startScan.models import (
     Vulnerability,
     VulnerabilityReference,
 )
+from django.db import transaction
 
 logger = Logger(True)
 
-@app.task(name='llm_vulnerability_description', bind=False, queue='gpt_queue')
+@app.task(name='llm_vulnerability_description', bind=False, queue='cpu_queue')
 def llm_vulnerability_description(vulnerability_id):
     """Generate and store Vulnerability Description using GPT.
 
@@ -66,18 +67,55 @@ def llm_vulnerability_description(vulnerability_id):
             response.get('references', [])
         )
 
-    # For all vulnerabilities with the same vulnerability name this description has to be stored.
-    # Also the condition is that the url must contain a part of this.
-    for vuln in Vulnerability.objects.filter(name=lookup_vulnerability.name, http_url__icontains=path):
-        vuln.description = response.get('description', vuln.description)
-        vuln.impact = response.get('impact')
-        vuln.remediation = response.get('remediation')
-        vuln.is_gpt_used = True
-        vuln.save()
+    # Perform all DB operations in a single transaction for better performance
+    with transaction.atomic():
+        # Get all matching vulnerabilities at once
+        vulns_to_update = list(Vulnerability.objects.filter(
+            name=lookup_vulnerability.name, 
+            http_url__icontains=path
+        ))
 
-        for url in response.get('references', []):
-            ref, created = VulnerabilityReference.objects.get_or_create(url=url)
-            vuln.references.add(ref)
+        if not vulns_to_update:
+            logger.info(f"No vulnerabilities found matching name={lookup_vulnerability.name} and path={path}")
+            return response
+
+        # Pre-create all references at once to avoid repeated get_or_create calls
+        reference_urls = response.get('references', [])
+        ref_objects = {}
+
+        if reference_urls:
+            # First, get existing references
+            existing_refs = VulnerabilityReference.objects.filter(url__in=reference_urls)
+            for ref in existing_refs:
+                ref_objects[ref.url] = ref
+
+            if missing_urls := [
+                url for url in reference_urls if url not in ref_objects
+            ]:
+                new_refs = [VulnerabilityReference(url=url) for url in missing_urls]
+                VulnerabilityReference.objects.bulk_create(new_refs, ignore_conflicts=True)
+
+                # Get the newly created references
+                for ref in VulnerabilityReference.objects.filter(url__in=missing_urls):
+                    ref_objects[ref.url] = ref
+
+        # Update all vulnerabilities
+        for vuln in vulns_to_update:
+            vuln.description = response.get('description', vuln.description)
+            vuln.impact = response.get('impact')
+            vuln.remediation = response.get('remediation')
+            vuln.is_gpt_used = True
+
+            if reference_urls:
+                # Add all references at once
+                refs_to_add = [ref_objects[url] for url in reference_urls]
+                vuln.references.add(*refs_to_add)
+
+        # Save all vulnerabilities in bulk if possible
+        # Note: Since we're modifying a M2M relationship, we can't use bulk_update
+        # We need to save each object individually, but at least we batch the adds
+        for vuln in vulns_to_update:
             vuln.save()
 
+    logger.info(f"Updated {len(vulns_to_update)} vulnerabilities with GPT-generated information")
     return response

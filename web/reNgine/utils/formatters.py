@@ -6,8 +6,6 @@ from typing import List, Union
 from django.utils import timezone
 from reNgine.utils.logger import Logger
 from reNgine.settings import DOMAIN_NAME, RENGINE_TASK_IGNORE_CACHE_KWARGS
-from reNgine.utils.parsers import parse_custom_header
-from reNgine.utils.builders import generate_gospider_params
 
 logger = Logger(__name__)
 
@@ -183,40 +181,3 @@ def get_traceback_path(task_name, results_dir, scan_history_id=None, subscan_id=
 
 def fmt_traceback(exc):
     return '\n'.join(traceback.format_exception(None, exc, exc.__traceback__))
-
-def generate_header_param(custom_header, tool_name=None):
-    """
-    Generate command-line parameters for a specific tool based on the custom header.
-
-    Args:
-        custom_header (dict or str): Dictionary or string containing the custom headers.
-        tool_name (str, optional): Name of the tool. Defaults to None.
-
-    Returns:
-        str: Command-line parameter for the specified tool.
-    """
-    logger.debug(f"Generating header parameters for tool: {tool_name}")
-    logger.debug(f"Input custom_header: {custom_header}")
-
-    # Ensure the custom_header is a dictionary
-    custom_header = parse_custom_header(custom_header)
-
-    # Common formats
-    common_headers = [f"{key}: {value}" for key, value in custom_header.items()]
-    semi_colon_headers = ';;'.join(common_headers)
-    colon_headers = [f"{key}:{value}" for key, value in custom_header.items()]
-
-    # Define format mapping for each tool
-    format_mapping = {
-        'common': ' '.join([f' -H "{header}"' for header in common_headers]),
-        'dalfox': ' '.join([f' -H "{header}"' for header in colon_headers]),
-        'hakrawler': f' -h "{semi_colon_headers}"',
-        'gospider': generate_gospider_params(custom_header),
-    }
-
-    # Get the appropriate format based on the tool name
-    result = format_mapping.get(tool_name, format_mapping.get('common'))
-    logger.debug(f"Selected format for {tool_name}: {result}")
-
-    # Return the corresponding parameter for the specified tool or default to common_headers format
-    return result

@@ -34,7 +34,7 @@ from reNgine.tasks.url import (
 )
 from reNgine.tasks.vulnerability import (
     crlfuzz_scan,
-    dalfox_xss_scan,
+    dalfox_scan,
     nuclei_scan,
     nuclei_individual_severity_module,
     s3scanner,
@@ -45,7 +45,7 @@ from reNgine.tasks.vulnerability import (
 # Export all tasks
 __all__ = [
     'crlfuzz_scan',
-    'dalfox_xss_scan', 
+    'dalfox_scan', 
     'dir_file_fuzz',
     'dorking',
     'fetch_url',

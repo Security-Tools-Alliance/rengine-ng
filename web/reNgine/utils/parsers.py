@@ -14,7 +14,6 @@ from reNgine.definitions import (
     NUCLEI_DEFAULT_TEMPLATES_PATH,
 )
 from reNgine.utils.logger import Logger
-from reNgine.utils.http import sanitize_url
 
 logger = Logger(__name__)
 
@@ -146,6 +145,8 @@ def parse_nmap_results(xml_file, output_file=None, parse_type='vulnerabilities')
             - services: List of service dictionaries
             - ports: List of port dictionaries
     """
+    from reNgine.utils.http import sanitize_url
+
     with open(xml_file, encoding='utf8') as f:
         content = f.read()
         try:

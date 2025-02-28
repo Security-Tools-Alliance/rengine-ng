@@ -1,11 +1,9 @@
 import os
-import time
 import json
 import yaml
 
 from pathlib import Path
 from copy import deepcopy
-from celery import group
 from dotted_dict import DottedDict
 
 from reNgine.definitions import (
@@ -23,13 +21,16 @@ from reNgine.settings import (
 )
 from reNgine.celery import app
 from reNgine.celery_custom_task import RengineTask
+from reNgine.utils.command_builder import CommandBuilder
 from reNgine.utils.http import get_subdomain_from_url
 from reNgine.utils.logger import Logger
+from reNgine.utils.task_config import TaskConfig
 from startScan.models import (
     ScanHistory,
     Subdomain,
 )
 from reNgine.tasks.command import run_command_line
+from reNgine.tasks.http import http_crawl
 from scanEngine.models import Proxy
 
 logger = Logger(True)
@@ -44,18 +45,21 @@ def osint(self, host=None, ctx=None, description=None):
     Returns:
         dict: Results from osint discovery and dorking.
     """
+    from reNgine.utils.scan_helpers import execute_grouped_tasks
+
     if ctx is None:
         ctx = {}
-    config = self.yaml_configuration.get(OSINT) or OSINT_DEFAULT_CONFIG
+    config = TaskConfig(self.yaml_configuration, self.results_dir, self.scan_id, self.filename)
+    osint_config = config.get_config(OSINT) or OSINT_DEFAULT_CONFIG
 
     grouped_tasks = []
 
-    if 'discover' in config:
+    if 'discover' in osint_config:
         logger.info('Starting OSINT Discovery')
         custom_ctx = deepcopy(ctx)
         custom_ctx['track'] = False
         _task = osint_discovery.si(
-            config=config,
+            config=osint_config,
             host=self.scan.domain.name,
             scan_history_id=self.scan.id,
             activity_id=self.activity_id,
@@ -64,23 +68,25 @@ def osint(self, host=None, ctx=None, description=None):
         )
         grouped_tasks.append(_task)
 
-    if OSINT_DORK in config or OSINT_CUSTOM_DORK in config:
+    if OSINT_DORK in osint_config or OSINT_CUSTOM_DORK in osint_config:
         logger.info('Starting OSINT Dorking')
         _task = dorking.si(
-            config=config,
+            config=osint_config,
             host=self.scan.domain.name,
             scan_history_id=self.scan.id,
             results_dir=self.results_dir
         )
         grouped_tasks.append(_task)
 
-    celery_group = group(grouped_tasks)
-    job = celery_group.apply_async()
-    while not job.ready():
-        # wait for all jobs to complete
-        time.sleep(5)
-
-    logger.info('OSINT Tasks finished...')
+    execute_grouped_tasks(
+        self,
+        grouped_tasks,
+        task_name="osint",
+        callback_kwargs={'description': 'Processing OSINT results'}
+    )
+    
+    logger.info('OSINT Tasks submitted...')
+    return {'status': 'submitted'}
 
 @app.task(name='osint_discovery', bind=True, base=RengineTask)
 def osint_discovery(self, config, host, scan_history_id, activity_id, results_dir, ctx=None):
@@ -96,7 +102,7 @@ def osint_discovery(self, config, host, scan_history_id, activity_id, results_di
         dict: osint metadat and theHarvester and h8mail results.
     """
     from reNgine.utils.db import save_metadata_info
-
+    from reNgine.utils.scan_helpers import execute_grouped_tasks
     if ctx is None:
         ctx = {}
     osint_lookup = config.get(OSINT_DISCOVER, [])
@@ -113,6 +119,20 @@ def osint_discovery(self, config, host, scan_history_id, activity_id, results_di
                 'documents_limit': documents_limit
             })
             meta_info = [save_metadata_info(meta_dict)]
+
+        # TODO: disabled for now
+        # elif osint_intensity == 'deep':
+        #     subdomains = Subdomain.objects
+        #     if self.scan:
+        #         subdomains = subdomains.filter(scan_history=self.scan)
+        #     for subdomain in subdomains:
+        #         meta_dict = DottedDict({
+        #             'osint_target': subdomain.name,
+        #             'domain': self.domain,
+        #             'scan_id': self.scan_id,
+        #             'documents_limit': documents_limit
+        #         })
+        #         meta_info.append(save_metadata_info(meta_dict))
 
     grouped_tasks = []
 
@@ -142,11 +162,12 @@ def osint_discovery(self, config, host, scan_history_id, activity_id, results_di
         )
         grouped_tasks.append(_task)
 
-    celery_group = group(grouped_tasks)
-    job = celery_group.apply_async()
-    while not job.ready():
-        # wait for all jobs to complete
-        time.sleep(5)
+    execute_grouped_tasks(
+        self,
+        grouped_tasks,
+        task_name="osint_discovery",
+        callback_kwargs={'description': 'Processing OSINT discovery results'}
+    )
 
     return {}
 
@@ -214,8 +235,8 @@ def dorking(self, config, host, scan_history_id, results_dir):
 
     return results
 
-@app.task(name='theHarvester', queue='theHarvester_queue', bind=False)
-def theHarvester(config, host, scan_history_id, activity_id, results_dir, ctx=None):
+@app.task(name='theHarvester', queue='io_queue', bind=True)
+def theHarvester(self, config, host, scan_history_id, activity_id, results_dir, ctx=None):
     """Run theHarvester to get save emails, hosts, employees found in domain.
 
     Args:
@@ -243,7 +264,6 @@ def theHarvester(config, host, scan_history_id, activity_id, results_dir, ctx=No
     output_path_json = str(Path(results_dir) / 'theHarvester.json')
     theHarvester_dir = str(Path.home() / ".config"  / 'theHarvester')
     history_file = str(Path(results_dir) / 'commands.txt')
-    cmd  = f'theHarvester -d {host} -f {output_path_json} -b anubis,baidu,bevigil,binaryedge,bing,bingapi,bufferoverun,brave,censys,certspotter,criminalip,crtsh,dnsdumpster,duckduckgo,fullhunt,hackertarget,hunter,hunterhow,intelx,netlas,onyphe,otx,pentesttools,projectdiscovery,rapiddns,rocketreach,securityTrails,sitedossier,subdomaincenter,subdomainfinderc99,threatminer,tomba,urlscan,virustotal,yahoo,zoomeye'
 
     # Update proxies.yaml
     proxy_query = Proxy.objects.all()
@@ -256,6 +276,12 @@ def theHarvester(config, host, scan_history_id, activity_id, results_dir, ctx=No
                 yaml.dump(yaml_data, file)
 
     # Run cmd
+    harvester_builder = CommandBuilder('theHarvester')
+    harvester_builder.add_option('-d', host)
+    harvester_builder.add_option('-f', output_path_json)
+    harvester_builder.add_option('-b', 'anubis,baidu,bevigil,binaryedge,bing,bingapi,bufferoverun,brave,censys,certspotter,criminalip,crtsh,dnsdumpster,duckduckgo,fullhunt,hackertarget,hunter,hunterhow,intelx,netlas,onyphe,otx,pentesttools,projectdiscovery,rapiddns,rocketreach,securityTrails,sitedossier,subdomaincenter,subdomainfinderc99,threatminer,tomba,urlscan,virustotal,yahoo,zoomeye')
+    cmd = harvester_builder.build_list()
+
     run_command_line.delay(
         cmd,
         shell=False,
@@ -280,8 +306,8 @@ def theHarvester(config, host, scan_history_id, activity_id, results_dir, ctx=No
     emails = data.get('emails', [])
     for email_address in emails:
         email, _ = save_email(email_address, scan_history=scan_history)
-        # if email:
-        # 	self.notify(fields={'Emails': f'• `{email.address}`'})
+        if email:
+            self.notify(fields={'Emails': f'• `{email.address}`'})
 
     linkedin_people = data.get('linkedin_people', [])
     for people in linkedin_people:
@@ -289,8 +315,8 @@ def theHarvester(config, host, scan_history_id, activity_id, results_dir, ctx=No
             people,
             designation='linkedin',
             scan_history=scan_history)
-        # if employee:
-        # 	self.notify(fields={'LinkedIn people': f'• {employee.name}'})
+        if employee:
+            self.notify(fields={'LinkedIn people': f'• {employee.name}'})
 
     twitter_people = data.get('twitter_people', [])
     for people in twitter_people:
@@ -298,8 +324,8 @@ def theHarvester(config, host, scan_history_id, activity_id, results_dir, ctx=No
             people,
             designation='twitter',
             scan_history=scan_history)
-        # if employee:
-        # 	self.notify(fields={'Twitter people': f'• {employee.name}'})
+        if employee:
+            self.notify(fields={'Twitter people': f'• {employee.name}'})
 
     hosts = data.get('hosts', [])
     urls = []
@@ -316,14 +342,14 @@ def theHarvester(config, host, scan_history_id, activity_id, results_dir, ctx=No
             crawl=False,
             ctx=ctx,
             subdomain=subdomain)
-        # if endpoint:
-        # 	urls.append(endpoint.http_url)
-            # self.notify(fields={'Hosts': f'• {endpoint.http_url}'})
+        if endpoint:
+            urls.append(endpoint.http_url)
+            self.notify(fields={'Hosts': f'• {endpoint.http_url}'})
 
-    # if enable_http_crawl:
-    # 	custom_ctx = deepcopy(ctx)
-    # 	custom_ctx['track'] = False
-    # 	http_crawl(urls, ctx=custom_ctx)
+    if enable_http_crawl:
+        custom_ctx = deepcopy(ctx)
+        custom_ctx['track'] = False
+        http_crawl.delay(urls, ctx=custom_ctx)
 
     # TODO: Lots of ips unrelated with our domain are found, disabling
     # this for now.
@@ -341,7 +367,7 @@ def theHarvester(config, host, scan_history_id, activity_id, results_dir, ctx=No
     # 			update_fields={'IPs': f'{ip.address}'})
     return data
 
-@app.task(name='h8mail', queue='h8mail_queue', bind=False)
+@app.task(name='h8mail', queue='io_queue', bind=False)
 def h8mail(config, host, scan_history_id, activity_id, results_dir, ctx=None):
     """Run h8mail.
 
@@ -365,7 +391,11 @@ def h8mail(config, host, scan_history_id, activity_id, results_dir, ctx=None):
     input_path = str(Path(results_dir) / 'emails.txt')
     output_file = str(Path(results_dir) / 'h8mail.json')
 
-    cmd = f'h8mail -t {input_path} --json {output_file}'
+    h8mail_builder = CommandBuilder('h8mail')
+    h8mail_builder.add_option('-t', input_path)
+    h8mail_builder.add_option('--json', output_file)
+    cmd = h8mail_builder.build_list()
+
     history_file = str(Path(results_dir) / 'commands.txt')
 
     run_command_line.delay(

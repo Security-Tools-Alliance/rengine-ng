@@ -1,6 +1,8 @@
 """
 Command execution framework with unified streaming/buffering interface
 """
+
+import contextlib
 import re
 import time
 import select
@@ -27,9 +29,14 @@ class CommandExecutor:
         self.timeout = self._calculate_timeout()
         self.trunc_char = self.context.get('trunc_char')
         self.is_json = '-json' in cmd
+        self.dry_run = os.getenv('COMMAND_EXECUTOR_DRY_RUN', '0') == '1'
 
     def execute(self, stream=False):
         """Main execution entry point"""
+        if self.dry_run:
+            logger.debug(f'[DRY RUN] Would execute command: {self.cmd}')
+            return self._mock_execution()
+        
         logger.debug(f"🔧 Starting command execution in {'STREAM' if stream else 'BUFFER'} mode")
         logger.debug(f"🔧 Command: {self.cmd}")
         logger.debug(f"🔧 Context: {self.context}")
@@ -76,19 +83,40 @@ class CommandExecutor:
         return result
 
     def _launch_process(self):
-        """Launch subprocess with proper command formatting"""
+        """Launch subprocess with improved security"""
+        if self.dry_run:
+            logger.info(f'📄 [DRY RUN] Skipping process launch for: {self.cmd}')
+            return None
+
         logger.debug("🚀 Launching process")
-        use_shell = self.context.get('shell', False)
-        command = self.cmd if use_shell else shlex.split(self.cmd)
-        
-        return subprocess.Popen(
-            command,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            shell=use_shell,
-            cwd=self.context.get('cwd'),
-            encoding=None
-        )
+
+        if self.context.get('shell', False):
+            # When shell is required, log a warning for security auditing
+            logger.warning(f"Using shell=True for command execution (security risk): {self.cmd}")
+            process = subprocess.Popen(
+                self.cmd,
+                shell=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                cwd=self.context.get('cwd'),
+                encoding=self.context.get('encoding', 'utf-8'),
+                errors='replace'
+            )
+        else:
+            # Preferred: using list mode for better security
+            cmd_args = shlex.split(self.cmd) if isinstance(self.cmd, str) else self.cmd
+            process = subprocess.Popen(
+                cmd_args,
+                shell=False,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                cwd=self.context.get('cwd'),
+                encoding=self.context.get('encoding', 'utf-8'), 
+                errors='replace'
+            )
+
+        logger.debug(f"📝 Process launched with PID: {process.pid}")
+        return process
 
     def _stream_output(self):
         """Stream output line by line"""
@@ -136,20 +164,20 @@ class CommandExecutor:
         logger.debug("📖 Starting process output reading")
         while True:
             ready, _, _ = select.select([self.process.stdout, self.process.stderr], [], [], 1.0)
-            
+
             if not ready:
                 if self.process.poll() is not None:
                     logger.debug("⏹ Process finished")
                     break
                 self._check_timeout()
                 continue
-                
+
             raw_line = self._read_ready_stream(ready)
             logger.debug(f"📥 Raw line from stream: {raw_line or None}...")
-            
+
             if raw_line:
                 line = self._process_line(raw_line)
-                
+
                 if self.is_json:
                     try:
                         # Improved JSON handling with error recovery
@@ -158,18 +186,14 @@ class CommandExecutor:
                             line = line.decode('utf-8', errors='replace').strip()
                         else:
                             line = line.strip()
-                        
+
                         if not line:
                             continue
-                        
+
                         # Attempt to parse as complete JSON
-                        try:
-                            json_line = json.loads(line)
-                            yield json_line
+                        with contextlib.suppress(json.JSONDecodeError):
+                            yield json.loads(line)
                             continue
-                        except json.JSONDecodeError:
-                            pass
-                        
                         # Handle concatenated JSON objects or partial content
                         json_buffer += line
                         decoder = json.JSONDecoder()
@@ -178,22 +202,20 @@ class CommandExecutor:
                                 obj, idx = decoder.raw_decode(json_buffer)
                                 yield obj
                                 json_buffer = json_buffer[idx:].lstrip()
-                            except json.JSONDecodeError as e:
+                            except json.JSONDecodeError:
                                 if len(json_buffer) > 1024:  # Prevent infinite loop
                                     logger.warning(f"Truncating malformed JSON buffer: {json_buffer[:200]}...")
                                     json_buffer = ''
                                 break
-                        
+
                     except Exception as e:
                         logger.error(f"❌ JSON processing failed: {str(e)}")
                         logger.debug(f"❌ Problematic content: {line[:200]}...")
-                        continue
                 else:
                     logger.debug("📝 Yielding text line")
                     yield line
-            else:
-                if self.process.poll() is not None:
-                    break
+            elif self.process.poll() is not None:
+                break
 
     def _check_timeout(self):
         """Check and handle execution timeout"""
@@ -349,6 +371,16 @@ class CommandExecutor:
                 self.command_obj.return_code = -1
                 self.command_obj.save(update_fields=['return_code'])
 
+    def _mock_execution(self):
+        """Generate mock command output for dry runs"""
+        mock_data = {
+            'command': self.cmd,
+            'output': f"DRY RUN OUTPUT FOR: {self.cmd}",
+            'return_code': 0
+        }
+
+        return json.dumps(mock_data) if self.is_json else mock_data
+
 def stream_command(cmd, **kwargs):
     context = {
         'shell': kwargs.get('shell', False),
@@ -357,7 +389,8 @@ def stream_command(cmd, **kwargs):
         'scan_id': kwargs.get('scan_id'),
         'activity_id': kwargs.get('activity_id'),
         'encoding': kwargs.get('encoding', 'utf-8'),
-        'trunc_char': kwargs.get('trunc_char')
+        'trunc_char': kwargs.get('trunc_char'),
+        'dry_run': kwargs.get('dry_run', os.getenv('COMMAND_EXECUTOR_DRY_RUN', '0') == '1')
     }
     executor = CommandExecutor(cmd, context)
     return executor.execute(stream=True)
@@ -371,7 +404,8 @@ def run_command(cmd, **kwargs):
         'activity_id': kwargs.get('activity_id'),
         'remove_ansi': kwargs.get('remove_ansi_sequence', False),
         'encoding': kwargs.get('encoding', 'utf-8'),
-        'trunc_char': kwargs.get('trunc_char')
+        'trunc_char': kwargs.get('trunc_char'),
+        'dry_run': kwargs.get('dry_run', os.getenv('COMMAND_EXECUTOR_DRY_RUN', '0') == '1')
     }
     executor = CommandExecutor(cmd, context)
     return executor.execute(stream=False)

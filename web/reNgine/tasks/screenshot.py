@@ -3,18 +3,8 @@ import os
 
 from pathlib import Path
 
-from reNgine.definitions import (
-    DEFAULT_SCAN_INTENSITY,
-    INTENSITY,
-    SCREENSHOT,
-    THREADS,
-    TIMEOUT,
-)
-from reNgine.settings import (
-    DEFAULT_HTTP_TIMEOUT,
-    DEFAULT_THREADS,
-    RENGINE_RESULTS,
-)
+from reNgine.definitions import SCREENSHOT
+from reNgine.settings import RENGINE_RESULTS
 from reNgine.celery import app
 from reNgine.celery_custom_task import RengineTask
 from reNgine.utils.logger import Logger
@@ -25,9 +15,11 @@ from scanEngine.models import Notification
 from startScan.models import Subdomain
 from reNgine.tasks.command import run_command_line
 from reNgine.tasks.notification import send_file_to_discord
+from reNgine.utils.command_builder import CommandBuilder
+from reNgine.utils.task_config import TaskConfig
 logger = Logger(True)
 
-@app.task(name='screenshot', queue='screenshot_queue', base=RengineTask, bind=True)
+@app.task(name='screenshot', queue='io_queue', base=RengineTask, bind=True)
 def screenshot(self, ctx=None, description=None):
     """Uses EyeWitness to gather screenshot of a domain and/or url.
 
@@ -39,13 +31,13 @@ def screenshot(self, ctx=None, description=None):
     if ctx is None:
         ctx = {}
     # Config
+    config = TaskConfig(self.yaml_configuration, self.results_dir, self.scan_id, self.filename)
     screenshots_path = str(Path(self.results_dir) / 'screenshots')
     output_path = str(Path(self.results_dir) / 'screenshots' / self.filename)
     alive_endpoints_file = str(Path(self.results_dir) / 'endpoints_alive.txt')
-    config = self.yaml_configuration.get(SCREENSHOT) or {}
-    intensity = config.get(INTENSITY) or self.yaml_configuration.get(INTENSITY, DEFAULT_SCAN_INTENSITY)
-    timeout = config.get(TIMEOUT) or self.yaml_configuration.get(TIMEOUT, DEFAULT_HTTP_TIMEOUT + 5)
-    threads = config.get(THREADS) or self.yaml_configuration.get(THREADS, DEFAULT_THREADS)
+    intensity = config.get_intensity(SCREENSHOT)
+    timeout = config.get_timeout(SCREENSHOT)
+    threads = config.get_threads(SCREENSHOT)
 
     # If intensity is normal, grab only the root endpoints of each subdomain
     strict = intensity == 'normal'
@@ -67,15 +59,20 @@ def screenshot(self, ctx=None, description=None):
     send_output_file = notification.send_scan_output_file if notification else False
 
     # Run cmd
-    cmd = f'EyeWitness -f {alive_endpoints_file} -d {screenshots_path} --no-prompt'
-    cmd += f' --timeout {timeout}' if timeout > 0 else ''
-    cmd += f' --threads {threads}' if threads > 0 else ''
+    eye_builder = CommandBuilder('EyeWitness')
+    eye_builder.add_option('-f', alive_endpoints_file)
+    eye_builder.add_option('-d', screenshots_path)
+    eye_builder.add_option('--no-prompt')
+    eye_builder.add_option('--timeout', timeout, timeout > 0)
+    eye_builder.add_option('--threads', threads, threads > 0)
+
     run_command_line.delay(
-        cmd,
+        eye_builder.build_list(),
         shell=False,
         history_file=self.history_file,
         scan_id=self.scan_id,
-        activity_id=self.activity_id)
+        activity_id=self.activity_id
+    )
     if not os.path.isfile(output_path):
         logger.error(f'Could not load EyeWitness results at {output_path} for {self.domain.name}.')
         return

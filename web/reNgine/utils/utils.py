@@ -1,7 +1,7 @@
 import os
 import glob
 from reNgine.utils.logger import Logger
-from reNgine.utils.command_executor import run_command
+import shutil
 
 logger = Logger(True)
 
@@ -71,7 +71,6 @@ def remove_file_or_pattern(path, pattern=None, history_file=None, scan_id=None, 
     Args:
         path: Path to file/directory to remove
         pattern: Optional pattern for multiple files (e.g. "*.csv")
-        shell: Whether to use shell=True in run_command
         history_file: History file for logging
         scan_id: Scan ID for logging
         activity_id: Activity ID for logging
@@ -81,27 +80,31 @@ def remove_file_or_pattern(path, pattern=None, history_file=None, scan_id=None, 
     try:
         if pattern:
             # Check for files matching the pattern
-            match_count = len(glob.glob(os.path.join(path, pattern)))
-            if match_count == 0:
+            matching_files = glob.glob(os.path.join(path, pattern))
+            if not matching_files:
                 logger.warning(f"No files matching pattern '{pattern}' in {path}")
                 return True
-            full_path = os.path.join(path, pattern)
+                
+            # Remove each matching file individually
+            for file_path in matching_files:
+                if os.path.isdir(file_path):
+                    shutil.rmtree(file_path)
+                else:
+                    os.remove(file_path)
         else:
             if not os.path.exists(path):
                 logger.warning(f"Path {path} does not exist")
                 return True
-            full_path = path
-
-        # Execute secure command
-        run_command(
-            f'rm -rf {full_path}',
-            shell=True,
-            history_file=history_file,
-            scan_id=scan_id,
-            activity_id=activity_id
-        )
+                
+            # Remove file or directory
+            if os.path.isdir(path):
+                shutil.rmtree(path)
+            else:
+                os.remove(path)
+                
         return True
     except Exception as e:
+        full_path = os.path.join(path, pattern) if pattern else path
         logger.error(f"Failed to delete {full_path}: {str(e)}")
         return False
 

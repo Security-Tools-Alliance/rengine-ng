@@ -1,4 +1,5 @@
-import markdown, json
+import markdown
+import json
 
 from celery import group
 from pathlib import Path
@@ -28,6 +29,7 @@ from reNgine.tasks.command import run_command_line
 from scanEngine.models import EngineType, VulnerabilityReportSetting
 from startScan.models import ScanHistory, SubScan, Email, Employee, Subdomain, EndPoint, Vulnerability, VulnerabilityTags, IpAddress, CountryISO, ScanActivity, CveId, CweId
 from targetApp.models import Domain, Organization
+from reNgine.utils.command_builder import CommandBuilder
 
 logger = Logger(True)
 
@@ -463,7 +465,16 @@ def delete_scan(request, slug, id):
     obj = get_object_or_404(ScanHistory, id=id)
     if request.method == "POST":
         delete_dir = obj.results_dir
-        run_command_line(f'rm -rf {delete_dir}')
+        
+        # Use CommandBuilder instead of direct string formatting
+        cmd_builder = CommandBuilder('rm')
+        cmd_builder.add_option('-rf', delete_dir)
+        
+        run_command_line(
+            cmd_builder.build_list(),
+            shell=False,  # Important: use shell=False with lists
+        )
+        
         obj.delete()
         messageData = {'status': 'true'}
         messages.add_message(
@@ -1002,9 +1013,8 @@ def create_report(request, slug, id):
     html = template.render(data)
     pdf = HTML(string=html).write_pdf()
 
-    if 'download' in request.GET:
-        response = HttpResponse(pdf, content_type='application/octet-stream')
-    else:
-        response = HttpResponse(pdf, content_type='application/pdf')
-
-    return response
+    return (
+        HttpResponse(pdf, content_type='application/octet-stream')
+        if 'download' in request.GET
+        else HttpResponse(pdf, content_type='application/pdf')
+    )

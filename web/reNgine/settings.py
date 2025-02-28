@@ -41,6 +41,7 @@ UI_REMOTE_DEBUG_PORT = int(os.environ.get('UI_REMOTE_DEBUG_PORT', 5678))
 CELERY_DEBUG = bool(int(os.environ.get('CELERY_DEBUG', '0')))
 CELERY_REMOTE_DEBUG = bool(int(os.environ.get('CELERY_REMOTE_DEBUG', '0')))
 CELERY_REMOTE_DEBUG_PORT = int(os.environ.get('CELERY_REMOTE_DEBUG_PORT', 5679))
+COMMAND_EXECUTOR_DRY_RUN = bool(int(os.environ.get('COMMAND_EXECUTOR_DRY_RUN', '0')))
 
 # Common env vars
 DEBUG = env.bool('UI_DEBUG', default=False)

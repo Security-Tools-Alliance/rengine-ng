@@ -1,6 +1,5 @@
 import requests
 import json
-import pickle
 import redis
 
 from time import sleep
@@ -111,14 +110,16 @@ def send_discord_message(message, title='', severity=None, url=None, files=None,
     # Check for cached response in cache, using title as key
     cached_response = DISCORD_WEBHOOKS_CACHE.get(title) if title else None
     if cached_response:
-        cached_response = pickle.loads(cached_response)
+        cached_response = json.loads(cached_response)
+
+
 
     # Get existing webhook if found in cache
     cached_webhook = (
         DISCORD_WEBHOOKS_CACHE.get(f'{title}_webhook') if title else None
     )
     if cached_webhook:
-        webhook = pickle.loads(cached_webhook)
+        webhook = json.loads(cached_webhook)
         webhook.remove_embeds()
     else:
         webhook = DiscordWebhook(
@@ -130,7 +131,7 @@ def send_discord_message(message, title='', severity=None, url=None, files=None,
     embed = None
     cached_embed = DISCORD_WEBHOOKS_CACHE.get(f'{title}_embed') if title else None
     if cached_embed:
-        embed = pickle.loads(cached_embed)
+        embed = json.loads(cached_embed)
     elif use_discord_embed:
         embed = DiscordEmbed(title=title)
 
@@ -174,8 +175,8 @@ def send_discord_message(message, title='', severity=None, url=None, files=None,
         webhook.add_embed(embed)
 
         # Add webhook and embed objects to cache, so we can pick them up later
-        DISCORD_WEBHOOKS_CACHE.set(f'{title}_webhook', pickle.dumps(webhook))
-        DISCORD_WEBHOOKS_CACHE.set(f'{title}_embed', pickle.dumps(embed))
+        DISCORD_WEBHOOKS_CACHE.set(f'{title}_webhook', json.dumps(webhook))
+        DISCORD_WEBHOOKS_CACHE.set(f'{title}_embed', json.dumps(embed))
 
     # Add files to webhook
     if files:
@@ -190,7 +191,7 @@ def send_discord_message(message, title='', severity=None, url=None, files=None,
     else:
         response = webhook.execute()
         if use_discord_embed and response.status_code == 200:
-            DISCORD_WEBHOOKS_CACHE.set(title, pickle.dumps(response))
+            DISCORD_WEBHOOKS_CACHE.set(title, json.dumps(response))
 
     # Get status code
     if response.status_code == 429:
@@ -308,3 +309,108 @@ def build_notification_message(scan, subscan=None, engine=None, status='RUNNING'
         'message': msg,
         'options': options
     }
+
+def send_vulnerability_scan_summary(task_instance, scan_id=None):
+    """Send vulnerability scan summary notification.
+    
+    Calculates statistics for all vulnerability types and sends a summary notification.
+    
+    Args:
+        task_instance: The RengineTask instance (self)
+        scan_id: Optional scan ID override (defaults to task_instance.scan_id)
+    """
+    from targetApp.models import Vulnerability
+    from scanEngine.models import Notification
+    
+    # Get notification settings
+    notif = Notification.objects.first()
+    send_status = notif.send_scan_status_notif if notif else False
+    
+    if not send_status:
+        return
+    
+    # Use provided scan_id or fallback to task instance scan_id
+    scan_id = scan_id or task_instance.scan_id
+    
+    # Count vulnerabilities by severity
+    vulns = Vulnerability.objects.filter(scan_history__id=scan_id)
+    info_count = vulns.filter(severity=0).count()
+    low_count = vulns.filter(severity=1).count()
+    medium_count = vulns.filter(severity=2).count()
+    high_count = vulns.filter(severity=3).count()
+    critical_count = vulns.filter(severity=4).count()
+    unknown_count = vulns.filter(severity=-1).count()
+    
+    # Calculate total
+    vulnerability_count = (
+        info_count + low_count + medium_count + 
+        high_count + critical_count + unknown_count
+    )
+    
+    # Prepare notification fields
+    fields = {
+        'Total': vulnerability_count,
+        'Critical': critical_count,
+        'High': high_count,
+        'Medium': medium_count,
+        'Low': low_count,
+        'Info': info_count,
+        'Unknown': unknown_count
+    }
+    
+    # Send notification
+    task_instance.notify(fields=fields)
+
+
+def send_vulnerability_notification(task_instance, vuln, http_url, subdomain_name, severity):
+    """Send notification for an individual vulnerability.
+    
+    Args:
+        task_instance: The RengineTask instance (self)
+        vuln: Vulnerability object
+        http_url: URL where vulnerability was found
+        subdomain_name: Name of the subdomain
+        severity: Severity string (low, medium, high, critical)
+    """
+    from scanEngine.models import Notification
+    
+    # Get notification settings
+    notif = Notification.objects.first()
+    
+    if not (
+        notif 
+        and notif.send_vuln_notif
+        and severity in ['low', 'medium', 'high', 'critical']
+    ):
+        return
+    
+    # Prepare notification fields
+    fields = {
+        'Severity': f'**{severity.upper()}**',
+        'URL': http_url,
+        'Subdomain': subdomain_name,
+        'Name': vuln.name,
+        'Type': vuln.type,
+        'Description': vuln.description,
+        'Template': vuln.template_url,
+        'Tags': vuln.get_tags_str(),
+        'CVEs': vuln.get_cve_str(),
+        'CWEs': vuln.get_cwe_str(),
+        'References': vuln.get_refs_str()
+    }
+    
+    # Map severity to notification level
+    severity_map = {
+        'low': 'info',
+        'medium': 'warning',
+        'high': 'error',
+        'critical': 'error'
+    }
+    
+    # Send notification
+    task_instance.notify(
+        f'vulnerability_scan_#{vuln.id}',
+        severity_map[severity],
+        fields,
+        add_meta_info=False
+    )

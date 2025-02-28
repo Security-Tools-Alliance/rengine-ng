@@ -6,13 +6,10 @@ import time
 from copy import deepcopy
 from pathlib import Path
 from celery import group
-from celery.result import allow_join_result
-
 from reNgine.celery import app
 from reNgine.celery_custom_task import RengineTask
 from reNgine.utils.logger import Logger
 from reNgine.tasks.command import run_command_line
-from reNgine.utils.builders import build_cmd
 from reNgine.utils.formatters import get_task_title
 from reNgine.utils.nmap_service import process_nmap_service_results
 from reNgine.utils.parsers import parse_nmap_results
@@ -20,13 +17,9 @@ from scanEngine.models import Notification
 from reNgine.definitions import (
     NAABU_DEFAULT_PORTS,
     PORT_SCAN,
-    ENABLE_HTTP_CRAWL,
-    TIMEOUT,
     NAABU_EXCLUDE_PORTS,
     NAABU_EXCLUDE_SUBDOMAINS,
     PORTS,
-    NAABU_RATE,
-    THREADS,
     NAABU_PASSIVE,
     UNCOMMON_WEB_PORTS,
     USE_NAABU_CONFIG,
@@ -34,13 +27,6 @@ from reNgine.definitions import (
     NMAP_COMMAND,
     NMAP_SCRIPT,
     NMAP_SCRIPT_ARGS,
-    RATE_LIMIT,
-)
-from reNgine.settings import (
-    DEFAULT_HTTP_TIMEOUT,
-    DEFAULT_THREADS,
-    DEFAULT_ENABLE_HTTP_CRAWL,
-    DEFAULT_RATE_LIMIT,
 )
 from reNgine.utils.utils import return_iterable
 from reNgine.utils.command_executor import stream_command
@@ -48,14 +34,23 @@ from reNgine.utils.ip import save_ip_address
 from startScan.models import Port, Subdomain
 from reNgine.utils.nmap import parse_http_ports_data
 from reNgine.utils.formatters import SafePath
+from reNgine.utils.command_builder import CommandBuilder
+from reNgine.utils.task_config import TaskConfig
 
 logger = Logger(True)
 
-@app.task(name='port_scan', queue='port_scan_queue', base=RengineTask, bind=True)
+@app.task(name='port_scan', queue='io_queue', base=RengineTask, bind=True)
 def port_scan(self, hosts=None, ctx=None, description=None):
-    """Run port scan using Naabu then Nmap."""
+    """Run port scan.
+
+    Args:
+        hosts (list, optional): Hosts to run port scan on.
+        description (str, optional): Task description shown in UI.
+
+    Returns:
+        list: List of open ports (dict).
+    """
     from reNgine.utils.db import (
-        get_random_proxy,
         get_subdomains,
         save_endpoint,
     )
@@ -64,28 +59,34 @@ def port_scan(self, hosts=None, ctx=None, description=None):
         hosts = []
     if ctx is None:
         ctx = {}
-    input_file = str(Path(self.results_dir) / 'input_subdomains_port_scan.txt')
-    proxy = get_random_proxy()
 
-    # Config
-    config = self.yaml_configuration.get(PORT_SCAN) or {}
-    enable_http_crawl = config.get(ENABLE_HTTP_CRAWL, DEFAULT_ENABLE_HTTP_CRAWL)
-    timeout = config.get(TIMEOUT) or self.yaml_configuration.get(TIMEOUT, DEFAULT_HTTP_TIMEOUT)
-    exclude_ports = config.get(NAABU_EXCLUDE_PORTS, [])
-    exclude_subdomains = config.get(NAABU_EXCLUDE_SUBDOMAINS, False)
-    ports = config.get(PORTS, NAABU_DEFAULT_PORTS)
+    # Initialize task config
+    config = TaskConfig(self.yaml_configuration, self.results_dir, self.scan_id, self.filename)
+
+    # Get configuration values
+    input_file = config.get_input_path('subdomains_port_scan')
+    proxy = config.get_proxy()
+
+    # Get port scan specific configs
+    port_config = config.get_config(PORT_SCAN)
+    enable_http_crawl = config.get_http_crawl_enabled(PORT_SCAN)
+    timeout = config.get_timeout(PORT_SCAN)
+    exclude_ports = port_config.get(NAABU_EXCLUDE_PORTS, [])
+    exclude_subdomains = port_config.get(NAABU_EXCLUDE_SUBDOMAINS, False)
+    ports = port_config.get(PORTS, NAABU_DEFAULT_PORTS)
     ports = [str(port) for port in ports]
-    rate_limit = config.get(NAABU_RATE) or self.yaml_configuration.get(RATE_LIMIT, DEFAULT_RATE_LIMIT)
-    threads = config.get(THREADS) or self.yaml_configuration.get(THREADS, DEFAULT_THREADS)
-    passive = config.get(NAABU_PASSIVE, False)
-    use_naabu_config = config.get(USE_NAABU_CONFIG, False)
+    rate_limit = config.get_rate_limit(PORT_SCAN)
+    threads = config.get_threads(PORT_SCAN)
+    passive = port_config.get(NAABU_PASSIVE, False)
+    use_naabu_config = port_config.get(USE_NAABU_CONFIG, False)
     exclude_ports_str = ','.join(return_iterable(exclude_ports))
+
     # nmap args
-    nmap_enabled = config.get(ENABLE_NMAP, False)
-    nmap_cmd = config.get(NMAP_COMMAND, '')
-    nmap_script = config.get(NMAP_SCRIPT, '')
+    nmap_enabled = port_config.get(ENABLE_NMAP, False)
+    nmap_cmd = port_config.get(NMAP_COMMAND, '')
+    nmap_script = port_config.get(NMAP_SCRIPT, '')
     nmap_script = ','.join(return_iterable(nmap_script))
-    nmap_script_args = config.get(NMAP_SCRIPT_ARGS)
+    nmap_script_args = port_config.get(NMAP_SCRIPT_ARGS)
 
     if hosts:
         with open(input_file, 'w') as f:
@@ -96,35 +97,46 @@ def port_scan(self, hosts=None, ctx=None, description=None):
             exclude_subdomains=exclude_subdomains,
             ctx=ctx)
 
-    # Build cmd
-    cmd = 'naabu -json -exclude-cdn'
-    cmd += f' -list {input_file}' if len(hosts) > 0 else f' -host {hosts[0]}'
+    if not hosts:
+        logger.info('No hosts to scan')
+        return {}
+
+    # Build cmd using the secure builder
+    cmd_builder = CommandBuilder('naabu')
+    cmd_builder.add_option('-json')
+    cmd_builder.add_option('-exclude-cdn')
+    cmd_builder.add_option('-list', input_file, len(hosts) > 0)
+    cmd_builder.add_option('-host', hosts[0], len(hosts) == 0)
+
+    # Port configuration
     if 'full' in ports or 'all' in ports:
-        ports_str = ' -p "-"'
+        cmd_builder.add_option('-p', '-')
     elif 'top-100' in ports:
-        ports_str = ' -top-ports 100'
+        cmd_builder.add_option('-top-ports', '100')
     elif 'top-1000' in ports:
-        ports_str = ' -top-ports 1000'
+        cmd_builder.add_option('-top-ports', '1000')
     else:
         ports_str = ','.join(ports)
-        ports_str = f' -p {ports_str}'
-    cmd += ports_str
-    cmd += (' -config ' + str(Path.home() / '.config' / 'naabu' / 'config.yaml')) if use_naabu_config else ''
-    cmd += f' -proxy "{proxy}"' if proxy else ''
-    cmd += f' -c {threads}' if threads else ''
-    cmd += f' -rate {rate_limit}' if rate_limit > 0 else ''
-    cmd += f' -timeout {timeout*1000}' if timeout > 0 else ''
-    cmd += ' -passive' if passive else ''
-    cmd += f' -exclude-ports {exclude_ports_str}' if exclude_ports else ''
-    cmd += ' -silent'
+        cmd_builder.add_option('-p', ports_str)
 
-    # Execute cmd and gather results
+    # Add remaining options
+    cmd_builder.add_option('-config', str(Path.home() / '.config' / 'naabu' / 'config.yaml'), use_naabu_config)
+    cmd_builder.add_option('-proxy', proxy, bool(proxy))
+    cmd_builder.add_option('-c', threads, bool(threads))
+    cmd_builder.add_option('-rate', rate_limit, rate_limit > 0)
+    cmd_builder.add_option('-timeout', timeout*1000, timeout > 0)
+    cmd_builder.add_option('-passive', condition=passive)
+    cmd_builder.add_option('-exclude-ports', exclude_ports_str, bool(exclude_ports))
+    cmd_builder.add_option('-silent')
+
+    # Execute command more securely using list mode
+    cmd_list = cmd_builder.build_list()
     results = []
     urls = []
     ports_data = {}
     for line in stream_command(
-            cmd,
-            shell=True,
+            cmd_list,
+            shell=False,  # Important: shell=False for security
             history_file=self.history_file,
             scan_id=self.scan_id,
             activity_id=self.activity_id):
@@ -207,11 +219,11 @@ def port_scan(self, hosts=None, ctx=None, description=None):
 
     logger.info('Finished running naabu port scan.')
 
-    # Process nmap results: 1 process per host
-    sigs = []
     if nmap_enabled:
         logger.warning('Starting nmap scans ...')
         logger.warning(ports_data)
+        # Process nmap results: 1 process per host
+        sigs = []
         for host, port_list in ports_data.items():
             ports_str = '_'.join([str(p) for p in port_list])
             ctx_nmap = ctx.copy()
@@ -226,59 +238,55 @@ def port_scan(self, hosts=None, ctx=None, description=None):
                 max_rate=rate_limit,
                 ctx=ctx_nmap)
             sigs.append(sig)
-        task = group(sigs).apply_async()
-        with allow_join_result():
-            results = task.get()
+        group(sigs).apply_async()
 
-    # Run parallel nmap scans on discovered ports
-    workflow = run_nmap.si(
-        hosts_data=ports_data,
-        ctx={
-            'nmap_cmd': nmap_cmd,
-            'nmap_script': nmap_script,
-            'nmap_script_args': nmap_script_args,
-            'rate_limit': rate_limit,
-            **ctx
-        }
-    )
-    return workflow
+    return ports_data
 
-@app.task(name='run_nmap', queue='port_scan_queue', base=RengineTask, bind=True)
-def run_nmap(self, hosts_data, ctx=None):
-    """Run nmap scans in parallel for multiple hosts."""
-    if ctx is None:
-        ctx = {}
+@app.task(name='run_nmap', queue='io_queue', base=RengineTask, bind=True)
+def run_nmap(self, ctx, **nmap_args):
+    """Run nmap scans in parallel for each host.
     
-    logger.warning(f'Launching nmap scans for {len(hosts_data)} hosts')
-    
-    # Create parallel tasks group
-    group_tasks = []
-    for host, ports in hosts_data.items():
-        ctx_host = ctx.copy()
-        ctx_host.update({
-            'description': get_task_title(f'nmap_{host}', self.scan_id, self.subscan_id),
-            'track': False
-        })
-        
-        group_tasks.append(
-            nmap.s(
-                args=ctx.get('nmap_cmd', '-Pn -sV --open'),
-                ports=ports,
+    Args:
+        self: RengineTask instance
+        ctx: Scan context
+        nmap_args: Dictionary containing nmap configuration
+            - nmap_cmd: Custom nmap args
+            - nmap_script: NSE scripts to run
+            - nmap_script_args: NSE script arguments
+            - ports_data: Dictionary mapping hosts to their open ports
+    """
+    sigs = []
+    for host, port_list in nmap_args.get('ports_data', {}).items():
+        custom_ctx = deepcopy(ctx)
+        custom_ctx['description'] = get_task_title(f'nmap_{host}', self.scan_id, self.subscan_id)
+        custom_ctx['track'] = False
+        sig = nmap.si(
+                args=nmap_args.get('nmap_cmd'),
+                ports=port_list,
                 host=host,
-                script=ctx.get('nmap_script'),
-                script_args=ctx.get('nmap_script_args'),
-                max_rate=ctx.get('rate_limit', 150),
-                ctx=ctx_host
-            )
-        )
-    
-    # Return group directly
-    return group(group_tasks)
+                script=nmap_args.get('nmap_script'),
+                script_args=nmap_args.get('nmap_script_args'),
+                max_rate=nmap_args.get('rate_limit'),
+                ctx=custom_ctx)
+        sigs.append(sig)
+    group(sigs).apply_async()
 
-@app.task(name='nmap', queue='port_scan_queue', base=RengineTask, bind=True)
+@app.task(name='nmap', queue='io_queue', base=RengineTask, bind=True)
 def nmap(self, args=None, ports=None, host=None, input_file=None, script=None, script_args=None, max_rate=None, ctx=None, description=None):
-    """Run nmap on a host."""
+    """Run nmap on a host.
+
+    Args:
+        args (str, optional): Existing nmap args to complete.
+        ports (list, optional): List of ports to scan.
+        host (str, optional): Host to scan.
+        input_file (str, optional): Input hosts file.
+        script (str, optional): NSE script to run.
+        script_args (str, optional): NSE script args.
+        max_rate (int): Max rate.
+        description (str, optional): Task description shown in UI.
+    """
     from reNgine.utils.db import save_vulns
+    from reNgine.utils.command_builder import get_nmap_cmd
 
     if ports is None:
         ports = []
@@ -291,100 +299,106 @@ def nmap(self, args=None, ports=None, host=None, input_file=None, script=None, s
     output_file = self.output_path
     output_file_xml = f'{self.results_dir}/{host}_{self.filename}'
     vulns_file = f'{self.results_dir}/{host}_{filename_vulns}'
-    logger.warning(f'🔍 Starting nmap scan on {host}')
+    logger.warning(f'Running nmap on {host}')
 
-    # Construction de la commande
+    # Build cmd
     nmap_cmd = get_nmap_cmd(
         args=args,
-        ports=','.join(map(str, ports)),
+        ports=ports_str,
+        script=script,
+        script_args=script_args,
+        max_rate=max_rate,
         host=host,
-        output_file=output_file_xml
-    )
-    
-    # Exécution directe
-    task = run_command_line.delay(
+        input_file=input_file,
+        output_file=output_file_xml)
+
+    # Run cmd and wait for completion
+    run_command_line.delay(
         nmap_cmd,
         shell=True,
         history_file=self.history_file,
         scan_id=self.scan_id,
-        activity_id=self.activity_id
-    )
+        activity_id=self.activity_id)
     
-    # Attente synchrone pour ce cas critique
-    with allow_join_result():
-        task.get()
-    
-    # Traitement des résultats
-    if os.path.exists(output_file_xml):
-        process_nmap_service_results(output_file_xml)
-        vulns = parse_nmap_results(output_file_xml, output_file, 'vulnerabilities')
-        save_vulns(self, notif, vulns_file, vulns)
-        return vulns
-    
-    logger.error('Nmap scan failed: no output file')
-    return None
+    # Check if the file exists
+    if not os.path.exists(output_file_xml):
+        logger.error(f"Output file nmap not created: {output_file_xml}")
+        return None
 
-@app.task(name='scan_http_ports', queue='port_scan_queue', base=RengineTask, bind=True)
+    # Update port service information
+    process_nmap_service_results(output_file_xml)
+
+    # Get nmap XML results and convert to JSON
+    vulns = parse_nmap_results(output_file_xml, output_file, parse_type='vulnerabilities')
+    save_vulns(self, notif, vulns_file, vulns)
+    return vulns
+
+@app.task(name='scan_http_ports', queue='io_queue', base=RengineTask, bind=True)
 def scan_http_ports(self, host, ctx=None, description=None):
-    """Scan HTTP ports of a host."""
+    """Celery task to scan HTTP ports of a host.
+    
+    Args:
+        host (str): Host to scan
+        ctx (dict): Execution context
+        description (str): Task description
+        
+    Returns:
+        dict: HTTP ports data per host 
+    """
+
     if ctx is None:
         ctx = {}
 
-    if cached_result := self.get_from_cache(host=host, ctx=ctx):
+    # Check cache first
+    cache_key = f"port_scan_{host}"
+    if cached_result := self.get_from_cache(cache_key):
         logger.info(f'Using cached port scan results for {host}')
         return cached_result
 
-    logger.warning(f'🚀 Starting HTTP port scan for {host}')
-    
-    # Configuration des ports à scanner
-    target_ports = sorted({80, 443} | set(UNCOMMON_WEB_PORTS))
-    
-    # Prepare scan parameters
-    scan_params = {
-        'hosts_data': {host: target_ports},
-        'ctx': {
-            'nmap_cmd': '-Pn -sV --open',
-            'rate_limit': 150,
-            **ctx
-        }
-    }
-    
-    # Let Celery handle the workflow
-    return run_nmap.s(**scan_params)
+    # Prepare output file path
+    results_dir = ctx.get('results_dir', '/tmp')
+    filename = f"{host}_nmap.xml"
+    try:
+        xml_file = SafePath.create_safe_path(
+            base_dir=results_dir,
+            components=[filename],
+            create_dir=False
+        )
+    except (ValueError, OSError) as e:
+        logger.error(f"Failed to create safe path for XML file: {str(e)}")
+        return None
 
-def get_nmap_cmd(input_file=None, args=None, host=None, ports=None, output_file=None, script=None, script_args=None, max_rate=None, flags=None):
+    # Configure ports to scan
+    all_ports = [80, 443] + UNCOMMON_WEB_PORTS
+    ports_str = ','.join(str(p) for p in sorted(set(all_ports)))
 
-	if flags is None:
-		flags = []
+    # Run nmap scan with retries
+    max_retries = 3
+    retry_delay = 2
 
-	# Initialize base options
-	options = {
-		"--max-rate": max_rate,
-		"-oX": output_file,
-		"--script": script,
-		"--script-args": script_args,
-	}
+    for attempt in range(max_retries):
+        try:
+            task = run_command_line.delay(
+                f'nmap -Pn -sV -p {ports_str} --open {host}',
+                history_file=self.history_file,
+                scan_id=self.scan_id,
+                activity_id=self.activity_id
+            )
 
-	# Build command with options
-	cmd = 'nmap'
-	cmd = build_cmd(cmd, options, flags)
+            while not task.ready():
+                # wait for all jobs to complete
+                time.sleep(5)
 
-	# Add existing arguments if provided
-	if args:
-		cmd += f' {args}'
+            if os.path.exists(xml_file):
+                break
 
-	# Add ports and service detection
-	if ports and '-p' not in cmd:
-		cmd = f'{cmd} -p {ports}'
-	if '-sV' not in cmd:
-		cmd = f'{cmd} -sV'
-	if '-Pn' not in cmd:
-		cmd = f'{cmd} -Pn'
+            logger.warning(f"Attempt {attempt + 1}/{max_retries}: Nmap output file not found")
+            time.sleep(retry_delay)
 
-	# Add input source
-	if not input_file:
-		cmd += f" {host}" if host else ""
-	else:
-		cmd += f" -iL {input_file}"
+        except Exception as e:
+            logger.error(f"Attempt {attempt + 1}/{max_retries}: Nmap scan failed: {str(e)}")
+            if attempt == max_retries - 1:
+                return None
+            time.sleep(retry_delay)
 
-	return cmd
+    return parse_http_ports_data(xml_file)

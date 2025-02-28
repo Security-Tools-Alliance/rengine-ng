@@ -198,6 +198,9 @@ def build_scan_workflow(domain, engine, ctx):
     Returns:
         tuple: (celery.Task, list) Workflow chain and task IDs
     """
+    # if CELERY_REMOTE_DEBUG:
+    #     debug()
+    
     # Build initial workflow
     initial_scan = scan_http_ports.si(
         host=domain.name,
@@ -247,12 +250,84 @@ def build_scan_workflow(domain, engine, ctx):
             security_tasks.append(task)
             task_ids.append(task.id)
 
-    # Add security tasks and report to workflow
-    final_workflow = chain(
+    workflow_parts = [
         workflow,
         group(security_tasks) if security_tasks else None,
         report.si(ctx=ctx)
-    )
-    task_ids.append(report.si(ctx=ctx).id)
-
+    ]
+    
+    final_workflow = chain(*[part for part in workflow_parts if part])
+    
     return final_workflow, task_ids 
+
+
+def execute_grouped_tasks(task_instance, grouped_tasks, task_name="unnamed_task", 
+                        store_ids=True, callback_kwargs=None):
+    """
+    Execute a group of tasks with proper callback handling.
+    This avoids the deadlock issues of using job.ready() in the main task.
+    
+    Args:
+        task_instance: The RengineTask instance (self)
+        grouped_tasks: List of task signatures to execute in parallel
+        task_name: Name of the parent task for logging
+        store_ids: Whether to store celery IDs in scan history
+        callback_kwargs: Additional kwargs to pass to post_process
+    
+    Returns:
+        tuple: (AsyncResult object, group task ID)
+    """
+    from reNgine.tasks.scan import post_process
+
+    if not grouped_tasks:
+        logger.info(f'No tasks to run for {task_name}')
+        return None, None
+    
+    # Create a group + callback chain
+    if callback_kwargs is None:
+        callback_kwargs = {}
+    
+    # Add parent task name
+    callback_kwargs['source_task'] = task_name
+    
+    # Log all subtasks that will be launched
+    logger.info(f'[{task_name}] Starting {len(grouped_tasks)} tasks:')
+    for i, task in enumerate(grouped_tasks, 1):
+        # Extract task name and any identifiable parameters
+        task_info = f"• {i}. {task.name}"
+        
+        # Try to extract key parameters for better logging
+        if task.kwargs:
+            key_params = []
+            # Extract description if available
+            if 'description' in task.kwargs:
+                key_params.append(f"description='{task.kwargs['description']}'")
+            # Extract any 'host' parameter
+            if 'host' in task.kwargs:
+                key_params.append(f"host='{task.kwargs['host']}'")
+            # Add any other important parameters here
+            
+            if key_params:
+                task_info += f" ({', '.join(key_params)})"
+        
+        logger.info(task_info)
+    
+    # Create the group and callback chain
+    task_group = group(grouped_tasks)
+    workflow = chain(
+        task_group,
+        post_process.s(**callback_kwargs)
+    )
+    
+    # Execute the workflow
+    result = workflow.apply_async()
+    
+    # Store IDs for monitoring if needed
+    if store_ids and hasattr(task_instance, 'scan'):
+        if not hasattr(task_instance.scan, 'celery_ids'):
+            task_instance.scan.celery_ids = []
+        task_instance.scan.celery_ids.append(result.id)
+        task_instance.scan.save()
+    
+    logger.info(f'Started {len(grouped_tasks)} tasks for {task_name} with ID {result.id}')
+    return result, result.id

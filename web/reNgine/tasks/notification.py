@@ -68,7 +68,7 @@ def send_notif(
 @app.task(
     name='send_scan_notif',
     bind=True,
-    queue='send_scan_notif_queue',
+    queue='send_notif_queue',
     retry_backoff=True,
     max_retries=3
 )
@@ -114,7 +114,7 @@ def send_scan_notif(
         logger.exception(f"Error sending notification: {str(e)}")
         raise self.retry(exc=e) from e
 
-@app.task(name='send_task_notif', bind=False, queue='send_task_notif_queue')
+@app.task(name='send_task_notif', bind=False, queue='send_notif_queue')
 def send_task_notif(task_name, status=None, result=None, output_path=None, traceback=None, scan_history_id=None, engine_id=None, subscan_id=None, severity=None, add_meta_info=True, update_fields=None):
     """Send task status notification.
 
@@ -197,7 +197,7 @@ def send_task_notif(task_name, status=None, result=None, output_path=None, trace
         subscan_id=subscan_id,
         **opts)
 
-@app.task(name='send_file_to_discord', bind=False, queue='send_file_to_discord_queue')
+@app.task(name='send_file_to_discord', bind=False, queue='io_queue')
 def send_file_to_discord(file_path, title=None):
     """Send file to Discord webhook.
     
@@ -220,7 +220,7 @@ def send_file_to_discord(file_path, title=None):
         webhook.add_file(file=f.read(), filename=tail)
     webhook.execute()
 
-@app.task(name='send_hackerone_report', bind=False, queue='send_hackerone_report_queue')
+@app.task(name='send_hackerone_report', bind=False, queue='io_queue')
 def send_hackerone_report(vulnerability_id):
     """Send HackerOne vulnerability report.
 

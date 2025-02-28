@@ -65,6 +65,7 @@ from reNgine.utils.logger import Logger
 
 from reNgine.tasks.command import run_command_line
 from reNgine.gpt import GPTVulnerabilityReportGenerator
+from reNgine.utils.command_builder import CommandBuilder
 
 logger = Logger(True)
 
@@ -426,7 +427,8 @@ def save_metadata_info(meta_dict):
     get_random_proxy()
 
     # Get metadata
-    result = extract_metadata_from_google_search(meta_dict.osint_target, meta_dict.documents_limit)
+    #result = extract_metadata_from_google_search(meta_dict.osint_target, meta_dict.documents_limit)
+    result=[]
     if not result:
         logger.error(f'No metadata result from Google Search for {meta_dict.osint_target}.')
         return []
@@ -470,15 +472,25 @@ def get_and_save_dork_results(lookup_target, results_dir, type, lookup_keywords=
             scan_history (startScan.models.ScanHistory): Scan History Object
     """
     results = []
-    gofuzz_command = f'{GOFUZZ_EXEC_PATH} -t {lookup_target} -d {delay} -p {page_count}'
 
+    # Create the builder with the execution path as the base command
+    cmd_builder = CommandBuilder(GOFUZZ_EXEC_PATH)
+    cmd_builder.add_option('-t', lookup_target)
+    cmd_builder.add_option('-d', delay)
+    cmd_builder.add_option('-p', page_count)
+
+    # Add conditional options
     if lookup_extensions:
-        gofuzz_command += f' -e {lookup_extensions}'
+        cmd_builder.add_option('-e', lookup_extensions)
     elif lookup_keywords:
-        gofuzz_command += f' -w {lookup_keywords}'
+        cmd_builder.add_option('-w', lookup_keywords)
 
+    # Define the output file
     output_file = str(Path(results_dir) / 'gofuzz.txt')
-    gofuzz_command += f' -o {output_file}'
+    cmd_builder.add_option('-o', output_file)
+
+    # Get the command as a list or string as needed
+    gofuzz_command = cmd_builder.build_string()  # or cmd_builder.build_list() depending on usage
     history_file = str(Path(results_dir) / 'commands.txt')
 
     try:
@@ -530,7 +542,12 @@ def get_and_save_emails(scan_history, activity_id, results_dir):
     # Gather emails from Google, Bing and Baidu
     output_file = str(Path(results_dir) / 'emails_tmp.txt')
     history_file = str(Path(results_dir) / 'commands.txt')
-    command = f'infoga --domain {scan_history.domain.name} --source all --report {output_file}'
+    cmd_builder = CommandBuilder('infoga')
+    cmd_builder.add_option('--domain', scan_history.domain.name)
+    cmd_builder.add_option('--source', 'all')
+    cmd_builder.add_option('--report', output_file)
+    command = cmd_builder.build_string()
+
     try:
         run_command_line(
             command,
