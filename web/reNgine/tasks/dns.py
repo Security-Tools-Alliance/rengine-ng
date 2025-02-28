@@ -43,7 +43,7 @@ def query_whois(ip_domain, force_reload_whois=False):
         return format_whois_response(domain_info, ip_domain)
 
     # Case 2: Need to query whois and other data sources
-    logger.info(f'Domain info for "{ip_domain}" not found in DB, querying whois')
+    logger.info(f'🔍 Domain info for "{ip_domain}" not found in DB, querying whois')
     domain_info = DottedDict()
 
     # Step 1: Find historical IPs

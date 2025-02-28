@@ -59,7 +59,7 @@ def subdomain_discovery(
         host = self.subdomain.name if self.subdomain else self.domain.name
 
     if self.url_filter:
-        logger.warning(f'Ignoring subdomains scan as an URL path filter was passed ({self.url_filter}).')
+        logger.warning(f'🌍 Ignoring subdomains scan as an URL path filter was passed ({self.url_filter}).')
         return
 
     # Config
@@ -102,7 +102,7 @@ def subdomain_discovery(
                     activity_id=self.activity_id
                 )
             except Exception as e:
-                logger.error(f'Error running command: {cmd}, error: {e}')
+                logger.error(f'🌍 Error running command: {cmd}, error: {e}')
                 continue
 
     # Gather all the tools' results in one single file. Write subdomains into
@@ -145,6 +145,12 @@ def subdomain_discovery(
         activity_id=self.activity_id
     )
 
+    # Check that the sorted file has been created
+    if not Path(self.output_path).exists():
+        logger.error('❌ Failed to create sorted subdomains file')
+        return SubdomainSerializer([], many=True).data
+
+    # Read the results file
     with open(self.output_path) as f:
         lines = f.readlines()
 

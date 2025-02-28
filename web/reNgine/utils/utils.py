@@ -82,7 +82,7 @@ def remove_file_or_pattern(path, pattern=None, history_file=None, scan_id=None, 
             # Check for files matching the pattern
             matching_files = glob.glob(os.path.join(path, pattern))
             if not matching_files:
-                logger.warning(f"No files matching pattern '{pattern}' in {path}")
+                logger.warning(f"📁 No files matching pattern '{pattern}' in {path}")
                 return True
                 
             # Remove each matching file individually
@@ -93,7 +93,7 @@ def remove_file_or_pattern(path, pattern=None, history_file=None, scan_id=None, 
                     os.remove(file_path)
         else:
             if not os.path.exists(path):
-                logger.warning(f"Path {path} does not exist")
+                logger.warning(f"📁 Path {path} does not exist")
                 return True
                 
             # Remove file or directory
@@ -105,7 +105,7 @@ def remove_file_or_pattern(path, pattern=None, history_file=None, scan_id=None, 
         return True
     except Exception as e:
         full_path = os.path.join(path, pattern) if pattern else path
-        logger.error(f"Failed to delete {full_path}: {str(e)}")
+        logger.error(f"📁 Failed to delete {full_path}: {str(e)}")
         return False
 
 def check_process_status(pid):

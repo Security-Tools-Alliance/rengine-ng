@@ -98,7 +98,7 @@ def port_scan(self, hosts=None, ctx=None, description=None):
             ctx=ctx)
 
     if not hosts:
-        logger.info('No hosts to scan')
+        logger.info('🔌 No hosts to scan')
         return {}
 
     # Build cmd using the secure builder
@@ -198,12 +198,12 @@ def port_scan(self, hosts=None, ctx=None, description=None):
             ports_data[host] = [port_number]
 
         # Send notification
-        logger.warning(f'Found opened port {port_number} on {ip_address} ({host})')
+        logger.warning(f'🔌 Found opened port {port_number} on {ip_address} ({host})')
 
     if not ports_data:
-        logger.info('Finished running naabu port scan - No open ports found.')
+        logger.info('🔌 Finished running naabu port scan - No open ports found.')
         if nmap_enabled:
-            logger.info('Nmap scans skipped')
+            logger.info('🔌 Nmap scans skipped')
         return ports_data
 
     # Send notification
@@ -217,10 +217,10 @@ def port_scan(self, hosts=None, ctx=None, description=None):
     with open(self.output_path, 'w') as f:
         json.dump(results, f, indent=4)
 
-    logger.info('Finished running naabu port scan.')
+    logger.info('🔌 Finished running naabu port scan.')
 
     if nmap_enabled:
-        logger.warning('Starting nmap scans ...')
+        logger.warning('🔌 Starting nmap scans ...')
         logger.warning(ports_data)
         # Process nmap results: 1 process per host
         sigs = []
@@ -401,4 +401,4 @@ def scan_http_ports(self, host, ctx=None, description=None):
                 return None
             time.sleep(retry_delay)
 
-    return parse_http_ports_data(xml_file)
+    return parse_http_ports_data(xml_file) if Path(xml_file).exists() else None

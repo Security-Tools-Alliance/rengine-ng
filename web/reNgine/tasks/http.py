@@ -21,6 +21,7 @@ from startScan.models import (
 )
 from reNgine.tasks.url import remove_duplicate_endpoints
 from reNgine.utils.task_config import TaskConfig
+from pathlib import Path
 
 logger = Logger(True)
 @app.task(name='http_crawl', queue='io_queue', base=RengineTask, bind=True)
@@ -60,7 +61,7 @@ def http_crawl(
     if duplicate_removal_fields is None:
         duplicate_removal_fields = []
 
-    logger.info('Initiating HTTP Crawl')
+    logger.info('🌐 Initiating HTTP Crawl')
 
     # Initialize task config
     config = TaskConfig(self.yaml_configuration, self.results_dir, self.scan_id, self.filename)
@@ -87,7 +88,7 @@ def http_crawl(
 
     # If no URLs found, skip it
     if not urls:
-        logger.error('No URLs to crawl. Skipping.')
+        logger.error('🌐 No URLs to crawl. Skipping.')
         return
 
     # Re-adjust thread number if few URLs
@@ -111,6 +112,10 @@ def http_crawl(
     # Process the results
     results = []
     endpoint_ids = []
+
+    if not Path(input_path).exists():
+        logger.error(f'📁 HTTP input file missing : {input_path}')
+        return []
 
     for line in stream_command(
             cmd,
@@ -136,7 +141,7 @@ def http_crawl(
         subdomain, _ = save_subdomain(subdomain_name, ctx=ctx)
 
         if not isinstance(subdomain, Subdomain):
-            logger.error(f"Invalid subdomain encountered: {subdomain}")
+            logger.error(f"🌐 Invalid subdomain encountered: {subdomain}")
             continue
 
         # Process the line and get results
@@ -153,7 +158,7 @@ def http_crawl(
             continue
 
         # Log and notify about the endpoint
-        logger.warning(endpoint_str)
+        logger.warning(f'🌐 {endpoint_str}')
         if endpoint.is_alive and endpoint.http_status != 403:
             self.notify(
                 fields={'Alive endpoint': f'• {endpoint_str}'},
@@ -203,6 +208,6 @@ def http_crawl(
         scan_id=self.scan_id,
         activity_id=self.activity_id
     ):
-        logger.error(f"Failed to clean up input file {input_path}")
+        logger.error(f"🌐 Failed to clean up input file {input_path}")
 
     return results

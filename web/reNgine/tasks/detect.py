@@ -49,7 +49,7 @@ def waf_detection(self, ctx=None, description=None):
         ctx=ctx
     )
     if not urls:
-        logger.error('No URLs to check for WAF. Skipping.')
+        logger.error('🛡️ No URLs to check for WAF. Skipping.')
         return
 
     # wafw00f command builder
@@ -66,7 +66,7 @@ def waf_detection(self, ctx=None, description=None):
     )
 
     if not os.path.isfile(self.output_path):
-        logger.error(f'Could not find {self.output_path}')
+        logger.error(f'🛡️ Could not find {self.output_path}')
         return
 
     with open(self.output_path) as file:
@@ -84,7 +84,7 @@ def waf_detection(self, ctx=None, description=None):
 
         # Add waf info to Subdomain in DB
         subdomain_name = get_subdomain_from_url(waf_data['url'])
-        logger.info(f'Wafw00f Subdomain : {subdomain_name}')
+        logger.info(f'🛡️ Wafw00f Subdomain : {subdomain_name}')
 
         try:
             subdomain = Subdomain.objects.get(
@@ -96,7 +96,7 @@ def waf_detection(self, ctx=None, description=None):
             subdomain.waf.add(waf)
             subdomain.save()
         except Subdomain.DoesNotExist:
-            logger.warning(f'Subdomain {subdomain_name} was not found in the db, skipping waf detection.')
+            logger.warning(f'🛡️ Subdomain {subdomain_name} was not found in the db, skipping waf detection.')
 
     return wafs
 
@@ -119,25 +119,25 @@ def run_cmseek(url):
         domain_name = urlparse(url).netloc
         json_path = os.path.join(base_path, domain_name, "cms.json")
 
-        if os.path.isfile(json_path):
-            with open(json_path, 'r') as f:
-                cms_data = json.load(f)
+        if not Path(json_path).exists():
+            logger.error(f'📁 CMSeeK file missing : {json_path}')
+            return {'status': False, 'message': 'CMS result file missing'}
 
-            if cms_data.get('cms_name'):
-                # CMS detected
-                result = {'status': True}
-                result |= cms_data
+        with open(json_path, 'r') as f:
+            cms_data = json.load(f)
 
-            # Clean up CMSeeK results
-            try:
-                shutil.rmtree(os.path.dirname(json_path))
-            except Exception as e:
-                logger.error(f"Error cleaning up CMSeeK results: {e}")
+        if cms_data.get('cms_name'):
+            # CMS detected
+            result = {'status': True}
+            result |= cms_data
 
-            return result
+        # Clean up CMSeeK results
+        try:
+            shutil.rmtree(os.path.dirname(json_path))
+        except Exception as e:
+            logger.error(f"Error cleaning up CMSeeK results: {e}")
 
-        # CMS not detected
-        return {'status': False, 'message': 'Could not detect CMS!'}
+        return result
 
     except Exception as e:
         logger.error(f"Error running CMSeeK: {e}")

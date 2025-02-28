@@ -116,7 +116,7 @@ def is_valid_url(url):
     Returns:
         bool: True if valid URL, False otherwise
     """
-    logger.debug(f'Validating URL: {url}')
+    logger.debug(f'🌐 Validating URL: {url}')
     
     # Handle URLs with scheme (http://, https://)
     if url.startswith(('http://', 'https://')):
@@ -129,21 +129,21 @@ def is_valid_url(url):
             # Validate port
             port = int(port)
             if not 1 <= port <= 65535:
-                logger.debug(f'Invalid port number: {port}')
+                logger.debug(f'🌐 Invalid port number: {port}')
                 return False
         else:
             domain = url
             
         # Validate domain
         if validators.domain(domain) or validators.ipv4(domain) or validators.ipv6(domain):
-            logger.debug(f'Valid domain/IP found: {domain}')
+            logger.debug(f'🌐 Valid domain/IP found: {domain}')
             return True
             
-        logger.debug(f'Invalid domain/IP: {domain}')
+        logger.debug(f'🌐 Invalid domain/IP: {domain}')
         return False
         
     except (ValueError, ValidationError) as e:
-        logger.debug(f'Validation error: {str(e)}')
+        logger.debug(f'🌐 Validation error: {str(e)}')
         return False
 
 def process_httpx_response(line):
@@ -415,12 +415,12 @@ def prepare_urls_with_fallback(urls, input_path, ctx=None, **http_urls_params):
     
     # Check if we have input URLs
     if urls and is_iterable(urls):
-        logger.debug('URLs provided by user, writing to file')
+        logger.debug('🌐 URLs provided by user, writing to file')
         with open(input_path, 'w') as f:
             f.write('\n'.join(urls))
     else:
         # No URLs provided, fetch from database
-        logger.debug('URLs gathered from database')
+        logger.debug('🌐 URLs gathered from database')
         urls = get_http_urls(**http_urls_params)
         
     return urls

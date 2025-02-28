@@ -35,9 +35,6 @@ def get_scan_engine(engine_id, scan):
     """Get scan engine and log available engines."""
     engine_id = engine_id or scan.scan_type.id
     logger.info(f'Engine ID: {engine_id}')
-    engines = EngineType.objects.all()
-    for engine in engines:
-        logger.info(f'Engine: {engine.id} - {engine.engine_name}')
     return EngineType.objects.get(pk=engine_id)
 
 def setup_scan_directory(domain_name, results_dir):
@@ -54,7 +51,7 @@ def handle_ip_scan(domain, engine):
         allowed_tasks = ['port_scan', 'fetch_url', 'dir_file_fuzz', 
                         'vulnerability_scan', 'screenshot', 'waf_detection']
         engine.tasks = [task for task in engine.tasks if task in allowed_tasks]
-        logger.info(f'IP scan detected - Limited available tasks to: {engine.tasks}')
+        logger.info(f'🔧 IP scan detected - Limited available tasks to: {engine.tasks}')
     return engine
 
 def initialize_scan_history(scan, domain, engine, scan_type, initiated_by_id, results_dir,
@@ -94,7 +91,7 @@ def initialize_scan_history(scan, domain, engine, scan_type, initiated_by_id, re
             scan.tasks = engine.tasks
             
             # Create directory and context
-            setup_scan_directory(domain.name, results_dir)
+            results_dir = setup_scan_directory(domain.name, results_dir)
             config = TaskConfig(engine.yaml_configuration, results_dir, scan.id, domain.name)
             setup_gf_patterns(scan, engine, config.get_config(FETCH_URL))
             
@@ -285,7 +282,7 @@ def execute_grouped_tasks(task_instance, grouped_tasks, task_name="unnamed_task"
     from reNgine.tasks.scan import post_process
 
     if not grouped_tasks:
-        logger.info(f'No tasks to run for {task_name}')
+        logger.info(f'⚠️ No tasks to run for {task_name}')
         return None, None
     
     # Create a group + callback chain
@@ -296,10 +293,10 @@ def execute_grouped_tasks(task_instance, grouped_tasks, task_name="unnamed_task"
     callback_kwargs['source_task'] = task_name
     
     # Log all subtasks that will be launched
-    logger.info(f'[{task_name}] Starting {len(grouped_tasks)} tasks:')
+    logger.info(f'🚀 [{task_name}] Starting {len(grouped_tasks)} tasks:')
     for i, task in enumerate(grouped_tasks, 1):
         # Extract task name and any identifiable parameters
-        task_info = f"• {i}. {task.name}"
+        task_info = f"  📋 {i}. {task.name}"
         
         # Try to extract key parameters for better logging
         if task.kwargs:
@@ -334,5 +331,14 @@ def execute_grouped_tasks(task_instance, grouped_tasks, task_name="unnamed_task"
         task_instance.scan.celery_ids.append(result.id)
         task_instance.scan.save()
     
-    logger.info(f'Started {len(grouped_tasks)} tasks for {task_name} with ID {result.id}')
-    return result, result.id
+    logger.info(f'✅ Started {len(grouped_tasks)} tasks for {task_name} with ID {result.id}')
+    
+    # Add more detailed error handling and timeout management
+    try:
+        # Note: We don't wait for group completion here to avoid deadlocks
+        # The post_process callback will handle completion
+        return result, result.id
+    except Exception as e:
+        logger.error(f'❌ Error executing tasks for {task_name}: {str(e)}')
+        # Re-raise to let Celery handle the error
+        raise

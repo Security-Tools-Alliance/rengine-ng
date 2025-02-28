@@ -85,14 +85,14 @@ class CommandExecutor:
     def _launch_process(self):
         """Launch subprocess with improved security"""
         if self.dry_run:
-            logger.info(f'📄 [DRY RUN] Skipping process launch for: {self.cmd}')
+            logger.info(f'🧪 [DRY RUN] Skipping process launch for: {self.cmd}')
             return None
 
-        logger.debug("🚀 Launching process")
+        logger.debug("🔄 Launching process")
 
         if self.context.get('shell', False):
             # When shell is required, log a warning for security auditing
-            logger.warning(f"Using shell=True for command execution (security risk): {self.cmd}")
+            logger.warning(f"⚠️ Using shell=True for command execution (security risk): {self.cmd}")
             process = subprocess.Popen(
                 self.cmd,
                 shell=True,

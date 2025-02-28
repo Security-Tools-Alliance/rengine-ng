@@ -44,16 +44,16 @@ def get_ips_from_cidr_range(target):
     try:
         return [str(ip) for ip in ipaddress.IPv4Network(target)]
     except ValueError:
-        logger.error(f'{target} is not a valid CIDR range. Skipping.')
+        logger.error(f'🌍 {target} is not a valid CIDR range. Skipping.')
         return []
 
 def save_ip_address(ip_address, subdomain=None, subscan=None, **kwargs):
     if not (validators.ipv4(ip_address) or validators.ipv6(ip_address)):
-        logger.info(f'IP {ip_address} is not a valid IP. Skipping.')
+        logger.info(f'🌍 IP {ip_address} is not a valid IP. Skipping.')
         return None, False
     ip, created = IpAddress.objects.get_or_create(address=ip_address)
     if created:
-        logger.info(f'Found new IP {ip_address}')
+        logger.info(f'🌍 Found new IP {ip_address}')
 
     # Set extra attributes
     for key, value in kwargs.items():
@@ -92,7 +92,7 @@ def geo_localize_ip(host, ip_id=None):
     try:
         # Skip IPv6 addresses
         if validators.ipv6(host):
-            logger.info(f'IPv6 "{host}" is not supported by geoiplookup. Skipping.')
+            logger.info(f'🌍 IPv6 "{host}" is not supported by geoiplookup. Skipping.')
             return None
 
         # Run geoiplookup command
@@ -101,7 +101,7 @@ def geo_localize_ip(host, ip_id=None):
 
         # Check if lookup was successful
         if 'IP Address not found' in out or "can't resolve hostname" in out:
-            logger.info(f'Geo IP lookup failed for host "{host}"')
+            logger.info(f'🌍 Geo IP lookup failed for host "{host}"')
             return None
 
         # Parse geoiplookup output
@@ -122,7 +122,7 @@ def geo_localize_ip(host, ip_id=None):
                     ip.geo_iso = geo_object
                     ip.save()
                 except IpAddress.DoesNotExist:
-                    logger.error(f"IP address with id {ip_id} not found")
+                    logger.error(f"🌍 IP address with id {ip_id} not found")
                     return None
 
         # Return geo data
@@ -132,5 +132,5 @@ def geo_localize_ip(host, ip_id=None):
         }
 
     except Exception as e:
-        logger.error(f"Error during geolocation of {host}: {str(e)}")
+        logger.error(f"🌍 Error during geolocation of {host}: {str(e)}")
         return None

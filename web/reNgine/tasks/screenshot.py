@@ -1,5 +1,4 @@
 import csv
-import os
 
 from pathlib import Path
 
@@ -51,7 +50,7 @@ def screenshot(self, ctx=None, description=None):
         ctx=ctx
     )
     if not urls:
-        logger.error('No URLs to take screenshot of. Skipping.')
+        logger.error('📸 No URLs to take screenshot of. Skipping.')
         return
 
     # Send start notif
@@ -73,8 +72,8 @@ def screenshot(self, ctx=None, description=None):
         scan_id=self.scan_id,
         activity_id=self.activity_id
     )
-    if not os.path.isfile(output_path):
-        logger.error(f'Could not load EyeWitness results at {output_path} for {self.domain.name}.')
+    if not Path(output_path).exists():
+        logger.error(f'📸 EyeWitness output file missing : {output_path}')
         return
 
     # Loop through results and save objects in DB
@@ -93,7 +92,7 @@ def screenshot(self, ctx=None, description=None):
                 screenshot_paths.append(screenshot_path)
                 subdomain.screenshot_path = screenshot_path.replace(RENGINE_RESULTS, '')
                 subdomain.save()
-                logger.warning(f'Added screenshot for {protocol}://{subdomain.name}:{port} to DB')
+                logger.warning(f'📸 Added screenshot for {protocol}://{subdomain.name}:{port} to DB')
 
 
     # Remove all db, html extra files in screenshot results

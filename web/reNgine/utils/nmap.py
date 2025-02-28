@@ -31,7 +31,7 @@ def get_nmap_http_datas(host, ctx):
             create_dir=False
         )
     except (ValueError, OSError) as e:
-        logger.error(f"Failed to create safe path for XML file: {str(e)}")
+        logger.error(f"🔌 Failed to create safe path for XML file: {str(e)}")
         return None
 
     # Combine standard and uncommon web ports
@@ -87,7 +87,7 @@ def get_nmap_http_datas(host, ctx):
 
             if result['state'] == 'open':
                 port_number = int(result['port'])
-                logger.info(f'Found open port {port_number} for host {hostname}')
+                logger.info(f'🔌 Found open port {port_number} for host {hostname}')
 
                 # Get service info if available
                 service_info = service_lookup.get(f"{hostname}:{port_number}", {})

@@ -55,7 +55,7 @@ def osint(self, host=None, ctx=None, description=None):
     grouped_tasks = []
 
     if 'discover' in osint_config:
-        logger.info('Starting OSINT Discovery')
+        logger.info('🕵️ Starting OSINT Discovery')
         custom_ctx = deepcopy(ctx)
         custom_ctx['track'] = False
         _task = osint_discovery.si(
@@ -69,7 +69,7 @@ def osint(self, host=None, ctx=None, description=None):
         grouped_tasks.append(_task)
 
     if OSINT_DORK in osint_config or OSINT_CUSTOM_DORK in osint_config:
-        logger.info('Starting OSINT Dorking')
+        logger.info('🕵️ Starting OSINT Dorking')
         _task = dorking.si(
             config=osint_config,
             host=self.scan.domain.name,
@@ -85,7 +85,7 @@ def osint(self, host=None, ctx=None, description=None):
         callback_kwargs={'description': 'Processing OSINT results'}
     )
     
-    logger.info('OSINT Tasks submitted...')
+    logger.info('🕵️ OSINT Tasks submitted...')
     return {'status': 'submitted'}
 
 @app.task(name='osint_discovery', bind=True, base=RengineTask)
@@ -110,7 +110,7 @@ def osint_discovery(self, config, host, scan_history_id, activity_id, results_di
     documents_limit = config.get(OSINT_DOCUMENTS_LIMIT, 50)
     # Get and save meta info
     if 'metainfo' in osint_lookup:
-        logger.info('Saving Metainfo')
+        logger.info('🕵️ Saving Metainfo')
         if osint_intensity == 'normal':
             meta_dict = DottedDict({
                 'osint_target': host,
@@ -137,7 +137,7 @@ def osint_discovery(self, config, host, scan_history_id, activity_id, results_di
     grouped_tasks = []
 
     if 'emails' in osint_lookup:
-        logger.info('Lookup for emails')
+        logger.info('🕵️ Lookup for emails')
         _task = h8mail.si(
             config=config,
             host=host,
@@ -149,7 +149,7 @@ def osint_discovery(self, config, host, scan_history_id, activity_id, results_di
         grouped_tasks.append(_task)
 
     if 'employees' in osint_lookup:
-        logger.info('Lookup for employees')
+        logger.info('🕵️ Lookup for employees')
         custom_ctx = deepcopy(ctx)
         custom_ctx['track'] = False
         _task = theHarvester.si(
@@ -219,7 +219,7 @@ def dorking(self, config, host, scan_history_id, results_dir):
     # Run default dorks
     try:
         for dork in dorks:
-            logger.info(f'Getting dork information for {dork}')
+            logger.info(f'🕵️ Getting dork information for {dork}')
             if dork == 'stackoverflow':
                 results = get_and_save_dork_results(
                     lookup_target='stackoverflow.com',

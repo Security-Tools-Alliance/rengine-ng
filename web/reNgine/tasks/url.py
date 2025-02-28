@@ -54,7 +54,7 @@ def fetch_url(self, urls=None, ctx=None, description=None):
     if ctx is None:
         ctx = {}
         
-    logger.info('Initiating URL Fetch')
+    logger.info('🔍 Initiating URL Fetch')
     
     # Initialize task config
     config = TaskConfig(self.yaml_configuration, self.results_dir, self.scan_id, self.filename)

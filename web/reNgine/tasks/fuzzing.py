@@ -180,7 +180,7 @@ def dir_file_fuzz(self, ctx={}, description=None):
 
             # If name empty log error and continue
             if not name:
-                logger.error(f'FUZZ not found for "{url}"')
+                logger.error(f'🔨 FUZZ not found for "{url}"')
                 continue
 
             # Get or create endpoint from URL
@@ -210,7 +210,7 @@ def dir_file_fuzz(self, ctx={}, description=None):
 
             # Log newly created file or directory if debug activated
             if created and CELERY_DEBUG:
-                logger.warning(f'Found new directory or file {url}')
+                logger.warning(f'🔨 Found new directory or file {url}')
 
             # Add file to current dirscan
             dirscan.directory_files.add(dfile)
@@ -233,5 +233,9 @@ def dir_file_fuzz(self, ctx={}, description=None):
         custom_ctx = deepcopy(ctx)
         custom_ctx['track'] = False
         http_crawl.delay(crawl_urls, ctx=custom_ctx)
+
+    if not Path(self.output_path).exists():
+        logger.error(f'❌ FFUF results file missing : {self.output_path}')
+        return []
 
     return results

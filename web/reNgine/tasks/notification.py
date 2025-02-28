@@ -90,7 +90,7 @@ def send_scan_notif(
             engine_id
         )
         if not scan:
-            logger.error(f"Scan {scan_history_id} not found")
+            logger.error(f"📢 Scan {scan_history_id} not found")
             return
 
         # Build message with already fetched objects
@@ -111,7 +111,7 @@ def send_scan_notif(
         )
 
     except Exception as e:
-        logger.exception(f"Error sending notification: {str(e)}")
+        logger.exception(f"📢 Error sending notification: {str(e)}")
         raise self.retry(exc=e) from e
 
 @app.task(name='send_task_notif', bind=False, queue='send_notif_queue')

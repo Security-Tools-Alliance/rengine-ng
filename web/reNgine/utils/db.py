@@ -310,7 +310,7 @@ def save_subdomain_metadata(subdomain, endpoint, extra_datas=None):
 
 # TODO Rename this here and in `save_subdomain_metadata`
 def _extracted_from_save_subdomain_metadata_3(endpoint, subdomain, extra_datas):
-    logger.info(f'Saving HTTP metadatas from {endpoint.http_url}')
+    logger.info(f'💾 Saving HTTP metadatas from {endpoint.http_url}')
     subdomain.http_url = endpoint.http_url
     subdomain.http_status = endpoint.http_status
     subdomain.response_time = endpoint.response_time
@@ -331,11 +331,11 @@ def _extracted_from_save_subdomain_metadata_3(endpoint, subdomain, extra_datas):
 
 def save_email(email_address, scan_history=None):
     if not validators.email(email_address):
-        logger.info(f'Email {email_address} is invalid. Skipping.')
+        logger.info(f'💾 Email {email_address} is invalid. Skipping.')
         return None, False
     email, created = Email.objects.get_or_create(address=email_address)
     if created:
-        logger.info(f'Found new email address {email_address}')
+        logger.info(f'💾 Found new email address {email_address}')
 
     # Add email to ScanHistory
     if scan_history:
@@ -349,7 +349,7 @@ def save_employee(name, designation, scan_history=None):
         name=name,
         designation=designation)
     if created:
-        logger.warning(f'Found new employee {name}')
+        logger.warning(f'💾 Found new employee {name}')
 
     # Add employee to ScanHistory
     if scan_history:
@@ -890,7 +890,7 @@ def get_random_proxy():
     if not proxy.use_proxy:
         return ''
     proxy_name = random.choice(proxy.proxies.splitlines())
-    logger.warning(f'Using proxy: {proxy_name}')
+    logger.warning(f'🌐 Using proxy: {proxy_name}')
     # os.environ['HTTP_PROXY'] = proxy_name
     # os.environ['HTTPS_PROXY'] = proxy_name
     return proxy_name
@@ -936,7 +936,7 @@ def get_subdomains(write_filepath=None, exclude_subdomains=False, ctx=None):
         if subdomain.name
     ]
     if not subdomains:
-        logger.error('No subdomains were found in query !')
+        logger.error('💾 No subdomains were found in query !')
 
     if url_filter:
         subdomains = [f'{subdomain}/{url_filter}' for subdomain in subdomains]
@@ -1145,7 +1145,7 @@ def get_http_urls(is_alive=False, is_uncrawled=False, strict=False, ignore_files
         endpoints = [e for e in endpoints if not urlparse(e).path.endswith(extensions)]
 
     if not endpoints:
-        logger.error('No endpoints were found in query !')
+        logger.error('💾 No endpoints were found in query !')
 
     if write_filepath:
         with open(write_filepath, 'w') as f:

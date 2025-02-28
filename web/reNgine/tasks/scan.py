@@ -77,11 +77,11 @@ def initiate_scan(self, scan_history_id, domain_id, engine_id=None, scan_type=LI
         )
 
         if not scan or not ctx:
-            raise ValueError("Failed to initialize scan")
+            raise ValueError("🚫 Failed to initialize scan")
 
         # Send start notification
         ctx_str = json.dumps(ctx, indent=2)
-        logger.warning(f'Starting scan {scan_history_id} with context:\n{ctx_str}')
+        logger.warning(f'🚀 Starting scan {scan_history_id} with context:\n{ctx_str}')
         send_scan_notif.apply_async(
             kwargs={
                 'scan_history_id': scan.id,
@@ -108,7 +108,7 @@ def initiate_scan(self, scan_history_id, domain_id, engine_id=None, scan_type=LI
     except (ValidationError, ScanHistory.DoesNotExist, Domain.DoesNotExist) as e:
         # Manage expected errors
         error_msg = str(e)
-        logger.error(f"Validation/DB error: {error_msg}")
+        logger.error(f"🚫 Validation/DB error: {error_msg}")
 
         if scan:
             scan.scan_status = FAILED_TASK
@@ -120,7 +120,7 @@ def initiate_scan(self, scan_history_id, domain_id, engine_id=None, scan_type=LI
     except Exception as e:
         # Manage unexpected errors
         error_msg = str(e)
-        logger.error(f"Unexpected error: {error_msg} {fmt_traceback(e)}")
+        logger.error(f"🚫 Unexpected error: {error_msg} {fmt_traceback(e)}")
 
         if scan:
             scan.scan_status = FAILED_TASK
