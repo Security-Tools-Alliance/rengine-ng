@@ -91,7 +91,7 @@ class TaskConfig:
         """
 
         config = self.get_config(config_section)
-        custom_header = config.get_value(CUSTOM_HEADER) or self.yaml_configuration.get(CUSTOM_HEADER)
+        custom_header = config.get(CUSTOM_HEADER) or self.yaml_configuration.get(CUSTOM_HEADER)
         if custom_header:
             return generate_header_param(custom_header, header_type)
         return None

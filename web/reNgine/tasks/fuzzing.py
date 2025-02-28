@@ -120,6 +120,7 @@ def dir_file_fuzz(self, ctx={}, description=None):
 
     # Loop through URLs and run command
     results = []
+    crawl_urls = []
     for url in urls:
         '''
             Above while fetching urls, we are not ignoring files, because some
@@ -152,8 +153,6 @@ def dir_file_fuzz(self, ctx={}, description=None):
             subdomain = Subdomain.objects.get(name=subdomain_name, scan_history=self.scan)
 
         # Loop through results and populate EndPoint and DirectoryFile in DB
-        results = []
-        crawl_urls = []
         for line in stream_command(
                 cmd_builder.build_list(),
                 shell=False,

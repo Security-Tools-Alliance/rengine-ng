@@ -12,7 +12,7 @@ def debug():
         if CELERY_REMOTE_DEBUG:
             logger.info(
                 f"\n⚡ Debugger started on port {str(CELERY_REMOTE_DEBUG_PORT)}"
-                + ", task is waiting IDE (VSCode ...) to be attached to continue ⚡\n"
+                + ", task is waiting 10 seconds for IDE (VSCode ...) to be attached to continue ⚡\n"
             )
             os.environ['GEVENT_SUPPORT'] = 'True'
             if not debugpy.is_client_connected():
