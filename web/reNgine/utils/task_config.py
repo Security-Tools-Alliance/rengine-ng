@@ -1,7 +1,10 @@
+import yaml
+
 from pathlib import Path
 from typing import Any, Dict
 
 from reNgine.definitions import (
+    CUSTOM_HEADER,
     DEFAULT_SCAN_INTENSITY,
     FETCH_GPT_REPORT,
     FOLLOW_REDIRECT,
@@ -19,20 +22,26 @@ from reNgine.settings import (
 from reNgine.utils.http import get_http_crawl_value
 from reNgine.utils.parsers import parse_custom_header
 from reNgine.utils.db import get_random_proxy
+from reNgine.utils.command_builder import generate_header_param
 
 class TaskConfig:
     """Helper class to manage configuration for scan tasks"""
 
-    def __init__(self, yaml_configuration: Dict[str, Any], results_dir: str, scan_id: int = None, filename: str = None):
+    def __init__(self, yaml_configuration, results_dir: str, scan_id: int = None, filename: str = None):
         """Initialize with task configuration
         
         Args:
-            yaml_configuration: Configuration dictionary from YAML
+            yaml_configuration: Configuration dictionary from YAML or YAML string
             results_dir: Directory to store results
             scan_id: Scan history ID
             filename: Base filename for outputs
         """
-        self.yaml_configuration = yaml_configuration
+        # Si c'est une chaîne, parser en YAML
+        if isinstance(yaml_configuration, str):
+            self.yaml_configuration = yaml.safe_load(yaml_configuration)
+        else:
+            self.yaml_configuration = yaml_configuration
+            
         self.results_dir = results_dir
         self.scan_id = scan_id
         self.filename = filename
@@ -69,7 +78,24 @@ class TaskConfig:
         # Then try from global config
         value = self.yaml_configuration.get(key)
         return value if value is not None else default_value
-    
+
+    def prepare_custom_header(self, config_section: str = None, header_type='common'):
+        """Prepare custom header from configuration.
+        
+        Args:
+            config (dict): Tool-specific configuration
+            header_type (str): Header type (common, dalfox, etc.)
+            
+        Returns:
+            str: Formatted custom header string or None
+        """
+
+        config = self.get_config(config_section)
+        custom_header = config.get_value(CUSTOM_HEADER) or self.yaml_configuration.get(CUSTOM_HEADER)
+        if custom_header:
+            return generate_header_param(custom_header, header_type)
+        return None
+
     def get_custom_header(self, config_section: str = None, header_type: str = None) -> Dict[str, str]:
         """Get custom headers for a section
         
@@ -81,7 +107,7 @@ class TaskConfig:
             Dictionary of custom headers
         """
         config = self.get_config(config_section) if config_section else self.yaml_configuration
-        return parse_custom_header(config, self.yaml_configuration, header_type)
+        return parse_custom_header(config)
     
     def get_http_crawl_enabled(self, config_section: str = None) -> bool:
         """Check if HTTP crawl is enabled

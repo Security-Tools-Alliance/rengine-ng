@@ -85,7 +85,7 @@ def subdomain_discovery(
     # Run tools
     for tool in tools:
         cmd, use_shell, error_msg = build_subdomain_tool_command(
-            tool, host, self.results_dir, config, get_random_proxy(), timeout, threads, custom_subdomain_tools)
+            tool, host, self.results_dir, subdomain_config, get_random_proxy(), timeout, threads, custom_subdomain_tools)
 
         if error_msg:
             logger.error(error_msg)

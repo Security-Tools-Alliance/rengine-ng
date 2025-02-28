@@ -1,7 +1,7 @@
 import json
 import logging
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model, update_session_auth_hash
@@ -20,7 +20,7 @@ from dashboard.utils import get_user_projects, get_user_groups
 from targetApp.models import Domain
 from startScan.models import (
     EndPoint, ScanHistory, SubScan, Subdomain, Vulnerability, ScanActivity,
-    IpAddress, Port, Technology, VulnerabilityTags, CountryISO
+    IpAddress, Port, Technology, CountryISO
 )
 from dashboard.models import Project, OpenAiAPIKey, NetlasAPIKey
 from dashboard.forms import ProjectForm

@@ -5,12 +5,16 @@ import validators
 from celery import chain, group
 from django.utils import timezone
 from django.db import transaction
+from django.core.exceptions import ValidationError
+from django.core.cache import cache
+
+from reNgine.definitions import DEFAULT_GF_PATTERNS, FAILED_TASK, FETCH_URL, GF_PATTERNS, RUNNING_TASK, SCHEDULED_SCAN, LIVE_SCAN
+from reNgine.settings import YAML_CACHE_TIMEOUT
+from reNgine.utils.db import create_scan_object
 from reNgine.utils.logger import Logger
 from reNgine.utils.utils import is_iterable
-from reNgine.utils.formatters import SafePath
-from scanEngine.models import EngineType
-from reNgine.definitions import FAILED_TASK, GF_PATTERNS, RUNNING_TASK, SCHEDULED_SCAN, LIVE_SCAN
-from reNgine.settings import YAML_CACHE_TIMEOUT
+from reNgine.utils.formatters import SafePath, fmt_traceback
+from reNgine.utils.task_config import TaskConfig
 from reNgine.tasks.subdomain import subdomain_discovery
 from reNgine.tasks.osint import osint
 from reNgine.tasks.port_scan import port_scan, scan_http_ports
@@ -21,10 +25,9 @@ from reNgine.tasks.screenshot import screenshot
 from reNgine.tasks.detect import waf_detection
 from reNgine.tasks.reporting import report
 
-from reNgine.utils.db import create_scan_object
 from startScan.models import ScanHistory
-from django.core.exceptions import ValidationError
-from django.core.cache import cache
+from scanEngine.models import EngineType
+
 
 logger = Logger(True)
 
@@ -92,7 +95,8 @@ def initialize_scan_history(scan, domain, engine, scan_type, initiated_by_id, re
             
             # Create directory and context
             setup_scan_directory(domain.name, results_dir)
-            setup_gf_patterns(scan, engine, get_cached_yaml_config(engine))
+            config = TaskConfig(engine.yaml_configuration, results_dir, scan.id, domain.name)
+            setup_gf_patterns(scan, engine, config.get_config(FETCH_URL))
             
             ctx = create_scan_context(
                 scan=scan,
@@ -108,7 +112,8 @@ def initialize_scan_history(scan, domain, engine, scan_type, initiated_by_id, re
             return scan, ctx
             
     except Exception as e:
-        logger.error(f"Failed to initialize scan: {str(e)}")
+        logger.error(f"Failed to initialize scan: {str(e)} {fmt_traceback(e)}")
+
         if scan:
             scan.scan_status = FAILED_TASK
             scan.error_message = str(e)
@@ -117,7 +122,7 @@ def initialize_scan_history(scan, domain, engine, scan_type, initiated_by_id, re
 
 def setup_gf_patterns(scan, engine, config):
     """Setup GF patterns if needed."""
-    gf_patterns = config.get(GF_PATTERNS, [])
+    gf_patterns = config.get(GF_PATTERNS, DEFAULT_GF_PATTERNS)
     add_gf_patterns = gf_patterns and 'fetch_url' in engine.tasks
     if add_gf_patterns and is_iterable(gf_patterns):
         scan.used_gf_patterns = ','.join(gf_patterns)

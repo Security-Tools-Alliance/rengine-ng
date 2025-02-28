@@ -8,15 +8,10 @@ from urllib.parse import urlparse
 from django.core.validators import URLValidator
 from django.core.exceptions import ValidationError
 
-from reNgine.utils.command_builder import CommandBuilder, generate_header_param
+from reNgine.utils.command_builder import CommandBuilder
 from reNgine.utils.logger import Logger
-from reNgine.definitions import (
-    ENABLE_HTTP_CRAWL,
-    CUSTOM_HEADER,
-)
-from reNgine.settings import (
-    DEFAULT_ENABLE_HTTP_CRAWL,
-)
+from reNgine.definitions import ENABLE_HTTP_CRAWL
+from reNgine.settings import DEFAULT_ENABLE_HTTP_CRAWL
 
 logger = Logger(True)
 
@@ -195,7 +190,7 @@ def extract_httpx_url(line, follow_redirect):
 
     return http_url, is_redirect
 
-def get_http_crawl_value(engine, config):
+def get_http_crawl_value(config, yaml_configuration):
     """Get HTTP crawl value from config.
     
     Args:
@@ -209,7 +204,7 @@ def get_http_crawl_value(engine, config):
     enable_http_crawl = config.get(ENABLE_HTTP_CRAWL) if config else None
     if enable_http_crawl is None:
         # scan engine value
-        yaml_config = yaml.safe_load(engine.yaml_configuration)
+        yaml_config = yaml.safe_load(yaml_configuration)
         enable_http_crawl = yaml_config.get(ENABLE_HTTP_CRAWL, DEFAULT_ENABLE_HTTP_CRAWL)
     logger.debug(f'Enable HTTP crawl: {enable_http_crawl}')
     return enable_http_crawl
@@ -429,23 +424,6 @@ def prepare_urls_with_fallback(urls, input_path, ctx=None, **http_urls_params):
         urls = get_http_urls(**http_urls_params)
         
     return urls
-
-def prepare_custom_header(config, yaml_configuration, header_type='common'):
-    """Prepare custom header from configuration.
-    
-    Args:
-        config (dict): Tool-specific configuration
-        yaml_configuration (dict): Global YAML configuration
-        header_type (str): Header type (common, dalfox, etc.)
-        
-    Returns:
-        str: Formatted custom header string or None
-    """
-    
-    custom_header = config.get(CUSTOM_HEADER) or yaml_configuration.get(CUSTOM_HEADER)
-    if custom_header:
-        return generate_header_param(custom_header, header_type)
-    return None
 
 def filter_urls_by_extension(urls, extensions_to_ignore=None):
     """Filter out URLs with specific file extensions.

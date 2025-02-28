@@ -65,7 +65,7 @@ def dir_file_fuzz(self, ctx={}, description=None):
     
     # Get the configurations
     fuzz_config = config.get_config(DIR_FILE_FUZZ)
-    custom_header = config.get_custom_header(DIR_FILE_FUZZ)
+    custom_header = config.prepare_custom_header(DIR_FILE_FUZZ)
     auto_calibration = config.get_value(DIR_FILE_FUZZ, AUTO_CALIBRATION, True)
     enable_http_crawl = config.get_http_crawl_enabled(DIR_FILE_FUZZ)
     rate_limit = config.get_rate_limit(DIR_FILE_FUZZ)

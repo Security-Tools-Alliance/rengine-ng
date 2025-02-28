@@ -76,7 +76,7 @@ def fetch_url(self, urls=None, ctx=None, description=None):
     
     # Prepare headers
     domain_request_headers = self.domain.request_headers if self.domain else None
-    custom_header = config.get_custom_header(FETCH_URL)
+    custom_header = config.prepare_custom_header(FETCH_URL)
     if domain_request_headers:
         custom_header = domain_request_headers
 

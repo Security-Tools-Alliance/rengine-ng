@@ -18,7 +18,7 @@ def build_amass_passive_command(host, results_dir, config=None):
     Returns:
         list: Command as list of arguments
     """
-    use_amass_config = config.get('USE_AMASS_CONFIG', False) if config else False
+    use_amass_config = config.get_value('USE_AMASS_CONFIG', False) if config else False
     
     cmd_builder = CommandBuilder('amass')
     cmd_builder.add_option('enum')
@@ -42,8 +42,8 @@ def build_amass_active_command(host, results_dir, config=None):
     Returns:
         list: Command as list of arguments
     """
-    use_amass_config = config.get('USE_AMASS_CONFIG', False) if config else False
-    amass_wordlist_name = config.get('AMASS_WORDLIST', 'default') if config else 'default'
+    use_amass_config = config.get_value('USE_AMASS_CONFIG', False) if config else False
+    amass_wordlist_name = config.get_value('AMASS_WORDLIST', 'default') if config else 'default'
     wordlist_path = str(Path('AMASS_DEFAULT_WORDLIST_PATH') / f'{amass_wordlist_name}.txt')
     
     cmd_builder = CommandBuilder('amass')
@@ -118,8 +118,8 @@ def build_oneforall_command(host, results_dir):
     # OneForAll requires shell=True for concatenated commands
     use_shell = True
     
-    cmd_builder = CommandBuilder('cd /usr/src/oneforall && python3 oneforall.py --target')
-    cmd_builder.add_option('', host, sep='')
+    cmd_builder = CommandBuilder('cd /usr/src/oneforall && python3 oneforall.py')
+    cmd_builder.add_option('--target', host)
     cmd_builder.add_option('--path', str(Path(results_dir) / 'subdomains_oneforall.txt'))
     cmd_builder.add_option('run')
     

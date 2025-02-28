@@ -14,8 +14,7 @@ from reNgine.settings import CELERY_DEBUG, RENGINE_RESULTS
 from reNgine.celery import app
 from reNgine.utils.debug import debug
 from reNgine.utils.logger import Logger
-from reNgine.utils.formatters import SafePath
-from reNgine.utils.http import get_http_crawl_value
+from reNgine.utils.formatters import SafePath, fmt_traceback
 from scanEngine.models import EngineType
 from startScan.models import (
     ScanHistory,
@@ -47,9 +46,8 @@ def initiate_scan(self, scan_history_id, domain_id, engine_id=None, scan_type=LI
                  results_dir=RENGINE_RESULTS, imported_subdomains=None,
                  out_of_scope_subdomains=None, initiated_by_id=None, url_filter=''):
     """Initiate a new scan workflow."""
-    if CELERY_DEBUG:
-        debug()
-        
+    debug()
+
     scan = None
 
     try:
@@ -96,7 +94,7 @@ def initiate_scan(self, scan_history_id, domain_id, engine_id=None, scan_type=LI
         # Build and execute workflow
         workflow, task_ids = build_scan_workflow(domain, engine, ctx)
         task = workflow.delay()
-        
+
         # Update scan with all task IDs
         scan.celery_ids.extend([self.request.id] + task_ids)
         scan.save()
@@ -108,28 +106,28 @@ def initiate_scan(self, scan_history_id, domain_id, engine_id=None, scan_type=LI
         }
 
     except (ValidationError, ScanHistory.DoesNotExist, Domain.DoesNotExist) as e:
-        # Gérer les erreurs attendues
+        # Manage expected errors
         error_msg = str(e)
         logger.error(f"Validation/DB error: {error_msg}")
-        
+
         if scan:
             scan.scan_status = FAILED_TASK
             scan.error_message = error_msg
             scan.save()
-            
+
         return {'success': False, 'error': error_msg}
-        
+
     except Exception as e:
-        # Gérer les erreurs inattendues
+        # Manage unexpected errors
         error_msg = str(e)
-        logger.error(f"Unexpected error: {error_msg}")
-        
+        logger.error(f"Unexpected error: {error_msg} {fmt_traceback(e)}")
+
         if scan:
             scan.scan_status = FAILED_TASK
             scan.error_message = error_msg
             scan.save()
-            
-        raise self.retry(exc=e, countdown=60)
+
+        raise self.retry(exc=e, countdown=60) from e
 
 @app.task(name='initiate_subscan', queue='orchestrator_queue', bind=False)
 def initiate_subscan(
@@ -150,8 +148,7 @@ def initiate_subscan(
         url_filter (str): URL path. Default: ''
     """
 
-    # if CELERY_REMOTE_DEBUG:
-    #     debug()
+    debug()
 
     subscan = None
     try:
@@ -168,8 +165,7 @@ def initiate_subscan(
 
         # Get YAML config
         config = yaml.safe_load(engine.yaml_configuration)
-        config_subscan = config.get(scan_type)
-        enable_http_crawl = get_http_crawl_value(engine, config_subscan)
+        config_subscan = config.get_value(scan_type)
 
         # Create scan activity of SubScan Model
         subscan = SubScan(

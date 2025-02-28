@@ -136,7 +136,7 @@ def port_scan(self, hosts=None, ctx=None, description=None):
     ports_data = {}
     for line in stream_command(
             cmd_list,
-            shell=False,  # Important: shell=False for security
+            shell=False,
             history_file=self.history_file,
             scan_id=self.scan_id,
             activity_id=self.activity_id):

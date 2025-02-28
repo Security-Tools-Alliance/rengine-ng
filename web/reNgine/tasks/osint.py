@@ -105,9 +105,9 @@ def osint_discovery(self, config, host, scan_history_id, activity_id, results_di
     from reNgine.utils.scan_helpers import execute_grouped_tasks
     if ctx is None:
         ctx = {}
-    osint_lookup = config.get(OSINT_DISCOVER, [])
-    osint_intensity = config.get(INTENSITY, 'normal')
-    documents_limit = config.get(OSINT_DOCUMENTS_LIMIT, 50)
+    osint_lookup = config.get_value(OSINT_DISCOVER, [])
+    osint_intensity = config.get_value(INTENSITY, 'normal')
+    documents_limit = config.get_value(OSINT_DOCUMENTS_LIMIT, 50)
     # Get and save meta info
     if 'metainfo' in osint_lookup:
         logger.info('Saving Metainfo')
@@ -187,8 +187,8 @@ def dorking(self, config, host, scan_history_id, results_dir):
     from reNgine.utils.db import get_and_save_dork_results
 
     scan_history = ScanHistory.objects.get(pk=scan_history_id)
-    dorks = config.get(OSINT_DORK, [])
-    custom_dorks = config.get(OSINT_CUSTOM_DORK, [])
+    dorks = config.get_value(OSINT_DORK, [])
+    custom_dorks = config.get_value(OSINT_CUSTOM_DORK, [])
     results = []
 
     # custom dorking has higher priority
@@ -260,7 +260,7 @@ def theHarvester(self, config, host, scan_history_id, activity_id, results_dir, 
     if ctx is None:
         ctx = {}
     scan_history = ScanHistory.objects.get(pk=scan_history_id)
-    enable_http_crawl = config.get(ENABLE_HTTP_CRAWL, DEFAULT_ENABLE_HTTP_CRAWL)
+    enable_http_crawl = config.get_value(ENABLE_HTTP_CRAWL, DEFAULT_ENABLE_HTTP_CRAWL)
     output_path_json = str(Path(results_dir) / 'theHarvester.json')
     theHarvester_dir = str(Path.home() / ".config"  / 'theHarvester')
     history_file = str(Path(results_dir) / 'commands.txt')

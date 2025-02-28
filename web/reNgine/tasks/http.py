@@ -66,7 +66,7 @@ def http_crawl(
     config = TaskConfig(self.yaml_configuration, self.results_dir, self.scan_id, self.filename)
     
     # Get configuration from TaskConfig
-    custom_header = config.get_custom_header(HTTP_CRAWL)
+    custom_header = config.prepare_custom_header(HTTP_CRAWL)
     threads = config.get_threads(HTTP_CRAWL)
     follow_redirect = config.get_follow_redirect(HTTP_CRAWL, False)
     self.output_path = None
