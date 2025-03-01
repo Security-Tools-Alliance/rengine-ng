@@ -17,6 +17,7 @@ class CommandBuilder:
         """
         self.command = [base_command]
         self.options = []
+        self.redirection = None
         
     def add_option(self, option, value=None, condition=True):
         """Add a command line option if condition is met
@@ -40,14 +41,30 @@ class CommandBuilder:
             self.options.append(option)
             
         return self
+
+    def add_redirection(self, operator, filename):
+        """Add an output redirection
         
+        Args:
+            operator (str): Redirection operator (e.g. '>', '>>')
+            filename (str): File to redirect output to
+            
+        Returns:
+            CommandBuilder: Self for chaining
+        """
+        self.redirection = (operator, filename)
+        return self
+    
     def build_list(self):
         """Build command as a list for subprocess
         
         Returns:
             list: Command as list of arguments
         """
-        return self.command + self.options
+        cmd = self.command.copy()
+        if self.redirection:
+            cmd.extend([self.redirection[0], self.redirection[1]])
+        return cmd
         
     def build_string(self):
         """Build command as a string (only for display, not execution)
@@ -55,7 +72,11 @@ class CommandBuilder:
         Returns:
             str: Command as properly quoted string
         """
-        return ' '.join([self.command[0]] + [shlex.quote(opt) for opt in self.options])
+        cmd = [shlex.quote(part) for part in self.command]
+        if self.redirection:
+            cmd.append(self.redirection[0])
+            cmd.append(shlex.quote(self.redirection[1]))
+        return ' '.join(cmd)
 
 def build_piped_command(commands, output_file=None, append=False):
     """Build a piped command securely using CommandBuilder.

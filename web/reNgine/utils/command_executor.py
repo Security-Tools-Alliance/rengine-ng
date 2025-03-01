@@ -20,7 +20,7 @@ class CommandExecutor:
     """Unified command execution handler with streaming capabilities"""
     
     def __init__(self, cmd, context=None):
-        self.cmd = cmd
+        self.cmd = shlex.split(cmd) if isinstance(cmd, str) else cmd
         self.context = context or {}
         self.process = None
         self.command_obj = None
@@ -58,7 +58,8 @@ class CommandExecutor:
 
     def _calculate_timeout(self):
         """Determine timeout based on command type"""
-        return 3600 if 'nuclei' in self.cmd.lower() else 1800
+        cmd_str = ' '.join(self.cmd) if isinstance(self.cmd, list) else self.cmd
+        return 3600 if 'nuclei' in cmd_str.lower() else 1800
 
     def _pre_execution_setup(self):
         """Prepare execution environment"""
@@ -85,14 +86,14 @@ class CommandExecutor:
     def _launch_process(self):
         """Launch subprocess with improved security"""
         if self.dry_run:
-            logger.info(f'🧪 [DRY RUN] Skipping process launch for: {self.cmd}')
+            logger.info(f'📄 [DRY RUN] Skipping process launch for: {self.cmd}')
             return None
 
-        logger.debug("🔄 Launching process")
+        logger.debug("🚀 Launching process")
 
         if self.context.get('shell', False):
             # When shell is required, log a warning for security auditing
-            logger.warning(f"⚠️ Using shell=True for command execution (security risk): {self.cmd}")
+            logger.warning(f"Using shell=True for command execution (security risk): {self.cmd}")
             process = subprocess.Popen(
                 self.cmd,
                 shell=True,
@@ -104,9 +105,8 @@ class CommandExecutor:
             )
         else:
             # Preferred: using list mode for better security
-            cmd_args = shlex.split(self.cmd) if isinstance(self.cmd, str) else self.cmd
             process = subprocess.Popen(
-                cmd_args,
+                self.cmd,
                 shell=False,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,

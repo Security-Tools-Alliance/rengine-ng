@@ -374,7 +374,7 @@ def scan_http_ports(self, host, ctx=None, description=None):
 
     # Run nmap scan with retries
     max_retries = 3
-    retry_delay = 2
+    retry_delay = 1
 
     for attempt in range(max_retries):
         try:
@@ -387,7 +387,7 @@ def scan_http_ports(self, host, ctx=None, description=None):
 
             while not task.ready():
                 # wait for all jobs to complete
-                time.sleep(5)
+                time.sleep(1)
 
             if os.path.exists(xml_file):
                 break

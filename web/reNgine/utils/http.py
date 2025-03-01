@@ -3,6 +3,7 @@ import re
 import validators
 import tldextract
 import yaml
+import os
 
 from urllib.parse import urlparse
 from django.core.validators import URLValidator
@@ -12,6 +13,7 @@ from reNgine.utils.command_builder import CommandBuilder
 from reNgine.utils.logger import Logger
 from reNgine.definitions import ENABLE_HTTP_CRAWL
 from reNgine.settings import DEFAULT_ENABLE_HTTP_CRAWL
+from reNgine.utils.mock import prepare_urls_mock
 
 logger = Logger(True)
 
@@ -404,25 +406,30 @@ def prepare_urls_with_fallback(urls, input_path, ctx=None, **http_urls_params):
     """
     from reNgine.utils.db import get_http_urls
     from reNgine.utils.utils import is_iterable
-    
+
+    # Check if we're in dry run mode
+    dry_run = os.getenv('COMMAND_EXECUTOR_DRY_RUN', '0') == '1'
+
     # Set default parameters if not provided
     if 'write_filepath' not in http_urls_params:
         http_urls_params['write_filepath'] = input_path
-    
+
     # Always pass context to get_http_urls
     if ctx is not None:
         http_urls_params['ctx'] = ctx
-    
+
     # Check if we have input URLs
     if urls and is_iterable(urls):
         logger.debug('🌐 URLs provided by user, writing to file')
         with open(input_path, 'w') as f:
             f.write('\n'.join(urls))
+    elif dry_run:
+        urls = prepare_urls_mock(ctx, input_path)
     else:
-        # No URLs provided, fetch from database
+        # Normal mode - fetch from database
         logger.debug('🌐 URLs gathered from database')
         urls = get_http_urls(**http_urls_params)
-        
+
     return urls
 
 def filter_urls_by_extension(urls, extensions_to_ignore=None):
