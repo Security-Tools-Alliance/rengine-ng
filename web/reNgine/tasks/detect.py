@@ -49,7 +49,7 @@ def waf_detection(self, ctx=None, description=None):
         ctx=ctx
     )
     if not urls:
-        logger.error('🛡️ No URLs to check for WAF. Skipping.')
+        logger.error('🛡️  No URLs to check for WAF. Skipping.')
         return
 
     # wafw00f command builder
@@ -66,7 +66,7 @@ def waf_detection(self, ctx=None, description=None):
     )
 
     if not os.path.isfile(self.output_path):
-        logger.error(f'🛡️ Could not find {self.output_path}')
+        logger.error(f'🛡️  Could not find {self.output_path}')
         return
 
     with open(self.output_path) as file:
@@ -84,7 +84,7 @@ def waf_detection(self, ctx=None, description=None):
 
         # Add waf info to Subdomain in DB
         subdomain_name = get_subdomain_from_url(waf_data['url'])
-        logger.info(f'🛡️ Wafw00f Subdomain : {subdomain_name}')
+        logger.info(f'🛡️  Wafw00f Subdomain : {subdomain_name}')
 
         try:
             subdomain = Subdomain.objects.get(
@@ -96,7 +96,7 @@ def waf_detection(self, ctx=None, description=None):
             subdomain.waf.add(waf)
             subdomain.save()
         except Subdomain.DoesNotExist:
-            logger.warning(f'🛡️ Subdomain {subdomain_name} was not found in the db, skipping waf detection.')
+            logger.warning(f'🛡️  Subdomain {subdomain_name} was not found in the db, skipping waf detection.')
 
     return wafs
 

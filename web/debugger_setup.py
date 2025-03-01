@@ -25,5 +25,5 @@ def setup_debugger(wait=False, gevent='False'):
             except Exception as e:
                 print(f"Failed to start debugger: {e}")
         else:
-            print(f"\n⚠️  Debugger already started on port "+ str(UI_REMOTE_DEBUG_PORT) +" ⚠️\n")
+            print(f"\n⚠️   Debugger already started on port "+ str(UI_REMOTE_DEBUG_PORT) +" ⚠️\n")
 

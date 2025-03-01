@@ -182,7 +182,340 @@ def get_cached_yaml_config(engine):
         
     return config 
 
-def build_scan_workflow(domain, engine, ctx):
+def visualize_workflow(domain, engine, ctx, show_details=False):
+    """Generate a text-based visualization of scan workflow.
+    
+    Creates a terminal-friendly visualization of the scan workflow with emojis
+    and tree structure to show sequences, parallelism, and dependencies.
+    
+    Args:
+        domain (Domain): Domain object
+        engine (EngineType): Engine configuration
+        ctx (dict): Scan context
+        show_details (bool): Whether to show detailed task configuration
+        
+    Returns:
+        str: Text-based visualization of the workflow
+    """
+    # Define task emojis
+    task_emojis = {
+        'scan_http_ports': '🔎',
+        'subdomain_discovery': '🔍',
+        'osint': '🌐',
+        'port_scan': '🔌',
+        'fetch_url': '📥',
+        'dir_file_fuzz': '📂',
+        'vulnerability_scan': '🛡️',
+        'screenshot': '📷',
+        'waf_detection': '🧱',
+        'report': '📊',
+        # Sub-tasks
+        'nuclei_scan': '🔬',
+        'dalfox_scan': '🕸️ ',
+        'crlfuzz_scan': '🐛',
+        's3scanner': '☁️',
+        'nuclei_individual_severity_module': '🎯',
+        'http_crawl': '🕷️  ',
+        'run_nmap': '🔍',
+        'nmap': '🔍',
+        'naabu': '📡',
+        # Severity levels
+        'unknown': '❔',
+        'info': 'ℹ️ ',
+        'low': '🟢',
+        'medium': '🟡',
+        'high': '🟠',
+        'critical': '🔴',
+        # OSINT sub-tasks
+        'github_scan': '🐙',
+        'email_search': '📧',
+        'emails': '📧',
+        'api_key_search': '🔑',
+        'dork_search': '🔍',
+        'social_scan': '👥',
+        'social_media': '👥',
+        'metadata_search': '📝',
+        'metainfo': '📝',
+        'pastebin_search': '📌',
+        'employees_search': '👔',
+        'employees': '👔',
+        'cloud_assets': '☁️',
+        'whois_lookup': '❓',
+        # Subdomain discovery sub-tasks
+        'subfinder': '🔎',
+        'amass': '🌐',
+        'amass-passive': '🌐',
+        'amass-active': '🌐',
+        'assetfinder': '💼',
+        'findomain': '🏠',
+        'sublist3r': '📜',
+        'dnsx': '🧩',
+        'altdns': '🔄',
+        'dnsgen': '🧬',
+        'oneforall': '🎯',
+        'censys': '🔭',
+        'shodan': '👁️',
+        'virustotal': '🦠',
+        'crt_sh': '📜',
+        'ctfr': '📜',
+        'certspotter': '🔍',
+        'chaos': '⚡',
+        'waybackurls': '⏪',
+        'github_subdomains': '😺',
+        'tlsx': '🔒',
+        'netlas': '🕸️ ',
+        # Fetch URL tools
+        'gospider': '🕷️  ',
+        'hakrawler': '🦿',
+        'gau': '🔍',
+        'katana': '⚔️ ',
+        # Dorks
+        'login_pages': '🔐',
+        'admin_panels': '👑',
+        'dashboard_pages': '📊',
+        'stackoverflow': '💻',
+        'project_management': '📋',
+        'code_sharing': '📝',
+        'config_files': '⚙️ ',
+        'jenkins': '🤖',
+        'wordpress_files': '📰',
+        'php_error': '⚠️',
+        'exposed_documents': '📄',
+        'db_files': '💾',
+        'git_exposed': '🐙'
+    }
+
+    # Helper function to get task symbol
+    def get_task_symbol(task_name):
+        return task_emojis.get(task_name, '❓')
+
+    # Parse YAML configuration if available
+    yaml_config = {}
+    if hasattr(engine, 'yaml_configuration'):
+        import yaml
+        yaml_config = yaml.safe_load(engine.yaml_configuration) or {}
+
+    # Build initial visualization
+    lines = []
+    lines.append(f"🚀 Scan Workflow for domain: {domain.name}")
+    lines.append(f"📋 Engine: {engine.engine_name}")
+    lines.append("=" * 50)
+
+    # Initial task - always present
+    lines.append(f"┌─ {get_task_symbol('scan_http_ports')} Initial HTTP ports scan")
+
+    # Parallel subdomain and OSINT tasks
+    parallel_tasks = []
+    parallel_task_details = {}
+
+    # Subdomain discovery
+    if 'subdomain_discovery' in engine.tasks:
+        parallel_tasks.append('subdomain_discovery')
+        subdomain_config = yaml_config.get('subdomain_discovery', {})
+        tools = subdomain_config.get('uses_tools', [])
+        if tools:
+            parallel_task_details['subdomain_discovery'] = tools
+
+    # OSINT
+    if 'osint' in engine.tasks:
+        parallel_tasks.append('osint')
+        osint_config = yaml_config.get('osint', {})
+
+        # Combine discover and dorks lists
+        osint_subtasks = []
+        osint_subtasks.extend(osint_config.get('discover', []))
+        osint_subtasks.extend(osint_config.get('dorks', []))
+
+        if osint_subtasks:
+            parallel_task_details['osint'] = osint_subtasks
+
+    if parallel_tasks:
+        lines.append("│")
+        lines.append("├─ 🔄 Parallel Tasks")
+        for i, task_name in enumerate(parallel_tasks):
+            is_last = i == len(parallel_tasks) - 1
+            task_display = f"{get_task_symbol(task_name)} {task_name.replace('_', ' ').title()}"
+
+            # Check if task has subtasks
+            subtasks = parallel_task_details.get(task_name, [])
+
+            if is_last and not subtasks:
+                lines.append(f"│  └─ {task_display}")
+            else:
+                lines.append(f"│  ├─ {task_display}")
+
+            # Add subtasks with proper indentation
+            if subtasks:
+                for j, subtask in enumerate(subtasks):
+                    subtask_is_last = j == len(subtasks) - 1 and is_last
+                    subtask_display = f"{get_task_symbol(subtask)} {subtask.replace('_', ' ').title()}"
+
+                    if subtask_is_last:
+                        lines.append(f"│  │  └─ {subtask_display}")
+                    else:
+                        lines.append(f"│  │  ├─ {subtask_display}")
+
+        lines.append("│")
+
+    # Port scan task
+    if 'port_scan' in engine.tasks:
+        lines.append(f"├─ {get_task_symbol('port_scan')} Port Scan")
+        
+        # Port scan always uses naabu first
+        port_scan_config = yaml_config.get('port_scan', {})
+        port_scan_subtasks = ['naabu']
+        
+        # Then nmap if enabled
+        if port_scan_config.get('enable_nmap', True):
+            port_scan_subtasks.append('nmap')
+        
+        # Add subtasks
+        for j, subtask in enumerate(port_scan_subtasks):
+            is_last = j == len(port_scan_subtasks) - 1
+            if is_last:
+                lines.append(f"│  └─ {get_task_symbol(subtask)} {subtask.replace('_', ' ').title()}")
+            else:
+                lines.append(f"│  ├─ {get_task_symbol(subtask)} {subtask.replace('_', ' ').title()}")
+
+    if 'fetch_url' in engine.tasks:
+        lines.append(f"├─ {get_task_symbol('fetch_url')} URL Fetching")
+        # Check which tools are configured
+        fetch_url_config = yaml_config.get('fetch_url', {})
+        fetch_url_tools = fetch_url_config.get('uses_tools', [])
+
+        # Add subtasks if any
+        for j, subtask in enumerate(fetch_url_tools):
+            is_last = j == len(fetch_url_tools) - 1
+            if is_last:
+                lines.append(f"│  └─ {get_task_symbol(subtask)} {subtask.replace('_', ' ').title()}")
+            else:
+                lines.append(f"│  ├─ {get_task_symbol(subtask)} {subtask.replace('_', ' ').title()}")
+
+        # Check if http_crawl is enabled
+        if fetch_url_config.get('enable_http_crawl', True):
+            if not fetch_url_tools:
+                lines.append(f"│  └─ {get_task_symbol('http_crawl')} Http Crawl")
+            else:
+                lines.append(f"│  ├─ {get_task_symbol('http_crawl')} Http Crawl")
+
+    # Security tasks - parallel execution
+    security_tasks = []
+    security_task_details = {}
+
+    # Check dir_file_fuzz
+    if 'dir_file_fuzz' in engine.tasks:
+        security_tasks.append('dir_file_fuzz')
+        dir_fuzz_config = yaml_config.get('dir_file_fuzz', {})
+        if dir_fuzz_config.get('enable_http_crawl', True):
+            security_task_details['dir_file_fuzz'] = ['http_crawl']
+
+    # Check vulnerability_scan
+    if 'vulnerability_scan' in engine.tasks:
+        security_tasks.append('vulnerability_scan')
+        vuln_config = yaml_config.get('vulnerability_scan', {})
+        vuln_subtasks = []
+        
+        if vuln_config.get('run_nuclei', True):
+            vuln_subtasks.append('nuclei_scan')
+        
+        if vuln_config.get('run_dalfox', False):
+            vuln_subtasks.append('dalfox_scan')
+            
+        if vuln_config.get('run_crlfuzz', False):
+            vuln_subtasks.append('crlfuzz_scan')
+            
+        if vuln_config.get('run_s3scanner', False):
+            vuln_subtasks.append('s3scanner')
+            
+        if vuln_subtasks:
+            security_task_details['vulnerability_scan'] = vuln_subtasks
+    
+    # Check screenshot
+    if 'screenshot' in engine.tasks:
+        security_tasks.append('screenshot')
+    
+    # Check waf_detection
+    if 'waf_detection' in engine.tasks:
+        security_tasks.append('waf_detection')
+
+    if security_tasks:
+        lines.append("│")
+        lines.append("├─ 🔄 Security Tasks (Parallel)")
+        for i, task_name in enumerate(security_tasks):
+            is_last = i == len(security_tasks) - 1
+            task_display = f"{get_task_symbol(task_name)} {task_name.replace('_', ' ').title()}"
+            
+            # Check if task has subtasks
+            subtasks = security_task_details.get(task_name, [])
+            
+            if is_last and not subtasks:
+                lines.append(f"│  └─ {task_display}")
+            else:
+                lines.append(f"│  ├─ {task_display}")
+                
+            # Add subtasks with proper indentation
+            if subtasks:
+                for j, subtask in enumerate(subtasks):
+                    subtask_is_last = j == len(subtasks) - 1 and is_last
+                    subtask_display = f"{get_task_symbol(subtask)} {subtask.replace('_', ' ').title()}"
+                    
+                    # Add severity info for nuclei scan
+                    if subtask == 'nuclei_scan':
+                        nuclei_config = vuln_config.get('nuclei', {})
+                        severities = nuclei_config.get('severities', ['unknown', 'info', 'low', 'medium', 'high', 'critical'])
+                        
+                        if subtask_is_last:
+                            lines.append(f"│  │  └─ {subtask_display}")
+                        else:
+                            lines.append(f"│  │  ├─ {subtask_display}")
+                            
+                        # Add severity levels with proper indentation
+                        sev_prefix = "│  │  │  "
+                        sev_line = sev_prefix + "Severities: "
+                        
+                        for k, severity in enumerate(severities):
+                            sev_emoji = get_task_symbol(severity)
+                            sev_line += f"{sev_emoji} {severity.title()}"
+                            if k < len(severities) - 1:
+                                sev_line += ", "
+                                
+                        lines.append(sev_line)
+                    else:
+                        if subtask_is_last:
+                            lines.append(f"│  │  └─ {subtask_display}")
+                        else:
+                            lines.append(f"│  │  ├─ {subtask_display}")
+        
+        lines.append("│")
+
+    # Final report task - always present
+    lines.append(f"└─ {get_task_symbol('report')} Final Report Generation")
+
+    # Show details if requested
+    if show_details and yaml_config:
+        lines.append("\n" + "=" * 50)
+        lines.append("📝 Task Details:")
+        for task_name in engine.tasks:
+            config = yaml_config.get(task_name, {})
+            lines.append(f"\n{get_task_symbol(task_name)} {task_name.replace('_', ' ').title()}:")
+
+            if not config:
+                lines.append("  └─ No specific configuration")
+                continue
+
+            for i, (key, value) in enumerate(config.items()):
+                if isinstance(value, (dict, list)):
+                    import json
+                    value_str = json.dumps(value, indent=2)
+                    # Indent each line of the JSON
+                    value_str = '\n'.join([f'    {line}' for line in value_str.split('\n')])
+                    lines.append(f"  └─ {key}:\n{value_str}")
+                else:
+                    lines.append(f"  └─ {key}: {value}")
+
+    return "\n".join(lines)
+
+def build_scan_workflow(domain, engine, ctx, show_visualization=False):
     """Build scan workflow based on engine configuration.
     
     The workflow follows this sequence:
@@ -196,12 +529,14 @@ def build_scan_workflow(domain, engine, ctx):
         domain (Domain): Domain object
         engine (EngineType): Engine configuration
         ctx (dict): Scan context
+        show_visualization (bool): Show ASCII visualization of workflow
         
     Returns:
         tuple: (celery.Task, list) Workflow chain and task IDs
     """
-    # if CELERY_REMOTE_DEBUG:
-    #     debug()
+    # Display workflow visualization if requested
+    if show_visualization:
+        logger.info(f"\n{visualize_workflow(domain, engine, ctx)}")
     
     # Build initial workflow
     initial_scan = scan_http_ports.si(
@@ -260,7 +595,7 @@ def build_scan_workflow(domain, engine, ctx):
     
     final_workflow = chain(*[part for part in workflow_parts if part])
     
-    return final_workflow, task_ids 
+    return final_workflow, task_ids
 
 
 def execute_grouped_tasks(task_instance, grouped_tasks, task_name="unnamed_task", 
@@ -282,7 +617,7 @@ def execute_grouped_tasks(task_instance, grouped_tasks, task_name="unnamed_task"
     from reNgine.tasks.scan import post_process
 
     if not grouped_tasks:
-        logger.info(f'⚠️ No tasks to run for {task_name}')
+        logger.info(f'⚠️  No tasks to run for {task_name}')
         return None, None
     
     # Create a group + callback chain

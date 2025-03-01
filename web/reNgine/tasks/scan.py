@@ -80,8 +80,7 @@ def initiate_scan(self, scan_history_id, domain_id, engine_id=None, scan_type=LI
             raise ValueError("🚫 Failed to initialize scan")
 
         # Send start notification
-        ctx_str = json.dumps(ctx, indent=2)
-        logger.warning(f'🚀 Starting scan {scan_history_id} with context:\n{ctx_str}')
+        logger.warning(f'🚀 Starting scan {scan_history_id}')
         send_scan_notif.apply_async(
             kwargs={
                 'scan_history_id': scan.id,
@@ -92,7 +91,7 @@ def initiate_scan(self, scan_history_id, domain_id, engine_id=None, scan_type=LI
         )
 
         # Build and execute workflow
-        workflow, task_ids = build_scan_workflow(domain, engine, ctx)
+        workflow, task_ids = build_scan_workflow(domain, engine, ctx, True)
         task = workflow.delay()
 
         # Update scan with all task IDs
