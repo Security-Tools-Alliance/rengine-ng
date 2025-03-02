@@ -18,7 +18,13 @@ class CommandBuilder:
         self.command = [base_command]
         self.options = []
         self.redirection = None
+        self.arguments = []
         
+    def add_raw_option(self, option):
+        """Add raw command-line option without value"""
+        self.options.append(option)
+        return self
+
     def add_option(self, option, value=None, condition=True):
         """Add a command line option if condition is met
         
@@ -61,9 +67,24 @@ class CommandBuilder:
         Returns:
             list: Command as list of arguments
         """
-        cmd = self.command.copy()
+        # Start with the base command
+        cmd = [self.command[0]]
+        
+        # Add all options as individual arguments
+        for option in self.options:
+            if isinstance(option, list):
+                cmd.extend(option)
+            else:
+                cmd.append(option)
+        
+        # Add redirection if present
         if self.redirection:
             cmd.extend([self.redirection[0], self.redirection[1]])
+        
+        # Add arguments
+        cmd.extend(self.arguments)
+        
+        logger.debug(f"🔍 Build list Command: {cmd}")
         return cmd
         
     def build_string(self):
@@ -72,11 +93,27 @@ class CommandBuilder:
         Returns:
             str: Command as properly quoted string
         """
-        cmd = [shlex.quote(part) for part in self.command]
+        # Start with the base command
+        cmd_parts = [shlex.quote(self.command[0])]
+
+        # Add all options as individual quoted arguments
+        for option in self.options:
+            if isinstance(option, list):
+                cmd_parts.extend([shlex.quote(str(part)) for part in option])
+            else:
+                cmd_parts.append(shlex.quote(str(option)))
+
+        # Add redirection if present
         if self.redirection:
-            cmd.append(self.redirection[0])
-            cmd.append(shlex.quote(self.redirection[1]))
-        return ' '.join(cmd)
+            cmd_parts.append(self.redirection[0])
+            cmd_parts.append(shlex.quote(self.redirection[1]))
+
+        # Add arguments
+        cmd_parts.extend(shlex.quote(arg) for arg in self.arguments)
+        # Join all parts with spaces
+        cmd_string = ' '.join(cmd_parts)
+        logger.debug(f"🔍 Build string Command: {cmd_string}")
+        return cmd_string
 
 def build_piped_command(commands, output_file=None, append=False):
     """Build a piped command securely using CommandBuilder.
@@ -128,29 +165,43 @@ def generate_header_param(custom_header, tool_name=None):
     Generate command-line parameters for a specific tool based on the custom header.
 
     Args:
-        custom_header (dict or str): Dictionary or string containing the custom headers.
+        custom_header (dict, str, None): Dictionary, string or None
         tool_name (str, optional): Name of the tool. Defaults to None.
 
     Returns:
-        str: Command-line parameter for the specified tool.
+        str: Command-line parameter for the specified tool
     """
-    logger.debug(f"Generating header parameters for tool: {tool_name}")
-    logger.debug(f"Input custom_header: {custom_header}")
+    # Early return for empty input
+    if not custom_header:
+        logger.debug("No custom headers provided")
+        return ''
 
-    # Ensure the custom_header is a dictionary
-    custom_header = parse_custom_header(custom_header)
+    # Validate input type before processing
+    if not isinstance(custom_header, (dict, str)):
+        logger.warning(f"⚠️ Invalid header type: {type(custom_header)}. Expected dict/str")
+        return ''
+
+    logger.debug(f"Generating header parameters for tool: {tool_name}")
+    
+    try:
+        parsed_header = parse_custom_header(custom_header)
+        if not parsed_header:
+            return ''
+    except ValueError as e:
+        logger.error(f"🚨 Header parsing failed: {str(e)}")
+        return ''
 
     # Common formats
-    common_headers = [f"{key}: {value}" for key, value in custom_header.items()]
+    common_headers = [f"{key}: {value}" for key, value in parsed_header.items()]
     semi_colon_headers = ';;'.join(common_headers)
-    colon_headers = [f"{key}:{value}" for key, value in custom_header.items()]
+    colon_headers = [f"{key}:{value}" for key, value in parsed_header.items()]
 
     # Define format mapping for each tool
     format_mapping = {
         'common': ' '.join([f' -H "{header}"' for header in common_headers]),
         'dalfox': ' '.join([f' -H "{header}"' for header in colon_headers]),
         'hakrawler': f' -h "{semi_colon_headers}"',
-        'gospider': generate_gospider_params(custom_header),
+        'gospider': generate_gospider_params(parsed_header),
     }
 
     # Get the appropriate format based on the tool name

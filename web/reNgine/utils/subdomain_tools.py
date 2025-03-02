@@ -303,4 +303,4 @@ def build_subdomain_tool_command(tool, host, results_dir, config=None, proxy=Non
     else:
         error_msg = f'Subdomain discovery tool "{tool}" is not supported by reNgine. Skipping.'
     
-    return cmd, use_shell, error_msg 
+    return cmd, use_shell, error_msg

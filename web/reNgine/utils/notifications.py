@@ -319,7 +319,7 @@ def send_vulnerability_scan_summary(task_instance, scan_id=None):
         task_instance: The RengineTask instance (self)
         scan_id: Optional scan ID override (defaults to task_instance.scan_id)
     """
-    from targetApp.models import Vulnerability
+    from startScan.models import Vulnerability
     from scanEngine.models import Notification
     
     # Get notification settings

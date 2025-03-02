@@ -360,15 +360,15 @@ def visualize_workflow(domain, engine, ctx, show_details=False):
     # Port scan task
     if 'port_scan' in engine.tasks:
         lines.append(f"├─ {get_task_symbol('port_scan')} Port Scan")
-        
+
         # Port scan always uses naabu first
         port_scan_config = yaml_config.get('port_scan', {})
         port_scan_subtasks = ['naabu']
-        
+
         # Then nmap if enabled
         if port_scan_config.get('enable_nmap', True):
             port_scan_subtasks.append('nmap')
-        
+
         # Add subtasks
         for j, subtask in enumerate(port_scan_subtasks):
             is_last = j == len(port_scan_subtasks) - 1
@@ -414,26 +414,26 @@ def visualize_workflow(domain, engine, ctx, show_details=False):
         security_tasks.append('vulnerability_scan')
         vuln_config = yaml_config.get('vulnerability_scan', {})
         vuln_subtasks = []
-        
+
         if vuln_config.get('run_nuclei', True):
             vuln_subtasks.append('nuclei_scan')
-        
+
         if vuln_config.get('run_dalfox', False):
             vuln_subtasks.append('dalfox_scan')
-            
+
         if vuln_config.get('run_crlfuzz', False):
             vuln_subtasks.append('crlfuzz_scan')
-            
+
         if vuln_config.get('run_s3scanner', False):
             vuln_subtasks.append('s3scanner')
-            
+
         if vuln_subtasks:
             security_task_details['vulnerability_scan'] = vuln_subtasks
-    
+
     # Check screenshot
     if 'screenshot' in engine.tasks:
         security_tasks.append('screenshot')
-    
+
     # Check waf_detection
     if 'waf_detection' in engine.tasks:
         security_tasks.append('waf_detection')
@@ -444,48 +444,48 @@ def visualize_workflow(domain, engine, ctx, show_details=False):
         for i, task_name in enumerate(security_tasks):
             is_last = i == len(security_tasks) - 1
             task_display = f"{get_task_symbol(task_name)} {task_name.replace('_', ' ').title()}"
-            
+
             # Check if task has subtasks
             subtasks = security_task_details.get(task_name, [])
-            
+
             if is_last and not subtasks:
                 lines.append(f"│  └─ {task_display}")
             else:
                 lines.append(f"│  ├─ {task_display}")
-                
+
             # Add subtasks with proper indentation
             if subtasks:
                 for j, subtask in enumerate(subtasks):
                     subtask_is_last = j == len(subtasks) - 1 and is_last
                     subtask_display = f"{get_task_symbol(subtask)} {subtask.replace('_', ' ').title()}"
-                    
+
                     # Add severity info for nuclei scan
                     if subtask == 'nuclei_scan':
                         nuclei_config = vuln_config.get('nuclei', {})
                         severities = nuclei_config.get('severities', ['unknown', 'info', 'low', 'medium', 'high', 'critical'])
-                        
+
                         if subtask_is_last:
                             lines.append(f"│  │  └─ {subtask_display}")
                         else:
                             lines.append(f"│  │  ├─ {subtask_display}")
-                            
+
                         # Add severity levels with proper indentation
                         sev_prefix = "│  │  │  "
-                        sev_line = sev_prefix + "Severities: "
-                        
+                        sev_line = f"{sev_prefix}Severities: "
+
                         for k, severity in enumerate(severities):
                             sev_emoji = get_task_symbol(severity)
                             sev_line += f"{sev_emoji} {severity.title()}"
                             if k < len(severities) - 1:
                                 sev_line += ", "
-                                
+
                         lines.append(sev_line)
                     else:
                         if subtask_is_last:
                             lines.append(f"│  │  └─ {subtask_display}")
                         else:
                             lines.append(f"│  │  ├─ {subtask_display}")
-        
+
         lines.append("│")
 
     # Final report task - always present

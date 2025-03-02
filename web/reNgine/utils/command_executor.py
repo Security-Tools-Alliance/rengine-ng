@@ -13,6 +13,8 @@ from django.apps import apps
 import shlex
 import json
 import os
+import threading
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -28,18 +30,16 @@ class CommandExecutor:
         self.return_code = -1
         self.timeout = self._calculate_timeout()
         self.trunc_char = self.context.get('trunc_char')
-        self.is_json = '-json' in cmd
+        self.stream_mode = False
+        self.is_json = '-json' in cmd or 'json' in cmd
         self.dry_run = os.getenv('COMMAND_EXECUTOR_DRY_RUN', '0') == '1'
 
     def execute(self, stream=False):
         """Main execution entry point"""
-        if self.dry_run:
-            logger.debug(f'[DRY RUN] Would execute command: {self.cmd}')
-            return self._mock_execution()
-        
         logger.debug(f"🔧 Starting command execution in {'STREAM' if stream else 'BUFFER'} mode")
         logger.debug(f"🔧 Command: {self.cmd}")
         logger.debug(f"🔧 Context: {self.context}")
+        self.stream_mode = stream
         self._pre_execution_setup()
         
         try:
@@ -77,7 +77,7 @@ class CommandExecutor:
         self.process = self._launch_process()
 
         try:
-            result = self._stream_output() if stream else self._buffer_output()
+            result = list(self._stream_output()) if stream else self._buffer_output()
         finally:
             self._save_return_code()
 
@@ -86,14 +86,17 @@ class CommandExecutor:
     def _launch_process(self):
         """Launch subprocess with improved security"""
         if self.dry_run:
-            logger.info(f'📄 [DRY RUN] Skipping process launch for: {self.cmd}')
-            return None
+            shell=str(self.context.get('shell', False))
+            cmd_str = ' '.join(self.cmd) if isinstance(self.cmd, list) else self.cmd
+            logger.debug(f'📄 [DRY RUN] Mock command: {cmd_str[:20]}... (shell={shell})')
+            return self._mock_execution()
+
 
         logger.debug("🚀 Launching process")
 
         if self.context.get('shell', False):
             # When shell is required, log a warning for security auditing
-            logger.warning(f"Using shell=True for command execution (security risk): {self.cmd}")
+            logger.warning(f"Using shell=True for command execution (security risk): {self.cmd[:20]}")
             process = subprocess.Popen(
                 self.cmd,
                 shell=True,
@@ -119,14 +122,21 @@ class CommandExecutor:
         return process
 
     def _stream_output(self):
-        """Stream output line by line"""
+        """Stream output line by line with database saving"""
         logger.debug("🔌 Starting stream output")
-        for line in self._read_process_output():
-            if isinstance(line, dict):
-                self._update_command_object(json.dumps(line), is_stream=True)
-            else:
-                self._update_command_object(line, is_stream=True)
-            yield line
+        output_lines = []
+
+        for line in iter(self.process.stdout.readline, b''):
+            if decoded := line.decode().strip():
+                logger.debug(f"🔠 Received line: {decoded}")
+                output_lines.append(decoded)
+                yield decoded
+
+        if full_output := '\n'.join(output_lines):
+            logger.debug(f"💾 Saving stream output ({len(output_lines)} lines)")
+            self._update_command_object(full_output, is_stream=True)
+        else:
+            logger.debug("📭 No stream output to save")
 
     def _buffer_output(self):
         """Collect all output before returning"""
@@ -162,60 +172,68 @@ class CommandExecutor:
     def _read_process_output(self):
         """Read process output with timeout handling"""
         logger.debug("📖 Starting process output reading")
+        stdout_fd = self.process.stdout.fileno()
+        stderr_fd = self.process.stderr.fileno()
+
         while True:
-            ready, _, _ = select.select([self.process.stdout, self.process.stderr], [], [], 1.0)
+            ready, _, _ = select.select([stdout_fd, stderr_fd], [], [], 1.0)
+
+            # Handle process completion first
+            if self.process.poll() is not None:
+                logger.debug("⏹ Process finished")
+                # Final read attempt for remaining output
+                if raw_line := self._read_ready_stream(ready):
+                    yield self._process_line(raw_line)
+                break
 
             if not ready:
-                if self.process.poll() is not None:
-                    logger.debug("⏹ Process finished")
-                    break
                 self._check_timeout()
                 continue
 
-            raw_line = self._read_ready_stream(ready)
-            logger.debug(f"📥 Raw line from stream: {raw_line or None}...")
-
-            if raw_line:
+            if raw_line := self._read_ready_stream(ready):
+                logger.debug(f"📥 Raw line from stream: {raw_line[:200]}...")
                 line = self._process_line(raw_line)
-
+                
                 if self.is_json:
-                    try:
-                        # Improved JSON handling with error recovery
-                        json_buffer = ''
-                        if isinstance(line, bytes):
-                            line = line.decode('utf-8', errors='replace').strip()
-                        else:
-                            line = line.strip()
-
-                        if not line:
-                            continue
-
-                        # Attempt to parse as complete JSON
-                        with contextlib.suppress(json.JSONDecodeError):
-                            yield json.loads(line)
-                            continue
-                        # Handle concatenated JSON objects or partial content
-                        json_buffer += line
-                        decoder = json.JSONDecoder()
-                        while json_buffer:
-                            try:
-                                obj, idx = decoder.raw_decode(json_buffer)
-                                yield obj
-                                json_buffer = json_buffer[idx:].lstrip()
-                            except json.JSONDecodeError:
-                                if len(json_buffer) > 1024:  # Prevent infinite loop
-                                    logger.warning(f"Truncating malformed JSON buffer: {json_buffer[:200]}...")
-                                    json_buffer = ''
-                                break
-
-                    except Exception as e:
-                        logger.error(f"❌ JSON processing failed: {str(e)}")
-                        logger.debug(f"❌ Problematic content: {line[:200]}...")
+                    yield from self._process_json_line(line)
                 else:
                     logger.debug("📝 Yielding text line")
                     yield line
-            elif self.process.poll() is not None:
-                break
+
+    def _process_json_line(self, line):
+        """Process a line of JSON output, handling partial/chunked data."""
+        try:
+            json_buffer = ''
+
+            if isinstance(line, bytes):
+                line = line.decode('utf-8', errors='replace').strip()
+            else:
+                line = line.strip()
+
+            if not line:
+                return
+
+            with contextlib.suppress(json.JSONDecodeError):
+                yield json.loads(line)
+                return
+
+            json_buffer += line
+            decoder = json.JSONDecoder()
+
+            while json_buffer:
+                try:
+                    obj, idx = decoder.raw_decode(json_buffer)
+                    yield obj
+                    json_buffer = json_buffer[idx:].lstrip()
+                except json.JSONDecodeError:
+                    if len(json_buffer) > 1024:
+                        logger.warning(f"Truncating malformed JSON buffer: {json_buffer[:200]}...")
+                        json_buffer = ''
+                    break
+
+        except Exception as e:
+            logger.error(f"❌ JSON processing failed: {str(e)}")
+            logger.debug(f"❌ Problematic content: {line[:200]}...")
 
     def _check_timeout(self):
         """Check and handle execution timeout"""
@@ -373,13 +391,95 @@ class CommandExecutor:
 
     def _mock_execution(self):
         """Generate mock command output for dry runs"""
-        mock_data = {
-            'command': self.cmd,
-            'output': f"DRY RUN OUTPUT FOR: {self.cmd}",
-            'return_code': 0
-        }
+        class MockProcess:
+            def __init__(self, cmd, stream_mode):
+                self.cmd = cmd
+                self.stream_mode = stream_mode
+                self._finished = False
+                self._returncode = 0
+                
+                # Create pipe for stdout simulation
+                self.read_fd, self.write_fd = os.pipe()
+                self.stdout = os.fdopen(self.read_fd, 'rb')
+                self.stderr = open(os.devnull, 'rb')
+                
+                # Start output generation thread
+                self.writer_thread = threading.Thread(
+                    target=self._generate_stream_output if stream_mode else self._generate_buffer_output,
+                    args=(self.write_fd,),
+                    daemon=True
+                )
+                self.writer_thread.start()
+            
+            def _generate_stream_output(self, write_fd):
+                """Simulate real-time JSON streaming output"""
+                json_entries = [
+                    {
+                        "status": "started",
+                        "message": "Scan initialization",
+                        "timestamp": datetime.now().isoformat()
+                    },
+                    {
+                        "status": "processing",
+                        "progress": 33,
+                        "current_item": "item1.example.com"
+                    },
+                    {
+                        "status": "processing", 
+                        "progress": 66,
+                        "current_item": "item2.example.com"
+                    },
+                    {
+                        "status": "completed",
+                        "results_count": 2,
+                        "vulnerabilities": ["XSS", "SQLi"]
+                    }
+                ]
+                
+                # Write with read validation
+                for entry in json_entries:
+                    data = json.dumps(entry) + "\n"
+                    os.write(write_fd, data.encode())
+                    time.sleep(0.5)
+                
+                os.close(write_fd)
+                self._finished = True
+            
+            def _generate_buffer_output(self, write_fd):
+                """Generate full output at once"""
+                os.write(write_fd, b"Full dry run output\nLine1\nLine2\n")
+                os.close(write_fd)
+                self._finished = True
+            
+            def wait(self):
+                """Simulate process completion wait"""
+                while self.writer_thread.is_alive():
+                    time.sleep(0.1)
+                self._finished = True
+                return self._returncode
 
-        return json.dumps(mock_data) if self.is_json else mock_data
+            def poll(self):
+                """Mock process status check"""
+                return self._returncode if self._finished else None
+
+            @property
+            def returncode(self):
+                """Always return 0 for successful dry runs"""
+                return self._returncode
+            
+            def communicate(self):
+                return (self.stdout.read(), self.stderr.read())
+            
+            def __del__(self):
+                """Clean up resources with error handling"""
+                with contextlib.suppress(AttributeError, OSError):
+                    self.stdout.close()
+                    self.stderr.close()
+                    
+                    if self.writer_thread.is_alive():
+                        self.writer_thread.join(timeout=0.1)
+
+        return MockProcess(self.cmd, self.stream_mode)
 
 def stream_command(cmd, **kwargs):
     context = {
