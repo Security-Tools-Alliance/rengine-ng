@@ -9,10 +9,10 @@ from django.core.exceptions import ValidationError
 from django.core.cache import cache
 
 from reNgine.definitions import DEFAULT_GF_PATTERNS, FAILED_TASK, FETCH_URL, GF_PATTERNS, RUNNING_TASK, SCHEDULED_SCAN, LIVE_SCAN
-from reNgine.settings import YAML_CACHE_TIMEOUT
+from reNgine.settings import COMMAND_EXECUTOR_DRY_RUN, YAML_CACHE_TIMEOUT
 from reNgine.utils.db import create_scan_object
 from reNgine.utils.logger import Logger
-from reNgine.utils.utils import is_iterable
+from reNgine.utils.utils import format_json_output, is_iterable
 from reNgine.utils.formatters import SafePath, fmt_traceback
 from reNgine.utils.task_config import TaskConfig
 from reNgine.tasks.subdomain import subdomain_discovery
@@ -92,8 +92,6 @@ def initialize_scan_history(scan, domain, engine, scan_type, initiated_by_id, re
             
             # Create directory and context
             results_dir = setup_scan_directory(domain.name, results_dir)
-            config = TaskConfig(engine.yaml_configuration, results_dir, scan.id, domain.name)
-            setup_gf_patterns(scan, engine, config.get_config(FETCH_URL))
             
             ctx = create_scan_context(
                 scan=scan,
@@ -105,6 +103,9 @@ def initialize_scan_history(scan, domain, engine, scan_type, initiated_by_id, re
                 url_filter=url_filter
             )
             
+            fetch_url_config = TaskConfig(ctx, FETCH_URL)
+            setup_gf_patterns(scan, engine, fetch_url_config.get_task_config())
+
             scan.save()
             return scan, ctx
             
@@ -151,7 +152,8 @@ def create_scan_context(scan, domain, engine, results_dir, out_of_scope_subdomai
         'out_of_scope_subdomains': out_of_scope_subdomains or [],
         'initiated_by_id': initiated_by_id,
         'url_filter': url_filter,
-        'yaml_configuration': config
+        'yaml_configuration': config,
+        'dry_run': COMMAND_EXECUTOR_DRY_RUN
     }
 
 def validate_scan_inputs(domain_id, engine_id, scan_type, scan_history_id=None):
@@ -279,7 +281,7 @@ def visualize_workflow(domain, engine, ctx, show_details=False):
         'config_files': '⚙️ ',
         'jenkins': '🤖',
         'wordpress_files': '📰',
-        'php_error': '⚠️',
+        'php_error': '⚠️ ',
         'exposed_documents': '📄',
         'db_files': '💾',
         'git_exposed': '🐙'
@@ -366,7 +368,7 @@ def visualize_workflow(domain, engine, ctx, show_details=False):
         port_scan_subtasks = ['naabu']
 
         # Then nmap if enabled
-        if port_scan_config.get('enable_nmap', True):
+        if port_scan_config.get('nmap_enabled', True):
             port_scan_subtasks.append('nmap')
 
         # Add subtasks
@@ -505,8 +507,7 @@ def visualize_workflow(domain, engine, ctx, show_details=False):
 
             for i, (key, value) in enumerate(config.items()):
                 if isinstance(value, (dict, list)):
-                    import json
-                    value_str = json.dumps(value, indent=2)
+                    value_str = format_json_output(value, indent=2)
                     # Indent each line of the JSON
                     value_str = '\n'.join([f'    {line}' for line in value_str.split('\n')])
                     lines.append(f"  └─ {key}:\n{value_str}")

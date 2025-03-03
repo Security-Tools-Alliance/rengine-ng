@@ -1,213 +1,241 @@
-from reNgine.definitions import (
-    HTTP_CRAWL,
-)
+from pathlib import Path
+
+from reNgine.definitions import HTTP_CRAWL
 from reNgine.celery import app
 from reNgine.celery_custom_task import RengineTask
+from reNgine.utils.command_builder import build_httpx_cmd
+from reNgine.utils.command_executor import stream_command
 from reNgine.utils.logger import Logger
-from reNgine.utils.command_executor import (
-    stream_command
-)
-from reNgine.utils.http import (
-    get_subdomain_from_url,
-    build_httpx_command,
-    process_httpx_line,
-    prepare_urls_for_http_scan,
-)
-from reNgine.utils.utils import (
-    remove_file_or_pattern,
-)
-from startScan.models import (
-    Subdomain,
-)
-from reNgine.tasks.url import remove_duplicate_endpoints
+from reNgine.utils.http import get_subdomain_from_url, prepare_urls_for_http_scan
+from reNgine.utils.parsers import parse_httpx_result
 from reNgine.utils.task_config import TaskConfig
-from pathlib import Path
+from reNgine.utils.utils import remove_file_or_pattern
+from reNgine.tasks.url import remove_duplicate_endpoints
+
+from startScan.models import Subdomain
+
 
 logger = Logger(True)
 @app.task(name='http_crawl', queue='io_queue', base=RengineTask, bind=True)
-def http_crawl(
-                self, 
-                urls=None, 
-                method=None, 
-                recrawl=False, 
-                ctx=None, 
-                track=True, 
-                description=None,
-                update_subdomain_metadatas=False, 
-                should_remove_duplicate_endpoints=True, 
-                duplicate_removal_fields=None):
-    """Use httpx to query HTTP URLs for important info like page titles, http
-    status, etc...
-
+def http_crawl(self, urls=None, method=None, recrawl=False, ctx=None, track=True, 
+               description=None, update_subdomain_metadatas=False, 
+               should_remove_duplicate_endpoints=True, duplicate_removal_fields=None):
+    """Use httpx to query HTTP URLs for important info like page titles, http status, etc.
+    
     Args:
-        urls (list, optional): A set of URLs to check. Overrides default
-            behavior which queries all endpoints related to this scan.
-        method (str): HTTP method to use (GET, HEAD, POST, PUT, DELETE).
-        recrawl (bool, optional): If False, filter out URLs that have already
-            been crawled.
+        urls (list, optional): URLs to check
+        method (str): HTTP method to use
+        recrawl (bool, optional): If False, filter out URLs already crawled
         should_remove_duplicate_endpoints (bool): Whether to remove duplicate endpoints
-        duplicate_removal_fields (list): List of Endpoint model fields to check for duplicates
-
-    Returns:
-        list: httpx results.
+        duplicate_removal_fields (list): Fields to check for duplicates
     """
-    from reNgine.utils.db import (
-        save_subdomain,
+    # Initialize context, config, and defaults
+    result = initialize_http_crawl(self, urls, ctx, duplicate_removal_fields, recrawl)
+    if not result:
+        return []
+    
+    config, task_config, input_path, urls, update_subdomain_metadatas = result
+    
+    # Build and execute the command
+    cmd = build_httpx_cmd(config, urls, method, task_config.get('threads', 10))
+    
+    # Process the results
+    results = process_http_results(
+        self, cmd, input_path, config.get_task_config()['follow_redirect'], 
+        update_subdomain_metadatas, ctx
     )
+    
+    # Clean up and post-processing
+    if should_remove_duplicate_endpoints and results:
+        remove_duplicate_endpoints(
+            self.scan_id, self.domain_id, self.subdomain_id,
+            filter_ids=[r.get('endpoint_id') for r in results if 'endpoint_id' in r]
+        )
+    
+    remove_file_or_pattern(input_path, history_file=self.history_file,
+                          scan_id=self.scan_id, activity_id=self.activity_id)
+    
+    return results
 
-    # Initialize context and duplicate_removal_fields
+def initialize_http_crawl(self, urls, ctx, duplicate_removal_fields, recrawl):
+    """Initialize HTTP crawl parameters and prepare URLs
+    
+    Returns:
+        tuple: (config, task_config, input_path, urls, update_subdomain_metadatas)
+        or None if no URLs found
+    """
     if ctx is None:
         ctx = {}
     if duplicate_removal_fields is None:
         duplicate_removal_fields = []
-
+        
     logger.info('🌐 Initiating HTTP Crawl')
-
-    # Initialize task config
-    config = TaskConfig(self.yaml_configuration, self.results_dir, self.scan_id, self.filename)
     
-    # Get configuration from TaskConfig
-    custom_header = config.prepare_custom_header(HTTP_CRAWL)
-    threads = config.get_threads(HTTP_CRAWL)
-    follow_redirect = config.get_follow_redirect(HTTP_CRAWL, False)
-    self.output_path = None
-    history_file = f'{self.results_dir}/commands.txt'
-
-    # Prepare URLs for scanning using the specific function
+    config = TaskConfig(ctx, HTTP_CRAWL)
+    task_config = config.get_task_config()
+    
     urls, input_path, subdomain_metadata_update = prepare_urls_for_http_scan(
-        urls, 
-        self.url_filter, 
-        self.results_dir, 
-        ctx,
-        recrawl
+        urls, self.url_filter, self.results_dir, ctx, recrawl
     )
-
-    # Update subdomain_metadatas flag if needed
-    if subdomain_metadata_update:
-        update_subdomain_metadatas = True
-
-    # If no URLs found, skip it
+    
     if not urls:
         logger.error('🌐 No URLs to crawl. Skipping.')
-        return
+        return None
+        
+    return config, task_config, input_path, urls, subdomain_metadata_update
 
-    # Re-adjust thread number if few URLs
-    if len(urls) < threads:
-        threads = len(urls)
-
-    # Get random proxy
-    proxy = config.get_proxy()
-
-    # Build the command
-    cmd = build_httpx_command(
-        threads, 
-        proxy, 
-        custom_header, 
-        urls, 
-        input_path, 
-        method, 
-        follow_redirect
-    )
-
-    # Process the results
+def process_http_results(self, cmd, input_path, follow_redirect, update_subdomain_metadatas, ctx):
+    """Process HTTP crawl results
+    
+    Returns:
+        list: Processed results
+    """
     results = []
     endpoint_ids = []
 
     if not Path(input_path).exists():
-        logger.error(f'📁 HTTP input file missing : {input_path}')
+        logger.error(f'📁 HTTP input file missing: {input_path}')
         return []
 
-    for line in stream_command(
-            cmd,
-            history_file=history_file,
-            scan_id=self.scan_id,
-            activity_id=self.activity_id):
-
+    for line in stream_command(cmd, history_file=self.history_file,
+                              scan_id=self.scan_id, activity_id=self.activity_id):
         # Skip invalid lines
-        if not line or not isinstance(line, dict):
+        if not line or not isinstance(line, dict) or line.get('failed', False):
             continue
 
-        # Check if the http request has an error
+        # Check for errors
         if 'error' in line:
             logger.error(line)
             continue
 
-        # No response from endpoint
-        if line.get('failed', False):
-            continue
-
-        # Get subdomain from URL
-        subdomain_name = get_subdomain_from_url(line.get('url', ''))
-        subdomain, _ = save_subdomain(subdomain_name, ctx=ctx)
-
-        if not isinstance(subdomain, Subdomain):
-            logger.error(f"🌐 Invalid subdomain encountered: {subdomain}")
-            continue
-
-        # Process the line and get results
-        endpoint, endpoint_str, result_data = process_httpx_line(
-            line, 
-            subdomain, 
-            ctx, 
-            follow_redirect, 
-            update_subdomain_metadatas,
-            self.subscan
-        )
-
-        if not endpoint:
-            continue
-
-        # Log and notify about the endpoint
-        logger.warning(f'🌐 {endpoint_str}')
-        if endpoint.is_alive and endpoint.http_status != 403:
-            self.notify(
-                fields={'Alive endpoint': f'• {endpoint_str}'},
-                add_meta_info=False)
-
-        # Add the results
-        line['_cmd'] = cmd
-        line.update(result_data)
-        results.append(line)
-
-        if techs_str := ', '.join(
-            [f'`{tech}`' for tech in result_data['techs']]
+        if endpoint_data := process_http_line(
+            self, line, cmd, follow_redirect, update_subdomain_metadatas, ctx
         ):
-            self.notify(
-                fields={'Technologies': techs_str},
-                add_meta_info=False)
-
-        # Notify about IPs
-        if result_data['a_records']:
-            ips_str = '• ' + '\n• '.join([f'`{ip}`' for ip in result_data['a_records']])
-            self.notify(
-                fields={'IPs': ips_str},
-                add_meta_info=False)
-
-        # Notify about host IP
-        if result_data['host']:
-            self.notify(
-                fields={'IPs': f'• `{result_data["host"]}`'},
-                add_meta_info=False)
-
-        # Add endpoint ID to the list
-        endpoint_ids.append(endpoint.id)
-
-    # Remove duplicate endpoints if needed
-    if should_remove_duplicate_endpoints and endpoint_ids:
-        remove_duplicate_endpoints(
-            self.scan_id,
-            self.domain_id,
-            self.subdomain_id,
-            filter_ids=endpoint_ids
-        )
-
-    # Clean up input file
-    if not remove_file_or_pattern(
-        input_path,
-        history_file=self.history_file,
-        scan_id=self.scan_id,
-        activity_id=self.activity_id
-    ):
-        logger.error(f"🌐 Failed to clean up input file {input_path}")
+            results.append(endpoint_data['result'])
+            endpoint_ids.append(endpoint_data['endpoint_id'])
 
     return results
+
+def process_http_line(self, line, cmd, follow_redirect, update_subdomain_metadatas, ctx):
+    """Process a single HTTP result line
+    
+    Returns:
+        dict: Processed endpoint data or None if invalid
+    """
+    from reNgine.utils.db import save_subdomain
+    
+    # Get subdomain from URL
+    subdomain_name = get_subdomain_from_url(line.get('url', ''))
+    subdomain, _ = save_subdomain(subdomain_name, ctx=ctx)
+    
+    if not isinstance(subdomain, Subdomain):
+        logger.error(f"🌐 Invalid subdomain encountered: {subdomain}")
+        return None
+        
+    # Process the line and get results
+    endpoint, endpoint_str, result_data = parse_httpx_result(
+        line, subdomain, ctx, follow_redirect, 
+        update_subdomain_metadatas, self.subscan
+    )
+    
+    if not endpoint:
+        return None
+        
+    # Log and notify about the endpoint
+    logger.warning(f'🌐 {endpoint_str}')
+    
+    notify_findings(self, endpoint, endpoint_str, result_data)
+    
+    # Add the results
+    line['_cmd'] = cmd
+    line['endpoint_id'] = endpoint.id
+    line.update(result_data)
+    
+    return {
+        'result': line,
+        'endpoint_id': endpoint.id
+    }
+
+def notify_findings(self, endpoint, endpoint_str, result_data):
+    """Send notification for alive endpoint
+    
+    Args:
+        self: Task instance with notify method
+        endpoint_str (str): Endpoint string
+    """
+    if endpoint.is_alive:
+        send_notification(
+            self, 
+            'Alive endpoint', 
+            endpoint_str
+        )
+
+    # Notification for technologies
+    if result_data['techs']:
+        send_notification(
+            self,
+            'Technologies',
+            result_data['techs'],
+            format_as_code=True,
+            use_bullet_points=False
+        )
+
+    # Notification for IPs (A records)
+    if result_data['a_records']:
+        send_notification(
+            self,
+            'IPs',
+            result_data['a_records'],
+            format_as_code=True
+        )
+
+    # Notification for host IP
+    if result_data['host']:
+        send_notification(
+            self,
+            'IPs',
+            result_data['host'],
+            format_as_code=True
+        )
+
+def send_notification(self, field_name, data, add_meta_info=False, format_as_code=False, use_bullet_points=True):
+    """Send formatted notification with consistent styling
+    
+    Args:
+        self: Task instance with notify method
+        field_name (str): Name of the field to display in notification
+        data: Data to display (str, list, or dict)
+        add_meta_info (bool): Whether to add metadata to notification
+        format_as_code (bool): Whether to format values as code with backticks
+        use_bullet_points (bool): Whether to format list items with bullet points
+        
+    Returns:
+        None
+    """
+    if not hasattr(self, 'notify') or not data:
+        return
+
+    # Format the data based on its type
+    if isinstance(data, list):
+        # Format list of items
+        items = [f'`{item}`' for item in data] if format_as_code else data
+        if use_bullet_points:
+            formatted_data = (
+                f'• {items[0]}'
+                if len(items) == 1
+                else '• ' + '\n• '.join(items)
+            )
+        else:
+            formatted_data = ', '.join(items)
+    elif isinstance(data, dict):
+        # Format dictionary values
+        formatted_data = ', '.join([f'{k}: {v}' for k, v in data.items()])
+    elif format_as_code:
+        formatted_data = f'`{data}`'
+    else:
+        formatted_data = f'• {data}' if use_bullet_points else str(data)
+    # Send the notification
+    self.notify(
+        fields={field_name: formatted_data},
+        add_meta_info=add_meta_info
+    )

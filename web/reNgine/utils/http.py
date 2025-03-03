@@ -3,17 +3,14 @@ import re
 import validators
 import tldextract
 import yaml
-import os
 
 from urllib.parse import urlparse
 from django.core.validators import URLValidator
 from django.core.exceptions import ValidationError
 
-from reNgine.utils.command_builder import CommandBuilder
 from reNgine.utils.logger import Logger
 from reNgine.definitions import ENABLE_HTTP_CRAWL
 from reNgine.settings import DEFAULT_ENABLE_HTTP_CRAWL
-from reNgine.utils.mock import prepare_urls_mock
 
 logger = Logger(True)
 
@@ -238,156 +235,7 @@ def get_data_from_post_request(request, field):
     else:
         return request.data.get(field, [])
 
-def build_httpx_command(threads, proxy, custom_header, urls, input_path, method=None, follow_redirect=False):
-    """Build command for httpx tool.
-    
-    Args:
-        threads (int): Number of threads to use
-        proxy (str): Proxy to use
-        custom_header (str): Custom HTTP header
-        urls (list): List of URLs to scan
-        input_path (str): Path to file containing URLs
-        method (str): HTTP method to use
-        follow_redirect (bool): Whether to follow redirects
-        
-    Returns:
-        str: Constructed command
-    """
-    cmd_builder = CommandBuilder('httpx')
-    cmd_builder.add_option('-cl')
-    cmd_builder.add_option('-ct')
-    cmd_builder.add_option('-rt')
-    cmd_builder.add_option('-location')
-    cmd_builder.add_option('-td')
-    cmd_builder.add_option('-websocket')
-    cmd_builder.add_option('-cname')
-    cmd_builder.add_option('-asn')
-    cmd_builder.add_option('-cdn')
-    cmd_builder.add_option('-probe')
-    cmd_builder.add_option('-random-agent')
-    
-    if threads > 0:
-        cmd_builder.add_option('-t', str(threads))
-    if proxy:
-        cmd_builder.add_option('--http-proxy', proxy)
-    if custom_header:
-        cmd_builder.add_option(custom_header)
-    
-    cmd_builder.add_option('-json')
-    
-    if len(urls) == 1:
-        cmd_builder.add_option('-u', urls[0])
-    else:
-        cmd_builder.add_option('-l', input_path)
-    
-    if method:
-        cmd_builder.add_option('-x', method)
-    
-    cmd_builder.add_option('-silent')
-    
-    if follow_redirect:
-        cmd_builder.add_option('-fr')
-    
-    return cmd_builder.build_string()
-
-def process_httpx_line(line, subdomain, ctx, follow_redirect, update_subdomain_metadatas, subscan=None):
-    """Process a single line from httpx output.
-    
-    Args:
-        line (dict): Line output from httpx
-        subdomain (Subdomain): Subdomain object
-        ctx (dict): Context
-        follow_redirect (bool): Whether redirects were followed
-        update_subdomain_metadatas (bool): Whether to update subdomain metadata
-        subscan: Subscan object
-        
-    Returns:
-        tuple: (endpoint, endpoint_str, result_data)
-    """
-    from reNgine.utils.db import save_endpoint, save_technologies, save_subdomain_metadata
-    from reNgine.utils.ip import save_ip_address
-    
-    # Parse httpx output
-    host = line.get('host', '')
-    content_length = line.get('content_length', 0)
-    http_status = line.get('status_code')
-    http_url, is_redirect = extract_httpx_url(line, follow_redirect)
-    page_title = line.get('title')
-    webserver = line.get('webserver')
-    cdn = line.get('cdn', False)
-    rt = line.get('time')
-    techs = line.get('tech', [])
-    content_type = line.get('content_type', '')
-    
-    # Process response time
-    response_time = -1
-    if rt:
-        response_time = float(''.join(ch for ch in rt if not ch.isalpha()))
-        if rt[-2:] == 'ms':
-            response_time /= 1000
-    
-    # Save endpoint to DB
-    endpoint, created = save_endpoint(
-        http_url,
-        crawl=False,
-        ctx=ctx,
-        subdomain=subdomain,
-        is_default=update_subdomain_metadatas
-    )
-    
-    if not endpoint:
-        return None, None, None
-        
-    # Update endpoint data
-    endpoint.http_status = http_status
-    endpoint.page_title = page_title
-    endpoint.content_length = content_length
-    endpoint.webserver = webserver
-    endpoint.response_time = response_time
-    endpoint.content_type = content_type
-    endpoint.save()
-    
-    # Format endpoint string for logging
-    endpoint_str = f'{http_url} [{http_status}] `{content_length}B` `{webserver}` `{rt}`'
-    
-    # Process technologies
-    save_technologies(techs, endpoint)
-    
-    # Process IP addresses from A records
-    a_records = line.get('a', [])
-    for ip_address in a_records:
-        save_ip_address(
-            ip_address,
-            subdomain,
-            subscan=subscan,
-            cdn=cdn)
-    
-    # Process host IP
-    if host:
-        save_ip_address(
-            host,
-            subdomain,
-            subscan=subscan,
-            cdn=cdn)
-    
-    # Update subdomain metadata if needed
-    if update_subdomain_metadatas:
-        save_subdomain_metadata(subdomain, endpoint, line)
-    
-    # Prepare result data
-    result_data = {
-        'final_url': http_url,
-        'endpoint_id': endpoint.id,
-        'endpoint_created': created,
-        'is_redirect': is_redirect,
-        'techs': techs,
-        'a_records': a_records,
-        'host': host
-    }
-    
-    return endpoint, endpoint_str, result_data
-
-def prepare_urls_with_fallback(urls, input_path, ctx=None, **http_urls_params):
+def prepare_urls_with_fallback(urls=None, input_path=None, ctx=None, **http_urls_params):
     """Prepare URLs from input list or database.
     
     This function handles a common pattern of working with URLs:
@@ -406,9 +254,7 @@ def prepare_urls_with_fallback(urls, input_path, ctx=None, **http_urls_params):
     """
     from reNgine.utils.db import get_http_urls
     from reNgine.utils.utils import is_iterable
-
-    # Check if we're in dry run mode
-    dry_run = os.getenv('COMMAND_EXECUTOR_DRY_RUN', '0') == '1'
+    from reNgine.utils.mock import prepare_urls_mock
 
     # Set default parameters if not provided
     if 'write_filepath' not in http_urls_params:
@@ -423,12 +269,14 @@ def prepare_urls_with_fallback(urls, input_path, ctx=None, **http_urls_params):
         logger.debug('🌐 URLs provided by user, writing to file')
         with open(input_path, 'w') as f:
             f.write('\n'.join(urls))
-    elif dry_run:
+    elif ctx.get('dry_run'):
         urls = prepare_urls_mock(ctx, input_path)
     else:
         # Normal mode - fetch from database
         logger.debug('🌐 URLs gathered from database')
         urls = get_http_urls(**http_urls_params)
+
+    ctx['urls'] = urls
 
     return urls
 

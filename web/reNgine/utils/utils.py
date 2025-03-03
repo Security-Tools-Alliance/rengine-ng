@@ -1,3 +1,4 @@
+import json
 import os
 import glob
 from reNgine.utils.logger import Logger
@@ -55,7 +56,8 @@ def replace_nulls(obj):
     else:
         return obj
 
-
+def format_json_output(data, indent=None, cls=None):
+    return json.dumps(data, indent=indent, cls=cls)
 
 def get_gpt_vuln_input_description(title, path):
     vulnerability_description = ''

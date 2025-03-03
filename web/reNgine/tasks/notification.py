@@ -4,10 +4,7 @@ import requests
 from celery import group
 from discord_webhook import DiscordWebhook
 
-from reNgine.definitions import (
-    NUCLEI_SEVERITY_MAP,
-    STATUS_TO_SEVERITIES,
-)
+from reNgine.definitions import NUCLEI_SEVERITY_MAP, STATUS_TO_SEVERITIES
 from reNgine.celery import app
 from reNgine.utils.logger import Logger
 from reNgine.utils.formatters import (

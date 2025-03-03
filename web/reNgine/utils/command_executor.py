@@ -16,6 +16,10 @@ import os
 import threading
 from datetime import datetime
 
+from reNgine.utils.mock import generate_mock_crlfuzz_vulnerabilities, generate_mock_dalfox_vulnerabilities, generate_mock_nuclei_vulnerabilities, generate_mock_s3scanner_vulnerabilities
+from reNgine.settings import COMMAND_EXECUTOR_DRY_RUN
+from reNgine.utils.utils import format_json_output
+
 logger = logging.getLogger(__name__)
 
 class CommandExecutor:
@@ -31,8 +35,9 @@ class CommandExecutor:
         self.timeout = self._calculate_timeout()
         self.trunc_char = self.context.get('trunc_char')
         self.stream_mode = False
-        self.is_json = '-json' in cmd or 'json' in cmd
-        self.dry_run = os.getenv('COMMAND_EXECUTOR_DRY_RUN', '0') == '1'
+        self.is_json = '-json' in cmd
+        self.dry_run = COMMAND_EXECUTOR_DRY_RUN
+        logger.debug(f"🔧 Dry run: {str(self.dry_run)}")
 
     def execute(self, stream=False):
         """Main execution entry point"""
@@ -63,7 +68,7 @@ class CommandExecutor:
 
     def _pre_execution_setup(self):
         """Prepare execution environment"""
-        logger.info(f"Initializing command execution: {self.cmd}")
+        logger.info(f"Initializing command execution: {' '.join(self.cmd)}")
         Command = self._get_command_model()
         self.command_obj = Command.objects.create(
             command=self.cmd,
@@ -142,12 +147,12 @@ class CommandExecutor:
         """Collect all output before returning"""
         logger.debug("📦 Starting buffer output")
         try:
-            return self._extracted_from__buffer_output()
+            return self._format_buffer_output()
         except Exception as e:
             logger.error(f"🔥 Buffer processing failed: {str(e)}")
             return self.process.returncode, ''
 
-    def _extracted_from__buffer_output(self):
+    def _format_buffer_output(self):
         # Wait for process completion and get output
         stdout, stderr = self.process.communicate()
 
@@ -295,7 +300,7 @@ class CommandExecutor:
             # Buffer mode: direct assignment
             if not is_stream:
                 logger.debug(f"📦 Saving buffer output ({len(data)} chars)")
-                self._extracted_from__update_command_object(
+                self._save_command_object(
                     current_output,
                     data,
                     "✅ Command object updated successfully with buffer mode",
@@ -306,11 +311,11 @@ class CommandExecutor:
             logger.debug(f"🔁 Appending stream data: {str(data)[:100]}...")
 
             if isinstance(data, dict):  # Already parsed JSON
-                output_line = json.dumps(data) + '\n'
+                output_line = format_json_output(data) + '\n'
             else:
                 output_line = f"{data}\n"
 
-            self._extracted_from__update_command_object(
+            self._save_command_object(
                 current_output,
                 output_line,
                 "✅ Command object updated successfully with stream mode",
@@ -320,7 +325,7 @@ class CommandExecutor:
             self.command_obj.output = f"Error: {str(e)}"
             self.command_obj.save(update_fields=['output'])
 
-    def _extracted_from__update_command_object(self, current_output, arg1, arg2):
+    def _save_command_object(self, current_output, arg1, arg2):
         self.command_obj.output = current_output + arg1
         self.command_obj.save(update_fields=['output'])
         logger.debug(arg2)
@@ -392,11 +397,12 @@ class CommandExecutor:
     def _mock_execution(self):
         """Generate mock command output for dry runs"""
         class MockProcess:
-            def __init__(self, cmd, stream_mode):
+            def __init__(self, cmd, stream_mode, context=None):
                 self.cmd = cmd
                 self.stream_mode = stream_mode
                 self._finished = False
                 self._returncode = 0
+                self.context = context
                 
                 # Create pipe for stdout simulation
                 self.read_fd, self.write_fd = os.pipe()
@@ -413,6 +419,19 @@ class CommandExecutor:
             
             def _generate_stream_output(self, write_fd):
                 """Simulate real-time JSON streaming output"""
+                urls = self.context.get('urls', [])
+                if ['nuclei', 'nuclei-scan'] in self.cmd:
+                    return generate_mock_nuclei_vulnerabilities(urls, count=5)
+
+                if ['dalfox', 'dalfox-scan'] in self.cmd:
+                    return generate_mock_dalfox_vulnerabilities(urls, count=5)
+
+                if ['s3scanner', 's3scanner-scan'] in self.cmd:
+                    return generate_mock_s3scanner_vulnerabilities(urls, count=5)
+
+                if ['crlfuzz', 'crlfuzz-scan'] in self.cmd:
+                    return generate_mock_crlfuzz_vulnerabilities(urls, count=5)
+
                 json_entries = [
                     {
                         "status": "started",
@@ -438,7 +457,7 @@ class CommandExecutor:
                 
                 # Write with read validation
                 for entry in json_entries:
-                    data = json.dumps(entry) + "\n"
+                    data = format_json_output(entry) + "\n"
                     os.write(write_fd, data.encode())
                     time.sleep(0.5)
                 
@@ -479,7 +498,7 @@ class CommandExecutor:
                     if self.writer_thread.is_alive():
                         self.writer_thread.join(timeout=0.1)
 
-        return MockProcess(self.cmd, self.stream_mode)
+        return MockProcess(self.cmd, self.stream_mode, self.context)
 
 def stream_command(cmd, **kwargs):
     context = {
@@ -490,7 +509,6 @@ def stream_command(cmd, **kwargs):
         'activity_id': kwargs.get('activity_id'),
         'encoding': kwargs.get('encoding', 'utf-8'),
         'trunc_char': kwargs.get('trunc_char'),
-        'dry_run': kwargs.get('dry_run', os.getenv('COMMAND_EXECUTOR_DRY_RUN', '0') == '1')
     }
     executor = CommandExecutor(cmd, context)
     return executor.execute(stream=True)
@@ -505,7 +523,6 @@ def run_command(cmd, **kwargs):
         'remove_ansi': kwargs.get('remove_ansi_sequence', False),
         'encoding': kwargs.get('encoding', 'utf-8'),
         'trunc_char': kwargs.get('trunc_char'),
-        'dry_run': kwargs.get('dry_run', os.getenv('COMMAND_EXECUTOR_DRY_RUN', '0') == '1')
     }
     executor = CommandExecutor(cmd, context)
     return executor.execute(stream=False)

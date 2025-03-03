@@ -1,31 +1,22 @@
+import os
 import validators
 
 from pathlib import Path
 from copy import deepcopy
 from urllib.parse import urlparse
 
-from reNgine.definitions import (
-    ALL,
-    SUBDOMAIN_DISCOVERY,
-    SUBDOMAIN_SCAN_DEFAULT_TOOLS,
-    USES_TOOLS,
-)
+from reNgine.definitions import ALL, SUBDOMAIN_DISCOVERY
 from reNgine.celery import app
 from reNgine.celery_custom_task import RengineTask
+from reNgine.utils.command_builder import CommandBuilder, build_piped_command, build_subdomain_tool_commands
 from reNgine.utils.logger import Logger
-from reNgine.utils.subdomain_tools import build_subdomain_tool_command
+from reNgine.utils.mock import prepare_subdomain_mock
+from reNgine.utils.task_config import TaskConfig
 from reNgine.tasks.command import run_command_line
 from reNgine.tasks.http import http_crawl
-from reNgine.utils.command_builder import CommandBuilder, build_piped_command
-from reNgine.utils.task_config import TaskConfig
 
-from scanEngine.models import (
-    InstalledExternalTool,
-    Notification,
-)
-from startScan.models import (
-    Subdomain,
-)
+from scanEngine.models import Notification
+from startScan.models import Subdomain
 
 logger = Logger(True)
 
@@ -47,7 +38,6 @@ def subdomain_discovery(
     """
     from api.serializers import SubdomainSerializer
     from reNgine.utils.db import (
-        get_random_proxy,
         get_interesting_subdomains,
         get_new_added_subdomain,
         get_removed_subdomain,
@@ -62,30 +52,31 @@ def subdomain_discovery(
         logger.warning(f'🌍 Ignoring subdomains scan as an URL path filter was passed ({self.url_filter}).')
         return
 
+    # Check if dry run mode is enabled
+    if ctx is None:
+        ctx = {}
+    if ctx.get('dry_run'):
+        return prepare_subdomain_mock(host, ctx)
+
     # Config
-    config = TaskConfig(self.yaml_configuration, self.results_dir, self.scan_id, self.filename)
-    subdomain_config = config.get_config(SUBDOMAIN_DISCOVERY)
-    enable_http_crawl = config.get_http_crawl_enabled(SUBDOMAIN_DISCOVERY)
-    threads = config.get_threads(SUBDOMAIN_DISCOVERY)
-    timeout = config.get_timeout(SUBDOMAIN_DISCOVERY)
-    tools = subdomain_config.get(USES_TOOLS, SUBDOMAIN_SCAN_DEFAULT_TOOLS)
-    default_subdomain_tools = [tool.name.lower() for tool in InstalledExternalTool.objects.filter(is_default=True).filter(is_subdomain_gathering=True)]
-    custom_subdomain_tools = [tool.name.lower() for tool in InstalledExternalTool.objects.filter(is_default=False).filter(is_subdomain_gathering=True)]
+    config = TaskConfig(ctx, SUBDOMAIN_DISCOVERY)
+    task_config = config.get_task_config()
+
     send_subdomain_changes, send_interesting = False, False
     if notif := Notification.objects.first():
         send_subdomain_changes = notif.send_subdomain_changes_notif
         send_interesting = notif.send_interesting_notif
 
     # Gather tools to run for subdomain scan
-    if ALL in tools:
-        tools = SUBDOMAIN_SCAN_DEFAULT_TOOLS + custom_subdomain_tools
+    if ALL in task_config['tools']:
+        tools = task_config['tools'] + task_config['custom_subdomain_tools']
     tools = [t.lower() for t in tools]
+    task_config['default_subdomain_tools'].extend(('amass-passive', 'amass-active'))
 
-    default_subdomain_tools.extend(('amass-passive', 'amass-active'))
     # Run tools
     for tool in tools:
-        cmd, use_shell, error_msg = build_subdomain_tool_command(
-            tool, host, self.results_dir, subdomain_config, get_random_proxy(), timeout, threads, custom_subdomain_tools)
+        cmd, use_shell, error_msg = build_subdomain_tool_commands(
+            tool, host, ctx, config)
 
         if error_msg:
             logger.error(error_msg)
@@ -107,8 +98,8 @@ def subdomain_discovery(
 
     # Gather all the tools' results in one single file. Write subdomains into
     # separate files, and sort all subdomains.
-    input_path = str(Path(self.results_dir) / "subdomains_*.txt")
-    output_path = self.output_path
+    input_path = config.get_working_dir(filename='subdomains_*.txt')
+    output_path = config.get_working_dir()
 
     cat_cmd = CommandBuilder('cat')
     cat_cmd.add_option(input_path)
@@ -189,7 +180,7 @@ def subdomain_discovery(
         urls.append(subdomain.name)
 
     # Bulk crawl subdomains
-    if enable_http_crawl:
+    if task_config['enable_http_crawl']:
         custom_ctx = deepcopy(ctx)
         custom_ctx['track'] = True
         http_crawl.delay(urls, ctx=custom_ctx, update_subdomain_metadatas=True)

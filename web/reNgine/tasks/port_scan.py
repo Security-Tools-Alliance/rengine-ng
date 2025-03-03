@@ -1,41 +1,25 @@
 import json
-import whatportis
 import os
 import time
 
 from copy import deepcopy
 from pathlib import Path
 from celery import group
+
+from reNgine.definitions import PORT_SCAN, UNCOMMON_WEB_PORTS
 from reNgine.celery import app
 from reNgine.celery_custom_task import RengineTask
-from reNgine.utils.logger import Logger
-from reNgine.tasks.command import run_command_line
-from reNgine.utils.formatters import get_task_title
-from reNgine.utils.nmap_service import process_nmap_service_results
-from reNgine.utils.parsers import parse_nmap_results
-from scanEngine.models import Notification
-from reNgine.definitions import (
-    NAABU_DEFAULT_PORTS,
-    PORT_SCAN,
-    NAABU_EXCLUDE_PORTS,
-    NAABU_EXCLUDE_SUBDOMAINS,
-    PORTS,
-    NAABU_PASSIVE,
-    UNCOMMON_WEB_PORTS,
-    USE_NAABU_CONFIG,
-    ENABLE_NMAP,
-    NMAP_COMMAND,
-    NMAP_SCRIPT,
-    NMAP_SCRIPT_ARGS,
-)
-from reNgine.utils.utils import return_iterable
+from reNgine.utils.command_builder import build_naabu_cmd
 from reNgine.utils.command_executor import stream_command
-from reNgine.utils.ip import save_ip_address
-from startScan.models import Port, Subdomain
+from reNgine.utils.formatters import SafePath, get_task_title
+from reNgine.utils.logger import Logger
 from reNgine.utils.nmap import parse_http_ports_data
-from reNgine.utils.formatters import SafePath
-from reNgine.utils.command_builder import CommandBuilder
+from reNgine.utils.nmap_service import process_nmap_service_results
+from reNgine.utils.parsers import parse_nmap_results, parse_naabu_result
 from reNgine.utils.task_config import TaskConfig
+from reNgine.tasks.command import run_command_line
+
+from scanEngine.models import Notification
 
 logger = Logger(True)
 
@@ -50,10 +34,7 @@ def port_scan(self, hosts=None, ctx=None, description=None):
     Returns:
         list: List of open ports (dict).
     """
-    from reNgine.utils.db import (
-        get_subdomains,
-        save_endpoint,
-    )
+    from reNgine.utils.db import get_subdomains
 
     if hosts is None:
         hosts = []
@@ -61,76 +42,24 @@ def port_scan(self, hosts=None, ctx=None, description=None):
         ctx = {}
 
     # Initialize task config
-    config = TaskConfig(self.yaml_configuration, self.results_dir, self.scan_id, self.filename)
-
-    # Get configuration values
-    input_file = config.get_input_path('subdomains_port_scan')
-    proxy = config.get_proxy()
-
-    # Get port scan specific configs
-    port_config = config.get_config(PORT_SCAN)
-    enable_http_crawl = config.get_http_crawl_enabled(PORT_SCAN)
-    timeout = config.get_timeout(PORT_SCAN)
-    exclude_ports = port_config.get(NAABU_EXCLUDE_PORTS, [])
-    exclude_subdomains = port_config.get(NAABU_EXCLUDE_SUBDOMAINS, False)
-    ports = port_config.get(PORTS, NAABU_DEFAULT_PORTS)
-    ports = [str(port) for port in ports]
-    rate_limit = config.get_rate_limit(PORT_SCAN)
-    threads = config.get_threads(PORT_SCAN)
-    passive = port_config.get(NAABU_PASSIVE, False)
-    use_naabu_config = port_config.get(USE_NAABU_CONFIG, False)
-    exclude_ports_str = ','.join(return_iterable(exclude_ports))
-
-    # nmap args
-    nmap_enabled = port_config.get(ENABLE_NMAP, False)
-    nmap_cmd = port_config.get(NMAP_COMMAND, '')
-    nmap_script = port_config.get(NMAP_SCRIPT, '')
-    nmap_script = ','.join(return_iterable(nmap_script))
-    nmap_script_args = port_config.get(NMAP_SCRIPT_ARGS)
+    config = TaskConfig(ctx, PORT_SCAN)
+    task_config = config.get_task_config()
 
     if hosts:
-        with open(input_file, 'w') as f:
+        with open(task_config['input_path'], 'w') as f:
             f.write('\n'.join(hosts))
     else:
         hosts = get_subdomains(
-            write_filepath=input_file,
-            exclude_subdomains=exclude_subdomains,
+            write_filepath=task_config['input_path'],
+            exclude_subdomains=task_config['exclude_subdomains'],
             ctx=ctx)
 
     if not hosts:
         logger.info('🔌 No hosts to scan')
         return {}
 
-    # Build cmd using the secure builder
-    cmd_builder = CommandBuilder('naabu')
-    cmd_builder.add_option('-json')
-    cmd_builder.add_option('-exclude-cdn')
-    cmd_builder.add_option('-list', input_file, len(hosts) > 0)
-    cmd_builder.add_option('-host', hosts[0], len(hosts) == 0)
-
-    # Port configuration
-    if 'full' in ports or 'all' in ports:
-        cmd_builder.add_option('-p', '-')
-    elif 'top-100' in ports:
-        cmd_builder.add_option('-top-ports', '100')
-    elif 'top-1000' in ports:
-        cmd_builder.add_option('-top-ports', '1000')
-    else:
-        ports_str = ','.join(ports)
-        cmd_builder.add_option('-p', ports_str)
-
-    # Add remaining options
-    cmd_builder.add_option('-config', str(Path.home() / '.config' / 'naabu' / 'config.yaml'), use_naabu_config)
-    cmd_builder.add_option('-proxy', proxy, bool(proxy))
-    cmd_builder.add_option('-c', threads, bool(threads))
-    cmd_builder.add_option('-rate', rate_limit, rate_limit > 0)
-    cmd_builder.add_option('-timeout', timeout*1000, timeout > 0)
-    cmd_builder.add_option('-passive', condition=passive)
-    cmd_builder.add_option('-exclude-ports', exclude_ports_str, bool(exclude_ports))
-    cmd_builder.add_option('-silent')
-
     # Execute command more securely using list mode
-    cmd_list = cmd_builder.build_list()
+    cmd_list = build_naabu_cmd(config, hosts)
     results = []
     urls = []
     ports_data = {}
@@ -141,68 +70,32 @@ def port_scan(self, hosts=None, ctx=None, description=None):
             scan_id=self.scan_id,
             activity_id=self.activity_id):
 
-        if not isinstance(line, dict):
+        # Parse port scan result
+        parsed_result = parse_naabu_result(line, ctx)
+        
+        # Skip if parsing failed
+        if not parsed_result:
             continue
+        
+        # Append raw line to results
         results.append(line)
-        port_number = line['port']
-        ip_address = line['ip']
-        host = line.get('host') or ip_address
-        if port_number == 0:
-            continue
-
-        # Grab subdomain
-        subdomain = Subdomain.objects.filter(
-            name=host,
-            target_domain=self.domain,
-            scan_history=self.scan
-        ).first()
-
-        # Add IP DB
-        ip, _ = save_ip_address(ip_address, subdomain, subscan=self.subscan)
-        if self.subscan:
-            ip.ip_subscan_ids.add(self.subscan)
-            ip.save()
-
-        # Add endpoint to DB
-        # port 80 and 443 not needed as http crawl already does that.
-        if port_number not in [80, 443]:
-            http_url = f'{host}:{port_number}'
-            endpoint, _ = save_endpoint(
-                http_url,
-                crawl=enable_http_crawl,
-                ctx=ctx,
-                subdomain=subdomain)
-            if endpoint:
-                http_url = endpoint.http_url
-            urls.append(http_url)
-
-        # Add Port in DB
-        port_details = whatportis.get_ports(str(port_number))
-        service_name = port_details[0].name if len(port_details) > 0 else 'unknown'
-        description = port_details[0].description if len(port_details) > 0 else ''
-
-        # get or create port
-        port, created = Port.objects.get_or_create(
-            number=port_number,
-            service_name=service_name,
-            description=description
-        )
-        if port_number in UNCOMMON_WEB_PORTS:
-            port.is_uncommon = True
-            port.save()
-        ip.ports.add(port)
-        ip.save()
-        if host in ports_data:
-            ports_data[host].append(port_number)
-        else:
-            ports_data[host] = [port_number]
-
-        # Send notification
-        logger.warning(f'🔌 Found opened port {port_number} on {ip_address} ({host})')
+        
+        # Process the result
+        if not process_port_scan_result(
+            parsed_result,
+            self.domain,
+            self.scan,
+            urls,
+            ports_data,
+            ctx,
+            enable_http_crawl=task_config['enable_http_crawl'],
+            subscan=self.subscan
+        ):
+            logger.error(f'❌ Failed to process port scan result: {line}')
 
     if not ports_data:
         logger.info('🔌 Finished running naabu port scan - No open ports found.')
-        if nmap_enabled:
+        if task_config['nmap_enabled']:
             logger.info('🔌 Nmap scans skipped')
         return ports_data
 
@@ -219,7 +112,7 @@ def port_scan(self, hosts=None, ctx=None, description=None):
 
     logger.info('🔌 Finished running naabu port scan.')
 
-    if nmap_enabled:
+    if task_config['nmap_enabled']:
         logger.warning('🔌 Starting nmap scans ...')
         logger.warning(ports_data)
         # Process nmap results: 1 process per host
@@ -230,12 +123,12 @@ def port_scan(self, hosts=None, ctx=None, description=None):
             ctx_nmap['description'] = get_task_title(f'nmap_{host}', self.scan_id, self.subscan_id)
             ctx_nmap['track'] = False
             sig = nmap.si(
-                cmd=nmap_cmd,
+                cmd=task_config['nmap_cmd'],
                 ports=port_list,
                 host=host,
-                script=nmap_script,
-                script_args=nmap_script_args,
-                max_rate=rate_limit,
+                script=task_config['nmap_script'],
+                script_args=task_config['nmap_script_args'],
+                max_rate=task_config['rate_limit'],
                 ctx=ctx_nmap)
             sigs.append(sig)
         group(sigs).apply_async()
@@ -286,7 +179,7 @@ def nmap(self, args=None, ports=None, host=None, input_file=None, script=None, s
         description (str, optional): Task description shown in UI.
     """
     from reNgine.utils.db import save_vulns
-    from reNgine.utils.command_builder import get_nmap_cmd
+    from reNgine.utils.command_builder import build_nmap_cmd
 
     if ports is None:
         ports = []
@@ -302,7 +195,7 @@ def nmap(self, args=None, ports=None, host=None, input_file=None, script=None, s
     logger.warning(f'Running nmap on {host}')
 
     # Build cmd
-    nmap_cmd = get_nmap_cmd(
+    nmap_cmd = build_nmap_cmd(
         args=args,
         ports=ports_str,
         script=script,
@@ -345,6 +238,8 @@ def scan_http_ports(self, host, ctx=None, description=None):
     Returns:
         dict: HTTP ports data per host 
     """
+    from reNgine.utils.mock import prepare_port_scan_mock
+    import os
 
     if ctx is None:
         ctx = {}
@@ -355,9 +250,15 @@ def scan_http_ports(self, host, ctx=None, description=None):
         logger.info(f'Using cached port scan results for {host}')
         return cached_result
 
+    # Check if dry run mode is enabled
+    if ctx.get('dry_run'):
+        results_dir = ctx.get('results_dir', '/tmp')
+        return prepare_port_scan_mock(host, results_dir, ctx)
+
     # Prepare output file path
     results_dir = ctx.get('results_dir', '/tmp')
     filename = f"{host}_nmap.xml"
+
     try:
         xml_file = SafePath.create_safe_path(
             base_dir=results_dir,
@@ -402,3 +303,79 @@ def scan_http_ports(self, host, ctx=None, description=None):
             time.sleep(retry_delay)
 
     return parse_http_ports_data(xml_file) if Path(xml_file).exists() else None
+
+def process_port_scan_result(parsed_result, domain, scan, urls, ports_data, ctx, enable_http_crawl=False, subscan=None):
+    """Process a parsed port scan result and save to database
+    
+    Args:
+        parsed_result (dict): Parsed port scan result
+        domain: The domain object
+        scan: The scan history object
+        urls (list): List to append URLs for further processing
+        ports_data (dict): Dictionary to track ports per host
+        ctx (dict): Context information
+        enable_http_crawl (bool): Whether to enable HTTP crawling
+        subscan: Optional subscan object
+        
+    Returns:
+        bool: True if processing succeeded, False otherwise
+    """
+    from startScan.models import Subdomain, Port
+    from reNgine.utils.db import save_ip_address, save_endpoint
+    
+    # Extract parsed data
+    port_number = parsed_result['port_number']
+    ip_address = parsed_result['ip_address']
+    host = parsed_result['host']
+    service_name = parsed_result['service_name']
+    description = parsed_result['description']
+    is_uncommon = parsed_result['is_uncommon']
+    needs_endpoint = parsed_result['needs_endpoint']
+    
+    # Grab subdomain
+    subdomain = Subdomain.objects.filter(
+        name=host,
+        target_domain=domain,
+        scan_history=scan
+    ).first()
+    
+    # Add IP DB
+    ip, _ = save_ip_address(ip_address, subdomain, subscan=subscan)
+    if subscan:
+        ip.ip_subscan_ids.add(subscan)
+        ip.save()
+    
+    # Add endpoint to DB if needed
+    if needs_endpoint:
+        http_url = f'{host}:{port_number}'
+        endpoint, _ = save_endpoint(
+            http_url,
+            crawl=enable_http_crawl,
+            ctx=ctx,
+            subdomain=subdomain)
+        if endpoint:
+            http_url = endpoint.http_url
+        urls.append(http_url)
+    
+    # Add Port in DB
+    port, created = Port.objects.get_or_create(
+        number=port_number,
+        service_name=service_name,
+        description=description
+    )
+    
+    if is_uncommon:
+        port.is_uncommon = True
+        port.save()
+    
+    ip.ports.add(port)
+    ip.save()
+    
+    if host in ports_data:
+        ports_data[host].append(port_number)
+    else:
+        ports_data[host] = [port_number]
+    
+    # Send notification
+    logger.warning(f'🔌 Found opened port {port_number} on {ip_address} ({host})')
+    return True

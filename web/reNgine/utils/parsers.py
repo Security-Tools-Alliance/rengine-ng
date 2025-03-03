@@ -13,9 +13,107 @@ from reNgine.definitions import (
     NUCLEI_SEVERITY_MAP,
     NUCLEI_DEFAULT_TEMPLATES_PATH,
 )
+from reNgine.utils.http import extract_httpx_url
 from reNgine.utils.logger import Logger
 
 logger = Logger(__name__)
+
+def parse_httpx_result(line, subdomain, ctx, follow_redirect, update_subdomain_metadatas, subscan=None):
+    """Process a single line from httpx output.
+    
+    Args:
+        line (dict): Line output from httpx
+        subdomain (Subdomain): Subdomain object
+        ctx (dict): Context
+        follow_redirect (bool): Whether redirects were followed
+        update_subdomain_metadatas (bool): Whether to update subdomain metadata
+        subscan: Subscan object
+        
+    Returns:
+        tuple: (endpoint, endpoint_str, result_data)
+    """
+    from reNgine.utils.db import save_endpoint, save_technologies, save_subdomain_metadata
+    from reNgine.utils.ip import save_ip_address
+    
+    # Parse httpx output
+    host = line.get('host', '')
+    content_length = line.get('content_length', 0)
+    http_status = line.get('status_code')
+    http_url, is_redirect = extract_httpx_url(line, follow_redirect)
+    page_title = line.get('title')
+    webserver = line.get('webserver')
+    cdn = line.get('cdn', False)
+    rt = line.get('time')
+    techs = line.get('tech', [])
+    content_type = line.get('content_type', '')
+    
+    # Process response time
+    response_time = -1
+    if rt:
+        response_time = float(''.join(ch for ch in rt if not ch.isalpha()))
+        if rt[-2:] == 'ms':
+            response_time /= 1000
+    
+    # Save endpoint to DB
+    endpoint, created = save_endpoint(
+        http_url,
+        crawl=False,
+        ctx=ctx,
+        subdomain=subdomain,
+        is_default=update_subdomain_metadatas
+    )
+    
+    if not endpoint:
+        return None, None, None
+        
+    # Update endpoint data
+    endpoint.http_status = http_status
+    endpoint.page_title = page_title
+    endpoint.content_length = content_length
+    endpoint.webserver = webserver
+    endpoint.response_time = response_time
+    endpoint.content_type = content_type
+    endpoint.save()
+    
+    # Format endpoint string for logging
+    endpoint_str = f'{http_url} [{http_status}] `{content_length}B` `{webserver}` `{rt}`'
+    
+    # Process technologies
+    save_technologies(techs, endpoint)
+    
+    # Process IP addresses from A records
+    a_records = line.get('a', [])
+    for ip_address in a_records:
+        save_ip_address(
+            ip_address,
+            subdomain,
+            subscan=subscan,
+            cdn=cdn)
+    
+    # Process host IP
+    if host:
+        save_ip_address(
+            host,
+            subdomain,
+            subscan=subscan,
+            cdn=cdn)
+    
+    # Update subdomain metadata if needed
+    if update_subdomain_metadatas:
+        save_subdomain_metadata(subdomain, endpoint, line)
+    
+    # Prepare result data
+    result_data = {
+        'final_url': http_url,
+        'endpoint_id': endpoint.id,
+        'endpoint_created': created,
+        'is_redirect': is_redirect,
+        'techs': techs,
+        'a_records': a_records,
+        'host': host
+    }
+    
+    return endpoint, endpoint_str, result_data
 
 def parse_s3scanner_result(line):
     '''
@@ -126,6 +224,99 @@ def parse_crlfuzz_result(url):
         'severity': 2,
         'description': 'A CRLF (HTTP Response Splitting) vulnerability has been discovered.',
         'source': CRLFUZZ,
+    }
+
+def parse_ffuf_result(line, ctx=None):
+    """Parse a single line from FFUF output
+    
+    Args:
+        line (dict): Line output from FFUF
+        ctx (dict): Additional context
+        
+    Returns:
+        dict: Parsed FFUF data with additional metadata
+    """
+    if not isinstance(line, dict):
+        return None
+        
+    import base64
+    from reNgine.utils.http import extract_path_from_url
+    
+    # Extract basic information from FFUF output
+    url = line.get('url', '')
+    length = line.get('length', 0)
+    status = line.get('status', 0)
+    words = line.get('words', 0)
+    lines_count = line.get('lines', 0)
+    content_type = line.get('content-type', '')
+    duration = line.get('duration', 0)
+    
+    # Extract path and convert to base64
+    path = extract_path_from_url(url)
+    name = base64.b64encode(path.encode()).decode() if path else ""
+    
+    # Calculate response time in seconds from nanoseconds
+    response_time = duration / 1000000000 if duration else 0
+    
+    return {
+        'url': url,
+        'name': name,
+        'length': length,
+        'status': status,
+        'words': words,
+        'lines': lines_count,
+        'content_type': content_type,
+        'duration': duration,
+        'response_time': response_time,
+        'raw_result': line
+    }
+
+def parse_naabu_result(line, ctx=None):
+    """Parse a single line from Naabu port scan output
+    
+    Args:
+        line (dict): Line output from Naabu
+        ctx (dict): Additional context
+        
+    Returns:
+        dict: Parsed port scan data with additional metadata
+    """
+    import whatportis
+    from reNgine.definitions import UNCOMMON_WEB_PORTS
+    
+    if not isinstance(line, dict):
+        return None
+    
+    # Extract basic information from Naabu output
+    port_number = line.get('port', 0)
+    ip_address = line.get('ip', '')
+    host = line.get('host', ip_address)
+    
+    # Skip port 0 (invalid)
+    if port_number == 0:
+        return None
+    
+    # Determine port service details
+    port_details = whatportis.get_ports(str(port_number))
+    service_name = port_details[0].name if len(port_details) > 0 else 'unknown'
+    description = port_details[0].description if len(port_details) > 0 else ''
+    
+    # Check if it's an uncommon web port
+    is_uncommon = port_number in UNCOMMON_WEB_PORTS
+    
+    # Determine if endpoint creation needed
+    # Port 80 and 443 are handled by HTTP crawl
+    needs_endpoint = port_number not in [80, 443]
+    
+    return {
+        'port_number': port_number, 
+        'ip_address': ip_address,
+        'host': host,
+        'service_name': service_name,
+        'description': description,
+        'is_uncommon': is_uncommon,
+        'needs_endpoint': needs_endpoint,
+        'raw_result': line
     }
 
 def parse_nmap_results(xml_file, output_file=None, parse_type='vulnerabilities'):

@@ -14,6 +14,7 @@ from scanEngine.models import Notification, EngineType
 from startScan.models import ScanHistory, SubScan, ScanActivity
 from reNgine.utils.logger import Logger
 from reNgine.utils.formatters import get_scan_fields, get_scan_title, get_scan_url
+from reNgine.utils.utils import format_json_output
 
 logger = Logger(True)
 
@@ -55,7 +56,7 @@ def send_slack_message(message):
     if not do_send:
         return
     hook_url = notif.slack_hook_url
-    requests.post(url=hook_url, data=json.dumps(message), headers=headers)
+    requests.post(url=hook_url, data=format_json_output(message), headers=headers)
 
 def send_lark_message(message):
     """Send lark message.
@@ -73,7 +74,7 @@ def send_lark_message(message):
     if not do_send:
         return
     hook_url = notif.lark_hook_url
-    requests.post(url=hook_url, data=json.dumps(message), headers=headers)
+    requests.post(url=hook_url, data=format_json_output(message), headers=headers)
 
 def send_discord_message(message, title='', severity=None, url=None, files=None, fields=None, fields_append=None):
     """Send Discord message.
@@ -175,8 +176,8 @@ def send_discord_message(message, title='', severity=None, url=None, files=None,
         webhook.add_embed(embed)
 
         # Add webhook and embed objects to cache, so we can pick them up later
-        DISCORD_WEBHOOKS_CACHE.set(f'{title}_webhook', json.dumps(webhook))
-        DISCORD_WEBHOOKS_CACHE.set(f'{title}_embed', json.dumps(embed))
+        DISCORD_WEBHOOKS_CACHE.set(f'{title}_webhook', format_json_output(webhook))
+        DISCORD_WEBHOOKS_CACHE.set(f'{title}_embed', format_json_output(embed))
 
     # Add files to webhook
     if files:
@@ -191,7 +192,7 @@ def send_discord_message(message, title='', severity=None, url=None, files=None,
     else:
         response = webhook.execute()
         if use_discord_embed and response.status_code == 200:
-            DISCORD_WEBHOOKS_CACHE.set(title, json.dumps(response))
+            DISCORD_WEBHOOKS_CACHE.set(title, format_json_output(response))
 
     # Get status code
     if response.status_code == 429:

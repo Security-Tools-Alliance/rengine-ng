@@ -3,28 +3,15 @@ import yaml
 import uuid
 
 from celery import chain
+from django.core.exceptions import ValidationError
 from django.utils import timezone
 
-from reNgine.definitions import (
-    RUNNING_TASK,
-    FAILED_TASK,
-    LIVE_SCAN,
-)
-from reNgine.settings import CELERY_DEBUG, RENGINE_RESULTS
+from reNgine.definitions import RUNNING_TASK, FAILED_TASK, LIVE_SCAN
+from reNgine.settings import RENGINE_RESULTS
 from reNgine.celery import app
 from reNgine.utils.debug import debug
-from reNgine.utils.logger import Logger
 from reNgine.utils.formatters import SafePath, fmt_traceback
-from scanEngine.models import EngineType
-from startScan.models import (
-    ScanHistory,
-    Subdomain,
-    SubScan,
-)
-from targetApp.models import Domain
-from reNgine.tasks.notification import send_scan_notif
-from reNgine.tasks.reporting import report
-from reNgine.tasks.http import http_crawl
+from reNgine.utils.logger import Logger
 from reNgine.utils.scan_helpers import (
     get_scan_engine,
     handle_ip_scan,
@@ -32,7 +19,13 @@ from reNgine.utils.scan_helpers import (
     validate_scan_inputs,
     build_scan_workflow,
 )
-from django.core.exceptions import ValidationError
+from reNgine.tasks.http import http_crawl
+from reNgine.tasks.notification import send_scan_notif
+from reNgine.tasks.reporting import report
+
+from scanEngine.models import EngineType
+from startScan.models import ScanHistory, Subdomain, SubScan
+from targetApp.models import Domain
 
 """
 Celery tasks.

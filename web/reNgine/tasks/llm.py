@@ -1,19 +1,10 @@
 from urllib.parse import urlparse
-
+from django.db import transaction
 from reNgine.celery import app
 from reNgine.utils.logger import Logger
-from reNgine.gpt import (
-    GPTVulnerabilityReportGenerator
-)
-from reNgine.utils.utils import (
-    get_gpt_vuln_input_description,
-)
-from startScan.models import (
-    GPTVulnerabilityReport,
-    Vulnerability,
-    VulnerabilityReference,
-)
-from django.db import transaction
+from reNgine.gpt import GPTVulnerabilityReportGenerator
+from reNgine.utils.utils import get_gpt_vuln_input_description
+from startScan.models import GPTVulnerabilityReport, Vulnerability, VulnerabilityReference
 
 logger = Logger(True)
 

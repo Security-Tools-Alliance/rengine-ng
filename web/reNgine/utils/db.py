@@ -5,19 +5,13 @@ import validators
 
 from copy import deepcopy
 from urllib.parse import urlparse
-from metafinder.extractor import extract_metadata_from_google_search
-from pathlib import Path
-from dotted_dict import DottedDict
+#from metafinder.extractor import extract_metadata_from_google_search
 
 from django.contrib.auth.models import User
 from django.db.models import Q
 from django.utils import timezone
 
-from reNgine.definitions import (
-    ENABLE_HTTP_CRAWL,
-    GOFUZZ_EXEC_PATH,
-    INITIATED_TASK,
-)
+from reNgine.definitions import ENABLE_HTTP_CRAWL, INITIATED_TASK
 from reNgine.settings import (
     DEFAULT_ENABLE_HTTP_CRAWL,
     RENGINE_HOME,
@@ -30,7 +24,6 @@ from scanEngine.models import (
 )
 
 from startScan.models import (
-    Dork,
     ScanActivity,
     Vulnerability,
     EndPoint,
@@ -38,7 +31,6 @@ from startScan.models import (
     Email,
     Employee,
     Technology,
-    MetaFinderDocument,
     ScanHistory,
     VulnerabilityTags,
     CveId,
@@ -47,9 +39,7 @@ from startScan.models import (
     GPTVulnerabilityReport
 )
 
-from targetApp.models import (
-    Domain,
-)
+from targetApp.models import Domain
 
 from reNgine.utils.utils import (
     get_gpt_vuln_input_description,
@@ -63,9 +53,7 @@ from reNgine.utils.http import (
 )
 from reNgine.utils.logger import Logger
 
-from reNgine.tasks.command import run_command_line
 from reNgine.gpt import GPTVulnerabilityReportGenerator
-from reNgine.utils.command_builder import CommandBuilder
 
 logger = Logger(True)
 
@@ -300,7 +288,7 @@ def save_subdomain_metadata(subdomain, endpoint, extra_datas=None):
     if extra_datas is None:
         extra_datas = {}
     if endpoint and endpoint.is_alive:
-        _extracted_from_save_subdomain_metadata_3(endpoint, subdomain, extra_datas)
+        _save_alive_subdomain_metadata(endpoint, subdomain, extra_datas)
     elif http_url := extra_datas.get('http_url'):
         subdomain.http_url = http_url
         subdomain.save()
@@ -308,8 +296,7 @@ def save_subdomain_metadata(subdomain, endpoint, extra_datas=None):
         logger.error(f'No HTTP URL found for {subdomain.name}. Skipping.')
 
 
-# TODO Rename this here and in `save_subdomain_metadata`
-def _extracted_from_save_subdomain_metadata_3(endpoint, subdomain, extra_datas):
+def _save_alive_subdomain_metadata(endpoint, subdomain, extra_datas):
     logger.info(f'💾 Saving HTTP metadatas from {endpoint.http_url}')
     subdomain.http_url = endpoint.http_url
     subdomain.http_status = endpoint.http_status
@@ -409,172 +396,6 @@ def save_imported_subdomains(subdomains, ctx=None):
                 subdomain=subdomain_obj
             )
             save_subdomain_metadata(subdomain_obj, endpoint)
-
-def save_metadata_info(meta_dict):
-    """Extract metadata from Google Search.
-
-    Args:
-        meta_dict (dict): Info dict.
-
-    Returns:
-        list: List of startScan.MetaFinderDocument objects.
-    """
-    logger.warning(f'Getting metadata for {meta_dict.osint_target}')
-
-    scan_history = ScanHistory.objects.get(id=meta_dict.scan_id)
-
-    # Proxy settings
-    get_random_proxy()
-
-    # Get metadata
-    #result = extract_metadata_from_google_search(meta_dict.osint_target, meta_dict.documents_limit)
-    result=[]
-    if not result:
-        logger.error(f'No metadata result from Google Search for {meta_dict.osint_target}.')
-        return []
-
-    # Add metadata info to DB
-    results = []
-    for metadata_name, data in result.get_metadata().items():
-        subdomain = Subdomain.objects.get(
-            scan_history=meta_dict.scan_id,
-            name=meta_dict.osint_target)
-        metadata = DottedDict(dict(data.items()))
-        meta_finder_document = MetaFinderDocument(
-            subdomain=subdomain,
-            target_domain=meta_dict.domain,
-            scan_history=scan_history,
-            url=metadata.url,
-            doc_name=metadata_name,
-            http_status=metadata.status_code,
-            producer=metadata.metadata.get('Producer'),
-            creator=metadata.metadata.get('Creator'),
-            creation_date=metadata.metadata.get('CreationDate'),
-            modified_date=metadata.metadata.get('ModDate'),
-            author=metadata.metadata.get('Author'),
-            title=metadata.metadata.get('Title'),
-            os=metadata.metadata.get('OSInfo'))
-        meta_finder_document.save()
-        results.append(data)
-    return results
-def get_and_save_dork_results(lookup_target, results_dir, type, lookup_keywords=None, lookup_extensions=None, delay=3, page_count=2, scan_history=None):
-    """
-        Uses gofuzz to dork and store information
-
-        Args:
-            lookup_target (str): target to look into such as stackoverflow or even the target itself
-            results_dir (str): Results directory
-            type (str): Dork Type Title
-            lookup_keywords (str): comma separated keywords or paths to look for
-            lookup_extensions (str): comma separated extensions to look for
-            delay (int): delay between each requests
-            page_count (int): pages in google to extract information
-            scan_history (startScan.models.ScanHistory): Scan History Object
-    """
-    results = []
-
-    # Create the builder with the execution path as the base command
-    cmd_builder = CommandBuilder(GOFUZZ_EXEC_PATH)
-    cmd_builder.add_option('-t', lookup_target)
-    cmd_builder.add_option('-d', delay)
-    cmd_builder.add_option('-p', page_count)
-
-    # Add conditional options
-    if lookup_extensions:
-        cmd_builder.add_option('-e', lookup_extensions)
-    elif lookup_keywords:
-        cmd_builder.add_option('-w', lookup_keywords)
-
-    # Define the output file
-    output_file = str(Path(results_dir) / 'gofuzz.txt')
-    cmd_builder.add_option('-o', output_file)
-
-    # Get the command as a list or string as needed
-    gofuzz_command = cmd_builder.build_string()  # or cmd_builder.build_list() depending on usage
-    history_file = str(Path(results_dir) / 'commands.txt')
-
-    try:
-        run_command_line(
-            gofuzz_command,
-            shell=False,
-            history_file=history_file,
-            scan_id=scan_history.id,
-        )
-
-        if not os.path.isfile(output_file):
-            return
-
-        with open(output_file) as f:
-            for line in f:
-                if url := line.strip():
-                    results.append(url)
-                    dork, created = Dork.objects.get_or_create(
-                        type=type,
-                        url=url
-                    )
-                    if scan_history:
-                        scan_history.dorks.add(dork)
-
-        # remove output file
-        os.remove(output_file)
-
-    except Exception as e:
-        logger.exception(e)
-
-    return results
-
-def get_and_save_emails(scan_history, activity_id, results_dir):
-    """Get and save emails from Google, Bing and Baidu.
-
-    Args:
-        scan_history (startScan.ScanHistory): Scan history object.
-        activity_id: ScanActivity Object
-        results_dir (str): Results directory.
-
-    Returns:
-        list: List of emails found.
-    """
-    emails = []
-
-    # Proxy settings
-    # get_random_proxy()
-
-    # Gather emails from Google, Bing and Baidu
-    output_file = str(Path(results_dir) / 'emails_tmp.txt')
-    history_file = str(Path(results_dir) / 'commands.txt')
-    cmd_builder = CommandBuilder('infoga')
-    cmd_builder.add_option('--domain', scan_history.domain.name)
-    cmd_builder.add_option('--source', 'all')
-    cmd_builder.add_option('--report', output_file)
-    command = cmd_builder.build_string()
-
-    try:
-        run_command_line(
-            command,
-            shell=False,
-            history_file=history_file,
-            scan_id=scan_history.id,
-            activity_id=activity_id)
-
-        if not os.path.isfile(output_file):
-            logger.info('No Email results')
-            return []
-
-        with open(output_file) as f:
-            for line in f:
-                if 'Email' in line:
-                    split_email = line.split(' ')[2]
-                    emails.append(split_email)
-
-        output_path = str(Path(results_dir) / 'emails.txt')
-        with open(output_path, 'w') as output_file:
-            for email_address in emails:
-                save_email(email_address, scan_history)
-                output_file.write(f'{email_address}\n')
-
-    except Exception as e:
-        logger.exception(e)
-    return emails 
 
 def get_vulnerability_gpt_report(vuln):
     title = vuln[0]
@@ -1255,3 +1076,25 @@ def load_custom_scan_engines(results_dir):
         engine, _ = EngineType.objects.get_or_create(engine_name=engine_name)
         engine.yaml_configuration = yaml_configuration
         engine.save()
+
+def subdomain_exists(subdomain_name, scan, domain):
+    """Check if a subdomain exists in the database.
+
+    Args:
+        subdomain_name (str): The name of the subdomain to check.
+        scan (startScan.models.ScanHistory): The scan of the subdomain to check.
+        domain (startScan.models.Domain): The domain of the subdomain to check.
+
+    Returns:
+        startScan.models.Subdomain: The subdomain object if it exists, otherwise False.
+    """
+    try:
+        subdomain = Subdomain.objects.get(
+            name=subdomain_name,
+            scan_history=scan,
+            target_domain=domain
+        )
+    except Subdomain.DoesNotExist:
+        logger.warning(f'Subdomain {subdomain_name} was not found in the db, skipping crlfuzz scan for this subdomain.')
+        return False
+    return subdomain

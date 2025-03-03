@@ -173,9 +173,9 @@ def get_output_file_name(scan_history_id, subscan_id, filename):
 def get_traceback_path(task_name, results_dir, scan_history_id=None, subscan_id=None):
     path = results_dir
     if scan_history_id:
-        path += f'/#{scan_history_id}'
+        path += f'/_failed_{scan_history_id}'
         if subscan_id:
-            path += f'-#{subscan_id}'
+            path += f'-{subscan_id}'
     path += f'-{task_name}.txt'
     return path
 

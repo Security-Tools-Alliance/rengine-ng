@@ -1,28 +1,17 @@
 import os
 import re
 
-from pathlib import Path
 from copy import deepcopy
 from urllib.parse import urlparse
 from django.db.models import Count
 
 from reNgine.definitions import (
-    DEFAULT_GF_PATTERNS,
-    DEFAULT_IGNORE_FILE_EXTENSIONS,
-    DUPLICATE_REMOVAL_FIELDS,
     FETCH_URL,
-    REMOVE_DUPLICATE_ENDPOINTS,
-    GF_PATTERNS,
     ENDPOINT_SCAN_DEFAULT_DUPLICATE_FIELDS,
-    USES_TOOLS,
     ENDPOINT_SCAN_DEFAULT_TOOLS,
-    EXCLUDED_SUBDOMAINS,
-    IGNORE_FILE_EXTENSION,
     ALL,
 )
-from reNgine.settings import (
-    DELETE_DUPLICATES_THRESHOLD,
-)
+from reNgine.settings import DELETE_DUPLICATES_THRESHOLD
 from reNgine.celery import app
 from reNgine.celery_custom_task import RengineTask
 from reNgine.utils.logger import Logger
@@ -33,7 +22,7 @@ from reNgine.utils.http import (
     prepare_urls_with_fallback,
 )
 from startScan.models import EndPoint, Subdomain
-from reNgine.utils.command_builder import CommandBuilder, build_piped_command, build_url_fetch_commands
+from reNgine.utils.command_builder import CommandBuilder, build_piped_command, build_fetch_url_commands
 from reNgine.utils.task_config import TaskConfig
 
 logger = Logger(True)
@@ -48,48 +37,25 @@ def fetch_url(self, urls=None, ctx=None, description=None):
     """
     from reNgine.utils.db import save_endpoint, save_subdomain
     from reNgine.tasks.http import http_crawl
- 
+
     if urls is None:
         urls = []
     if ctx is None:
         ctx = {}
-        
-    logger.info('🔍 Initiating URL Fetch')
-    
-    # Initialize task config
-    config = TaskConfig(self.yaml_configuration, self.results_dir, self.scan_id, self.filename)
-    
-    # Prepare input file path
-    input_path = config.get_input_path('endpoints_fetch_url')
-    
-    # Get configuration from TaskConfig
-    fetch_url_config = config.get_config(FETCH_URL)
-    should_remove_duplicate_endpoints = fetch_url_config.get(REMOVE_DUPLICATE_ENDPOINTS, True)
-    duplicate_removal_fields = fetch_url_config.get(DUPLICATE_REMOVAL_FIELDS, ENDPOINT_SCAN_DEFAULT_DUPLICATE_FIELDS)
-    enable_http_crawl = config.get_http_crawl_enabled(FETCH_URL)
-    gf_patterns = fetch_url_config.get(GF_PATTERNS, DEFAULT_GF_PATTERNS)
-    ignore_file_extension = fetch_url_config.get(IGNORE_FILE_EXTENSION, DEFAULT_IGNORE_FILE_EXTENSIONS)
-    tools = fetch_url_config.get(USES_TOOLS, ENDPOINT_SCAN_DEFAULT_TOOLS)
-    threads = config.get_threads(FETCH_URL)
-    follow_redirect = config.get_follow_redirect(FETCH_URL, False)
-    exclude_subdomains = fetch_url_config.get(EXCLUDED_SUBDOMAINS, False)
-    
-    # Prepare headers
-    domain_request_headers = self.domain.request_headers if self.domain else None
-    custom_header = config.prepare_custom_header(FETCH_URL)
-    if domain_request_headers:
-        custom_header = domain_request_headers
 
-    # Get proxy
-    proxy = config.get_proxy()
+    logger.info('🔍 Initiating URL Fetch')
+
+    # Initialize task config
+    config = TaskConfig(ctx, FETCH_URL)
+    task_config = config.get_task_config()
 
     # Initialize the URLs
     urls = prepare_urls_with_fallback(
-        urls, 
-        input_path, 
-        ctx,
+        urls=urls, 
+        input_path=task_config['input_path'], 
+        ctx=ctx,
         is_alive=True,
-        exclude_subdomains=exclude_subdomains,
+        exclude_subdomains=task_config['exclude_subdomains'],
         get_only_default_urls=True
     )
 
@@ -99,49 +65,41 @@ def fetch_url(self, urls=None, ctx=None, description=None):
         return []
 
     # Get URL mapping for tools
+    tools = task_config['tools']
     if ALL in tools:
         tools = ENDPOINT_SCAN_DEFAULT_TOOLS
-    
+
     # Filter out unsupported tools
     tools = [tool for tool in tools if tool in ['gau', 'hakrawler', 'waybackurls', 'gospider', 'katana']]
-    
+
     # Build commands for all tools
-    cmd_map = build_url_fetch_commands(
-        tools, 
-        self.target_domain, 
-        self.output_path, 
-        threads, 
-        proxy, 
-        custom_header, 
-        follow_redirect
-    )
+    host = self.subdomain.http_url if self.subdomain else self.domain.name
+    cmd_map = build_fetch_url_commands(config)
 
     # Initialize variables for tracking URLs and their sources
     all_urls = set()
     tool_mapping = {}  # {url: [tools that found it]}
-    
+
     # Run tools and collect URLs
     for tool in tools:
         if tool not in cmd_map:
             logger.warning(f'Tool {tool} not supported. Skipping.')
             continue
-            
+
         logger.warning(f'Running {tool} for URL discovery')
-        
+
         # Prepare output path for this tool
-        tool_output_path = str(Path(self.results_dir) / f'urls_{tool}.txt')
-        self.output_path = tool_output_path
-        
+        self.output_path = config.get_working_dir(filename=f'urls_{tool}.txt')
+
         # Build and run the command using CommandBuilder
-        tool_cmd = CommandBuilder(cmd_map[tool])
-        tool_cmd.add_option(self.target_domain)
-        
+        tool_cmd = cmd_map[tool].add_option(host)
+
         sort_cmd = CommandBuilder("sort")
         sort_cmd.add_option("-u")
-        
+
         # Create a piped command: tool | sort -u | tee output_file
-        piped_cmd = build_piped_command([tool_cmd, sort_cmd], output_file=tool_output_path)
-        
+        piped_cmd = build_piped_command([tool_cmd, sort_cmd], output_file=self.output_path)
+
         run_command_line.delay(
             cmd=piped_cmd.build_string(),
             shell=True,
@@ -149,67 +107,81 @@ def fetch_url(self, urls=None, ctx=None, description=None):
             scan_id=self.scan_id,
             activity_id=self.activity_id
         )
-        
+
         # Check if output file exists
-        if not os.path.exists(tool_output_path):
-            logger.error(f'Could not find {tool} output file {tool_output_path}')
+        if not os.path.exists(self.output_path):
+            logger.error(f'Could not find {tool} output file {self.output_path}')
             continue
-        
+
         # Process URLs from output file
-        with open(tool_output_path, 'r') as f:
+        with open(self.output_path, 'r') as f:
             for url in f:
                 url = url.strip()
                 if not url:
                     continue
-                
+
                 # Sanitize and filter URL
                 http_url = sanitize_url(url)
-                
+
                 # Skip URLs with ignored extensions
-                if ignore_file_extension and any(http_url.endswith(ext) for ext in ignore_file_extension):
+                if task_config['ignore_file_extension'] and any(http_url.endswith(ext) for ext in task_config['ignore_file_extension']):
                     continue
-                    
+
                 # Track which tools found this URL
                 if http_url not in tool_mapping:
                     tool_mapping[http_url] = []
                 tool_mapping[http_url].append(tool)
-                
+
                 # Add to set of all URLs
                 all_urls.add(http_url)
-                
+
         logger.info(f'Discovered {len(all_urls)} unique URLs so far')
-    
+
     # Add endpoints to database
+    results = []
+    
     for url in all_urls:
         subdomain_name = get_subdomain_from_url(url)
         subdomain, _ = save_subdomain(subdomain_name, ctx=ctx)
         if not isinstance(subdomain, Subdomain):
             logger.error(f"Invalid subdomain encountered: {subdomain}")
             continue
-            
-        endpoint, _ = save_endpoint(
+
+        endpoint, created = save_endpoint(
             url,
             crawl=False,
             subdomain=subdomain,
             ctx=ctx
         )
-    
+        
+        if endpoint:
+            results.append({
+                'endpoint_id': endpoint.id,
+                'url': url,
+                'created': created
+            })
+
     # Remove duplicate endpoints if configured
-    if should_remove_duplicate_endpoints:
-        removed_count = remove_duplicate_endpoints(fields=duplicate_removal_fields, ctx=ctx)
+    if task_config['should_remove_duplicate_endpoints']:
+        removed_count = remove_duplicate_endpoints(
+            scan_history_id=self.scan_id,
+            domain_id=self.domain_id,
+            subdomain_id=self.subdomain_id,
+            filter_ids=[r.get('endpoint_id') for r in results if 'endpoint_id' in r]
+        )
         if removed_count > 0:
             logger.info(f'Removed {removed_count} duplicate endpoints')
-    
+
     # HTTP crawl if enabled
-    if enable_http_crawl:
+    if task_config['enable_http_crawl']:
         custom_ctx = deepcopy(ctx)
         custom_ctx['track'] = True
         http_crawl.delay(list(all_urls), ctx=custom_ctx)
-    
+
     # Run gf patterns if configured
-    if gf_patterns:
-        self._run_gf_patterns(gf_patterns, ctx)
-    
+    if task_config['gf_patterns']:
+        _run_gf_patterns(self, task_config['gf_patterns'], ctx)
+
     return list(all_urls)
 
 def _run_gf_patterns(self, gf_patterns, ctx):
@@ -237,7 +209,8 @@ def _run_gf_patterns(self, gf_patterns, ctx):
             
         # Run gf on current pattern
         logger.warning(f'Running gf on pattern "{gf_pattern}"')
-        gf_output_file = str(Path(self.results_dir) / f'gf_patterns_{gf_pattern}.txt')
+        config = TaskConfig(ctx, FETCH_URL)
+        gf_output_file = config.get_working_dir(filename=f'gf_patterns_{gf_pattern}.txt')
         
         # Build commands with CommandBuilder
         cat_cmd = CommandBuilder("cat")
@@ -405,6 +378,9 @@ def remove_duplicate_endpoints(scan_history_id, domain_id, subdomain_id=None, fi
                     ep.delete()
                 logger.warning(msg)
 
+                return len(eps_to_delete)
+        return 0
+
     except Exception as e:
         logger.error(f'Error removing duplicate endpoints: {str(e)}')
-        raise
+        return 0

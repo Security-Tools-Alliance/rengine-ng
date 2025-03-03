@@ -4,7 +4,7 @@ import subprocess
 import tldextract
 
 from reNgine.utils.logger import Logger
-from reNgine.utils.command_builder import CommandBuilder
+from reNgine.utils.command_builder import build_tlsx_cmd, build_whois_cmd
 from reNgine.common_serializers import (
     DomainDNSRecordSerializer,
     DomainWhoisStatusSerializer,
@@ -266,17 +266,7 @@ def find_related_tlds(domain):
     related_tlds = []
     output_path = '/tmp/ip_domain_tlsx.txt'
     
-    # Build command with CommandBuilder for better security
-    cmd_builder = CommandBuilder('tlsx')
-    cmd_builder.add_option('-san')
-    cmd_builder.add_option('-cn')
-    cmd_builder.add_option('-silent')
-    cmd_builder.add_option('-ro')
-    cmd_builder.add_option('-host', domain)
-    cmd_builder.add_option('-o', output_path)
-    
-    # Need to use shell=True due to redirection 
-    cmd = cmd_builder.build_string()
+    cmd = build_tlsx_cmd(domain, output_path)
     
     try:
         subprocess.run(cmd, shell=True, check=True)
@@ -384,12 +374,10 @@ def execute_whois(domain):
     Returns:
         dict: Parsed whois output
     """
-    # Build command with CommandBuilder for better security
-    cmd_builder = CommandBuilder('whois')
-    cmd_builder.add_option(domain)
+    cmd = build_whois_cmd(domain)
     
     try:
-        output = subprocess.check_output(cmd_builder.build_list(), universal_newlines=True)
+        output = subprocess.check_output(cmd, universal_newlines=True)
         
         # Initialize whois_data with defaults
         whois_data = {

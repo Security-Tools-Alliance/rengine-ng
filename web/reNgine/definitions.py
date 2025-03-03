@@ -43,7 +43,7 @@ MATCH_HTTP_STATUS = 'match_http_status'
 MAX_TIME = 'max_time'
 NAABU_EXCLUDE_PORTS = 'exclude_ports'
 NAABU_EXCLUDE_SUBDOMAINS = 'exclude_subdomains'
-ENABLE_NMAP = 'enable_nmap'
+ENABLE_NMAP = 'nmap_enabled'
 NMAP_COMMAND = 'nmap_cmd'
 NMAP_SCRIPT = 'nmap_script'
 NMAP_SCRIPT_ARGS = 'nmap_script_args'
@@ -522,9 +522,6 @@ ATTACK_SUGGESTION_GPT_SYSTEM_PROMPT = """
     Also suggest if any CVE ID, known exploits, existing vulnerabilities, any news articles URL related to the information provided to you.
 """
 
-
-# OSINT GooFuzz Path
-GOFUZZ_EXEC_PATH = 'GooFuzz'
 
 ###############################################################################
 # SCAN ENGINES DEFINITIONS

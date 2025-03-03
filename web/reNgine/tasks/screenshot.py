@@ -1,21 +1,20 @@
-import csv
-
 from pathlib import Path
 
 from reNgine.definitions import SCREENSHOT
 from reNgine.settings import RENGINE_RESULTS
 from reNgine.celery import app
 from reNgine.celery_custom_task import RengineTask
-from reNgine.utils.logger import Logger
-from reNgine.utils.utils import extract_columns
+from reNgine.utils.command_builder import build_eyewitness_cmd
 from reNgine.utils.formatters import get_output_file_name
-from reNgine.utils.utils import remove_file_or_pattern
+from reNgine.utils.http import prepare_urls_with_fallback
+from reNgine.utils.logger import Logger
+from reNgine.utils.task_config import TaskConfig
+from reNgine.utils.utils import extract_columns, remove_file_or_pattern
 from scanEngine.models import Notification
 from startScan.models import Subdomain
 from reNgine.tasks.command import run_command_line
 from reNgine.tasks.notification import send_file_to_discord
-from reNgine.utils.command_builder import CommandBuilder
-from reNgine.utils.task_config import TaskConfig
+
 logger = Logger(True)
 
 @app.task(name='screenshot', queue='io_queue', base=RengineTask, bind=True)
@@ -25,27 +24,21 @@ def screenshot(self, ctx=None, description=None):
     Args:
         description (str, optional): Task description shown in UI.
     """
-    from reNgine.utils.db import get_http_urls
  
     if ctx is None:
         ctx = {}
     # Config
-    config = TaskConfig(self.yaml_configuration, self.results_dir, self.scan_id, self.filename)
-    screenshots_path = str(Path(self.results_dir) / 'screenshots')
-    output_path = str(Path(self.results_dir) / 'screenshots' / self.filename)
-    alive_endpoints_file = str(Path(self.results_dir) / 'endpoints_alive.txt')
-    intensity = config.get_intensity(SCREENSHOT)
-    timeout = config.get_timeout(SCREENSHOT)
-    threads = config.get_threads(SCREENSHOT)
+    config = TaskConfig(ctx, SCREENSHOT)
+    task_config = config.get_task_config()
 
     # If intensity is normal, grab only the root endpoints of each subdomain
-    strict = intensity == 'normal'
+    strict = task_config['intensity'] == 'normal'
 
     # Get URLs to take screenshot of
-    urls = get_http_urls(
+    urls = prepare_urls_with_fallback(
         is_alive=True,
         strict=strict,
-        write_filepath=alive_endpoints_file,
+        write_filepath=task_config['alive_endpoints_file'],
         get_only_default_urls=True,
         ctx=ctx
     )
@@ -58,27 +51,22 @@ def screenshot(self, ctx=None, description=None):
     send_output_file = notification.send_scan_output_file if notification else False
 
     # Run cmd
-    eye_builder = CommandBuilder('EyeWitness')
-    eye_builder.add_option('-f', alive_endpoints_file)
-    eye_builder.add_option('-d', screenshots_path)
-    eye_builder.add_option('--no-prompt')
-    eye_builder.add_option('--timeout', timeout, timeout > 0)
-    eye_builder.add_option('--threads', threads, threads > 0)
+    cmd = build_eyewitness_cmd(config)
 
     run_command_line.delay(
-        eye_builder.build_list(),
+        cmd,
         shell=False,
         history_file=self.history_file,
         scan_id=self.scan_id,
         activity_id=self.activity_id
     )
-    if not Path(output_path).exists():
-        logger.error(f'📸 EyeWitness output file missing : {output_path}')
+    if not Path(csv := config.get_working_dir(filename=self.filename)).exists():
+        logger.error(f'📸 EyeWitness output file missing : {csv}')
         return
 
     # Loop through results and save objects in DB
     screenshot_paths = []
-    with open(output_path, 'r') as file:
+    with open(csv, 'r') as file:
         reader = csv.reader(file)
         header = next(reader)  # Skip header row
         indices = [header.index(col) for col in ["Protocol", "Port", "Domain", "Request Status", "Screenshot Path", " Source Path"]]
@@ -99,7 +87,7 @@ def screenshot(self, ctx=None, description=None):
     patterns = ['*.csv', '*.db', '*.js', '*.html', '*.css']
     for pattern in patterns:
         remove_file_or_pattern(
-            screenshots_path,
+            task_config['screenshots_path'],
             pattern=pattern,
             history_file=self.history_file,
             scan_id=self.scan_id,
@@ -108,7 +96,7 @@ def screenshot(self, ctx=None, description=None):
 
     # Delete source folder
     remove_file_or_pattern(
-        str(Path(screenshots_path) / 'source'),
+        str(Path(task_config['screenshots_path']) / 'source'),
         history_file=self.history_file,
         scan_id=self.scan_id,
         activity_id=self.activity_id
