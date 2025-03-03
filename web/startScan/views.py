@@ -1,5 +1,4 @@
 import markdown
-import json
 
 from celery import group
 from pathlib import Path
@@ -21,7 +20,7 @@ from api.serializers import IpSerializer
 from reNgine.celery import app
 from reNgine.utils.db import create_scan_object, create_scan_activity, get_interesting_subdomains
 from reNgine.utils.logger import Logger
-from reNgine.utils.utils import safe_int_cast
+from reNgine.utils.utils import format_json_output, safe_int_cast
 from reNgine.settings import RENGINE_RESULTS
 from reNgine.definitions import ABORTED_TASK, SUCCESS_TASK, RUNNING_TASK, LIVE_SCAN, SCHEDULED_SCAN, PERM_INITATE_SCANS_SUBSCANS, PERM_MODIFY_SCAN_RESULTS, PERM_MODIFY_SCAN_REPORT, PERM_MODIFY_SYSTEM_CONFIGURATIONS, FOUR_OH_FOUR_URL
 from reNgine.tasks.scan import initiate_scan
@@ -188,7 +187,7 @@ def detail_scan(request, id, slug):
         'scan_history_id': id,
         'history': scan,
         'scan_activity': scan_activity,
-        'ip_addresses': json.dumps(ip_serializer.data, cls=DjangoJSONEncoder),
+        'ip_addresses': format_json_output(ip_serializer.data, cls=DjangoJSONEncoder),
         'subdomain_count': subdomain_count,
         'alive_count': alive_count,
         'important_count': important_count,
@@ -578,7 +577,7 @@ def schedule_scan(request, host_id, slug):
                 interval=schedule,
                 name=task_name,
                 task='initiate_scan',
-                kwargs=json.dumps(kwargs)
+                kwargs=format_json_output(kwargs)
             )
         elif scheduled_mode == 'clocked':
             schedule_time = request.POST['scheduled_time']
@@ -605,7 +604,7 @@ def schedule_scan(request, host_id, slug):
                 one_off=True,
                 name=task_name,
                 task='initiate_scan',
-                kwargs=json.dumps(kwargs)
+                kwargs=format_json_output(kwargs)
             )
         messages.add_message(
             request,
@@ -784,7 +783,7 @@ def schedule_organization_scan(request, slug, id):
                 clock, _ = ClockedSchedule.objects.get_or_create(
                     clocked_time=schedule_time
                 )
-                _kwargs = json.dumps({
+                _kwargs = format_json_output({
                     'domain_id': domain.id,
                     'engine_id': engine.id,
                     'scan_history_id': 0,
@@ -819,7 +818,7 @@ def schedule_organization_scan(request, slug, id):
                     every=frequency_value,
                     period=period
                 )
-                _kwargs = json.dumps({
+                _kwargs = format_json_output({
                     'domain_id': domain.id,
                     'engine_id': engine.id,
                     'scan_history_id': 0,

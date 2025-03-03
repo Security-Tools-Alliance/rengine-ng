@@ -4,7 +4,6 @@ import logging
 from datetime import timedelta
 from urllib.parse import urlparse
 import validators
-import json
 
 from django import http
 from django.conf import settings
@@ -58,6 +57,7 @@ from targetApp.forms import (
     AddOrganizationForm,
     UpdateOrganizationForm,
 )
+from reNgine.utils.utils import format_json_output
 
 logger = logging.getLogger(__name__)
 
@@ -586,7 +586,7 @@ def target_summary(request, slug, id):
         many=True,
         context={'target_id': id}
     )
-    context['ip_addresses'] = json.dumps(ip_serializer.data, cls=DjangoJSONEncoder)
+    context['ip_addresses'] = format_json_output(ip_serializer.data, cls=DjangoJSONEncoder)
 
 
 

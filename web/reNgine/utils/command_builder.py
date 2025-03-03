@@ -116,6 +116,11 @@ class CommandBuilder:
         logger.debug(f"🔍 Build string Command: {cmd_string}")
         return cmd_string
 
+    def set_env(self, env_var, value):
+        """Set an environment variable for the command"""
+        self.options.append(f'{env_var}={value}')
+        return self
+
 def build_piped_command(commands, output_file=None, append=False):
     """Build a piped command securely using CommandBuilder.
     
@@ -870,13 +875,21 @@ def build_netlas_command(host, results_dir, config):
     results_file = config.get_working_dir(filename='subdomains_netlas.txt')
     netlas_key = get_netlas_key()
     
+    if not netlas_key:
+        raise ValueError("Netlas API key not configured. Please set NETLAS_API_KEY in environment variables.")
+    
     cmd_builder = CommandBuilder('netlas')
     cmd_builder.add_option('search')
     cmd_builder.add_option('-d', 'domain')
     cmd_builder.add_option('-i', 'domain')
     cmd_builder.add_option(f'domain:"*.{host}"')
     cmd_builder.add_option('-f', 'json')
-    cmd_builder.add_option('-a', netlas_key, bool(netlas_key))
+    
+    # Security of the API key
+    if netlas_key:
+        # Use of an ephemeral environment variable
+        cmd_builder.set_env('NETLAS_API_KEY', netlas_key)
+        cmd_builder.add_option('-a', '$NETLAS_API_KEY')
     
     netlas_cmd = cmd_builder.build_string()
     quoted_results_file = shlex.quote(results_file)

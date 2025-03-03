@@ -2,6 +2,7 @@ import environ
 import mimetypes
 import os
 from pathlib import Path
+import logging
 
 from reNgine.init import first_run
 
@@ -61,6 +62,10 @@ YAML_CACHE_TIMEOUT = env.int('YAML_CACHE_TIMEOUT', default=300)  # 5 minutes
 # Globals
 ALLOWED_HOSTS = ['*']
 SECRET_KEY = first_run(SECRET_FILE, BASE_DIR)
+
+
+# Secure configuration for API Key
+NETLAS_API_KEY = os.environ.get('NETLAS_API_KEY', '')
 
 # Databases
 DATABASES = {
@@ -226,9 +231,32 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 '''
 LOGGING settings
 '''
+class SensitiveDataFilter(logging.Filter):
+    """Security filter to mask sensitive data in logs"""
+    
+    def filter(self, record):
+        sensitive_keys = [
+            NETLAS_API_KEY,
+        ]
+        
+        for key in filter(None, sensitive_keys):
+            if hasattr(record, 'msg'):
+                if isinstance(record.msg, str):
+                    record.msg = record.msg.replace(key, '[REDACTED]')
+                elif isinstance(record.msg, dict):
+                    for k, v in record.msg.items():
+                        if key in str(v):
+                            record.msg[k] = '[REDACTED]'
+        return True
+
 LOGGING = {
     'version': 1,
-    'disable_existing_loggers': True,
+    'disable_existing_loggers': False,
+    'filters': {
+        'sensitive_data': {
+            '()': 'reNgine.settings.SensitiveDataFilter'
+        }
+    },
     'handlers': {
         'file': {
             'level': 'ERROR',
@@ -248,6 +276,7 @@ LOGGING = {
         },
         'console': {
             'class': 'logging.StreamHandler',
+            'filters': ['sensitive_data'],  # Applique le filtre
             'formatter': 'brief'
         },
         'task': {
@@ -365,6 +394,7 @@ LOGGING = {
     'root': {
         'handlers': ['console'],
         'level': 'DEBUG' if CELERY_DEBUG else 'INFO',
+        'filters': ['sensitive_data']  # Filtre global
     }
 }
 

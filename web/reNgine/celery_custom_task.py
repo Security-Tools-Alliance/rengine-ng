@@ -2,6 +2,7 @@ import os
 import json
 
 from celery import Task
+from celery.utils.log import get_task_logger
 from celery.worker.request import Request
 from django.utils import timezone
 from redis import Redis
@@ -24,15 +25,14 @@ from reNgine.utils.formatters import (
 	get_task_cache_key,
 	get_traceback_path
 )
-from reNgine.utils.logger import Logger
 from reNgine.utils.utils import format_json_output
 
 from scanEngine.models import EngineType
 from startScan.models import ScanActivity, ScanHistory, SubScan
 
-cache = None
-logger = Logger(True)
+logger = get_task_logger(__name__)
 
+cache = None
 if 'CELERY_BROKER' in os.environ:
 	cache = Redis.from_url(os.environ['CELERY_BROKER'])
 
@@ -75,6 +75,7 @@ class RengineTask(Task):
 		# Get task info
 		self.task_name = self.name.split('.')[-1]
 		self.description = kwargs.get('description') or ' '.join(self.task_name.split('_')).capitalize()
+		logger = get_task_logger(self.task_name)
 
 		# Get reNgine context
 		ctx = kwargs.get('ctx', {})

@@ -41,7 +41,7 @@ port_scan: {
   'threads': 30,
   'passive': false,
   # 'use_naabu_config': false,
-  # 'enable_nmap': true,
+  # 'nmap_enabled': true,
   # 'nmap_cmd': '',
   # 'nmap_script': '',
   # 'nmap_script_args': ''
