@@ -1,6 +1,5 @@
 import csv
 import io
-import logging
 from datetime import timedelta
 from urllib.parse import urlparse
 import validators
@@ -58,8 +57,8 @@ from targetApp.forms import (
     UpdateOrganizationForm,
 )
 from reNgine.utils.utils import format_json_output
+from reNgine.utils.logger import default_logger as logger
 
-logger = logging.getLogger(__name__)
 
 def index(request):
     """
@@ -94,7 +93,7 @@ def add_target(request, slug):
             if multiple_targets:
                 bulk_targets = [t.rstrip() for t in request.POST['addTargets'].split('\n') if t]
                 sanitized_targets = [target if isinstance(target, str) and validators.domain(target) else 'Invalid target' for target in bulk_targets]
-                logger.info('Adding multiple targets: %s', sanitized_targets)
+                logger.info(f'Adding multiple targets: {sanitized_targets}')
                 description = request.POST.get('targetDescription', '')
                 h1_team_handle = request.POST.get('targetH1TeamHandle')
                 organization_name = request.POST.get('targetOrganization')
@@ -157,8 +156,7 @@ def add_target(request, slug):
                     sanitized_domains = [domain if isinstance(domain, str) and validators.domain(domain) else 'Invalid Domain' for domain in domains]
                     sanitized_http_urls = [url if validators.url(url) else 'Invalid URL' for url in http_urls]
                     sanitized_ports = [port if isinstance(port, int) else 'Invalid Port' for port in ports]
-                    logger.info('IPs: %s | Domains: %s | URLs: %s | Ports: %s', 
-                                sanitized_ips, sanitized_domains, sanitized_http_urls, sanitized_ports)
+                    logger.info(f'IPs: {sanitized_ips} | Domains: {sanitized_domains} | URLs: {sanitized_http_urls} | Ports: {sanitized_ports}')
 
                     for domain_name in domains:
                         if not Domain.objects.filter(name=domain_name).exists():
@@ -172,7 +170,7 @@ def add_target(request, slug):
                             domain.save()
                             added_target_count += 1
                             if created:
-                                logger.info('Added new domain %s', domain.name)
+                                logger.info(f'Added new domain {domain.name}')
 
                             if organization_name:
                                 organization = None
@@ -193,7 +191,7 @@ def add_target(request, slug):
                             target_domain=domain,
                             http_url=http_url)
                         if created:
-                            logger.info('Added new endpoint %s', endpoint.http_url)
+                            logger.info(f'Added new endpoint {endpoint.http_url}')
 
                     for ip_address in ips:
                         ip_data = get_ip_info(ip_address)
@@ -203,7 +201,7 @@ def add_target(request, slug):
                         ip.version = ip_data.version
                         ip.save()
                         if created:
-                            logger.warning('Added new IP %s', ip)
+                            logger.warning(f'Added new IP {ip}')
 
                     for port_number in ports:
                         port, created = Port.objects.get_or_create(
@@ -211,7 +209,7 @@ def add_target(request, slug):
                             defaults={'is_uncommon': port_number not in [80, 443, 8080, 8443]}
                         )
                         if created:
-                            logger.warning('Added new port %s', port.number)
+                            logger.warning(f'Added new port {port.number}')
 
             # Import from txt / csv
             elif 'import-txt-target' in request.POST or 'import-csv-target' in request.POST:
@@ -316,7 +314,7 @@ def add_target(request, slug):
                         domain.save()
                         added_target_count += 1
                         if created:
-                            logger.info('Added new domain %s', domain.name)
+                            logger.info(f'Added new domain {domain.name}')
                         if is_ip:
                             ip_data = get_ip_info(ip)
                             ip, created = IpAddress.objects.get_or_create(address=ip)
@@ -325,7 +323,7 @@ def add_target(request, slug):
                             ip.version = ip_data.version
                             ip.save()
                             if created:
-                                logger.info('Added new IP %s', ip)
+                                logger.info(f'Added new IP {ip}')
 
         except (Http404, ValueError) as e:
             logger.exception(e)
@@ -388,7 +386,7 @@ def delete_target(request, slug, id):
             )
         except Http404:
             if isinstance(id, int):  # Ensure id is an integer
-                logger.error('Domain not found: %d', id)
+                logger.error(f'Domain not found: {id}')
             else:
                 logger.error('Domain not found: Invalid ID provided')
             messages.add_message(
@@ -399,7 +397,7 @@ def delete_target(request, slug, id):
     else:
         valid_methods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD']
         if request.method in valid_methods:
-            logger.error('Invalid request method: %s', request.method)
+            logger.error(f'Invalid request method: {request.method}')
         else:
             logger.error('Invalid request method: Unknown method provided')
         

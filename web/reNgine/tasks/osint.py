@@ -15,15 +15,13 @@ from reNgine.celery import app
 from reNgine.celery_custom_task import RengineTask
 from reNgine.utils.command_builder import build_gofuzz_cmd, build_harvester_cmd, build_h8mail_cmd, build_infoga_cmd
 from reNgine.utils.http import get_subdomain_from_url
-from reNgine.utils.logger import Logger
+from reNgine.utils.logger import default_logger as logger
 from reNgine.utils.task_config import TaskConfig
 from reNgine.tasks.command import run_command_line
 from reNgine.tasks.http import http_crawl
 
 from scanEngine.models import Proxy
 from startScan.models import Dork, MetaFinderDocument, ScanHistory, Subdomain
-
-logger = Logger(True)
 
 @app.task(name='osint', bind=True, base=RengineTask)
 def osint(self, host=None, ctx=None, description=None):
@@ -308,7 +306,7 @@ def h8mail(self, ctx, host, scan_history_id, activity_id, results_dir):
 
     if ctx is None:
         ctx = {}
-    logger.warning('Getting leaked credentials')
+    logger.info('Getting leaked credentials')
 
     config = TaskConfig(ctx, OSINT)
 
@@ -330,7 +328,7 @@ def h8mail(self, ctx, host, scan_history_id, activity_id, results_dir):
     # TODO: go through h8mail output and save emails to DB
     scan_history = ScanHistory.objects.get(pk=scan_history_id)
     for cred in creds:
-        logger.warning(cred)
+        logger.info(cred)
         email_address = cred['target']
         pwn_num = cred['pwn_num']
         pwn_data = cred.get('data', [])
@@ -448,7 +446,7 @@ def save_metadata_info(meta_dict):
     Returns:
         list: List of startScan.MetaFinderDocument objects.
     """
-    logger.warning(f'Getting metadata for {meta_dict.osint_target}')
+    logger.info(f'Getting metadata for {meta_dict.osint_target}')
 
     scan_history = ScanHistory.objects.get(id=meta_dict.scan_id)
 
@@ -456,7 +454,7 @@ def save_metadata_info(meta_dict):
     #result = extract_metadata_from_google_search(meta_dict.osint_target, meta_dict.documents_limit)
     result=[]
     if not result:
-        logger.error(f'No metadata result from Google Search for {meta_dict.osint_target}.')
+        logger.warning(f'No metadata result from Google Search for {meta_dict.osint_target}.')
         return []
 
     # Add metadata info to DB

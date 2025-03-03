@@ -7,15 +7,13 @@ from reNgine.celery_custom_task import RengineTask
 from reNgine.utils.command_builder import build_eyewitness_cmd
 from reNgine.utils.formatters import get_output_file_name
 from reNgine.utils.http import prepare_urls_with_fallback
-from reNgine.utils.logger import Logger
+from reNgine.utils.logger import default_logger as logger
 from reNgine.utils.task_config import TaskConfig
 from reNgine.utils.utils import extract_columns, remove_file_or_pattern
 from scanEngine.models import Notification
 from startScan.models import Subdomain
 from reNgine.tasks.command import run_command_line
 from reNgine.tasks.notification import send_file_to_discord
-
-logger = Logger(True)
 
 @app.task(name='screenshot', queue='io_queue', base=RengineTask, bind=True)
 def screenshot(self, ctx=None, description=None):
@@ -43,7 +41,7 @@ def screenshot(self, ctx=None, description=None):
         ctx=ctx
     )
     if not urls:
-        logger.error('📸 No URLs to take screenshot of. Skipping.')
+        logger.warning('📸 No URLs to take screenshot of. Skipping.')
         return
 
     # Send start notif
@@ -80,7 +78,7 @@ def screenshot(self, ctx=None, description=None):
                 screenshot_paths.append(screenshot_path)
                 subdomain.screenshot_path = screenshot_path.replace(RENGINE_RESULTS, '')
                 subdomain.save()
-                logger.warning(f'📸 Added screenshot for {protocol}://{subdomain.name}:{port} to DB')
+                logger.info(f'📸 Added screenshot for {protocol}://{subdomain.name}:{port} to DB')
 
 
     # Remove all db, html extra files in screenshot results

@@ -3,7 +3,7 @@ from bs4 import BeautifulSoup
 import subprocess
 import tldextract
 
-from reNgine.utils.logger import Logger
+from reNgine.utils.logger import default_logger as logger
 from reNgine.utils.command_builder import build_tlsx_cmd, build_whois_cmd
 from reNgine.common_serializers import (
     DomainDNSRecordSerializer,
@@ -14,7 +14,6 @@ from reNgine.common_serializers import (
 )
 from dotted_dict import DottedDict
 
-logger = Logger(True)
 
 def reverse_whois(lookup_keyword):
     domains = []
@@ -119,9 +118,9 @@ def get_domain_historical_ip_address(domain):
             })
             
     except requests.RequestException as e:
-        logger.error(f"Error retrieving historical IP data for {domain}: {str(e)}")
+        logger.exception(f"Error retrieving historical IP data for {domain}: {str(e)}")
     except Exception as e:
-        logger.error(f"Error parsing historical IP data for {domain}: {str(e)}")
+        logger.exception(f"Error parsing historical IP data for {domain}: {str(e)}")
         
     return ips
 
@@ -285,7 +284,7 @@ def find_related_tlds(domain):
         
         related_tlds = list(set(related_tlds))
     except Exception as e:
-        logger.error(f"Error finding related TLDs for {domain}: {str(e)}")
+        logger.exception(f"Error finding related TLDs for {domain}: {str(e)}")
     
     return related_tlds
 
@@ -421,5 +420,5 @@ def execute_whois(domain):
         
         return whois_data
     except Exception as e:
-        logger.error(f"Error executing whois for {domain}: {str(e)}")
+        logger.exception(f"Error executing whois for {domain}: {str(e)}")
         return None

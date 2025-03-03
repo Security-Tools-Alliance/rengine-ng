@@ -7,7 +7,7 @@ from reNgine.definitions import DIR_FILE_FUZZ
 from reNgine.celery import app
 from reNgine.celery_custom_task import RengineTask
 from reNgine.utils.command_executor import stream_command
-from reNgine.utils.logger import Logger
+from reNgine.utils.logger import default_logger as logger
 from reNgine.utils.http import get_subdomain_from_url, prepare_urls_with_fallback
 from startScan.models import DirectoryScan, Subdomain
 from reNgine.utils.command_builder import build_ffuf_cmd
@@ -17,9 +17,6 @@ from reNgine.utils.parsers import parse_ffuf_result
 """
 Celery tasks.
 """
-
-logger = Logger(is_task_logger=True)  # Use task logger for Celery tasks
-
 
 @app.task(name='dir_file_fuzz', queue='io_queue', base=RengineTask, bind=True)
 def dir_file_fuzz(self, ctx=None, description=None):
@@ -181,7 +178,7 @@ def process_ffuf_result(parsed_result, subdomain, dirscan, ctx, crawl_urls, subs
 
     # Log newly created file or directory if debug activated
     if created and CELERY_DEBUG:
-        logger.warning(f'🔨 Found new directory or file {url}')
+        logger.info(f'🔨 Found new directory or file {url}')
 
     # Add file to current dirscan
     dirscan.directory_files.add(dfile)

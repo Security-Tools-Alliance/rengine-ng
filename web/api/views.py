@@ -1,4 +1,3 @@
-import logging
 import re
 import os.path
 from pathlib import Path
@@ -25,6 +24,7 @@ from rest_framework.parsers import JSONParser
 
 from recon_note.models import TodoNote
 from reNgine.celery import app
+from reNgine.utils.logger import default_logger as logger
 from reNgine.utils.db import (
 	get_lookup_keywords,
 )
@@ -125,8 +125,6 @@ from .serializers import (
 	VisualiseDataSerializer,
 	VulnerabilitySerializer
 )
-
-logger = logging.getLogger(__name__)
 
 
 class OllamaManager(APIView):
@@ -848,7 +846,7 @@ class StopScan(APIView):
 					SUCCESS_TASK)
 				response['status'] = True
 			except Exception as e:
-				logging.error(e)
+				logger.error(e)
 				response = {'status': False, 'message': str(e)}
 		elif scan_id:
 			try:
@@ -864,7 +862,7 @@ class StopScan(APIView):
 					SUCCESS_TASK)
 				response['status'] = True
 			except Exception as e:
-				logging.error(e)
+				logger.error(e)
 				response = {'status': False, 'message': str(e)}
 
 		logger.warning(f'Revoking tasks {task_ids}')

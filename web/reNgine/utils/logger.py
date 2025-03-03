@@ -2,19 +2,7 @@ import logging
 import os
 from celery.utils.log import get_task_logger
 from celery import current_task
-
-# ANSI color codes
-GREY = "\x1b[38;20m"
-BLUE = "\x1b[34;20m"
-YELLOW = "\x1b[33;20m"
-RED = "\x1b[31;20m"
-BOLD_RED = "\x1b[31;1m"
-RESET = "\x1b[0m"
-BOLD = "\x1b[1m"
-GREEN = "\x1b[32;20m"
-CYAN = "\x1b[36;20m"
-MAGENTA = "\x1b[35;20m"
-WHITE = "\x1b[37;20m"
+from .colors import Colors
 
 # Force colors even in Docker
 FORCE_COLOR = os.environ.get('FORCE_COLOR', 'true').lower() != 'false'
@@ -25,11 +13,11 @@ class CustomFormatter(logging.Formatter):
     FORMAT = "%(levelname)s | %(message)s"
     
     FORMATS = {
-        logging.DEBUG: BLUE + FORMAT + RESET,
-        logging.INFO: GREY + FORMAT + RESET,
-        logging.WARNING: YELLOW + FORMAT + RESET,
-        logging.ERROR: RED + FORMAT + RESET,
-        logging.CRITICAL: BOLD_RED + FORMAT + RESET
+        logging.DEBUG: Colors.BLUE + FORMAT + Colors.RESET,
+        logging.INFO: Colors.GRAY + FORMAT + Colors.RESET,
+        logging.WARNING: Colors.YELLOW + FORMAT + Colors.RESET,
+        logging.ERROR: Colors.RED + FORMAT + Colors.RESET,
+        logging.CRITICAL: Colors.BOLD_RED + FORMAT + Colors.RESET
     }
     
     def format(self, record):
@@ -59,62 +47,75 @@ class Logger:
                 name = is_task_logger
                 self.is_task_logger = True
             
+            # Colors for different task categories
+            base_task_colors = Colors.GRAY
+            scan_management_colors = Colors.WHITE
+            detection_analysis_colors = Colors.PURPLE
+            web_discovery_colors = Colors.GREEN
+            reconnaissance_colors = Colors.BLUE
+            osint_colors = Colors.LIGHT_CYAN
+            vulnerability_colors = Colors.LIGHT_ORANGE
+            notification_colors = Colors.WHITE
+            system_colors = Colors.GRAY
+
             # Map of task colors
             self.task_colors = {
                 # Base tasks
-                'default': WHITE,
-                'run_command_line': YELLOW,
-                
-                # Detection and analysis
-                'waf_detection': YELLOW,
-                'vulnerability_scan': RED,
-                'port_scan': BLUE,
-                'nmap': CYAN,
-                'scan_http_ports': MAGENTA,
-                
-                # Reconnaissance
-                'subdomain_discovery': BLUE,
-                'osint_discovery': CYAN,
-                'theHarvester': CYAN,
-                'find_subdomains': BLUE,
-                'query_whois': GREEN,
-                'query_reverse_whois': GREEN,
-                'query_ip_history': GREEN,
-                
-                # Fuzzing and exploration
-                'dir_file_fuzz': YELLOW,
-                'http_crawl': MAGENTA,
-                'dalfox_scan': RED,
-                'crlfuzz_scan': RED,
-                's3scanner': RED,
-                
-                # Screenshots and visual
-                'screenshot': GREY,
-                'fetch_url': GREY,
-                
-                # Vulnerability analysis
-                'nuclei_scan': BOLD_RED,
-                'llm_vulnerability_description': RED,
-                
-                # Notifications
-                'send_scan_notif': GREEN,
-                'send_task_notif': GREEN,
-                'send_file_to_discord': GREEN,
-                'send_hackerone_report': GREEN,
+                'default': base_task_colors,
+                'run_command_line': Colors.YELLOW,
                 
                 # Scan management
-                'initiate_scan': MAGENTA,
-                'initiate_subscan': MAGENTA,
-                'post_process': CYAN,
-                'remove_duplicate_endpoints': BLUE,
+                'initiate_scan': scan_management_colors,
+                'initiate_subscan': scan_management_colors,
+                'post_process': scan_management_colors,
+                'remove_duplicate_endpoints': scan_management_colors,
+
+                # Detection and analysis
+                'waf_detection': detection_analysis_colors,
+                'port_scan': detection_analysis_colors,
+                'nmap': detection_analysis_colors,
+                'scan_http_ports': detection_analysis_colors,
                 
-                # Infrastructure
-                'geo_localize': CYAN,
-                'run_cmseek': YELLOW,
+                # Web discovery
+                'http_crawl': web_discovery_colors,
+                'fetch_url': web_discovery_colors,
+                'run_cmseek': web_discovery_colors,
+                'screenshot': web_discovery_colors,
+
+                # Reconnaissance
+                'subdomain_discovery': reconnaissance_colors,
+                'geo_localize': reconnaissance_colors,
+                
+                # OSINT
+                'osint': Colors.CYAN,
+                'osint_discovery': osint_colors,
+                'dorking': osint_colors,
+                'theHarvester': osint_colors,
+                'h8mail': osint_colors,
+                'find_subdomains': osint_colors,
+                'query_whois': osint_colors,
+                'query_reverse_whois': osint_colors,
+                'query_ip_history': osint_colors,
+                
+                # Vulnerability analysis
+                'vulnerability_scan': Colors.ORANGE,
+                'nuclei_scan': vulnerability_colors,
+                'nuclei_individual_severity_module': vulnerability_colors,
+                'dir_file_fuzz': vulnerability_colors,
+                'dalfox_scan': vulnerability_colors,
+                'crlfuzz_scan': vulnerability_colors,
+                's3scanner': vulnerability_colors,
+                'llm_vulnerability_description': vulnerability_colors,
+                
+                # Notifications
+                'send_scan_notif': notification_colors,
+                'send_task_notif': notification_colors,
+                'send_file_to_discord': notification_colors,
+                'send_hackerone_report': notification_colors,
                 
                 # System tasks
-                'report': GREEN,
-                'scan_activity': WHITE
+                'report': system_colors,
+                'scan_activity': system_colors
             }
             
             self.logger = logging.getLogger(name)
@@ -132,6 +133,16 @@ class Logger:
             task_handler = logging.StreamHandler()
             task_handler.setFormatter(CustomFormatter())
             self.task_logger.addHandler(task_handler)
+            
+            # Initialization of colors for log levels
+            self.level_colors = {
+                'DEBUG': Colors.BLUE,
+                'INFO': Colors.GRAY,
+                'WARNING': Colors.YELLOW,
+                'ERROR': Colors.RED,
+                'CRITICAL': Colors.BOLD_RED
+            }
+            
             self._initialized = True
     
     def info(self, message):
@@ -169,12 +180,12 @@ class Logger:
         for line in lines:
             if FORCE_COLOR:
                 color = self.task_colors.get(task_name.split('.')[-1], self.task_colors['default'])
-                level_color = self.level_colors.get(level, GREY)
-                bold = BOLD if level != 'INFO' else ''
-                colored_line = f"{color}{task_name:<35}{RESET} | {level_color}{bold}{level:<8}{RESET} | {color}{line}{RESET}"
+                level_color = self.level_colors.get(level, Colors.GRAY) if level != 'INFO' else color
+                bold = Colors.BOLD if level != 'INFO' else ''
+                colored_line = f"{color}{task_name:<20}{Colors.RESET} | {level_color}{bold}{level:<8}{Colors.RESET} | {level_color}{line}{Colors.RESET}"
                 colored_lines.append(colored_line)
             else:
-                colored_lines.append(f"{task_name:<35} | {level:<8} | {line}")
+                colored_lines.append(f"{task_name:<20} | {level:<8} | {line}")
 
         # Join lines and print
         formatted_message = '\n'.join(colored_lines)

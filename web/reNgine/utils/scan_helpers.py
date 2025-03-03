@@ -11,7 +11,7 @@ from django.core.cache import cache
 from reNgine.definitions import DEFAULT_GF_PATTERNS, FAILED_TASK, FETCH_URL, GF_PATTERNS, RUNNING_TASK, SCHEDULED_SCAN, LIVE_SCAN
 from reNgine.settings import COMMAND_EXECUTOR_DRY_RUN, YAML_CACHE_TIMEOUT
 from reNgine.utils.db import create_scan_object
-from reNgine.utils.logger import Logger
+from reNgine.utils.logger import default_logger as logger
 from reNgine.utils.utils import format_json_output, is_iterable
 from reNgine.utils.formatters import SafePath, fmt_traceback
 from reNgine.utils.task_config import TaskConfig
@@ -29,7 +29,6 @@ from startScan.models import ScanHistory
 from scanEngine.models import EngineType
 
 
-logger = Logger(True)
 
 def get_scan_engine(engine_id, scan):
     """Get scan engine and log available engines."""
@@ -110,7 +109,7 @@ def initialize_scan_history(scan, domain, engine, scan_type, initiated_by_id, re
             return scan, ctx
             
     except Exception as e:
-        logger.error(f"Failed to initialize scan: {str(e)} {fmt_traceback(e)}")
+        logger.exception(f"Failed to initialize scan: {str(e)} {fmt_traceback(e)}")
 
         if scan:
             scan.scan_status = FAILED_TASK
@@ -675,6 +674,6 @@ def execute_grouped_tasks(task_instance, grouped_tasks, task_name="unnamed_task"
         # The post_process callback will handle completion
         return result, result.id
     except Exception as e:
-        logger.error(f'❌ Error executing tasks for {task_name}: {str(e)}')
+        logger.exception(f'❌ Error executing tasks for {task_name}: {str(e)}')
         # Re-raise to let Celery handle the error
         raise

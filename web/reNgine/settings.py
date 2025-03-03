@@ -237,6 +237,8 @@ class SensitiveDataFilter(logging.Filter):
     def filter(self, record):
         sensitive_keys = [
             NETLAS_API_KEY,
+            os.environ.get('AWS_ACCESS_KEY_ID'),
+            os.environ.get('AWS_SECRET_ACCESS_KEY')
         ]
         
         for key in filter(None, sensitive_keys):

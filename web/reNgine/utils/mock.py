@@ -4,10 +4,9 @@ Mock data utilities for dry run testing
 
 import random
 
-from reNgine.utils.logger import Logger
+from reNgine.utils.logger import default_logger as logger
 from reNgine.utils.parsers import parse_dalfox_result, parse_s3scanner_result
 
-logger = Logger(True)
 
 def generate_mock_urls(count=10, base_domains=None, subdomains=True, paths=True, params=False):
     """Generate mock URLs for dry run testing
@@ -545,7 +544,7 @@ def prepare_port_scan_mock(host, results_dir, context=None):
 
         return parse_http_ports_data(xml_file) if Path(xml_file).exists() else None
     except Exception as e:
-        logger.error(f"Failed to prepare mock port scan data: {str(e)}")
+        logger.exception(f"Failed to prepare mock port scan data: {str(e)}")
         return None
 
 def prepare_subdomain_mock(host, context=None):
@@ -567,7 +566,7 @@ def prepare_subdomain_mock(host, context=None):
             host, context, SubdomainSerializer
         )
     except Exception as e:
-        logger.error(f"Failed to prepare mock subdomain data: {str(e)}")
+        logger.exception(f"Failed to prepare mock subdomain data: {str(e)}")
         return []
 
 
@@ -648,7 +647,7 @@ def prepare_nuclei_vulnerability_mock(urls, context=None):
             ),
         }
     except Exception as e:
-        logger.error(f"Failed to prepare mock vulnerability data: {str(e)}")
+        logger.exception(f"Failed to prepare mock vulnerability data: {str(e)}")
         return {'status': 'error', 'message': str(e)}
 
 def prepare_dalfox_vulnerability_mock(urls, context=None):
@@ -678,7 +677,7 @@ def prepare_dalfox_vulnerability_mock(urls, context=None):
             'total_count': len(parsed_vulnerabilities)
         }
     except Exception as e:
-        logger.error(f"Failed to prepare mock Dalfox vulnerability data: {str(e)}")
+        logger.exception(f"Failed to prepare mock Dalfox vulnerability data: {str(e)}")
         return {'status': 'error', 'message': str(e)}
 
 def prepare_crlfuzz_vulnerability_mock(urls, context=None):
@@ -705,7 +704,7 @@ def prepare_crlfuzz_vulnerability_mock(urls, context=None):
             'total_count': len(parsed_vulnerabilities)
         }
     except Exception as e:
-        logger.error(f"Failed to prepare mock CRLFUZZ vulnerability data: {str(e)}")
+        logger.exception(f"Failed to prepare mock CRLFUZZ vulnerability data: {str(e)}")
         return {'status': 'error', 'message': str(e)}
 
 def prepare_s3scanner_vulnerability_mock(context=None):
@@ -746,5 +745,5 @@ def prepare_s3scanner_vulnerability_mock(context=None):
             ),
         }
     except Exception as e:
-        logger.error(f"Failed to prepare mock S3Scanner bucket data: {str(e)}")
+        logger.exception(f"Failed to prepare mock S3Scanner bucket data: {str(e)}")
         return {'status': 'error', 'message': str(e)}

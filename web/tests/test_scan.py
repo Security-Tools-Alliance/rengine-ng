@@ -1,10 +1,7 @@
-import json
 import os
 import unittest
 import yaml
 from dotenv import load_dotenv
-from reNgine.settings import CELERY_DEBUG
-from celery.utils.log import get_task_logger
 from scanEngine.models import EngineType
 from django.utils import timezone
 from reNgine.tasks.url import fetch_url
@@ -21,7 +18,6 @@ os.environ.setdefault('RENGINE_SECRET_KEY', os.getenv('RENGINE_SECRET_KEY', 'sec
 os.environ.setdefault('CELERY_ALWAYS_EAGER', os.getenv('CELERY_ALWAYS_EAGER', 'True'))
 
 
-logger = get_task_logger(__name__)
 # To pass the DOMAIN_NAME variable when running tests, you can use:
 # DOMAIN_NAME=example.com python3 manage.py test
 # Or set a default value if the environment variable is not defined

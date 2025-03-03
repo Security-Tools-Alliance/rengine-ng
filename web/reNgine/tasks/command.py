@@ -1,8 +1,7 @@
 from reNgine.celery import app
 from reNgine.utils.command_executor import run_command
-from reNgine.utils.logger import Logger
+from reNgine.utils.logger import default_logger as logger
 
-logger = Logger(True)
 
 @app.task(name='run_command_line', bind=False, queue='run_command_queue')
 def run_command_line(cmd, **kwargs):

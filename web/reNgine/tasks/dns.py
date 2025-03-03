@@ -2,7 +2,7 @@ from dotted_dict import DottedDict
 from django.utils import timezone
 
 from reNgine.celery import app
-from reNgine.utils.logger import Logger
+from reNgine.utils.logger import default_logger as logger
 from reNgine.utils.dns import (
     get_domain_info_from_db,
     get_domain_historical_ip_address,
@@ -17,7 +17,6 @@ from targetApp.models import (
     Registrar,
 )
 
-logger = Logger(True)
 
 @app.task(name='query_whois', bind=False, queue='io_queue')
 def query_whois(ip_domain, force_reload_whois=False):
@@ -51,7 +50,7 @@ def query_whois(ip_domain, force_reload_whois=False):
         historical_ips = get_domain_historical_ip_address(ip_domain)
         domain_info.historical_ips = historical_ips
     except Exception as e:
-        logger.error(f'HistoricalIP for {ip_domain} not found!\nError: {str(e)}')
+        logger.exception(f'HistoricalIP for {ip_domain} not found!\nError: {str(e)}')
         historical_ips = []
 
     # Step 2: Find associated domains using reverse whois
@@ -59,7 +58,7 @@ def query_whois(ip_domain, force_reload_whois=False):
         related_domains = reverse_whois(ip_domain.split('.')[0])
         domain_info.related_domains = [domain['name'] for domain in related_domains]
     except Exception as e:
-        logger.error(f'Associated domain not found for {ip_domain}\nError: {str(e)}')
+        logger.exception(f'Associated domain not found for {ip_domain}\nError: {str(e)}')
         domain_info.related_domains = []
 
     # Step 3: Find related TLDs
@@ -67,7 +66,7 @@ def query_whois(ip_domain, force_reload_whois=False):
         related_tlds = find_related_tlds(ip_domain)
         domain_info.related_tlds = related_tlds
     except Exception as e:
-        logger.error(f'Related TLDs not found for {ip_domain}\nError: {str(e)}')
+        logger.exception(f'Related TLDs not found for {ip_domain}\nError: {str(e)}')
         domain_info.related_tlds = []
 
     # Step 4: Execute WHOIS
@@ -76,7 +75,7 @@ def query_whois(ip_domain, force_reload_whois=False):
             # Update domain_info with whois data
             domain_info.update(whois_data)
     except Exception as e:
-        logger.error(f'Error executing whois for {ip_domain}\nError: {str(e)}')
+        logger.exception(f'Error executing whois for {ip_domain}\nError: {str(e)}')
 
     # Step 5: Save information to database if we have a domain object
     if domain:

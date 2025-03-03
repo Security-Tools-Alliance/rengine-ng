@@ -5,7 +5,7 @@ from reNgine.celery import app
 from reNgine.celery_custom_task import RengineTask
 from reNgine.utils.command_builder import build_httpx_cmd
 from reNgine.utils.command_executor import stream_command
-from reNgine.utils.logger import Logger
+from reNgine.utils.logger import default_logger as logger
 from reNgine.utils.http import get_subdomain_from_url, prepare_urls_for_http_scan
 from reNgine.utils.parsers import parse_httpx_result
 from reNgine.utils.task_config import TaskConfig
@@ -15,7 +15,6 @@ from reNgine.tasks.url import remove_duplicate_endpoints
 from startScan.models import Subdomain
 
 
-logger = Logger(True)
 @app.task(name='http_crawl', queue='io_queue', base=RengineTask, bind=True)
 def http_crawl(self, urls=None, method=None, recrawl=False, ctx=None, track=True, 
                description=None, update_subdomain_metadatas=False, 
@@ -79,7 +78,7 @@ def initialize_http_crawl(self, urls, ctx, duplicate_removal_fields, recrawl):
     )
     
     if not urls:
-        logger.error('🌐 No URLs to crawl. Skipping.')
+        logger.warning('🌐 No URLs to crawl. Skipping.')
         return None
         
     return config, task_config, input_path, urls, subdomain_metadata_update
@@ -142,7 +141,7 @@ def process_http_line(self, line, cmd, follow_redirect, update_subdomain_metadat
         return None
         
     # Log and notify about the endpoint
-    logger.warning(f'🌐 {endpoint_str}')
+    logger.info(f'🌐 {endpoint_str}')
     
     notify_findings(self, endpoint, endpoint_str, result_data)
     

@@ -9,7 +9,7 @@ from reNgine.definitions import ALL, SUBDOMAIN_DISCOVERY
 from reNgine.celery import app
 from reNgine.celery_custom_task import RengineTask
 from reNgine.utils.command_builder import CommandBuilder, build_piped_command, build_subdomain_tool_commands
-from reNgine.utils.logger import Logger
+from reNgine.utils.logger import default_logger as logger
 from reNgine.utils.mock import prepare_subdomain_mock
 from reNgine.utils.task_config import TaskConfig
 from reNgine.tasks.command import run_command_line
@@ -18,7 +18,6 @@ from reNgine.tasks.http import http_crawl
 from scanEngine.models import Notification
 from startScan.models import Subdomain
 
-logger = Logger(True)
 
 
 @app.task(name='subdomain_discovery', queue='io_queue', base=RengineTask, bind=True)
@@ -49,7 +48,7 @@ def subdomain_discovery(
         host = self.subdomain.name if self.subdomain else self.domain.name
 
     if self.url_filter:
-        logger.warning(f'🌍 Ignoring subdomains scan as an URL path filter was passed ({self.url_filter}).')
+        logger.info(f'🌍 Ignoring subdomains scan as an URL path filter was passed ({self.url_filter}).')
         return
 
     # Check if dry run mode is enabled
@@ -93,7 +92,7 @@ def subdomain_discovery(
                     activity_id=self.activity_id
                 )
             except Exception as e:
-                logger.error(f'🌍 Error running command: {cmd}, error: {e}')
+                logger.exception(f'🌍 Error running command: {cmd}, error: {e}')
                 continue
 
     # Gather all the tools' results in one single file. Write subdomains into
@@ -160,14 +159,14 @@ def subdomain_discovery(
             valid_url
         )
         if not valid_domain:
-            logger.error(f'Subdomain {subdomain_name} is not a valid domain, IP or URL. Skipping.')
+            logger.warning(f'Subdomain {subdomain_name} is not a valid domain, IP or URL. Skipping.')
             continue
 
         if valid_url:
             subdomain_name = urlparse(subdomain_name).netloc
 
         if subdomain_name in self.out_of_scope_subdomains:
-            logger.error(f'Subdomain {subdomain_name} is out of scope. Skipping.')
+            logger.warning(f'Subdomain {subdomain_name} is out of scope. Skipping.')
             continue
 
         # Add subdomain

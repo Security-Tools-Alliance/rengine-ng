@@ -97,11 +97,10 @@ from reNgine.settings import (
 from reNgine.utils.parsers import parse_custom_header
 from reNgine.utils.db import get_random_proxy
 from reNgine.utils.utils import format_json_output, return_iterable
-from reNgine.utils.logger import Logger
+from reNgine.utils.logger import default_logger as logger
 
 from scanEngine.models import InstalledExternalTool
 
-logger = Logger(True)
 
 class TaskConfig:
     """Helper class to manage configuration for scan tasks"""

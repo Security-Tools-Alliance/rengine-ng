@@ -1,8 +1,7 @@
 from reNgine.celery import app
-from reNgine.utils.logger import Logger
+from reNgine.utils.logger import default_logger as logger
 from reNgine.utils.ip import geo_localize_ip
 
-logger = Logger(True)
 
 @app.task(name='geo_localize', bind=False, queue='io_queue')
 def geo_localize(host, ip_id=None):

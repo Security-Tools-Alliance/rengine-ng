@@ -1,10 +1,8 @@
 import os
 import threading
 import debugpy
-from reNgine.utils.logger import Logger
+from reNgine.utils.logger import default_logger as logger
 from reNgine.settings import CELERY_REMOTE_DEBUG, CELERY_REMOTE_DEBUG_PORT
-
-logger = Logger(True)
 
 def debug():
     try:
@@ -27,4 +25,4 @@ def debug():
 
 
     except Exception as e:
-        logger.error(e)
+        logger.exception(e)

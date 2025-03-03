@@ -1,11 +1,10 @@
 import ipaddress
 import validators
 from reNgine.utils.command_executor import run_command
-from reNgine.utils.logger import Logger
+from reNgine.utils.logger import default_logger as logger
 from startScan.models import IpAddress, CountryISO
 from django.db import transaction
 
-logger = Logger(True)
 
 def get_ip_info(ip_address):
     """
@@ -44,7 +43,7 @@ def get_ips_from_cidr_range(target):
     try:
         return [str(ip) for ip in ipaddress.IPv4Network(target)]
     except ValueError:
-        logger.error(f'🌍 {target} is not a valid CIDR range. Skipping.')
+        logger.exception(f'🌍 {target} is not a valid CIDR range. Skipping.')
         return []
 
 def save_ip_address(ip_address, subdomain=None, subscan=None, **kwargs):
@@ -122,7 +121,7 @@ def geo_localize_ip(host, ip_id=None):
                     ip.geo_iso = geo_object
                     ip.save()
                 except IpAddress.DoesNotExist:
-                    logger.error(f"🌍 IP address with id {ip_id} not found")
+                    logger.exception(f"🌍 IP address with id {ip_id} not found")
                     return None
 
         # Return geo data
@@ -132,5 +131,5 @@ def geo_localize_ip(host, ip_id=None):
         }
 
     except Exception as e:
-        logger.error(f"🌍 Error during geolocation of {host}: {str(e)}")
+        logger.exception(f"🌍 Error during geolocation of {host}: {str(e)}")
         return None

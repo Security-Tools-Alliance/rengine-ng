@@ -1,9 +1,8 @@
 from . import settings
 import requests
 from django.core.cache import cache
-import logging
+from reNgine.utils.logger import default_logger as logger
 
-logger = logging.getLogger(__name__)
 
 def version(request):
     return {"RENGINE_CURRENT_VERSION": settings.RENGINE_CURRENT_VERSION}
@@ -22,7 +21,7 @@ def misc(request):
             # Handle the exception if the request fails
             external_ip = 'Unable to retrieve IP'  # Default value in case of error
             # You can also log the error if necessary
-            logger.error(f"Error retrieving external IP: {e}")
+            logger.exception(f"Error retrieving external IP: {e}")
 
     return {
         'external_ip': external_ip

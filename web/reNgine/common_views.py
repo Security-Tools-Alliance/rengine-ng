@@ -3,9 +3,8 @@ from django.shortcuts import render
 from django.template import RequestContext
 from django.utils.module_loading import import_string
 
-import logging  
-
-logger = logging.getLogger(__name__)  
+from reNgine.utils.logger import default_logger as logger
+  
 
 def permission_denied(request):
     logger.warning(f"Permission denied for user {request.user}")

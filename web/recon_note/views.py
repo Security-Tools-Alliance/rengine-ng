@@ -5,12 +5,12 @@ This module contains the views for the recon_note app, which handles
 the management of todo notesand related operations.
 """
 import json
-import logging
 
 from django.http import JsonResponse
 from django.shortcuts import render
 
 from recon_note.models import TodoNote
+from reNgine.utils.logger import default_logger as logger
 
 def list_note(request, slug):
     """
@@ -51,7 +51,7 @@ def flip_todo_status(request):
         body_unicode = request.body.decode('utf-8')
         body = json.loads(body_unicode)
     except json.JSONDecodeError as e:
-        logging.error('JSON decode error: %s', e)
+        logger.error(f'JSON decode error: {e}')
         return JsonResponse({'status': False, 'error': 'Invalid JSON.'}, status=400)
 
     note_id = body.get('id')
@@ -91,7 +91,7 @@ def flip_important_status(request):
         body_unicode = request.body.decode('utf-8')
         body = json.loads(body_unicode)
     except json.JSONDecodeError as e:
-        logging.error('JSON decode error: %s', e)
+        logger.error(f'JSON decode error: {e}')
         return JsonResponse({'status': False, 'error': 'Invalid JSON.'}, status=400)
 
     note_id = body.get('id')
@@ -130,7 +130,7 @@ def delete_note(request):
         body_unicode = request.body.decode('utf-8')
         body = json.loads(body_unicode)
     except json.JSONDecodeError as e:
-        logging.error('JSON decode error: %s', e)
+        logger.error(f'JSON decode error: {e}')
         return JsonResponse({'status': False, 'error': 'Invalid JSON.'}, status=400)
 
     note_id = body.get('id')

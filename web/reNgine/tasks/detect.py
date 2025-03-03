@@ -12,7 +12,7 @@ from reNgine.definitions import WAF_DETECTION
 from reNgine.settings import RENGINE_TOOL_PATH
 from reNgine.tasks.command import run_command_line
 from reNgine.utils.command_builder import CommandBuilder, build_cmsseek_cmd, build_wafw00f_cmd
-from reNgine.utils.logger import Logger
+from reNgine.utils.logger import default_logger as logger
 from reNgine.utils.http import get_subdomain_from_url, prepare_urls_with_fallback
 from reNgine.utils.task_config import TaskConfig
 
@@ -21,9 +21,6 @@ from startScan.models import Waf, Subdomain
 """
 Celery tasks.
 """
-
-logger = Logger(is_task_logger=True)  # Use task logger for Celery tasks
-
 
 @app.task(name='waf_detection', queue='io_queue', base=RengineTask, bind=True)
 def waf_detection(self, ctx=None, description=None):
@@ -50,7 +47,7 @@ def waf_detection(self, ctx=None, description=None):
         ctx=ctx
     )
     if not urls:
-        logger.error('🛡️  No URLs to check for WAF. Skipping.')
+        logger.warning('🛡️  No URLs to check for WAF. Skipping.')
         return
 
     run_command_line.delay(
@@ -92,7 +89,7 @@ def waf_detection(self, ctx=None, description=None):
             subdomain.waf.add(waf)
             subdomain.save()
         except Subdomain.DoesNotExist:
-            logger.warning(f'🛡️  Subdomain {subdomain_name} was not found in the db, skipping waf detection.')
+            logger.info(f'🛡️  Subdomain {subdomain_name} was not found in the db, skipping waf detection.')
 
     return wafs
 
@@ -123,12 +120,12 @@ def run_cmseek(url):
         try:
             shutil.rmtree(os.path.dirname(json_path))
         except Exception as e:
-            logger.error(f"Error cleaning up CMSeeK results: {e}")
+            logger.exception(f"Error cleaning up CMSeeK results: {e}")
 
         return result
 
     except Exception as e:
-        logger.error(f"Error running CMSeeK: {e}")
+        logger.exception(f"Error running CMSeeK: {e}")
         return {'status': False, 'message': str(e)}
 
 @app.task(name='run_wafw00f', bind=False, queue='run_command_queue')
@@ -153,5 +150,5 @@ def run_wafw00f(url):
             logger.info("No WAF detected")
             return "No WAF detected"
     except Exception as e:
-        logger.error(f"Unexpected error: {e}")
+        logger.exception(f"Unexpected error: {e}")
         return f"Unexpected error: {str(e)}"

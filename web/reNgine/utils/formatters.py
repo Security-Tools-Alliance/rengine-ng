@@ -4,10 +4,8 @@ import humanize
 from pathlib import Path
 from typing import List, Union
 from django.utils import timezone
-from reNgine.utils.logger import Logger
+from reNgine.utils.logger import default_logger as logger
 from reNgine.settings import DOMAIN_NAME, RENGINE_TASK_IGNORE_CACHE_KWARGS
-
-logger = Logger(__name__)
 
 class SafePath:
     """Utility class for safe path handling and directory creation."""
@@ -75,7 +73,7 @@ class SafePath:
             return str(abs_path)
             
         except Exception as e:
-            logger.error(f"Error creating safe path: {str(e)}")
+            logger.exception(f"Error creating safe path: {str(e)}")
             raise
 
     @classmethod

@@ -6,7 +6,7 @@ from discord_webhook import DiscordWebhook
 
 from reNgine.definitions import NUCLEI_SEVERITY_MAP, STATUS_TO_SEVERITIES
 from reNgine.celery import app
-from reNgine.utils.logger import Logger
+from reNgine.utils.logger import default_logger as logger
 from reNgine.utils.formatters import (
     get_scan_url,
     get_task_title,
@@ -31,8 +31,6 @@ from startScan.models import (
     Vulnerability,
 )
 from django.core.cache import cache
-
-logger = Logger(True)
 
 @app.task(name='send_notif', bind=False, queue='send_notif_queue')
 def send_notif(

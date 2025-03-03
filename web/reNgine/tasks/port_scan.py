@@ -12,7 +12,7 @@ from reNgine.celery_custom_task import RengineTask
 from reNgine.utils.command_builder import build_naabu_cmd
 from reNgine.utils.command_executor import stream_command
 from reNgine.utils.formatters import SafePath, get_task_title
-from reNgine.utils.logger import Logger
+from reNgine.utils.logger import default_logger as logger
 from reNgine.utils.nmap import parse_http_ports_data
 from reNgine.utils.nmap_service import process_nmap_service_results
 from reNgine.utils.parsers import parse_nmap_results, parse_naabu_result
@@ -20,8 +20,6 @@ from reNgine.utils.task_config import TaskConfig
 from reNgine.tasks.command import run_command_line
 
 from scanEngine.models import Notification
-
-logger = Logger(True)
 
 @app.task(name='port_scan', queue='io_queue', base=RengineTask, bind=True)
 def port_scan(self, hosts=None, ctx=None, description=None):
@@ -113,8 +111,8 @@ def port_scan(self, hosts=None, ctx=None, description=None):
     logger.info('🔌 Finished running naabu port scan.')
 
     if task_config['nmap_enabled']:
-        logger.warning('🔌 Starting nmap scans ...')
-        logger.warning(ports_data)
+        logger.info('🔌 Starting nmap scans ...')
+        logger.info(ports_data)
         # Process nmap results: 1 process per host
         sigs = []
         for host, port_list in ports_data.items():
@@ -192,7 +190,7 @@ def nmap(self, args=None, ports=None, host=None, input_file=None, script=None, s
     output_file = self.output_path
     output_file_xml = f'{self.results_dir}/{host}_{self.filename}'
     vulns_file = f'{self.results_dir}/{host}_{filename_vulns}'
-    logger.warning(f'Running nmap on {host}')
+    logger.info(f'Running nmap on {host}')
 
     # Build cmd
     nmap_cmd = build_nmap_cmd(
@@ -266,7 +264,7 @@ def scan_http_ports(self, host, ctx=None, description=None):
             create_dir=False
         )
     except (ValueError, OSError) as e:
-        logger.error(f"Failed to create safe path for XML file: {str(e)}")
+        logger.exception(f"Failed to create safe path for XML file: {str(e)}")
         return None
 
     # Configure ports to scan
@@ -297,7 +295,7 @@ def scan_http_ports(self, host, ctx=None, description=None):
             time.sleep(retry_delay)
 
         except Exception as e:
-            logger.error(f"Attempt {attempt + 1}/{max_retries}: Nmap scan failed: {str(e)}")
+            logger.exception(f"Attempt {attempt + 1}/{max_retries}: Nmap scan failed: {str(e)}")
             if attempt == max_retries - 1:
                 return None
             time.sleep(retry_delay)
@@ -377,5 +375,5 @@ def process_port_scan_result(parsed_result, domain, scan, urls, ports_data, ctx,
         ports_data[host] = [port_number]
     
     # Send notification
-    logger.warning(f'🔌 Found opened port {port_number} on {ip_address} ({host})')
+    logger.info(f'🔌 Found opened port {port_number} on {ip_address} ({host})')
     return True

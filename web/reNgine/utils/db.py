@@ -51,11 +51,9 @@ from reNgine.utils.http import (
     is_valid_url,
     sanitize_url,
 )
-from reNgine.utils.logger import Logger
+from reNgine.utils.logger import default_logger as logger
 
 from reNgine.gpt import GPTVulnerabilityReportGenerator
-
-logger = Logger(True)
 
 def save_vulns(self, notif, vulns_file, vulns):
     with open(vulns_file, 'w') as f:
@@ -80,11 +78,11 @@ def save_vulns(self, notif, vulns_file, vulns):
             **vuln_data)
         vulns_str += f'• {str(vuln)}\n'
         if created:
-            logger.warning(str(vuln))
+            logger.info(str(vuln))
 
     # Send only 1 notif for all vulns to reduce number of notifs
     if notif and notif.send_vuln_notif and vulns_str:
-        logger.warning(vulns_str)
+        logger.info(vulns_str)
         self.notify(fields={'CVEs': vulns_str})
 
 def save_vulnerability(**vuln_data):
@@ -149,11 +147,11 @@ def save_endpoint(http_url, ctx=None, crawl=False, is_default=False, http_status
     scheme = urlparse(http_url).scheme
 
     if not scheme:
-        logger.error(f'{http_url} is missing scheme (http or https). Skipping.')
+        logger.warning(f'{http_url} is missing scheme (http or https). Skipping.')
         return None, False
 
     if not is_valid_url(http_url):
-        logger.error(f'{http_url} is not a valid URL. Skipping.')
+        logger.warning(f'{http_url} is not a valid URL. Skipping.')
         return None, False
 
     # Get required objects
@@ -170,7 +168,7 @@ def save_endpoint(http_url, ctx=None, crawl=False, is_default=False, http_status
 
     # For regular domain scans, validate URL belongs to domain
     if not is_ip_scan and domain.name not in http_url:
-        logger.error(f"{http_url} is not a URL of domain {domain.name}. Skipping.")
+        logger.warning(f"{http_url} is not a URL of domain {domain.name}. Skipping.")
         return None, False
 
     http_url = sanitize_url(http_url)
@@ -197,7 +195,7 @@ def save_endpoint(http_url, ctx=None, crawl=False, is_default=False, http_status
         custom_ctx['track'] = False
         results = http_crawl(urls=[http_url], ctx=custom_ctx)
         if not results or results[0]['failed']:
-            logger.error(f'Endpoint for {http_url} does not seem to be up. Skipping.')
+            logger.warning(f'Endpoint for {http_url} does not seem to be up. Skipping.')
             return None, False
 
         endpoint_data = results[0]
@@ -246,12 +244,12 @@ def save_subdomain(subdomain_name, ctx=None):
         validators.ipv6(subdomain_name)
     )
     if not valid_domain:
-        logger.error(f'{subdomain_name} is not a valid domain/IP. Skipping.')
+        logger.warning(f'{subdomain_name} is not a valid domain/IP. Skipping.')
         return None, False
 
     # Check if subdomain is in scope
     if subdomain_name in out_of_scope_subdomains:
-        logger.error(f'{subdomain_name} is out-of-scope. Skipping.')
+        logger.warning(f'{subdomain_name} is out-of-scope. Skipping.')
         return None, False
 
     # Get domain object and check if we're scanning an IP
@@ -266,7 +264,7 @@ def save_subdomain(subdomain_name, ctx=None):
 
     # For regular domain scans, validate subdomain belongs to domain
     if not is_ip_scan and ctx.get('domain_id') and domain.name not in subdomain_name:
-        logger.error(f"{subdomain_name} is not a subdomain of domain {domain.name}. Skipping.")
+        logger.warning(f"{subdomain_name} is not a subdomain of domain {domain.name}. Skipping.")
         return None, False
 
     # Create or get subdomain object
@@ -293,7 +291,7 @@ def save_subdomain_metadata(subdomain, endpoint, extra_datas=None):
         subdomain.http_url = http_url
         subdomain.save()
     else:
-        logger.error(f'No HTTP URL found for {subdomain.name}. Skipping.')
+        logger.warning(f'No HTTP URL found for {subdomain.name}. Skipping.')
 
 
 def _save_alive_subdomain_metadata(endpoint, subdomain, extra_datas):
@@ -336,7 +334,7 @@ def save_employee(name, designation, scan_history=None):
         name=name,
         designation=designation)
     if created:
-        logger.warning(f'💾 Found new employee {name}')
+        logger.info(f'💾 Found new employee {name}')
 
     # Add employee to ScanHistory
     if scan_history:
@@ -371,7 +369,7 @@ def save_imported_subdomains(subdomains, ctx=None):
     if not subdomains:
         return
 
-    logger.warning(f'Found {len(subdomains)} imported subdomains.')
+    logger.info(f'Found {len(subdomains)} imported subdomains.')
     with open(f'{results_dir}/from_imported.txt', 'w+') as output_file:
         url_filter = ctx.get('url_filter')
         enable_http_crawl = ctx.get('yaml_configuration').get(ENABLE_HTTP_CRAWL, DEFAULT_ENABLE_HTTP_CRAWL)
@@ -711,7 +709,7 @@ def get_random_proxy():
     if not proxy.use_proxy:
         return ''
     proxy_name = random.choice(proxy.proxies.splitlines())
-    logger.warning(f'🌐 Using proxy: {proxy_name}')
+    logger.info(f'🌐 Using proxy: {proxy_name}')
     # os.environ['HTTP_PROXY'] = proxy_name
     # os.environ['HTTPS_PROXY'] = proxy_name
     return proxy_name
@@ -757,7 +755,7 @@ def get_subdomains(write_filepath=None, exclude_subdomains=False, ctx=None):
         if subdomain.name
     ]
     if not subdomains:
-        logger.error('💾 No subdomains were found in query !')
+        logger.warning('💾 No subdomains were found in query !')
 
     if url_filter:
         subdomains = [f'{subdomain}/{url_filter}' for subdomain in subdomains]
@@ -966,7 +964,7 @@ def get_http_urls(is_alive=False, is_uncrawled=False, strict=False, ignore_files
         endpoints = [e for e in endpoints if not urlparse(e).path.endswith(extensions)]
 
     if not endpoints:
-        logger.error('💾 No endpoints were found in query !')
+        logger.warning('💾 No endpoints were found in query !')
 
     if write_filepath:
         with open(write_filepath, 'w') as f:

@@ -7,7 +7,6 @@ import re
 import time
 import select
 import subprocess
-import logging
 from django.utils import timezone
 from django.apps import apps
 import shlex
@@ -19,8 +18,7 @@ from datetime import datetime
 from reNgine.utils.mock import generate_mock_crlfuzz_vulnerabilities, generate_mock_dalfox_vulnerabilities, generate_mock_nuclei_vulnerabilities, generate_mock_s3scanner_vulnerabilities
 from reNgine.settings import COMMAND_EXECUTOR_DRY_RUN
 from reNgine.utils.utils import format_json_output
-
-logger = logging.getLogger(__name__)
+from reNgine.utils.logger import default_logger as logger
 
 class CommandExecutor:
     """Unified command execution handler with streaming capabilities"""
@@ -43,14 +41,14 @@ class CommandExecutor:
         """Main execution entry point"""
         logger.debug(f"🔧 Starting command execution in {'STREAM' if stream else 'BUFFER'} mode")
         logger.debug(f"🔧 Command: {self.cmd}")
-        logger.debug(f"🔧 Context: {self.context}")
+        logger.debug(f"🔧 Context: {format_json_output(self.context)}")
         self.stream_mode = stream
         self._pre_execution_setup()
         
         try:
             return self._handle_execution(stream)
         except Exception as e:
-            logger.error(f"🔥 Critical execution error: {str(e)}", exc_info=True)
+            logger.exception(f"🔥 Critical execution error: {str(e)}")
             self._handle_execution_error(e)
         finally:
             if not stream:
@@ -149,7 +147,7 @@ class CommandExecutor:
         try:
             return self._format_buffer_output()
         except Exception as e:
-            logger.error(f"🔥 Buffer processing failed: {str(e)}")
+            logger.exception(f"🔥 Buffer processing failed: {str(e)}")
             return self.process.returncode, ''
 
     def _format_buffer_output(self):
@@ -237,7 +235,7 @@ class CommandExecutor:
                     break
 
         except Exception as e:
-            logger.error(f"❌ JSON processing failed: {str(e)}")
+            logger.exception(f"❌ JSON processing failed: {str(e)}")
             logger.debug(f"❌ Problematic content: {line[:200]}...")
 
     def _check_timeout(self):
@@ -284,7 +282,7 @@ class CommandExecutor:
             return decoded
 
         except Exception as e:
-            logger.error(f"🚨 Stream read failed: {str(e)}")
+            logger.exception(f"🚨 Stream read failed: {str(e)}")
             return None
 
     def _update_command_object(self, data, is_stream=False):
@@ -321,14 +319,13 @@ class CommandExecutor:
                 "✅ Command object updated successfully with stream mode",
             )
         except Exception as e:
-            logger.error(f"❌ Output update failed: {str(e)}")
+            logger.exception(f"❌ Output update failed: {str(e)}")
             self.command_obj.output = f"Error: {str(e)}"
             self.command_obj.save(update_fields=['output'])
 
     def _save_command_object(self, current_output, arg1, arg2):
         self.command_obj.output = current_output + arg1
         self.command_obj.save(update_fields=['output'])
-        logger.debug(arg2)
 
     def _handle_execution_error(self, error):
         """Handle execution errors"""
@@ -390,7 +387,7 @@ class CommandExecutor:
                 logger.debug(f"💾 Saved return code: {return_code}")
                 
             except Exception as e:
-                logger.error(f"❌ Failed to save return code: {str(e)}")
+                logger.exception(f"❌ Failed to save return code: {str(e)}")
                 self.command_obj.return_code = -1
                 self.command_obj.save(update_fields=['return_code'])
 

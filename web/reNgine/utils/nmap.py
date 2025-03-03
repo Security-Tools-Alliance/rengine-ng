@@ -3,13 +3,12 @@ import time
 from django.db import transaction
 
 from reNgine.definitions import UNCOMMON_WEB_PORTS
-from reNgine.utils.logger import Logger
+from reNgine.utils.logger import default_logger as logger
 from reNgine.utils.formatters import SafePath
 from reNgine.utils.ip import save_ip_address
 from reNgine.utils.nmap_service import create_or_update_port_with_service
 from reNgine.utils.parsers import parse_nmap_results
 
-logger = Logger(True)
 
 def get_nmap_http_datas(host, ctx):
     """Check if standard and non-standard HTTP ports are open for given hosts.

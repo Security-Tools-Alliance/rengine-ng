@@ -1,5 +1,4 @@
 import json
-import logging
 
 from datetime import timedelta
 
@@ -25,8 +24,8 @@ from startScan.models import (
 from dashboard.models import Project, OpenAiAPIKey, NetlasAPIKey
 from dashboard.forms import ProjectForm
 from reNgine.definitions import PERM_MODIFY_SYSTEM_CONFIGURATIONS, FOUR_OH_FOUR_URL
+from reNgine.utils.logger import default_logger as logger
 
-logger = logging.getLogger(__name__)
 
 def index(request, slug):
     try:

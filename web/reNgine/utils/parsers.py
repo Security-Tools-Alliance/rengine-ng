@@ -14,9 +14,7 @@ from reNgine.definitions import (
     NUCLEI_DEFAULT_TEMPLATES_PATH,
 )
 from reNgine.utils.http import extract_httpx_url
-from reNgine.utils.logger import Logger
-
-logger = Logger(__name__)
+from reNgine.utils.logger import default_logger as logger
 
 def parse_httpx_result(line, subdomain, ctx, follow_redirect, update_subdomain_metadatas, subscan=None):
     """Process a single line from httpx output.
@@ -343,8 +341,8 @@ def parse_nmap_results(xml_file, output_file=None, parse_type='vulnerabilities')
         try:
             nmap_results = xmltodict.parse(content)
         except Exception as e:
-            logger.warning(e)
-            logger.error(f'Cannot parse {xml_file} to valid JSON. Skipping.')
+            logger.debug(e)
+            logger.exception(f'Cannot parse {xml_file} to valid JSON. Skipping.')
             return []
 
     if output_file:
@@ -492,30 +490,30 @@ def parse_nmap_vulscan_output(script_output):
         entry = {'id': id, 'title': title}
         data[provider_name]['entries'].append(entry)
 
-    logger.warning('Vulscan parsed output:')
-    logger.warning(pprint.pformat(data))
+    logger.info('Vulscan parsed output:')
+    logger.info(pprint.pformat(data))
 
     for provider_name in data:
         if provider_name == 'Exploit-DB':
-            logger.error(f'Provider {provider_name} is not supported YET.')
+            logger.warning(f'Provider {provider_name} is not supported YET.')
         elif provider_name == 'IBM X-Force':
-            logger.error(f'Provider {provider_name} is not supported YET.')
+            logger.warning(f'Provider {provider_name} is not supported YET.')
         elif provider_name == 'MITRE CVE':
-            logger.error(f'Provider {provider_name} is not supported YET.')
+            logger.warning(f'Provider {provider_name} is not supported YET.')
             for entry in data[provider_name]['entries']:
                 cve_id = entry['id']
                 vuln = cve_to_vuln(cve_id)
                 vulns.append(vuln)
         elif provider_name == 'OSVDB':
-            logger.error(f'Provider {provider_name} is not supported YET.')
+            logger.warning(f'Provider {provider_name} is not supported YET.')
         elif provider_name == 'OpenVAS (Nessus)':
-            logger.error(f'Provider {provider_name} is not supported YET.')
+            logger.warning(f'Provider {provider_name} is not supported YET.')
         elif provider_name == 'SecurityFocus':
-            logger.error(f'Provider {provider_name} is not supported YET.')
+            logger.warning(f'Provider {provider_name} is not supported YET.')
         elif provider_name == 'VulDB':
-            logger.error(f'Provider {provider_name} is not supported YET.')
+            logger.warning(f'Provider {provider_name} is not supported YET.')
         else:
-            logger.error(f'Provider {provider_name} is not supported.')
+            logger.warning(f'Provider {provider_name} is not supported.')
     return vulns
 
 
@@ -553,7 +551,7 @@ def cve_to_vuln(cve_id, vuln_type=''):
     """
     cve_info = CVESearch('https://cve.circl.lu').id(cve_id)
     if not cve_info:
-        logger.error(f'Could not fetch CVE info for cve {cve_id}. Skipping.')
+        logger.warning(f'Could not fetch CVE info for cve {cve_id}. Skipping.')
         return None
     vuln_cve_id = cve_info['id']
     vuln_name = vuln_cve_id
@@ -588,7 +586,7 @@ def cve_to_vuln(cve_id, vuln_type=''):
         msg += f'\n\tOSVDB: {id}'
     for exploit_id in exploit_ids:
         msg += f'\n\tEXPLOITDB: {exploit_id}'
-    logger.warning(msg)
+    logger.info(msg)
     return {
         'name': vuln_name,
         'type': vuln_type,

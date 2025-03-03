@@ -8,11 +8,10 @@ from urllib.parse import urlparse
 from django.core.validators import URLValidator
 from django.core.exceptions import ValidationError
 
-from reNgine.utils.logger import Logger
+from reNgine.utils.logger import default_logger as logger
 from reNgine.definitions import ENABLE_HTTP_CRAWL
 from reNgine.settings import DEFAULT_ENABLE_HTTP_CRAWL
 
-logger = Logger(True)
 
 def get_subdomain_from_url(url):
     """Get subdomain from HTTP URL.

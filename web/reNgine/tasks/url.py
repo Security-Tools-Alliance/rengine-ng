@@ -14,7 +14,7 @@ from reNgine.definitions import (
 from reNgine.settings import DELETE_DUPLICATES_THRESHOLD
 from reNgine.celery import app
 from reNgine.celery_custom_task import RengineTask
-from reNgine.utils.logger import Logger
+from reNgine.utils.logger import default_logger as logger
 from reNgine.tasks.command import run_command_line
 from reNgine.utils.http import (
     get_subdomain_from_url,
@@ -25,7 +25,6 @@ from startScan.models import EndPoint, Subdomain
 from reNgine.utils.command_builder import CommandBuilder, build_piped_command, build_fetch_url_commands
 from reNgine.utils.task_config import TaskConfig
 
-logger = Logger(True)
 
 @app.task(name='fetch_url', queue='io_queue', base=RengineTask, bind=True)
 def fetch_url(self, urls=None, ctx=None, description=None):
@@ -86,7 +85,7 @@ def fetch_url(self, urls=None, ctx=None, description=None):
             logger.warning(f'Tool {tool} not supported. Skipping.')
             continue
 
-        logger.warning(f'Running {tool} for URL discovery')
+        logger.info(f'Running {tool} for URL discovery')
 
         # Prepare output path for this tool
         self.output_path = config.get_working_dir(filename=f'urls_{tool}.txt')
@@ -208,7 +207,7 @@ def _run_gf_patterns(self, gf_patterns, ctx):
             continue
             
         # Run gf on current pattern
-        logger.warning(f'Running gf on pattern "{gf_pattern}"')
+        logger.info(f'Running gf on pattern "{gf_pattern}"')
         config = TaskConfig(ctx, FETCH_URL)
         gf_output_file = config.get_working_dir(filename=f'gf_patterns_{gf_pattern}.txt')
         
@@ -305,7 +304,7 @@ def run_gf_list():
             }
     
     except Exception as e:
-        logger.error(f"Error running GF list: {e}")
+        logger.exception(f"Error running GF list: {e}")
         return {
             'status': False,
             'message': str(e)
@@ -376,11 +375,11 @@ def remove_duplicate_endpoints(scan_history_id, domain_id, subdomain_id=None, fi
                         continue
                     msg += f'\n\t {ep.http_url} [{ep.http_status}] {filter_criteria}'
                     ep.delete()
-                logger.warning(msg)
+                logger.info(msg)
 
                 return len(eps_to_delete)
         return 0
 
     except Exception as e:
-        logger.error(f'Error removing duplicate endpoints: {str(e)}')
+        logger.exception(f'Error removing duplicate endpoints: {str(e)}')
         return 0

@@ -16,6 +16,7 @@ services:
       retries: 5
     networks:
       - rengine_network
+    tty: true
 
   redis:
     image: ghcr.io/security-tools-alliance/rengine-ng:rengine-redis-v${RENGINE_VERSION}
@@ -31,6 +32,7 @@ services:
       retries: 5
     networks:
       - rengine_network
+    tty: true
 
   celery:
     image: ghcr.io/security-tools-alliance/rengine-ng:rengine-celery-v${RENGINE_VERSION}
@@ -64,6 +66,7 @@ services:
         condition: service_healthy
     networks:
       - rengine_network
+    tty: true
 
   celery-beat:
     image: ghcr.io/security-tools-alliance/rengine-ng:rengine-celery-v${RENGINE_VERSION}
@@ -90,6 +93,7 @@ services:
       - wordlist:/home/rengine/wordlists
     networks:
       - rengine_network
+    tty: true
 
   web:
     image: ghcr.io/security-tools-alliance/rengine-ng:rengine-web-v${RENGINE_VERSION}
@@ -126,6 +130,7 @@ services:
       rengine_network:
         aliases:
           - rengine
+    tty: true
 
   proxy:
     image: ghcr.io/security-tools-alliance/rengine-ng:rengine-proxy-v${RENGINE_VERSION}
@@ -156,6 +161,7 @@ services:
     ports:
       - 8082:8082/tcp
       - 443:443/tcp
+    tty: true
 
   ollama:
     image: ghcr.io/security-tools-alliance/rengine-ng:rengine-ollama-v${RENGINE_VERSION}

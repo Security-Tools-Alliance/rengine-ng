@@ -19,7 +19,7 @@ from django.db.models.functions import Lower
 from api.serializers import IpSerializer
 from reNgine.celery import app
 from reNgine.utils.db import create_scan_object, create_scan_activity, get_interesting_subdomains
-from reNgine.utils.logger import Logger
+from reNgine.utils.logger import default_logger as logger
 from reNgine.utils.utils import format_json_output, safe_int_cast
 from reNgine.settings import RENGINE_RESULTS
 from reNgine.definitions import ABORTED_TASK, SUCCESS_TASK, RUNNING_TASK, LIVE_SCAN, SCHEDULED_SCAN, PERM_INITATE_SCANS_SUBSCANS, PERM_MODIFY_SCAN_RESULTS, PERM_MODIFY_SCAN_REPORT, PERM_MODIFY_SYSTEM_CONFIGURATIONS, FOUR_OH_FOUR_URL
@@ -30,7 +30,6 @@ from startScan.models import ScanHistory, SubScan, Email, Employee, Subdomain, E
 from targetApp.models import Domain, Organization
 from reNgine.utils.command_builder import CommandBuilder
 
-logger = Logger(True)
 
 def scan_history(request, slug):
     host = ScanHistory.objects.filter(domain__project__slug=slug).order_by('-start_scan_date')

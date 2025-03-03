@@ -2,9 +2,8 @@ from django.db.models.signals import m2m_changed, pre_delete
 from django.dispatch import receiver
 from .models import Subdomain, IpAddress
 from django.db import transaction
-import logging
+from reNgine.utils.logger import default_logger as logger
 
-logger = logging.getLogger(__name__)
 
 @receiver(pre_delete, sender=Subdomain)
 def handle_subdomain_deletion(sender, instance, **kwargs):

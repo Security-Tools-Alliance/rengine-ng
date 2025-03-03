@@ -1,11 +1,10 @@
 import xml.etree.ElementTree as ET
 
 from reNgine.definitions import UNCOMMON_WEB_PORTS
-from reNgine.utils.logger import Logger
+from reNgine.utils.logger import default_logger as logger
 from reNgine.utils.parsers import parse_nmap_results
 from startScan.models import IpAddress, Port
 
-logger = Logger(True)
 
 def create_or_update_port_with_service(port_number, service_info, ip_address=None):
     """Create or update port with service information from nmap for specific IP."""
@@ -51,7 +50,7 @@ def process_nmap_service_results(xml_file):
                 ip_address=ip_address
             )
         except Exception as e:
-            logger.error(f"Failed to process port {service['port']}: {str(e)}")
+            logger.exception(f"Failed to process port {service['port']}: {str(e)}")
 
 def update_port_service_info(port, service_info):
     """Update port service information consistently."""
@@ -71,7 +70,7 @@ def update_port_service_info(port, service_info):
         port.save(update_fields=['service_name', 'description'])
         
     except Exception as e:
-        logger.error(f"Error updating port {port.number}: {str(e)}")
+        logger.exception(f"Error updating port {port.number}: {str(e)}")
         raise
 
 def get_or_create_port(ip_address, port_number, service_info=None):

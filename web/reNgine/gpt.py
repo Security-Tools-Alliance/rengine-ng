@@ -10,9 +10,8 @@ from reNgine.definitions import (
 from langchain_community.llms import Ollama
 
 from dashboard.models import OllamaSettings
-import logging
+from reNgine.utils.logger import default_logger as logger
 
-logger = logging.getLogger(__name__)
 
 class GPTVulnerabilityReportGenerator:
 
@@ -131,7 +130,7 @@ class GPTAttackSuggestionGenerator:
 				'input': input
 			}
 		except ValueError as e:
-			logger.error("Error in get_attack_suggestion: %s", str(e), exc_info=True)
+			logger.exception(f"Error in get_attack_suggestion: {str(e)}")
 			return {
 				'status': False,
 				'error': "An error occurred while processing your request.",

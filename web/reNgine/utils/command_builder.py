@@ -2,10 +2,8 @@ from pathlib import Path
 import shlex
 
 from reNgine.definitions import USE_SUBFINDER_CONFIG
-from reNgine.utils.logger import Logger
+from reNgine.utils.logger import default_logger as logger
 from reNgine.utils.api import get_netlas_key
-
-logger = Logger(True)
 
 class CommandBuilder:
     """Secure command builder that prevents shell injection"""
@@ -196,7 +194,7 @@ def generate_header_param(custom_header, tool_name=None):
         if not parsed_header:
             return ''
     except ValueError as e:
-        logger.error(f"🚨 Header parsing failed: {str(e)}")
+        logger.exception(f"🚨 Header parsing failed: {str(e)}")
         return ''
 
     # Common formats

@@ -2,7 +2,6 @@ import os
 import json
 
 from celery import Task
-from celery.utils.log import get_task_logger
 from celery.worker.request import Request
 from django.utils import timezone
 from redis import Redis
@@ -25,12 +24,11 @@ from reNgine.utils.formatters import (
 	get_task_cache_key,
 	get_traceback_path
 )
+from reNgine.utils.logger import default_logger as logger
 from reNgine.utils.utils import format_json_output
 
 from scanEngine.models import EngineType
 from startScan.models import ScanActivity, ScanHistory, SubScan
-
-logger = get_task_logger(__name__)
 
 cache = None
 if 'CELERY_BROKER' in os.environ:
@@ -75,7 +73,6 @@ class RengineTask(Task):
 		# Get task info
 		self.task_name = self.name.split('.')[-1]
 		self.description = kwargs.get('description') or ' '.join(self.task_name.split('_')).capitalize()
-		logger = get_task_logger(self.task_name)
 
 		# Get reNgine context
 		ctx = kwargs.get('ctx', {})
@@ -135,9 +132,9 @@ class RengineTask(Task):
 			# Create ScanActivity for this task and send start scan notifs
 			if self.track:
 				if self.domain:
-					logger.warning(f'Task {self.task_name} for {self.subdomain.name if self.subdomain else self.domain.name} is RUNNING')
+					logger.info(f'Task {self.task_name} for {self.subdomain.name if self.subdomain else self.domain.name} is RUNNING')
 				else:
-					logger.warning(f'Task {self.task_name} is RUNNING')
+					logger.info(f'Task {self.task_name} is RUNNING')
 				self.create_scan_activity()
 
 		if RENGINE_CACHE_ENABLED:
@@ -148,9 +145,9 @@ class RengineTask(Task):
 				self.status = SUCCESS_TASK
 				if RENGINE_RECORD_ENABLED and self.track:
 					if self.domain:
-						logger.warning(f'Task {self.task_name} for {self.subdomain.name if self.subdomain else self.domain.name} status is SUCCESS (CACHED)')
+						logger.info(f'Task {self.task_name} for {self.subdomain.name if self.subdomain else self.domain.name} status is SUCCESS (CACHED)')
 					else:
-						logger.warning(f'Task {self.task_name} status is SUCCESS (CACHED)')
+						logger.info(f'Task {self.task_name} status is SUCCESS (CACHED)')
 					self.update_scan_activity()
 				return json.loads(result)
 
@@ -186,7 +183,7 @@ class RengineTask(Task):
 				else:
 					msg = f'Task {self.task_name} status is {self.status_str}'
 				msg += f' | Error: {self.error}' if self.error else ''
-				logger.warning(msg)
+				logger.info(msg)
 				self.update_scan_activity()
 
 		# Set task result in cache if task was successful
@@ -208,7 +205,7 @@ class RengineTask(Task):
 					json.dump(self.result, f, indent=4)
 				else:
 					f.write(self.result)
-			logger.warning(f'Wrote {self.task_name} results to {self.output_path}')
+			logger.info(f'Wrote {self.task_name} results to {self.output_path}')
 
 	def create_scan_activity(self):
 		if not self.track:
@@ -292,7 +289,7 @@ class RengineTask(Task):
 				if target:
 					msg += f' for {target}'
 				msg += ' status is SUCCESS (CACHED)'
-				logger.warning(msg)
+				logger.info(msg)
 				self.update_scan_activity()
 			return json.loads(result)
 		return None

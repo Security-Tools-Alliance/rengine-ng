@@ -2,7 +2,6 @@
 
 from django.db import migrations, models
 import django.db.models.deletion
-import logging
 
 
 def migrate_ports_to_ip(apps, schema_editor):
@@ -11,7 +10,8 @@ def migrate_ports_to_ip(apps, schema_editor):
     IPAddress = apps.get_model('startScan', 'IPAddress')
     # Explicit retrieval of the intermediate model
     IPPortM2M = apps.get_model('startScan', 'ipaddress_ports')
-    logger = logging.getLogger(__name__)
+    from reNgine.utils.logger import default_logger as logger
+
     
     logger.info(f"Starting port migration for {IPAddress.objects.count()} IP addresses")
     

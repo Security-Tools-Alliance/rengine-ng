@@ -1,10 +1,9 @@
 import json
 import os
 import glob
-from reNgine.utils.logger import Logger
+from reNgine.utils.logger import default_logger as logger
 import shutil
 
-logger = Logger(True)
 
 def is_safe_path(basedir, path, follow_symlinks=True):
     # Source: https://security.openstack.org/guidelines/dg_using-file-paths.html
@@ -113,7 +112,7 @@ def remove_file_or_pattern(path, pattern=None, history_file=None, scan_id=None, 
         return True
     except Exception as e:
         full_path = os.path.join(path, pattern) if pattern else path
-        logger.error(f"📁 Failed to delete {full_path}: {str(e)}")
+        logger.exception(f"📁 Failed to delete {full_path}: {str(e)}")
         return False
 
 def check_process_status(pid):

@@ -1,8 +1,7 @@
-import logging
 import secrets
 import os
+from reNgine.utils.logger import default_logger as logger
 
-logger = logging.getLogger(__name__)
 
 
 '''
@@ -19,11 +18,11 @@ def first_run(secret_file, base_dir):
     else:
         try:
             secret_key = get_random()
-            secret = open(secret_file, 'w')
-            secret.write(secret_key)
-            secret.close()
-        except OSError:
-            raise Exception(f'Secret file generation failed. Path: {secret_file}')
+            with open(secret_file, 'w') as secret:
+                secret.write(secret_key)
+        except OSError as e:
+            logger.exception(f'Secret file generation failed. Path: {secret_file}')
+            raise Exception(f'Secret file generation failed. Path: {secret_file}') from e
     return secret_key
 
 

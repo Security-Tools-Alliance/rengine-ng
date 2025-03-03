@@ -11,7 +11,7 @@ from reNgine.settings import RENGINE_RESULTS
 from reNgine.celery import app
 from reNgine.utils.debug import debug
 from reNgine.utils.formatters import SafePath, fmt_traceback
-from reNgine.utils.logger import Logger
+from reNgine.utils.logger import default_logger as logger
 from reNgine.utils.scan_helpers import (
     get_scan_engine,
     handle_ip_scan,
@@ -30,9 +30,6 @@ from targetApp.models import Domain
 """
 Celery tasks.
 """
-
-logger = Logger(is_task_logger=True)  # Use task logger for Celery tasks
-
 
 @app.task(name='initiate_scan', queue='orchestrator_queue', bind=True)
 def initiate_scan(self, scan_history_id, domain_id, engine_id=None, scan_type=LIVE_SCAN,
@@ -73,7 +70,7 @@ def initiate_scan(self, scan_history_id, domain_id, engine_id=None, scan_type=LI
             raise ValueError("🚫 Failed to initialize scan")
 
         # Send start notification
-        logger.warning(f'🚀 Starting scan {scan_history_id}')
+        logger.info(f'🚀 Starting scan {scan_history_id}')
         send_scan_notif.apply_async(
             kwargs={
                 'scan_history_id': scan.id,
@@ -100,7 +97,7 @@ def initiate_scan(self, scan_history_id, domain_id, engine_id=None, scan_type=LI
     except (ValidationError, ScanHistory.DoesNotExist, Domain.DoesNotExist) as e:
         # Manage expected errors
         error_msg = str(e)
-        logger.error(f"🚫 Validation/DB error: {error_msg}")
+        logger.exception(f"🚫 Validation/DB error: {error_msg}")
 
         if scan:
             scan.scan_status = FAILED_TASK
@@ -112,7 +109,7 @@ def initiate_scan(self, scan_history_id, domain_id, engine_id=None, scan_type=LI
     except Exception as e:
         # Manage unexpected errors
         error_msg = str(e)
-        logger.error(f"🚫 Unexpected error: {error_msg} {fmt_traceback(e)}")
+        logger.exception(f"🚫 Unexpected error: {error_msg} {fmt_traceback(e)}")
 
         if scan:
             scan.scan_status = FAILED_TASK
@@ -178,7 +175,7 @@ def initiate_subscan(
                 components=[domain.name, 'subscans', str(uuid_scan)]
             )
         except (ValueError, OSError) as e:
-            logger.error(f"Failed to create results directory: {str(e)}")
+            logger.exception(f"Failed to create results directory: {str(e)}")
             subscan.scan_status = FAILED_TASK
             subscan.error_message = "Failed to create results directory, scan failed"
             subscan.save()
@@ -216,7 +213,7 @@ def initiate_subscan(
         }
 
         ctx_str = json.dumps(ctx, indent=2)
-        logger.warning(f'Starting subscan {subscan.id} with context:\n{ctx_str}')
+        logger.info(f'Starting subscan {subscan.id} with context:\n{ctx_str}')
 
         if enable_http_crawl:
             results = http_crawl(
