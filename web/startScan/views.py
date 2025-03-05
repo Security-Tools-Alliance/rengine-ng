@@ -1,7 +1,9 @@
+import os
 import markdown
+import shutil
+from pathlib import Path
 
 from celery import group
-from pathlib import Path
 from weasyprint import HTML
 from datetime import datetime, timedelta
 from django.contrib import messages
@@ -19,16 +21,15 @@ from django.db.models.functions import Lower
 from api.serializers import IpSerializer
 from reNgine.celery import app
 from reNgine.utils.db import create_scan_object, create_scan_activity, get_interesting_subdomains
+from reNgine.utils.formatters import format_json_output
 from reNgine.utils.logger import default_logger as logger
-from reNgine.utils.utils import format_json_output, safe_int_cast
+from reNgine.utils.utils import safe_int_cast
 from reNgine.settings import RENGINE_RESULTS
 from reNgine.definitions import ABORTED_TASK, SUCCESS_TASK, RUNNING_TASK, LIVE_SCAN, SCHEDULED_SCAN, PERM_INITATE_SCANS_SUBSCANS, PERM_MODIFY_SCAN_RESULTS, PERM_MODIFY_SCAN_REPORT, PERM_MODIFY_SYSTEM_CONFIGURATIONS, FOUR_OH_FOUR_URL
 from reNgine.tasks.scan import initiate_scan
-from reNgine.tasks.command import run_command_line
 from scanEngine.models import EngineType, VulnerabilityReportSetting
 from startScan.models import ScanHistory, SubScan, Email, Employee, Subdomain, EndPoint, Vulnerability, VulnerabilityTags, IpAddress, CountryISO, ScanActivity, CveId, CweId
 from targetApp.models import Domain, Organization
-from reNgine.utils.command_builder import CommandBuilder
 
 
 def scan_history(request, slug):
@@ -460,33 +461,15 @@ def export_urls(request, slug, scan_id):
 
 @has_permission_decorator(PERM_MODIFY_SCAN_RESULTS, redirect_url=FOUR_OH_FOUR_URL)
 def delete_scan(request, slug, id):
-    obj = get_object_or_404(ScanHistory, id=id)
     if request.method == "POST":
-        delete_dir = obj.results_dir
-        
-        # Use CommandBuilder instead of direct string formatting
-        cmd_builder = CommandBuilder('rm')
-        cmd_builder.add_option('-rf', delete_dir)
-        
-        run_command_line(
-            cmd_builder.build_list(),
-            shell=False,  # Important: use shell=False with lists
-        )
-        
-        obj.delete()
-        messageData = {'status': 'true'}
-        messages.add_message(
-            request,
-            messages.INFO,
-            'Scan history successfully deleted!'
-        )
-    else:
-        messageData = {'status': 'false'}
-        messages.add_message(
-            request,
-            messages.INFO,
-            'Oops! something went wrong!'
-        )
+        return JsonResponse(_delete_scan(request, id))
+
+    messageData = {'status': 'false'}
+    messages.add_message(
+        request,
+        messages.INFO,
+        'Oops! something went wrong!'
+    )
     return JsonResponse(messageData)
 
 
@@ -690,15 +673,35 @@ def delete_all_scan_results(request, slug):
 
 @has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
 def delete_all_screenshots(request, slug):
-    if request.method == 'POST':
-        domains = Domain.objects.filter(project__slug=slug)
-        for domain in domains:
-            run_command_line(f'rm -rf {str(Path(RENGINE_RESULTS) / domain.name)}')
-        messageData = {'status': 'true'}
-        messages.add_message(
-            request,
-            messages.INFO,
-            'Screenshots successfully deleted!')
+    if request.method != 'POST':
+        return HttpResponseRedirect(reverse('rengine_settings', kwargs={'slug': slug}))
+    domains = Domain.objects.filter(project__slug=slug)
+    screenshot_count = 0
+
+    for domain in domains:
+        domain_dir = Path(RENGINE_RESULTS) / domain.name
+
+        # search in domain/scans/*/screenshots
+        for screenshots_dir in domain_dir.glob("scans/*/screenshots"):
+            if screenshots_dir.exists() and screenshots_dir.is_dir():
+                shutil.rmtree(screenshots_dir)
+                screenshot_count += 1
+
+        # search in domain/subscans/*/screenshots
+        for screenshots_dir in domain_dir.glob("subscans/*/screenshots"):
+            if screenshots_dir.exists() and screenshots_dir.is_dir():
+                shutil.rmtree(screenshots_dir)
+                screenshot_count += 1
+
+    if screenshot_count > 0:
+        message = f'{screenshot_count} screenshots directories successfully deleted!'
+    else:
+        message = 'No screenshots directories found to delete!'
+    messageData = {'status': 'true'}
+    messages.add_message(
+        request,
+        messages.INFO,
+        message)
     return JsonResponse(messageData)
 
 
@@ -858,18 +861,27 @@ def schedule_organization_scan(request, slug, id):
 
 @has_permission_decorator(PERM_MODIFY_SCAN_RESULTS, redirect_url=FOUR_OH_FOUR_URL)
 def delete_scans(request, slug):
-    if request.method == "POST":
-        for key, value in request.POST.items():
-            if key in ['scan_history_table_length', 'csrfmiddlewaretoken']:
-                continue
-            scan = get_object_or_404(ScanHistory, id=value)
-            delete_dir = scan.results_dir
-            run_command_line(f'rm -rf {delete_dir}')
-            scan.delete()
+    if request.method != "POST":
+        return render(request, 'startScan/delete_scans.html')
+    failed_scans = []
+    for key, value in request.POST.items():
+        if key in ['scan_history_table_length', 'csrfmiddlewaretoken']:
+            continue
+        result = _delete_scan(request, value, batch=True)
+        if result['status'] == 'false':
+            failed_scans.append(value)
+    if failed_scans:
+        messages.add_message(
+            request,
+            messages.ERROR,
+            f'Failed to delete scans: {", ".join(failed_scans)}'
+        )
+    else:
         messages.add_message(
             request,
             messages.INFO,
-            'All Scans deleted!')
+            'All Scans deleted!'
+        )
     return HttpResponseRedirect(reverse('scan_history', kwargs={'slug': slug}))
 
 
@@ -1016,3 +1028,47 @@ def create_report(request, slug, id):
         if 'download' in request.GET
         else HttpResponse(pdf, content_type='application/pdf')
     )
+
+def _delete_scan(request, id, batch=False):
+    try:
+        obj = ScanHistory.objects.get(id=id)
+    except ScanHistory.DoesNotExist:
+        message = f"ScanHistory object to delete (id:{id}) not found"
+        logger.error(message)
+        if not batch:
+            messages.add_message(
+                request,
+                messages.ERROR,
+                message
+            )
+        return {'status': 'false'}
+
+    try:
+        obj.delete()
+        delete_dir = obj.results_dir
+        if not os.path.exists(delete_dir):
+            logger.warning(f"ScanHistory object {id} has no results directory")
+            message = f"Scan history (id:{id}) successfully deleted"
+        else:
+            shutil.rmtree(delete_dir)
+            message = f"Scan history (id:{id}) with his results directory successfully deleted"
+        logger.info(message)
+        if not batch:
+            messages.add_message(
+                request,
+                messages.INFO,
+                message
+            )
+    except Exception as e:
+        message = f"Error deleting scan history (id:{id})"
+        if batch:
+            logger.error(f"{message}: {e}")
+        else:
+            messages.add_message(
+                request,
+                messages.ERROR,
+                f"{message}, check log file for details"
+            )
+        return {'status': 'false'}
+
+    return {'status': 'true'}

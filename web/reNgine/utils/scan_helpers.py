@@ -9,11 +9,11 @@ from django.core.exceptions import ValidationError
 from django.core.cache import cache
 
 from reNgine.definitions import DEFAULT_GF_PATTERNS, FAILED_TASK, FETCH_URL, GF_PATTERNS, RUNNING_TASK, SCHEDULED_SCAN, LIVE_SCAN
-from reNgine.settings import COMMAND_EXECUTOR_DRY_RUN, YAML_CACHE_TIMEOUT
-from reNgine.utils.db import create_scan_object
+from reNgine.settings import COMMAND_EXECUTOR_DRY_RUN, YAML_CACHE_TIMEOUT, RENGINE_CACHE_ENABLED
+from reNgine.utils.db import create_scan_object, get_imported_subdomains
+from reNgine.utils.formatters import SafePath, fmt_traceback, format_json_output
 from reNgine.utils.logger import default_logger as logger
-from reNgine.utils.utils import format_json_output, is_iterable
-from reNgine.utils.formatters import SafePath, fmt_traceback
+from reNgine.utils.utils import is_iterable
 from reNgine.utils.task_config import TaskConfig
 from reNgine.tasks.subdomain import subdomain_discovery
 from reNgine.tasks.osint import osint
@@ -91,6 +91,7 @@ def initialize_scan_history(scan, domain, engine, scan_type, initiated_by_id, re
             
             # Create directory and context
             results_dir = setup_scan_directory(domain.name, results_dir)
+            scan.results_dir = results_dir
             
             ctx = create_scan_context(
                 scan=scan,
@@ -537,13 +538,21 @@ def build_scan_workflow(domain, engine, ctx, show_visualization=False):
     # Display workflow visualization if requested
     if show_visualization:
         logger.info(f"\n{visualize_workflow(domain, engine, ctx)}")
-    
-    # Build initial workflow
+
+    # Get list of hosts to scan (domain + imported subdomains)
+    hosts_to_scan = [domain.name]
+
+    if imported_subdomains := get_imported_subdomains(ctx=ctx):
+        hosts_to_scan.extend([s.name for s in imported_subdomains])
+        logger.info(f"Including {len(imported_subdomains)} imported subdomains in initial scan")
+
+    # Build initial workflow with all hosts
     initial_scan = scan_http_ports.si(
-        host=domain.name,
+        hosts=hosts_to_scan,
         ctx=ctx,
         description='Initial web services detection'
     )
+
     task_ids = [initial_scan.id]
     # Build parallel tasks
     parallel_tasks = []
@@ -592,14 +601,56 @@ def build_scan_workflow(domain, engine, ctx, show_visualization=False):
         group(security_tasks) if security_tasks else None,
         report.si(ctx=ctx)
     ]
-    
+
     final_workflow = chain(*[part for part in workflow_parts if part])
-    
+
     return final_workflow, task_ids
 
 
+def get_or_set_cache_for_task(task, use_cache=True):
+    """
+    Check if a task result exists in cache, for grouped tasks.
+    
+    Args:
+        task: Celery task signature
+        use_cache: Whether to use cache
+        
+    Returns:
+        tuple: (cached_result, cache_key)
+    """
+    from reNgine.utils.cache import check_task_cache
+    
+    if not use_cache:
+        return None, None
+    
+    # Extract task args and kwargs for cache key generation
+    args = task.args if hasattr(task, 'args') else []
+    kwargs = task.kwargs if hasattr(task, 'kwargs') else {}
+    
+    # Use the common cache checking function
+    return check_task_cache(task.name, *args, **kwargs)
+
+def set_cache_for_task(cache_key, result, timeout=600):
+    """
+    Set task result in cache.
+    
+    Args:
+        cache_key: Cache key to use
+        result: Result to cache
+        timeout: Cache timeout in seconds (default: 10 minutes)
+    """
+    if not RENGINE_CACHE_ENABLED or not cache_key:
+        return
+        
+    try:
+        cache.set(cache_key, format_json_output(result))
+        cache.expire(cache_key, timeout)
+    except Exception as e:
+        logger.warning(f"Failed to set cache: {str(e)}")
+
+
 def execute_grouped_tasks(task_instance, grouped_tasks, task_name="unnamed_task", 
-                        store_ids=True, callback_kwargs=None):
+                        store_ids=True, callback_kwargs=None, use_cache=True):
     """
     Execute a group of tasks with proper callback handling.
     This avoids the deadlock issues of using job.ready() in the main task.
@@ -610,11 +661,17 @@ def execute_grouped_tasks(task_instance, grouped_tasks, task_name="unnamed_task"
         task_name: Name of the parent task for logging
         store_ids: Whether to store celery IDs in scan history
         callback_kwargs: Additional kwargs to pass to post_process
+        use_cache: Whether to use cache for tasks
     
     Returns:
         tuple: (AsyncResult object, group task ID)
     """
     from reNgine.tasks.scan import post_process
+    
+    # Results dictionary to store cached results
+    cached_results = {}
+    tasks_to_run = []
+    cache_keys = {}
 
     if not grouped_tasks:
         logger.info(f'⚠️  No tasks to run for {task_name}')
@@ -626,31 +683,70 @@ def execute_grouped_tasks(task_instance, grouped_tasks, task_name="unnamed_task"
     
     # Add parent task name
     callback_kwargs['source_task'] = task_name
+    run_task_name = f'{task_name}_for_{len(grouped_tasks)}_hosts'
     
-    # Log all subtasks that will be launched
-    logger.info(f'🚀 [{task_name}] Starting {len(grouped_tasks)} tasks:')
-    for i, task in enumerate(grouped_tasks, 1):
-        # Extract task name and any identifiable parameters
-        task_info = f"  📋 {i}. {task.name}"
+    # Check cache for each task before executing
+    logger.info(f'🚀 [{run_task_name}] Checking cache for {len(grouped_tasks)} tasks')
+    for task in grouped_tasks:
+        cached_result, cache_key = get_or_set_cache_for_task(task, use_cache=use_cache)
         
-        # Try to extract key parameters for better logging
+        # If we have a key parameter, extract it for better logging
+        key_param = None
         if task.kwargs:
-            key_params = []
-            # Extract description if available
-            if 'description' in task.kwargs:
-                key_params.append(f"description='{task.kwargs['description']}'")
-            # Extract any 'host' parameter
             if 'host' in task.kwargs:
-                key_params.append(f"host='{task.kwargs['host']}'")
-            # Add any other important parameters here
-            
-            if key_params:
-                task_info += f" ({', '.join(key_params)})"
+                key_param = task.kwargs['host']
+            elif 'url' in task.kwargs:
+                key_param = task.kwargs['url']
         
-        logger.info(task_info)
+        if cached_result:
+            # Store cached result
+            if key_param:
+                cached_results[key_param] = cached_result
+                logger.info(f"  📋 {task.name} (CACHED) for {key_param}")
+            else:
+                # No specific key, just log that we found a cached result
+                logger.info(f"  📋 {task.name} (CACHED)")
+        else:
+            # Need to run this task
+            tasks_to_run.append(task)
+            if key_param and cache_key:
+                cache_keys[key_param] = cache_key
+            
+            # Log all subtasks that will be launched
+            task_info = f"  📋 {task.name}"
+            
+            # Try to extract key parameters for better logging
+            if task.kwargs:
+                key_params = []
+                # Extract description if available
+                if 'description' in task.kwargs:
+                    key_params.append(f"description='{task.kwargs['description']}'")
+                # Extract any 'host' parameter
+                if 'host' in task.kwargs:
+                    key_params.append(f"host='{task.kwargs['host']}'")
+                # Add any other important parameters here
+                
+                if key_params:
+                    task_info += f" ({', '.join(key_params)})"
+            
+            logger.info(task_info)
+    
+    # If all tasks were cached, return the cached results
+    if not tasks_to_run and cached_results:
+        logger.info(f'✅ All {len(grouped_tasks)} tasks for {run_task_name} retrieved from cache')
+        # Add callback function to handle cached results
+        callback_kwargs['cached_results'] = cached_results
+        callback_kwargs['cache_keys'] = cache_keys
+        post_process.delay(**callback_kwargs)
+        return None, None
     
     # Create the group and callback chain
-    task_group = group(grouped_tasks)
+    task_group = group(tasks_to_run)
+    
+    # Add cached results to callback if we have some
+    if cached_results:
+        callback_kwargs['cached_results'] = cached_results
+        callback_kwargs['cache_keys'] = cache_keys
     workflow = chain(
         task_group,
         post_process.s(**callback_kwargs)
@@ -666,7 +762,7 @@ def execute_grouped_tasks(task_instance, grouped_tasks, task_name="unnamed_task"
         task_instance.scan.celery_ids.append(result.id)
         task_instance.scan.save()
     
-    logger.info(f'✅ Started {len(grouped_tasks)} tasks for {task_name} with ID {result.id}')
+    logger.info(f'✅ Started {len(tasks_to_run)} tasks for {run_task_name} with ID {result.id}')
     
     # Add more detailed error handling and timeout management
     try:
@@ -674,6 +770,6 @@ def execute_grouped_tasks(task_instance, grouped_tasks, task_name="unnamed_task"
         # The post_process callback will handle completion
         return result, result.id
     except Exception as e:
-        logger.exception(f'❌ Error executing tasks for {task_name}: {str(e)}')
+        logger.exception(f'❌ Error executing tasks for {run_task_name}: {str(e)}')
         # Re-raise to let Celery handle the error
         raise

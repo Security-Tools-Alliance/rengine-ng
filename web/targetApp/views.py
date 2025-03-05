@@ -56,7 +56,7 @@ from targetApp.forms import (
     AddOrganizationForm,
     UpdateOrganizationForm,
 )
-from reNgine.utils.utils import format_json_output
+from reNgine.utils.formatters import format_json_output
 from reNgine.utils.logger import default_logger as logger
 
 

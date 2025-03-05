@@ -2,7 +2,6 @@ from django.utils import timezone
 
 from reNgine.definitions import SUCCESS_TASK, FAILED_TASK
 from reNgine.celery import app
-from reNgine.utils.logger import default_logger as logger
 from startScan.models import ScanActivity, ScanHistory, SubScan
 from reNgine.tasks.notification import send_scan_notif
 

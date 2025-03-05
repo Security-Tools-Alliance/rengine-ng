@@ -253,7 +253,6 @@ def prepare_urls_with_fallback(urls=None, input_path=None, ctx=None, **http_urls
     """
     from reNgine.utils.db import get_http_urls
     from reNgine.utils.utils import is_iterable
-    from reNgine.utils.mock import prepare_urls_mock
 
     # Set default parameters if not provided
     if 'write_filepath' not in http_urls_params:
@@ -268,8 +267,6 @@ def prepare_urls_with_fallback(urls=None, input_path=None, ctx=None, **http_urls
         logger.debug('🌐 URLs provided by user, writing to file')
         with open(input_path, 'w') as f:
             f.write('\n'.join(urls))
-    elif ctx.get('dry_run'):
-        urls = prepare_urls_mock(ctx, input_path)
     else:
         # Normal mode - fetch from database
         logger.debug('🌐 URLs gathered from database')

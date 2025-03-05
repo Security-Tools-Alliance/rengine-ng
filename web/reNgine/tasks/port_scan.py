@@ -1,24 +1,22 @@
 import json
 import os
-import time
 
 from copy import deepcopy
-from pathlib import Path
 from celery import group
 
 from reNgine.definitions import PORT_SCAN, UNCOMMON_WEB_PORTS
 from reNgine.celery import app
 from reNgine.celery_custom_task import RengineTask
+from reNgine.settings import RENGINE_CACHE_ENABLED
 from reNgine.utils.command_builder import build_naabu_cmd
 from reNgine.utils.command_executor import stream_command
-from reNgine.utils.formatters import SafePath, get_task_title
+from reNgine.utils.debug import debug
+from reNgine.utils.formatters import get_task_title
 from reNgine.utils.logger import default_logger as logger
-from reNgine.utils.nmap import parse_http_ports_data
-from reNgine.utils.nmap_service import process_nmap_service_results
+from reNgine.utils.nmap_service import create_nmap_xml_file
 from reNgine.utils.parsers import parse_nmap_results, parse_naabu_result
 from reNgine.utils.task_config import TaskConfig
 from reNgine.tasks.command import run_command_line
-
 from scanEngine.models import Notification
 
 @app.task(name='port_scan', queue='io_queue', base=RengineTask, bind=True)
@@ -113,23 +111,23 @@ def port_scan(self, hosts=None, ctx=None, description=None):
     if task_config['nmap_enabled']:
         logger.info('🔌 Starting nmap scans ...')
         logger.info(ports_data)
-        # Process nmap results: 1 process per host
-        sigs = []
-        for host, port_list in ports_data.items():
-            ports_str = '_'.join([str(p) for p in port_list])
-            ctx_nmap = ctx.copy()
-            ctx_nmap['description'] = get_task_title(f'nmap_{host}', self.scan_id, self.subscan_id)
-            ctx_nmap['track'] = False
-            sig = nmap.si(
-                cmd=task_config['nmap_cmd'],
-                ports=port_list,
-                host=host,
-                script=task_config['nmap_script'],
-                script_args=task_config['nmap_script_args'],
-                max_rate=task_config['rate_limit'],
-                ctx=ctx_nmap)
-            sigs.append(sig)
-        group(sigs).apply_async()
+        
+        ctx_nmap = ctx.copy()
+        ctx_nmap['track'] = False
+        
+        nmap_args = {
+            'nmap_cmd': task_config['nmap_cmd'],
+            'nmap_script': task_config['nmap_script'],
+            'nmap_script_args': task_config['nmap_script_args'],
+            'rate_limit': task_config['rate_limit'],
+            'ports_data': ports_data,
+            'wait_for_results': False,
+            'use_cache': RENGINE_CACHE_ENABLED
+        }
+        
+        run_nmap.delay(ctx=ctx_nmap, **nmap_args)
+        
+        logger.info(f'🔌 Launched nmap scans for {len(ports_data)} hosts')
 
     return ports_data
 
@@ -145,25 +143,74 @@ def run_nmap(self, ctx, **nmap_args):
             - nmap_script: NSE scripts to run
             - nmap_script_args: NSE script arguments
             - ports_data: Dictionary mapping hosts to their open ports
+            - wait_for_results: If True, wait for results and return them
+            - use_cache: If True, use task cache for results
     """
-    sigs = []
-    for host, port_list in nmap_args.get('ports_data', {}).items():
+    from reNgine.utils.scan_helpers import execute_grouped_tasks
+
+    wait_for_results = nmap_args.pop('wait_for_results', False)
+    use_cache = nmap_args.pop('use_cache', False)
+    ports_data = nmap_args.get('ports_data', {})
+
+    # Prepare task signatures
+    task_signatures = []
+    host_map = {}
+
+    # Create task signatures for each host
+    for i, (host, port_list) in enumerate(ports_data.items()):
         custom_ctx = deepcopy(ctx)
         custom_ctx['description'] = get_task_title(f'nmap_{host}', self.scan_id, self.subscan_id)
         custom_ctx['track'] = False
+        output_file_xml = create_nmap_xml_file(host, self.results_dir, 'nmap.xml')
+        logger.info(f'🔌 Running nmap on {host} with output file {output_file_xml}')
+
+        # Create task signature
         sig = nmap.si(
-                args=nmap_args.get('nmap_cmd'),
-                ports=port_list,
-                host=host,
-                script=nmap_args.get('nmap_script'),
-                script_args=nmap_args.get('nmap_script_args'),
-                max_rate=nmap_args.get('rate_limit'),
-                ctx=custom_ctx)
-        sigs.append(sig)
-    group(sigs).apply_async()
+            args=nmap_args.get('nmap_cmd'),
+            ports=port_list,
+            host=host,
+            script=nmap_args.get('nmap_script'),
+            script_args=nmap_args.get('nmap_script_args'),
+            max_rate=nmap_args.get('rate_limit'),
+            ctx=custom_ctx,
+            output_file_xml=output_file_xml
+        )
+
+        task_signatures.append(sig)
+        host_map[i] = host
+
+    if not task_signatures:
+        logger.info('🔌 No nmap tasks to run - no hosts with open ports')
+        return None
+
+    if wait_for_results:
+        # Let execute_grouped_tasks handle caching and task execution
+        task_results, task_id = execute_grouped_tasks(
+            task_instance=self,
+            grouped_tasks=task_signatures,
+            task_name="nmap_scan",
+            use_cache=use_cache,
+            callback_kwargs={
+                'host_map': host_map,
+                'scan_ctx': ctx,
+                #'callback': process_nmap_results.s(ctx=ctx),
+                'parent_task_id': self.request.id
+            }
+        )
+
+        return {
+            'task_id': task_id,
+            'status': 'processing',
+            'host_count': len(host_map)
+        }
+    else:
+        # Just run tasks in parallel and don't wait
+        group(task_signatures).apply_async()
+        return None
 
 @app.task(name='nmap', queue='io_queue', base=RengineTask, bind=True)
-def nmap(self, args=None, ports=None, host=None, input_file=None, script=None, script_args=None, max_rate=None, ctx=None, description=None):
+def nmap(self, args=None, ports=None, host=None, input_file=None, output_file_xml=None,
+         script=None, script_args=None, max_rate=None, ctx=None, description=None):
     """Run nmap on a host.
 
     Args:
@@ -171,6 +218,7 @@ def nmap(self, args=None, ports=None, host=None, input_file=None, script=None, s
         ports (list, optional): List of ports to scan.
         host (str, optional): Host to scan.
         input_file (str, optional): Input hosts file.
+        xml_file (str, optional): XML file to save.
         script (str, optional): NSE script to run.
         script_args (str, optional): NSE script args.
         max_rate (int): Max rate.
@@ -178,6 +226,7 @@ def nmap(self, args=None, ports=None, host=None, input_file=None, script=None, s
     """
     from reNgine.utils.db import save_vulns
     from reNgine.utils.command_builder import build_nmap_cmd
+    from reNgine.utils.nmap_service import process_nmap_xml
 
     if ports is None:
         ports = []
@@ -185,11 +234,10 @@ def nmap(self, args=None, ports=None, host=None, input_file=None, script=None, s
         ctx = {}
     notif = Notification.objects.first()
     ports_str = ','.join(str(port) for port in ports)
-    self.filename = 'nmap.xml'
-    filename_vulns = self.filename.replace('.xml', '_vulns.json')
-    output_file = self.output_path
-    output_file_xml = f'{self.results_dir}/{host}_{self.filename}'
-    vulns_file = f'{self.results_dir}/{host}_{filename_vulns}'
+    output_file = f'{self.results_dir}/{host}_nmap.json'
+    if not output_file_xml:
+        output_file_xml = create_nmap_xml_file(host, self.results_dir, 'nmap.xml')
+    vulns_file = f'{self.results_dir}/{host}_nmap_vulns.json'
     logger.info(f'Running nmap on {host}')
 
     # Build cmd
@@ -210,97 +258,70 @@ def nmap(self, args=None, ports=None, host=None, input_file=None, script=None, s
         history_file=self.history_file,
         scan_id=self.scan_id,
         activity_id=self.activity_id)
-    
+
     # Check if the file exists
     if not os.path.exists(output_file_xml):
         logger.error(f"Output file nmap not created: {output_file_xml}")
         return None
 
     # Update port service information
-    process_nmap_service_results(output_file_xml)
+    process_nmap_xml(output_file_xml)
 
     # Get nmap XML results and convert to JSON
     vulns = parse_nmap_results(output_file_xml, output_file, parse_type='vulnerabilities')
     save_vulns(self, notif, vulns_file, vulns)
-    return vulns
+
+    return {'vulns': vulns, 'xml_file': output_file_xml, 'host': host}
 
 @app.task(name='scan_http_ports', queue='io_queue', base=RengineTask, bind=True)
-def scan_http_ports(self, host, ctx=None, description=None):
-    """Celery task to scan HTTP ports of a host.
+def scan_http_ports(self, hosts=None, ctx=None, description=None):
+    """Celery task to scan HTTP ports of hosts and process results.
     
     Args:
-        host (str): Host to scan
+        hosts (str or list): Host(s) to scan. Can be a single host or list of hosts.
         ctx (dict): Execution context
         description (str): Task description
         
     Returns:
-        dict: HTTP ports data per host 
+        dict: HTTP ports data per host with scheme detection
     """
-    from reNgine.utils.mock import prepare_port_scan_mock
-    import os
-
     if ctx is None:
         ctx = {}
 
-    # Check cache first
-    cache_key = f"port_scan_{host}"
-    if cached_result := self.get_from_cache(cache_key):
-        logger.info(f'Using cached port scan results for {host}')
-        return cached_result
+    # Convert string host to list for consistent handling
+    if hosts is None:
+        hosts = []
+    elif isinstance(hosts, str):
+        hosts = [hosts]
 
-    # Check if dry run mode is enabled
-    if ctx.get('dry_run'):
-        results_dir = ctx.get('results_dir', '/tmp')
-        return prepare_port_scan_mock(host, results_dir, ctx)
+    if not hosts:
+        logger.info('No hosts to scan')
+        return {}
 
-    # Prepare output file path
-    results_dir = ctx.get('results_dir', '/tmp')
-    filename = f"{host}_nmap.xml"
-
-    try:
-        xml_file = SafePath.create_safe_path(
-            base_dir=results_dir,
-            components=[filename],
-            create_dir=False
-        )
-    except (ValueError, OSError) as e:
-        logger.exception(f"Failed to create safe path for XML file: {str(e)}")
-        return None
-
-    # Configure ports to scan
+    # Prepare ports to scan
     all_ports = [80, 443] + UNCOMMON_WEB_PORTS
-    ports_str = ','.join(str(p) for p in sorted(set(all_ports)))
 
-    # Run nmap scan with retries
-    max_retries = 3
-    retry_delay = 1
+    # Build ports data for run_nmap
+    ports_data = {host: all_ports for host in hosts}
 
-    for attempt in range(max_retries):
-        try:
-            task = run_command_line.delay(
-                f'nmap -Pn -sV -p {ports_str} --open {host}',
-                history_file=self.history_file,
-                scan_id=self.scan_id,
-                activity_id=self.activity_id
-            )
+    # Configure nmap arguments
+    nmap_args = {
+        'nmap_cmd': '-Pn -sV --open',
+        'ports_data': ports_data,
+        'rate_limit': 150,
+        'wait_for_results': True,
+        'use_cache': True,
+        'results_dir': ctx.get('results_dir', '/tmp')
+    }
 
-            while not task.ready():
-                # wait for all jobs to complete
-                time.sleep(1)
+    # Execute nmap scan with results waiting
+    nmap_results = run_nmap(ctx=ctx, **nmap_args)
 
-            if os.path.exists(xml_file):
-                break
+    if not nmap_results:
+        logger.error("🔌 Nmap scan failed or returned no results")
+        return {}
 
-            logger.warning(f"Attempt {attempt + 1}/{max_retries}: Nmap output file not found")
-            time.sleep(retry_delay)
-
-        except Exception as e:
-            logger.exception(f"Attempt {attempt + 1}/{max_retries}: Nmap scan failed: {str(e)}")
-            if attempt == max_retries - 1:
-                return None
-            time.sleep(retry_delay)
-
-    return parse_http_ports_data(xml_file) if Path(xml_file).exists() else None
+    return
 
 def process_port_scan_result(parsed_result, domain, scan, urls, ports_data, ctx, enable_http_crawl=False, subscan=None):
     """Process a parsed port scan result and save to database
@@ -377,3 +398,103 @@ def process_port_scan_result(parsed_result, domain, scan, urls, ports_data, ctx,
     # Send notification
     logger.info(f'🔌 Found opened port {port_number} on {ip_address} ({host})')
     return True
+
+#@app.task(name='process_nmap_results', queue='cpu_queue', base=RengineTask, bind=True)
+def process_nmap_results(ctx, combined_results=None, host_map=None, source_task=None, **kwargs):
+    """Process results from nmap scans and prepare structured data.
+    
+    Args:
+        combined_results (dict): Results from post_process task
+        host_map (dict): Map of indices to hosts
+        source_task (str): Name of source task
+        **kwargs: Additional keyword arguments
+        
+    Returns:
+        dict: Processed results with XML files paths and vulnerabilities per host
+    """
+    debug()
+
+    from reNgine.utils.db import save_subdomain
+    from reNgine.utils.nmap_service import create_first_endpoint_from_nmap_data
+    from reNgine.utils.parsers import parse_http_ports_data
+
+    logger.info(f"📊 Processing nmap results from {source_task}")
+    
+    if not combined_results:
+        logger.error("❌ No results to process")
+        return {}
+    
+    processed_results = {}
+    
+    # Process results based on the structure returned by post_process
+    for key, result in combined_results.items():
+        # Check if this is a result with a host parameter
+        if isinstance(result, dict) and 'host' in result:
+            host = result.get('host')
+            xml_file = result.get('xml_file')
+            vulns = result.get('vulns')
+            
+            if host and xml_file:
+                processed_results[host] = {
+                    'xml_file': xml_file,
+                    'vulns': vulns
+                }
+        # Also check numeric keys from host_map
+        elif host_map and key.startswith('result_'):
+            try:
+                # Extract index from result_X format
+                index = int(key.split('_')[1])
+                if index in host_map:
+                    host = host_map[index]
+                    if isinstance(result, dict):
+                        processed_results[host] = {
+                            'xml_file': result.get('xml_file'),
+                            'vulns': result.get('vulns')
+                        }
+            except (ValueError, IndexError):
+                pass
+    
+    # Also check for direct host entries in combined_results
+    for host, host_data in combined_results.items():
+        if isinstance(host_data, dict) and 'xml_file' in host_data and host not in processed_results:
+            processed_results[host] = {
+                'xml_file': host_data.get('xml_file'),
+                'vulns': host_data.get('vulns')
+            }
+    
+    # Process and organize results by host
+    hosts_data = {}
+
+    # Extract XML file paths from nmap_results
+    xml_files = {}
+    for host, result in processed_results.items():
+        if isinstance(result, dict) and 'xml_file' in result:
+            xml_file = result['xml_file']
+            if os.path.exists(xml_file):
+                xml_files[host] = xml_file
+            else:
+                logger.error(f"Nmap output file not found: {xml_file}")
+
+    # Process each XML file to extract detailed information
+    for host, xml_file in xml_files.items():
+        # Create subdomain
+        subdomain_name = ctx.get('domain_name')
+        if subdomain_name:
+            subdomain, _ = save_subdomain(subdomain_name, ctx=ctx)
+        else:
+            subdomain = None
+            logger.warning(f"No domain name in context for host {host}")
+
+        # Parse HTTP ports data
+        hosts_data |= parse_http_ports_data(xml_file)
+
+        # Create first HTTP endpoint if domain name is provided
+        if subdomain_name and subdomain:
+            endpoint = create_first_endpoint_from_nmap_data(hosts_data, subdomain.target_domain, subdomain, ctx)
+            if not endpoint:
+                logger.error(f'Could not create any valid endpoints for {subdomain_name}. Scan failed.')
+
+
+    logger.info(f"✅ Processed nmap results for {len(processed_results)} hosts")
+    
+    return processed_results

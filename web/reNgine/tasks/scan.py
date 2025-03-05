@@ -18,10 +18,12 @@ from reNgine.utils.scan_helpers import (
     initialize_scan_history,
     validate_scan_inputs,
     build_scan_workflow,
+    set_cache_for_task,
 )
 from reNgine.tasks.http import http_crawl
 from reNgine.tasks.notification import send_scan_notif
 from reNgine.tasks.reporting import report
+from reNgine.tasks.port_scan import process_nmap_results
 
 from scanEngine.models import EngineType
 from startScan.models import ScanHistory, Subdomain, SubScan
@@ -36,7 +38,9 @@ def initiate_scan(self, scan_history_id, domain_id, engine_id=None, scan_type=LI
                  results_dir=RENGINE_RESULTS, imported_subdomains=None,
                  out_of_scope_subdomains=None, initiated_by_id=None, url_filter=''):
     """Initiate a new scan workflow."""
-    debug()
+    from reNgine.utils.db import save_imported_subdomains
+    
+    #debug()
 
     scan = None
 
@@ -65,6 +69,8 @@ def initiate_scan(self, scan_history_id, domain_id, engine_id=None, scan_type=LI
             out_of_scope_subdomains=out_of_scope_subdomains,
             url_filter=url_filter
         )
+
+        save_imported_subdomains(imported_subdomains, ctx)
 
         if not scan or not ctx:
             raise ValueError("🚫 Failed to initialize scan")
@@ -137,7 +143,7 @@ def initiate_subscan(
         url_filter (str): URL path. Default: ''
     """
 
-    debug()
+    #debug()
 
     subscan = None
     try:
@@ -253,27 +259,56 @@ def initiate_subscan(
         }    
 
 @app.task(name='post_process', queue='orchestrator_queue', bind=True)
-def post_process(self, results, source_task=None, description="Processing results"):
+def post_process(self, results=None, source_task=None, cached_results=None, cache_keys=None, **kwargs):
     """
-    Callback task that runs after a group of tasks completes.
-    Used as a safe alternative to job.get() which can cause deadlocks.
+    Process results from a group of tasks and handle caching.
+    
+    Args:
+        results: Results from the group of tasks
+        source_task: Name of the parent task
+        cached_results: Dictionary of results retrieved from cache
+        cache_keys: Dictionary of cache keys by host/key parameter
+        **kwargs: Additional parameters
     """
-    if failed_tasks := [
-        r
-        for r in results
-        if isinstance(r, dict) and r.get('status') == 'failed'
-    ]:
-        logger.error(f'❌ {source_task or "Task group"} failed: {len(failed_tasks)}/{len(results)} subtasks failed')
-        return {
-            'status': 'failed',
-            'source': source_task,
-            'results': results,
-            'failed_count': len(failed_tasks)
-        }
-    else:
-        logger.info(f'✅ All {source_task or "grouped"} subtasks completed successfully')
-        return {
-            'status': 'success', 
-            'source': source_task,
-            'results': results
-        }
+    #debug()
+    logger.info(f"📊 Processing results from {source_task} task group")
+
+    # Initialize combined results
+    combined_results = {}
+
+    # Add cached results if any
+    if cached_results:
+        combined_results |= cached_results
+        logger.info(f"📋 Added {len(cached_results)} cached results")
+
+    # Process new results
+    if results:
+        for i, result in enumerate(results):
+            if result:
+                # Try to find a key parameter in the result
+                key_param = None
+                if isinstance(result, dict) and 'host' in result:
+                    key_param = result['host']
+                elif isinstance(result, dict) and 'url' in result:
+                    key_param = result['url']
+
+                # Store result
+                if key_param:
+                    combined_results[key_param] = result
+
+                    # Cache the new result if we have a cache key
+                    if cache_keys and key_param in cache_keys:
+                        set_cache_for_task(cache_keys[key_param], result)
+                else:
+                    # No specific key, just add to combined results with index
+                    combined_results[f"result_{i}"] = result
+
+    if source_task == 'nmap_scan':
+        try:
+            process_nmap_results(ctx=kwargs['scan_ctx'], combined_results=combined_results)
+        except Exception as e:
+            logger.exception(f"Error processing nmap results: {e}\n{fmt_traceback(e)}")
+
+    logger.info(f"✅ Processed {len(combined_results)} total results")
+
+    return combined_results

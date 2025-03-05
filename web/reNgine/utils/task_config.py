@@ -96,8 +96,9 @@ from reNgine.settings import (
 )
 from reNgine.utils.parsers import parse_custom_header
 from reNgine.utils.db import get_random_proxy
-from reNgine.utils.utils import format_json_output, return_iterable
+from reNgine.utils.formatters import format_json_output
 from reNgine.utils.logger import default_logger as logger
+from reNgine.utils.utils import return_iterable
 
 from scanEngine.models import InstalledExternalTool
 

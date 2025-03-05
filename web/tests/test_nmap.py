@@ -8,7 +8,6 @@ from pathlib import Path
 os.environ['RENGINE_SECRET_KEY'] = 'secret'
 os.environ['CELERY_ALWAYS_EAGER'] = 'True'
 
-from reNgine.utils.logger import default_logger as logger
 from reNgine.settings import CELERY_DEBUG
 from reNgine.utils.parsers import parse_nmap_results 
 

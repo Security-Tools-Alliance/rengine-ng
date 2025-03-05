@@ -110,6 +110,7 @@ services:
     volumes:
       - ../web:/home/rengine/rengine:rw,z
       - ./web/entrypoint.sh:/entrypoint.sh:ro
+      - scan_results:/home/rengine/scan_results
       - tool_config:/home/rengine/.config
       - nuclei_templates:/home/rengine/nuclei-templates
       - gf_patterns:/home/rengine/.gf

@@ -13,8 +13,7 @@ from reNgine.settings import CELERY_BROKER_URL
 from scanEngine.models import Notification, EngineType
 from startScan.models import ScanHistory, SubScan, ScanActivity
 from reNgine.utils.logger import default_logger as logger
-from reNgine.utils.formatters import get_scan_fields, get_scan_title, get_scan_url
-from reNgine.utils.utils import format_json_output
+from reNgine.utils.formatters import get_scan_fields, get_scan_title, get_scan_url, format_json_output
 
 
 DISCORD_WEBHOOKS_CACHE = redis.Redis.from_url(CELERY_BROKER_URL)

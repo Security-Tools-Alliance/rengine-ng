@@ -10,7 +10,6 @@ from reNgine.celery import app
 from reNgine.celery_custom_task import RengineTask
 from reNgine.utils.command_builder import CommandBuilder, build_piped_command, build_subdomain_tool_commands
 from reNgine.utils.logger import default_logger as logger
-from reNgine.utils.mock import prepare_subdomain_mock
 from reNgine.utils.task_config import TaskConfig
 from reNgine.tasks.command import run_command_line
 from reNgine.tasks.http import http_crawl
@@ -54,8 +53,6 @@ def subdomain_discovery(
     # Check if dry run mode is enabled
     if ctx is None:
         ctx = {}
-    if ctx.get('dry_run'):
-        return prepare_subdomain_mock(host, ctx)
 
     # Config
     config = TaskConfig(ctx, SUBDOMAIN_DISCOVERY)

@@ -17,7 +17,7 @@ from datetime import datetime
 
 from reNgine.utils.mock import generate_mock_crlfuzz_vulnerabilities, generate_mock_dalfox_vulnerabilities, generate_mock_nuclei_vulnerabilities, generate_mock_s3scanner_vulnerabilities
 from reNgine.settings import COMMAND_EXECUTOR_DRY_RUN
-from reNgine.utils.utils import format_json_output
+from reNgine.utils.formatters import format_json_output
 from reNgine.utils.logger import default_logger as logger
 
 class CommandExecutor:
@@ -41,7 +41,7 @@ class CommandExecutor:
         """Main execution entry point"""
         logger.debug(f"🔧 Starting command execution in {'STREAM' if stream else 'BUFFER'} mode")
         logger.debug(f"🔧 Command: {self.cmd}")
-        logger.debug(f"🔧 Context: {format_json_output(self.context)}")
+        logger.debug(f"🔧 Context: {format_json_output(self.context, indent=2)}")
         self.stream_mode = stream
         self._pre_execution_setup()
         
@@ -417,6 +417,7 @@ class CommandExecutor:
             def _generate_stream_output(self, write_fd):
                 """Simulate real-time JSON streaming output"""
                 urls = self.context.get('urls', [])
+                logger.debug(f'Mock URLs: {urls}')
                 if ['nuclei', 'nuclei-scan'] in self.cmd:
                     return generate_mock_nuclei_vulnerabilities(urls, count=5)
 
@@ -427,6 +428,9 @@ class CommandExecutor:
                     return generate_mock_s3scanner_vulnerabilities(urls, count=5)
 
                 if ['crlfuzz', 'crlfuzz-scan'] in self.cmd:
+                    return generate_mock_crlfuzz_vulnerabilities(urls, count=5)
+
+                if ['http_crawl'] in self.cmd:
                     return generate_mock_crlfuzz_vulnerabilities(urls, count=5)
 
                 json_entries = [

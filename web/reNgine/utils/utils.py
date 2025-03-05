@@ -55,15 +55,6 @@ def replace_nulls(obj):
     else:
         return obj
 
-def format_json_output(data, indent=None, cls=None):
-    """
-    Serialize data to JSON format.
-
-    This utility function standardizes JSON serialization across the project.
-    Note: Monitor its usage in high-frequency logging scenarios for potential performance impacts.
-    """
-    return json.dumps(data, indent=indent, cls=cls)
-
 def get_gpt_vuln_input_description(title, path):
     vulnerability_description = ''
     vulnerability_description += f'Vulnerability Title: {title}'

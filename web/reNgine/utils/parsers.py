@@ -4,6 +4,7 @@ import xmltodict
 import re
 import pprint
 from pycvesearch import CVESearch
+from django.db import transaction
 from reNgine.definitions import (
     CRLFUZZ,
     DALFOX,
@@ -15,6 +16,8 @@ from reNgine.definitions import (
 )
 from reNgine.utils.http import extract_httpx_url
 from reNgine.utils.logger import default_logger as logger
+from reNgine.utils.nmap_service import get_port_datas
+from reNgine.utils.formatters import fmt_traceback
 
 def parse_httpx_result(line, subdomain, ctx, follow_redirect, update_subdomain_metadatas, subscan=None):
     """Process a single line from httpx output.
@@ -539,6 +542,58 @@ def parse_nmap_vulners_output(script_output, url=''):
             vulns.append(vuln)
     return vulns
 
+def parse_http_ports_data(xml_file):
+    """Parse Nmap XML file to extract HTTP ports data.
+    
+    Args:
+        xml_file (str): Path to Nmap XML file
+        
+    Returns:
+        dict: HTTP data per host with format:
+        {
+            'hostname': {
+                'ports': [80, 443, ...],
+                'scheme': 'http' or 'https',
+                'ip': '1.2.3.4'
+            }
+        }
+    """
+    hosts_data = {}
+
+    # Parse results to get open ports and services
+    port_results = parse_nmap_results(xml_file, parse_type='ports')
+    service_results = parse_nmap_results(xml_file, parse_type='services')
+
+    # Create service lookup dict for efficiency
+    service_lookup = {
+        f"{service['host']}:{service['port']}": service 
+        for service in service_results
+    }
+
+    # Process results per host
+    with transaction.atomic():
+        for result in port_results:
+            hostname = result.get('hostname') or result.get('host')
+            if not hostname:
+                continue
+
+            if hostname not in hosts_data:
+                hosts_data[hostname] = {
+                    'ports': [],
+                    'schemes': set(),
+                    'ip': None
+                }
+
+            if result['state'] == 'open':
+                try:
+                    hosts_data[hostname].update(get_port_datas(
+                        result, hostname, service_lookup, hosts_data[hostname]
+                    ))
+                except Exception as e:
+                    logger.exception(f"Error parsing port data for {hostname}: {e}")
+                    logger.debug(fmt_traceback(e))
+
+    return hosts_data
 
 def cve_to_vuln(cve_id, vuln_type=''):
     """Search for a CVE using CVESearch and return Vulnerability data.
