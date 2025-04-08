@@ -1,5 +1,4 @@
 from reNgine.celery import app
-from reNgine.utils.logger import default_logger as logger
 from reNgine.utils.ip import geo_localize_ip
 
 

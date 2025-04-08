@@ -12,13 +12,11 @@ from django.apps import apps
 import shlex
 import json
 import os
-import threading
-from datetime import datetime
 
-from reNgine.utils.mock import generate_mock_crlfuzz_vulnerabilities, generate_mock_dalfox_vulnerabilities, generate_mock_nuclei_vulnerabilities, generate_mock_s3scanner_vulnerabilities
 from reNgine.settings import COMMAND_EXECUTOR_DRY_RUN
 from reNgine.utils.formatters import format_json_output
 from reNgine.utils.logger import default_logger as logger
+from reNgine.utils.mock_process import MockProcess
 
 class CommandExecutor:
     """Unified command execution handler with streaming capabilities"""
@@ -392,112 +390,7 @@ class CommandExecutor:
                 self.command_obj.save(update_fields=['return_code'])
 
     def _mock_execution(self):
-        """Generate mock command output for dry runs"""
-        class MockProcess:
-            def __init__(self, cmd, stream_mode, context=None):
-                self.cmd = cmd
-                self.stream_mode = stream_mode
-                self._finished = False
-                self._returncode = 0
-                self.context = context
-                
-                # Create pipe for stdout simulation
-                self.read_fd, self.write_fd = os.pipe()
-                self.stdout = os.fdopen(self.read_fd, 'rb')
-                self.stderr = open(os.devnull, 'rb')
-                
-                # Start output generation thread
-                self.writer_thread = threading.Thread(
-                    target=self._generate_stream_output if stream_mode else self._generate_buffer_output,
-                    args=(self.write_fd,),
-                    daemon=True
-                )
-                self.writer_thread.start()
-            
-            def _generate_stream_output(self, write_fd):
-                """Simulate real-time JSON streaming output"""
-                urls = self.context.get('urls', [])
-                logger.debug(f'Mock URLs: {urls}')
-                if ['nuclei', 'nuclei-scan'] in self.cmd:
-                    return generate_mock_nuclei_vulnerabilities(urls, count=5)
-
-                if ['dalfox', 'dalfox-scan'] in self.cmd:
-                    return generate_mock_dalfox_vulnerabilities(urls, count=5)
-
-                if ['s3scanner', 's3scanner-scan'] in self.cmd:
-                    return generate_mock_s3scanner_vulnerabilities(urls, count=5)
-
-                if ['crlfuzz', 'crlfuzz-scan'] in self.cmd:
-                    return generate_mock_crlfuzz_vulnerabilities(urls, count=5)
-
-                if ['http_crawl'] in self.cmd:
-                    return generate_mock_crlfuzz_vulnerabilities(urls, count=5)
-
-                json_entries = [
-                    {
-                        "status": "started",
-                        "message": "Scan initialization",
-                        "timestamp": datetime.now().isoformat()
-                    },
-                    {
-                        "status": "processing",
-                        "progress": 33,
-                        "current_item": "item1.example.com"
-                    },
-                    {
-                        "status": "processing", 
-                        "progress": 66,
-                        "current_item": "item2.example.com"
-                    },
-                    {
-                        "status": "completed",
-                        "results_count": 2,
-                        "vulnerabilities": ["XSS", "SQLi"]
-                    }
-                ]
-                
-                # Write with read validation
-                for entry in json_entries:
-                    data = format_json_output(entry) + "\n"
-                    os.write(write_fd, data.encode())
-                    time.sleep(0.5)
-                
-                os.close(write_fd)
-                self._finished = True
-            
-            def _generate_buffer_output(self, write_fd):
-                """Generate full output at once"""
-                os.write(write_fd, b"Full dry run output\nLine1\nLine2\n")
-                os.close(write_fd)
-                self._finished = True
-            
-            def wait(self):
-                """Simulate process completion wait"""
-                while self.writer_thread.is_alive():
-                    time.sleep(0.1)
-                self._finished = True
-                return self._returncode
-
-            def poll(self):
-                """Mock process status check"""
-                return self._returncode if self._finished else None
-
-            @property
-            def returncode(self):
-                """Always return 0 for successful dry runs"""
-                return self._returncode
-            
-            def communicate(self):
-                return (self.stdout.read(), self.stderr.read())
-            
-            def __del__(self):
-                """Clean up resources with error handling"""
-                with contextlib.suppress(AttributeError, OSError):
-                    self.stdout.close()
-                    self.stderr.close()
-                    
-                    if self.writer_thread.is_alive():
-                        self.writer_thread.join(timeout=0.1)
+        """Generate mock command output for dry runs based on input URLs"""
 
         return MockProcess(self.cmd, self.stream_mode, self.context)
 

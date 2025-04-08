@@ -4,7 +4,6 @@ import xmltodict
 import re
 import pprint
 from pycvesearch import CVESearch
-from django.db import transaction
 from reNgine.definitions import (
     CRLFUZZ,
     DALFOX,
@@ -571,27 +570,26 @@ def parse_http_ports_data(xml_file):
     }
 
     # Process results per host
-    with transaction.atomic():
-        for result in port_results:
-            hostname = result.get('hostname') or result.get('host')
-            if not hostname:
-                continue
+    for result in port_results:
+        hostname = result.get('hostname') or result.get('host')
+        if not hostname:
+            continue
 
-            if hostname not in hosts_data:
-                hosts_data[hostname] = {
-                    'ports': [],
-                    'schemes': set(),
-                    'ip': None
-                }
+        if hostname not in hosts_data:
+            hosts_data[hostname] = {
+                'ports': [],
+                'schemes': set(),
+                'ip': None
+            }
 
-            if result['state'] == 'open':
-                try:
-                    hosts_data[hostname].update(get_port_datas(
-                        result, hostname, service_lookup, hosts_data[hostname]
-                    ))
-                except Exception as e:
-                    logger.exception(f"Error parsing port data for {hostname}: {e}")
-                    logger.debug(fmt_traceback(e))
+        if result['state'] == 'open':
+            try:
+                hosts_data[hostname].update(get_port_datas(
+                    result, hostname, service_lookup, hosts_data[hostname]
+                ))
+            except Exception as e:
+                logger.exception(f"Error parsing port data for {hostname}: {e}")
+                logger.debug(fmt_traceback(e))
 
     return hosts_data
 

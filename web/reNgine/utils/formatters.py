@@ -181,12 +181,18 @@ def get_traceback_path(task_name, results_dir, scan_history_id=None, subscan_id=
 def fmt_traceback(exc):
     return '\n'.join(traceback.format_exception(None, exc, exc.__traceback__))
 
-def format_json_output(data, indent=None, cls=None):
+def format_json_output(data, indent=None, cls=None, separators=(',', ':')):
     """
     Serialize data to JSON format.
 
-    This utility function standardizes JSON serialization across the project.
-    Note: Monitor its usage in high-frequency logging scenarios for potential performance impacts.
+    Args:
+        data: Data to serialize
+        indent: Indentation level
+        cls: Class to use for serialization
+        separators: Separators to use for serialization
+
+    Returns:
+        str: Serialized data
     """
-    return json.dumps(data, indent=indent, cls=cls)
+    return json.dumps(data, indent=indent, cls=cls, separators=separators)
 

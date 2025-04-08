@@ -214,22 +214,21 @@ class RengineTask(Task):
 		return None
 
 	def mock_generator(self, *args, **kwargs):
-		"""Generate mock result for dry_run mode based on task type.
-		
-		This method should be overridden by subclasses to provide specific mock implementations.
-		The default implementation tries to use a generic mock provider.
-		
-		Returns:
-			dict/list: Mock result data
-		"""
-		from reNgine.utils.mock import get_mock_for_task
-		
-		# Get context and other relevant parameters
+		"""Generate mock result for dry_run mode based on task type."""
+		from reNgine.utils.mock_datas import MockData
+
+		# Extract domain from kwargs if available
 		ctx = kwargs.get('ctx', {})
+		if domain_name := kwargs.get('domain', None):
+			ctx['domain_name'] = domain_name
+
 		results_dir = ctx.get('results_dir', '/tmp')
-		
+
+		# Initialize MockData with enhanced context
+		mock_data = MockData(context=ctx)
+
 		# Get specific mock data for this task
-		return get_mock_for_task(
+		return mock_data.get_mock_for_task(
 			task_name=self.task_name,
 			args=args,
 			kwargs=kwargs,
@@ -453,7 +452,7 @@ class RengineTask(Task):
 			# No mock file or error reading it, try mock generator
 			if hasattr(self, 'mock_generator'):
 				try:
-					logger.info(f'Generating mock result for {self.task_name}')
+					logger.info(f'🧪 Generating mock result for {self.task_name}')
 					self.result = self.mock_generator(*args, **kwargs)
 					self.status = SUCCESS_TASK
 					

@@ -412,7 +412,7 @@ def process_nmap_results(ctx, combined_results=None, host_map=None, source_task=
     Returns:
         dict: Processed results with XML files paths and vulnerabilities per host
     """
-    debug()
+    #debug()
 
     from reNgine.utils.db import save_subdomain
     from reNgine.utils.nmap_service import create_first_endpoint_from_nmap_data
