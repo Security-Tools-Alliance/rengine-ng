@@ -92,20 +92,36 @@ class RengineTask(Task):
 		self.output_path = f'{self.results_dir}/{self.filename}'
 
 		if RENGINE_RECORD_ENABLED:
-			if self.engine: # task not in engine.tasks, skip it.
-				# create a rule for tasks that has to run parallel like dalfox
-				# xss scan but not necessarily part of main task rather part like
-				# dalfox scan being part of vulnerability task
-				dependent_tasks = {
-					'dalfox_xss_scan': 'vulnerability_scan',
-					'crlfuzz': 'vulnerability_scan',
-					'nuclei_scan': 'vulnerability_scan',
-					'nuclei_individual_severity_module': 'vulnerability_scan',
-					's3scanner': 'vulnerability_scan',
-				}
-				if self.track and self.task_name not in self.engine.tasks and dependent_tasks.get(self.task_name) not in self.engine.tasks:
-					logger.debug(f'Task {self.name} is not part of engine "{self.engine.engine_name}" tasks. Skipping.')
-					return
+			if self.engine:
+					# task not in engine.tasks, skip it.
+					# create a rule for tasks that has to run parallel like dalfox
+					# xss scan but not necessarily part of main task rather part like
+					# dalfox scan being part of vulnerability task
+					# Exempted tasks that can always run
+					dependent_tasks = {
+							'dalfox_xss_scan': 'vulnerability_scan',
+							'crlfuzz': 'vulnerability_scan',
+							'nuclei_scan': 'vulnerability_scan',
+							'nuclei_individual_severity_module': 'vulnerability_scan',
+							's3scanner': 'vulnerability_scan',
+					}
+
+					exempted_tasks = [
+							'http_crawl',
+							'scan_http_ports',
+							'run_nmap',
+							'nmap'
+					]
+
+					# Skip if task is not part of engine and not exempted
+					if (
+							self.track and
+							self.task_name not in self.engine.tasks and
+							dependent_tasks.get(self.task_name) not in self.engine.tasks and
+							self.task_name.lower() not in exempted_tasks
+					):
+							logger.debug(f'Task {self.task_name} is not part of engine "{self.engine.engine_name}" tasks. Skipping.')
+							return False
 
 			# Create ScanActivity for this task and send start scan notifs
 			if self.track:
