@@ -44,7 +44,7 @@ def migrate_ports_to_ip(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('startScan', '0058_alter_ipaddress_ports'),
+        ('startScan', '0060_alter_ipaddress_ports'),
     ]
 
     operations = [
