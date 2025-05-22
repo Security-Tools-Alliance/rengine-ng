@@ -529,43 +529,37 @@ main() {
       exit 1
   fi
 
+  # Install type
   if [ "$current_id" -ne 1000 ]; then
-    INSTALL_TYPE="source"
-    log "Build has been forced because your user ID is not the same as the pre-built images. If you want to use pre-built images, your current user installing reNgine-ng must be 1000." $COLOR_RED
+      # If the user is not 1000, force source install because pre-built images are not compatible with user > 1000
+      INSTALL_TYPE="source"
+      log "Build has been forced because your user ID is not the same as the pre-built images. If you want to use pre-built images, your current user installing reNgine-ng must be 1000." $COLOR_RED
   else
-    if [ $isNonInteractive = false ]; then
-      log "Do you want to build Docker images from source or use pre-built images (recommended)? \nThis saves significant build time but requires good download speeds for it to complete fast." $COLOR_RED
-      log "1) From source" $COLOR_YELLOW
-      log "2) Use pre-built images (default)" $COLOR_YELLOW
-      read -p "Enter your choice (1 or 2, default is 2): " choice
+      if [ "$isNonInteractive" = false ]; then
+          log "Do you want to build Docker images from source or use pre-built images (recommended)?\nThis saves significant build time but requires good download speeds for it to complete fast." $COLOR_RED
+          log "1) From source" $COLOR_YELLOW
+          log "2) Use pre-built images (default)" $COLOR_YELLOW
+          read -p "Enter your choice (1 or 2, default is 2): " choice
 
-      case $choice in
-        1)
-          INSTALL_TYPE="source"
-          ;;
-        2|"")
-          INSTALL_TYPE="prebuilt"
-          ;;
-        *)
-          log "Invalid choice. Defaulting to pre-built images." $COLOR_RED
-          INSTALL_TYPE="prebuilt"
-          ;;
-      esac
-    fi
+          case $choice in
+              1)
+                  INSTALL_TYPE="source"
+                  ;;
+              2|"")
+                  INSTALL_TYPE="prebuilt"
+                  ;;
+              *)
+                  log "Invalid choice. Defaulting to pre-built images." $COLOR_RED
+                  INSTALL_TYPE="prebuilt"
+                  ;;
+          esac
+      elif [ "$isNonInteractive" = true ]; then
+        INSTALL_TYPE="${INSTALL_TYPE:-prebuilt}"
+      fi
   fi
-
-  if [ -z "$INSTALL_TYPE" ]; then
-    log "Error: INSTALL_TYPE is not set" $COLOR_RED
-    exit 1
-  elif [ "$INSTALL_TYPE" != "prebuilt" ] && [ "$INSTALL_TYPE" != "source" ]; then
-    log "Error: INSTALL_TYPE must be either 'prebuilt' or 'source'" $COLOR_RED
-    exit 1
-  fi
-
-  log "Selected installation type: $INSTALL_TYPE" $COLOR_CYAN
 
   # Non-interactive install
-  if [ $isNonInteractive = true ]; then
+  if [ "$isNonInteractive" = true ]; then
     # Load and verify .env file
     if [ -f .env ]; then
         export $(grep -v '^#' .env | xargs)
@@ -579,12 +573,11 @@ main() {
       exit 1
     fi
 
-    INSTALL_TYPE=${INSTALL_TYPE:-prebuilt}
     log "Non-interactive installation parameter set. Installation begins." $COLOR_GREEN
   fi
 
   if [ -z "$INSTALL_TYPE" ]; then
-    log "Error: INSTALL_TYPE is not set" $COLOR_RED
+    log "Error: INSTALL_TYPE is not set in .env, please set it to either 'prebuilt' or 'source'" $COLOR_RED
     exit 1
   elif [ "$INSTALL_TYPE" != "prebuilt" ] && [ "$INSTALL_TYPE" != "source" ]; then
     log "Error: INSTALL_TYPE must be either 'prebuilt' or 'source'" $COLOR_RED

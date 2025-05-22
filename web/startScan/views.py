@@ -15,6 +15,7 @@ from django.utils import timezone
 from django.utils.html import mark_safe
 from django_celery_beat.models import ClockedSchedule, IntervalSchedule, PeriodicTask
 from rolepermissions.decorators import has_permission_decorator
+from django.db.models.functions import Lower
 
 from api.serializers import IpSerializer
 from reNgine.celery import app
@@ -44,7 +45,9 @@ def detail_scan(request, id, slug):
     # Get scan objects
     scan = get_object_or_404(ScanHistory, id=id)
     domain_id = safe_int_cast( scan.domain.id)
-    scan_engines = EngineType.objects.order_by('engine_name').all()
+    scan_engines = EngineType.objects.annotate(
+        lower_name=Lower('engine_name')
+    ).order_by('lower_name')
     recent_scans = ScanHistory.objects.filter(domain__id=domain_id)
     last_scans = (
         ScanHistory.objects
@@ -230,7 +233,9 @@ def detail_scan(request, id, slug):
 
 def all_subdomains(request, slug):
     subdomains = Subdomain.objects.filter(target_domain__project__slug=slug)
-    scan_engines = EngineType.objects.order_by('engine_name').all()
+    scan_engines = EngineType.objects.annotate(
+        lower_name=Lower('engine_name')
+    ).order_by('lower_name')
     alive_subdomains = subdomains.filter(http_status__gt=0) # TODO: replace this with is_alive() function
     important_subdomains = (
         subdomains
@@ -313,7 +318,9 @@ def start_scan_ui(request, slug, domain_id):
         return HttpResponseRedirect(reverse('scan_history', kwargs={'slug': slug}))
 
     # GET request
-    engine = EngineType.objects.order_by('engine_name')
+    engine = EngineType.objects.annotate(
+        lower_name=Lower('engine_name')
+    ).order_by('lower_name')
     custom_engine_count = (
         EngineType.objects
         .filter(default_engine=False)
@@ -731,7 +738,9 @@ def start_organization_scan(request, id, slug):
         return HttpResponseRedirect(reverse('scan_history', kwargs={'slug': slug}))
 
     # GET request
-    engine = EngineType.objects.order_by('engine_name')
+    engine = EngineType.objects.annotate(
+        lower_name=Lower('engine_name')
+    ).order_by('lower_name')
     custom_engine_count = EngineType.objects.filter(default_engine=False).count()
     domain_list = organization.get_domains()
     context = {
@@ -822,7 +831,9 @@ def schedule_organization_scan(request, slug, id):
         return HttpResponseRedirect(reverse('scheduled_scan_view', kwargs={'slug': slug}))
 
     # GET request
-    engine = EngineType.objects
+    engine = EngineType.objects.annotate(
+        lower_name=Lower('engine_name')
+    ).order_by('lower_name')
     custom_engine_count = EngineType.objects.filter(default_engine=False).count()
     context = {
         'scan_history_active': 'active',

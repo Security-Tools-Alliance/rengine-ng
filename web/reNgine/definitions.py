@@ -446,3 +446,21 @@ DEFAULT_OLLAMA_INSTANCE = 'http://ollama:11434'
 
 # Get Ollama instance URL from environment or use default
 OLLAMA_INSTANCE = os.getenv('OLLAMA_INSTANCE', DEFAULT_OLLAMA_INSTANCE)
+
+###############################################################################
+# SCAN ENGINES DEFINITIONS
+###############################################################################
+
+ENGINE_DISPLAY_NAMES = [
+    ('subdomain_discovery', 'Subdomain Discovery'),
+    ('port_scan', 'Port Scan'),
+    ('fetch_url', 'Fetch URLs'),
+    ('dir_file_fuzz', 'Directory and File Fuzzing'),
+    ('vulnerability_scan', 'Vulnerability Scan'),
+    ('osint', 'Open-Source Intelligence'),
+    ('screenshot', 'Screenshot'),
+    ('waf_detection', 'WAF Detection')
+]
+
+# Engine names for internal use
+ENGINE_NAMES = [engine[0] for engine in ENGINE_DISPLAY_NAMES]

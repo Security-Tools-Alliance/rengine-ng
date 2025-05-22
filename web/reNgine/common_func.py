@@ -359,7 +359,7 @@ def get_http_urls(
 
 	if write_filepath:
 		with open(write_filepath, 'w') as f:
-			f.write('\n'.join(endpoints))
+			f.write('\n'.join([url for url in endpoints if url is not None]))
 
 	return endpoints
 
@@ -1414,3 +1414,41 @@ def get_http_crawl_value(engine, config):
         enable_http_crawl = yaml_config.get(ENABLE_HTTP_CRAWL, DEFAULT_ENABLE_HTTP_CRAWL)
     logger.debug(f'Enable HTTP crawl: {enable_http_crawl}')
     return enable_http_crawl
+
+def get_or_create_port(ip_address, port_number, service_info=None):
+    """Centralized port handling with service info management."""
+    port, created = Port.objects.get_or_create(
+        ip_address=ip_address,
+        number=port_number,
+        defaults={
+            'is_uncommon': port_number in UNCOMMON_WEB_PORTS,
+            'service_name': 'unknown',
+            'description': ''
+        }
+    )
+    
+    if not created and service_info:
+        update_port_service_info(port, service_info)
+    
+    return port
+
+def update_port_service_info(port, service_info):
+    """Update port service information consistently."""
+    try:
+        description_parts = []
+        for key in ['service_product', 'service_version', 'service_extrainfo']:
+            value = service_info.get(key)
+            if value and value not in description_parts:
+                description_parts.append(value)
+        
+        port.service_name = service_info.get('service_name', 'unknown').strip() or 'unknown'
+        port.description = ' - '.join(filter(None, description_parts))[:1000]
+        
+        if port.ip_address:
+            logger.debug(f'Updating service info for {port.ip_address.address}:{port.number}')
+            
+        port.save(update_fields=['service_name', 'description'])
+        
+    except Exception as e:
+        logger.error(f"Error updating port {port.number}: {str(e)}")
+        raise
