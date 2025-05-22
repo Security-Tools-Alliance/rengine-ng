@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 from urllib.parse import urlparse
 import json
+import hashlib
 
 from reNgine.utils.logger import default_logger as logger
 from reNgine.definitions import UNCOMMON_WEB_PORTS
@@ -43,8 +44,16 @@ class MockData:
         if ctx is None:
             ctx = {}
 
-        if not results_dir and ctx:
-            results_dir = ctx.get('results_dir', '/tmp')
+        # Ensure we have a valid results_dir
+        if not results_dir:
+            if ctx and 'results_dir' in ctx:
+                results_dir = ctx.get('results_dir')
+            else:
+                # Default to /tmp if no results_dir is provided
+                results_dir = '/tmp'
+                
+        # Log the results directory being used
+        logger.info(f"🧪 Using results directory: {results_dir}")
 
         # Create a mapping of task handlers
         task_mock_handlers = {
@@ -596,7 +605,34 @@ class MockData:
         """
         host = kwargs.get('host', 'example.com')
         ports = kwargs.get('ports', [80, 443])
-        xml_file = f"results_dir/{host}_nmap.xml"
+
+        # Simulate DNS resolution by generating a random IP address
+        ip_address = f"192.168.{random.randint(1, 254)}.{random.randint(1, 254)}"
+
+        # Generate realistic nmap output
+        nmap_output = [
+            f"Starting Nmap 7.80 ( https://nmap.org ) at {datetime.now().strftime('%Y-%m-%d %H:%M:%S %Z')}"
+        ]
+        nmap_output.extend(
+            (
+                f"Nmap scan report for {host} ({ip_address})",
+                "Host is up (0.00042s latency).",
+                "Not shown: 997 closed ports",
+                "PORT     STATE  SERVICE    VERSION",
+            )
+        )
+        # Add port information
+        for port in ports:
+            service = "http" if port == 80 else "https" if port == 443 else f"service-{port}"
+            version = "Apache/2.4.41" if port in [80, 443] else "unknown"
+            # Format: PORT      STATE   SERVICE     VERSION
+            # Example: 80/tcp   open    http        Apache/2.4.41
+            nmap_output.append(f"{f'{str(port)}/tcp':<9}{'open':<7}{service:<10}{version}")
+
+        nmap_output.extend(
+            ("", "Nmap done: 1 IP address (1 host up) scanned in 1.23 seconds")
+        )
+        xml_file = f"{results_dir}/{host}_nmap.xml"
         if kwargs.get('xml_output', True):
             # Create mock XML file
             try:
@@ -604,11 +640,14 @@ class MockData:
             except (ValueError, OSError) as e:
                 logger.error(f"Failed to create mock XML for {host}: {str(e)}")
 
-        # Return command result
+        # Return command result with resolved IP and realistic output
         return {
-            'command': f"nmap {host} -p {','.join(map(str, ports))}",
+            'command': f"nmap -sV -p {','.join(map(str, ports))} {host}",
             'return_code': 0,
-            'output': f"Mock nmap scan for {host}",
+            'output': '\n'.join(nmap_output),
+            'resolved_ip': ip_address,
+            'host_up': True,
+            'ports': [{'port': port, 'state': 'open', 'service': 'http' if port == 80 else 'https' if port == 443 else f'service-{port}'} for port in ports]
         }
 
 
@@ -622,16 +661,77 @@ class MockData:
         return self._generate_nmap_xml(hosts, count)
 
     def mock_nuclei_scan(self, urls, count=5):
-        """Generate mock vulnerability data for dry run testing
-        
+        """
+        Generate mock nuclei vulnerabilities
+
         Args:
             urls (list): List of URLs to associate vulnerabilities with
             count (int): Number of vulnerabilities to generate per URL
-            
-        Returns:
-            list: List of mock vulnerability dictionaries
         """
-        return self._generate_nuclei_output(urls, count)
+
+        vulnerabilities = []
+
+        # Common templates for nuclei
+        templates = [
+            'cves/2021/CVE-2021-44228',
+            'exposures/configs/git-config',
+            'vulnerabilities/wordpress/wp-config',
+            'vulnerabilities/generic/basic-xss',
+            'vulnerabilities/generic/basic-ssrf',
+            'vulnerabilities/generic/open-redirect',
+            'misconfiguration/security-txt'
+        ]
+
+        severity_map = {
+            'cves': 'critical',
+            'exposures': 'medium',
+            'vulnerabilities/wordpress': 'high',
+            'vulnerabilities/generic/basic-xss': 'medium',
+            'vulnerabilities/generic/basic-ssrf': 'high',
+            'vulnerabilities/generic/open-redirect': 'medium',
+            'misconfiguration': 'info'
+        }
+
+        for url in urls:
+            # Deterministically select 30% of URLs based on hash
+            if hashlib.md5(url.encode()).hexdigest().endswith('000'):  # 30% chance based on URL hash
+                continue
+
+            template = random.choice(templates)
+            severity = next(
+                (value for key, value in severity_map.items() if key in template),
+                'info',
+            )
+            # Create mock vulnerability with nuclei's expected format
+            vulnerability = {
+                'template': template,
+                'info': {
+                    'name': template.split('/')[-1].replace('-', ' ').title(),
+                    'author': 'nuclei-team',
+                    'severity': severity,
+                    'description': f"Mock vulnerability found using {template}",
+                    'reference': f"https://example.com/references/{template}"
+                },
+                'host': url,
+                'request': {
+                    'url': url,
+                    'method': 'GET',
+                    'headers': {
+                        'User-Agent': 'nuclei'
+                    },
+                    'type': 'http',
+                    'matched-at': url,
+                    'extracted-results': [],
+                    'ip': random.choice(['192.168.1.1', '10.0.0.1', '172.16.0.1']),
+                    'timestamp': datetime.now().isoformat(),
+                    'matcher-status': True,
+                    'matched-line': random.randint(10, 500)
+                }
+            }
+
+            vulnerabilities.append(vulnerability)
+
+        return vulnerabilities
         
     def mock_dalfox_scan(self, urls, count=3):
         """Generate mock Dalfox XSS vulnerability data for dry run testing
@@ -1044,79 +1144,6 @@ class MockData:
 
         return fuzzing_results
 
-    def _generate_nuclei_output(self, urls, count=5):
-        """
-        Generate mock nuclei vulnerabilities
-
-        Args:
-            urls (list): List of URLs to associate vulnerabilities with
-            count (int): Number of vulnerabilities to generate per URL
-        """
-
-        vulnerabilities = []
-
-        # Common templates for nuclei
-        templates = [
-            'cves/2021/CVE-2021-44228',
-            'exposures/configs/git-config',
-            'vulnerabilities/wordpress/wp-config',
-            'vulnerabilities/generic/basic-xss',
-            'vulnerabilities/generic/basic-ssrf',
-            'vulnerabilities/generic/open-redirect',
-            'misconfiguration/security-txt'
-        ]
-
-        severity_map = {
-            'cves': 'critical',
-            'exposures': 'medium',
-            'vulnerabilities/wordpress': 'high',
-            'vulnerabilities/generic/basic-xss': 'medium',
-            'vulnerabilities/generic/basic-ssrf': 'high',
-            'vulnerabilities/generic/open-redirect': 'medium',
-            'misconfiguration': 'info'
-        }
-
-        for url in urls:
-            # Only generate findings for some URLs (30% chance)
-            if random.random() > 0.3:
-                continue
-
-            template = random.choice(templates)
-            severity = next(
-                (value for key, value in severity_map.items() if key in template),
-                'info',
-            )
-            # Create mock vulnerability with nuclei's expected format
-            vulnerability = {
-                'template': template,
-                'info': {
-                    'name': template.split('/')[-1].replace('-', ' ').title(),
-                    'author': 'nuclei-team',
-                    'severity': severity,
-                    'description': f"Mock vulnerability found using {template}",
-                    'reference': f"https://example.com/references/{template}"
-                },
-                'host': url,
-                'request': {
-                    'url': url,
-                    'method': 'GET',
-                    'headers': {
-                        'User-Agent': 'nuclei'
-                    },
-                    'type': 'http',
-                    'matched-at': url,
-                    'extracted-results': [],
-                    'ip': random.choice(['192.168.1.1', '10.0.0.1', '172.16.0.1']),
-                    'timestamp': datetime.now().isoformat(),
-                    'matcher-status': True,
-                    'matched-line': random.randint(10, 500)
-                }
-            }
-
-            vulnerabilities.append(vulnerability)
-
-            return vulnerabilities
-        
     def _generate_dalfox_output(self, urls, count=5):
         """
         Generate mock dalfox XSS findings

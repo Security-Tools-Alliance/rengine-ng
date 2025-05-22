@@ -70,7 +70,7 @@ class RengineTask(Task):
 		return CELERY_TASK_STATUS_MAP.get(self.status)
 
 	def __call__(self, *args, **kwargs):
-		#debug()
+		debug()
 
 		self.result = None
 		self.status = RUNNING_TASK
@@ -87,10 +87,6 @@ class RengineTask(Task):
 		if not self.check_engine_compatibility_and_create_activity():
 			return None
 
-		# Handle dry run mode if enabled
-		if COMMAND_EXECUTOR_DRY_RUN:
-			self.handle_dry_run(*args, **kwargs)
-
 		# Check cache for previous results
 		if RENGINE_CACHE_ENABLED:
 			if cached_result := self.get_from_cache(*args, **kwargs):
@@ -99,8 +95,12 @@ class RengineTask(Task):
 		# Execute task, catch exceptions and update ScanActivity object after
 		# task has finished running.
 		try:
-			self.result = self.run(*args, **kwargs)
-			self.status = SUCCESS_TASK
+			# Handle dry run mode if enabled
+			if COMMAND_EXECUTOR_DRY_RUN:
+				self.handle_dry_run(*args, **kwargs)
+			else:
+				self.result = self.run(*args, **kwargs)
+				self.status = SUCCESS_TASK
 
 		except Exception as exc:
 			# Use common exception handler for task execution errors

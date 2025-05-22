@@ -22,10 +22,7 @@ def get_subdomain_from_url(url):
     Returns:
         str: Subdomain name.
     """
-        # Check if the URL has a scheme. If not, add a temporary one to prevent empty netloc.
-    if "://" not in url:
-        url = f"http://{url}"
-
+    url = add_scheme_to_url(url)
     url_obj = urlparse(url.strip())
     return url_obj.netloc.split(':')[0]
 
@@ -75,7 +72,7 @@ def sanitize_url(http_url):
     Returns:
         str: Stripped HTTP URL.
     """
-        # Check if the URL has a scheme. If not, add a temporary one to prevent empty netloc.
+    # Check if the URL has a scheme. If not, add a temporary one to prevent empty netloc.
     if "://" not in http_url:
         http_url = f"http://{http_url}"
     url = urlparse(http_url)
@@ -83,7 +80,9 @@ def sanitize_url(http_url):
     if url.netloc.endswith(':80'):
         url = url._replace(netloc=url.netloc.replace(':80', ''))
     elif url.netloc.endswith(':443'):
-        url = url._replace(scheme=url.scheme.replace('http', 'https'))
+        # Only replace http with https, not https with httpss
+        if url.scheme == 'http':
+            url = url._replace(scheme='https')
         url = url._replace(netloc=url.netloc.replace(':443', ''))
     return url.geturl().rstrip('/')
 
@@ -344,3 +343,36 @@ def prepare_urls_for_http_scan(urls, url_filter, results_dir, ctx=None, recrawl=
             urls = all_urls
 
     return urls, input_path, update_subdomain_metadatas
+
+def add_scheme_to_url(url, default_scheme='http'):
+    """Add scheme to URL if missing.
+    
+    Args:
+        url (str): URL to process
+        default_scheme (str): Default scheme to use if none is present (default: 'https')
+        
+    Returns:
+        str: URL with scheme
+    """
+    if not url:
+        return url
+
+    # Handle URLs with userinfo using urlparse
+    parsed = urlparse(url)
+    if parsed.netloc and '@' in parsed.netloc:
+        userinfo, host = parsed.netloc.split('@', 1)
+        if parsed.scheme in ['http', 'https']:
+            return f'{parsed.scheme}://{userinfo}@{host}{parsed.path}{parsed.query}{parsed.fragment}'
+        return f'{default_scheme}://{parsed.netloc}{parsed.path}{parsed.query}{parsed.fragment}'
+
+    # If URL has an invalid scheme, remove it
+    if parsed.scheme:
+        url = url.split('://', 1)[1]
+
+    if not parsed.netloc:
+        # Default to https for modern best practices
+        return f'{default_scheme}://{url}'
+    if any(f':{port}' in parsed.netloc for port in [443, 8443, 8444]):
+        return f'https://{url}'
+    elif any(f':{port}' in parsed.netloc for port in [80, 8080, 8000]):
+        return f'http://{url}'

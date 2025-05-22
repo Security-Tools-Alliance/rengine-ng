@@ -294,7 +294,6 @@ def visualize_workflow(domain, engine, ctx, show_details=False):
     # Parse YAML configuration if available
     yaml_config = {}
     if hasattr(engine, 'yaml_configuration'):
-        import yaml
         yaml_config = yaml.safe_load(engine.yaml_configuration) or {}
 
     # Build initial visualization
@@ -305,6 +304,9 @@ def visualize_workflow(domain, engine, ctx, show_details=False):
 
     # Initial task - always present
     lines.append(f"┌─ {get_task_symbol('scan_http_ports')} Initial HTTP ports scan")
+    # Check if http_crawl is enabled
+    if yaml_config.get('enable_http_crawl', True):
+        lines.append(f"│ └─ {get_task_symbol('http_crawl')} Http Crawl")
 
     # Parallel subdomain and OSINT tasks
     parallel_tasks = []

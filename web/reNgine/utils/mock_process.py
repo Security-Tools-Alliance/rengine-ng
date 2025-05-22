@@ -13,7 +13,7 @@ from reNgine.utils.debug import debug
 
 class MockProcess:
     def __init__(self, cmd, stream_mode, context=None):
-        debug()
+        #debug()
         self.cmd = cmd
         self.stream_mode = stream_mode
         self._finished = False
@@ -146,26 +146,25 @@ class MockProcess:
             streaming (bool): Whether to output in streaming mode
         """
         cmd_str = ' '.join(self.cmd)
-        mock_data = MockData(context=self.context)
 
         if command_type == 'httpx':
             mock_data._generate_httpx_output(urls)
         elif command_type == 'nuclei':
-            mock_data._generate_nuclei_output(urls)
+            mock_data.mock_nuclei_scan(urls)
         elif command_type == 'port_scan':
-            mock_data._generate_port_scan_output(urls)
+            mock_data.mock_port_scan(None, {'urls': urls}, None, self.context)
         elif command_type == 'nmap':
-            mock_data._generate_nmap_output(urls)
+            mock_data.mock_nmap(None, {'host': urls[0] if urls else 'example.com', 'ports': [80, 443]}, None, self.context)
         elif command_type == 'dalfox':
-            mock_data._generate_dalfox_output(urls) 
+            mock_data.mock_dalfox_scan(urls) 
         elif command_type == 's3scanner':
-            mock_data._generate_s3scanner_output(urls)
+            mock_data.mock_s3scanner()
         elif command_type == 'crlfuzz':
-            mock_data._generate_crlfuzz_output(urls)
+            mock_data.mock_crlfuzz_scan(urls)
         elif command_type in ['ffuf']:
-            mock_data._generate_dir_file_fuzz_output(urls)
+            mock_data.mock_dir_file_fuzz(None, {'urls': urls}, None, self.context)
         elif command_type == 'osint':
-            mock_data._generate_osint_output(urls)
+            mock_data.mock_osint(None, {'host': urls[0] if urls else 'example.com'}, None, self.context)
         elif streaming:
             self._stream_generic_output(write_fd, urls, cmd_str)
         else:

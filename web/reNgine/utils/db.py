@@ -47,6 +47,7 @@ from reNgine.utils.utils import (
     is_iterable,
 )
 from reNgine.utils.http import (
+    add_scheme_to_url,
     get_domain_from_subdomain,
     is_valid_url,
     sanitize_url,
@@ -140,6 +141,8 @@ def save_vulnerability(**vuln_data):
 def save_endpoint(http_url, ctx=None, crawl=False, is_default=False, http_status=None, **endpoint_data):
     """Get or create EndPoint object. If crawl is True, also crawl the endpoint HTTP URL with httpx."""
     from reNgine.tasks.http import http_crawl
+    from reNgine.utils.parsers import parse_httpx_result
+    
     if ctx is None:
         ctx = {}
     # Remove nulls and validate basic inputs
@@ -147,8 +150,8 @@ def save_endpoint(http_url, ctx=None, crawl=False, is_default=False, http_status
     scheme = urlparse(http_url).scheme
 
     if not scheme:
-        logger.warning(f'{http_url} is missing scheme (http or https). Skipping.')
-        return None, False
+        http_url = add_scheme_to_url(http_url)
+        logger.warning(f'{http_url} is missing scheme (http or https). Adding scheme.')
 
     if not is_valid_url(http_url):
         logger.warning(f'{http_url} is not a valid URL. Skipping.')
@@ -194,15 +197,19 @@ def save_endpoint(http_url, ctx=None, crawl=False, is_default=False, http_status
         custom_ctx = deepcopy(ctx)
         custom_ctx['track'] = False
         results = http_crawl(urls=[http_url], ctx=custom_ctx)
-        if not results or results[0]['failed']:
+        if not results:
             logger.warning(f'Endpoint for {http_url} does not seem to be up. Skipping.')
             return None, False
 
-        endpoint_data = results[0]
-        endpoint = EndPoint.objects.get(pk=endpoint_data['endpoint_id'])
-        endpoint.is_default = is_default
-        endpoint.save()
-        created = endpoint_data['endpoint_created']
+        # Use parse_httpx_result to process the crawl results
+        endpoint, _, result_data = parse_httpx_result(
+            results[0],
+            subdomain,
+            ctx,
+            follow_redirect=True,
+            update_subdomain_metadatas=is_default
+        )
+        return endpoint, result_data.get('endpoint_created', True)
     else:
         create_data = {
             'scan_history': scan,
@@ -371,8 +378,9 @@ def save_imported_subdomains(subdomains, ctx=None):
 
     logger.info(f'Found {len(subdomains)} imported subdomains.')
     with open(f'{results_dir}/from_imported.txt', 'w+') as output_file:
-        url_filter = ctx.get('url_filter')
-        enable_http_crawl = ctx.get('yaml_configuration').get(ENABLE_HTTP_CRAWL, DEFAULT_ENABLE_HTTP_CRAWL)
+        # TODO: add base endpoint creation
+        # url_filter = ctx.get('url_filter')
+        # enable_http_crawl = ctx.get('yaml_configuration').get(ENABLE_HTTP_CRAWL, DEFAULT_ENABLE_HTTP_CRAWL)
         for subdomain in subdomains:
             # Save valid imported subdomains
             subdomain_name = subdomain.strip()
@@ -384,16 +392,16 @@ def save_imported_subdomains(subdomains, ctx=None):
             subdomain_obj.save()
             output_file.write(f'{subdomain}\n')
 
-            # Create base endpoint (for scan)
-            http_url = f'{subdomain_obj.name}{url_filter}' if url_filter else subdomain_obj.name
-            endpoint, _ = save_endpoint(
-                http_url,
-                ctx=ctx,
-                crawl=enable_http_crawl,
-                is_default=True,
-                subdomain=subdomain_obj
-            )
-            save_subdomain_metadata(subdomain_obj, endpoint)
+            # # Create base endpoint (for scan)
+            # http_url = f'{subdomain_obj.name}{url_filter}' if url_filter else subdomain_obj.name
+            # endpoint, _ = save_endpoint(
+            #     sanitize_url(http_url),
+            #     ctx=ctx,
+            #     crawl=enable_http_crawl,
+            #     is_default=True,
+            #     subdomain=subdomain_obj
+            # )
+            # save_subdomain_metadata(subdomain_obj, endpoint)
     return subdomains
 
 def get_vulnerability_gpt_report(vuln):

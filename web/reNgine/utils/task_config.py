@@ -95,7 +95,6 @@ from reNgine.settings import (
     DEFAULT_THREADS,
 )
 from reNgine.utils.parsers import parse_custom_header
-from reNgine.utils.db import get_random_proxy
 from reNgine.utils.formatters import format_json_output
 from reNgine.utils.logger import default_logger as logger
 from reNgine.utils.utils import return_iterable
@@ -266,6 +265,8 @@ class TaskConfig:
         Returns:
             Proxy string or empty string
         """
+        from reNgine.utils.db import get_random_proxy
+
         return get_random_proxy()
     
     def get_input_path(self, name: str) -> str:

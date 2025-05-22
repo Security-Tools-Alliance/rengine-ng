@@ -40,7 +40,7 @@ def initiate_scan(self, scan_history_id, domain_id, engine_id=None, scan_type=LI
     """Initiate a new scan workflow."""
     from reNgine.utils.db import save_imported_subdomains
     
-    #debug()
+    debug()
 
     scan = None
 
@@ -305,7 +305,13 @@ def post_process(self, results=None, source_task=None, cached_results=None, cach
 
     if source_task == 'nmap_scan':
         try:
-            process_nmap_results(ctx=kwargs['scan_ctx'], combined_results=combined_results)
+            process_nmap_results(
+                ctx=kwargs['scan_ctx'],
+                combined_results=combined_results,
+                host_map=kwargs.get('host_map'),
+                source_task=source_task,
+                enable_http_crawl=kwargs.get('enable_http_crawl', False)
+            )
         except Exception as e:
             logger.exception(f"Error processing nmap results: {e}\n{fmt_traceback(e)}")
 
