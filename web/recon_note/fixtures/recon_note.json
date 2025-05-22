@@ -3,11 +3,37 @@
   "model": "recon_note.todonote",
   "pk": 1,
   "fields": {
-    "title": "Check for vuln",
-    "description": "There's a lot",
+    "title": "SQLi",
+    "description": "SQLi",
     "scan_history": 1,
-    "subdomain": 24,
+    "subdomain": 88,
     "is_done": false,
+    "is_important": true,
+    "project": 1
+  }
+},
+{
+  "model": "recon_note.todonote",
+  "pk": 2,
+  "fields": {
+    "title": "XSS",
+    "description": "",
+    "scan_history": 1,
+    "subdomain": 88,
+    "is_done": false,
+    "is_important": false,
+    "project": 1
+  }
+},
+{
+  "model": "recon_note.todonote",
+  "pk": 3,
+  "fields": {
+    "title": "SSRF",
+    "description": "",
+    "scan_history": 1,
+    "subdomain": 88,
+    "is_done": true,
     "is_important": false,
     "project": 1
   }

@@ -58,7 +58,7 @@
                         <p class="text-muted mb-4">If you have API keys for these services, please enter them here.</p>
                         <div class="mb-3">
                           <label for="key_openai" class="form-label">OpenAI <span class="ms-1 badge bg-soft-danger text-danger">🔥 Recommended</span><span class="ms-1 badge bg-soft-primary text-primary">Experimental</span></label>
-                          <p class="text-muted">OpenAI keys will be used to generate vulnerability description, remediation, impact and vulnerability report writing using ChatGPT.</p>
+                          <p class="text-muted">OpenAI keys will be used to generate vulnerability description, remediation, impact and vulnerability report writing using LLM.</p>
                           {% if openai_key %}
                             <input class="form-control" type="text" id="key_openai" name="key_openai" placeholder="Enter OpenAI Key" value="{{openai_key}}">
                           {% else %}

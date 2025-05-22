@@ -124,7 +124,7 @@ vulnerability_scan: {
   'rate_limit': 150,
   'retries': 1,
   'timeout': 5,
-  'fetch_gpt_report': true,
+  'fetch_llm_report': true,
   'nuclei': {
     'use_nuclei_config': false,
     'severities': ['unknown', 'info', 'low', 'medium', 'high', 'critical'],

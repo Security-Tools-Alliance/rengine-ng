@@ -3,6 +3,7 @@ import logging
 import re
 from pathlib import Path
 from .settings import RENGINE_WORDLISTS
+import os
 
 ###############################################################################
 # TOOLS DEFINITIONS
@@ -23,7 +24,7 @@ ALL = 'all'
 AMASS_WORDLIST = 'amass_wordlist'
 AUTO_CALIBRATION = 'auto_calibration'
 CUSTOM_HEADER = 'custom_header'
-FETCH_GPT_REPORT = 'fetch_gpt_report'
+FETCH_LLM_REPORT = 'fetch_llm_report'
 RUN_NUCLEI = 'run_nuclei'
 RUN_CRLFUZZ = 'run_crlfuzz'
 RUN_DALFOX = 'run_dalfox'
@@ -433,95 +434,18 @@ PERM_INITATE_SCANS_SUBSCANS = 'initiate_scans_subscans'
 # 404 page url
 FOUR_OH_FOUR_URL = '/404/'
 
+# OSINT GooFuzz Path
+GOFUZZ_EXEC_PATH = 'GooFuzz'
 
 ###############################################################################
-# OLLAMA DEFINITIONS
+# LLM DEFINITIONS
 ###############################################################################
-OLLAMA_INSTANCE = 'http://ollama:11434'
 
-DEFAULT_GPT_MODELS = [
-    {
-        'name': 'gpt-3',
-        'model': 'gpt-3',
-        'modified_at': '',
-        'details': {
-            'family': 'GPT',
-            'parameter_size': '~175B',
-        }
-    },
-    {
-        'name': 'gpt-3.5-turbo',
-        'model': 'gpt-3.5-turbo',
-        'modified_at': '',
-        'details': {
-            'family': 'GPT',
-            'parameter_size': '~7B',
-        }
-    },
-    {
-        'name': 'gpt-4',
-        'model': 'gpt-4',
-        'modified_at': '',
-        'details': {
-            'family': 'GPT',
-            'parameter_size': '~1.7T',
-        }
-    },
-	{
-        'name': 'gpt-4-turbo',
-        'model': 'gpt-4',
-        'modified_at': '',
-        'details': {
-            'family': 'GPT',
-            'parameter_size': '~1.7T',
-        }
-    }
-]
+# Default Ollama instance URL if not set in environment
+DEFAULT_OLLAMA_INSTANCE = 'http://ollama:11434'
 
-
-
-# GPT Vulnerability Report Generator
-VULNERABILITY_DESCRIPTION_SYSTEM_MESSAGE = """
-    You are a highly skilled penetration tester who has recently completed a penetration testing.
-    You will be given with a
-        - Vulnerability title
-        - Vulnerable URL
-        - and some description about the vulnerability.
-    Your job is to write a detailed technical penetration testing report based on the given Vulnerability details.
-    The purpose of this report is to provide an in-depth analysis of the vulnerabilities discovered during the penetration testing engagement.
-
-    The penetration testing report must contain all separated by \n\n
-
-    - Vulnerability description
-        Include a detailed vulnerability description, include any known CVE IDs, any known existing vulnerabilities.
-    - Impact
-        Include what this vulnerability can impact for web applications.
-    - Remediation
-        Include steps to remediate this vulnerability. Separate each new remediations by - and a new line \n
-    - References
-        Include any references URL about this vulnerability, any existing CVE ID, or news articles etc. Separate each new references by - and a new line \n. Only include http urls
-
-    Do not write 'Penetration Testing Report:' on the title.
-"""
-
-
-ATTACK_SUGGESTION_GPT_SYSTEM_PROMPT = """
-    You are a highly skilled penetration tester who has recently completed a reconnaissance on a target.
-    As a penetration tester, I've conducted a thorough reconnaissance on a specific subdomain.
-    Based on my reconnaissance you will be given with a
-        - Subdomain Name
-        - Subdomain Page Title
-        - Open Ports if any detected
-        - HTTP Status
-        - Technologies Detected
-        - Content Type
-        - Web Server
-        - Page Content Length
-    I'm seeking insights into potential technical web application attacks that could be executed on this subdomain, along with explanations for why these attacks are feasible given the discovered information.
-    Please provide a detailed list of these attack types and their underlying technical rationales on every attacks you suggested.
-    Also suggest if any CVE ID, known exploits, existing vulnerabilities, any news articles URL related to the information provided to you.
-"""
-
+# Get Ollama instance URL from environment or use default
+OLLAMA_INSTANCE = os.getenv('OLLAMA_INSTANCE', DEFAULT_OLLAMA_INSTANCE)
 
 ###############################################################################
 # SCAN ENGINES DEFINITIONS

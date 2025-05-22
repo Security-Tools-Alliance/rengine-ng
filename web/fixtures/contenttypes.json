@@ -1,0 +1,482 @@
+[
+{
+  "model": "contenttypes.contenttype",
+  "pk": 1,
+  "fields": {
+    "app_label": "admin",
+    "model": "logentry"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 2,
+  "fields": {
+    "app_label": "auth",
+    "model": "permission"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 3,
+  "fields": {
+    "app_label": "auth",
+    "model": "group"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 4,
+  "fields": {
+    "app_label": "auth",
+    "model": "user"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 5,
+  "fields": {
+    "app_label": "contenttypes",
+    "model": "contenttype"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 6,
+  "fields": {
+    "app_label": "sessions",
+    "model": "session"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 7,
+  "fields": {
+    "app_label": "dashboard",
+    "model": "searchhistory"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 8,
+  "fields": {
+    "app_label": "dashboard",
+    "model": "project"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 9,
+  "fields": {
+    "app_label": "dashboard",
+    "model": "netlasapikey"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 10,
+  "fields": {
+    "app_label": "dashboard",
+    "model": "openaiapikey"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 11,
+  "fields": {
+    "app_label": "dashboard",
+    "model": "ollamasettings"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 12,
+  "fields": {
+    "app_label": "targetApp",
+    "model": "domain"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 13,
+  "fields": {
+    "app_label": "targetApp",
+    "model": "organization"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 14,
+  "fields": {
+    "app_label": "targetApp",
+    "model": "domaininfo"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 15,
+  "fields": {
+    "app_label": "targetApp",
+    "model": "domainregistration"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 16,
+  "fields": {
+    "app_label": "targetApp",
+    "model": "dnsrecord"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 17,
+  "fields": {
+    "app_label": "targetApp",
+    "model": "nameserver"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 18,
+  "fields": {
+    "app_label": "targetApp",
+    "model": "registrar"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 19,
+  "fields": {
+    "app_label": "targetApp",
+    "model": "whoisstatus"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 20,
+  "fields": {
+    "app_label": "targetApp",
+    "model": "historicalip"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 21,
+  "fields": {
+    "app_label": "targetApp",
+    "model": "relateddomain"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 22,
+  "fields": {
+    "app_label": "scanEngine",
+    "model": "configuration"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 23,
+  "fields": {
+    "app_label": "scanEngine",
+    "model": "enginetype"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 24,
+  "fields": {
+    "app_label": "scanEngine",
+    "model": "hackerone"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 25,
+  "fields": {
+    "app_label": "scanEngine",
+    "model": "installedexternaltool"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 26,
+  "fields": {
+    "app_label": "scanEngine",
+    "model": "interestinglookupmodel"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 27,
+  "fields": {
+    "app_label": "scanEngine",
+    "model": "notification"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 28,
+  "fields": {
+    "app_label": "scanEngine",
+    "model": "proxy"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 29,
+  "fields": {
+    "app_label": "scanEngine",
+    "model": "vulnerabilityreportsetting"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 30,
+  "fields": {
+    "app_label": "scanEngine",
+    "model": "wordlist"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 31,
+  "fields": {
+    "app_label": "startScan",
+    "model": "dork"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 32,
+  "fields": {
+    "app_label": "startScan",
+    "model": "email"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 33,
+  "fields": {
+    "app_label": "startScan",
+    "model": "employee"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 34,
+  "fields": {
+    "app_label": "startScan",
+    "model": "endpoint"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 35,
+  "fields": {
+    "app_label": "startScan",
+    "model": "ipaddress"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 36,
+  "fields": {
+    "app_label": "startScan",
+    "model": "port"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 37,
+  "fields": {
+    "app_label": "startScan",
+    "model": "scanhistory"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 38,
+  "fields": {
+    "app_label": "startScan",
+    "model": "subdomain"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 39,
+  "fields": {
+    "app_label": "startScan",
+    "model": "technology"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 40,
+  "fields": {
+    "app_label": "startScan",
+    "model": "vulnerability"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 41,
+  "fields": {
+    "app_label": "startScan",
+    "model": "subscan"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 42,
+  "fields": {
+    "app_label": "startScan",
+    "model": "scanactivity"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 43,
+  "fields": {
+    "app_label": "startScan",
+    "model": "metafinderdocument"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 44,
+  "fields": {
+    "app_label": "startScan",
+    "model": "vulnerabilitytags"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 45,
+  "fields": {
+    "app_label": "startScan",
+    "model": "directoryfile"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 46,
+  "fields": {
+    "app_label": "startScan",
+    "model": "directoryscan"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 47,
+  "fields": {
+    "app_label": "startScan",
+    "model": "cveid"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 48,
+  "fields": {
+    "app_label": "startScan",
+    "model": "cweid"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 49,
+  "fields": {
+    "app_label": "startScan",
+    "model": "waf"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 50,
+  "fields": {
+    "app_label": "startScan",
+    "model": "countryiso"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 51,
+  "fields": {
+    "app_label": "startScan",
+    "model": "command"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 52,
+  "fields": {
+    "app_label": "startScan",
+    "model": "s3bucket"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 53,
+  "fields": {
+    "app_label": "startScan",
+    "model": "llmvulnerabilityreport"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 54,
+  "fields": {
+    "app_label": "recon_note",
+    "model": "todonote"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 55,
+  "fields": {
+    "app_label": "django_celery_beat",
+    "model": "crontabschedule"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 56,
+  "fields": {
+    "app_label": "django_celery_beat",
+    "model": "intervalschedule"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 57,
+  "fields": {
+    "app_label": "django_celery_beat",
+    "model": "periodictask"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 58,
+  "fields": {
+    "app_label": "django_celery_beat",
+    "model": "periodictasks"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 59,
+  "fields": {
+    "app_label": "django_celery_beat",
+    "model": "solarschedule"
+  }
+},
+{
+  "model": "contenttypes.contenttype",
+  "pk": 60,
+  "fields": {
+    "app_label": "django_celery_beat",
+    "model": "clockedschedule"
+  }
+}
+]

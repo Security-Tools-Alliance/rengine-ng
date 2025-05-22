@@ -940,7 +940,7 @@
           {% regroup all_vulnerabilities by get_path as grouped_vulnerabilities %}
           {% for vulnerabilities in grouped_vulnerabilities %}
             {% for vulnerability in vulnerabilities.list %}
-              <div>
+              <div style="page-break-before: always">
                 <h4 class="content-heading" id="vuln_{{vulnerability.name.split|join:'_'}}">
                   <span>{{vulnerability.name}}
                     <br>in {{vulnerabilities.grouper}}</span>
@@ -990,17 +990,17 @@
                 {% if vulnerability.description %}
                   <br>
                   <span class="mini-heading">Description</span><br>
-                  {{vulnerability.description|linebreaks}}
+                  {{vulnerability.description|linebreaks|safe}}
                 {% endif %}
                 {% if vulnerability.impact %}
                   <br>
                   <span class="mini-heading">Impact</span><br>
-                  {{vulnerability.impact|linebreaks}}
+                  {{vulnerability.impact|linebreaks|safe}}
                 {% endif %}
                 {% if vulnerability.remediation %}
                   <br>
                   <span class="mini-heading">Remediation</span><br>
-                  {{vulnerability.remediation|linebreaks}}
+                  {{vulnerability.remediation|linebreaks|safe}}
                 {% endif %}
                 <br>
                 <span class="mini-heading">Vulnerable URL(s)</span><br>
@@ -1024,15 +1024,19 @@
                     {% endfor %}
                   {% endfor %}
                 </ul> -->
-                {% if vulnerability.references.all %}
+                {% if vulnerability.references %}
                   <span class="mini-heading">References</span><br>
-                  <ul>
-                    {% for ref in vulnerability.references.all %}
-                    <li>
-                      <span class="text-blue"><a href="{{ref}}" target="_blank" rel="noopener noreferrer">{{ref}}</a></span>
-                    </li>
-                    {% endfor %}
-                  </ul>
+                  {% if vulnerability.references|length > 0 and vulnerability.references.0 %}
+                      <ul>
+                          {% for reference in vulnerability.references %}
+                              <li>
+                                  <a href="{{ reference }}" target="_blank" rel="noopener noreferrer">{{ reference }}</a>
+                              </li>
+                          {% endfor %}
+                      </ul>
+                  {% else %}
+                      <p>{{ vulnerability.references }}</p>
+                  {% endif %}
                 {% endif %}
                 <br>
                 <br>

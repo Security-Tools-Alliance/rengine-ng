@@ -33,7 +33,7 @@ const vuln_datatable_columns = [
 	{'data': 'template_id'},
 	{'data': 'impact'},
 	{'data': 'remediation'},
-	{'data': 'is_gpt_used'},
+	{'data': 'is_llm_used'},
 ];
 
 const vuln_datatable_page_length = 50;

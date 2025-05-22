@@ -4,34 +4,21 @@
   "pk": 1,
   "fields": {
     "name": "Default",
+    "description": null,
     "slug": "default",
-    "insert_date": "2024-09-03T21:23:21.459Z"
+    "insert_date": "2024-11-13T01:59:02.841Z",
+    "users": []
   }
 },
 {
   "model": "dashboard.project",
-  "pk": 2,
+  "pk": 34,
   "fields": {
-    "name": "My Project",
-    "slug": "my-project",
-    "insert_date": "2024-09-04T00:32:08.839Z"
-  }
-},
-{
-  "model": "dashboard.project",
-  "pk": 3,
-  "fields": {
-    "name": "My Other Project",
-    "slug": "my-other-project",
-    "insert_date": "2024-09-04T00:32:31.475Z"
-  }
-},
-{
-  "model": "dashboard.ollamasettings",
-  "pk": 1,
-  "fields": {
-    "selected_model": "gpt-3",
-    "use_ollama": false
+    "name": "Another project",
+    "description": null,
+    "slug": "another-project",
+    "insert_date": "2024-11-13T03:05:09.478Z",
+    "users": []
   }
 }
 ]
