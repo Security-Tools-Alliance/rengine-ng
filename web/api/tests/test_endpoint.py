@@ -92,6 +92,7 @@ class TestInterestingEndpointViewSet(BaseTestCase):
         super().setUp()
         self.data_generator.create_project_base()
         self.data_generator.create_endpoint()
+        self.data_generator.create_interesting_lookup_model()
 
     def test_interesting_endpoint_viewset(self):
         """Test retrieving interesting endpoints for a scan."""
@@ -100,7 +101,7 @@ class TestInterestingEndpointViewSet(BaseTestCase):
             url, {"scan_id": self.data_generator.scan_history.id}
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertGreaterEqual(len(response.data), 1)
+        self.assertGreaterEqual(len(response.data["results"]), 1)
         self.assertEqual(
             response.data["results"][0]["http_url"],
             self.data_generator.endpoint.http_url,

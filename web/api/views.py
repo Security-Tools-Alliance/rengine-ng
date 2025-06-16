@@ -1646,7 +1646,7 @@ class ListTodoNotes(APIView):
     def get(self, request, format=None):
         notes = TodoNote.objects.all().order_by('-id')
         scan_id = safe_int_cast(request.query_params.get('scan_id'))
-        if project := request.query:
+        if project := request.query_params.get('project'):
             notes = notes.filter(project__slug=project)
         target_id = safe_int_cast(request.query_params.get('target_id'))
         todo_id = request.query_params.get('todo_id')
