@@ -29,6 +29,8 @@ class Logger:
     """Class to print/write logs to the terminals"""
     
     _instance = None
+    _original_level = None
+    _is_disabled = False
     
     def __new__(cls, is_task_logger=False):
         if not cls._instance:
@@ -170,6 +172,9 @@ class Logger:
         self._log(message, 'ERROR')
     
     def _log(self, message, level):
+        if self._is_disabled:
+            return
+            
         task_name = current_task.name if hasattr(current_task, 'name') and self.is_task_logger else ''
         
         # Split multi-line messages
@@ -190,6 +195,23 @@ class Logger:
         # Join lines and print
         formatted_message = '\n'.join(colored_lines)
         print(formatted_message, flush=True)
+
+    @classmethod
+    def disable_logging(cls):
+        """Disable all logging by setting level to CRITICAL."""
+        if not cls._is_disabled:
+            cls._original_level = logging.getLogger().getEffectiveLevel()
+            logging.disable(logging.CRITICAL)
+            cls._is_disabled = True
+
+    @classmethod
+    def enable_logging(cls):
+        """Re-enable logging to its original level."""
+        if cls._is_disabled:
+            logging.disable(logging.NOTSET)
+            logging.getLogger().setLevel(cls._original_level)
+            cls._original_level = None
+            cls._is_disabled = False
 
 # Global logger instance (task logger by default)
 default_logger = Logger(True)

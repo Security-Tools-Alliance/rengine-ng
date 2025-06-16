@@ -1,9 +1,8 @@
-import logging
-
 from utils.test_utils import TestDataGenerator, TestValidation
 from django.test import TestCase, Client
 from django.contrib.auth import get_user_model
 from dashboard.views import on_user_logged_in
+from reNgine.utils.logger import Logger
 
 __all__ = [
     'BaseTestCase',
@@ -50,8 +49,11 @@ class BaseTestCase(TestCase):
         self.test_validation = TestValidation()
 
         # Disable logging for tests
-        logging.disable(logging.CRITICAL)
+        Logger.disable_logging()
 
     def tearDown(self):
         # Restore original on_user_logged_in function
         on_user_logged_in.__code__ = self.original_on_user_logged_in.__code__
+        
+        # Re-enable logging
+        Logger.enable_logging()
