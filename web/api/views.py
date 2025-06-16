@@ -66,9 +66,6 @@ from reNgine.tasks.dns import (
 )
 from reNgine.tasks.llm import llm_vulnerability_description
 from reNgine.tasks.notification import send_hackerone_report
-from reNgine.tasks.url import (
-	run_gf_list,
-)
 from reNgine.llm.generator import LLMAttackSuggestionGenerator
 from reNgine.llm.utils import convert_markdown_to_html
 from reNgine.utils.utils import is_safe_path, remove_lead_and_trail_slash
@@ -144,9 +141,7 @@ import threading
 class OllamaManager(APIView):
     def clean_channel_name(self, name):
         """Clean channel name to only contain valid characters"""
-        # Replace any non-alphanumeric characters with hyphens
-        clean_name = re.sub(r'[^a-zA-Z0-9\-\.]', '-', name)
-        return clean_name
+        return re.sub(r'[^a-zA-Z0-9\-\.]', '-', name)
 
     def get(self, request):
         model_name = request.query_params.get('model')
@@ -347,9 +342,7 @@ class AvailableOllamaModels(APIView):
     def get(self, request):
         try:
             cache_key = 'ollama_available_models'
-            cached_data = cache.get(cache_key)
-            
-            if cached_data:
+            if cached_data := cache.get(cache_key):
                 return Response(cached_data)
 
             # Use recommended models from config
@@ -363,17 +356,17 @@ class AvailableOllamaModels(APIView):
                         model['name']: model 
                         for model in response.json().get('models', [])
                     }
-                    
+
                     # Mark installed models and add their details
                     for model in recommended_models:
                         base_name = model['name']
                         model['installed_versions'] = [
-                            name.replace(f"{base_name}:", "") 
-                            for name in installed_models.keys() 
+                            name.replace(f"{base_name}:", "")
+                            for name in installed_models
                             if name.startswith(base_name)
                         ]
                         model['installed'] = len(model['installed_versions']) > 0
-                        
+
                         # Add capabilities from MODEL_REQUIREMENTS if available
                         if base_name in MODEL_REQUIREMENTS:
                             model['capabilities'] = MODEL_REQUIREMENTS[base_name]
@@ -563,8 +556,7 @@ class ListTargetsDatatableViewSet(viewsets.ModelViewSet):
     serializer_class = DomainSerializer
 
     def get_queryset(self):
-        slug = self.request.GET.get('slug', None)
-        if slug:
+        if slug := self.request.GET.get('slug', None):
             self.queryset = self.queryset.filter(project__slug=slug)
         return self.queryset
 
@@ -635,10 +627,7 @@ class WafDetector(APIView):
 
 class SearchHistoryView(APIView):
     def get(self, request):
-        req = self.request
-
-        response = {}
-        response['status'] = False
+        response = {'status': False}
 
         scan_history = SearchHistory.objects.all().order_by('-id')[:5]
 
@@ -651,12 +640,9 @@ class SearchHistoryView(APIView):
 
 class UniversalSearch(APIView):
     def get(self, request):
-        req = self.request
-        query = req.query_params.get('query')
+        query = request.query_params.get('query')
 
-        response = {}
-        response['status'] = False
-
+        response = {'status': False}
         if not query:
             response['message'] = 'No query parameter provided!'
             return Response(response)
@@ -700,59 +686,54 @@ class UniversalSearch(APIView):
 
         return Response(response)
 
-
 class FetchMostCommonVulnerability(APIView):
     def post(self, request):
         data = request.data
         response = {'status': False}
 
         try:
-            limit = safe_int_cast(data.get('limit', 20))
-            project_slug = data.get('slug')
-            scan_history_id = safe_int_cast(data.get('scan_history_id'))
-            target_id = safe_int_cast(data.get('target_id'))
-            is_ignore_info = data.get('ignore_info', False)
-
-            vulnerabilities = (
-                Vulnerability.objects.filter(target_domain__project__slug=project_slug)
-                if project_slug else Vulnerability.objects.all()
-            )
-
-            if scan_history_id:
-                vuln_query = vulnerabilities.filter(scan_history__id=scan_history_id).values("name", "severity")
-            elif target_id:
-                vuln_query = vulnerabilities.filter(target_domain__id=target_id).values("name", "severity")
-            else:
-                vuln_query = vulnerabilities.values("name", "severity")
-
-            if is_ignore_info:
-                most_common_vulnerabilities = (
-                    vuln_query.exclude(severity=0)
-                    .annotate(count=Count('name'))
-                    .order_by("-count")[:limit]
-                )
-            else:
-                most_common_vulnerabilities = (
-                    vuln_query.annotate(count=Count('name'))
-                    .order_by("-count")[:limit]
-                )
-
-            most_common_vulnerabilities = list(most_common_vulnerabilities)
-
-            if most_common_vulnerabilities:
-                response['status'] = True
-                response['result'] = most_common_vulnerabilities
-
+            self._process_vulnerability_filters(data, response)
         except Exception as e:
             logger.error(f"Error in FetchMostCommonVulnerability: {str(e)}")
             response['message'] = 'An error occurred while fetching vulnerabilities.'
 
         return Response(response)
 
+    def _process_vulnerability_filters(self, data, response):
+        limit = safe_int_cast(data.get('limit', 20))
+        project_slug = data.get('slug')
+        scan_history_id = safe_int_cast(data.get('scan_history_id'))
+        target_id = safe_int_cast(data.get('target_id'))
+        is_ignore_info = data.get('ignore_info', False)
+
+        vulnerabilities = (
+            Vulnerability.objects.filter(target_domain__project__slug=project_slug)
+            if project_slug else Vulnerability.objects.all()
+        )
+
+        if scan_history_id:
+            vuln_query = vulnerabilities.filter(scan_history__id=scan_history_id).values("name", "severity")
+        elif target_id:
+            vuln_query = vulnerabilities.filter(target_domain__id=target_id).values("name", "severity")
+        else:
+            vuln_query = vulnerabilities.values("name", "severity")
+
+        most_common_vulnerabilities = (
+            vuln_query.exclude(severity=0)
+            .annotate(count=Count('name'))
+            .order_by("-count")[:limit]
+            if is_ignore_info
+            else vuln_query.annotate(count=Count('name')).order_by("-count")[
+                :limit
+            ]
+        )
+        if most_common_vulnerabilities := list(most_common_vulnerabilities):
+            response['status'] = True
+            response['result'] = most_common_vulnerabilities
+
 class FetchMostVulnerable(APIView):
     def post(self, request):
-        req = self.request
-        data = req.data
+        data = request.data
 
         project_slug = data.get('slug')
         scan_history_id = safe_int_cast(data.get('scan_history_id'))
@@ -760,8 +741,7 @@ class FetchMostVulnerable(APIView):
         limit = safe_int_cast(data.get('limit', 20))
         is_ignore_info = data.get('ignore_info', False)
 
-        response = {}
-        response['status'] = False
+        response = {'status': False}
 
         if project_slug:
             project = Project.objects.get(slug=project_slug)
@@ -861,7 +841,7 @@ class CVEDetails(APIView):
         if not cve_id:
             return Response({'status': False, 'message': 'CVE ID not provided'})
 
-        response = requests.get('https://cve.circl.lu/api/cve/' + cve_id)
+        response = requests.get(f'https://cve.circl.lu/api/cve/{cve_id}')
 
         if response.status_code != 200:
             return  Response({'status': False, 'message': 'Unknown Error Occured!'})
@@ -1038,9 +1018,7 @@ class ListSubScans(APIView):
         subdomain_id = safe_int_cast(data.get('subdomain_id', None))
         scan_history = safe_int_cast(data.get('scan_history_id', None))
         domain_id = safe_int_cast(data.get('domain_id', None))
-        response = {}
-        response['status'] = False
-
+        response = {'status': False}
         if subdomain_id:
             subscans = (
                 SubScan.objects
@@ -1217,46 +1195,42 @@ class DeleteVulnerability(APIView):
 
 class ListInterestingKeywords(APIView):
     def get(self, request, format=None):
-        req = self.request
         keywords = get_lookup_keywords()
         return Response(keywords)
 
 
 class RengineUpdateCheck(APIView):
     def get(self, request):
-        req = self.request
         github_api = \
             'https://api.github.com/repos/Security-Tools-Alliance/rengine-ng/releases'
         response = requests.get(github_api).json()
         if 'message' in response:
             return Response({'status': False, 'message': 'RateLimited'})
 
-        return_response = {}
-
         # get current version_number
         # remove quotes from current_version
         current_version = (RENGINE_CURRENT_VERSION[1:] if RENGINE_CURRENT_VERSION[0] == 'v' else RENGINE_CURRENT_VERSION).replace("'", "")
-        
+
         # for consistency remove v from both if exists
         latest_version = re.search(r'v(\d+\.)?(\d+\.)?(\*|\d+)',
-                                ((response[0]['name'
-                                ])[1:] if response[0]['name'][0] == 'v'
+                                (response[0]['name'][1:] if response[0]['name'][0] == 'v'
                                     else response[0]['name']))
 
-        latest_version = latest_version.group(0) if latest_version else None
+        latest_version = latest_version[0] if latest_version else None
 
         if not latest_version:
             latest_version = re.search(r'(\d+\.)?(\d+\.)?(\*|\d+)',
-                                        ((response[0]['name'
-                                        ])[1:] if response[0]['name'][0]
-                                        == 'v' else response[0]['name']))
+                                        (response[0]['name'][1:] if response[0]['name'][0] == 'v' else response[0]['name']))
             if latest_version:
-                latest_version = latest_version.group(0)
+                latest_version = latest_version[0]
 
-        return_response['status'] = True
-        return_response['latest_version'] = latest_version
-        return_response['current_version'] = current_version
-        return_response['update_available'] = version.parse(current_version) < version.parse(latest_version)
+        return_response = {
+            'status': True,
+            'latest_version': latest_version,
+            'current_version': current_version,
+            'update_available': version.parse(current_version)
+            < version.parse(latest_version),
+        }
         if version.parse(current_version) < version.parse(latest_version):
             return_response['changelog'] = response[0]['body']
 
@@ -1280,16 +1254,16 @@ class UninstallTool(APIView):
 
         # check install instructions, if it is installed using go, then remove from go bin path,
         # else try to remove from github clone path
-
+        
         # getting tool name is tricky!
-
+        
         if 'go install' in tool.install_command:
             tool_name = tool.install_command.split('/')[-1].split('@')[0]
-            uninstall_command = 'rm /go/bin/' + tool_name
+            uninstall_command = f'rm /go/bin/{tool_name}'
         elif 'git clone' in tool.install_command:
             tool_name = tool.install_command[:-1] if tool.install_command[-1] == '/' else tool.install_command
             tool_name = tool_name.split('/')[-1]
-            uninstall_command = 'rm -rf ' + tool.github_clone_path
+            uninstall_command = f'rm -rf {tool.github_clone_path}'
         else:
             return Response({'status': False, 'message': 'Cannot uninstall tool!'})
 
@@ -1318,25 +1292,27 @@ class UpdateTool(APIView):
         update_command = tool.update_command.lower()
 
         if not update_command:
-            return Response({'status': False, 'message': tool.name + 'has missing update command! Cannot update the tool.'})
+            return Response(
+                {
+                    'status': False,
+                    'message': f'{tool.name}has missing update command! Cannot update the tool.',
+                }
+            )
         elif update_command == 'git pull':
             tool_name = tool.install_command[:-1] if tool.install_command[-1] == '/' else tool.install_command
             tool_name = tool_name.split('/')[-1]
-            update_command = 'cd ' + str(Path(RENGINE_TOOL_GITHUB_PATH) / tool_name) + ' && git pull && cd -'
+            update_command = f'cd {str(Path(RENGINE_TOOL_GITHUB_PATH) / tool_name)} && git pull && cd -'
 
         run_command(update_command)
-        return Response({'status': True, 'message': tool.name + ' updated successfully.'})
+        return Response(
+            {'status': True, 'message': f'{tool.name} updated successfully.'}
+        )
 
 
 class GetExternalToolCurrentVersion(APIView):
     def get(self, request):
-        req = self.request
-        # toolname is also the command
-        tool_id = safe_int_cast(req.query_params.get('tool_id'))
-        tool_name = req.query_params.get('name')
-        # can supply either tool id or tool_name
-
-        tool = None
+        tool_id = safe_int_cast(request.query_params.get('tool_id'))
+        tool_name = request.query_params.get('name')
 
         if tool_id:
             if not InstalledExternalTool.objects.filter(id=tool_id).exists():
@@ -1352,11 +1328,18 @@ class GetExternalToolCurrentVersion(APIView):
 
         version_number = None
         _, stdout = run_command(tool.version_lookup_command)
-        version_number = re.search(re.compile(tool.version_match_regex), str(stdout))
-        if not version_number:
+        if version_number := re.search(
+            re.compile(tool.version_match_regex), str(stdout)
+        ):
+            return Response(
+                {
+                    'status': True,
+                    'version_number': version_number[0],
+                    'tool_name': tool.name,
+                }
+            )
+        else:
             return Response({'status': False, 'message': 'Invalid version lookup command.'})
-
-        return Response({'status': True, 'version_number': version_number.group(0), 'tool_name': tool.name})
 
 
 
@@ -1406,7 +1389,6 @@ class GithubToolCheckGetLatestRelease(APIView):
 
 class ScanStatus(APIView):
     def get(self, request):
-        req = self.request
         slug = self.request.GET.get('project', None)
         # main tasks
         recently_completed_scans = (
@@ -1462,22 +1444,19 @@ class ScanStatus(APIView):
 
 class Whois(APIView):
     def get(self, request):
-        req = self.request
-        ip_domain = req.query_params.get('ip_domain')
+        ip_domain = request.query_params.get('ip_domain')
         if not (validators.domain(ip_domain) or validators.ipv4(ip_domain) or validators.ipv6(ip_domain)):
             print(f'Ip address or domain "{ip_domain}" did not pass validator.')
             return Response({'status': False, 'message': 'Invalid domain or IP'})
-        is_force_update = req.query_params.get('is_reload')
-        is_force_update = True if is_force_update and 'true' == is_force_update.lower() else False
+        is_force_update = request.query_params.get('is_reload')
+        is_force_update = bool(is_force_update and is_force_update.lower() == 'true')
         task = query_whois.apply_async(args=(ip_domain,is_force_update))
         response = task.wait()
         return Response(response)
 
-
 class ReverseWhois(APIView):
     def get(self, request):
-        req = self.request
-        lookup_keyword = req.query_params.get('lookup_keyword')
+        lookup_keyword = request.query_params.get('lookup_keyword')
         task = query_reverse_whois.apply_async(args=(lookup_keyword,))
         response = task.wait()
         return Response(response)
@@ -1485,8 +1464,7 @@ class ReverseWhois(APIView):
 
 class DomainIPHistory(APIView):
     def get(self, request):
-        req = self.request
-        domain = req.query_params.get('domain')
+        domain = request.query_params.get('domain')
         task = query_ip_history.apply_async(args=(domain,))
         response = task.wait()
         return Response(response)
@@ -1512,9 +1490,8 @@ class CMSDetector(APIView):
 
 class IPToDomain(APIView):
     def get(self, request):
-        req = self.request
-        ip_address = req.query_params.get('ip_address')
-        response = {}
+        ip_address = request.query_params.get('ip_address')
+        response = {'status': False}
         if not ip_address:
             return Response({
                 'status': False,
@@ -1552,113 +1529,109 @@ class IPToDomain(APIView):
 
 class VulnerabilityReport(APIView):
     def get(self, request):
-        req = self.request
-        vulnerability_id = safe_int_cast(req.query_params.get('vulnerability_id'))
+        vulnerability_id = safe_int_cast(request.query_params.get('vulnerability_id'))
         return Response({"status": send_hackerone_report(vulnerability_id)})
 
 
 class GetFileContents(APIView):
     def get(self, request, format=None):
-        req = self.request
-        name = req.query_params.get('name')
+        name = request.query_params.get('name')
+        config_files = {
+            'nuclei_config': {'tool': 'nuclei', 'filename': 'config.yaml'},
+            'subfinder_config': {'tool': 'subfinder', 'filename': 'config.yaml'},
+            'naabu_config': {'tool': 'naabu', 'filename': 'config.yaml'},
+            'theharvester_config': {'tool': 'theHarvester', 'filename': 'api-keys.yaml'},
+            'amass_config': {'tool': 'amass', 'filename': 'config.ini'},
+            'gau_config': {'tool': 'gau', 'filename': 'config.toml'}
+        }
 
-        response = {}
-        response['status'] = False
+        for param, config in config_files.items():
+            if param in request.query_params:
+                return self._get_config_file(config['tool'], config['filename'])
 
-        if 'nuclei_config' in req.query_params:
-            path = str(Path.home() / ".config" / "nuclei" / "config.yaml")
-            if not os.path.exists(path):
-                run_command(f'touch {path}')
-                response['message'] = 'File Created!'
+        if 'gf_pattern' in request.query_params:
+            return self._get_gf_pattern(name)
+
+        if 'nuclei_template' in request.query_params:
+            return self._get_nuclei_template(name)
+
+        response = {'status': False, 'message': 'Invalid Query Params'}
+        return Response(response)
+
+    def _migrate_legacy_config(self, tool, new_filename):
+        """Migrate old config files to new format."""
+        old_paths = {
+            'amass': str(Path.home() / ".config" / "amass.ini"),
+            'gau': str(Path.home() / ".config" / ".gau.toml")
+        }
+        
+        if tool not in old_paths:
+            return
+            
+        old_path = old_paths[tool]
+        new_path = str(Path.home() / ".config" / tool / new_filename)
+        
+        if os.path.exists(old_path) and not os.path.exists(new_path):
+            # Create destination directory if it doesn't exist
+            os.makedirs(os.path.dirname(new_path), exist_ok=True)
+            
+            # Copy file to new location
+            run_command(f'cp {old_path} {new_path}')
+            
+            # Create symbolic link for backward compatibility
+            run_command(f'ln -sf {new_path} {old_path}')
+            
+            logger.info(f'Migrated {tool} config from {old_path} to {new_path}')
+
+    def _get_config_file(self, tool, filename):
+        path = str(Path.home() / ".config" / tool / filename)
+        response = {'status': False}
+        
+        # Handle migration of old config files
+        self._migrate_legacy_config(tool, filename)
+        
+        if not os.path.exists(path):
+            run_command(f'touch {path}')
+            response['message'] = 'File Created!'
+            
+        with open(path, "r") as f:
+            response['status'] = True
+            response['content'] = f.read()
+            
+        return Response(response)
+
+    def _get_gf_pattern(self, name):
+        response = {'status': False}
+        basedir = str(Path.home() / '.gf')
+        path = str(Path.home() / '.gf' / f'{name}.json')
+        
+        if is_safe_path(basedir, path) and os.path.exists(path):
             with open(path, "r") as f:
                 response['status'] = True
                 response['content'] = f.read()
-            return Response(response)
+        else:
+            response['message'] = "Invalid path!"
+            
+        return Response(response)
 
-        if 'subfinder_config' in req.query_params:
-            path = str(Path.home() / ".config" / "subfinder" / "config.yaml")
-            if not os.path.exists(path):
-                run_command(f'touch {path}')
-                response['message'] = 'File Created!'
+    def _get_nuclei_template(self, name):
+        response = {'status': False}
+        safe_dir = str(Path.home() / 'nuclei-templates')
+        path = str(Path.home() / 'nuclei-templates' / f'{name}')
+        
+        if is_safe_path(safe_dir, path) and os.path.exists(path):
             with open(path, "r") as f:
                 response['status'] = True
                 response['content'] = f.read()
-            return Response(response)
-
-        if 'naabu_config' in req.query_params:
-            path = str(Path.home() / ".config" / "naabu" / "config.yaml")
-            if not os.path.exists(path):
-                run_command(f'touch {path}')
-                response['message'] = 'File Created!'
-            with open(path, "r") as f:
-                response['status'] = True
-                response['content'] = f.read()
-            return Response(response)
-
-        if 'theharvester_config' in req.query_params:
-            path = str(Path.home() / ".config" / 'theHarvester' / 'api-keys.yaml')
-            if not os.path.exists(path):
-                run_command(f'touch {path}')
-                response['message'] = 'File Created!'
-            with open(path, "r") as f:
-                response['status'] = True
-                response['content'] = f.read()
-            return Response(response)
-
-        if 'amass_config' in req.query_params:
-            path = str(Path.home() / ".config" / "amass" / "config.ini")
-            if not os.path.exists(path):
-                run_command(f'touch {path}')
-                response['message'] = 'File Created!'
-            with open(path, "r") as f:
-                response['status'] = True
-                response['content'] = f.read()
-            return Response(response)
-
-        if 'gf_pattern' in req.query_params:
-            basedir = str(Path.home() / '.gf')
-            path = str(Path.home() / '.gf' / f'{name}.json')
-            if is_safe_path(basedir, path) and os.path.exists(path):
-                with open(path, "r") as f:
-                    content = f.read()
-                response['status'] = True
-                response['content'] = content
-            else:
-                response['message'] = "Invalid path!"
-                response['status'] = False
-            return Response(response)
-
-
-        if 'nuclei_template' in req.query_params:
-            safe_dir = str(Path.home() / 'nuclei-templates')
-            path = str(Path.home() / 'nuclei-templates' / f'{name}')
-            if is_safe_path(safe_dir, path) and os.path.exists(path):
-                with open(path.format(name), "r") as f:
-                    content = f.read()
-                response['status'] = True
-                response['content'] = content
-            else:
-                response['message'] = 'Invalid Path!'
-                response['status'] = False
-            return Response(response)
-
-        if 'gau_config' in req.query_params:
-            path = str(Path.home() / ".config" / 'gau' / 'config.toml')
-            if not os.path.exists(path):
-                run_command(f'touch {path}')
-                response['message'] = 'File Created!'
-            with open(path, "r") as f:
-                response['status'] = True
-                response['content'] = f.read()
-            return Response(response)
-
-        response['message'] = 'Invalid Query Params'
+        else:
+            response['message'] = 'Invalid Path!'
+            
         return Response(response)
 
 class GfList(APIView):
     def get(self, request):
         try:
-            task = run_gf_list.delay()
+            task = run_command('gf -list')
             result = task.get(timeout=30)  # 30 seconds timeout
 
             if result['status']:
@@ -1671,15 +1644,13 @@ class GfList(APIView):
 
 class ListTodoNotes(APIView):
     def get(self, request, format=None):
-        req = self.request
         notes = TodoNote.objects.all().order_by('-id')
-        scan_id = safe_int_cast(req.query_params.get('scan_id'))
-        project = req.query_params.get('project')
-        if project:
+        scan_id = safe_int_cast(request.query_params.get('scan_id'))
+        if project := request.query:
             notes = notes.filter(project__slug=project)
-        target_id = safe_int_cast(req.query_params.get('target_id'))
-        todo_id = req.query_params.get('todo_id')
-        subdomain_id = safe_int_cast(req.query_params.get('subdomain_id'))
+        target_id = safe_int_cast(request.query_params.get('target_id'))
+        todo_id = request.query_params.get('todo_id')
+        subdomain_id = safe_int_cast(request.query_params.get('subdomain_id'))
         if target_id:
             notes = notes.filter(scan_history__in=ScanHistory.objects.filter(domain__id=target_id))
         elif scan_id:
@@ -1694,10 +1665,8 @@ class ListTodoNotes(APIView):
 
 class ListScanHistory(APIView):
     def get(self, request, format=None):
-        req = self.request
         scan_history = ScanHistory.objects.all().order_by('-start_scan_date')
-        project = req.query_params.get('project')
-        if project:
+        if project := request.query_params.get('project'):
             scan_history = scan_history.filter(domain__project__slug=project)
         scan_history = ScanHistorySerializer(scan_history, many=True)
         return Response(scan_history.data)
@@ -1705,7 +1674,7 @@ class ListScanHistory(APIView):
 
 class ListEngines(APIView):
     def get(self, request):
-        if engine_id := request.GET.get('engine_id'):
+        if engine_id := request.query_params.get('engine_id'):
             engines = EngineType.objects.filter(id=engine_id)
         else:
             engines = EngineType.objects.all()
@@ -1723,8 +1692,7 @@ class ListOrganizations(APIView):
 
 class ListTargetsInOrganization(APIView):
     def get(self, request, format=None):
-        req = self.request
-        organization_id = safe_int_cast(req.query_params.get('organization_id'))
+        organization_id = safe_int_cast(request.query_params.get('organization_id'))
         organization = Organization.objects.filter(id=organization_id)
         targets = Domain.objects.filter(domains__in=organization)
         organization_serializer = OrganizationSerializer(organization, many=True)
@@ -1734,7 +1702,6 @@ class ListTargetsInOrganization(APIView):
 
 class ListTargetsWithoutOrganization(APIView):
     def get(self, request, format=None):
-        req = self.request
         targets = Domain.objects.exclude(domains__in=Organization.objects.all())
         targets_serializer = OrganizationTargetsSerializer(targets, many=True)
         return Response({'domains': targets_serializer.data})
@@ -1742,8 +1709,7 @@ class ListTargetsWithoutOrganization(APIView):
 
 class VisualiseData(APIView):
     def get(self, request, format=None):
-        req = self.request
-        if scan_id := safe_int_cast(req.query_params.get('scan_id')):
+        if scan_id := safe_int_cast(request.query_params.get('scan_id')):
             mitch_data = ScanHistory.objects.filter(id=scan_id)
             serializer = VisualiseDataSerializer(mitch_data, many=True)
             
@@ -1785,11 +1751,10 @@ class VisualiseData(APIView):
 
 class ListTechnology(APIView):
     def get(self, request, format=None):
-        req = self.request
-        scan_id = safe_int_cast(req.query_params.get('scan_id'))
+        scan_id = safe_int_cast(request.query_params.get('scan_id'))
 
         # Determine the queryset based on the presence of target_id or scan_id
-        if target_id := safe_int_cast(req.query_params.get('target_id')):
+        if target_id := safe_int_cast(request.query_params.get('target_id')):
             subdomain_filter = Subdomain.objects.filter(target_domain__id=target_id)
         elif scan_id:
             subdomain_filter = Subdomain.objects.filter(scan_history__id=scan_id)
@@ -1806,27 +1771,23 @@ class ListTechnology(APIView):
 
 class ListDorkTypes(APIView):
     def get(self, request, format=None):
-        req = self.request
-        scan_id = safe_int_cast(req.query_params.get('scan_id'))
+        scan_id = safe_int_cast(request.query_params.get('scan_id'))
         if scan_id:
             dork = Dork.objects.filter(
                 dorks__in=ScanHistory.objects.filter(id=scan_id)
             ).values('type').annotate(count=Count('type')).order_by('-count')
-            serializer = DorkCountSerializer(dork, many=True)
-            return Response({"dorks": serializer.data})
         else:
             dork = Dork.objects.filter(
                 dorks__in=ScanHistory.objects.all()
             ).values('type').annotate(count=Count('type')).order_by('-count')
-            serializer = DorkCountSerializer(dork, many=True)
-            return Response({"dorks": serializer.data})
+
+        serializer = DorkCountSerializer(dork, many=True)
+        return Response({"dorks": serializer.data})
 
 
 class ListEmails(APIView):
     def get(self, request, format=None):
-        req = self.request
-        scan_id = safe_int_cast(req.query_params.get('scan_id'))
-        if scan_id:
+        if scan_id := safe_int_cast(request.query_params.get('scan_id')):
             email = Email.objects.filter(
                 emails__in=ScanHistory.objects.filter(id=scan_id)).order_by('password')
             serializer = EmailSerializer(email, many=True)
@@ -1835,9 +1796,8 @@ class ListEmails(APIView):
 
 class ListDorks(APIView):
     def get(self, request, format=None):
-        req = self.request
-        scan_id = safe_int_cast(req.query_params.get('scan_id'))
-        type = req.query_params.get('type')
+        scan_id = safe_int_cast(request.query_params.get('scan_id'))
+        type = request.query_params.get('type')
         if scan_id:
             dork = Dork.objects.filter(
                 dorks__in=ScanHistory.objects.filter(id=scan_id))
@@ -1858,21 +1818,17 @@ class ListDorks(APIView):
 
 class ListEmployees(APIView):
     def get(self, request, format=None):
-        req = self.request
-        scan_id = safe_int_cast(req.query_params.get('scan_id'))
-        if scan_id:
+        if scan_id := safe_int_cast(request.query_params.get('scan_id')):
             employee = Employee.objects.filter(
                 employees__in=ScanHistory.objects.filter(id=scan_id))
             serializer = EmployeeSerializer(employee, many=True)
             return Response({"employees": serializer.data})
 
-
 class ListPorts(APIView):
     def get(self, request, format=None):
-        req = self.request
-        scan_id = safe_int_cast(req.query_params.get('scan_id'))
-        target_id = safe_int_cast(req.query_params.get('target_id'))
-        ip_address = req.query_params.get('ip_address')
+        scan_id = safe_int_cast(request.query_params.get('scan_id'))
+        target_id = safe_int_cast(request.query_params.get('target_id'))
+        ip_address = request.query_params.get('ip_address')
 
         # Build the base query
         port_query = Port.objects.all()
@@ -1880,16 +1836,16 @@ class ListPorts(APIView):
         # Filter based on parameters
         if target_id:
             port_query = port_query.filter(
-                ports__ip_subscan_ids__target_domain__id=target_id
+                ip_address__ip_addresses__target_domain__id=target_id
             )
         elif scan_id:
             port_query = port_query.filter(
-                ports__ip_subscan_ids__scan_history__id=scan_id
+                ip_address__ip_addresses__scan_history__id=scan_id
             )
 
         if ip_address:
             port_query = port_query.filter(
-                ports__address=ip_address
+                ip_address__address=ip_address
             )
 
         # Grouping information
@@ -1908,13 +1864,12 @@ class ListPorts(APIView):
 
 class ListSubdomains(APIView):
     def get(self, request, format=None):
-        req = self.request
-        scan_id = safe_int_cast(req.query_params.get('scan_id'))
-        project = req.query_params.get('project')
-        target_id = safe_int_cast(req.query_params.get('target_id'))
-        ip_address = req.query_params.get('ip_address')
-        port = req.query_params.get('port')
-        tech = req.query_params.get('tech')
+        scan_id = safe_int_cast(request.query_params.get('scan_id'))
+        project = request.query_params.get('project')
+        target_id = safe_int_cast(request.query_params.get('target_id'))
+        ip_address = request.query_params.get('ip_address')
+        port = request.query_params.get('port')
+        tech = request.query_params.get('tech')
 
         subdomains = Subdomain.objects.filter(target_domain__project__slug=project) if project else Subdomain.objects.all()
 
@@ -1936,39 +1891,35 @@ class ListSubdomains(APIView):
                 ip_addresses__ports__number=port
             ).distinct('name')
 
-        if 'only_important' in req.query_params:
+        if 'only_important' in request.query_params:
             subdomain_query = subdomain_query.filter(is_important=True)
 
 
-        if 'no_lookup_interesting' in req.query_params:
+        if 'no_lookup_interesting' in request.query_params:
             serializer = OnlySubdomainNameSerializer(subdomain_query, many=True)
         else:
             serializer = SubdomainSerializer(subdomain_query, many=True)
         return Response({"subdomains": serializer.data})
 
-    def post(self, req):
-        req = self.request
-        data = req.data
+    def post(self, request):
+        data = request.data
 
         subdomain_ids = data.get('subdomain_ids')
 
         subdomain_names = []
 
-        for id in subdomain_ids:
-            subdomain_names.append(Subdomain.objects.get(id=id).name)
-
+        subdomain_names.extend(
+            Subdomain.objects.get(id=id).name for id in subdomain_ids
+        )
         if subdomain_names:
             return Response({'status': True, "results": subdomain_names})
 
         return Response({'status': False})
 
 
-
 class ListOsintUsers(APIView):
     def get(self, request, format=None):
-        req = self.request
-        scan_id = safe_int_cast(req.query_params.get('scan_id'))
-        if scan_id:
+        if scan_id := safe_int_cast(request.query_params.get('scan_id')):
             documents = MetaFinderDocument.objects.filter(scan_history__id=scan_id).exclude(author__isnull=True).values('author').distinct()
             serializer = MetafinderUserSerializer(documents, many=True)
             return Response({"users": serializer.data})
@@ -1976,9 +1927,7 @@ class ListOsintUsers(APIView):
 
 class ListMetadata(APIView):
     def get(self, request, format=None):
-        req = self.request
-        scan_id = safe_int_cast(req.query_params.get('scan_id'))
-        if scan_id:
+        if scan_id := safe_int_cast(request.query_params.get('scan_id')):
             documents = MetaFinderDocument.objects.filter(scan_history__id=scan_id).distinct()
             serializer = MetafinderDocumentSerializer(documents, many=True)
             return Response({"metadata": serializer.data})
@@ -1986,11 +1935,10 @@ class ListMetadata(APIView):
 
 class ListIPs(APIView):
     def get(self, request, format=None):
-        req = self.request
-        scan_id = safe_int_cast(req.query_params.get('scan_id'))
-        target_id = safe_int_cast(req.query_params.get('target_id'))
+        scan_id = safe_int_cast(request.query_params.get('scan_id'))
+        target_id = safe_int_cast(request.query_params.get('target_id'))
 
-        port = req.query_params.get('port')
+        port = request.query_params.get('port')
 
         if target_id:
             ips = IpAddress.objects.filter(
@@ -2021,9 +1969,7 @@ class IpAddressViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         req = self.request
-        scan_id = safe_int_cast(req.query_params.get('scan_id'))
-
-        if scan_id:
+        if scan_id := safe_int_cast(req.query_params.get('scan_id')):
             self.queryset = Subdomain.objects.filter(
                 scan_history__id=scan_id).exclude(
                 ip_addresses__isnull=True).distinct()
@@ -2046,8 +1992,7 @@ class SubdomainsViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         req = self.request
-        scan_id = safe_int_cast(req.query_params.get('scan_id'))
-        if scan_id:
+        if scan_id := safe_int_cast(req.query_params.get('scan_id')):
             if 'only_screenshot' in self.request.query_params:
                 return (
                     Subdomain.objects
@@ -2960,44 +2905,49 @@ class VulnerabilityViewSet(viewsets.ModelViewSet):
         _order_col = self.request.GET.get(u'order[0][column]', None)
         _order_direction = self.request.GET.get(u'order[0][dir]', None)
         if search_value or _order_col or _order_direction:
-            order_col = 'severity'
-            if _order_col == '1':
-                order_col = 'source'
-            elif _order_col == '3':
-                order_col = 'name'
-            elif _order_col == '7':
-                order_col = 'severity'
-            elif _order_col == '11':
-                order_col = 'http_url'
-            elif _order_col == '15':
-                order_col = 'open_status'
-
-            if _order_direction == 'desc':
-                order_col = f'-{order_col}'
-            # if the search query is separated by = means, it is a specific lookup
-            # divide the search query into two half and lookup
-            operators = ['=', '&', '|', '>', '<', '!']
-            if any(x in search_value for x in operators):
-                if '&' in search_value:
-                    complex_query = search_value.split('&')
-                    for query in complex_query:
-                        if query.strip():
-                            qs = qs & self.special_lookup(query.strip())
-                elif '|' in search_value:
-                    qs = Subdomain.objects.none()
-                    complex_query = search_value.split('|')
-                    for query in complex_query:
-                        if query.strip():
-                            qs = self.special_lookup(query.strip()) | qs
-                else:
-                    qs = self.special_lookup(search_value)
-            else:
-                qs = self.general_lookup(search_value)
-            return qs.order_by(order_col)
+            return self._apply_sorting_and_search(
+                _order_col, _order_direction, search_value, qs
+            )
         return qs.order_by('-severity')
 
+    def _apply_sorting_and_search(self, _order_col, _order_direction, search_value, qs):
+        order_col = 'severity'
+        if _order_col == '1':
+            order_col = 'source'
+        elif _order_col == '11':
+            order_col = 'http_url'
+        elif _order_col == '15':
+            order_col = 'open_status'
+
+        elif _order_col == '3':
+            order_col = 'name'
+        elif _order_col == '7':
+            order_col = 'severity'
+        if _order_direction == 'desc':
+            order_col = f'-{order_col}'
+        # if the search query is separated by = means, it is a specific lookup
+        # divide the search query into two half and lookup
+        operators = ['=', '&', '|', '>', '<', '!']
+        if any(x in search_value for x in operators):
+            if '&' in search_value:
+                complex_query = search_value.split('&')
+                for query in complex_query:
+                    if query.strip():
+                        qs = qs & self.special_lookup(query.strip())
+            elif '|' in search_value:
+                qs = Subdomain.objects.none()
+                complex_query = search_value.split('|')
+                for query in complex_query:
+                    if query.strip():
+                        qs = self.special_lookup(query.strip()) | qs
+            else:
+                qs = self.special_lookup(search_value)
+        else:
+            qs = self.general_lookup(search_value)
+        return qs.order_by(order_col)
+
     def general_lookup(self, search_value):
-        qs = (
+        return (
             self.queryset
             .filter(Q(http_url__icontains=search_value) |
                     Q(target_domain__name__icontains=search_value) |
@@ -3017,7 +2967,6 @@ class VulnerabilityViewSet(viewsets.ModelViewSet):
                     Q(hackerone_report_id__icontains=search_value) |
                     Q(tags__name__icontains=search_value))
         )
-        return qs
 
     def special_lookup(self, search_value):
         qs = self.queryset.filter()
@@ -3337,49 +3286,3 @@ def websocket_status(request):
             'status': False,
             'error': str(e)
         }, status=500)
-
-class GetIpDetails(APIView):
-    def get(self, request, format=None):
-        req = self.request
-        ip_address = req.query_params.get('ip_address')
-        scan_id = safe_int_cast(req.query_params.get('scan_id'))
-        target_id = safe_int_cast(req.query_params.get('target_id'))
-
-        if not ip_address:
-            return Response({"error": "IP address is required"}, status=400)
-
-        # Build the base query
-        ip_query = IpAddress.objects.filter(address=ip_address)
-
-        if scan_id:
-            ip_query = ip_query.filter(
-                ip_addresses__scan_history__id=scan_id
-            )
-        elif target_id:
-            ip_query = ip_query.filter(
-                ip_addresses__target_domain__id=target_id
-            )
-
-        # Preloading relations to optimize performance
-        ip_query = ip_query.prefetch_related(
-            'ports',
-            'ip_addresses',
-        ).distinct()
-
-
-        if not ip_query.exists():
-            return Response({"error": "IP not found"}, status=404)
-            
-        serializer = IpSerializer(
-            ip_query.first(), 
-            context={'scan_id': scan_id}
-        )
-        return Response(serializer.data)
-
-class UncommonWebPortsView(APIView):
-    def get(self, request):
-        from reNgine.definitions import UNCOMMON_WEB_PORTS
-        return Response({
-            'uncommon_web_ports': UNCOMMON_WEB_PORTS,
-            'common_web_ports': [80, 443]
-        })
