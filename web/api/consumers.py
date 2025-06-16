@@ -2,9 +2,7 @@ from channels.generic.websocket import WebsocketConsumer
 from asgiref.sync import async_to_sync
 import json
 import re
-import logging
-
-logger = logging.getLogger(__name__)
+from reNgine.utils.logger import default_logger as logger
 
 class OllamaDownloadConsumer(WebsocketConsumer):
     def clean_channel_name(self, name):

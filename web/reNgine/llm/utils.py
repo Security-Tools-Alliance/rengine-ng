@@ -1,10 +1,7 @@
-from django.contrib import messages
 from dashboard.models import OllamaSettings
 from reNgine.llm.config import LLM_CONFIG
-import logging
+from reNgine.utils.logger import default_logger as logger
 from markdown import markdown
-
-logger = logging.getLogger(__name__)
 
 def get_default_llm_model():
     """
@@ -27,23 +24,6 @@ def get_default_llm_model():
         logger.error(f"Error while getting default model from config: {e}")
         return 'gpt-3.5-turbo'  # Ultimate fallback
 
-def validate_llm_model(request, model_name):
-    """Check if LLM model exists and is available"""
-    try:
-        # Check if model exists in LLMToolkit
-        if not LLMToolkit.is_model_available(model_name):
-            messages.info(
-                request,
-                f"Model {model_name} is not available. "
-                f'<a href="/llm/settings/">Configure your LLM models here</a>.',
-                extra_tags='safe'
-            )
-            return False
-        return True
-    except Exception as e:
-        logger.error(f"Error while validating LLM model: {e}")
-        return False 
-    
 def get_llm_vuln_input_description(title, path):
 	vulnerability_description = ''
 	vulnerability_description += f'Vulnerability Title: {title}'
