@@ -385,10 +385,12 @@ class TestDataGenerator:
     def create_port(self):
         """Create and return a test port."""
         self.port = Port.objects.create(
-            number=80, service_name="http", description="open", is_uncommon=True
+            number=80,
+            service_name="http",
+            description="open",
+            is_uncommon=True,
+            ip_address=self.ip_address if hasattr(self, 'ip_address') else None
         )
-        if hasattr(self, 'ip_address'):
-            self.ip_address.ports.add(self.port)
         return self.port
 
     def create_metafinder_document(self):

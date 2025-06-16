@@ -143,14 +143,16 @@ class TestListPorts(BaseTestCase):
             {
                 "target_id": self.data_generator.domain.id,
                 "scan_id": self.data_generator.scan_history.id,
-                "ip_address": "1.1.1.1",
+                "ip_address": self.data_generator.ip_address.address,
             },
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("ports", response.data)
         self.assertGreaterEqual(len(response.data["ports"]), 1)
-        self.assertEqual(response.data["ports"][0]["number"], 80)
-        self.assertEqual(response.data["ports"][0]["service_name"], "http")
+        self.assertEqual(response.data["ports"][0]["number"], self.data_generator.port.number)
+        self.assertEqual(response.data["ports"][0]["service_name"], self.data_generator.port.service_name)
+        self.assertEqual(response.data["ports"][0]["description"], self.data_generator.port.description)
+        self.assertEqual(response.data["ports"][0]["is_uncommon"], self.data_generator.port.is_uncommon)
 
 class TestWhois(BaseTestCase):
     """Test case for WHOIS lookup."""
