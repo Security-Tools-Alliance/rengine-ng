@@ -426,6 +426,13 @@ def get_vulnerability_llm_report(vuln):
             path
         )
         response = report.get_vulnerability_description(vulnerability_description)
+
+        # Validate response structure
+        required_fields = ['description', 'impact', 'remediation']
+        if any(field not in response for field in required_fields):
+            logger.error(f'Incomplete LLM response for {title}: {response}')
+            return
+
         add_llm_description_db(
             title,
             path,
@@ -434,7 +441,6 @@ def get_vulnerability_llm_report(vuln):
             response.get('remediation'),
             response.get('references', [])
         )
-
 
     for vuln in Vulnerability.objects.filter(name=title, http_url__icontains=path):
         vuln.description = response.get('description', vuln.description)
@@ -449,13 +455,18 @@ def get_vulnerability_llm_report(vuln):
             vuln.save()
 
 def add_llm_description_db(title, path, description, impact, remediation, references):
-    llm_report = LLMVulnerabilityReport()
-    llm_report.url_path = path
-    llm_report.title = title
-    llm_report.description = description
-    llm_report.impact = impact
-    llm_report.remediation = remediation
-    llm_report.save()
+    llm_report, created = LLMVulnerabilityReport.objects.get_or_create(
+        url_path=path,
+        title=title,
+        defaults={
+            'description': description,
+            'impact': impact,
+            'remediation': remediation
+        }
+    )
+    
+    if not created:
+        return
 
     for url in references:
         ref, created = VulnerabilityReference.objects.get_or_create(url=url)
