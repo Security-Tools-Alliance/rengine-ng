@@ -2,20 +2,20 @@ from urllib.parse import urlparse
 from django.db import transaction
 from reNgine.celery import app
 from reNgine.utils.logger import default_logger as logger
-from reNgine.gpt import GPTVulnerabilityReportGenerator
-from reNgine.utils.utils import get_gpt_vuln_input_description
-from startScan.models import GPTVulnerabilityReport, Vulnerability, VulnerabilityReference
+from reNgine.llm.generator import LLMVulnerabilityReportGenerator
+from reNgine.utils.utils import get_llm_vuln_input_description
+from startScan.models import LLMVulnerabilityReport, Vulnerability, VulnerabilityReference
 
 @app.task(name='llm_vulnerability_description', bind=False, queue='cpu_queue')
 def llm_vulnerability_description(vulnerability_id):
-    """Generate and store Vulnerability Description using GPT.
+    """Generate and store Vulnerability Description using LLM.
 
     Args:
         vulnerability_id (Vulnerability Model ID): Vulnerability ID to fetch Description.
     """
-    from reNgine.utils.db import add_gpt_description_db
+    from reNgine.utils.db import add_llm_description_db
 
-    logger.info('Getting GPT Vulnerability Description')
+    logger.info('Getting LLM Vulnerability Description')
     try:
         lookup_vulnerability = Vulnerability.objects.get(id=vulnerability_id)
         lookup_url = urlparse(lookup_vulnerability.http_url)
@@ -27,7 +27,7 @@ def llm_vulnerability_description(vulnerability_id):
         }
 
     if (
-        stored := GPTVulnerabilityReport.objects.filter(url_path=path)
+        stored := LLMVulnerabilityReport.objects.filter(url_path=path)
         .filter(title=lookup_vulnerability.name)
         .first()
     ):
@@ -39,15 +39,15 @@ def llm_vulnerability_description(vulnerability_id):
             'references': [url.url for url in stored.references.all()]
         }
     else:
-        vulnerability_description = get_gpt_vuln_input_description(
+        vulnerability_description = get_llm_vuln_input_description(
             lookup_vulnerability.name,
             path
         )
         # One can add more description here later
 
-        gpt_generator = GPTVulnerabilityReportGenerator()
-        response = gpt_generator.get_vulnerability_description(vulnerability_description)
-        add_gpt_description_db(
+        llm_generator = LLMVulnerabilityReportGenerator()
+        response = llm_generator.get_vulnerability_description(vulnerability_description)
+        add_llm_description_db(
             lookup_vulnerability.name,
             path,
             response.get('description'),
@@ -93,7 +93,7 @@ def llm_vulnerability_description(vulnerability_id):
             vuln.description = response.get('description', vuln.description)
             vuln.impact = response.get('impact')
             vuln.remediation = response.get('remediation')
-            vuln.is_gpt_used = True
+            vuln.is_llm_used = True
 
             if reference_urls:
                 # Add all references at once
@@ -106,5 +106,5 @@ def llm_vulnerability_description(vulnerability_id):
         for vuln in vulns_to_update:
             vuln.save()
 
-    logger.info(f"Updated {len(vulns_to_update)} vulnerabilities with GPT-generated information")
+    logger.info(f"Updated {len(vulns_to_update)} vulnerabilities with LLM-generated information")
     return response

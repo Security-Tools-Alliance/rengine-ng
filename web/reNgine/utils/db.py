@@ -36,13 +36,13 @@ from startScan.models import (
     CveId,
     CweId,
     VulnerabilityReference,
-    GPTVulnerabilityReport
+    LLMVulnerabilityReport
 )
 
 from targetApp.models import Domain
 
 from reNgine.utils.utils import (
-    get_gpt_vuln_input_description,
+    get_llm_vuln_input_description,
     replace_nulls,
     is_iterable,
 )
@@ -54,7 +54,7 @@ from reNgine.utils.http import (
 )
 from reNgine.utils.logger import default_logger as logger
 
-from reNgine.gpt import GPTVulnerabilityReportGenerator
+from reNgine.llm.generator import LLMVulnerabilityReportGenerator
 
 def save_vulns(self, notif, vulns_file, vulns):
     with open(vulns_file, 'w') as f:
@@ -404,12 +404,12 @@ def save_imported_subdomains(subdomains, ctx=None):
             # save_subdomain_metadata(subdomain_obj, endpoint)
     return subdomains
 
-def get_vulnerability_gpt_report(vuln):
+def get_vulnerability_llm_report(vuln):
     title = vuln[0]
     path = vuln[1]
-    logger.info(f'Getting GPT Report for {title}, PATH: {path}')
+    logger.info(f'Getting LLM Report for {title}, PATH: {path}')
     if (
-        stored := GPTVulnerabilityReport.objects.filter(url_path=path)
+        stored := LLMVulnerabilityReport.objects.filter(url_path=path)
         .filter(title=title)
         .first()
     ):
@@ -420,13 +420,13 @@ def get_vulnerability_gpt_report(vuln):
             'references': [url.url for url in stored.references.all()]
         }
     else:
-        report = GPTVulnerabilityReportGenerator()
-        vulnerability_description = get_gpt_vuln_input_description(
+        report = LLMVulnerabilityReportGenerator()
+        vulnerability_description = get_llm_vuln_input_description(
             title,
             path
         )
         response = report.get_vulnerability_description(vulnerability_description)
-        add_gpt_description_db(
+        add_llm_description_db(
             title,
             path,
             response.get('description'),
@@ -440,7 +440,7 @@ def get_vulnerability_gpt_report(vuln):
         vuln.description = response.get('description', vuln.description)
         vuln.impact = response.get('impact')
         vuln.remediation = response.get('remediation')
-        vuln.is_gpt_used = True
+        vuln.is_llm_used = True
         vuln.save()
 
         for url in response.get('references', []):
@@ -448,19 +448,19 @@ def get_vulnerability_gpt_report(vuln):
             vuln.references.add(ref)
             vuln.save()
 
-def add_gpt_description_db(title, path, description, impact, remediation, references):
-    gpt_report = GPTVulnerabilityReport()
-    gpt_report.url_path = path
-    gpt_report.title = title
-    gpt_report.description = description
-    gpt_report.impact = impact
-    gpt_report.remediation = remediation
-    gpt_report.save()
+def add_llm_description_db(title, path, description, impact, remediation, references):
+    llm_report = LLMVulnerabilityReport()
+    llm_report.url_path = path
+    llm_report.title = title
+    llm_report.description = description
+    llm_report.impact = impact
+    llm_report.remediation = remediation
+    llm_report.save()
 
     for url in references:
         ref, created = VulnerabilityReference.objects.get_or_create(url=url)
-        gpt_report.references.add(ref)
-        gpt_report.save()
+        llm_report.references.add(ref)
+        llm_report.save()
 
 
 def record_exists(model, data, exclude_keys=[]):

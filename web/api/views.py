@@ -69,7 +69,7 @@ from reNgine.tasks.notification import send_hackerone_report
 from reNgine.tasks.url import (
 	run_gf_list,
 )
-from reNgine.llm.llm import LLMAttackSuggestionGenerator
+from reNgine.llm.generator import LLMAttackSuggestionGenerator
 from reNgine.llm.utils import convert_markdown_to_html
 from reNgine.utils.utils import is_safe_path, remove_lead_and_trail_slash
 from scanEngine.models import EngineType, InstalledExternalTool
@@ -99,6 +99,7 @@ from reNgine.utils.db import (
 	get_interesting_endpoints,
 	get_interesting_subdomains
 )
+from reNgine.utils.api import get_open_ai_key
 
 from .serializers import (
     CommandSerializer,
@@ -122,7 +123,6 @@ from .serializers import (
     OnlySubdomainNameSerializer,
     OrganizationSerializer,
     OrganizationTargetsSerializer,
-    PortSerializer,
     ProjectSerializer,
     ReconNoteSerializer,
     ScanHistorySerializer,
@@ -139,8 +139,6 @@ from .serializers import (
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 import threading
-
-logger = logging.getLogger(__name__)
 
 
 class OllamaManager(APIView):
@@ -511,7 +509,7 @@ class LLMAttackSuggestion(APIView):
                 'error': 'An error occurred while deleting the analysis'
             }, status=500)
 
-class LLMVulnerabilityReportGenerator(APIView):
+class LLMVulnerabilityReportView(APIView):
     def get(self, request):
         req = self.request
         vulnerability_id = safe_int_cast(req.query_params.get('id'))
@@ -520,7 +518,7 @@ class LLMVulnerabilityReportGenerator(APIView):
                 'status': False,
                 'error': 'Missing GET param Vulnerability `id`'
             })
-        task = llm_vulnerability_report.apply_async(args=(vulnerability_id,))
+        task = llm_vulnerability_description.apply_async(args=(vulnerability_id,))
         response = task.wait()
         return Response(response)
 

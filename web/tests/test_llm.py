@@ -4,7 +4,7 @@ from rest_framework import status
 from django.urls import reverse
 
 from reNgine.llm.config import MODEL_REQUIREMENTS
-from reNgine.llm.llm import LLMVulnerabilityReportGenerator, LLMAttackSuggestionGenerator
+from reNgine.llm.generator import LLMVulnerabilityReportGenerator, LLMAttackSuggestionGenerator
 from reNgine.llm.validators import LLMProvider
 from utils.test_base import BaseTestCase
 
@@ -31,7 +31,7 @@ class TestLLMVulnerabilityReport(TestLLMBase):
         super().setUp()
         self.generator = LLMVulnerabilityReportGenerator()
 
-    @patch('reNgine.llm.llm.LLMVulnerabilityReportGenerator._get_openai_response')
+    @patch('reNgine.llm.generator.LLMVulnerabilityReportGenerator._get_openai_response')
     def test_get_vulnerability_report_success(self, mock_get_response):
         """Test successful vulnerability report generation."""
         mock_get_response.return_value = "Test section content"
@@ -49,7 +49,7 @@ class TestLLMVulnerabilityReport(TestLLMBase):
         validated = self.generator._validate_input(input_data)
         self.assertEqual(validated, input_data)
 
-    @patch('reNgine.llm.llm.LLMVulnerabilityReportGenerator._get_section_response')
+    @patch('reNgine.llm.generator.LLMVulnerabilityReportGenerator._get_section_response')
     def test_get_vulnerability_report_failure(self, mock_get_section):
         """Test vulnerability report generation failure."""
         # Mock section response to raise an exception
@@ -68,7 +68,7 @@ class TestLLMAttackSuggestion(TestLLMBase):
         super().setUp()
         self.generator = LLMAttackSuggestionGenerator()
 
-    @patch('reNgine.llm.llm.LLMAttackSuggestionGenerator.get_attack_suggestion')
+    @patch('reNgine.llm.generator.LLMAttackSuggestionGenerator.get_attack_suggestion')
     def test_get_attack_suggestion_success(self, mock_get_suggestion):
         """Test successful attack suggestion generation."""
         mock_suggestion = "Test attack suggestion"
@@ -96,7 +96,7 @@ class TestLLMAttackSuggestion(TestLLMBase):
         validated = self.generator._validate_input(input_data)
         self.assertEqual(validated, input_data)
 
-    @patch('reNgine.llm.llm.LLMAttackSuggestionGenerator._get_openai_response')
+    @patch('reNgine.llm.generator.LLMAttackSuggestionGenerator._get_openai_response')
     def test_get_attack_suggestion_failure(self, mock_get_response):
         """Test attack suggestion generation failure."""
         mock_get_response.side_effect = Exception("API Error")

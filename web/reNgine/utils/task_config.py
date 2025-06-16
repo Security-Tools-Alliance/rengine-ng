@@ -7,7 +7,7 @@ from reNgine.definitions import (
     CUSTOM_HEADER,
     DEFAULT_SCAN_INTENSITY,
     ENABLE_HTTP_CRAWL,
-    FETCH_GPT_REPORT,
+    FETCH_LLM_REPORT,
     FFUF_DEFAULT_WORDLIST_NAME,
     FFUF_DEFAULT_WORDLIST_PATH,
     FOLLOW_REDIRECT,
@@ -88,7 +88,7 @@ from reNgine.definitions import (
 )
 from reNgine.settings import (
     DEFAULT_ENABLE_HTTP_CRAWL,
-    DEFAULT_GET_GPT_REPORT,
+    DEFAULT_GET_LLM_REPORT,
     DEFAULT_HTTP_TIMEOUT,
     DEFAULT_RATE_LIMIT,
     DEFAULT_RETRIES,
@@ -248,16 +248,16 @@ class TaskConfig:
         """
         return self.get_value(config_section, INTENSITY, DEFAULT_SCAN_INTENSITY)
     
-    def get_gpt_report_enabled(self, config_section: str = None) -> bool:
-        """Check if GPT report generation is enabled
+    def get_llm_report_enabled(self, config_section: str = None) -> bool:
+        """Check if LLM report generation is enabled
         
         Args:
             config_section: Configuration section name
             
         Returns:
-            Boolean indicating if GPT report is enabled
+            Boolean indicating if LLM report is enabled
         """
-        return self.get_value(config_section, FETCH_GPT_REPORT, DEFAULT_GET_GPT_REPORT)
+        return self.get_value(config_section, FETCH_LLM_REPORT, DEFAULT_GET_LLM_REPORT)
     
     def get_proxy(self) -> str:
         """Get a random proxy if enabled
@@ -494,7 +494,7 @@ class TaskConfig:
             'retries': self.get_value(config_section, RETRIES, DEFAULT_RETRIES),
             'timeout': self.get_timeout(config_section),
             'custom_header': self.prepare_custom_header(config_section),
-            'should_fetch_gpt_report': self.get_gpt_report_enabled(config_section),
+            'should_fetch_llm_report': self.get_llm_report_enabled(config_section),
             'input_path': self.get_input_path('endpoints_vulnerability_scan'),
 
             # Nuclei specific

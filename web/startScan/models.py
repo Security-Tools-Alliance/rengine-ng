@@ -10,7 +10,6 @@ from django.utils import timezone
 from reNgine.definitions import (CELERY_TASK_STATUSES,
 								 NUCLEI_REVERSE_SEVERITY_MAP,
 								 ENGINE_DISPLAY_NAMES)
-from reNgine.utilities import *
 from reNgine.llm.utils import convert_markdown_to_html
 from scanEngine.models import EngineType
 from targetApp.models import Domain

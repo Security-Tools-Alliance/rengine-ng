@@ -1,14 +1,12 @@
 from typing import Optional, Dict, Any
-import logging
 from abc import ABC, abstractmethod
 import openai
 from langchain_community.llms import Ollama
 from reNgine.llm.config import LLM_CONFIG
 from reNgine.llm.utils import get_default_llm_model
 from reNgine.llm.validators import LLMProvider, LLMResponse
-from reNgine.common_func import get_open_ai_key
-
-logger = logging.getLogger(__name__)
+from reNgine.utils.api import get_open_ai_key
+from reNgine.utils.logger import default_logger as logger
 
 class BaseLLMGenerator(ABC):
     """Base class for LLM generators with common functionality"""

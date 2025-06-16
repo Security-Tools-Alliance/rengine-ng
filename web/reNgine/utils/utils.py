@@ -1,4 +1,3 @@
-import json
 import os
 import glob
 from reNgine.utils.logger import default_logger as logger
@@ -55,10 +54,10 @@ def replace_nulls(obj):
     else:
         return obj
 
-def get_gpt_vuln_input_description(title, path):
+def get_llm_vuln_input_description(title, path):
     vulnerability_description = ''
     vulnerability_description += f'Vulnerability Title: {title}'
-    # gpt gives concise vulnerability description when a vulnerable URL is provided
+    # llm gives concise vulnerability description when a vulnerable URL is provided
     vulnerability_description += f'\nVulnerable URL: {path}'
 
     return vulnerability_description
