@@ -18,7 +18,7 @@ poetry run -C $RENGINE_FOLDER python3 manage.py collectstatic --no-input --clear
 
 # Load default engines, keywords, and external tools
 print_msg "Load default engines"
-poetry run -C $RENGINE_FOLDER python3 manage.py loaddata fixtures/default_scan_engines.yaml --app scanEngine.EngineType
+poetry run -C $RENGINE_FOLDER python3 manage.py loaddefaultengines
 print_msg "Load default keywords"
 poetry run -C $RENGINE_FOLDER python3 manage.py loaddata fixtures/default_keywords.yaml --app scanEngine.InterestingLookupModel
 print_msg "Load default external tools"

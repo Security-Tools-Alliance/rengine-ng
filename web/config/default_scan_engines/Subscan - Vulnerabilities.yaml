@@ -1,0 +1,43 @@
+# This scan engine is used to scan the vulnerabilities of the target
+# Use it from the subdomains list to scan the vulnerabilities of one or more selected subdomains
+
+# Global vars for all tools
+#
+# Custom header - FFUF, Nuclei, Dalfox, CRL Fuzz, HTTPx, Fetch URL (Hakrawler, Katana, Gospider)
+custom_header: {
+  'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:126.0) Gecko/20100101 Firefox/126.0',
+}
+# 'user_agent': ''                    # Dalfox only
+# 'enable_http_crawl': true           # All tools
+# 'timeout': 10                       # Subdomain discovery, Screenshot, Port scan, FFUF, Nuclei                       
+# 'threads': 30                       # All tools
+# 'rate_limit': 150                   # Port scan, FFUF, Nuclei
+# 'intensity': 'normal'               # Screenshot (grab only the root endpoints of each subdomain), Nuclei (reduce number of endpoints to scan), OSINT (not implemented yet)
+# 'retries': 1                        # Nuclei
+
+vulnerability_scan: {
+  # 'custom_header': {
+  #   'Cookie':'Test',
+  #   'User-Agent': 'Mozilla/5.0',
+  #   'Custom-Header': 'My custom header'
+  # },
+  'run_nuclei': true,
+  'run_dalfox': false,
+  'run_crlfuzz': true,
+  'run_s3scanner': true,
+  'enable_http_crawl': true,
+  'concurrency': 50,
+  'intensity': 'normal',
+  'rate_limit': 150,
+  'retries': 1,
+  'timeout': 5,
+  'fetch_gpt_report': true,
+  'nuclei': {
+    'use_nuclei_config': false,
+    'severities': ['unknown', 'info', 'low', 'medium', 'high', 'critical'],
+    # 'tags': [],                 # Nuclei tags (https://github.com/projectdiscovery/nuclei-templates)
+    # 'templates': [],            # Nuclei templates (https://github.com/projectdiscovery/nuclei-templates)
+    # 'custom_templates': []      # Nuclei custom templates uploaded in reNgine
+  }
+}
+
