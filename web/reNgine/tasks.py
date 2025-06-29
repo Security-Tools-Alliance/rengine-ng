@@ -3071,6 +3071,7 @@ def http_crawl(
     cmd += f' -json'
     cmd += f' -u {urls[0]}' if len(urls) == 1 else f' -l {input_path}'
     cmd += f' -x {method}' if method else ''
+    cmd += f' -retries 5'
     cmd += f' -silent'
     if follow_redirect:
         cmd += ' -fr'
@@ -3083,6 +3084,7 @@ def http_crawl(
             activity_id=self.activity_id):
 
         if not line or not isinstance(line, dict):
+            logger.error("No line found")
             continue
 
         # Check if the http request has an error
@@ -3095,6 +3097,7 @@ def http_crawl(
 
         # No response from endpoint
         if line.get('failed', False):
+            logger.error("Failed to crawl endpoint")
             continue
 
         # Parse httpx output
@@ -3193,6 +3196,13 @@ def http_crawl(
             save_subdomain_metadata(subdomain, endpoint, line)
 
         endpoint_ids.append(endpoint.id)
+
+    # Check if httpx returned any lines
+    if not results:
+        logger.error(f"httpx returned no lines for command: {cmd}")
+        logger.error(f"URLs processed: {urls}")
+        if len(urls) > 1:
+            logger.error(f"Input file path: {input_path}")
 
     if should_remove_duplicate_endpoints:
         # Remove 'fake' alive endpoints that are just redirects to the same page
