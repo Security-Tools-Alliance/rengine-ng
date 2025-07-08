@@ -675,6 +675,7 @@ def build_httpx_cmd(config, urls, method=None, threads=None):
     if method:
         cmd_builder.add_option('-x', method)
     
+    cmd_builder.add_option('-retries', 5)
     cmd_builder.add_option('-silent')
     
     if task_config['follow_redirect']:

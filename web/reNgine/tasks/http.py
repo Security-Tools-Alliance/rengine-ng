@@ -100,6 +100,7 @@ def process_http_results(self, cmd, input_path, follow_redirect, update_subdomai
                               scan_id=self.scan_id, activity_id=self.activity_id):
         # Skip invalid lines
         if not line or not isinstance(line, dict) or line.get('failed', False):
+            logger.error("No line found or failed to crawl endpoint")
             continue
 
         # Check for errors
@@ -112,6 +113,11 @@ def process_http_results(self, cmd, input_path, follow_redirect, update_subdomai
         ):
             results.append(endpoint_data['result'])
             endpoint_ids.append(endpoint_data['endpoint_id'])
+
+    # Check if httpx returned any lines
+    if not results:
+        logger.error(f"httpx returned no lines for command: {cmd}")
+        logger.error(f"URLs processed: {input_path}")
 
     return results
 
