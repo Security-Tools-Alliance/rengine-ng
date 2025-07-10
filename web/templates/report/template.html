@@ -596,7 +596,7 @@
         {% elif scan_object.scan_status == 2 %}
           {% if scan_object.get_completed_time_in_sec < 60 %}
             Completed in < 1 minutes {% else %} Completed in {{ scan_object.start_scan_date|timesince:scan_object.stop_scan_date }} {% endif %} {% elif scan_object.scan_status == 3 %} Aborted in
-          {{ scan_object.start_scan_date|timesince:scan_object.stop_scan_date }} {% endif %} <br>
+          {{ scan_object.start_scan_date|timesince:scan_object.stop_scan_date }} {% elif scan_object.scan_status == 4 %} Finalizing - {{ scan_object.get_elapsed_time }} {% endif %} <br>
         Report Generated on: {% now "F j, Y" %}
       </p>
     </article>

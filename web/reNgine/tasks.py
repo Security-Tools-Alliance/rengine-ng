@@ -55,6 +55,130 @@ logger = get_task_logger(__name__)
 # Scan / Subscan tasks #
 #----------------------#
 
+#-------------------------#
+# Async Task Tracking     #
+#-------------------------#
+
+def track_async_tasks(scan_id, task_ids, task_type="background"):
+    """Track asynchronous tasks launched by parent tasks.
+    
+    Args:
+        scan_id (int): Scan history ID
+        task_ids (list): List of Celery task IDs
+        task_type (str): Type of async tasks (e.g., "background", "vulnerability")
+    """
+    if not task_ids:
+        return
+        
+    # Store in scan metadata for tracking
+    scan = ScanHistory.objects.filter(pk=scan_id).first()
+    if not scan:
+        return
+        
+    # Initialize async_tasks if not exists
+    if not hasattr(scan, 'async_task_ids') or not scan.async_task_ids:
+        scan.async_task_ids = []
+    
+    # Add new task IDs
+    existing_ids = scan.async_task_ids or []
+    new_ids = [str(task_id) for task_id in task_ids if str(task_id) not in existing_ids]
+    scan.async_task_ids = existing_ids + new_ids
+    scan.save()
+    
+    logger.info(f'Tracking {len(new_ids)} async {task_type} tasks for scan {scan_id}')
+
+
+def check_async_tasks_status(scan_id):
+    """Check if async tasks are still running.
+    
+    Args:
+        scan_id (int): Scan history ID
+        
+    Returns:
+        tuple: (has_running_tasks, total_tasks, running_tasks)
+    """
+    scan = ScanHistory.objects.filter(pk=scan_id).first()
+    if not scan or not hasattr(scan, 'async_task_ids') or not scan.async_task_ids:
+        return False, 0, 0
+        
+    from celery import current_app
+    
+    task_ids = scan.async_task_ids or []
+    running_tasks = 0
+    
+    for task_id in task_ids:
+        try:
+            result = current_app.AsyncResult(task_id)
+            if result.state in ['PENDING', 'STARTED', 'RETRY']:
+                running_tasks += 1
+        except Exception as e:
+            logger.debug(f'Error checking task {task_id}: {e}')
+            # Assume task is no longer running if we can't check it
+            continue
+    
+    has_running = running_tasks > 0
+    logger.debug(f'Scan {scan_id}: {running_tasks}/{len(task_ids)} async tasks still running')
+    
+    return has_running, len(task_ids), running_tasks
+
+
+@app.task(name='finalize_scan_status', bind=False, queue='report_queue')
+def finalize_scan_status(scan_id, subscan_id=None):
+    """Final callback to update scan status when all async tasks are done.
+    
+    Args:
+        scan_id (int): Scan history ID
+        subscan_id (int, optional): SubScan ID
+    """
+    has_running, total_tasks, running_tasks = check_async_tasks_status(scan_id)
+    
+    if has_running:
+        # Still have running tasks, check again later
+        logger.info(f'Scan {scan_id}: {running_tasks}/{total_tasks} async tasks still running, will check again in 30s')
+        finalize_scan_status.apply_async(args=[scan_id, subscan_id], countdown=30)
+        return
+    
+    # All async tasks are done, update to final status
+    logger.info(f'Scan {scan_id}: All async tasks completed, updating to final status')
+    
+    # Determine final status based on failed tasks
+    scan = ScanHistory.objects.filter(pk=scan_id).first()
+    if not scan:
+        return
+        
+    tasks = ScanActivity.objects.filter(scan_of=scan).all()
+    if subscan_id:
+        subscan = SubScan.objects.filter(pk=subscan_id).first()
+        if subscan:
+            tasks = tasks.filter(celery_id__in=subscan.celery_ids)
+    
+    failed_tasks = tasks.filter(status=FAILED_TASK)
+    failed_count = failed_tasks.count()
+    final_status = SUCCESS_TASK if failed_count == 0 else FAILED_TASK
+    final_status_h = 'SUCCESS' if failed_count == 0 else 'FAILED'
+    
+    # Update scan/subscan status
+    if subscan_id:
+        subscan = SubScan.objects.filter(pk=subscan_id).first()
+        if subscan:
+            subscan.status = final_status
+            subscan.save()
+    else:
+        scan.scan_status = final_status
+        
+    scan.stop_scan_date = timezone.now()
+    scan.save()
+    
+    # Send final notification
+    send_scan_notif.delay(
+        scan_history_id=scan_id,
+        subscan_id=subscan_id,
+        engine_id=scan.scan_type.id if scan.scan_type else None,
+        status=final_status_h
+    )
+    
+    logger.info(f'Scan {scan_id} finalized with status: {final_status_h}')
+
 
 @app.task(name='initiate_scan', bind=False, queue='initiate_scan_queue')
 def initiate_scan(
@@ -403,8 +527,42 @@ def report(ctx={}, description=None):
 
     # Get task status
     failed_count = failed_tasks.count()
-    status = SUCCESS_TASK if failed_count == 0 else FAILED_TASK
-    status_h = 'SUCCESS' if failed_count == 0 else 'FAILED'
+    
+    # Check if there are async tasks still running
+    has_async_tasks = False
+    running_async_count = 0
+    
+    # Simple check for async tasks by looking at scan metadata
+    # This is a simplified version - in a full implementation you'd want to
+    # properly track task IDs and check their status via Celery
+    try:
+        # Check if we have any recently started async tasks
+        recent_activities = ScanActivity.objects.filter(
+            scan_of=scan,
+            time__gte=timezone.now() - timezone.timedelta(minutes=5)  # Started in last 5 minutes
+        ).filter(
+            name__in=['http_crawl', 'nuclei_scan', 'vulnerability_scan', 'dalfox_xss_scan', 'crlfuzz_scan']
+        )
+        
+        if recent_activities.exists():
+            has_async_tasks = True
+            running_async_count = recent_activities.count()
+            logger.info(f'Found {running_async_count} recent async tasks for scan {scan_id}')
+    except Exception as e:
+        logger.debug(f'Error checking async tasks: {e}')
+        has_async_tasks = False
+    
+    # Determine status based on failures and async tasks
+    if failed_count > 0:
+        status = FAILED_TASK
+        status_h = 'FAILED'
+    elif has_async_tasks:
+        status = RUNNING_BACKGROUND
+        status_h = 'RUNNING_BACKGROUND'
+        logger.info(f'Scan {scan_id}: Main tasks completed but {running_async_count} async tasks still running')
+    else:
+        status = SUCCESS_TASK
+        status_h = 'SUCCESS'
 
     # Update scan / subscan status
     if subscan:
@@ -413,7 +571,10 @@ def report(ctx={}, description=None):
         subscan.save()
     else:
         scan.scan_status = status
-    scan.stop_scan_date = timezone.now()
+    
+    # Only set stop_scan_date if fully completed (not for RUNNING_BACKGROUND)
+    if status != RUNNING_BACKGROUND:
+        scan.stop_scan_date = timezone.now()
     scan.save()
 
     # Send scan status notif
@@ -422,6 +583,81 @@ def report(ctx={}, description=None):
         subscan_id=subscan_id,
         engine_id=engine_id,
         status=status_h)
+    
+    # For RUNNING_BACKGROUND status, schedule a check later to finalize
+    if status == RUNNING_BACKGROUND:
+        logger.info(f'Scheduling status check in 2 minutes for scan {scan_id}')
+        # Use a simple delayed task to check again later
+        check_and_finalize_scan.apply_async(args=[scan_id, subscan_id], countdown=120)  # Check again in 2 minutes
+
+
+@app.task(name='check_and_finalize_scan', bind=False, queue='report_queue')
+def check_and_finalize_scan(scan_id, subscan_id=None):
+    """Check if async tasks are done and finalize scan status.
+    
+    Args:
+        scan_id (int): Scan history ID
+        subscan_id (int, optional): SubScan ID
+    """
+    scan = ScanHistory.objects.filter(pk=scan_id).first()
+    if not scan:
+        return
+    
+    # Simple check: if scan status is not RUNNING_BACKGROUND anymore, don't do anything
+    if scan.scan_status != RUNNING_BACKGROUND:
+        logger.info(f'Scan {scan_id} status is no longer RUNNING_BACKGROUND, skipping finalization')
+        return
+    
+    # Check for recent async task activities (simplified approach)
+    recent_activities = ScanActivity.objects.filter(
+        scan_of=scan,
+        time__gte=timezone.now() - timezone.timedelta(minutes=10),  # Active in last 10 minutes
+        name__in=['http_crawl', 'nuclei_scan', 'vulnerability_scan', 'dalfox_xss_scan', 'crlfuzz_scan']
+    ).filter(status=RUNNING_TASK)
+    
+    if recent_activities.exists():
+        # Still have running async tasks, check again later
+        running_count = recent_activities.count()
+        logger.info(f'Scan {scan_id}: {running_count} async tasks still running, will check again in 2 minutes')
+        check_and_finalize_scan.apply_async(args=[scan_id, subscan_id], countdown=120)
+        return
+    
+    # No more running async tasks, finalize the scan
+    logger.info(f'Scan {scan_id}: All async tasks completed, finalizing status')
+    
+    # Check for failures in all tasks
+    all_tasks = ScanActivity.objects.filter(scan_of=scan)
+    if subscan_id:
+        subscan = SubScan.objects.filter(pk=subscan_id).first()
+        if subscan:
+            all_tasks = all_tasks.filter(celery_id__in=subscan.celery_ids)
+    
+    failed_tasks = all_tasks.filter(status=FAILED_TASK)
+    failed_count = failed_tasks.count()
+    final_status = SUCCESS_TASK if failed_count == 0 else FAILED_TASK
+    final_status_h = 'SUCCESS' if failed_count == 0 else 'FAILED'
+    
+    # Update scan/subscan status
+    if subscan_id:
+        subscan = SubScan.objects.filter(pk=subscan_id).first()
+        if subscan:
+            subscan.status = final_status
+            subscan.save()
+    else:
+        scan.scan_status = final_status
+        
+    scan.stop_scan_date = timezone.now()
+    scan.save()
+    
+    # Send final notification
+    send_scan_notif.delay(
+        scan_history_id=scan_id,
+        subscan_id=subscan_id,
+        engine_id=scan.scan_type.id if scan.scan_type else None,
+        status=final_status_h
+    )
+    
+    logger.info(f'Scan {scan_id} finalized with status: {final_status_h}')
 
 
 #------------------------- #

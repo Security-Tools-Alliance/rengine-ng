@@ -87,6 +87,8 @@ Target Summary
 													<span class="badge badge-soft-success float-end">Completed</span>
 													{% elif scan.scan_status == 3 %}
 													<span class="badge badge-soft-danger float-end">Aborted</span>
+													{% elif scan.scan_status == 4 %}
+													<span class="badge badge-soft-info float-end">Finalizing</span>
 													{% else %}
 													<span class="badge badge-soft-danger float-end">Unknown</span>
 													{% endif %}

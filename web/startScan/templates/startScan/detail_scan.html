@@ -122,6 +122,9 @@ Scan Findings
 									{% elif history.scan_status == 3 %}
 									<span class="mdi mdi-circle text-danger"></span>
 									<span class="badge badge-soft-danger">Aborted</span>
+									{% elif history.scan_status == 4 %}
+									<span class="mdi mdi-circle text-info"></span>
+									<span class="badge badge-soft-info">Finalizing</span>
 									{% else %}
 									<span class="mdi mdi-circle text-danger"></span>
 									<span class="badge badge-danger">Unknown</span>
@@ -165,6 +168,8 @@ Scan Findings
 						{% endif %}
 						{% elif history.scan_status == 3 %}
 						<span class="mt-1 mb-0 text-danger font-14">Aborted in {{ history.start_scan_date|timesince:history.stop_scan_date }}</span>
+						{% elif history.scan_status == 4 %}
+						<span class="mt-1 mb-0 text-info font-14">Finalizing - {{ history.get_elapsed_time }}</span>
 						{% endif %}
 
 
@@ -184,6 +189,9 @@ Scan Findings
 							</div>
 							{% elif history.scan_status == 3 %}
 							<div class="progress-bar bg-danger" role="progressbar" style="width: {% widthratio history.scanactivity_set.all|length history.scan_type.get_number_of_steps|add:4  100 %}%" aria-valuemin="0" aria-valuemax="4">
+							</div>
+							{% elif history.scan_status == 4 %}
+							<div class="progress-bar bg-info progress-bar-striped progress-bar-animated" role="progressbar" style="width: 90%" aria-valuemin="0" aria-valuemax="100">
 							</div>
 							{% else %}
 							<div class="progress">
@@ -256,6 +264,8 @@ Scan Findings
 													<span class="badge badge-soft-success float-end">Completed</span>
 													{% elif scan.scan_status == 3 %}
 													<span class="badge badge-soft-danger float-end">Aborted</span>
+													{% elif scan.scan_status == 4 %}
+													<span class="badge badge-soft-info float-end">Finalizing</span>
 													{% else %}
 													<span class="badge badge-soft-danger float-end">Unknown</span>
 													{% endif %}
