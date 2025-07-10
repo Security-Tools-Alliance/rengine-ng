@@ -350,17 +350,9 @@ def initiate_subscan(
         logger.warning(f'Starting subscan {subscan.id} with context:\n{ctx_str}')
 
         if enable_http_crawl:
-            results = http_crawl(
-                urls=[subdomain.http_url],
-                ctx=ctx)
-            if not results:
-                subscan.scan_status = FAILED_TASK
-                subscan.error_message = "Sorry, host does not seems to have any web service"
-                subscan.save()
-                return {
-                    'success': False,
-                    'error': subscan.error_message
-                }
+            # Launch http_crawl asynchronously to avoid blocking initiate_subscan
+            http_crawl.delay(urls=[subdomain.http_url], ctx=ctx)
+            logger.info(f'Started HTTP crawl for {subdomain.http_url} asynchronously')
 
         # Build header + callback
         workflow = method.si(ctx=ctx)
@@ -626,11 +618,13 @@ def subdomain_discovery(
         subdomains.append(subdomain)
         urls.append(subdomain.name)
 
-    # Bulk crawl subdomains
+    # Bulk crawl subdomains asynchronously
     if enable_http_crawl:
         custom_ctx = deepcopy(ctx)
         custom_ctx['track'] = True
-        http_crawl(urls, ctx=custom_ctx, update_subdomain_metadatas=True)
+        # Launch http_crawl asynchronously to avoid blocking subdomain_discovery
+        http_crawl.delay(urls, ctx=custom_ctx, update_subdomain_metadatas=True)
+        logger.info(f'Started HTTP crawl for {len(urls)} subdomains asynchronously')
     else:
         url_filter = ctx.get('url_filter')
         # Find root subdomain endpoints
@@ -711,13 +705,14 @@ def osint(self, host=None, ctx={}, description=None):
         )
         grouped_tasks.append(_task)
 
-    celery_group = group(grouped_tasks)
-    job = celery_group.apply_async()
-    while not job.ready():
-        # wait for all jobs to complete
-        time.sleep(5)
-
-    logger.info('OSINT Tasks finished...')
+    # Launch OSINT tasks asynchronously without waiting for completion
+    # This avoids Celery deadlock by not blocking the worker
+    if grouped_tasks:
+        celery_group = group(grouped_tasks)
+        job = celery_group.apply_async()
+        logger.info(f'Started {len(grouped_tasks)} OSINT tasks asynchronously')
+    else:
+        logger.info('No OSINT tasks to run')
 
 @app.task(name='osint_discovery', queue='osint_discovery_queue', bind=False)
 def osint_discovery(config, host, scan_history_id, activity_id, results_dir, ctx={}):
@@ -795,11 +790,14 @@ def osint_discovery(config, host, scan_history_id, activity_id, results_dir, ctx
         )
         grouped_tasks.append(_task)
 
-    celery_group = group(grouped_tasks)
-    job = celery_group.apply_async()
-    while not job.ready():
-        # wait for all jobs to complete
-        time.sleep(5)
+    # Launch OSINT discovery tasks asynchronously without waiting for completion
+    # This avoids Celery deadlock by not blocking the worker
+    if grouped_tasks:
+        celery_group = group(grouped_tasks)
+        job = celery_group.apply_async()
+        logger.info(f'Started {len(grouped_tasks)} OSINT discovery tasks asynchronously')
+    else:
+        logger.info('No OSINT discovery tasks to run')
 
     # results['emails'] = results.get('emails', []) + emails
     # results['creds'] = creds
@@ -1876,11 +1874,13 @@ def dir_file_fuzz(self, ctx={}, description=None):
             subdomain.directories.add(dirscan)
             subdomain.save()
 
-    # Crawl discovered URLs
+    # Crawl discovered URLs asynchronously
     if enable_http_crawl:
         custom_ctx = deepcopy(ctx)
         custom_ctx['track'] = False
-        http_crawl(urls, ctx=custom_ctx)
+        # Launch http_crawl asynchronously to avoid blocking dir_file_fuzz
+        http_crawl.delay(urls, ctx=custom_ctx)
+        logger.info(f'Started HTTP crawl for {len(urls)} discovered URLs asynchronously')
 
     return results
 
@@ -2088,16 +2088,18 @@ def fetch_url(self, urls=[], ctx={}, description=None):
         f.write('\n'.join(all_urls))
     logger.warning(f'Found {len(all_urls)} usable URLs')
 
-    # Crawl discovered URLs
+    # Crawl discovered URLs asynchronously
     if enable_http_crawl:
         custom_ctx = deepcopy(ctx)
         custom_ctx['track'] = False
-        http_crawl(
+        # Launch http_crawl asynchronously to avoid blocking fetch_url
+        http_crawl.delay(
             all_urls,
             ctx=custom_ctx,
             should_remove_duplicate_endpoints=should_remove_duplicate_endpoints,
             duplicate_removal_fields=duplicate_removal_fields
         )
+        logger.info(f'Started HTTP crawl for {len(all_urls)} discovered URLs asynchronously')
 
     #-------------------#
     # GF PATTERNS MATCH #
@@ -4936,18 +4938,31 @@ def save_endpoint(
     
     # Create new endpoint
     if crawl:
+        # For now, when crawl=True, we create a basic endpoint and launch crawl asynchronously
+        # This avoids blocking the current task while still enabling crawling
         custom_ctx = deepcopy(ctx)
         custom_ctx['track'] = False
-        results = http_crawl(urls=[http_url], ctx=custom_ctx)
-        if not results or results[0]['failed']:
-            logger.error(f'Endpoint for {http_url} does not seem to be up. Skipping.')
-            return None, False
+        
+        # Create basic endpoint first
+        create_data = {
+            'scan_history': scan,
+            'target_domain': domain,
+            'http_url': http_url,
+            'is_default': is_default,
+            'discovered_date': timezone.now(),
+        }
+        
+        if http_status is not None:
+            create_data['http_status'] = http_status
             
-        endpoint_data = results[0]
-        endpoint = EndPoint.objects.get(pk=endpoint_data['endpoint_id'])
-        endpoint.is_default = is_default
-        endpoint.save()
-        created = endpoint_data['endpoint_created']
+        create_data.update(endpoint_data)
+        
+        endpoint = EndPoint.objects.create(**create_data)
+        created = True
+        
+        # Launch http_crawl asynchronously to populate endpoint details
+        http_crawl.delay(urls=[http_url], ctx=custom_ctx)
+        logger.info(f'Started HTTP crawl for {http_url} asynchronously to populate endpoint details')
     else:
         create_data = {
             'scan_history': scan,
