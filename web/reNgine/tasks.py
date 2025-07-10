@@ -635,7 +635,7 @@ def subdomain_discovery(
         url_filter = ctx.get('url_filter')
         # Find root subdomain endpoints
         for subdomain in subdomains:
-            subdomain_name = subdomain.strip()
+            subdomain_name = 'http://' + subdomain.name.strip()
             # Create base endpoint (for scan)
             http_url = f'{subdomain.name}{url_filter}' if url_filter else subdomain.name
             endpoint, _ = save_endpoint(
@@ -2222,14 +2222,14 @@ def vulnerability_scan(self, urls=[], ctx={}, description=None):
         )
         grouped_tasks.append(_task)
 
-    celery_group = group(grouped_tasks)
-    job = celery_group.apply_async()
-
-    while not job.ready():
-        # wait for all jobs to complete
-        time.sleep(5)
-
-    logger.info('Vulnerability scan completed...')
+    # Launch tasks asynchronously without waiting for completion
+    # This avoids Celery deadlock by not blocking the worker
+    if grouped_tasks:
+        celery_group = group(grouped_tasks)
+        job = celery_group.apply_async()
+        logger.info(f'Started {len(grouped_tasks)} vulnerability scan tasks asynchronously')
+    else:
+        logger.info('No vulnerability scan tasks to run')
 
     # return results
     return None
@@ -2655,14 +2655,14 @@ def nuclei_scan(self, urls=[], ctx={}, description=None):
         )
         grouped_tasks.append(_task)
 
-    celery_group = group(grouped_tasks)
-    job = celery_group.apply_async()
-
-    while not job.ready():
-        # wait for all jobs to complete
-        time.sleep(5)
-
-    logger.info('Vulnerability scan with all severities completed...')
+    # Launch tasks asynchronously without waiting for completion
+    # This avoids Celery deadlock by not blocking the worker
+    if grouped_tasks:
+        celery_group = group(grouped_tasks)
+        job = celery_group.apply_async()
+        logger.info(f'Started {len(grouped_tasks)} Nuclei scan tasks asynchronously (severities: {severities})')
+    else:
+        logger.info('No Nuclei scan tasks to run')
 
     return None
 @app.task(name='dalfox_xss_scan', queue='main_scan_queue', base=RengineTask, bind=True)
