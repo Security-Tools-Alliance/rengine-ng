@@ -7,7 +7,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('startScan', '0061_auto_20250216_1450'),
+        ('startScan', '0062_vulnerabilityreference'),
     ]
 
     operations = [
