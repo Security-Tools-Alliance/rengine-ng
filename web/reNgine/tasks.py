@@ -194,8 +194,7 @@ def initiate_scan(
 		initiated_by (int): User ID initiating the scan.
     """
 
-    if CELERY_REMOTE_DEBUG:
-        debug()
+    #debug()
 
     scan = None
     try:
@@ -296,26 +295,40 @@ def initiate_scan(
         # Create initial host
         host = domain.name
         
-        # Use Nmap to find web services ports
-        logger.warning(f'Using Nmap to find web services on {host}')
-        hosts_data = get_nmap_http_datas(host, ctx)
-        logger.debug(f'Identified hosts: {hosts_data}')
+        # Check if default endpoints already exist for this subdomain
+        existing_default_endpoint = EndPoint.objects.filter(
+            target_domain=domain,
+            is_default=True
+        ).first()
+        
+        if existing_default_endpoint:
+            logger.warning(f'Default endpoint already exists for {host}. Updating with HTTP crawl instead of Nmap.')
 
-        if not hosts_data:
-            logger.warning(f'Nmap found no web services on host {host}. Scan failed.')
-            scan.scan_status = FAILED_TASK
-            scan.error_message = "Sorry, host does not seems to have any web service"
-            scan.save()
-            return {'success': False, 'error': scan.error_message}
+            # Launch http_crawl to update endpoint data
+            http_crawl.delay(urls=[existing_default_endpoint.http_url], ctx=ctx, update_subdomain_metadatas=True)
+            logger.info(f'Started HTTP crawl for existing endpoint {endpoint.http_url} to update data')
+            
+        else:
+            # Use Nmap to find web services ports
+            logger.warning(f'Using Nmap to find web services on {host}')
+            hosts_data = get_nmap_http_datas(host, ctx)
+            logger.debug(f'Identified hosts: {hosts_data}')
 
-        # Create first HTTP endpoint
-        endpoint = create_first_endpoint_from_nmap_data(hosts_data, domain, subdomain, ctx)
-        if not endpoint:
-            logger.warning(f'Could not create any valid endpoints for {host}. Scan failed.')
-            scan.scan_status = FAILED_TASK 
-            scan.error_message = "Failed to create valid endpoints"
-            scan.save()
-            return {'success': False, 'error': scan.error_message}
+            if not hosts_data:
+                logger.warning(f'Nmap found no web services on host {host}. Scan failed.')
+                scan.scan_status = FAILED_TASK
+                scan.error_message = "Sorry, host does not seems to have any web service"
+                scan.save()
+                return {'success': False, 'error': scan.error_message}
+
+            # Create first HTTP endpoint
+            endpoint = create_first_endpoint_from_nmap_data(hosts_data, domain, subdomain, ctx)
+            if not endpoint:
+                logger.warning(f'Could not create any valid endpoints for {host}. Scan failed.')
+                scan.scan_status = FAILED_TASK 
+                scan.error_message = "Failed to create valid endpoints"
+                scan.save()
+                return {'success': False, 'error': scan.error_message}
 
         # Build Celery tasks, crafted according to the dependency graph below:
         # subdomain_discovery --> port_scan --> fetch_url --> dir_file_fuzz
@@ -382,8 +395,7 @@ def initiate_subscan(
         url_filter (str): URL path. Default: ''
     """
 
-    if CELERY_REMOTE_DEBUG:
-        debug()
+    #debug()
 
     subscan = None
     try:
@@ -507,6 +519,11 @@ def report(ctx={}, description=None):
     engine_id = ctx.get('engine_id')
     scan = ScanHistory.objects.filter(pk=scan_id).first()
     subscan = SubScan.objects.filter(pk=subscan_id).first()
+
+    # Check if scan exists
+    if not scan:
+        logger.error(f'ScanHistory with ID {scan_id} not found')
+        return
 
     # Get failed tasks
     tasks = ScanActivity.objects.filter(scan_of=scan).all()
@@ -869,7 +886,6 @@ def subdomain_discovery(
         url_filter = ctx.get('url_filter')
         # Find root subdomain endpoints
         for subdomain in subdomains:
-            subdomain_name = 'http://' + subdomain.name.strip()
             # Create base endpoint (for scan)
             http_url = f'{subdomain.name}{url_filter}' if url_filter else subdomain.name
             endpoint, _ = save_endpoint(
@@ -2153,7 +2169,7 @@ def fetch_url(self, urls=[], ctx={}, description=None):
     exclude_subdomains = config.get(EXCLUDED_SUBDOMAINS, False)
 
     # Initialize the URLs
-    if urls and is_iterable(urls):
+    if urls and is_iterable(urls) and any(url for url in urls if url):
         logger.debug(f'URLs provided by user')
         with open(input_path, 'w') as f:
             f.write('\n'.join(urls))
@@ -2797,7 +2813,7 @@ def nuclei_scan(self, urls=[], ctx={}, description=None):
     # severities_str = ','.join(severities)
 
     # Get alive endpoints
-    if urls and is_iterable(urls):
+    if urls and is_iterable(urls) and any(url for url in urls if url):
         with open(input_path, 'w') as f:
             f.write('\n'.join(urls))
     else:
@@ -2930,7 +2946,7 @@ def dalfox_xss_scan(self, urls=[], ctx={}, description=None):
     threads = dalfox_config.get(THREADS) or self.yaml_configuration.get(THREADS, DEFAULT_THREADS)
     input_path = str(Path(self.results_dir) / 'input_endpoints_dalfox_xss.txt')
 
-    if urls and is_iterable(urls):
+    if urls and is_iterable(urls) and any(url for url in urls if url):
         with open(input_path, 'w') as f:
             f.write('\n'.join(urls))
     else:
@@ -3062,7 +3078,7 @@ def crlfuzz_scan(self, urls=[], ctx={}, description=None):
     input_path = str(Path(self.results_dir) / 'input_endpoints_crlf.txt')
     output_path = str(Path(self.results_dir) / f'{self.filename}')
 
-    if urls and is_iterable(urls):
+    if urls and is_iterable(urls) and any(url for url in urls if url):
         with open(input_path, 'w') as f:
             f.write('\n'.join(urls))
     else:
@@ -3245,6 +3261,8 @@ def http_crawl(
     """
     logger.info('Initiating HTTP Crawl')
 
+    #debug()
+
     # Initialize urls as empty list if None
     if urls is None:
         urls = []
@@ -3259,7 +3277,7 @@ def http_crawl(
     self.output_path = None
     input_path = f'{self.results_dir}/httpx_input.txt'
     history_file = f'{self.results_dir}/commands.txt'
-    if urls and is_iterable(urls):
+    if urls and is_iterable(urls) and any(url for url in urls if url):
         if self.url_filter:
             urls = [u for u in urls if self.url_filter in u]
         urls = [url for url in urls if url is not None]
@@ -3377,6 +3395,8 @@ def http_crawl(
         )
         if not endpoint:
             continue
+        endpoint.discovered_date = datetime.now()
+        endpoint.http_url = http_url
         endpoint.http_status = http_status
         endpoint.page_title = page_title
         endpoint.content_length = content_length
@@ -5125,34 +5145,34 @@ def save_endpoint(
     # Remove nulls and validate basic inputs
     endpoint_data = replace_nulls(endpoint_data)
     scheme = urlparse(http_url).scheme
-    
+
     if not scheme:
-        logger.error(f'{http_url} is missing scheme (http or https). Skipping.')
-        return None, False
-        
+        logger.error(f'{http_url} is missing scheme (http or https). Creating default endpoint with http scheme.')
+        http_url = f'http://{http_url.strip()}'
+
     if not is_valid_url(http_url):
         logger.error(f'{http_url} is not a valid URL. Skipping.')
         return None, False
-    
+
     # Get required objects
     scan = ScanHistory.objects.filter(pk=ctx.get('scan_history_id')).first()
     domain = Domain.objects.filter(pk=ctx.get('domain_id')).first()
     subdomain = endpoint_data.get('subdomain')
-    
+
     if not all([scan, domain]):
         logger.error('Missing scan or domain information')
         return None, False
-        
+
     # Check if we're scanning an IP
     is_ip_scan = validators.ipv4(domain.name) or validators.ipv6(domain.name)
-        
+
     # For regular domain scans, validate URL belongs to domain
     if not is_ip_scan and domain.name not in http_url:
         logger.error(f"{http_url} is not a URL of domain {domain.name}. Skipping.")
         return None, False
-    
+
     http_url = sanitize_url(http_url)
-    
+
     # If this is a default endpoint, check if one already exists for this subdomain
     if is_default and subdomain:
         existing_default = EndPoint.objects.filter(
@@ -5161,28 +5181,28 @@ def save_endpoint(
             subdomain=subdomain,
             is_default=True
         ).first()
-        
+
         if existing_default:
             logger.info(f'Default endpoint already exists for subdomain {subdomain}')
             return existing_default, False
-    
+
     # Check for existing endpoint with same URL
     existing_endpoint = EndPoint.objects.filter(
         scan_history=scan,
         target_domain=domain,
         http_url=http_url
     ).first()
-    
+
     if existing_endpoint:
         return existing_endpoint, False
-    
+
     # Create new endpoint
     if crawl:
         # For now, when crawl=True, we create a basic endpoint and launch crawl asynchronously
         # This avoids blocking the current task while still enabling crawling
         custom_ctx = deepcopy(ctx)
         custom_ctx['track'] = False
-        
+
         # Create basic endpoint first
         create_data = {
             'scan_history': scan,
@@ -5191,15 +5211,15 @@ def save_endpoint(
             'is_default': is_default,
             'discovered_date': timezone.now(),
         }
-        
+
         if http_status is not None:
             create_data['http_status'] = http_status
-            
+
         create_data.update(endpoint_data)
-        
+
         endpoint = EndPoint.objects.create(**create_data)
         created = True
-        
+
         # Launch http_crawl asynchronously to populate endpoint details
         http_crawl.delay(urls=[http_url], ctx=custom_ctx)
         logger.info(f'Started HTTP crawl for {http_url} asynchronously to populate endpoint details')
@@ -5211,20 +5231,20 @@ def save_endpoint(
             'is_default': is_default,
             'discovered_date': timezone.now(),
         }
-        
+
         if http_status is not None:
             create_data['http_status'] = http_status
-            
+
         create_data.update(endpoint_data)
 
         endpoint = EndPoint.objects.create(**create_data)
         created = True
-    
+
     # Add subscan relation if needed
     if created and ctx.get('subscan_id'):
         endpoint.endpoint_subscan_ids.add(ctx.get('subscan_id'))
         endpoint.save()
-    
+
     return endpoint, created
 
 

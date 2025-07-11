@@ -305,37 +305,50 @@ def get_http_urls(
 	subdomain_id = ctx.get('subdomain_id')
 	url_filter = ctx.get('url_filter', '')
 	domain = Domain.objects.filter(pk=domain_id).first()
+	subdomain = Subdomain.objects.filter(pk=subdomain_id).first()
 	scan = ScanHistory.objects.filter(pk=scan_id).first()
+	if subdomain:
+		logger.info(f'Searching for endpoints for starting scan on {domain} and subdomain {subdomain}')
+	else:
+		logger.info(f'Searching for endpoints for starting scan on {domain}')
+	log_header = 'Found a total of '
+	log_found = ''
 
 	query = EndPoint.objects
 	if domain:
 		logger.debug(f'Searching URLs by domain {domain}')
 		query = query.filter(target_domain=domain)
-		logger.debug(f'Found a total of {query.count()} endpoints for domain {domain}')
+		log_found = f'{log_header}{query.count()} endpoints for domain {domain}'
+		logger.debug(log_found)
 	if scan:
 		logger.debug(f'Searching URLs by scan {scan}')
 		query = query.filter(scan_history=scan)
-		logger.debug(f'Found a total of {query.count()} endpoints for scan {scan}')
+		log_found = f'{log_header}{query.count()} endpoints for scan {scan}'
+		logger.debug(log_found)
 	if subdomain_id:
 		subdomain = Subdomain.objects.filter(pk=subdomain_id).first()
 		logger.debug(f'Searching URLs by subdomain {subdomain}')
 		query = query.filter(subdomain__id=subdomain_id)
-		logger.debug(f'Found a total of {query.count()} endpoints for subdomain {subdomain}')
+		log_found = f'{log_header}{query.count()} endpoints for subdomain {subdomain}'
+		logger.debug(log_found)
 	elif exclude_subdomains and domain:
-		logger.debug(f'Excluding subdomains')
+		logger.debug('Excluding subdomains')
 		query = query.filter(http_url=domain.http_url)
-		logger.debug(f'Found a total of {query.count()} endpoints for domain {domain}')
+		log_found = f'{log_header}{query.count()} endpoints for domain {domain}'
+		logger.debug(log_found)
 	if get_only_default_urls:
-		logger.debug(f'Searching only for default URL')
+		logger.debug('Searching only for default URL')
 		query = query.filter(is_default=True)
-		logger.debug(f'Found a total of {query.count()} default endpoints')
+		log_found = f'{log_header}{query.count()} default endpoints'
+		logger.debug(log_found)
 
 	# If is_uncrawled is True, select only endpoints that have not been crawled
 	# yet (no status)
 	if is_uncrawled:
-		logger.debug(f'Searching for uncrawled endpoints only')
-		query = query.filter(http_status__isnull=True)
-		logger.debug(f'Found a total of {query.count()} uncrawled endpoints')
+		logger.debug('Searching for uncrawled endpoints only')
+		query = query.filter(http_status=0)
+		log_found = f'{log_header}{query.count()} uncrawled endpoints'
+		logger.debug(log_found)
 
 	# If a path is passed, select only endpoints that contains it
 	if url_filter and domain:
@@ -345,14 +358,18 @@ def get_http_urls(
 			query = query.filter(http_url=url)
 		else:
 			query = query.filter(http_url__contains=url)
-		logger.debug(f'Found a total of {query.count()} endpoints with path {url_filter}')
+		log_found = f'{log_header}{query.count()} endpoints with path {url_filter}'
+		logger.debug(log_found)
+
+	if log_found:
+		logger.info(log_found)
 
 	# Select distinct endpoints and order
 	endpoints = query.distinct('http_url').order_by('http_url').all()
 
 	# If is_alive is True, select only endpoints that are alive
 	if is_alive:
-		logger.debug(f'Searching for alive endpoints only')
+		logger.debug('Searching for alive endpoints only')
 		endpoints = [e for e in endpoints if e.is_alive]
 		logger.debug(f'Found a total of {len(endpoints)} alive endpoints')
 
@@ -365,7 +382,7 @@ def get_http_urls(
 		endpoints = [e for e in endpoints if not urlparse(e).path.endswith(extensions)]
 
 	if not endpoints:
-		logger.error(f'No endpoints were found in query !')
+		logger.error('No endpoints were found in query !')
 
 	if write_filepath:
 		with open(write_filepath, 'w') as f:
