@@ -311,40 +311,50 @@ def get_http_urls(
 	if domain:
 		logger.debug(f'Searching URLs by domain {domain}')
 		query = query.filter(target_domain=domain)
+		logger.debug(f'Found a total of {query.count()} endpoints for domain {domain}')
 	if scan:
 		logger.debug(f'Searching URLs by scan {scan}')
 		query = query.filter(scan_history=scan)
+		logger.debug(f'Found a total of {query.count()} endpoints for scan {scan}')
 	if subdomain_id:
 		subdomain = Subdomain.objects.filter(pk=subdomain_id).first()
 		logger.debug(f'Searching URLs by subdomain {subdomain}')
 		query = query.filter(subdomain__id=subdomain_id)
+		logger.debug(f'Found a total of {query.count()} endpoints for subdomain {subdomain}')
 	elif exclude_subdomains and domain:
 		logger.debug(f'Excluding subdomains')
 		query = query.filter(http_url=domain.http_url)
+		logger.debug(f'Found a total of {query.count()} endpoints for domain {domain}')
 	if get_only_default_urls:
 		logger.debug(f'Searching only for default URL')
 		query = query.filter(is_default=True)
+		logger.debug(f'Found a total of {query.count()} default endpoints')
 
 	# If is_uncrawled is True, select only endpoints that have not been crawled
 	# yet (no status)
 	if is_uncrawled:
 		logger.debug(f'Searching for uncrawled endpoints only')
 		query = query.filter(http_status__isnull=True)
+		logger.debug(f'Found a total of {query.count()} uncrawled endpoints')
 
 	# If a path is passed, select only endpoints that contains it
 	if url_filter and domain:
+		logger.debug(f'Searching for endpoints with path {url_filter}')
 		url = f'{domain.name}{url_filter}'
 		if strict:
 			query = query.filter(http_url=url)
 		else:
 			query = query.filter(http_url__contains=url)
+		logger.debug(f'Found a total of {query.count()} endpoints with path {url_filter}')
 
 	# Select distinct endpoints and order
 	endpoints = query.distinct('http_url').order_by('http_url').all()
 
 	# If is_alive is True, select only endpoints that are alive
 	if is_alive:
+		logger.debug(f'Searching for alive endpoints only')
 		endpoints = [e for e in endpoints if e.is_alive]
+		logger.debug(f'Found a total of {len(endpoints)} alive endpoints')
 
 	# Grab only http_url from endpoint objects
 	endpoints = [e.http_url for e in endpoints]

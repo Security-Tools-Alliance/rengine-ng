@@ -55,10 +55,12 @@ def index(request, slug):
             'failed': ScanHistory.get_project_timeline(project, date_range, status=3)
         },
         'subscans': {
-            'pending': SubScan.get_project_timeline(project, date_range, status=0),
+            'pending': SubScan.get_project_timeline(project, date_range, status=-1),
             'running': SubScan.get_project_timeline(project, date_range, status=1),
             'completed': SubScan.get_project_timeline(project, date_range, status=2),
-            'failed': SubScan.get_project_timeline(project, date_range, status=3)
+            'failed': SubScan.get_project_timeline(project, date_range, status=0),
+            'aborted': SubScan.get_project_timeline(project, date_range, status=3),
+            'finalizing': SubScan.get_project_timeline(project, date_range, status=4)
         }
     }
 

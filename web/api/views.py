@@ -1412,7 +1412,7 @@ class ScanStatus(APIView):
             ScanHistory.objects
             .filter(domain__project__slug=slug)
             .order_by('-start_scan_date')
-            .filter(scan_status=1)
+            .filter(Q(scan_status=1) | Q(scan_status=4))
         )
         pending_scans = (
             ScanHistory.objects
@@ -1431,7 +1431,7 @@ class ScanStatus(APIView):
             SubScan.objects
             .filter(scan_history__domain__project__slug=slug)
             .order_by('-start_scan_date')
-            .filter(status=1)
+            .filter(Q(status=1) | Q(status=4))
         )
         pending_tasks = (
             SubScan.objects

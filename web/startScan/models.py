@@ -524,10 +524,12 @@ class SubScan(models.Model):
 		"""Aggregate total subscans and status distribution"""
 		return queryset.aggregate(
 			total=Count('id'),
-			pending=Count('id', filter=models.Q(status=0)),
+			pending=Count('id', filter=models.Q(status=-1)),
 			running=Count('id', filter=models.Q(status=1)),
 			completed=Count('id', filter=models.Q(status=2)),
-			failed=Count('id', filter=models.Q(status=3))
+			failed=Count('id', filter=models.Q(status=0)),
+			aborted=Count('id', filter=models.Q(status=3)),
+			finalizing=Count('id', filter=models.Q(status=4))
 		)
 
 	@classmethod

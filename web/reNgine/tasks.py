@@ -150,17 +150,6 @@ def finalize_scan_status(scan_id, subscan_id=None):
     if subscan_id:
         subscan = SubScan.objects.filter(pk=subscan_id).first()
         if subscan:
-            tasks = tasks.filter(celery_id__in=subscan.celery_ids)
-    
-    failed_tasks = tasks.filter(status=FAILED_TASK)
-    failed_count = failed_tasks.count()
-    final_status = SUCCESS_TASK if failed_count == 0 else FAILED_TASK
-    final_status_h = 'SUCCESS' if failed_count == 0 else 'FAILED'
-    
-    # Update scan/subscan status
-    if subscan_id:
-        subscan = SubScan.objects.filter(pk=subscan_id).first()
-        if subscan:
             subscan.status = final_status
             subscan.save()
     else:
@@ -603,10 +592,23 @@ def check_and_finalize_scan(scan_id, subscan_id=None):
     if not scan:
         return
     
-    # Simple check: if scan status is not RUNNING_BACKGROUND anymore, don't do anything
-    if scan.scan_status != RUNNING_BACKGROUND:
-        logger.info(f'Scan {scan_id} status is no longer RUNNING_BACKGROUND, skipping finalization')
-        return
+    # Check if we're dealing with a subscan
+    subscan = None
+    if subscan_id:
+        subscan = SubScan.objects.filter(pk=subscan_id).first()
+        if not subscan:
+            logger.warning(f'SubScan {subscan_id} not found, skipping finalization')
+            return
+        
+        # Check if subscan status is not RUNNING_BACKGROUND anymore
+        if subscan.status != RUNNING_BACKGROUND:
+            logger.info(f'SubScan {subscan_id} status is no longer RUNNING_BACKGROUND, skipping finalization')
+            return
+    else:
+        # Check if main scan status is not RUNNING_BACKGROUND anymore
+        if scan.scan_status != RUNNING_BACKGROUND:
+            logger.info(f'Scan {scan_id} status is no longer RUNNING_BACKGROUND, skipping finalization')
+            return
     
     # Check for recent async task activities (simplified approach)
     recent_activities = ScanActivity.objects.filter(
@@ -615,22 +617,26 @@ def check_and_finalize_scan(scan_id, subscan_id=None):
         name__in=['http_crawl', 'nuclei_scan', 'vulnerability_scan', 'dalfox_xss_scan', 'crlfuzz_scan']
     ).filter(status=RUNNING_TASK)
     
+    # If checking a subscan, filter activities by subscan's celery_ids
+    if subscan_id and subscan:
+        recent_activities = recent_activities.filter(celery_id__in=subscan.celery_ids)
+    
     if recent_activities.exists():
         # Still have running async tasks, check again later
         running_count = recent_activities.count()
-        logger.info(f'Scan {scan_id}: {running_count} async tasks still running, will check again in 2 minutes')
+        scan_or_subscan = f'SubScan {subscan_id}' if subscan_id else f'Scan {scan_id}'
+        logger.info(f'{scan_or_subscan}: {running_count} async tasks still running, will check again in 2 minutes')
         check_and_finalize_scan.apply_async(args=[scan_id, subscan_id], countdown=120)
         return
     
     # No more running async tasks, finalize the scan
-    logger.info(f'Scan {scan_id}: All async tasks completed, finalizing status')
+    scan_or_subscan = f'SubScan {subscan_id}' if subscan_id else f'Scan {scan_id}'
+    logger.info(f'{scan_or_subscan}: All async tasks completed, finalizing status')
     
     # Check for failures in all tasks
     all_tasks = ScanActivity.objects.filter(scan_of=scan)
-    if subscan_id:
-        subscan = SubScan.objects.filter(pk=subscan_id).first()
-        if subscan:
-            all_tasks = all_tasks.filter(celery_id__in=subscan.celery_ids)
+    if subscan_id and subscan:
+        all_tasks = all_tasks.filter(celery_id__in=subscan.celery_ids)
     
     failed_tasks = all_tasks.filter(status=FAILED_TASK)
     failed_count = failed_tasks.count()
@@ -638,16 +644,14 @@ def check_and_finalize_scan(scan_id, subscan_id=None):
     final_status_h = 'SUCCESS' if failed_count == 0 else 'FAILED'
     
     # Update scan/subscan status
-    if subscan_id:
-        subscan = SubScan.objects.filter(pk=subscan_id).first()
-        if subscan:
-            subscan.status = final_status
-            subscan.save()
+    if subscan_id and subscan:
+        subscan.status = final_status
+        subscan.stop_scan_date = timezone.now()
+        subscan.save()
     else:
         scan.scan_status = final_status
-        
-    scan.stop_scan_date = timezone.now()
-    scan.save()
+        scan.stop_scan_date = timezone.now()
+        scan.save()
     
     # Send final notification
     send_scan_notif.delay(
@@ -657,7 +661,7 @@ def check_and_finalize_scan(scan_id, subscan_id=None):
         status=final_status_h
     )
     
-    logger.info(f'Scan {scan_id} finalized with status: {final_status_h}')
+    logger.info(f'{scan_or_subscan} finalized with status: {final_status_h}')
 
 
 #------------------------- #

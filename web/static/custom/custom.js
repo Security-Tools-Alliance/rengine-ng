@@ -1081,6 +1081,9 @@ function show_subscan_results(endpoint_url, subscan_id) {
 			badge_color = 'success';
 		} else if (response['subscan']['status'] == 3) {
 			scan_status = 'Aborted';
+		} else if (response['subscan']['status'] == 4) {
+			badge_color = 'info';
+			scan_status = 'Finalizing';
 		} else {
 			scan_status = 'Unknown';
 		}
@@ -1456,6 +1459,14 @@ function get_and_render_subscan_history(endpoint, subdomain_id, subdomain_name) 
 					color = 'success';
 					bg_color = 'bg-soft-success';
 					status_badge = '<span class="float-end badge bg-success">Task Completed</span>';
+				} else if (result_obj.status == 1) {
+					color = 'primary';
+					bg_color = 'bg-soft-primary';
+					status_badge = '<span class="float-end badge bg-primary">Running</span>';
+				} else if (result_obj.status == 4) {
+					color = 'info';
+					bg_color = 'bg-soft-info';
+					status_badge = '<span class="float-end badge bg-info">Finalizing</span>';
 				}
 
 				$('#subscan_history_table').append(`
@@ -2061,6 +2072,10 @@ function loadSubscanHistoryWidget(endpoint, scan_history_id = null, domain_id = 
 					color = 'primary';
 					bg_color = 'bg-soft-primary';
 					status_badge = '<span class="float-end badge bg-primary">Running</span>';
+				} else if (result_obj.status == 4) {
+					color = 'info';
+					bg_color = 'bg-soft-info';
+					status_badge = '<span class="float-end badge bg-info">Finalizing</span>';
 				}
 
 				$('#subscan_history_widget').append(`
