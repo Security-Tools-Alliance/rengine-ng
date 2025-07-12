@@ -3,6 +3,7 @@ import json
 import os
 import pprint
 import subprocess
+import select
 import time
 import validators
 import xmltodict
@@ -4524,7 +4525,11 @@ def run_command(cmd, cwd=None, shell=False, history_file=None, scan_id=None, act
 
 def stream_command(cmd, cwd=None, shell=False, history_file=None, encoding='utf-8', scan_id=None, activity_id=None, trunc_char=None):
     """
-    Execute a command and yield its output line by line.
+    Execute a command and yield its output line by line in real-time.
+    
+    This function uses select.select() to monitor file descriptors and processes
+    output as soon as it becomes available, ensuring proper streaming behavior
+    for tools like httpx and nuclei.
 
     Args:
         cmd (str): The command to execute.
@@ -4537,54 +4542,116 @@ def stream_command(cmd, cwd=None, shell=False, history_file=None, encoding='utf-
         trunc_char (str, optional): Character to truncate lines. Defaults to None.
 
     Yields:
-        str: Each line of the command output.
+        str or dict: Each line of the command output, processed and potentially parsed as JSON.
     """
-    logger.info(f"Starting execution of command: {cmd}")
+    logger.info(f"Starting real-time execution of command: {cmd}")
     command_obj = create_command_object(cmd, scan_id, activity_id)
     command = prepare_command(cmd, shell)
     logger.debug(f"Prepared stream command: {command}")
     
-    process = execute_command(command, shell, cwd)
-    output = ""
-    error_output = ""
-
+    # Execute command with line buffering for better streaming
+    process = subprocess.Popen(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        shell=shell,
+        cwd=cwd,
+        bufsize=1,  # Line buffered
+        universal_newlines=True,
+        encoding=encoding
+    )
+    
+    # Initialize buffers and tracking variables
+    stdout_buffer = ""
+    stderr_buffer = ""
+    full_output = ""
+    full_error = ""
+    
+    # Use select for real-time streaming on Linux
     while True:
-        stdout_data = process.stdout.readline()
-        stderr_data = process.stderr.readline()
-        
-        if not stdout_data and not stderr_data and process.poll() is not None:
-            break
+        # Check if process has terminated
+        if process.poll() is not None:
+            # Read any remaining data
+            remaining_stdout = process.stdout.read()
+            remaining_stderr = process.stderr.read()
             
-        if stdout_data:
-            output += stdout_data
-            try:
-                item = process_line(stdout_data, trunc_char)
-                if item:
-                    yield item
-            except Exception as e:
-                logger.error(f"Error processing output line: {e}")
-                
-        if stderr_data:
-            error_output += stderr_data
-
+            if remaining_stdout:
+                stdout_buffer += remaining_stdout
+                full_output += remaining_stdout
+            if remaining_stderr:
+                stderr_buffer += remaining_stderr
+                full_error += remaining_stderr
+            
+            # Process any remaining complete lines
+            while '\n' in stdout_buffer:
+                line, stdout_buffer = stdout_buffer.split('\n', 1)
+                if line.strip():
+                    try:
+                        item = process_line(line, trunc_char)
+                        if item:
+                            yield item
+                    except Exception as e:
+                        logger.error(f"Error processing output line: {e}")
+            break
+        
+        # Use select to wait for data availability
+        try:
+            ready, _, _ = select.select([process.stdout, process.stderr], [], [], 0.1)
+            
+            for fd in ready:
+                try:
+                    data = fd.read(1024)
+                    if data:
+                        if fd == process.stdout:
+                            stdout_buffer += data
+                            full_output += data
+                            
+                            # Process complete lines immediately
+                            while '\n' in stdout_buffer:
+                                line, stdout_buffer = stdout_buffer.split('\n', 1)
+                                if line.strip():
+                                    try:
+                                        item = process_line(line, trunc_char)
+                                        if item:
+                                            yield item
+                                    except Exception as e:
+                                        logger.error(f"Error processing output line: {e}")
+                        else:
+                            stderr_buffer += data
+                            full_error += data
+                except Exception as e:
+                    logger.debug(f"Error reading from file descriptor: {e}")
+                    continue
+                    
+        except Exception as e:
+            logger.debug(f"Select error: {e}")
+            # Fallback to simple polling if select fails
+            time.sleep(0.1)
+    
+    # Wait for process completion
     process.wait()
     return_code = process.returncode
     
+    # Log completion status
     if return_code != 0:
         error_msg = f"Command failed with exit code {return_code}"
-        if error_output:
-            error_msg += f"\nError output:\n{error_output}"
+        if full_error:
+            error_msg += f"\nError output:\n{full_error}"
         logger.error(error_msg)
-        
-    command_obj.output = output or None
-    command_obj.error_output = error_output or None
+    else:
+        logger.info(f"Command completed successfully with exit code {return_code}")
+    
+    # Save command results
+    command_obj.output = full_output or None
+    command_obj.error_output = full_error or None
     command_obj.return_code = return_code
     command_obj.save()
     
     logger.debug(f'Command returned exit code: {return_code}')
 
+    # Write history if requested
     if history_file:
-        write_history(history_file, cmd, return_code, output)
+        write_history(history_file, cmd, return_code, full_output)
 
 def process_httpx_response(line):
     """TODO: implement this"""
