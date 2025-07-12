@@ -43,7 +43,6 @@ class ScanHistory(models.Model):
 	domain = models.ForeignKey(Domain, on_delete=models.CASCADE)
 	scan_type = models.ForeignKey(EngineType, on_delete=models.CASCADE)
 	celery_ids = ArrayField(models.CharField(max_length=100), blank=True, default=list)
-	async_task_ids = ArrayField(models.CharField(max_length=100), blank=True, default=list)
 	tasks = ArrayField(models.CharField(max_length=200), null=True)
 	stop_scan_date = models.DateTimeField(null=True, blank=True)
 	used_gf_patterns = models.CharField(max_length=500, null=True, blank=True)
