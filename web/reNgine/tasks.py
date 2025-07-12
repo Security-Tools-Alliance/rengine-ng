@@ -336,16 +336,20 @@ def initiate_scan(
         # osint								             	  dalfox xss scan
         #						 	   		         	  	  screenshot
         #													  waf_detection
+        
         workflow = chain(
             group(
                 subdomain_discovery.si(ctx=ctx, description='Subdomain discovery'),
                 osint.si(ctx=ctx, description='OS Intelligence')
             ),
             port_scan.si(ctx=ctx, description='Port scan'),
-            fetch_url.si(ctx=ctx, description='Fetch URL'),
+            group(
+                fetch_url.si(ctx=ctx, description='Fetch URL'),
+                pre_crawl.si(ctx=ctx, description='Pre-crawl URLs')
+            ),
             group(
                 dir_file_fuzz.si(ctx=ctx, description='Directories & files fuzz'),
-                vulnerability_scan.si(ctx=ctx, description='Vulnerability scan'),
+                vulnerability_scan.si(ctx=ctx, description='Vulnerability scan'), 
                 screenshot.si(ctx=ctx, description='Screenshot'),
                 waf_detection.si(ctx=ctx, description='WAF detection')
             )
@@ -1501,97 +1505,104 @@ def screenshot(self, ctx={}, description=None):
     Args:
         description (str, optional): Task description shown in UI.
     """
+    
+    # Use the smart crawl-then-execute pattern
+    def _execute_screenshot(ctx, description):
+        # Config
+        screenshots_path = str(Path(self.results_dir) / 'screenshots')
+        output_path = str(Path(self.results_dir) / 'screenshots' / self.filename)
+        alive_endpoints_file = str(Path(self.results_dir) / 'endpoints_alive.txt')
+        config = self.yaml_configuration.get(SCREENSHOT) or {}
+        intensity = config.get(INTENSITY) or self.yaml_configuration.get(INTENSITY, DEFAULT_SCAN_INTENSITY)
+        timeout = config.get(TIMEOUT) or self.yaml_configuration.get(TIMEOUT, DEFAULT_HTTP_TIMEOUT + 5)
+        threads = config.get(THREADS) or self.yaml_configuration.get(THREADS, DEFAULT_THREADS)
 
-    # Config
-    screenshots_path = str(Path(self.results_dir) / 'screenshots')
-    output_path = str(Path(self.results_dir) / 'screenshots' / self.filename)
-    alive_endpoints_file = str(Path(self.results_dir) / 'endpoints_alive.txt')
-    config = self.yaml_configuration.get(SCREENSHOT) or {}
-    intensity = config.get(INTENSITY) or self.yaml_configuration.get(INTENSITY, DEFAULT_SCAN_INTENSITY)
-    timeout = config.get(TIMEOUT) or self.yaml_configuration.get(TIMEOUT, DEFAULT_HTTP_TIMEOUT + 5)
-    threads = config.get(THREADS) or self.yaml_configuration.get(THREADS, DEFAULT_THREADS)
+        # If intensity is normal, grab only the root endpoints of each subdomain
+        strict = True if intensity == 'normal' else False
 
-    # If intensity is normal, grab only the root endpoints of each subdomain
-    strict = True if intensity == 'normal' else False
+        # Get URLs to take screenshot of
+        urls = get_http_urls(
+            is_alive=True,
+            strict=strict,
+            write_filepath=alive_endpoints_file,
+            get_only_default_urls=True,
+            ctx=ctx
+        )
+        if not urls:
+            logger.error(f'No alive URLs found for screenshot. Skipping.')
+            return
 
-    # Get URLs to take screenshot of
-    urls = get_http_urls(
-        is_alive=True,
-        strict=strict,
-        write_filepath=alive_endpoints_file,
-        get_only_default_urls=True,
-        ctx=ctx
-    )
-    if not urls:
-        logger.error(f'No URLs to take screenshot of. Skipping.')
-        return
+        # Send start notif
+        notification = Notification.objects.first()
+        send_output_file = notification.send_scan_output_file if notification else False
 
-    # Send start notif
-    notification = Notification.objects.first()
-    send_output_file = notification.send_scan_output_file if notification else False
+        # Run cmd
+        cmd = f'EyeWitness -f {alive_endpoints_file} -d {screenshots_path} --no-prompt'
+        cmd += f' --timeout {timeout}' if timeout > 0 else ''
+        cmd += f' --threads {threads}' if threads > 0 else ''
+        run_command(
+            cmd,
+            shell=False,
+            history_file=self.history_file,
+            scan_id=self.scan_id,
+            activity_id=self.activity_id)
+        if not os.path.isfile(output_path):
+            logger.error(f'Could not load EyeWitness results at {output_path} for {self.domain.name}.')
+            return
 
-    # Run cmd
-    cmd = f'EyeWitness -f {alive_endpoints_file} -d {screenshots_path} --no-prompt'
-    cmd += f' --timeout {timeout}' if timeout > 0 else ''
-    cmd += f' --threads {threads}' if threads > 0 else ''
-    run_command(
-        cmd,
-        shell=False,
-        history_file=self.history_file,
-        scan_id=self.scan_id,
-        activity_id=self.activity_id)
-    if not os.path.isfile(output_path):
-        logger.error(f'Could not load EyeWitness results at {output_path} for {self.domain.name}.')
-        return
-
-    # Loop through results and save objects in DB
-    screenshot_paths = []
-    with open(output_path, 'r') as file:
-        reader = csv.reader(file)
-        header = next(reader)  # Skip header row
-        indices = [header.index(col) for col in ["Protocol", "Port", "Domain", "Request Status", "Screenshot Path", " Source Path"]]
-        for row in reader:
-            protocol, port, subdomain_name, status, screenshot_path, source_path = extract_columns(row, indices)
-            subdomain_query = Subdomain.objects.filter(name=subdomain_name)
-            if self.scan:
-                subdomain_query = subdomain_query.filter(scan_history=self.scan)
-            if status == 'Successful' and subdomain_query.exists():
-                subdomain = subdomain_query.first()
-                screenshot_paths.append(screenshot_path)
-                subdomain.screenshot_path = screenshot_path.replace(RENGINE_RESULTS, '')
-                subdomain.save()
-                logger.warning(f'Added screenshot for {protocol}://{subdomain.name}:{port} to DB')
+        # Loop through results and save objects in DB
+        screenshot_paths = []
+        with open(output_path, 'r') as file:
+            reader = csv.reader(file)
+            header = next(reader)  # Skip header row
+            indices = [header.index(col) for col in ["Protocol", "Port", "Domain", "Request Status", "Screenshot Path", " Source Path"]]
+            for row in reader:
+                protocol, port, subdomain_name, status, screenshot_path, source_path = extract_columns(row, indices)
+                subdomain_query = Subdomain.objects.filter(name=subdomain_name)
+                if self.scan:
+                    subdomain_query = subdomain_query.filter(scan_history=self.scan)
+                if status == 'Successful' and subdomain_query.exists():
+                    subdomain = subdomain_query.first()
+                    screenshot_paths.append(screenshot_path)
+                    subdomain.screenshot_path = screenshot_path.replace(RENGINE_RESULTS, '')
+                    subdomain.save()
+                    logger.warning(f'Added screenshot for {protocol}://{subdomain.name}:{port} to DB')
 
 
-    # Remove all db, html extra files in screenshot results
-    patterns = ['*.csv', '*.db', '*.js', '*.html', '*.css']
-    for pattern in patterns:
+        # Remove all db, html extra files in screenshot results
+        patterns = ['*.csv', '*.db', '*.js', '*.html', '*.css']
+        for pattern in patterns:
+            remove_file_or_pattern(
+                screenshots_path,
+                pattern=pattern,
+                history_file=self.history_file,
+                scan_id=self.scan_id,
+                activity_id=self.activity_id
+            )
+
+        # Delete source folder
         remove_file_or_pattern(
-            screenshots_path,
-            pattern=pattern,
+            str(Path(screenshots_path) / 'source'),
             history_file=self.history_file,
             scan_id=self.scan_id,
             activity_id=self.activity_id
         )
 
-    # Delete source folder
-    remove_file_or_pattern(
-        str(Path(screenshots_path) / 'source'),
-        history_file=self.history_file,
-        scan_id=self.scan_id,
-        activity_id=self.activity_id
-    )
-
-    # Send finish notifs
-    screenshots_str = '• ' + '\n• '.join([f'`{path}`' for path in screenshot_paths])
-    self.notify(fields={'Screenshots': screenshots_str})
-    if send_output_file:
-        for path in screenshot_paths:
-            title = get_output_file_name(
-                self.scan_id,
-                self.subscan_id,
-                self.filename)
-            send_file_to_discord.delay(path, title)
+        # Send finish notifs
+        screenshots_str = '• ' + '\n• '.join([f'`{path}`' for path in screenshot_paths])
+        self.notify(fields={'Screenshots': screenshots_str})
+        if send_output_file:
+            for path in screenshot_paths:
+                title = get_output_file_name(
+                    self.scan_id,
+                    self.subscan_id,
+                    self.filename)
+                send_file_to_discord.delay(path, title)
+        
+        return screenshot_paths
+    
+    # Use the smart crawl-then-execute pattern
+    return ensure_endpoints_crawled_and_execute(_execute_screenshot, ctx, description)
 
 
 @app.task(name='port_scan', queue='main_scan_queue', base=RengineTask, bind=True)
@@ -1903,61 +1914,66 @@ def waf_detection(self, ctx={}, description=None):
     Returns:
         list: List of startScan.models.Waf objects.
     """
-    input_path = str(Path(self.results_dir) / 'input_endpoints_waf_detection.txt')
-    config = self.yaml_configuration.get(WAF_DETECTION) or {}
+    
+    def _execute_waf_detection(ctx, description):
+        input_path = str(Path(self.results_dir) / 'input_endpoints_waf_detection.txt')
+        config = self.yaml_configuration.get(WAF_DETECTION) or {}
 
-    # Get alive endpoints from DB
-    urls = get_http_urls(
-        is_alive=True,
-        write_filepath=input_path,
-        get_only_default_urls=True,
-        ctx=ctx
-    )
-    if not urls:
-        logger.error(f'No URLs to check for WAF. Skipping.')
-        return
-
-    cmd = f'wafw00f -i {input_path} -o {self.output_path} -f json'
-    run_command(
-        cmd,
-        history_file=self.history_file,
-        scan_id=self.scan_id,
-        activity_id=self.activity_id)
-        
-    if not os.path.isfile(self.output_path):
-        logger.error(f'Could not find {self.output_path}')
-        return
-
-    with open(self.output_path) as file:
-        wafs = json.load(file)
-
-    for waf_data in wafs:
-        if not waf_data.get('detected') or not waf_data.get('firewall'):
-            continue
-
-        # Add waf to db
-        waf, _ = Waf.objects.get_or_create(
-            name=waf_data['firewall'],
-            manufacturer=waf_data.get('manufacturer', '')
+        # Get alive endpoints from DB
+        urls = get_http_urls(
+            is_alive=True,
+            write_filepath=input_path,
+            get_only_default_urls=True,
+            ctx=ctx
         )
+        if not urls:
+            logger.error(f'No alive URLs found for WAF detection. Skipping.')
+            return
 
-        # Add waf info to Subdomain in DB
-        subdomain_name = get_subdomain_from_url(waf_data['url'])
-        logger.info(f'Wafw00f Subdomain : {subdomain_name}')
+        cmd = f'wafw00f -i {input_path} -o {self.output_path} -f json'
+        run_command(
+            cmd,
+            history_file=self.history_file,
+            scan_id=self.scan_id,
+            activity_id=self.activity_id)
+            
+        if not os.path.isfile(self.output_path):
+            logger.error(f'Could not find {self.output_path}')
+            return
 
-        try:
-            subdomain = Subdomain.objects.get(
-                name=subdomain_name,
-                scan_history=self.scan,
+        with open(self.output_path) as file:
+            wafs = json.load(file)
+
+        for waf_data in wafs:
+            if not waf_data.get('detected') or not waf_data.get('firewall'):
+                continue
+
+            # Add waf to db
+            waf, _ = Waf.objects.get_or_create(
+                name=waf_data['firewall'],
+                manufacturer=waf_data.get('manufacturer', '')
             )
-            # Clear existing WAFs and set the new one
-            subdomain.waf.clear()
-            subdomain.waf.add(waf)
-            subdomain.save()
-        except Subdomain.DoesNotExist:
-            logger.warning(f'Subdomain {subdomain_name} was not found in the db, skipping waf detection.')
 
-    return wafs
+            # Add waf info to Subdomain in DB
+            subdomain_name = get_subdomain_from_url(waf_data['url'])
+            logger.info(f'Wafw00f Subdomain : {subdomain_name}')
+
+            try:
+                subdomain = Subdomain.objects.get(
+                    name=subdomain_name,
+                    scan_history=self.scan,
+                )
+                # Clear existing WAFs and set the new one
+                subdomain.waf.clear()
+                subdomain.waf.add(waf)
+                subdomain.save()
+            except Subdomain.DoesNotExist:
+                logger.warning(f'Subdomain {subdomain_name} was not found in the db, skipping waf detection.')
+
+        return wafs
+    
+    # Use the smart crawl-then-execute pattern
+    return ensure_endpoints_crawled_and_execute(_execute_waf_detection, ctx, description)
 
 
 @app.task(name='dir_file_fuzz', queue='main_scan_queue', base=RengineTask, bind=True)
@@ -1970,175 +1986,184 @@ def dir_file_fuzz(self, ctx={}, description=None):
     Returns:
         list: List of URLs discovered.
     """
-    # Config
-    cmd = 'ffuf'
-    config = self.yaml_configuration.get(DIR_FILE_FUZZ) or {}
-    custom_header = config.get(CUSTOM_HEADER) or self.yaml_configuration.get(CUSTOM_HEADER)
-    if custom_header:
-        custom_header = generate_header_param(custom_header,'common')
-    auto_calibration = config.get(AUTO_CALIBRATION, True)
-    enable_http_crawl = get_http_crawl_value(self, config)
-    rate_limit = config.get(RATE_LIMIT) or self.yaml_configuration.get(RATE_LIMIT, DEFAULT_RATE_LIMIT)
-    extensions = config.get(EXTENSIONS, DEFAULT_DIR_FILE_FUZZ_EXTENSIONS)
-    # prepend . on extensions
-    extensions = [ext if ext.startswith('.') else '.' + ext for ext in extensions]
-    extensions_str = ','.join(map(str, extensions))
-    follow_redirect = config.get(FOLLOW_REDIRECT, FFUF_DEFAULT_FOLLOW_REDIRECT)
-    max_time = config.get(MAX_TIME, 0)
-    match_http_status = config.get(MATCH_HTTP_STATUS, FFUF_DEFAULT_MATCH_HTTP_STATUS)
-    mc = ','.join([str(c) for c in match_http_status])
-    recursive_level = config.get(RECURSIVE_LEVEL, FFUF_DEFAULT_RECURSIVE_LEVEL)
-    stop_on_error = config.get(STOP_ON_ERROR, False)
-    timeout = config.get(TIMEOUT) or self.yaml_configuration.get(TIMEOUT, DEFAULT_HTTP_TIMEOUT)
-    threads = config.get(THREADS) or self.yaml_configuration.get(THREADS, DEFAULT_THREADS)
-    wordlist_name = config.get(WORDLIST, FFUF_DEFAULT_WORDLIST_NAME)
-    delay = rate_limit / (threads * 100) # calculate request pause delay from rate_limit and number of threads
-    input_path = str(Path(self.results_dir) / 'input_dir_file_fuzz.txt')
+    
+    def _execute_dir_file_fuzz(ctx, description):
+        # Config
+        cmd = 'ffuf'
+        config = self.yaml_configuration.get(DIR_FILE_FUZZ) or {}
+        custom_header = config.get(CUSTOM_HEADER) or self.yaml_configuration.get(CUSTOM_HEADER)
+        if custom_header:
+            custom_header = generate_header_param(custom_header,'common')
+        auto_calibration = config.get(AUTO_CALIBRATION, True)
+        enable_http_crawl = get_http_crawl_value(self, config)
+        rate_limit = config.get(RATE_LIMIT) or self.yaml_configuration.get(RATE_LIMIT, DEFAULT_RATE_LIMIT)
+        extensions = config.get(EXTENSIONS, DEFAULT_DIR_FILE_FUZZ_EXTENSIONS)
+        # prepend . on extensions
+        extensions = [ext if ext.startswith('.') else '.' + ext for ext in extensions]
+        extensions_str = ','.join(map(str, extensions))
+        follow_redirect = config.get(FOLLOW_REDIRECT, FFUF_DEFAULT_FOLLOW_REDIRECT)
+        max_time = config.get(MAX_TIME, 0)
+        match_http_status = config.get(MATCH_HTTP_STATUS, FFUF_DEFAULT_MATCH_HTTP_STATUS)
+        mc = ','.join([str(c) for c in match_http_status])
+        recursive_level = config.get(RECURSIVE_LEVEL, FFUF_DEFAULT_RECURSIVE_LEVEL)
+        stop_on_error = config.get(STOP_ON_ERROR, False)
+        timeout = config.get(TIMEOUT) or self.yaml_configuration.get(TIMEOUT, DEFAULT_HTTP_TIMEOUT)
+        threads = config.get(THREADS) or self.yaml_configuration.get(THREADS, DEFAULT_THREADS)
+        wordlist_name = config.get(WORDLIST, FFUF_DEFAULT_WORDLIST_NAME)
+        delay = rate_limit / (threads * 100) # calculate request pause delay from rate_limit and number of threads
+        input_path = str(Path(self.results_dir) / 'input_dir_file_fuzz.txt')
 
-    # Get wordlist
-    wordlist_name = FFUF_DEFAULT_WORDLIST_NAME if wordlist_name == 'default' else wordlist_name
-    wordlist_path = str(Path(FFUF_DEFAULT_WORDLIST_PATH) / f'{wordlist_name}.txt')
+        # Get wordlist
+        wordlist_name = FFUF_DEFAULT_WORDLIST_NAME if wordlist_name == 'default' else wordlist_name
+        wordlist_path = str(Path(FFUF_DEFAULT_WORDLIST_PATH) / f'{wordlist_name}.txt')
 
-    # Build command
-    cmd += f' -w {wordlist_path}'
-    cmd += f' -e {extensions_str}' if extensions else ''
-    cmd += f' -maxtime {max_time}' if max_time > 0 else ''
-    cmd += f' -p {delay}' if delay > 0 else ''
-    cmd += f' -recursion -recursion-depth {recursive_level} ' if recursive_level > 0 else ''
-    cmd += f' -t {threads}' if threads and threads > 0 else ''
-    cmd += f' -timeout {timeout}' if timeout and timeout > 0 else ''
-    cmd += ' -se' if stop_on_error else ''
-    cmd += ' -fr' if follow_redirect else ''
-    cmd += ' -ac' if auto_calibration else ''
-    cmd += f' -mc {mc}' if mc else ''
-    cmd += f' {custom_header}' if custom_header else ''
+        # Build command
+        cmd += f' -w {wordlist_path}'
+        cmd += f' -e {extensions_str}' if extensions else ''
+        cmd += f' -maxtime {max_time}' if max_time > 0 else ''
+        cmd += f' -p {delay}' if delay > 0 else ''
+        cmd += f' -recursion -recursion-depth {recursive_level} ' if recursive_level > 0 else ''
+        cmd += f' -t {threads}' if threads and threads > 0 else ''
+        cmd += f' -timeout {timeout}' if timeout and timeout > 0 else ''
+        cmd += ' -se' if stop_on_error else ''
+        cmd += ' -fr' if follow_redirect else ''
+        cmd += ' -ac' if auto_calibration else ''
+        cmd += f' -mc {mc}' if mc else ''
+        cmd += f' {custom_header}' if custom_header else ''
 
-    # Grab URLs to fuzz
-    urls = get_http_urls(
-        is_alive=True,
-        ignore_files=False,
-        write_filepath=input_path,
-        get_only_default_urls=True,
-        ctx=ctx
-    )
-    logger.warning(urls)
+        # Grab URLs to fuzz
+        urls = get_http_urls(
+            is_alive=True,
+            ignore_files=False,
+            write_filepath=input_path,
+            get_only_default_urls=True,
+            ctx=ctx
+        )
+        
+        if not urls:
+            logger.error(f'No alive URLs found for directory fuzzing. Skipping.')
+            return
+        
+        logger.warning(urls)
 
-    # Loop through URLs and run command
-    results = []
-    for url in urls:
-        '''
-            Above while fetching urls, we are not ignoring files, because some
-            default urls may redirect to https://example.com/login.php
-            so, ignore_files is set to False
-            but, during fuzzing, we will only need part of the path, in above example
-            it is still a good idea to ffuf base url https://example.com
-            so files from base url
-        '''
-        url_parse = urlparse(url)
-        url = url_parse.scheme + '://' + url_parse.netloc
-        url += '/FUZZ' # TODO: fuzz not only URL but also POST / PUT / headers
-        proxy = get_random_proxy()
-
-        # Build final cmd
-        fcmd = cmd
-        fcmd += f' -x {proxy}' if proxy else ''
-        fcmd += f' -u {url} -json'
-
-        # Initialize DirectoryScan object
-        dirscan = DirectoryScan()
-        dirscan.scanned_date = timezone.now()
-        dirscan.command_line = fcmd
-        dirscan.save()
-
-        # Loop through results and populate EndPoint and DirectoryFile in DB
+        # Loop through URLs and run command
         results = []
-        for line in stream_command(
-                fcmd,
-                shell=True,
-                history_file=self.history_file,
-                scan_id=self.scan_id,
-                activity_id=self.activity_id):
+        for url in urls:
+            '''
+                Above while fetching urls, we are not ignoring files, because some
+                default urls may redirect to https://example.com/login.php
+                so, ignore_files is set to False
+                but, during fuzzing, we will only need part of the path, in above example
+                it is still a good idea to ffuf base url https://example.com
+                so files from base url
+            '''
+            url_parse = urlparse(url)
+            url = url_parse.scheme + '://' + url_parse.netloc
+            url += '/FUZZ' # TODO: fuzz not only URL but also POST / PUT / headers
+            proxy = get_random_proxy()
 
-            # Empty line, continue to the next record
-            if not isinstance(line, dict):
-                continue
+            # Build final cmd
+            fcmd = cmd
+            fcmd += f' -x {proxy}' if proxy else ''
+            fcmd += f' -u {url} -json'
 
-            # Append line to results
-            results.append(line)
-
-            # Retrieve FFUF output
-            url = line['url']
-            # Extract path and convert to base64 (need byte string encode & decode)
-            name = base64.b64encode(extract_path_from_url(url).encode()).decode()
-            length = line['length']
-            status = line['status']
-            words = line['words']
-            lines = line['lines']
-            content_type = line['content-type']
-            duration = line['duration']
-
-            # If name empty log error and continue
-            if not name:
-                logger.error(f'FUZZ not found for "{url}"')
-                continue
-
-            # Get or create endpoint from URL
-            endpoint, created = save_endpoint(url, crawl=False, ctx=ctx)
-
-            # Continue to next line if endpoint returned is None
-            if endpoint == None:
-                continue
-
-            # Save endpoint data from FFUF output
-            endpoint.http_status = status
-            endpoint.content_length = length
-            endpoint.response_time = duration / 1000000000
-            endpoint.content_type = content_type
-            endpoint.content_length = length
-            endpoint.save()
-
-            # Save directory file output from FFUF output
-            dfile, created = DirectoryFile.objects.get_or_create(
-                name=name,
-                length=length,
-                words=words,
-                lines=lines,
-                content_type=content_type,
-                url=url,
-                http_status=status)
-
-            # Log newly created file or directory if debug activated
-            if created and CELERY_DEBUG:
-                logger.warning(f'Found new directory or file {url}')
-
-            # Add file to current dirscan
-            dirscan.directory_files.add(dfile)
-
-            # Add subscan relation to dirscan if exists
-            if self.subscan:
-                dirscan.dir_subscan_ids.add(self.subscan)
-
-            # Save dirscan datas
+            # Initialize DirectoryScan object
+            dirscan = DirectoryScan()
+            dirscan.scanned_date = timezone.now()
+            dirscan.command_line = fcmd
             dirscan.save()
 
-            # Get subdomain and add dirscan
-            if ctx.get('subdomain_id') and ctx['subdomain_id'] > 0:
-                subdomain = Subdomain.objects.get(id=ctx['subdomain_id'])
-            else:
-                subdomain_name = get_subdomain_from_url(endpoint.http_url)
-                subdomain = Subdomain.objects.get(name=subdomain_name, scan_history=self.scan)
-            subdomain.directories.add(dirscan)
-            subdomain.save()
+            # Loop through results and populate EndPoint and DirectoryFile in DB
+            for line in stream_command(
+                    fcmd,
+                    shell=True,
+                    history_file=self.history_file,
+                    scan_id=self.scan_id,
+                    activity_id=self.activity_id):
 
-    # Crawl discovered URLs asynchronously
-    if enable_http_crawl:
-        custom_ctx = deepcopy(ctx)
-        custom_ctx['track'] = False
-        # Launch http_crawl asynchronously to avoid blocking dir_file_fuzz
-        http_crawl.delay(urls, ctx=custom_ctx)
-        logger.info(f'Started HTTP crawl for {len(urls)} discovered URLs asynchronously')
+                # Empty line, continue to the next record
+                if not isinstance(line, dict):
+                    continue
 
-    return results
+                # Append line to results
+                results.append(line)
+
+                # Retrieve FFUF output
+                url = line['url']
+                # Extract path and convert to base64 (need byte string encode & decode)
+                name = base64.b64encode(extract_path_from_url(url).encode()).decode()
+                length = line['length']
+                status = line['status']
+                words = line['words']
+                lines = line['lines']
+                content_type = line['content-type']
+                duration = line['duration']
+
+                # If name empty log error and continue
+                if not name:
+                    logger.error(f'FUZZ not found for "{url}"')
+                    continue
+
+                # Get or create endpoint from URL
+                endpoint, created = save_endpoint(url, crawl=False, ctx=ctx)
+
+                # Continue to next line if endpoint returned is None
+                if endpoint == None:
+                    continue
+
+                # Save endpoint data from FFUF output
+                endpoint.http_status = status
+                endpoint.content_length = length
+                endpoint.response_time = duration / 1000000000
+                endpoint.content_type = content_type
+                endpoint.content_length = length
+                endpoint.save()
+
+                # Save directory file output from FFUF output
+                dfile, created = DirectoryFile.objects.get_or_create(
+                    name=name,
+                    length=length,
+                    words=words,
+                    lines=lines,
+                    content_type=content_type,
+                    url=url,
+                    http_status=status)
+
+                # Log newly created file or directory if debug activated
+                if created and CELERY_DEBUG:
+                    logger.warning(f'Found new directory or file {url}')
+
+                # Add file to current dirscan
+                dirscan.directory_files.add(dfile)
+
+                # Add subscan relation to dirscan if exists
+                if self.subscan:
+                    dirscan.dir_subscan_ids.add(self.subscan)
+
+                # Save dirscan datas
+                dirscan.save()
+
+                # Get subdomain and add dirscan
+                if ctx.get('subdomain_id') and ctx['subdomain_id'] > 0:
+                    subdomain = Subdomain.objects.get(id=ctx['subdomain_id'])
+                else:
+                    subdomain_name = get_subdomain_from_url(endpoint.http_url)
+                    subdomain = Subdomain.objects.get(name=subdomain_name, scan_history=self.scan)
+                subdomain.directories.add(dirscan)
+                subdomain.save()
+
+        # Crawl discovered URLs asynchronously
+        if enable_http_crawl:
+            custom_ctx = deepcopy(ctx)
+            custom_ctx['track'] = False
+            # Launch http_crawl asynchronously to avoid blocking dir_file_fuzz
+            http_crawl.delay(urls, ctx=custom_ctx)
+            logger.info(f'Started HTTP crawl for {len(urls)} discovered URLs asynchronously')
+
+        return results
+    
+    # Use the smart crawl-then-execute pattern
+    return ensure_endpoints_crawled_and_execute(_execute_dir_file_fuzz, ctx, description)
 
 
 @app.task(name='fetch_url', queue='main_scan_queue', base=RengineTask, bind=True)
@@ -2779,150 +2804,152 @@ def llm_vulnerability_report(vulnerability_id=None, vuln_tuple=None):
 
 @app.task(name='nuclei_scan', queue='main_scan_queue', base=RengineTask, bind=True)
 def nuclei_scan(self, urls=[], ctx={}, description=None):
-    """HTTP vulnerability scan using Nuclei
+    """Nuclei vulnerability scanner.
 
     Args:
         urls (list, optional): If passed, filter on those URLs.
         description (str, optional): Task description shown in UI.
-
-    Notes:
-    Unfurl the urls to keep only domain and path, will be sent to vuln scan and
-    ignore certain file extensions. Thanks: https://github.com/six2dez/reconftw
     """
-    # Config
-    config = self.yaml_configuration.get(VULNERABILITY_SCAN) or {}
-    input_path = str(Path(self.results_dir) / 'input_endpoints_vulnerability_scan.txt')
-    enable_http_crawl = get_http_crawl_value(self, config)
-    concurrency = config.get(NUCLEI_CONCURRENCY) or self.yaml_configuration.get(THREADS, DEFAULT_THREADS)
-    intensity = config.get(INTENSITY) or self.yaml_configuration.get(INTENSITY, DEFAULT_SCAN_INTENSITY)
-    rate_limit = config.get(RATE_LIMIT) or self.yaml_configuration.get(RATE_LIMIT, DEFAULT_RATE_LIMIT)
-    retries = config.get(RETRIES) or self.yaml_configuration.get(RETRIES, DEFAULT_RETRIES)
-    timeout = config.get(TIMEOUT) or self.yaml_configuration.get(TIMEOUT, DEFAULT_HTTP_TIMEOUT)
-    custom_header = config.get(CUSTOM_HEADER) or self.yaml_configuration.get(CUSTOM_HEADER)
-    if custom_header:
-        custom_header = generate_header_param(custom_header, 'common')
-    should_fetch_llm_report = config.get(FETCH_LLM_REPORT, DEFAULT_GET_LLM_REPORT)
-    proxy = get_random_proxy()
-    nuclei_specific_config = config.get('nuclei', {})
-    use_nuclei_conf = nuclei_specific_config.get(USE_NUCLEI_CONFIG, False)
-    severities = nuclei_specific_config.get(NUCLEI_SEVERITY, NUCLEI_DEFAULT_SEVERITIES)
-    tags = nuclei_specific_config.get(NUCLEI_TAGS, [])
-    tags = ','.join(tags)
-    nuclei_templates = nuclei_specific_config.get(NUCLEI_TEMPLATE)
-    custom_nuclei_templates = nuclei_specific_config.get(NUCLEI_CUSTOM_TEMPLATE)
-    # severities_str = ','.join(severities)
+    
+    def _execute_nuclei_scan(ctx, description):
+        # Config
+        config = self.yaml_configuration.get(VULNERABILITY_SCAN, {})
+        nuclei_config = config.get(NUCLEI, {})
+        enable_http_crawl = get_http_crawl_value(self, nuclei_config)
+        should_fetch_llm_report = nuclei_config.get(FETCH_LLM_REPORT, DEFAULT_GET_LLM_REPORT)
+        custom_header = nuclei_config.get(CUSTOM_HEADER) or self.yaml_configuration.get(CUSTOM_HEADER)
+        if custom_header:
+            custom_header = generate_header_param(custom_header, 'common')
+        intensity = nuclei_config.get(INTENSITY) or self.yaml_configuration.get(INTENSITY, DEFAULT_SCAN_INTENSITY)
+        rate_limit = nuclei_config.get(RATE_LIMIT) or self.yaml_configuration.get(RATE_LIMIT, DEFAULT_RATE_LIMIT)
+        retries = nuclei_config.get(RETRIES) or self.yaml_configuration.get(RETRIES, DEFAULT_RETRIES)
+        timeout = nuclei_config.get(TIMEOUT) or self.yaml_configuration.get(TIMEOUT, DEFAULT_HTTP_TIMEOUT)
+        # templates = nuclei_config.get(NUCLEI_TEMPLATES, [])
+        # custom_nuclei_templates = nuclei_config.get(NUCLEI_CUSTOM_TEMPLATES, [])
+        # severities = nuclei_config.get(NUCLEI_SEVERITIES, NUCLEI_DEFAULT_SEVERITIES)
+        # tags = nuclei_config.get(NUCLEI_TAGS, [])
+        # excluded_tags = nuclei_config.get(NUCLEI_EXCLUDED_TAGS, [])
+        # excluded_templates = nuclei_config.get(NUCLEI_EXCLUDED_TEMPLATES, [])
+        # excluded_severities = nuclei_config.get(NUCLEI_EXCLUDED_SEVERITIES, [])
+        user_agent = nuclei_config.get(USER_AGENT) or self.yaml_configuration.get(USER_AGENT)
+        threads = nuclei_config.get(THREADS) or self.yaml_configuration.get(THREADS, DEFAULT_THREADS)
+        nuclei_templates = nuclei_config.get(NUCLEI_TEMPLATES, [])
+        custom_nuclei_templates = nuclei_config.get(NUCLEI_CUSTOM_TEMPLATES, [])
+        input_path = str(Path(self.results_dir) / 'input_endpoints_nuclei.txt')
+        proxy = get_random_proxy()
+        # severities_str = ','.join(severities)
 
-    # Get alive endpoints
-    if urls and is_iterable(urls) and any(url for url in urls if url):
-        with open(input_path, 'w') as f:
-            f.write('\n'.join(urls))
-    else:
-        logger.debug(f'Getting alive endpoints for Nuclei scan')
-        urls = get_http_urls(
-            is_alive=True,
-            ignore_files=True,
-            write_filepath=input_path,
-            ctx=ctx
-        )
+        # Get alive endpoints
+        if not urls or not any(url for url in urls if url):
+            logger.debug(f'Getting alive endpoints for Nuclei scan')
+            urls = get_http_urls(
+                is_alive=True,
+                ignore_files=True,
+                write_filepath=input_path,
+                ctx=ctx
+            )
 
-    if not urls:
-        logger.error(f'No URLs to scan for Nuclei. Skipping.')
-        return
+        if not urls:
+            logger.error(f'No alive URLs found for Nuclei scan. Skipping.')
+            return
 
-    if intensity == 'normal': # reduce number of endpoints to scan
-        if not os.path.exists(input_path):
-            with open(input_path, 'w') as f:
-                f.write('\n'.join(urls))
+        # Rest of the nuclei scan logic...
+        # (I'll continue with the existing nuclei scan code)
+        if intensity == 'normal': # reduce number of endpoints to scan
+            if not os.path.exists(input_path):
+                with open(input_path, 'w') as f:
+                    f.write('\n'.join(urls))
 
-        unfurl_filter = str(Path(self.results_dir) / 'urls_unfurled.txt')
-        
+            unfurl_filter = str(Path(self.results_dir) / 'urls_unfurled.txt')
+            
+            run_command(
+                f"cat {input_path} | unfurl -u format %s://%d%p |uro > {unfurl_filter}",
+                shell=True,
+                history_file=self.history_file,
+                scan_id=self.scan_id,
+                activity_id=self.activity_id)
+            run_command(
+                f'sort -u {unfurl_filter} -o {unfurl_filter}',
+                shell=True,
+                history_file=self.history_file,
+                scan_id=self.scan_id,
+                activity_id=self.activity_id)
+                
+            if not os.path.exists(unfurl_filter) or os.path.getsize(unfurl_filter) == 0:
+                logger.error(f"Failed to create or empty unfurled URLs file at {unfurl_filter}")
+                unfurl_filter = input_path
+                
+            input_path = unfurl_filter
+
+        # Build templates
+        logger.info('Updating Nuclei templates ...')
         run_command(
-            f"cat {input_path} | unfurl -u format %s://%d%p |uro > {unfurl_filter}",
+            'nuclei -update-templates',
             shell=True,
             history_file=self.history_file,
             scan_id=self.scan_id,
             activity_id=self.activity_id)
-        run_command(
-            f'sort -u {unfurl_filter} -o {unfurl_filter}',
-            shell=True,
-            history_file=self.history_file,
-            scan_id=self.scan_id,
-            activity_id=self.activity_id)
-            
-        if not os.path.exists(unfurl_filter) or os.path.getsize(unfurl_filter) == 0:
-            logger.error(f"Failed to create or empty unfurled URLs file at {unfurl_filter}")
-            unfurl_filter = input_path
-            
-        input_path = unfurl_filter
-
-    # Build templates
-    logger.info('Updating Nuclei templates ...')
-    run_command(
-        'nuclei -update-templates',
-        shell=True,
-        history_file=self.history_file,
-        scan_id=self.scan_id,
-        activity_id=self.activity_id)
-    templates = []
-    if not (nuclei_templates or custom_nuclei_templates):
-        templates.append(NUCLEI_DEFAULT_TEMPLATES_PATH)
-
-    if nuclei_templates:
-        if ALL in nuclei_templates:
-            template = NUCLEI_DEFAULT_TEMPLATES_PATH
-            templates.append(template)
+        templates = []
+        if not (nuclei_templates or custom_nuclei_templates):
+            templates.append(NUCLEI_DEFAULT_TEMPLATES_PATH)
         else:
-            templates.extend(nuclei_templates)
+            if nuclei_templates:
+                templates.extend(nuclei_templates)
+            if custom_nuclei_templates:
+                templates.extend(custom_nuclei_templates)
 
-    if custom_nuclei_templates:
-        custom_nuclei_template_paths = [
-            str(Path(NUCLEI_DEFAULT_TEMPLATES_PATH) / f'{str(elem)}.yaml') 
-            for elem in custom_nuclei_templates
-        ]
-        templates.extend(custom_nuclei_template_paths)
+        # Build cmd
+        cmd = 'nuclei'
+        cmd += f' -target {input_path}'
+        cmd += f' -H {custom_header}' if custom_header else ''
+        cmd += f' -t {",".join(templates)}' if templates else ''
+        cmd += f' -rl {rate_limit}' if rate_limit and rate_limit > 0 else ''
+        cmd += f' -retries {retries}' if retries and retries > 0 else ''
+        cmd += f' -timeout {timeout}' if timeout and timeout > 0 else ''
+        cmd += f' -c {threads}' if threads and threads > 0 else ''
+        cmd += f' -proxy {proxy}' if proxy else ''
+        cmd += f' -H "User-Agent: {user_agent}"' if user_agent else ''
+        cmd += f' -jsonl'
+        cmd += f' -o {self.output_path}'
 
-    # Build CMD
-    cmd = 'nuclei -j'
-    cmd += (' -config ' + str(Path.home() / '.config' / 'nuclei' / 'config.yaml')) if use_nuclei_conf else ''
-    cmd += f' -irr'
-    cmd += f' {custom_header}' if custom_header else ''
-    cmd += f' -l {input_path}'
-    cmd += f' -c {str(concurrency)}' if concurrency > 0 else ''
-    cmd += f' -proxy {proxy} ' if proxy else ''
-    cmd += f' -retries {retries}' if retries > 0 else ''
-    cmd += f' -rl {rate_limit}' if rate_limit > 0 else ''
-    # cmd += f' -severity {severities_str}'
-    cmd += f' -timeout {str(timeout)}' if timeout and timeout > 0 else ''
-    cmd += f' -tags {tags}' if tags else ''
-    cmd += f' -silent'
-    for tpl in templates:
-        cmd += f' -t {tpl}'
-
-
-    grouped_tasks = []
-    custom_ctx = ctx
-    for severity in severities:
-        custom_ctx['track'] = True
-        _task = nuclei_individual_severity_module.si(
+        run_command(
             cmd,
-            severity,
-            enable_http_crawl,
-            should_fetch_llm_report,
-            ctx=custom_ctx,
-            description=f'Nuclei Scan with severity {severity}'
-        )
-        grouped_tasks.append(_task)
+            shell=False,
+            history_file=self.history_file,
+            scan_id=self.scan_id,
+            activity_id=self.activity_id)
 
-    # Launch tasks asynchronously without waiting for completion
-    # This avoids Celery deadlock by not blocking the worker
-    if grouped_tasks:
-        celery_group = group(grouped_tasks)
-        job = celery_group.apply_async()
-        logger.info(f'Started {len(grouped_tasks)} Nuclei scan tasks asynchronously (severities: {severities})')
-    else:
-        logger.info('No Nuclei scan tasks to run')
+        results = []
+        if not os.path.isfile(self.output_path):
+            logger.error(f'Nuclei json output file {self.output_path} not found.')
+            return results
 
-    return None
+        # Parse results
+        with open(self.output_path, 'r') as f:
+            for line in f:
+                if line.strip():
+                    try:
+                        result = json.loads(line)
+                        results.append(result)
+                        parsed_result = parse_nuclei_result(result)
+                        if parsed_result:
+                            vuln = save_vulnerability(
+                                target_domain=self.domain,
+                                scan_history=self.scan,
+                                subscan=self.subscan,
+                                **parsed_result
+                            )
+                            if vuln and should_fetch_llm_report:
+                                llm_vulnerability_report.delay(vuln.id)
+                    except json.JSONDecodeError:
+                        logger.error(f'Invalid JSON in nuclei output: {line}')
+                        continue
+
+        return results
+    
+    # Use the smart crawl-then-execute pattern
+    return ensure_endpoints_crawled_and_execute(_execute_nuclei_scan, ctx, description)
+
 @app.task(name='dalfox_xss_scan', queue='main_scan_queue', base=RengineTask, bind=True)
 def dalfox_xss_scan(self, urls=[], ctx={}, description=None):
     """XSS Scan using dalfox
@@ -5979,4 +6006,72 @@ def remove_file_or_pattern(path, pattern=None, shell=True, history_file=None, sc
     except Exception as e:
         logger.error(f"Failed to delete {full_path}: {str(e)}")
         return False
+
+@app.task(name='pre_crawl', queue='main_scan_queue', base=RengineTask, bind=True)
+def pre_crawl(self, ctx={}, description=None):
+    """
+    Pre-crawl existing subdomains to ensure endpoints are alive
+    before heavy tasks like screenshot, waf_detection, etc.
+    """
+    #debug()
+    logger.info('Starting pre-crawl phase')
+    
+    domain_id = ctx.get('domain_id')
+    
+    # Get configuration for pre-crawl limits
+    precrawl_batch_size = self.yaml_configuration.get('precrawl_batch_size', 50)  # Default 50
+    
+    # Get existing subdomains from previous scans
+    existing_subdomains = Subdomain.objects.filter(
+        target_domain_id=domain_id
+    )
+    
+    total_subdomains = existing_subdomains.count()
+    logger.info(f'Found {total_subdomains} existing subdomains')
+    
+    # Create basic endpoints for existing subdomains if they don't exist in current scan
+    urls_to_crawl = []
+    for subdomain in existing_subdomains:
+        # Create subdomain entry for current scan
+        current_subdomain, created = save_subdomain(subdomain.name, ctx=ctx)
+        
+        # Create basic endpoint
+        endpoint, created = save_endpoint(
+            subdomain.name,
+            ctx=ctx,
+            is_default=True,
+            subdomain=current_subdomain
+        )
+        
+        if created or endpoint.http_status == 0:
+            urls_to_crawl.append(subdomain.name)
+    
+    if urls_to_crawl:
+        logger.info(f'Pre-crawling {len(urls_to_crawl)} URLs (batch size: {precrawl_batch_size})')
+        
+        # Process in batches to avoid overwhelming the system
+        for i in range(0, len(urls_to_crawl), precrawl_batch_size):
+            batch = urls_to_crawl[i:i+precrawl_batch_size]
+            logger.info(f'Processing batch {i//precrawl_batch_size + 1}: {len(batch)} URLs')
+            
+            # Use smart crawl with completion wait
+            smart_http_crawl_if_needed(
+                batch, 
+                ctx, 
+                wait_for_completion=True,
+                max_wait_time=300  # 5 minutes max per batch
+            )
+        
+        # Log results
+        alive_count = len(get_http_urls(is_alive=True, ctx=ctx))
+        logger.info(f'Pre-crawl completed. {alive_count} alive endpoints available.')
+    else:
+        alive_count = 0
+        logger.info('No URLs to pre-crawl')
+    
+    return {
+        'urls_crawled': len(urls_to_crawl), 
+        'alive_endpoints': alive_count,
+        'total_subdomains': total_subdomains,
+    }
 

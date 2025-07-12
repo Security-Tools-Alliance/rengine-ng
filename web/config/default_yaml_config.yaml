@@ -1,5 +1,9 @@
 # Global vars for all tools
 #
+# Batch size for processing URLs
+# Smaller batches = more granular control, better error handling
+# Larger batches = potentially faster but higher memory usage and risk of overwhelming the system
+# precrawl_batch_size: 50
 # Custom header - FFUF, Nuclei, Dalfox, CRL Fuzz, HTTPx, Fetch URL (Hakrawler, Katana, Gospider)
 # custom_header: {
 #   'Cookie':'Test',
