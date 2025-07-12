@@ -3306,6 +3306,7 @@ def http_crawl(
         )
         if not endpoint:
             continue
+        logger.info(f'Updating endpoint datas: {endpoint}')
         # Update endpoint object
         endpoint.discovered_date = datetime.now()
         endpoint.http_status = http_status
@@ -5839,12 +5840,15 @@ def pre_crawl(self, ctx={}, description=None):
             batch = urls_to_crawl[i:i+precrawl_batch_size]
             logger.info(f'Processing batch {i//precrawl_batch_size + 1}: {len(batch)} URLs')
             
+            # Calculate dynamic max_wait_time based on batch size (5 seconds per URL)
+            dynamic_max_wait_time = len(batch) * 5
+            
             # Use smart crawl with completion wait
             smart_http_crawl_if_needed(
                 batch,
                 ctx,
-                wait_for_completion=False,
-                max_wait_time=300  # 5 minutes max per batch
+                wait_for_completion=True,
+                max_wait_time=dynamic_max_wait_time
             )
         
         # Log results
@@ -5885,12 +5889,15 @@ def intermediate_crawl(self, ctx={}, description=None):
         batch = uncrawled_endpoints[i:i+batch_size]
         logger.info(f'Processing intermediate crawl batch {i//batch_size + 1}: {len(batch)} URLs')
         
+        # Calculate dynamic max_wait_time based on batch size (5 seconds per URL)
+        dynamic_max_wait_time = len(batch) * 5
+        
         # Use smart crawl with completion wait
         smart_http_crawl_if_needed(
             batch,
             ctx,
-            wait_for_completion=False,
-            max_wait_time=180  # 3 minutes max per batch
+            wait_for_completion=True,
+            max_wait_time=dynamic_max_wait_time
         )
     
     # Log results
@@ -5928,11 +5935,14 @@ def post_crawl(self, ctx={}, description=None):
             batch = uncrawled_endpoints[i:i+batch_size]
             logger.info(f'Final crawl batch {i//batch_size + 1}: {len(batch)} URLs')
             
+            # Calculate dynamic max_wait_time based on batch size (5 seconds per URL)
+            dynamic_max_wait_time = len(batch) * 5
+            
             smart_http_crawl_if_needed(
                 batch,
                 ctx,
-                wait_for_completion=False,
-                max_wait_time=120  # 2 minutes max per batch
+                wait_for_completion=True,
+                max_wait_time=dynamic_max_wait_time
             )
     
     # Final statistics

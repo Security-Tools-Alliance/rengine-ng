@@ -308,9 +308,9 @@ def get_http_urls(
 	subdomain = Subdomain.objects.filter(pk=subdomain_id).first()
 	scan = ScanHistory.objects.filter(pk=scan_id).first()
 	if subdomain:
-		logger.info(f'Searching for endpoints for starting scan on {domain} and subdomain {subdomain}')
+		logger.info(f'Searching for endpoints to crawl on subdomain {subdomain}')
 	else:
-		logger.info(f'Searching for endpoints for starting scan on {domain}')
+		logger.info(f'Searching for endpoints to crawl on domain {domain}')
 	log_header = 'Found a total of '
 	log_found = ''
 
