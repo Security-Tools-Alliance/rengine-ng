@@ -59,116 +59,6 @@ logger = get_task_logger(__name__)
 # Async Task Tracking     #
 #-------------------------#
 
-def track_async_tasks(scan_id, task_ids, task_type="background"):
-    """Track asynchronous tasks launched by parent tasks.
-    
-    Args:
-        scan_id (int): Scan history ID
-        task_ids (list): List of Celery task IDs
-        task_type (str): Type of async tasks (e.g., "background", "vulnerability")
-    """
-    if not task_ids:
-        return
-        
-    # Store in scan metadata for tracking
-    scan = ScanHistory.objects.filter(pk=scan_id).first()
-    if not scan:
-        return
-        
-    # Initialize async_tasks if not exists
-    if not hasattr(scan, 'async_task_ids') or not scan.async_task_ids:
-        scan.async_task_ids = []
-    
-    # Add new task IDs
-    existing_ids = scan.async_task_ids or []
-    new_ids = [str(task_id) for task_id in task_ids if str(task_id) not in existing_ids]
-    scan.async_task_ids = existing_ids + new_ids
-    scan.save()
-    
-    logger.info(f'Tracking {len(new_ids)} async {task_type} tasks for scan {scan_id}')
-
-
-def check_async_tasks_status(scan_id):
-    """Check if async tasks are still running.
-    
-    Args:
-        scan_id (int): Scan history ID
-        
-    Returns:
-        tuple: (has_running_tasks, total_tasks, running_tasks)
-    """
-    scan = ScanHistory.objects.filter(pk=scan_id).first()
-    if not scan or not hasattr(scan, 'async_task_ids') or not scan.async_task_ids:
-        return False, 0, 0
-        
-    from celery import current_app
-    
-    task_ids = scan.async_task_ids or []
-    running_tasks = 0
-    
-    for task_id in task_ids:
-        try:
-            result = current_app.AsyncResult(task_id)
-            if result.state in ['PENDING', 'STARTED', 'RETRY']:
-                running_tasks += 1
-        except Exception as e:
-            logger.debug(f'Error checking task {task_id}: {e}')
-            # Assume task is no longer running if we can't check it
-            continue
-    
-    has_running = running_tasks > 0
-    logger.debug(f'Scan {scan_id}: {running_tasks}/{len(task_ids)} async tasks still running')
-    
-    return has_running, len(task_ids), running_tasks
-
-
-@app.task(name='finalize_scan_status', bind=False, queue='report_queue')
-def finalize_scan_status(scan_id, subscan_id=None):
-    """Final callback to update scan status when all async tasks are done.
-    
-    Args:
-        scan_id (int): Scan history ID
-        subscan_id (int, optional): SubScan ID
-    """
-    has_running, total_tasks, running_tasks = check_async_tasks_status(scan_id)
-    
-    if has_running:
-        # Still have running tasks, check again later
-        logger.info(f'Scan {scan_id}: {running_tasks}/{total_tasks} async tasks still running, will check again in 30s')
-        finalize_scan_status.apply_async(args=[scan_id, subscan_id], countdown=30)
-        return
-    
-    # All async tasks are done, update to final status
-    logger.info(f'Scan {scan_id}: All async tasks completed, updating to final status')
-    
-    # Determine final status based on failed tasks
-    scan = ScanHistory.objects.filter(pk=scan_id).first()
-    if not scan:
-        return
-        
-    tasks = ScanActivity.objects.filter(scan_of=scan).all()
-    if subscan_id:
-        subscan = SubScan.objects.filter(pk=subscan_id).first()
-        if subscan:
-            subscan.status = final_status
-            subscan.save()
-    else:
-        scan.scan_status = final_status
-        
-    scan.stop_scan_date = timezone.now()
-    scan.save()
-    
-    # Send final notification
-    send_scan_notif.delay(
-        scan_history_id=scan_id,
-        subscan_id=subscan_id,
-        engine_id=scan.scan_type.id if scan.scan_type else None,
-        status=final_status_h
-    )
-    
-    logger.info(f'Scan {scan_id} finalized with status: {final_status_h}')
-
-
 @app.task(name='initiate_scan', bind=False, queue='initiate_scan_queue')
 def initiate_scan(
         scan_history_id,
@@ -217,7 +107,7 @@ def initiate_scan(
 
         # Check if scanning an IP address
         is_ip_scan = validators.ip_address.ipv4(domain.name) or validators.ip_address.ipv6(domain.name)
-        
+
         if is_ip_scan:
             # Filter out irrelevant tasks for an IP
             allowed_tasks = ['port_scan', 'fetch_url', 'dir_file_fuzz', 'vulnerability_scan', 'screenshot', 'waf_detection']
@@ -292,68 +182,79 @@ def initiate_scan(
         subdomain_name = domain.name
         subdomain, _ = save_subdomain(subdomain_name, ctx=ctx)
 
-        # Create initial host
+        # Create initial host - no more initial web service detection
         host = domain.name
-        
-        # Check if default endpoints already exist for this subdomain
-        existing_default_endpoint = EndPoint.objects.filter(
-            target_domain=domain,
-            is_default=True
-        ).first()
-        
-        if existing_default_endpoint:
-            logger.warning(f'Default endpoint already exists for {host}. Updating with HTTP crawl instead of Nmap.')
+        logger.info(f'Creating scan for {host} - web service detection will be handled by port_scan or pre_crawl')
 
-            # Launch http_crawl to update endpoint data
-            http_crawl.delay(urls=[existing_default_endpoint.http_url], ctx=ctx, update_subdomain_metadatas=True)
-            logger.info(f'Started HTTP crawl for existing endpoint {endpoint.http_url} to update data')
-            
-        else:
-            # Use Nmap to find web services ports
-            logger.warning(f'Using Nmap to find web services on {host}')
-            hosts_data = get_nmap_http_datas(host, ctx)
-            logger.debug(f'Identified hosts: {hosts_data}')
+        # Build new workflow structure based on enabled tasks:
+        # 1. Initial discovery (subdomain_discovery, osint)
+        # 2. pre_crawl (crawl existing subdomains)
+        # 3. port_scan (if enabled)
+        # 4. fetch_url (discover new endpoints)
+        # 5. intermediate_crawl (crawl new endpoints)
+        # 6. Final tasks (dir_file_fuzz, vulnerability_scan, screenshot, waf_detection)
+        # 7. post_crawl (final endpoint verification)
 
-            if not hosts_data:
-                logger.warning(f'Nmap found no web services on host {host}. Scan failed.')
-                scan.scan_status = FAILED_TASK
-                scan.error_message = "Sorry, host does not seems to have any web service"
-                scan.save()
-                return {'success': False, 'error': scan.error_message}
+        workflow_tasks = []
 
-            # Create first HTTP endpoint
-            endpoint = create_first_endpoint_from_nmap_data(hosts_data, domain, subdomain, ctx)
-            if not endpoint:
-                logger.warning(f'Could not create any valid endpoints for {host}. Scan failed.')
-                scan.scan_status = FAILED_TASK 
-                scan.error_message = "Failed to create valid endpoints"
-                scan.save()
-                return {'success': False, 'error': scan.error_message}
+        # Phase 1: Initial discovery
+        initial_tasks = []
+        if 'subdomain_discovery' in engine.tasks:
+            initial_tasks.append(subdomain_discovery.si(ctx=ctx, description='Subdomain discovery'))
+        if 'osint' in engine.tasks:
+            initial_tasks.append(osint.si(ctx=ctx, description='OS Intelligence'))
 
-        # Build Celery tasks, crafted according to the dependency graph below:
-        # subdomain_discovery --> port_scan --> fetch_url --> dir_file_fuzz
-        # osint								             	  vulnerability_scan
-        # osint								             	  dalfox xss scan
-        #						 	   		         	  	  screenshot
-        #													  waf_detection
-        
-        workflow = chain(
-            group(
-                subdomain_discovery.si(ctx=ctx, description='Subdomain discovery'),
-                osint.si(ctx=ctx, description='OS Intelligence')
-            ),
-            port_scan.si(ctx=ctx, description='Port scan'),
-            group(
-                fetch_url.si(ctx=ctx, description='Fetch URL'),
-                pre_crawl.si(ctx=ctx, description='Pre-crawl URLs')
-            ),
-            group(
-                dir_file_fuzz.si(ctx=ctx, description='Directories & files fuzz'),
-                vulnerability_scan.si(ctx=ctx, description='Vulnerability scan'), 
-                screenshot.si(ctx=ctx, description='Screenshot'),
-                waf_detection.si(ctx=ctx, description='WAF detection')
+        if initial_tasks:
+            workflow_tasks.extend(
+                (
+                    group(initial_tasks),
+                    pre_crawl.si(ctx=ctx, description='Pre-crawl endpoints'),
+                )
             )
-        )
+        # Phase 2: Port scan (if enabled)
+        reconnaissance_tasks = []
+        if 'port_scan' in engine.tasks:
+            reconnaissance_tasks.append('port_scan')
+            workflow_tasks.append(port_scan.si(ctx=ctx, description='Port scan'))
+
+        # Phase 3: Fetch URLs (if enabled)
+        if 'fetch_url' in engine.tasks:
+            reconnaissance_tasks.append('fetch_url')
+            workflow_tasks.append(fetch_url.si(ctx=ctx, description='Fetch URLs'))
+
+        if reconnaissance_tasks:
+            # Intermediate crawl of discovered endpoints
+            workflow_tasks.append(intermediate_crawl.si(ctx=ctx, description='Intermediate crawl'))
+
+        # Phase 4: Final tasks
+        final_tasks = []
+        if 'dir_file_fuzz' in engine.tasks:
+            final_tasks.append(dir_file_fuzz.si(ctx=ctx, description='Directory & file fuzzing'))
+        if 'vulnerability_scan' in engine.tasks:
+            final_tasks.append(vulnerability_scan.si(ctx=ctx, description='Vulnerability scan'))
+        if 'screenshot' in engine.tasks:
+            final_tasks.append(screenshot.si(ctx=ctx, description='Screenshot'))
+        if 'waf_detection' in engine.tasks:
+            final_tasks.append(waf_detection.si(ctx=ctx, description='WAF detection'))
+
+        if final_tasks:
+            workflow_tasks.extend(
+                (
+                    group(final_tasks),
+                    post_crawl.si(
+                        ctx=ctx, description='Post-crawl verification'
+                    ),
+                )
+            )
+        # Create workflow chain
+        workflow = chain(*workflow_tasks) if workflow_tasks else None
+
+        if not workflow:
+            logger.error('No tasks to execute in workflow')
+            scan.scan_status = FAILED_TASK
+            scan.error_message = "No tasks configured for this engine"
+            scan.save()
+            return {'success': False, 'error': scan.error_message}
 
         # Build callback
         callback = report.si(ctx=ctx).set(link_error=[report.si(ctx=ctx)])
@@ -375,6 +276,10 @@ def initiate_scan(
             scan.scan_status = FAILED_TASK
             scan.error_message = str(e)
             scan.save()
+        return {
+            'success': False,
+            'error': str(e)
+        }
         return {
             'success': False,
             'error': str(e)
@@ -417,7 +322,7 @@ def initiate_subscan(
         # Get YAML config
         config = yaml.safe_load(engine.yaml_configuration)
         config_subscan = config.get(scan_type)
-        enable_http_crawl = get_http_crawl_value(engine, config_subscan)
+
 
         # Create scan activity of SubScan Model
         subscan = SubScan(
@@ -478,10 +383,7 @@ def initiate_subscan(
         ctx_str = json.dumps(ctx, indent=2)
         logger.warning(f'Starting subscan {subscan.id} with context:\n{ctx_str}')
 
-        if enable_http_crawl:
-            # Launch http_crawl asynchronously to avoid blocking initiate_subscan
-            http_crawl.delay(urls=[subdomain.http_url], ctx=ctx)
-            logger.info(f'Started HTTP crawl for {subdomain.http_url} asynchronously')
+        # HTTP crawling is now handled by dedicated crawl tasks
 
         # Build header + callback
         workflow = method.si(ctx=ctx)
@@ -713,7 +615,6 @@ def subdomain_discovery(
 
     # Config
     config = self.yaml_configuration.get(SUBDOMAIN_DISCOVERY) or {}
-    enable_http_crawl = get_http_crawl_value(self, config)
     threads = config.get(THREADS) or self.yaml_configuration.get(THREADS, DEFAULT_THREADS)
     timeout = config.get(TIMEOUT) or self.yaml_configuration.get(TIMEOUT, DEFAULT_HTTP_TIMEOUT)
     tools = config.get(USES_TOOLS, SUBDOMAIN_SCAN_DEFAULT_TOOLS)
@@ -879,26 +780,18 @@ def subdomain_discovery(
         subdomains.append(subdomain)
         urls.append(subdomain.name)
 
-    # Bulk crawl subdomains asynchronously
-    if enable_http_crawl:
-        custom_ctx = deepcopy(ctx)
-        custom_ctx['track'] = True
-        # Launch http_crawl asynchronously to avoid blocking subdomain_discovery
-        http_crawl.delay(urls, ctx=custom_ctx, update_subdomain_metadatas=True)
-        logger.info(f'Started HTTP crawl for {len(urls)} subdomains asynchronously')
-    else:
-        url_filter = ctx.get('url_filter')
-        # Find root subdomain endpoints
-        for subdomain in subdomains:
-            # Create base endpoint (for scan)
-            http_url = f'{subdomain.name}{url_filter}' if url_filter else subdomain.name
-            endpoint, _ = save_endpoint(
-                http_url,
-                ctx=ctx,
-                is_default=True,
-                subdomain=subdomain
-            )
-            save_subdomain_metadata(subdomain, endpoint)
+    url_filter = ctx.get('url_filter')
+    # Find root subdomain endpoints
+    for subdomain in subdomains:
+        # Create base endpoint (for scan)
+        http_url = f'{subdomain.name}{url_filter}' if url_filter else subdomain.name
+        endpoint, _ = save_endpoint(
+            http_url,
+            ctx=ctx,
+            is_default=True,
+            subdomain=subdomain
+        )
+        save_subdomain_metadata(subdomain, endpoint)
 
     # Send notifications
     subdomains_str = '\n'.join([f'• `{subdomain.name}`' for subdomain in subdomains])
@@ -1350,7 +1243,6 @@ def theHarvester(config, host, scan_history_id, activity_id, results_dir, ctx={}
         dict: Dict of emails, employees, hosts and ips found during crawling.
     """
     scan_history = ScanHistory.objects.get(pk=scan_history_id)
-    enable_http_crawl = config.get(ENABLE_HTTP_CRAWL, DEFAULT_ENABLE_HTTP_CRAWL)
     output_path_json = str(Path(results_dir) / 'theHarvester.json')
     theHarvester_dir = str(Path.home() / ".config"  / 'theHarvester')
     history_file = str(Path(results_dir) / 'commands.txt')
@@ -1424,17 +1316,12 @@ def theHarvester(config, host, scan_history_id, activity_id, results_dir, ctx={}
             continue
         endpoint, _ = save_endpoint(
             http_url,
-            crawl=False,
             ctx=ctx,
             subdomain=subdomain)
         # if endpoint:
         # 	urls.append(endpoint.http_url)
             # self.notify(fields={'Hosts': f'• {endpoint.http_url}'})
 
-    # if enable_http_crawl:
-    # 	custom_ctx = deepcopy(ctx)
-    # 	custom_ctx['track'] = False
-    # 	http_crawl(urls, ctx=custom_ctx)
 
     # TODO: Lots of ips unrelated with our domain are found, disabling
     # this for now.
@@ -1607,7 +1494,7 @@ def screenshot(self, ctx={}, description=None):
 
 @app.task(name='port_scan', queue='main_scan_queue', base=RengineTask, bind=True)
 def port_scan(self, hosts=None, ctx=None, description=None):
-    """Run port scan.
+    """Run port scan and detect web services.
 
     Args:
         hosts (list, optional): Hosts to run port scan on.
@@ -1625,7 +1512,6 @@ def port_scan(self, hosts=None, ctx=None, description=None):
 
     # Config
     config = self.yaml_configuration.get(PORT_SCAN) or {}
-    enable_http_crawl = get_http_crawl_value(self, config)
     timeout = config.get(TIMEOUT) or self.yaml_configuration.get(TIMEOUT, DEFAULT_HTTP_TIMEOUT)
     exclude_ports = config.get(NAABU_EXCLUDE_PORTS, [])
     exclude_subdomains = config.get(NAABU_EXCLUDE_SUBDOMAINS, False)
@@ -1636,6 +1522,10 @@ def port_scan(self, hosts=None, ctx=None, description=None):
     passive = config.get(NAABU_PASSIVE, False)
     use_naabu_config = config.get(USE_NAABU_CONFIG, False)
     exclude_ports_str = ','.join(return_iterable(exclude_ports))
+    
+    # Web service detection configuration
+    web_ports = config.get('web_ports', UNCOMMON_WEB_PORTS + [80, 443, 8080, 8443])
+    
     # nmap args
     nmap_enabled = config.get(ENABLE_NMAP, False)
     nmap_cmd = config.get(NMAP_COMMAND, '')
@@ -1678,6 +1568,8 @@ def port_scan(self, hosts=None, ctx=None, description=None):
     results = []
     urls = []
     ports_data = {}
+    web_services = []
+    
     for line in stream_command(
             cmd,
             shell=True,
@@ -1707,16 +1599,31 @@ def port_scan(self, hosts=None, ctx=None, description=None):
             ip.ip_subscan_ids.add(self.subscan)
             ip.save()
 
-        # Add endpoint to DB
-        http_url = f'{host}:{port_number}'
-        endpoint, _ = save_endpoint(
-            http_url,
-            crawl=enable_http_crawl,
-            ctx=ctx,
-            subdomain=subdomain)
-        if endpoint:
-            http_url = endpoint.http_url
-        urls.append(http_url)
+        # Check if this is a web service port
+        is_web_port = port_number in web_ports
+        
+        if is_web_port:
+            # Determine scheme based on port
+            scheme = 'https' if port_number in [443, 8443] or 'ssl' in str(port_number) else 'http'
+            
+            # Create web service endpoint
+            http_url = f'{scheme}://{host}:{port_number}'
+            endpoint, _ = save_endpoint(
+                http_url,
+                ctx=ctx,
+                subdomain=subdomain,
+                is_default=(port_number in [80, 443])
+            )
+            
+            if endpoint:
+                web_services.append({
+                    'host': host,
+                    'port': port_number,
+                    'scheme': scheme,
+                    'url': http_url
+                })
+                urls.append(http_url)
+                logger.info(f'Created web service endpoint: {http_url}')
 
         # Add Port in DB
         if any(c.isalpha() for c in ip_address):
@@ -1728,8 +1635,8 @@ def port_scan(self, hosts=None, ctx=None, description=None):
             ip_address=ip,
             number=port_number,
             defaults={
-                'service_name': 'unknown',
-                'description': '',
+                'service_name': 'http' if is_web_port else 'unknown',
+                'description': f'Web service on port {port_number}' if is_web_port else '',
                 'is_uncommon': port_number in UNCOMMON_WEB_PORTS
             }
         )
@@ -1757,6 +1664,11 @@ def port_scan(self, hosts=None, ctx=None, description=None):
         ports_str = ', '.join([f'`{port}`' for port in ports])
         fields_str += f'• `{host}`: {ports_str}\n'
     self.notify(fields={'Ports discovered': fields_str})
+    
+    # Send web services notification
+    if web_services:
+        web_services_str = '\n'.join([f'• `{ws["url"]}`' for ws in web_services])
+        self.notify(fields={'Web services found': web_services_str})
 
     # Save output to file
     with open(self.output_path, 'w') as f:
@@ -1995,7 +1907,6 @@ def dir_file_fuzz(self, ctx={}, description=None):
         if custom_header:
             custom_header = generate_header_param(custom_header,'common')
         auto_calibration = config.get(AUTO_CALIBRATION, True)
-        enable_http_crawl = get_http_crawl_value(self, config)
         rate_limit = config.get(RATE_LIMIT) or self.yaml_configuration.get(RATE_LIMIT, DEFAULT_RATE_LIMIT)
         extensions = config.get(EXTENSIONS, DEFAULT_DIR_FILE_FUZZ_EXTENSIONS)
         # prepend . on extensions
@@ -2105,7 +2016,7 @@ def dir_file_fuzz(self, ctx={}, description=None):
                     continue
 
                 # Get or create endpoint from URL
-                endpoint, created = save_endpoint(url, crawl=False, ctx=ctx)
+                endpoint, created = save_endpoint(url, ctx=ctx)
 
                 # Continue to next line if endpoint returned is None
                 if endpoint == None:
@@ -2152,13 +2063,6 @@ def dir_file_fuzz(self, ctx={}, description=None):
                 subdomain.directories.add(dirscan)
                 subdomain.save()
 
-        # Crawl discovered URLs asynchronously
-        if enable_http_crawl:
-            custom_ctx = deepcopy(ctx)
-            custom_ctx['track'] = False
-            # Launch http_crawl asynchronously to avoid blocking dir_file_fuzz
-            http_crawl.delay(urls, ctx=custom_ctx)
-            logger.info(f'Started HTTP crawl for {len(urls)} discovered URLs asynchronously')
 
         return results
     
@@ -2181,7 +2085,7 @@ def fetch_url(self, urls=[], ctx={}, description=None):
     config = self.yaml_configuration.get(FETCH_URL) or {}
     should_remove_duplicate_endpoints = config.get(REMOVE_DUPLICATE_ENDPOINTS, True)
     duplicate_removal_fields = config.get(DUPLICATE_REMOVAL_FIELDS, ENDPOINT_SCAN_DEFAULT_DUPLICATE_FIELDS)
-    enable_http_crawl = get_http_crawl_value(self, config)
+
     gf_patterns = config.get(GF_PATTERNS, DEFAULT_GF_PATTERNS)
     ignore_file_extension = config.get(IGNORE_FILE_EXTENSION, DEFAULT_IGNORE_FILE_EXTENSIONS)
     tools = config.get(USES_TOOLS, ENDPOINT_SCAN_DEFAULT_TOOLS)
@@ -2369,18 +2273,6 @@ def fetch_url(self, urls=[], ctx={}, description=None):
         f.write('\n'.join(all_urls))
     logger.warning(f'Found {len(all_urls)} usable URLs')
 
-    # Crawl discovered URLs asynchronously
-    if enable_http_crawl:
-        custom_ctx = deepcopy(ctx)
-        custom_ctx['track'] = False
-        # Launch http_crawl asynchronously to avoid blocking fetch_url
-        http_crawl.delay(
-            all_urls,
-            ctx=custom_ctx,
-            should_remove_duplicate_endpoints=should_remove_duplicate_endpoints,
-            duplicate_removal_fields=duplicate_removal_fields
-        )
-        logger.info(f'Started HTTP crawl for {len(all_urls)} discovered URLs asynchronously')
 
     #-------------------#
     # GF PATTERNS MATCH #
@@ -2428,8 +2320,7 @@ def fetch_url(self, urls=[], ctx={}, description=None):
                 logger.error(f"Invalid subdomain encountered: {subdomain}")
                 continue
             endpoint, created = save_endpoint(
-                http_url,
-                crawl=False,
+                http_url=http_url,
                 subdomain=subdomain,
                 ctx=ctx)
             if not endpoint:
@@ -2518,7 +2409,7 @@ def vulnerability_scan(self, urls=[], ctx={}, description=None):
     return None
 
 @app.task(name='nuclei_individual_severity_module', queue='main_scan_queue', base=RengineTask, bind=True)
-def nuclei_individual_severity_module(self, cmd, severity, enable_http_crawl, should_fetch_llm_report, ctx={}, description=None):
+def nuclei_individual_severity_module(self, cmd, severity, should_fetch_llm_report, ctx={}, description=None):
     '''
         This celery task will run vulnerability scan in parallel.
         All severities supplied should run in parallel as grouped tasks.
@@ -2573,18 +2464,12 @@ def nuclei_individual_severity_module(self, cmd, severity, enable_http_crawl, sh
 
         # Get or create EndPoint object
         response = line.get('response')
-        httpx_crawl = False if response else enable_http_crawl # avoid yet another httpx crawl
         endpoint, _ = save_endpoint(
-            http_url,
-            crawl=httpx_crawl,
+            http_url=http_url,
             subdomain=subdomain,
             ctx=ctx)
         if endpoint:
             http_url = endpoint.http_url
-            if not httpx_crawl:
-                output = parse_curl_output(response)
-                endpoint.http_status = output['http_status']
-                endpoint.save()
 
         # Get or create Vulnerability object
         vuln, _ = save_vulnerability(
@@ -2815,7 +2700,6 @@ def nuclei_scan(self, urls=[], ctx={}, description=None):
         # Config
         config = self.yaml_configuration.get(VULNERABILITY_SCAN, {})
         nuclei_config = config.get(NUCLEI, {})
-        enable_http_crawl = get_http_crawl_value(self, nuclei_config)
         should_fetch_llm_report = nuclei_config.get(FETCH_LLM_REPORT, DEFAULT_GET_LLM_REPORT)
         custom_header = nuclei_config.get(CUSTOM_HEADER) or self.yaml_configuration.get(CUSTOM_HEADER)
         if custom_header:
@@ -3036,8 +2920,7 @@ def dalfox_xss_scan(self, urls=[], ctx={}, description=None):
             continue
 
         endpoint, _ = save_endpoint(
-            http_url,
-            crawl=True,
+            http_url=http_url,
             subdomain=subdomain,
             ctx=ctx
         )
@@ -3166,8 +3049,7 @@ def crlfuzz_scan(self, urls=[], ctx={}, description=None):
             continue
 
         endpoint, _ = save_endpoint(
-            http_url,
-            crawl=True,
+            http_url=http_url,
             subdomain=subdomain,
             ctx=ctx
         )
@@ -3288,7 +3170,7 @@ def http_crawl(
     """
     logger.info('Initiating HTTP Crawl')
 
-    #debug()
+    debug()
 
     # Initialize urls as empty list if None
     if urls is None:
@@ -3414,17 +3296,18 @@ def http_crawl(
 
         # Save default HTTP URL to endpoint object in DB
         endpoint, created = save_endpoint(
-            http_url,
-            crawl=False,
+            http_url=http_url,
+            http_status=http_status,
             ctx=ctx,
             subdomain=subdomain,
             is_default=update_subdomain_metadatas
         )
         if not endpoint:
             continue
+        # Update endpoint object
         endpoint.discovered_date = datetime.now()
-        endpoint.http_url = http_url
         endpoint.http_status = http_status
+        endpoint.http_url = http_url
         endpoint.page_title = page_title
         endpoint.content_length = content_length
         endpoint.webserver = webserver
@@ -5152,18 +5035,16 @@ def save_vulnerability(**vuln_data):
 def save_endpoint(
         http_url,
         ctx={},
-        crawl=False,
         is_default=False,
-        http_status=None,
+        http_status=0,
         **endpoint_data):
-    """Get or create EndPoint object. If crawl is True, also crawl the endpoint
-    HTTP URL with httpx.
+    """Get or create EndPoint object.
 
     Args:
         http_url (str): Input HTTP URL.
-        is_default (bool): If the url is a default url for SubDomains.
         ctx (dict): Context containing scan and domain information.
-        crawl (bool): Run httpx on endpoint if True.
+        is_default (bool): If the url is a default url for SubDomains.
+        http_status (int): HTTP status code.
         endpoint_data: Additional endpoint data (including subdomain).
         
     Returns:
@@ -5224,48 +5105,19 @@ def save_endpoint(
         return existing_endpoint, False
 
     # Create new endpoint
-    if crawl:
-        # For now, when crawl=True, we create a basic endpoint and launch crawl asynchronously
-        # This avoids blocking the current task while still enabling crawling
-        custom_ctx = deepcopy(ctx)
-        custom_ctx['track'] = False
+    create_data = {
+        'scan_history': scan,
+        'target_domain': domain,
+        'http_url': http_url,
+        'is_default': is_default,
+        'discovered_date': timezone.now(),
+        'http_status': http_status
+    }
 
-        # Create basic endpoint first
-        create_data = {
-            'scan_history': scan,
-            'target_domain': domain,
-            'http_url': http_url,
-            'is_default': is_default,
-            'discovered_date': timezone.now(),
-        }
+    create_data |= endpoint_data
 
-        if http_status is not None:
-            create_data['http_status'] = http_status
-
-        create_data.update(endpoint_data)
-
-        endpoint = EndPoint.objects.create(**create_data)
-        created = True
-
-        # Launch http_crawl asynchronously to populate endpoint details
-        http_crawl.delay(urls=[http_url], ctx=custom_ctx)
-        logger.info(f'Started HTTP crawl for {http_url} asynchronously to populate endpoint details')
-    else:
-        create_data = {
-            'scan_history': scan,
-            'target_domain': domain,
-            'http_url': http_url,
-            'is_default': is_default,
-            'discovered_date': timezone.now(),
-        }
-
-        if http_status is not None:
-            create_data['http_status'] = http_status
-
-        create_data.update(endpoint_data)
-
-        endpoint = EndPoint.objects.create(**create_data)
-        created = True
+    endpoint = EndPoint.objects.create(**create_data)
+    created = True
 
     # Add subscan relation if needed
     if created and ctx.get('subscan_id'):
@@ -5452,7 +5304,6 @@ def save_imported_subdomains(subdomains, ctx={}):
     logger.warning(f'Found {len(subdomains)} imported subdomains.')
     with open(f'{results_dir}/from_imported.txt', 'w+') as output_file:
         url_filter = ctx.get('url_filter')
-        enable_http_crawl = ctx.get('yaml_configuration').get(ENABLE_HTTP_CRAWL, DEFAULT_ENABLE_HTTP_CRAWL)
         for subdomain in subdomains:
             # Save valid imported subdomains
             subdomain_name = subdomain.strip()
@@ -5467,30 +5318,12 @@ def save_imported_subdomains(subdomains, ctx={}):
             # Create base endpoint (for scan)
             http_url = f'{subdomain_obj.name}{url_filter}' if url_filter else subdomain_obj.name
             endpoint, _ = save_endpoint(
-                http_url,
+                http_url=http_url,
                 ctx=ctx,
-                crawl=enable_http_crawl,
                 is_default=True,
                 subdomain=subdomain_obj
             )
             save_subdomain_metadata(subdomain_obj, endpoint)
-
-            # New Nmap scan for imported subdomain
-            try:
-                logger.info(f'Initiating Nmap scan for imported subdomain: {subdomain_name}')
-                if hosts_data := get_nmap_http_datas(subdomain_name, ctx):
-                    # Create endpoints from Nmap results
-                    create_first_endpoint_from_nmap_data(
-                        hosts_data,
-                        domain=domain,
-                        subdomain=subdomain_obj,
-                        ctx=ctx
-                    )
-                    logger.debug(f"Nmap scan completed successfully for {subdomain_name}")
-            except Exception as e:
-                logger.error(f"Nmap scan failed for {subdomain_name}: {str(e)}")
-                continue
-
 
 @app.task(name='query_reverse_whois', bind=False, queue='query_reverse_whois_queue')
 def query_reverse_whois(lookup_keyword):
@@ -5770,142 +5603,6 @@ def get_nmap_http_datas(host, ctx):
     
     return hosts_data
 
-def create_first_endpoint_from_nmap_data(hosts_data, domain, subdomain, ctx):
-    """Create endpoints from Nmap service detection results.
-    Returns the first created endpoint or None if failed."""
-    
-    if not hosts_data:
-        logger.warning("No Nmap data provided. Skipping endpoint creation.")
-        return None
-
-    endpoint = None
-    is_ip_scan = validators.ipv4(domain.name) or validators.ipv6(domain.name)
-    url_filter = ctx.get('url_filter', '').rstrip('/')
-
-    # For IP scans, ensure we have an entry for the IP itself
-    if is_ip_scan and domain.name not in hosts_data:
-        rdns_hostname = next(iter(hosts_data.keys()), None)
-        if rdns_hostname and hosts_data[rdns_hostname]:
-            hosts_data[domain.name] = hosts_data[rdns_hostname].copy()
-            logger.info(f"Created IP endpoint data from rDNS {rdns_hostname}")
-
-    for hostname, data in hosts_data.items():
-        current_subdomain = subdomain
-        schemes_to_try = []
-        
-        # If scheme is detected, try it first
-        if data['scheme']:
-            schemes_to_try.append(data['scheme'])
-        
-        # Add any missing schemes to try
-        for scheme in ['https', 'http']:
-            if scheme not in schemes_to_try:
-                schemes_to_try.append(scheme)
-
-        # Try each port with each scheme
-        successful_endpoint = None
-        for port in data['ports']:
-            for scheme in schemes_to_try:
-                host_url = f"{scheme}://{hostname}:{port}{url_filter}"
-                logger.debug(f'Processing HTTP URL: {host_url}')
-
-                # For IP scans, create endpoints for both IP and rDNS
-                if is_ip_scan:
-                    if hostname != domain.name:
-                        # Create subdomain for rDNS
-                        logger.info(f'Creating subdomain for rDNS hostname: {hostname}')
-                        rdns_subdomain, _ = save_subdomain(hostname, ctx=ctx)
-                        if rdns_subdomain:
-                            # Try to create endpoint for rDNS
-                            rdns_endpoint, _ = save_endpoint(
-                                host_url,
-                                ctx=ctx,
-                                crawl=True,
-                                is_default=True,
-                                subdomain=rdns_subdomain
-                            )
-                            if rdns_endpoint:
-                                successful_endpoint = rdns_endpoint
-                                save_subdomain_metadata(
-                                    rdns_subdomain,
-                                    rdns_endpoint,
-                                    extra_datas={
-                                        'http_url': host_url,
-                                        'open_ports': data['ports']
-                                    }
-                                )
-                                break  # Found working scheme, try next port
-                    
-                    # Always try to create endpoint for IP itself
-                    if hostname == domain.name or not endpoint:
-                        current_endpoint, _ = save_endpoint(
-                            f"{scheme}://{domain.name}:{port}{url_filter}",
-                            ctx=ctx,
-                            crawl=True,
-                            is_default=True,
-                            subdomain=current_subdomain
-                        )
-                        if current_endpoint:
-                            successful_endpoint = current_endpoint
-                            save_subdomain_metadata(
-                                current_subdomain,
-                                current_endpoint,
-                                extra_datas={
-                                    'http_url': f"{scheme}://{domain.name}:{port}{url_filter}",
-                                    'open_ports': data['ports']
-                                }
-                            )
-                            break  # Found working scheme, try next port
-
-                # For regular domain scans
-                else:
-                    if hostname != domain.name:
-                        logger.info(f'Creating subdomain for hostname: {hostname}')
-                        current_subdomain, _ = save_subdomain(hostname, ctx=ctx)
-                        if not current_subdomain:
-                            logger.warning(f'Could not create subdomain for hostname: {hostname}. Skipping this host.')
-                            continue
-
-                    # Try to create endpoint with crawling
-                    current_endpoint, _ = save_endpoint(
-                        host_url,
-                        ctx=ctx,
-                        crawl=True,
-                        is_default=True,
-                        subdomain=current_subdomain
-                    )
-
-                    if current_endpoint:
-                        successful_endpoint = current_endpoint
-                        save_subdomain_metadata(
-                            current_subdomain,
-                            current_endpoint,
-                            extra_datas={
-                                'http_url': host_url,
-                                'open_ports': data['ports']
-                            }
-                        )
-                        break  # Found working scheme, try next port
-
-            if successful_endpoint:
-                break  # Found working port, stop trying others
-
-        # Keep track of hostname data even if no endpoint was created
-        if not successful_endpoint and current_subdomain:  # Added check for current_subdomain
-            save_subdomain_metadata(
-                current_subdomain,
-                None,
-                extra_datas={
-                    'http_url': f"unknown://{hostname}{url_filter}",
-                    'open_ports': data['ports']
-                }
-            )
-        # Update main endpoint if needed
-        elif not endpoint or hostname == domain.name:
-            endpoint = successful_endpoint
-
-    return endpoint
-
 def process_nmap_service_results(xml_file):
     """Update port information with nmap service detection results"""
     services = parse_nmap_results(xml_file, parse_type='services')
@@ -6012,16 +5709,16 @@ def pre_crawl(self, ctx={}, description=None):
     """
     Pre-crawl existing subdomains to ensure endpoints are alive
     before heavy tasks like screenshot, waf_detection, etc.
+    Also handles initial web service detection if no endpoints exist.
     """
-    #debug()
     logger.info('Starting pre-crawl phase')
     
     domain_id = ctx.get('domain_id')
     
     # Get configuration for pre-crawl limits
-    precrawl_batch_size = self.yaml_configuration.get('precrawl_batch_size', 50)  # Default 50
+    precrawl_batch_size = self.yaml_configuration.get('precrawl_batch_size', 50)
     
-    # Get existing subdomains from previous scans
+    # Get existing subdomains from current scan
     existing_subdomains = Subdomain.objects.filter(
         target_domain_id=domain_id
     )
@@ -6029,25 +5726,45 @@ def pre_crawl(self, ctx={}, description=None):
     total_subdomains = existing_subdomains.count()
     logger.info(f'Found {total_subdomains} existing subdomains')
     
-    # Create basic endpoints for existing subdomains if they don't exist in current scan
+    # Check if we have any endpoints at all
+    existing_endpoints = get_http_urls(ctx=ctx)
+    
+    if not existing_endpoints:
+        # No endpoints exist - need to create basic web service endpoints
+        # Use UNCOMMON_WEB_PORTS for detection
+        logger.info('No existing endpoints found - creating basic web service endpoints')
+        
+        web_ports = self.yaml_configuration.get('web_ports', UNCOMMON_WEB_PORTS + [80, 443, 8080, 8443])
+        domain = Domain.objects.get(id=domain_id)
+        
+        # Create basic endpoints for the main domain
+        for subdomain in existing_subdomains:  # Limit to first 10 for initial detection
+            for port in [80, 443, 8080, 8443]:  # Start with common web ports
+                scheme = 'https' if port in [443, 8443] else 'http'
+                url = f'{scheme}://{subdomain.name}:{port}'
+                
+                _, created = save_endpoint(
+                    url,
+                    ctx=ctx,
+                    subdomain=subdomain,
+                    is_default=(port in [80, 443])
+                )
+                
+                if created:
+                    logger.info(f'Created initial endpoint: {url}')
+    
+    # Get URLs to crawl (both existing and newly created)
     urls_to_crawl = []
     for subdomain in existing_subdomains:
-        # Create subdomain entry for current scan
-        current_subdomain, created = save_subdomain(subdomain.name, ctx=ctx)
-        
-        # Create basic endpoint
-        endpoint, created = save_endpoint(
-            subdomain.name,
-            ctx=ctx,
-            is_default=True,
-            subdomain=current_subdomain
-        )
-        
-        if created or endpoint.http_status == 0:
-            urls_to_crawl.append(subdomain.name)
+        # Get endpoints for this subdomain that need crawling
+        subdomain_endpoints = get_http_urls(is_uncrawled=True, ctx={'subdomain_id': subdomain.id})
+        urls_to_crawl.extend(subdomain_endpoints)
     
     if urls_to_crawl:
         logger.info(f'Pre-crawling {len(urls_to_crawl)} URLs (batch size: {precrawl_batch_size})')
+        
+        # Count alive endpoints before pre-crawl
+        alive_before = len(get_http_urls(is_alive=True, ctx=ctx))
         
         # Process in batches to avoid overwhelming the system
         for i in range(0, len(urls_to_crawl), precrawl_batch_size):
@@ -6056,15 +5773,16 @@ def pre_crawl(self, ctx={}, description=None):
             
             # Use smart crawl with completion wait
             smart_http_crawl_if_needed(
-                batch, 
-                ctx, 
-                wait_for_completion=True,
+                batch,
+                ctx,
+                wait_for_completion=False,
                 max_wait_time=300  # 5 minutes max per batch
             )
         
         # Log results
         alive_count = len(get_http_urls(is_alive=True, ctx=ctx))
-        logger.info(f'Pre-crawl completed. {alive_count} alive endpoints available.')
+        new_alive = alive_count - alive_before
+        logger.info(f'Pre-crawl completed. {new_alive} new alive endpoints discovered (total: {alive_count})')
     else:
         alive_count = 0
         logger.info('No URLs to pre-crawl')
@@ -6073,5 +5791,91 @@ def pre_crawl(self, ctx={}, description=None):
         'urls_crawled': len(urls_to_crawl), 
         'alive_endpoints': alive_count,
         'total_subdomains': total_subdomains,
+    }
+
+@app.task(name='intermediate_crawl', queue='main_scan_queue', base=RengineTask, bind=True)
+def intermediate_crawl(self, ctx={}, description=None):
+    """
+    Intermediate crawl phase - crawl newly discovered endpoints after fetch_url
+    """
+    logger.info('Starting intermediate crawl phase')
+    
+    # Get all uncrawled endpoints
+    uncrawled_endpoints = get_http_urls(is_uncrawled=True, ctx=ctx)
+    
+    if not uncrawled_endpoints:
+        logger.info('No uncrawled endpoints found for intermediate crawl')
+        return {'urls_crawled': 0, 'alive_endpoints': 0}
+    
+    # Get batch size from configuration
+    batch_size = self.yaml_configuration.get('precrawl_batch_size', 50)
+    
+    logger.info(f'Intermediate crawling {len(uncrawled_endpoints)} URLs (batch size: {batch_size})')
+    
+    # Process in batches
+    for i in range(0, len(uncrawled_endpoints), batch_size):
+        batch = uncrawled_endpoints[i:i+batch_size]
+        logger.info(f'Processing intermediate crawl batch {i//batch_size + 1}: {len(batch)} URLs')
+        
+        # Use smart crawl with completion wait
+        smart_http_crawl_if_needed(
+            batch,
+            ctx,
+            wait_for_completion=True,
+            max_wait_time=180  # 3 minutes max per batch
+        )
+    
+    # Log results
+    alive_count = len(get_http_urls(is_alive=True, ctx=ctx))
+    logger.info(f'Intermediate crawl completed. {alive_count} alive endpoints available.')
+    
+    return {
+        'urls_crawled': len(uncrawled_endpoints),
+        'alive_endpoints': alive_count
+    }
+
+@app.task(name='post_crawl', queue='main_scan_queue', base=RengineTask, bind=True)
+def post_crawl(self, ctx={}, description=None):
+    """
+    Post-crawl phase - final verification and cleanup of endpoints
+    """
+    logger.info('Starting post-crawl verification phase')
+    
+    # Get all endpoints
+    all_endpoints = get_http_urls(ctx=ctx)
+    alive_endpoints = get_http_urls(is_alive=True, ctx=ctx)
+    
+    logger.info(f'Post-crawl verification: {len(alive_endpoints)} alive endpoints out of {len(all_endpoints)} total')
+    
+    # Check for any remaining uncrawled endpoints and crawl them
+    uncrawled_endpoints = get_http_urls(is_uncrawled=True, ctx=ctx)
+    
+    if uncrawled_endpoints:
+        logger.info(f'Found {len(uncrawled_endpoints)} uncrawled endpoints, performing final crawl')
+        
+        # Final crawl with smaller batch size for reliability
+        batch_size = min(20, len(uncrawled_endpoints))
+        
+        for i in range(0, len(uncrawled_endpoints), batch_size):
+            batch = uncrawled_endpoints[i:i+batch_size]
+            logger.info(f'Final crawl batch {i//batch_size + 1}: {len(batch)} URLs')
+            
+            smart_http_crawl_if_needed(
+                batch,
+                ctx,
+                wait_for_completion=True,
+                max_wait_time=120  # 2 minutes max per batch
+            )
+    
+    # Final statistics
+    final_alive_count = len(get_http_urls(is_alive=True, ctx=ctx))
+    final_total_count = len(get_http_urls(ctx=ctx))
+    
+    logger.info(f'Post-crawl completed. Final stats: {final_alive_count} alive endpoints out of {final_total_count} total')
+    
+    return {
+        'total_endpoints': final_total_count,
+        'alive_endpoints': final_alive_count,
+        'uncrawled_processed': len(uncrawled_endpoints)
     }
 

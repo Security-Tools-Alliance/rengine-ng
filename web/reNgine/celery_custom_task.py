@@ -111,7 +111,9 @@ class RengineTask(Task):
 							'scan_http_ports',
 							'run_nmap',
 							'nmap',
-							'pre_crawl'
+							'pre_crawl',
+							'intermediate_crawl',
+							'post_crawl'
 					]
 
 					# Skip if task is not part of engine and not exempted

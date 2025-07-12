@@ -1423,24 +1423,7 @@ def get_ips_from_cidr_range(target):
         logger.error(f'{target} is not a valid CIDR range. Skipping.')
         return []
 
-def get_http_crawl_value(engine, config):
-    """Get HTTP crawl value from config.
-    
-    Args:
-        engine: EngineType object
-        config: Configuration dictionary or None
-        
-    Returns:
-        bool: True if HTTP crawl is enabled
-    """
-    # subscan engine value
-    enable_http_crawl = config.get(ENABLE_HTTP_CRAWL) if config else None
-    if enable_http_crawl is None:
-        # scan engine value
-        yaml_config = yaml.safe_load(engine.yaml_configuration)
-        enable_http_crawl = yaml_config.get(ENABLE_HTTP_CRAWL, DEFAULT_ENABLE_HTTP_CRAWL)
-    logger.debug(f'Enable HTTP crawl: {enable_http_crawl}')
-    return enable_http_crawl
+
 
 
 def ensure_endpoints_crawled_and_execute(task_function, ctx, description=None, max_wait_time=300):
