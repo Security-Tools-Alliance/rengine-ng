@@ -3284,6 +3284,8 @@ def http_crawl(
         cname = line.get('cname', '')
         content_type = line.get('content_type', '')
         response_time = -1
+        port_number = line.get('port')
+        host_ip = line.get('ip')
         if rt:
             response_time = float(''.join(ch for ch in rt if not ch.isalpha()))
             if rt[-2:] == 'ms':
@@ -3323,6 +3325,41 @@ def http_crawl(
             self.notify(
                 fields={'Alive endpoint': f'• {endpoint_str}'},
                 add_meta_info=False)
+        
+        # If endpoint is alive (http_status > 0), record the port in the database
+        if http_status and http_status > 0:
+            if port_number:
+                # Convert port to integer if it's a string
+                port_number = int(port_number) if isinstance(port_number, str) else port_number
+                logger.info(f'Endpoint {http_url} is alive (status {http_status}), recording port {port_number}')
+                
+                # Get all IPs associated with this subdomain and record the port
+                subdomain_ips = subdomain.ip_addresses.all()
+                for ip in subdomain_ips:
+                    get_or_create_port(
+                        ip_address=ip,
+                        port_number=port_number,
+                        service_info={
+                            'service_name': 'web',
+                            'service_product': webserver or 'unknown'
+                        }
+                    )
+                    logger.debug(f'Recorded port {port_number} for IP {ip.address}')
+                
+                # Also record the port for the host IP if provided by httpx
+                if host and host != subdomain_name:
+                    # Get or create IP for the host
+                    host_ip, _ = save_ip_address(host, subdomain, subscan=self.subscan)
+                    if host_ip:
+                        get_or_create_port(
+                            ip_address=host_ip,
+                            port_number=port_number,
+                            service_info={
+                                'service_name': 'web',
+                                'service_product': webserver or 'unknown'
+                            }
+                        )
+                        logger.debug(f'Recorded port {port_number} for host IP {host_ip.address}')
 
         # Add endpoint to results
         line['_cmd'] = cmd
@@ -3374,8 +3411,8 @@ def http_crawl(
 
     # Check if httpx returned any lines
     if not results:
-        logger.error(f"httpx returned no lines for command: {cmd}")
-        logger.error(f"URLs processed: {urls}")
+        logger.warning(f"httpx returned no lines for command: {cmd}")
+        logger.warning(f"URLs processed: {urls}")
         if len(urls) > 1:
             logger.error(f"Input file path: {input_path}")
 
@@ -5150,18 +5187,39 @@ def save_endpoint(
 
     http_url = sanitize_url(http_url)
 
-    # If this is a default endpoint, check if one already exists for this subdomain
+    # If this is a default endpoint, check if one already exists for this subdomain + port combination
     if is_default and subdomain:
-        existing_default = EndPoint.objects.filter(
+        # Extract port from current URL
+        parsed_current = urlparse(http_url)
+        if parsed_current.port:
+            current_port = parsed_current.port
+        elif parsed_current.scheme == 'https':
+            current_port = 443
+        else:
+            current_port = 80
+        
+        # Get all default endpoints for this subdomain
+        existing_defaults = EndPoint.objects.filter(
             scan_history=scan,
             target_domain=domain,
             subdomain=subdomain,
             is_default=True
-        ).first()
-
-        if existing_default:
-            logger.info(f'Default endpoint already exists for subdomain {subdomain}')
-            return existing_default, False
+        )
+        
+        # Check if any existing default endpoint has the same port
+        for existing_default in existing_defaults:
+            # Extract port from existing URL
+            parsed_existing = urlparse(existing_default.http_url)
+            if parsed_existing.port:
+                existing_port = parsed_existing.port
+            elif parsed_existing.scheme == 'https':
+                existing_port = 443
+            else:
+                existing_port = 80
+                
+            if existing_port == current_port:
+                logger.info(f'Default endpoint already exists for subdomain {subdomain} on port {current_port}')
+                return existing_default, False
 
     # Check for existing endpoint with same URL
     existing_endpoint = EndPoint.objects.filter(
@@ -5522,156 +5580,6 @@ def run_gf_list():
             'status': False,
             'message': str(e)
         }
-
-def get_nmap_http_datas(host, ctx):
-    """Check if standard and non-standard HTTP ports are open for given hosts.
-    
-    Args:
-        host (str): Initial hostname to scan
-        ctx (dict): Context dictionary
-        
-    Returns:
-        dict: Dictionary of results per host:
-            {
-                'host1': {'scheme': 'https', 'ports': [80, 443, 8080]},
-                'host2': {'scheme': 'http', 'ports': [80, 8000]}
-            }
-    """
-    results_dir = ctx.get('results_dir', '/tmp')
-    filename = ctx.get('filename', 'nmap.xml')
-    try:
-        xml_file = SafePath.create_safe_path(
-            base_dir=results_dir,
-            components=[f"{host}_{filename}"],
-            create_dir=False
-        )
-    except (ValueError, OSError) as e:
-        logger.error(f"Failed to create safe path for XML file: {str(e)}")
-        return None
-    
-    # Combine standard (80,443) and uncommon web ports
-    all_ports = [80, 443] + UNCOMMON_WEB_PORTS
-    # Convert ports list to nmap format (e.g. "80,443,8000-8089,...")
-    ports_str = ','.join(str(p) for p in sorted(set(all_ports)))
-    
-    # Basic nmap scan for all HTTP ports
-    nmap_args = {
-        'rate_limit': 150,
-        'nmap_cmd': f'-Pn -p {ports_str} --open',
-        'nmap_script': None,
-        'nmap_script_args': None,
-        'ports_data': {host: all_ports},
-    }
-    
-    logger.info(f'Scanning ports: {ports_str}')
-    
-    # Add retry logic for nmap scan
-    max_retries = 3
-    retry_delay = 2
-    
-    for attempt in range(max_retries):
-        try:
-            run_nmap(ctx, **nmap_args)
-            if os.path.exists(xml_file):
-                break
-            logger.warning(f"Attempt {attempt + 1}/{max_retries}: Nmap output file not found, retrying in {retry_delay}s...")
-            time.sleep(retry_delay)
-        except Exception as e:
-            logger.error(f"Attempt {attempt + 1}/{max_retries}: Nmap scan failed: {str(e)}")
-            if attempt == max_retries - 1:
-                logger.error(f"Nmap scan failed after {max_retries} attempts: {str(e)}")
-                return None
-            time.sleep(retry_delay)
-    else:
-        logger.error(f"Failed to generate output file after {max_retries} retries")
-        return None
-    
-    # Parse results to get open ports and services
-    port_results = parse_nmap_results(xml_file, parse_type='ports')
-    service_results = parse_nmap_results(xml_file, parse_type='services')
-    
-    # Create service lookup dict for efficiency
-    service_lookup = {
-        f"{service['host']}:{service['port']}": service 
-        for service in service_results
-    }
-    
-    # Group results by host using atomic transaction
-    hosts_data = {}
-    with transaction.atomic():
-        for result in port_results:
-            hostname = result['host']
-            if hostname not in hosts_data:
-                hosts_data[hostname] = {
-                    'ports': [],
-                    'schemes': set()
-                }
-                
-            if result['state'] == 'open':
-                port_number = int(result['port'])
-                logger.info(f'Found open port {port_number} for host {hostname}')
-                
-                # Get service info if available
-                service_info = service_lookup.get(f"{hostname}:{port_number}", {})
-                service_name = service_info.get('service_name', '').lower()
-                
-                # Detect scheme from service
-                if service_name in ['http', 'http-proxy', 'http-alt']:
-                    hosts_data[hostname]['schemes'].add('http')
-                elif service_name in ['https', 'https-alt', 'ssl/http', 'ssl/https']:
-                    hosts_data[hostname]['schemes'].add('https')
-                
-                # Get IP address from nmap XML result
-                ip = None
-                if 'addresses' in result and result['addresses']:
-                    for addr in result['addresses']:
-                        if addr.get('type') == 'ipv4':
-                            ip = addr.get('addr')
-                            break
-                        elif addr.get('type') == 'ipv6':
-                            ip = addr.get('addr')
-                
-                if ip:
-                    ip_address, _ = IpAddress.objects.get_or_create(
-                        address=ip
-                    )
-                else:
-                    logger.warning(f'No IP address found in nmap results for {hostname}')
-                    ip_address = None
-                
-                # Create or update port with service info
-                create_or_update_port_with_service(
-                    port_number=port_number,
-                    service_info=service_info,
-                    ip_address=ip_address
-                )
-                
-                # Add port to hosts_data
-                if port_number not in hosts_data[hostname]['ports']:
-                    hosts_data[hostname]['ports'].append(port_number)
-        
-        # Determine final scheme for each host
-        for hostname, data in hosts_data.items():
-            # Prefer HTTPS over HTTP if both are detected
-            if 'https' in data['schemes']:
-                data['scheme'] = 'https'
-            elif 'http' in data['schemes']:
-                data['scheme'] = 'http'
-            else:
-                # Fallback to port-based detection if no service info
-                if 443 in data['ports']:
-                    data['scheme'] = 'https'
-                elif 80 in data['ports']:
-                    data['scheme'] = 'http'
-                else:
-                    data['scheme'] = None
-            
-            # Clean up the data structure
-            del data['schemes']
-            logger.debug(f'Host {hostname} - scheme: {data["scheme"]}, ports: {data["ports"]}')
-    
-    return hosts_data
-
 def process_nmap_service_results(xml_file):
     """Update port information with nmap service detection results"""
     services = parse_nmap_results(xml_file, parse_type='services')
@@ -5777,7 +5685,7 @@ def remove_file_or_pattern(path, pattern=None, shell=True, history_file=None, sc
 def pre_crawl(self, ctx={}, description=None):
     """
     Pre-crawl existing subdomains to ensure endpoints are alive
-    before heavy tasks like screenshot, waf_detection, etc.
+    before heavy tasks like nuclei, screenshot, waf_detection, etc. starts
     Also handles initial web service detection if no endpoints exist.
     """
     logger.info('Starting pre-crawl phase')
@@ -5785,7 +5693,7 @@ def pre_crawl(self, ctx={}, description=None):
     domain_id = ctx.get('domain_id')
     
     # Get configuration for pre-crawl limits
-    precrawl_batch_size = self.yaml_configuration.get('precrawl_batch_size', 50)
+    precrawl_batch_size = self.yaml_configuration.get('precrawl_batch_size', 350)
     
     # Get existing subdomains from current scan
     existing_subdomains = Subdomain.objects.filter(
@@ -5795,39 +5703,58 @@ def pre_crawl(self, ctx={}, description=None):
     total_subdomains = existing_subdomains.count()
     logger.info(f'Found {total_subdomains} existing subdomains')
     
-    # Check if we have any endpoints at all
-    existing_endpoints = get_http_urls(ctx=ctx)
-    
-    if not existing_endpoints:
-        # No endpoints exist - need to create basic web service endpoints
-        # Use UNCOMMON_WEB_PORTS for detection
-        logger.info('No existing endpoints found - creating basic web service endpoints')
-        
-        web_ports = self.yaml_configuration.get('web_ports', UNCOMMON_WEB_PORTS + [80, 443, 8080, 8443])
-        domain = Domain.objects.get(id=domain_id)
-        
-        # Create basic endpoints for the main domain
-        for subdomain in existing_subdomains:  # Limit to first 10 for initial detection
-            for port in [80, 443, 8080, 8443]:  # Start with common web ports
-                scheme = 'https' if port in [443, 8443] else 'http'
-                url = f'{scheme}://{subdomain.name}:{port}'
-                
-                _, created = save_endpoint(
-                    url,
-                    ctx=ctx,
-                    subdomain=subdomain,
-                    is_default=(port in [80, 443])
-                )
-                
-                if created:
-                    logger.info(f'Created initial endpoint: {url}')
-    
+
     # Get URLs to crawl (both existing and newly created)
     urls_to_crawl = []
+    additional_urls_to_test = []
+    
     for subdomain in existing_subdomains:
         # Get endpoints for this subdomain that need crawling
         subdomain_endpoints = get_http_urls(is_uncrawled=True, ctx={'subdomain_id': subdomain.id})
         urls_to_crawl.extend(subdomain_endpoints)
+        
+        # Check if there's only one endpoint and it's the default one
+        if len(subdomain_endpoints) == 1:
+            default_endpoint = EndPoint.objects.filter(
+                subdomain=subdomain,
+                is_default=True
+            ).first()
+            
+            if default_endpoint:
+                logger.info(f'Found single default endpoint for {subdomain.name}, testing COMMON_WEB_PORTS and UNCOMMON_WEB_PORTS')
+                
+                # Add COMMON_WEB_PORTS and UNCOMMON_WEB_PORTS URLs to crawl list (not to database yet)
+                # Test both http and https schemes since we don't know which one is available
+                all_ports = COMMON_WEB_PORTS + UNCOMMON_WEB_PORTS
+                for port in all_ports:
+                    # Special handling for default ports 80 and 443
+                    if port == 80:
+                        # Port 80 is HTTP default, no need to specify port
+                        url = f'http://{subdomain.name}'
+                        if url not in urls_to_crawl:
+                            urls_to_crawl.append(url)
+                            additional_urls_to_test.append(url)
+                            logger.debug(f'Added port URL to crawl: {url}')
+                    elif port == 443:
+                        # Port 443 is HTTPS default, no need to specify port
+                        url = f'https://{subdomain.name}'
+                        if url not in urls_to_crawl:
+                            urls_to_crawl.append(url)
+                            additional_urls_to_test.append(url)
+                            logger.debug(f'Added port URL to crawl: {url}')
+                    else:
+                        # For all other ports, test both schemes
+                        for scheme in ['http', 'https']:
+                            url = f'{scheme}://{subdomain.name}:{port}'
+                            
+                            # Don't add if it already exists in crawl list
+                            if url not in urls_to_crawl:
+                                urls_to_crawl.append(url)
+                                additional_urls_to_test.append(url)
+                                logger.debug(f'Added port URL to crawl: {url}')
+    
+    if additional_urls_to_test:
+        logger.info(f'Added {len(additional_urls_to_test)} additional URLs to test on COMMON_WEB_PORTS and UNCOMMON_WEB_PORTS')
     
     if urls_to_crawl:
         logger.info(f'Pre-crawling {len(urls_to_crawl)} URLs (batch size: {precrawl_batch_size})')
@@ -5863,6 +5790,7 @@ def pre_crawl(self, ctx={}, description=None):
         'urls_crawled': len(urls_to_crawl), 
         'alive_endpoints': alive_count,
         'total_subdomains': total_subdomains,
+        'additional_urls_tested': len(additional_urls_to_test),
     }
 
 @app.task(name='intermediate_crawl', queue='main_scan_queue', base=RengineTask, bind=True)

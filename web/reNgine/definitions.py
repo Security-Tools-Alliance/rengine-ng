@@ -268,6 +268,7 @@ DYNAMIC_ID = -1
 # Uncommon Ports
 # Source: https://github.com/six2dez/reconftw/blob/main/reconftw.cfg
 ###############################################################################
+COMMON_WEB_PORTS = [80, 443, 8080, 8443]
 UNCOMMON_WEB_PORTS = [
     81, 82, 83, 84, 85, 86, 87, 88, 89,
     300,
