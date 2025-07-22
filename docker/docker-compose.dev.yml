@@ -17,6 +17,7 @@ services:
       - ./celery/entrypoint-dev.sh:/entrypoint-dev.sh:ro
     ports:
       - "127.0.0.1:5679:5679"
+      - "127.0.0.1:5555:5555"
 
   celery-beat:
     entrypoint: /entrypoint-dev.sh
