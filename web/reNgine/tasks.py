@@ -3242,7 +3242,6 @@ def http_crawl(
     cmd += f' -json'
     cmd += f' -u {urls[0]}' if len(urls) == 1 else f' -l {input_path}'
     cmd += f' -x {method}' if method else ''
-    cmd += f' -retries 5'
     cmd += f' -silent'
     if follow_redirect:
         cmd += ' -fr'
