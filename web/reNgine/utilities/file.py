@@ -31,11 +31,17 @@ def remove_file_or_pattern(path, pattern=None, shell=True, history_file=None, sc
                 logger.warning(f"No files matching pattern '{pattern}' in {path}")
                 return True
             
+            all_deleted = True
             for file_path in matched_files:
-                if os.path.isfile(file_path):
-                    os.remove(file_path)
-                elif os.path.isdir(file_path):
-                    shutil.rmtree(file_path)
+                try:
+                    if os.path.isfile(file_path):
+                        os.remove(file_path)
+                    elif os.path.isdir(file_path):
+                        shutil.rmtree(file_path)
+                except OSError as e:
+                    logger.error(f"Failed to delete '{file_path}': {e}")
+                    all_deleted = False
+            return all_deleted
         else:
             if not os.path.exists(path):
                 logger.warning(f"Path {path} does not exist")
@@ -45,8 +51,8 @@ def remove_file_or_pattern(path, pattern=None, shell=True, history_file=None, sc
                 os.remove(path)
             elif os.path.isdir(path):
                 shutil.rmtree(path)
+            return True
         
-        return True
-    except Exception as e:
+    except OSError as e:
         logger.error(f"Failed to delete {path}: {str(e)}")
         return False 

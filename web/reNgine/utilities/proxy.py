@@ -1,10 +1,5 @@
-import json
-import os
 import random
 import re
-import shutil
-import subprocess
-from urllib.parse import urlparse
 
 from celery.utils.log import get_task_logger
 from scanEngine.models import Proxy
@@ -22,10 +17,9 @@ def get_random_proxy():
     Returns:
         str: Proxy name or '' if no proxy defined in db or use_proxy is False.
     """
-    proxies_enabled = Proxy.objects.filter(use_proxy=True)
-    if not proxies_enabled.exists():
+    proxy = Proxy.objects.filter(use_proxy=True).order_by('?').first()
+    if not proxy:
         return ''
-    proxy = random.choice(proxies_enabled)
     proxy_name = random.choice(proxy.proxies.splitlines())
     logger.warning(f'Using proxy: {proxy_name}')
     # os.environ['HTTP_PROXY'] = proxy_name

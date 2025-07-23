@@ -1,5 +1,6 @@
 import os
 import re
+import uuid
 from celery.utils.log import get_task_logger
 from scanEngine.models import EngineType
 
@@ -20,7 +21,16 @@ def sanitize_filename(name):
         str: Sanitized filename-safe string.
     """
     # Replace invalid filename characters with underscores
-    return re.sub(r'[<>:"/\\|?*]', '_', name).strip()
+
+
+    sanitized = re.sub(r'[<>:"/\\|?*]', '_', name)
+    # Remove leading/trailing dots and spaces
+    sanitized = sanitized.strip(' .')
+    if not sanitized:
+        unique_suffix = uuid.uuid4().hex[:8]
+        sanitized = f"untitled_{unique_suffix}"
+        logger.warning("Sanitized filename was empty. Defaulted to '%s'.", sanitized)
+    return sanitized
 
 def dump_custom_scan_engines(results_dir):
     """Dump custom scan engines to YAML files.
