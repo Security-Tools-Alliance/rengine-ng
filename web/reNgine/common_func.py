@@ -12,7 +12,6 @@ import humanize
 import redis
 import requests
 import tldextract
-import xmltodict
 import validators
 import ipaddress
 
@@ -23,6 +22,7 @@ from discord_webhook import DiscordEmbed, DiscordWebhook
 from django.db.models import Q
 from django.core.validators import URLValidator
 from django.core.exceptions import ValidationError
+from django.utils import timezone
 
 from reNgine.common_serializers import *
 from reNgine.definitions import *
@@ -1598,3 +1598,1055 @@ def update_port_service_info(port, service_info):
     except Exception as e:
         logger.error(f"Error updating port {port.number}: {str(e)}")
         raise
+
+#-------------------------------#
+# Database Save Functions      #
+#-------------------------------#
+
+def save_endpoint(
+        http_url,
+        ctx={},
+        is_default=False,
+        http_status=0,
+        **endpoint_data):
+    """Get or create EndPoint object.
+
+    Args:
+        http_url (str): Input HTTP URL.
+        ctx (dict): Context containing scan and domain information.
+        is_default (bool): If the url is a default url for SubDomains.
+        http_status (int): HTTP status code.
+        endpoint_data: Additional endpoint data (including subdomain).
+        
+    Returns:
+        tuple: (EndPoint, created) or (None, False) if invalid
+    """
+    from startScan.models import ScanHistory, EndPoint, Subdomain
+    from targetApp.models import Domain
+    from reNgine.common_func import sanitize_url, is_valid_url
+    
+    # Remove nulls and validate basic inputs
+    endpoint_data = replace_nulls(endpoint_data)
+    scheme = urlparse(http_url).scheme
+
+    if not scheme:
+        logger.error(f'{http_url} is missing scheme (http or https). Creating default endpoint with http scheme.')
+        http_url = f'http://{http_url.strip()}'
+
+    if not is_valid_url(http_url):
+        logger.error(f'{http_url} is not a valid URL. Skipping.')
+        return None, False
+
+    # Get required objects
+    scan = ScanHistory.objects.filter(pk=ctx.get('scan_history_id')).first()
+    domain = Domain.objects.filter(pk=ctx.get('domain_id')).first()
+    subdomain = endpoint_data.get('subdomain')
+
+    if not all([scan, domain]):
+        logger.error('Missing scan or domain information')
+        return None, False
+
+    # Check if we're scanning an IP
+    is_ip_scan = validators.ipv4(domain.name) or validators.ipv6(domain.name)
+
+    # For regular domain scans, validate URL belongs to domain
+    if not is_ip_scan and domain.name not in http_url:
+        logger.error(f"{http_url} is not a URL of domain {domain.name}. Skipping.")
+        return None, False
+
+    http_url = sanitize_url(http_url)
+
+    # If this is a default endpoint, check if one already exists for this subdomain + port combination
+    if is_default and subdomain:
+        # Extract port from current URL
+        parsed_current = urlparse(http_url)
+        if parsed_current.port:
+            current_port = parsed_current.port
+        elif parsed_current.scheme == 'https':
+            current_port = 443
+        else:
+            current_port = 80
+        
+        # Get all default endpoints for this subdomain
+        existing_defaults = EndPoint.objects.filter(
+            scan_history=scan,
+            target_domain=domain,
+            subdomain=subdomain,
+            is_default=True
+        )
+        
+        # Check if any existing default endpoint has the same port
+        for existing_default in existing_defaults:
+            # Extract port from existing URL
+            parsed_existing = urlparse(existing_default.http_url)
+            if parsed_existing.port:
+                existing_port = parsed_existing.port
+            elif parsed_existing.scheme == 'https':
+                existing_port = 443
+            else:
+                existing_port = 80
+                
+            if existing_port == current_port:
+                logger.info(f'Default endpoint already exists for subdomain {subdomain} on port {current_port}')
+                return existing_default, False
+
+    # Check for existing endpoint with same URL
+    existing_endpoint = EndPoint.objects.filter(
+        scan_history=scan,
+        target_domain=domain,
+        http_url=http_url
+    ).first()
+
+    if existing_endpoint:
+        return existing_endpoint, False
+
+    # Create new endpoint
+    create_data = {
+        'scan_history': scan,
+        'target_domain': domain,
+        'http_url': http_url,
+        'is_default': is_default,
+        'discovered_date': timezone.now(),
+        'http_status': http_status
+    }
+
+    create_data |= endpoint_data
+
+    endpoint = EndPoint.objects.create(**create_data)
+    created = True
+
+    # Add subscan relation if needed
+    if created and ctx.get('subscan_id'):
+        endpoint.endpoint_subscan_ids.add(ctx.get('subscan_id'))
+        endpoint.save()
+
+    return endpoint, created
+
+
+def save_subdomain(subdomain_name, ctx={}):
+    """Get or create Subdomain object.
+
+    Args:
+        subdomain_name (str): Subdomain name.
+        ctx (dict): Context containing scan information and settings.
+
+    Returns:
+        tuple: (startScan.models.Subdomain, created) where `created` is a
+            boolean indicating if the object has been created in DB.
+    """
+    from startScan.models import ScanHistory, Subdomain
+    from targetApp.models import Domain
+    
+    scan_id = ctx.get('scan_history_id')
+    subscan_id = ctx.get('subscan_id')
+    out_of_scope_subdomains = ctx.get('out_of_scope_subdomains', [])
+    subdomain_name = subdomain_name.lower()
+
+    # Validate domain/IP format
+    valid_domain = (
+        validators.domain(subdomain_name) or
+        validators.ipv4(subdomain_name) or
+        validators.ipv6(subdomain_name)
+    )
+    if not valid_domain:
+        logger.error(f'{subdomain_name} is not a valid domain/IP. Skipping.')
+        return None, False
+
+    # Check if subdomain is in scope
+    if subdomain_name in out_of_scope_subdomains:
+        logger.error(f'{subdomain_name} is out-of-scope. Skipping.')
+        return None, False
+
+    # Get domain object and check if we're scanning an IP
+    scan = ScanHistory.objects.filter(pk=scan_id).first()
+    domain = scan.domain if scan else None
+    
+    if not domain:
+        logger.error('No domain found in scan history. Skipping.')
+        return None, False
+        
+    is_ip_scan = validators.ipv4(domain.name) or validators.ipv6(domain.name)
+
+    # For regular domain scans, validate subdomain belongs to domain
+    if not is_ip_scan and ctx.get('domain_id'):
+        if domain.name not in subdomain_name:
+            logger.error(f"{subdomain_name} is not a subdomain of domain {domain.name}. Skipping.")
+            return None, False
+
+    # Create or get subdomain object
+    subdomain, created = Subdomain.objects.get_or_create(
+        scan_history=scan,
+        target_domain=domain,
+        name=subdomain_name)
+
+    if created:
+        logger.info(f'Found new subdomain/rDNS: {subdomain_name}')
+        subdomain.discovered_date = timezone.now()
+        if subscan_id:
+            subdomain.subdomain_subscan_ids.add(subscan_id)
+        subdomain.save()
+
+    return subdomain, created
+
+
+def save_subdomain_metadata(subdomain, endpoint, extra_datas={}):
+    """Save metadata from endpoint to subdomain.
+    
+    Args:
+        subdomain: Subdomain object
+        endpoint: EndPoint object  
+        extra_datas: Additional metadata to save
+    """
+    
+    if endpoint and endpoint.is_alive:
+        logger.info(f'Saving HTTP metadatas from {endpoint.http_url}')
+        subdomain.http_url = endpoint.http_url
+        subdomain.http_status = endpoint.http_status
+        subdomain.response_time = endpoint.response_time
+        subdomain.page_title = endpoint.page_title
+        subdomain.content_type = endpoint.content_type
+        subdomain.content_length = endpoint.content_length
+        subdomain.webserver = endpoint.webserver
+        cname = extra_datas.get('cname')
+        if cname and is_iterable(cname):
+            subdomain.cname = ','.join(cname)
+        cdn = extra_datas.get('cdn')
+        if cdn and is_iterable(cdn):
+            subdomain.is_cdn = ','.join(cdn)
+            subdomain.cdn_name = extra_datas.get('cdn_name')
+        for tech in endpoint.techs.all():
+            subdomain.technologies.add(tech)
+        subdomain.save()
+    else:
+        http_url = extra_datas.get('http_url')
+        if http_url:
+            subdomain.http_url = http_url
+            subdomain.save()
+        else:
+            logger.error(f'No HTTP URL found for {subdomain.name}. Skipping.')
+
+
+def remove_file_or_pattern(path, pattern=None, shell=True, history_file=None, scan_id=None, activity_id=None):
+    """
+    Safely removes a file/directory or pattern matching files
+    Args:
+        path: Path to file/directory to remove
+        pattern: Optional pattern for multiple files (e.g. "*.csv")
+        shell: Whether to use shell=True in run_command
+        history_file: History file for logging
+        scan_id: Scan ID for logging
+        activity_id: Activity ID for logging
+    Returns:
+        bool: True if successful, False if error occurred
+    """
+    import glob
+    from reNgine.tasks.command import run_command
+    
+    try:
+        if pattern:
+            # Check for files matching the pattern
+            match_count = len(glob.glob(os.path.join(path, pattern)))
+            if match_count == 0:
+                logger.warning(f"No files matching pattern '{pattern}' in {path}")
+                return True
+            full_path = os.path.join(path, pattern)
+        else:
+            if not os.path.exists(path):
+                logger.warning(f"Path {path} does not exist")
+                return True
+            full_path = path
+
+        # Execute secure command
+        run_command(
+            f'rm -rf {full_path}',
+            shell=shell,
+            history_file=history_file,
+            scan_id=scan_id,
+            activity_id=activity_id
+        )
+        return True
+    except Exception as e:
+        logger.error(f"Failed to delete {full_path}: {str(e)}")
+        return False
+
+
+def extract_httpx_url(line, follow_redirect):
+    """Extract final URL from httpx results.
+
+    Args:
+        line (dict): URL data output by httpx.
+
+    Returns:
+        tuple: (final_url, redirect_bool) tuple.
+    """
+    status_code = line.get('status_code', 0)
+    final_url = line.get('final_url')
+    location = line.get('location')
+    chain_status_codes = line.get('chain_status_codes', [])
+    http_url = line.get('url')
+
+    # Final URL is already looking nice, if it exists and follow redirect is enabled, return it
+    if final_url and follow_redirect:
+        return final_url, False
+
+    # Handle redirects manually if follow redirect is enabled
+    if follow_redirect:
+        REDIRECT_STATUS_CODES = [301, 302]
+        is_redirect = (
+            status_code in REDIRECT_STATUS_CODES
+            or
+            any(x in REDIRECT_STATUS_CODES for x in chain_status_codes)
+        )
+        if is_redirect and location:
+            if location.startswith(('http', 'https')):
+                http_url = location
+            else:
+                http_url = f'{http_url}/{location.lstrip("/")}'
+    else:
+        is_redirect = False
+
+    # Sanitize URL
+    http_url = sanitize_url(http_url)
+
+    return http_url, is_redirect
+
+
+def get_and_save_dork_results(lookup_target, results_dir, type, lookup_keywords=None, lookup_extensions=None, delay=3, page_count=2, scan_history=None):
+    """
+        Uses gofuzz to dork and store information
+
+        Args:
+            lookup_target (str): target to look into such as stackoverflow or even the target itself
+            results_dir (str): Results directory
+            type (str): Dork Type Title
+            lookup_keywords (str): comma separated keywords or paths to look for
+            lookup_extensions (str): comma separated extensions to look for
+            delay (int): delay between each requests
+            page_count (int): pages in google to extract information
+            scan_history (startScan.ScanHistory): Scan History Object
+    """
+    from reNgine.tasks.command import run_command
+    from pathlib import Path
+    
+    results = []
+    gofuzz_command = f'{GOFUZZ_EXEC_PATH} -t {lookup_target} -d {delay} -p {page_count}'
+
+    if lookup_extensions:
+        gofuzz_command += f' -e {lookup_extensions}'
+    elif lookup_keywords:
+        gofuzz_command += f' -w {lookup_keywords}'
+
+    output_file = str(Path(results_dir) / 'gofuzz.txt')
+    gofuzz_command += f' -o {output_file}'
+    history_file = str(Path(results_dir) / 'commands.txt')
+
+    try:
+        run_command(
+            gofuzz_command,
+            shell=False,
+            history_file=history_file,
+            scan_id=scan_history.id,
+        )
+
+        if not os.path.isfile(output_file):
+            return
+
+        with open(output_file) as f:
+            for line in f.readlines():
+                url = line.strip()
+                if url:
+                    results.append(url)
+                    dork, created = Dork.objects.get_or_create(
+                        type=type,
+                        url=url
+                    )
+                    if scan_history:
+                        scan_history.dorks.add(dork)
+
+        # remove output file
+        os.remove(output_file)
+
+    except Exception as e:
+        logger.exception(e)
+
+    return results
+
+
+def get_and_save_emails(scan_history, activity_id, results_dir):
+    """Get and save emails from Google, Bing and Baidu.
+
+    Args:
+        scan_history (startScan.ScanHistory): Scan history object.
+        activity_id: ScanActivity Object
+        results_dir (str): Results directory.
+
+    Returns:
+        list: List of emails found.
+    """
+    from reNgine.tasks.command import run_command
+    from pathlib import Path
+    
+    emails = []
+
+    # Proxy settings
+    # get_random_proxy()
+
+    # Gather emails from Google, Bing and Baidu
+    output_file = str(Path(results_dir) / 'emails_tmp.txt')
+    history_file = str(Path(results_dir) / 'commands.txt')
+    command = f'infoga --domain {scan_history.domain.name} --source all --report {output_file}'
+    try:
+        run_command(
+            command,
+            shell=False,
+            history_file=history_file,
+            scan_id=scan_history.id,
+            activity_id=activity_id)
+
+        if not os.path.isfile(output_file):
+            logger.info('No Email results')
+            return []
+
+        with open(output_file) as f:
+            for line in f.readlines():
+                if 'Email' in line:
+                    split_email = line.split(' ')[2]
+                    emails.append(split_email)
+
+        output_path = str(Path(results_dir) / 'emails.txt')
+        with open(output_path, 'w') as output_file:
+            for email_address in emails:
+                save_email(email_address, scan_history)
+                output_file.write(f'{email_address}\n')
+
+    except Exception as e:
+        logger.exception(e)
+    return emails
+
+
+def save_metadata_info(meta_dict):
+    """Extract metadata from Google Search.
+
+    Args:
+        meta_dict (dict): Info dict.
+
+    Returns:
+        list: List of startScan.MetaFinderDocument objects.
+    """
+    from dotted_dict import DottedDict
+    from metafinder.extractor import extract_metadata_from_google_search
+    
+    logger.warning(f'Getting metadata for {meta_dict.osint_target}')
+
+    scan_history = ScanHistory.objects.get(id=meta_dict.scan_id)
+
+    # Proxy settings
+    get_random_proxy()
+
+    # Get metadata
+    result = extract_metadata_from_google_search(meta_dict.osint_target, meta_dict.documents_limit)
+    if not result:
+        logger.error(f'No metadata result from Google Search for {meta_dict.osint_target}.')
+        return []
+
+    # Add metadata info to DB
+    results = []
+    for metadata_name, data in result.get_metadata().items():
+        subdomain = Subdomain.objects.get(
+            scan_history=meta_dict.scan_id,
+            name=meta_dict.osint_target)
+        metadata = DottedDict({k: v for k, v in data.items()})
+        meta_finder_document = MetaFinderDocument(
+            subdomain=subdomain,
+            target_domain=meta_dict.domain,
+            scan_history=scan_history,
+            url=metadata.url,
+            doc_name=metadata_name,
+            http_status=metadata.status_code,
+            producer=metadata.metadata.get('Producer'),
+            creator=metadata.metadata.get('Creator'),
+            creation_date=metadata.metadata.get('CreationDate'),
+            modified_date=metadata.metadata.get('ModDate'),
+            author=metadata.metadata.get('Author'),
+            title=metadata.metadata.get('Title'),
+            os=metadata.metadata.get('OSInfo'))
+        meta_finder_document.save()
+        results.append(data)
+    return results
+
+
+def save_email(email_address, scan_history=None):
+    if not validators.email(email_address):
+        logger.info(f'Email {email_address} is invalid. Skipping.')
+        return None, False
+    email, created = Email.objects.get_or_create(address=email_address)
+    if created:
+        logger.info(f'Found new email address {email_address}')
+
+    # Add email to ScanHistory
+    if scan_history:
+        scan_history.emails.add(email)
+        scan_history.save()
+
+    return email, created
+
+
+def save_employee(name, designation, scan_history=None):
+    employee, created = Employee.objects.get_or_create(
+        name=name,
+        designation=designation)
+    if created:
+        logger.warning(f'Found new employee {name}')
+
+    # Add employee to ScanHistory
+    if scan_history:
+        scan_history.employees.add(employee)
+        scan_history.save()
+
+    return employee, created
+
+
+def save_ip_address(ip_address, subdomain=None, subscan=None, **kwargs):
+    from reNgine.tasks.geo import geo_localize
+    
+    if not (validators.ipv4(ip_address) or validators.ipv6(ip_address)):
+        logger.info(f'IP {ip_address} is not a valid IP. Skipping.')
+        return None, False
+    ip, created = IpAddress.objects.get_or_create(address=ip_address)
+    if created:
+        logger.warning(f'Found new IP {ip_address}')
+
+    # Set extra attributes
+    for key, value in kwargs.items():
+        setattr(ip, key, value)
+    ip.save()
+
+    # Add IP to subdomain
+    if subdomain:
+        subdomain.ip_addresses.add(ip)
+        subdomain.save()
+
+    # Add subscan to IP
+    if subscan:
+        ip.ip_subscan_ids.add(subscan)
+
+    # Geo-localize IP asynchronously
+    if created:
+        geo_localize.delay(ip_address, ip.id)
+
+    return ip, created
+
+
+def save_vulnerability(**vuln_data):
+    from django.utils import timezone
+    
+    references = vuln_data.pop('references', [])
+    cve_ids = vuln_data.pop('cve_ids', [])
+    cwe_ids = vuln_data.pop('cwe_ids', [])
+    tags = vuln_data.pop('tags', [])
+    subscan = vuln_data.pop('subscan', None)
+
+    # remove nulls
+    vuln_data = replace_nulls(vuln_data)
+
+    # Create vulnerability
+    vuln, created = Vulnerability.objects.get_or_create(**vuln_data)
+    if created:
+        vuln.discovered_date = timezone.now()
+        vuln.open_status = True
+        vuln.save()
+
+    # Save vuln tags
+    for tag_name in tags or []:
+        tag, created = VulnerabilityTags.objects.get_or_create(name=tag_name)
+        if tag:
+            vuln.tags.add(tag)
+            vuln.save()
+
+    # Save CVEs
+    for cve_id in cve_ids or []:
+        cve, created = CveId.objects.get_or_create(name=cve_id)
+        if cve:
+            vuln.cve_ids.add(cve)
+            vuln.save()
+
+    # Save CWEs
+    for cve_id in cwe_ids or []:
+        cwe, created = CweId.objects.get_or_create(name=cve_id)
+        if cwe:
+            vuln.cwe_ids.add(cwe)
+            vuln.save()
+
+    # Save vuln reference
+    if references:
+        vuln.references = references
+        vuln.save()
+
+    # Save subscan id in vuln object
+    if subscan:
+        vuln.vuln_subscan_ids.add(subscan)
+        vuln.save()
+
+    return vuln, created
+
+
+def create_or_update_port_with_service(port_number, service_info, ip_address=None):
+    """Create or update port with service information from nmap for specific IP."""
+    port = get_or_create_port(ip_address, port_number)
+    if ip_address and service_info:
+        update_port_service_info(port, service_info)
+    return port
+
+
+def parse_nmap_results(xml_file, output_file=None, parse_type='vulnerabilities'):
+    """Parse results from nmap output file.
+
+    Args:
+        xml_file (str): nmap XML report file path.
+        output_file (str, optional): JSON output file path.
+        parse_type (str): Type of parsing to perform:
+            - 'vulnerabilities': Parse vulnerabilities from nmap scripts
+            - 'services': Parse service banners from -sV
+            - 'ports': Parse only open ports
+
+    Returns:
+        list: List of parsed results depending on parse_type:
+            - vulnerabilities: List of vulnerability dictionaries
+            - services: List of service dictionaries
+            - ports: List of port dictionaries
+    """
+    import json
+    import xmltodict
+    
+    with open(xml_file, encoding='utf8') as f:
+        content = f.read()
+        try:
+            nmap_results = xmltodict.parse(content)
+        except Exception as e:
+            logger.warning(e)
+            logger.error(f'Cannot parse {xml_file} to valid JSON. Skipping.')
+            return []
+
+    if output_file:
+        with open(output_file, 'w') as f:
+            json.dump(nmap_results, f, indent=4)
+
+    hosts = nmap_results.get('nmaprun', {}).get('host', {})
+    if isinstance(hosts, dict):
+        hosts = [hosts]
+
+    results = []
+    
+    for host in hosts:
+        # Get hostname/IP
+        hostnames_dict = host.get('hostnames', {})
+        
+        # Get all IP addresses of the host
+        addresses = []
+        host_addresses = host.get('address', [])
+        if isinstance(host_addresses, dict):
+            host_addresses = [host_addresses]
+        for addr in host_addresses:
+            if addr.get('@addrtype') in ['ipv4', 'ipv6']:
+                addresses.append({
+                    'addr': addr.get('@addr'),
+                    'type': addr.get('@addrtype')
+                })
+
+        if hostnames_dict:
+            if not (hostname_data := hostnames_dict.get('hostname', [])):
+                hostnames = [addresses[0]['addr'] if addresses else 'unknown']
+            else:
+                # Convert to list if it's a unique dictionary
+                if isinstance(hostname_data, dict):
+                    hostname_data = [hostname_data]
+                hostnames = [entry.get('@name') for entry in hostname_data if entry.get('@name')] or [addresses[0]['addr'] if addresses else 'unknown']
+        else:
+            hostnames = [addresses[0]['addr'] if addresses else 'unknown']
+
+        # Process each hostname
+        for hostname in hostnames:
+            ports = host.get('ports', {}).get('port', [])
+            if isinstance(ports, dict):
+                ports = [ports]
+
+            for port in ports:
+                port_number = port['@portid']
+                if not port_number or not port_number.isdigit():
+                    continue
+                    
+                port_protocol = port['@protocol']
+                port_state = port.get('state', {}).get('@state')
+                
+                # Skip closed ports
+                if port_state != 'open':
+                    continue
+
+                url = sanitize_url(f'{hostname}:{port_number}')
+
+                if parse_type == 'ports':
+                    # Return only open ports info with addresses
+                    results.append({
+                        'host': hostname,
+                        'port': port_number,
+                        'protocol': port_protocol,
+                        'state': port_state,
+                        'addresses': addresses
+                    })
+                    continue
+
+                if parse_type == 'services':
+                    # Parse service information from -sV
+                    service = port.get('service', {})
+                    results.append({
+                        'host': hostname,
+                        'port': port_number,
+                        'protocol': port_protocol,
+                        'service_name': service.get('@name'),
+                        'service_product': service.get('@product'),
+                        'service_version': service.get('@version'),
+                        'service_extrainfo': service.get('@extrainfo'),
+                        'service_ostype': service.get('@ostype'),
+                        'service_method': service.get('@method'),
+                        'service_conf': service.get('@conf')
+                    })
+                    continue
+
+                if parse_type == 'vulnerabilities':
+                    # Original vulnerability parsing logic
+                    url_vulns = []
+                    scripts = port.get('script', [])
+                    if isinstance(scripts, dict):
+                        scripts = [scripts]
+
+                    for script in scripts:
+                        script_id = script['@id']
+                        script_output = script['@output']
+                        
+                        if script_id == 'vulscan':
+                            vulns = parse_nmap_vulscan_output(script_output)
+                            url_vulns.extend(vulns)
+                        elif script_id == 'vulners':
+                            vulns = parse_nmap_vulners_output(script_output)
+                            url_vulns.extend(vulns)
+                        else:
+                            logger.warning(f'Script output parsing for script "{script_id}" is not supported yet.')
+
+                    for vuln in url_vulns:
+                        vuln['source'] = NMAP
+                        vuln['http_url'] = url
+                        if 'http_path' in vuln:
+                            vuln['http_url'] += vuln['http_path']
+                        results.append(vuln)
+
+    return results
+
+
+def parse_nmap_http_csrf_output(script_output):
+    pass
+
+
+def parse_nmap_vulscan_output(script_output):
+    """Parse nmap vulscan script output.
+
+    Args:
+        script_output (str): Vulscan script output.
+
+    Returns:
+        list: List of Vulnerability dicts.
+    """
+    import re
+    import pprint
+    
+    data = {}
+    vulns = []
+    provider_name = ''
+
+    # Sort all vulns found by provider so that we can match each provider with
+    # a function that pulls from its API to get more info about the
+    # vulnerability.
+    for line in script_output.splitlines():
+        if not line:
+            continue
+        if not line.startswith('['): # provider line
+            if "No findings" in line:
+                logger.info(f"No findings: {line}")
+                continue
+            elif ' - ' in line:
+                provider_name, provider_url = tuple(line.split(' - '))
+                data[provider_name] = {'url': provider_url.rstrip(':'), 'entries': []}
+                continue
+            else:
+                # Log a warning
+                logger.warning(f"Unexpected line format: {line}")
+                continue
+        reg = r'\[(.*)\] (.*)'
+        matches = re.match(reg, line)
+        id, title = matches.groups()
+        entry = {'id': id, 'title': title}
+        data[provider_name]['entries'].append(entry)
+
+    logger.warning('Vulscan parsed output:')
+    logger.warning(pprint.pformat(data))
+
+    for provider_name in data:
+        if provider_name == 'Exploit-DB':
+            logger.error(f'Provider {provider_name} is not supported YET.')
+            pass
+        elif provider_name == 'IBM X-Force':
+            logger.error(f'Provider {provider_name} is not supported YET.')
+            pass
+        elif provider_name == 'MITRE CVE':
+            logger.error(f'Provider {provider_name} is not supported YET.')
+            for entry in data[provider_name]['entries']:
+                cve_id = entry['id']
+                vuln = cve_to_vuln(cve_id)
+                vulns.append(vuln)
+        elif provider_name == 'OSVDB':
+            logger.error(f'Provider {provider_name} is not supported YET.')
+            pass
+        elif provider_name == 'OpenVAS (Nessus)':
+            logger.error(f'Provider {provider_name} is not supported YET.')
+            pass
+        elif provider_name == 'SecurityFocus':
+            logger.error(f'Provider {provider_name} is not supported YET.')
+            pass
+        elif provider_name == 'VulDB':
+            logger.error(f'Provider {provider_name} is not supported YET.')
+            pass
+        else:
+            logger.error(f'Provider {provider_name} is not supported.')
+    return vulns
+
+
+def parse_nmap_vulners_output(script_output, url=''):
+    """Parse nmap vulners script output.
+
+    TODO: Rework this as it's currently matching all CVEs no matter the
+    confidence.
+
+    Args:
+        script_output (str): Script output.
+
+    Returns:
+        list: List of found vulnerabilities.
+    """
+    import re
+    
+    vulns = []
+    # Check for CVE in script output
+    CVE_REGEX = re.compile(r'.*(CVE-\d\d\d\d-\d+).*')
+    matches = CVE_REGEX.findall(script_output)
+    matches = list(dict.fromkeys(matches))
+    for cve_id in matches: # get CVE info
+        vuln = cve_to_vuln(cve_id, vuln_type='nmap-vulners-nse')
+        if vuln:
+            vulns.append(vuln)
+    return vulns
+
+
+def cve_to_vuln(cve_id, vuln_type=''):
+    """Search for a CVE using CVESearch and return Vulnerability data.
+
+    Args:
+        cve_id (str): CVE ID in the form CVE-*
+
+    Returns:
+        dict: Vulnerability dict.
+    """
+    from pycvesearch import CVESearch
+    import pprint
+    
+    cve_info = CVESearch('https://cve.circl.lu').id(cve_id)
+    if not cve_info:
+        logger.error(f'Could not fetch CVE info for cve {cve_id}. Skipping.')
+        return None
+    vuln_cve_id = cve_info['id']
+    vuln_name = vuln_cve_id
+    vuln_description = cve_info.get('summary', 'none').replace(vuln_cve_id, '').strip()
+    try:
+        vuln_cvss = float(cve_info.get('cvss', -1))
+    except (ValueError, TypeError):
+        vuln_cvss = -1
+    vuln_cwe_id = cve_info.get('cwe', '')
+    exploit_ids = cve_info.get('refmap', {}).get('exploit-db', [])
+    osvdb_ids = cve_info.get('refmap', {}).get('osvdb', [])
+    references = cve_info.get('references', [])
+    capec_objects = cve_info.get('capec', [])
+
+    # Parse ovals for a better vuln name / type
+    ovals = cve_info.get('oval', [])
+    if ovals:
+        vuln_name = ovals[0]['title']
+        vuln_type = ovals[0]['family']
+
+    # Set vulnerability severity based on CVSS score
+    vuln_severity = 'info'
+    if vuln_cvss < 4:
+        vuln_severity = 'low'
+    elif vuln_cvss < 7:
+        vuln_severity = 'medium'
+    elif vuln_cvss < 9:
+        vuln_severity = 'high'
+    else:
+        vuln_severity = 'critical'
+
+    # Build console warning message
+    msg = f'{vuln_name} | {vuln_severity.upper()} | {vuln_cve_id} | {vuln_cwe_id} | {vuln_cvss}'
+    for id in osvdb_ids:
+        msg += f'\n\tOSVDB: {id}'
+    for exploit_id in exploit_ids:
+        msg += f'\n\tEXPLOITDB: {exploit_id}'
+    logger.warning(msg)
+    vuln = {
+        'name': vuln_name,
+        'type': vuln_type,
+        'severity': NUCLEI_SEVERITY_MAP[vuln_severity],
+        'description': vuln_description,
+        'cvss_score': vuln_cvss,
+        'references': references,
+        'cve_ids': [vuln_cve_id],
+        'cwe_ids': [vuln_cwe_id]
+    }
+    return vuln
+
+
+def process_httpx_response(line):
+    """TODO: implement this"""
+    pass
+
+
+def create_scan_activity(scan_history_id, message, status):
+    from django.utils import timezone
+    
+    scan_activity = ScanActivity()
+    scan_activity.scan_of = ScanHistory.objects.get(pk=scan_history_id)
+    scan_activity.title = message
+    scan_activity.time = timezone.now()
+    scan_activity.status = status
+    scan_activity.save()
+    return scan_activity.id
+
+
+def save_imported_subdomains(subdomains, ctx={}):
+    """Take a list of subdomains imported and write them to from_imported.txt.
+
+    Args:
+        subdomains (list): List of subdomain names.
+        ctx (dict): Context dict with domain_id, results_dir, etc.
+    """
+    domain_id = ctx['domain_id']
+    domain = Domain.objects.get(pk=domain_id)
+    results_dir = ctx.get('results_dir', RENGINE_RESULTS)
+
+    # Validate each subdomain and de-duplicate entries
+    subdomains = list(
+        {
+            subdomain
+            for subdomain in subdomains
+            if domain.name == get_domain_from_subdomain(subdomain)
+        }
+    )
+    if not subdomains:
+        return
+
+    logger.warning(f'Found {len(subdomains)} imported subdomains.')
+    with open(f'{results_dir}/from_imported.txt', 'w+') as output_file:
+        url_filter = ctx.get('url_filter')
+        for subdomain in subdomains:
+            # Save valid imported subdomains
+            subdomain_name = subdomain.strip()
+            subdomain_obj, _ = save_subdomain(subdomain_name, ctx=ctx)
+            if not isinstance(subdomain_obj, Subdomain):
+                logger.error(f"Invalid subdomain encountered: {subdomain}")
+                continue
+            subdomain_obj.is_imported_subdomain = True
+            subdomain_obj.save()
+            output_file.write(f'{subdomain}\n')
+
+            # Create base endpoint (for scan)
+            http_url = f'{subdomain_obj.name}{url_filter}' if url_filter else subdomain_obj.name
+            endpoint, _ = save_endpoint(
+                http_url=http_url,
+                ctx=ctx,
+                is_default=True,
+                subdomain=subdomain_obj
+            )
+            save_subdomain_metadata(subdomain_obj, endpoint)
+
+
+def process_nmap_service_results(xml_file):
+    """Update port information with nmap service detection results"""
+    import xml.etree.ElementTree as ET
+    
+    services = parse_nmap_results(xml_file, parse_type='services')
+    
+    for service in services:
+        try:
+            # Get IP from host address node
+            ip = service.get('ip', '')
+            host = service.get('host', '')
+            
+            # If IP is empty, try to get it from the host
+            if not ip and host:
+                # Parse XML to get IP for this host
+                tree = ET.parse(xml_file)
+                root = tree.getroot()
+                for host_elem in root.findall('.//host'):
+                    hostnames = host_elem.find('hostnames')
+                    if hostnames is not None:
+                        for hostname in hostnames.findall('hostname'):
+                            if hostname.get('name') == host:
+                                ip = host_elem.find('address').get('addr')
+                                break
+            
+            # Skip if still empty or if it's a hostname
+            if not ip or any(c.isalpha() for c in ip):
+                logger.warning(f"Skipping invalid IP address: {ip} for host {host}")
+                continue
+                
+            ip_address, _ = IpAddress.objects.get_or_create(
+                address=ip
+            )
+            create_or_update_port_with_service(
+                port_number=int(service['port']),
+                service_info=service,
+                ip_address=ip_address
+            )
+        except Exception as e:
+            logger.error(f"Failed to process port {service['port']}: {str(e)}")
+
+
+def debug():
+    try:
+        # Activate remote debug for scan worker
+        if CELERY_REMOTE_DEBUG:
+            logger.info(f"\n⚡ Debugger started on port "+ str(CELERY_REMOTE_DEBUG_PORT) +", task is waiting IDE (VSCode ...) to be attached to continue ⚡\n")
+            os.environ['GEVENT_SUPPORT'] = 'True'
+            import debugpy
+            debugpy.listen(('0.0.0.0',CELERY_REMOTE_DEBUG_PORT))
+            debugpy.wait_for_client()
+    except Exception as e:
+        logger.error(e)
+
+
+def parse_curl_output(response):
+    # TODO: Enrich from other cURL fields.
+    import re
+    
+    CURL_REGEX_HTTP_STATUS = f'HTTP\/(?:(?:\d\.?)+)\s(\d+)\s(?:\w+)'
+    http_status = 0
+    if response:
+        failed = False
+        regex = re.compile(CURL_REGEX_HTTP_STATUS, re.MULTILINE)
+        try:
+            http_status = int(regex.findall(response)[0])
+        except (KeyError, TypeError, IndexError):
+            pass
+    return {
+        'http_status': http_status,
+    }
+
+# TODO Implement associated domains
+def get_associated_domains(keywords):
+      return []

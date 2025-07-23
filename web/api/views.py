@@ -30,6 +30,7 @@ from rest_framework.decorators import api_view
 from recon_note.models import TodoNote
 from reNgine.celery import app
 from reNgine.common_func import (
+    create_scan_activity,
     get_data_from_post_request,
     get_interesting_endpoints,
     get_interesting_subdomains,
@@ -54,7 +55,6 @@ from reNgine.settings import (
     RENGINE_TOOL_GITHUB_PATH
 )
 from reNgine.tasks import (
-    create_scan_activity,
     llm_vulnerability_report,
     initiate_subscan,
     query_ip_history,
@@ -3225,10 +3225,10 @@ class GetIpDetails(APIView):
 
 class UncommonWebPortsView(APIView):
     def get(self, request):
-        from reNgine.definitions import UNCOMMON_WEB_PORTS
+        from reNgine.definitions import UNCOMMON_WEB_PORTS, COMMON_WEB_PORTS
         return Response({
             'uncommon_web_ports': UNCOMMON_WEB_PORTS,
-            'common_web_ports': [80, 443]
+            'common_web_ports': COMMON_WEB_PORTS
         })
 
 class LLMModelsManager(APIView):
@@ -3368,11 +3368,3 @@ class GetIpDetails(APIView):
             context={'scan_id': scan_id}
         )
         return Response(serializer.data)
-
-class UncommonWebPortsView(APIView):
-    def get(self, request):
-        from reNgine.definitions import UNCOMMON_WEB_PORTS
-        return Response({
-            'uncommon_web_ports': UNCOMMON_WEB_PORTS,
-            'common_web_ports': [80, 443]
-        })

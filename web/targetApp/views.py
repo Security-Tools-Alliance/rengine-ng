@@ -27,10 +27,10 @@ from api.serializers import IpSerializer
 from reNgine.common_func import (
     get_ip_info,
     get_ips_from_cidr_range,
+    sanitize_url
 )
 from reNgine.tasks import (
     run_command,
-    sanitize_url,
 )
 from startScan.models import (
     EndPoint,

@@ -10,8 +10,9 @@ from django.contrib import messages
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from rolepermissions.decorators import has_permission_decorator
+from reNgine.common_func import send_discord_message, send_slack_message, send_lark_message, send_telegram_message
+from reNgine.tasks import run_command, run_gf_list
 
-from reNgine.tasks import run_command, send_discord_message, send_slack_message, send_lark_message, send_telegram_message, run_gf_list
 from scanEngine.forms import AddEngineForm, UpdateEngineForm, AddWordlistForm, ExternalToolForm, InterestingLookupForm, NotificationForm, ProxyForm, HackeroneForm, ReportForm
 from scanEngine.models import EngineType, Wordlist, InstalledExternalTool, InterestingLookupModel, Notification, Hackerone, Proxy, VulnerabilityReportSetting
 from dashboard.models import OpenAiAPIKey, NetlasAPIKey
