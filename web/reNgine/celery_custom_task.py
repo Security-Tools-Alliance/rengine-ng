@@ -1,14 +1,26 @@
 import json
+import os
 
 from celery import Task
 from celery.utils.log import get_task_logger
 from celery.worker.request import Request
 from django.utils import timezone
 from redis import Redis
-from reNgine.common_func import (fmt_traceback, get_output_file_name,
-								 get_task_cache_key, get_traceback_path)
-from reNgine.definitions import *
-from reNgine.settings import *
+from reNgine.utilities.misc import fmt_traceback, get_traceback_path
+from reNgine.utilities.notification import get_output_file_name
+from reNgine.utilities.database import get_task_cache_key
+from reNgine.definitions import (
+	CELERY_TASK_STATUS_MAP,
+	FAILED_TASK,
+	RUNNING_TASK,
+	SUCCESS_TASK
+)
+from reNgine.settings import (
+	RENGINE_CACHE_ENABLED,
+	RENGINE_RECORD_ENABLED,
+	RENGINE_RAISE_ON_ERROR,
+	RENGINE_RESULTS
+)
 from scanEngine.models import EngineType
 from startScan.models import ScanActivity, ScanHistory, SubScan
 

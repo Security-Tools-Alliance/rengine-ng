@@ -6,7 +6,7 @@ import time
 from celery.utils.log import get_task_logger
 
 from reNgine.celery import app
-from reNgine.common_func import (
+from reNgine.utilities.command import (
     create_command_object,
     prepare_command,
     execute_command,

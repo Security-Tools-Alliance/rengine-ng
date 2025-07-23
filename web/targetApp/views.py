@@ -24,11 +24,8 @@ from reNgine.definitions import (
 
 from api.serializers import IpSerializer
 
-from reNgine.common_func import (
-    get_ip_info,
-    get_ips_from_cidr_range,
-    sanitize_url
-)
+from reNgine.utilities.data import get_ip_info, get_ips_from_cidr_range
+from reNgine.utilities.url import sanitize_url
 from reNgine.tasks import (
     run_command,
 )

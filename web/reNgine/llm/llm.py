@@ -6,7 +6,7 @@ from langchain_community.llms import Ollama
 from reNgine.llm.config import LLM_CONFIG
 from reNgine.llm.utils import get_default_llm_model
 from reNgine.llm.validators import LLMProvider, LLMResponse
-from reNgine.common_func import get_open_ai_key
+from reNgine.utilities.external import get_open_ai_key
 
 logger = logging.getLogger(__name__)
 

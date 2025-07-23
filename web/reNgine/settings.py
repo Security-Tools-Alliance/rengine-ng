@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 
 from reNgine.init import first_run
-from reNgine.utilities import RengineTaskFormatter
+from reNgine.utilities.logging import RengineTaskFormatter
 
 env = environ.FileAwareEnv()
 
@@ -355,9 +355,7 @@ LOGGING = {
 
 # debug
 def show_toolbar(request):
-    if UI_DEBUG:
-        return True
-    return False
+    return bool(UI_DEBUG)
 
 if UI_DEBUG:
     DEBUG_TOOLBAR_CONFIG = {

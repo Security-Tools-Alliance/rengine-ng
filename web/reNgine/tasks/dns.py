@@ -7,12 +7,31 @@ from django.utils import timezone
 from dotted_dict import DottedDict
 
 from reNgine.celery import app
-from reNgine.common_func import debug, get_domain_historical_ip_address, reverse_whois, get_associated_domains, get_netlas_key
+from reNgine.utilities.external import (
+    get_domain_historical_ip_address,
+    reverse_whois,
+    get_associated_domains,
+    get_netlas_key
+)
 from reNgine.definitions import EMAIL_REGEX
 from reNgine.tasks.command import run_command
-from targetApp.models import DNSRecord, Domain, DomainInfo, DomainRegistration, HistoricalIP, NameServer, Registrar, RelatedDomain, WhoisStatus
+from targetApp.models import (
+    DNSRecord,
+    Domain,
+    DomainInfo,
+    DomainRegistration,
+    HistoricalIP,
+    NameServer,
+    Registrar,
+    RelatedDomain,
+    WhoisStatus,
+)
 from reNgine.common_serializers import (
-    DomainDNSRecordSerializer, DomainWhoisStatusSerializer, HistoricalIPSerializer, NameServersSerializer, RelatedDomainSerializer
+    DomainDNSRecordSerializer,
+    DomainWhoisStatusSerializer,
+    HistoricalIPSerializer,
+    NameServersSerializer,
+    RelatedDomainSerializer
 )
 logger = get_task_logger(__name__)
 

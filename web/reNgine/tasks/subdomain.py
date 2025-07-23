@@ -25,11 +25,10 @@ from reNgine.settings import (
     RENGINE_TOOL_GITHUB_PATH,
 )
 from reNgine.tasks.command import run_command
-from reNgine.common_func import (
-    save_subdomain, save_endpoint, save_subdomain_metadata,
-    get_random_proxy, get_netlas_key, get_new_added_subdomain,
-    get_removed_subdomain, get_interesting_subdomains
-)
+from reNgine.utilities.database import save_subdomain, save_endpoint, save_subdomain_metadata
+from reNgine.utilities.proxy import get_random_proxy
+from reNgine.utilities.external import get_netlas_key
+from reNgine.utilities.subdomain import get_new_added_subdomain, get_removed_subdomain, get_interesting_subdomains
 from scanEngine.models import InstalledExternalTool, Notification
 from startScan.models import Subdomain
 
@@ -51,6 +50,8 @@ def subdomain_discovery(
     Returns:
         subdomains (list): List of subdomain names.
     """
+    if ctx is None:
+        ctx = {}
     if not host:
         host = self.subdomain.name if self.subdomain else self.domain.name
 
@@ -66,8 +67,7 @@ def subdomain_discovery(
     default_subdomain_tools = [tool.name.lower() for tool in InstalledExternalTool.objects.filter(is_default=True).filter(is_subdomain_gathering=True)]
     custom_subdomain_tools = [tool.name.lower() for tool in InstalledExternalTool.objects.filter(is_default=False).filter(is_subdomain_gathering=True)]
     send_subdomain_changes, send_interesting = False, False
-    notif = Notification.objects.first()
-    if notif:
+    if notif := Notification.objects.first():
         send_subdomain_changes = notif.send_subdomain_changes_notif
         send_interesting = notif.send_interesting_notif
 
@@ -76,10 +76,7 @@ def subdomain_discovery(
         tools = SUBDOMAIN_SCAN_DEFAULT_TOOLS + custom_subdomain_tools
     tools = [t.lower() for t in tools]
 
-    # Make exception for amass since tool name is amass, but command is amass-active/passive
-    default_subdomain_tools.append('amass-passive')
-    default_subdomain_tools.append('amass-active')
-
+    default_subdomain_tools.extend(('amass-passive', 'amass-active'))
     # Run tools
     for tool in tools:
         cmd = None
@@ -113,8 +110,8 @@ def subdomain_discovery(
 
             elif tool == 'oneforall':
                 cmd = f'oneforall --target {host} run'
-                cmd_extract = f'cut -d\',\' -f6 ' + str(Path(RENGINE_TOOL_GITHUB_PATH) / 'OneForAll' / 'results' / f'{host}.csv') + ' | tail -n +2 > ' + str(Path(self.results_dir) / 'subdomains_oneforall.txt')
-                cmd_rm = f'rm -rf ' + str(Path(RENGINE_TOOL_GITHUB_PATH) / 'OneForAll' / 'results'/ f'{host}.csv')
+                cmd_extract = 'cut -d\',\' -f6 ' + str(Path(RENGINE_TOOL_GITHUB_PATH) / 'OneForAll' / 'results' / f'{host}.csv') + ' | tail -n +2 > ' + str(Path(self.results_dir) / 'subdomains_oneforall.txt')
+                cmd_rm = 'rm -rf ' + str(Path(RENGINE_TOOL_GITHUB_PATH) / 'OneForAll' / 'results'/ f'{host}.csv')
                 cmd += f' && {cmd_extract} && {cmd_rm}'
 
             elif tool == 'ctfr':
@@ -176,7 +173,7 @@ def subdomain_discovery(
     # Gather all the tools' results in one single file. Write subdomains into
     # separate files, and sort all subdomains.
     run_command(
-        f'cat ' + str(Path(self.results_dir) / 'subdomains_*.txt') + f' > {self.output_path}',
+        'cat ' + str(Path(self.results_dir) / 'subdomains_*.txt') + f' > {self.output_path}',
         shell=True,
         history_file=self.history_file,
         scan_id=self.scan_id,

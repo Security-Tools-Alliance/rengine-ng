@@ -19,7 +19,12 @@ from django.db.models.functions import Lower
 
 from api.serializers import IpSerializer
 from reNgine.celery import app
-from reNgine.common_func import logger, create_scan_activity, get_interesting_subdomains, create_scan_object, safe_int_cast
+from reNgine.utilities.database import create_scan_activity, create_scan_object
+from reNgine.utilities.subdomain import get_interesting_subdomains
+from reNgine.utilities.data import safe_int_cast
+from celery.utils.log import get_task_logger
+
+logger = get_task_logger(__name__)
 from reNgine.settings import RENGINE_RESULTS
 from reNgine.definitions import ABORTED_TASK, SUCCESS_TASK, RUNNING_TASK, LIVE_SCAN, SCHEDULED_SCAN, PERM_INITATE_SCANS_SUBSCANS, PERM_MODIFY_SCAN_RESULTS, PERM_MODIFY_SCAN_REPORT, PERM_MODIFY_SYSTEM_CONFIGURATIONS, FOUR_OH_FOUR_URL
 from reNgine.tasks import initiate_scan, run_command

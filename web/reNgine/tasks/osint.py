@@ -20,10 +20,8 @@ from reNgine.definitions import (
     OSINT_DEFAULT_CONFIG,
 )
 from reNgine.tasks.command import run_command
-from reNgine.common_func import (
-    get_and_save_dork_results, save_metadata_info,
-    save_email, save_employee
-)
+from reNgine.utilities.misc import get_and_save_dork_results
+from reNgine.utilities.database import save_metadata_info, save_email, save_employee
 from scanEngine.models import Proxy
 from startScan.models import ScanHistory, Subdomain
 
@@ -31,7 +29,7 @@ logger = get_task_logger(__name__)
 
 
 @app.task(name='osint', queue='io_queue', base=RengineTask, bind=True)
-def osint(self, host=None, ctx={}, description=None):
+def osint(self, host=None, ctx=None, description=None):
     """Run Open-Source Intelligence tools on selected domain.
 
     Args:
@@ -40,6 +38,8 @@ def osint(self, host=None, ctx={}, description=None):
     Returns:
         dict: Results from osint discovery and dorking.
     """
+    if ctx is None:
+        ctx = {}
     config = self.yaml_configuration.get(OSINT) or OSINT_DEFAULT_CONFIG
     results = {}
 
@@ -80,7 +80,7 @@ def osint(self, host=None, ctx={}, description=None):
 
 
 @app.task(name='osint_discovery', queue='io_queue', bind=False)
-def osint_discovery(config, host, scan_history_id, activity_id, results_dir, ctx={}):
+def osint_discovery(config, host, scan_history_id, activity_id, results_dir, ctx=None):
     """Run OSINT discovery.
 
     Args:
@@ -92,11 +92,12 @@ def osint_discovery(config, host, scan_history_id, activity_id, results_dir, ctx
     Returns:
         dict: osint metadat and theHarvester and h8mail results.
     """
+    if ctx is None:
+        ctx = {}
     scan_history = ScanHistory.objects.get(pk=scan_history_id)
     osint_lookup = config.get(OSINT_DISCOVER, [])
     osint_intensity = config.get(INTENSITY, 'normal')
     documents_limit = config.get(OSINT_DOCUMENTS_LIMIT, 50)
-    results = {}
     emails = []
     creds = []
 
@@ -162,10 +163,7 @@ def osint_discovery(config, host, scan_history_id, activity_id, results_dir, ctx
     else:
         logger.info('No OSINT discovery tasks to run')
 
-    # results['emails'] = results.get('emails', []) + emails
-    # results['creds'] = creds
-    # results['meta_info'] = meta_info
-    return results
+    return {}
 
 
 @app.task(name='dorking', bind=False, queue='io_queue')
@@ -437,8 +435,11 @@ def theHarvester(config, host, scan_history_id, activity_id, results_dir, ctx=No
     Returns:
         dict: Dict of emails, employees, hosts and ips found during crawling.
     """
-    from reNgine.common_func import get_subdomain_from_url, save_subdomain, save_endpoint
+    from reNgine.utilities.url import get_subdomain_from_url
+    from reNgine.utilities.database import save_subdomain, save_endpoint
     
+    if ctx is None:
+        ctx = {}
     scan_history = ScanHistory.objects.get(pk=scan_history_id)
     output_path_json = str(Path(results_dir) / 'theHarvester.json')
     theHarvester_dir = str(Path.home() / ".config"  / 'theHarvester')
@@ -552,6 +553,8 @@ def h8mail(config, host, scan_history_id, activity_id, results_dir, ctx=None):
     Returns:
         list[dict]: List of credentials info.
     """
+    if ctx is None:
+        ctx = {}
     logger.warning('Getting leaked credentials')
     scan_history = ScanHistory.objects.get(pk=scan_history_id)
     input_path = str(Path(results_dir) / 'emails.txt')

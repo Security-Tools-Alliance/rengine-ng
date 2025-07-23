@@ -29,15 +29,12 @@ from rest_framework.decorators import api_view
 
 from recon_note.models import TodoNote
 from reNgine.celery import app
-from reNgine.common_func import (
-    create_scan_activity,
-    get_data_from_post_request,
-    get_interesting_endpoints,
-    get_interesting_subdomains,
-    get_lookup_keywords,
-    safe_int_cast,
-    get_open_ai_key,
-)
+from reNgine.utilities.database import create_scan_activity
+from reNgine.utilities.data import get_data_from_post_request, safe_int_cast
+from reNgine.utilities.endpoint import get_interesting_endpoints
+from reNgine.utilities.subdomain import get_interesting_subdomains
+from reNgine.utilities.lookup import get_lookup_keywords
+from reNgine.utilities.external import get_open_ai_key
 from reNgine.definitions import (
 	ABORTED_TASK,
 	NUCLEI_SEVERITY_MAP,
@@ -68,7 +65,7 @@ from reNgine.tasks import (
 )
 from reNgine.llm.llm import LLMAttackSuggestionGenerator
 from reNgine.llm.utils import convert_markdown_to_html
-from reNgine.utilities import is_safe_path, remove_lead_and_trail_slash
+from reNgine.utilities.path import is_safe_path, remove_lead_and_trail_slash
 from scanEngine.models import EngineType, InstalledExternalTool
 from startScan.models import (
     Command,
@@ -112,7 +109,6 @@ from .serializers import (
     OnlySubdomainNameSerializer,
     OrganizationSerializer,
     OrganizationTargetsSerializer,
-    PortSerializer,
     ProjectSerializer,
     ReconNoteSerializer,
     ScanHistorySerializer,
@@ -136,9 +132,7 @@ logger = logging.getLogger(__name__)
 class OllamaManager(APIView):
     def clean_channel_name(self, name):
         """Clean channel name to only contain valid characters"""
-        # Replace any non-alphanumeric characters with hyphens
-        clean_name = re.sub(r'[^a-zA-Z0-9\-\.]', '-', name)
-        return clean_name
+        return re.sub(r'[^a-zA-Z0-9\-\.]', '-', name)
 
     def get(self, request):
         model_name = request.query_params.get('model')
@@ -339,9 +333,7 @@ class AvailableOllamaModels(APIView):
     def get(self, request):
         try:
             cache_key = 'ollama_available_models'
-            cached_data = cache.get(cache_key)
-            
-            if cached_data:
+            if cached_data := cache.get(cache_key):
                 return Response(cached_data)
 
             # Use recommended models from config
@@ -355,7 +347,7 @@ class AvailableOllamaModels(APIView):
                         model['name']: model 
                         for model in response.json().get('models', [])
                     }
-                    
+
                     # Mark installed models and add their details
                     for model in recommended_models:
                         base_name = model['name']
@@ -365,7 +357,7 @@ class AvailableOllamaModels(APIView):
                             if name.startswith(base_name)
                         ]
                         model['installed'] = len(model['installed_versions']) > 0
-                        
+
                         # Add capabilities from MODEL_REQUIREMENTS if available
                         if base_name in MODEL_REQUIREMENTS:
                             model['capabilities'] = MODEL_REQUIREMENTS[base_name]
@@ -555,8 +547,7 @@ class ListTargetsDatatableViewSet(viewsets.ModelViewSet):
     serializer_class = DomainSerializer
 
     def get_queryset(self):
-        slug = self.request.GET.get('slug', None)
-        if slug:
+        if slug := self.request.GET.get('slug', None):
             self.queryset = self.queryset.filter(project__slug=slug)
         return self.queryset
 
@@ -3330,41 +3321,3 @@ def websocket_status(request):
             'status': False,
             'error': str(e)
         }, status=500)
-
-class GetIpDetails(APIView):
-    def get(self, request, format=None):
-        req = self.request
-        ip_address = req.query_params.get('ip_address')
-        scan_id = safe_int_cast(req.query_params.get('scan_id'))
-        target_id = safe_int_cast(req.query_params.get('target_id'))
-
-        if not ip_address:
-            return Response({"error": "IP address is required"}, status=400)
-
-        # Build the base query
-        ip_query = IpAddress.objects.filter(address=ip_address)
-
-        if scan_id:
-            ip_query = ip_query.filter(
-                ip_addresses__scan_history__id=scan_id
-            )
-        elif target_id:
-            ip_query = ip_query.filter(
-                ip_addresses__target_domain__id=target_id
-            )
-
-        # Preloading relations to optimize performance
-        ip_query = ip_query.prefetch_related(
-            'ports',
-            'ip_addresses',
-        ).distinct()
-
-
-        if not ip_query.exists():
-            return Response({"error": "IP not found"}, status=404)
-            
-        serializer = IpSerializer(
-            ip_query.first(), 
-            context={'scan_id': scan_id}
-        )
-        return Response(serializer.data)

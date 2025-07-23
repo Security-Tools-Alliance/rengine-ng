@@ -22,6 +22,8 @@ def report(ctx=None, description=None):
     Args:
         description (str, optional): Task description shown in UI.
     """
+    if ctx is None:
+        ctx = {}
     # Get objects
     subscan_id = ctx.get('subscan_id')
     scan_id = ctx.get('scan_history_id')

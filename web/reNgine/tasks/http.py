@@ -1,5 +1,4 @@
 import json
-import os
 from datetime import datetime
 
 from celery.utils.log import get_task_logger
@@ -16,13 +15,24 @@ from reNgine.definitions import (
 )
 from reNgine.settings import DEFAULT_THREADS
 from reNgine.tasks.command import stream_command
-from reNgine.common_func import (
-    get_http_urls, get_subdomain_from_url, generate_header_param,
-    get_random_proxy, is_iterable, smart_http_crawl_if_needed,
-    get_or_create_port, save_subdomain, save_endpoint, save_ip_address, save_subdomain_metadata,
-    remove_file_or_pattern, extract_httpx_url, debug
+from reNgine.utilities.endpoint import get_http_urls, smart_http_crawl_if_needed
+from reNgine.utilities.url import get_subdomain_from_url, extract_httpx_url
+from reNgine.utilities.command import generate_header_param
+from reNgine.utilities.proxy import get_random_proxy
+from reNgine.utilities.data import is_iterable
+from reNgine.utilities.port import get_or_create_port
+from reNgine.utilities.database import (
+    save_subdomain,
+    save_endpoint,
+    save_ip_address,
+    save_subdomain_metadata,
 )
-from startScan.models import Subdomain, Technology, EndPoint
+from reNgine.utilities.file import remove_file_or_pattern
+from startScan.models import (
+    Subdomain,
+    Technology,
+    EndPoint,
+)
 
 logger = get_task_logger(__name__)
 
@@ -59,7 +69,6 @@ def http_crawl(
     if urls is None:
         urls = []
 
-    cmd = 'httpx'
     config = self.yaml_configuration.get(HTTP_CRAWL) or {}
     custom_header = config.get(CUSTOM_HEADER) or self.yaml_configuration.get(CUSTOM_HEADER)
     if custom_header:
@@ -115,6 +124,7 @@ def http_crawl(
     proxy = get_random_proxy()
 
     # Run command
+    cmd = 'httpx'
     cmd += ' -cl -ct -rt -location -td -websocket -cname -asn -cdn -probe -random-agent'
     cmd += f' -t {threads}' if threads > 0 else ''
     cmd += f' --http-proxy {proxy}' if proxy else ''

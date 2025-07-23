@@ -19,11 +19,10 @@ from reNgine.settings import (
     DEFAULT_HTTP_TIMEOUT,
 )
 from reNgine.tasks.command import run_command
-from reNgine.common_func import (
-    get_http_urls, ensure_endpoints_crawled_and_execute,
-    get_output_file_name, extract_columns
-)
-from reNgine.common_func import remove_file_or_pattern
+from reNgine.utilities.endpoint import get_http_urls, ensure_endpoints_crawled_and_execute
+from reNgine.utilities.notification import get_output_file_name
+from reNgine.utilities.data import extract_columns
+from reNgine.utilities.file import remove_file_or_pattern
 from reNgine.tasks.notification import send_file_to_discord
 from scanEngine.models import Notification
 from startScan.models import Subdomain

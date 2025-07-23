@@ -23,8 +23,9 @@ from reNgine.settings import (
 )
 from reNgine.tasks.notification import send_scan_notif
 from reNgine.tasks.reporting import report
-from reNgine.utilities import SafePath
-from reNgine.common_func import create_scan_object, is_iterable, save_imported_subdomains, save_subdomain
+from reNgine.utilities.path import SafePath
+from reNgine.utilities.database import create_scan_object, save_imported_subdomains, save_subdomain
+from reNgine.utilities.data import is_iterable
 from scanEngine.models import EngineType
 from startScan.models import ScanActivity, ScanHistory, SubScan
 from targetApp.models import Domain

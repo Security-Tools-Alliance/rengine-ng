@@ -3,7 +3,7 @@ import requests
 from celery.utils.log import get_task_logger
 
 from reNgine.celery import app
-from reNgine.common_func import (
+from reNgine.utilities.notification import (
     send_discord_message, send_slack_message, send_lark_message,
     send_telegram_message, enrich_notification, get_scan_url, get_scan_title,
     get_scan_fields, get_task_title

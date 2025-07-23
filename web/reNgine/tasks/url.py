@@ -31,11 +31,12 @@ from reNgine.settings import (
     DELETE_DUPLICATES_THRESHOLD
 )
 from reNgine.tasks.command import run_command
-from reNgine.common_func import (
-    get_http_urls, get_subdomain_from_url,
-    get_random_proxy, generate_header_param, sanitize_url, is_iterable,
-    save_subdomain, save_endpoint
-)
+from reNgine.utilities.endpoint import get_http_urls
+from reNgine.utilities.url import get_subdomain_from_url, sanitize_url
+from reNgine.utilities.proxy import get_random_proxy
+from reNgine.utilities.command import generate_header_param
+from reNgine.utilities.data import is_iterable
+from reNgine.utilities.database import save_subdomain, save_endpoint
 from startScan.models import EndPoint, Subdomain
 
 logger = get_task_logger(__name__)

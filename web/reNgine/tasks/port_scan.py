@@ -32,12 +32,13 @@ from reNgine.settings import (
     DEFAULT_RATE_LIMIT,
 )
 from reNgine.tasks.command import stream_command, run_command
-from reNgine.common_func import (
-    get_subdomains, get_random_proxy, get_nmap_cmd,
-    get_task_title, return_iterable,
-    parse_nmap_results, process_nmap_service_results,
-    save_endpoint, save_ip_address, save_vulnerability
-)
+from reNgine.utilities.subdomain import get_subdomains
+from reNgine.utilities.proxy import get_random_proxy
+from reNgine.utilities.command import get_nmap_cmd
+from reNgine.utilities.notification import get_task_title
+from reNgine.utilities.data import return_iterable
+from reNgine.utilities.parser import parse_nmap_results, process_nmap_service_results
+from reNgine.utilities.database import save_endpoint, save_ip_address, save_vulnerability
 from scanEngine.models import Notification
 from startScan.models import Port, Subdomain, EndPoint
 
@@ -57,7 +58,8 @@ def port_scan(self, hosts=None, ctx=None, description=None):
     """
     # Initialize mutable parameters
     hosts = hosts or []
-    ctx = ctx or {}
+    if ctx is None:
+        ctx = {}
 
     input_file = str(Path(self.results_dir) / 'input_subdomains_port_scan.txt')
     proxy = get_random_proxy()

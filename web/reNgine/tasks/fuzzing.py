@@ -35,11 +35,11 @@ from reNgine.settings import (
     CELERY_DEBUG,
 )
 from reNgine.tasks.command import stream_command
-from reNgine.common_func import (
-    get_http_urls, ensure_endpoints_crawled_and_execute,
-    get_random_proxy, generate_header_param, extract_path_from_url,
-    save_endpoint, get_subdomain_from_url
-)
+from reNgine.utilities.endpoint import get_http_urls, ensure_endpoints_crawled_and_execute
+from reNgine.utilities.proxy import get_random_proxy
+from reNgine.utilities.command import generate_header_param
+from reNgine.utilities.url import extract_path_from_url, get_subdomain_from_url
+from reNgine.utilities.database import save_endpoint
 from startScan.models import DirectoryScan, DirectoryFile, Subdomain
 
 logger = get_task_logger(__name__)
