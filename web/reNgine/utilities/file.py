@@ -1,5 +1,6 @@
 import glob
 import os
+import shutil
 from celery.utils.log import get_task_logger
 
 logger = get_task_logger(__name__)
@@ -15,38 +16,37 @@ def remove_file_or_pattern(path, pattern=None, shell=True, history_file=None, sc
     Args:
         path: Path to file/directory to remove
         pattern: Optional pattern for multiple files (e.g. "*.csv")
-        shell: Whether to use shell=True in run_command
-        history_file: History file for logging
-        scan_id: Scan ID for logging
-        activity_id: Activity ID for logging
+        shell: Whether to use shell=True in run_command (deprecated)
+        history_file: History file for logging (deprecated)
+        scan_id: Scan ID for logging (deprecated)
+        activity_id: Activity ID for logging (deprecated)
     Returns:
         bool: True if successful, False if error occurred
     """
-    from reNgine.tasks.command import run_command
-    
     try:
         if pattern:
-            # Check for files matching the pattern
-            match_count = len(glob.glob(os.path.join(path, pattern)))
-            if match_count == 0:
+            # Find and remove files matching the pattern
+            matched_files = glob.glob(os.path.join(path, pattern))
+            if not matched_files:
                 logger.warning(f"No files matching pattern '{pattern}' in {path}")
                 return True
-            full_path = os.path.join(path, pattern)
+            
+            for file_path in matched_files:
+                if os.path.isfile(file_path):
+                    os.remove(file_path)
+                elif os.path.isdir(file_path):
+                    shutil.rmtree(file_path)
         else:
             if not os.path.exists(path):
                 logger.warning(f"Path {path} does not exist")
                 return True
-            full_path = path
-
-        # Execute secure command
-        run_command(
-            f'rm -rf {full_path}',
-            shell=shell,
-            history_file=history_file,
-            scan_id=scan_id,
-            activity_id=activity_id
-        )
+            
+            if os.path.isfile(path):
+                os.remove(path)
+            elif os.path.isdir(path):
+                shutil.rmtree(path)
+        
         return True
     except Exception as e:
-        logger.error(f"Failed to delete {full_path}: {str(e)}")
+        logger.error(f"Failed to delete {path}: {str(e)}")
         return False 

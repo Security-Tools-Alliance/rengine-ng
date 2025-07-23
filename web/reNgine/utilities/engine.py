@@ -1,4 +1,5 @@
 import os
+import re
 from celery.utils.log import get_task_logger
 from scanEngine.models import EngineType
 
@@ -8,6 +9,18 @@ logger = get_task_logger(__name__)
 #------------------#
 # EngineType utils #
 #------------------#
+
+def sanitize_filename(name):
+    """Sanitize a string to be safe for use as a filename.
+    
+    Args:
+        name (str): Original name.
+        
+    Returns:
+        str: Sanitized filename-safe string.
+    """
+    # Replace invalid filename characters with underscores
+    return re.sub(r'[<>:"/\\|?*]', '_', name).strip()
 
 def dump_custom_scan_engines(results_dir):
     """Dump custom scan engines to YAML files.
@@ -19,7 +32,8 @@ def dump_custom_scan_engines(results_dir):
     if not os.path.exists(results_dir):
         os.makedirs(results_dir)
     for engine in custom_engines:
-        with open(f'{results_dir}/{engine.engine_name}.yaml', 'w') as f:
+        safe_name = sanitize_filename(engine.engine_name)
+        with open(f'{results_dir}/{safe_name}.yaml', 'w') as f:
             f.write(engine.yaml_configuration)
 
 

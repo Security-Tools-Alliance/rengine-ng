@@ -14,19 +14,12 @@ def get_lookup_keywords():
     Returns:
         list: Lookup keywords.
     """
-    lookup_model = InterestingLookupModel.objects.first()
-    lookup_obj = InterestingLookupModel.objects.filter().order_by('-id').first()
-    custom_lookup_keywords = []
-    default_lookup_keywords = []
-    if lookup_model:
-        default_lookup_keywords = [
-            key.strip()
-            for key in lookup_model.keywords.split(',')]
-    if lookup_obj:
-        custom_lookup_keywords = [
-            key.strip()
-            for key in lookup_obj.keywords.split(',')
-        ]
-    lookup_keywords = default_lookup_keywords + custom_lookup_keywords
-    lookup_keywords = list(filter(None, lookup_keywords)) # remove empty strings from list
-    return lookup_keywords 
+    lookup_obj = InterestingLookupModel.objects.order_by('-id').first()
+    if not lookup_obj:
+        return []
+    
+    lookup_keywords = [
+        key.strip()
+        for key in lookup_obj.keywords.split(',')
+    ]
+    return list(filter(None, lookup_keywords))  # remove empty strings from list 
