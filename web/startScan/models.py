@@ -190,7 +190,8 @@ class ScanHistory(models.Model):
 			pending=Count('id', filter=models.Q(scan_status=0)),
 			running=Count('id', filter=models.Q(scan_status=1)),
 			completed=Count('id', filter=models.Q(scan_status=2)),
-			failed=Count('id', filter=models.Q(scan_status=3))
+			failed=Count('id', filter=models.Q(scan_status=3)),
+			running_background=Count('id', filter=models.Q(scan_status=4))
 		)
 
 	@classmethod
