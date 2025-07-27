@@ -39,7 +39,8 @@ from reNgine.definitions import (
 	ABORTED_TASK,
 	NUCLEI_SEVERITY_MAP,
 	RUNNING_TASK,
-	SUCCESS_TASK
+	SUCCESS_TASK,
+	FAILED_TASK
 )
 from reNgine.llm.config import (
     OLLAMA_INSTANCE,
@@ -119,7 +120,8 @@ from .serializers import (
     SubScanSerializer,
     TechnologyCountSerializer,
     VisualiseDataSerializer,
-    VulnerabilitySerializer
+    VulnerabilitySerializer,
+    ScanActivitySerializer
 )
 
 from channels.layers import get_channel_layer
@@ -1005,8 +1007,8 @@ class FetchSubscanResults(APIView):
             subscan_results = SubdomainSerializer(subdomains_in_subscan, many=True).data
 
         elif task_name == 'screenshot':
-            subdomains_in_subscan = Subdomain.objects.filter(subdomain_subscan_ids__in=subscan, screenshot_path__isnull=False)
-            subscan_results = SubdomainSerializer(subdomains_in_subscan, many=True).data
+            endpoints_in_subscan = EndPoint.objects.filter(endpoint_subscan_ids__in=subscan, screenshot_path__isnull=False)
+            subscan_results = EndpointSerializer(endpoints_in_subscan, many=True).data
 
         logger.info(subscan_data)
         logger.info(subscan_results)
@@ -1411,19 +1413,20 @@ class ScanStatus(APIView):
             .filter(scan_status=-1)
         )
 
-        # subtasks
+        # subtasks - use ScanActivity instead of SubScan for better visibility
         recently_completed_tasks = (
-            SubScan.objects
-            .filter(scan_history__domain__project__slug=slug)
-            .order_by('-start_scan_date')
-            .filter(Q(status=0) | Q(status=2) | Q(status=3))[:15]
+            ScanActivity.objects
+            .filter(scan_of__domain__project__slug=slug)
+            .order_by('-time')
+            .filter(Q(status=FAILED_TASK) | Q(status=SUCCESS_TASK))[:15]
         )
         current_tasks = (
-            SubScan.objects
-            .filter(scan_history__domain__project__slug=slug)
-            .order_by('-start_scan_date')
-            .filter(Q(status=1) | Q(status=4))
+            ScanActivity.objects
+            .filter(scan_of__domain__project__slug=slug)
+            .order_by('-time')
+            .filter(status=RUNNING_TASK)
         )
+        # For pending tasks, we keep SubScan since ScanActivity don't have pending status
         pending_tasks = (
             SubScan.objects
             .filter(scan_history__domain__project__slug=slug)
@@ -1437,8 +1440,8 @@ class ScanStatus(APIView):
             },
             'tasks': {
                 'pending': SubScanSerializer(pending_tasks, many=True).data,
-                'running': SubScanSerializer(current_tasks, many=True).data,
-                'completed': SubScanSerializer(recently_completed_tasks, many=True).data
+                'running': ScanActivitySerializer(current_tasks, many=True).data,
+                'completed': ScanActivitySerializer(recently_completed_tasks, many=True).data
             }
         }
         return Response(response)
@@ -2033,10 +2036,15 @@ class SubdomainsViewSet(viewsets.ModelViewSet):
         scan_id = safe_int_cast(req.query_params.get('scan_id'))
         if scan_id:
             if 'only_screenshot' in self.request.query_params:
+                # Get subdomains that have endpoints with screenshots
+                endpoint_subdomains = EndPoint.objects.filter(
+                    scan_history__id=scan_id,
+                    screenshot_path__isnull=False
+                ).values_list('subdomain', flat=True).distinct()
                 return (
                     Subdomain.objects
                     .filter(scan_history__id=scan_id)
-                    .exclude(screenshot_path__isnull=True))
+                    .filter(id__in=endpoint_subdomains))
             return Subdomain.objects.filter(scan_history=scan_id)
 
     def paginate_queryset(self, queryset, view=None):
@@ -3321,3 +3329,147 @@ def websocket_status(request):
             'status': False,
             'error': str(e)
         }, status=500)
+
+class FetchScreenshots(APIView):
+    def get(self, request):
+        """Get screenshots from endpoints for a specific scan or target"""
+        req = self.request
+        scan_id = safe_int_cast(req.query_params.get('scan_id'))
+        target_id = safe_int_cast(req.query_params.get('target_id'))
+        subdomain_id = safe_int_cast(req.query_params.get('subdomain_id'))
+        port = req.query_params.get('port')
+        
+        if not scan_id and not target_id:
+            return Response({
+                'status': False,
+                'error': 'Missing scan_id or target_id parameter'
+            })
+        
+        def extract_port_from_url(url):
+            """Extract port from URL, return default ports for HTTP/HTTPS"""
+            from urllib.parse import urlparse
+            parsed = urlparse(url)
+            if parsed.port:
+                return parsed.port
+            elif parsed.scheme == 'https':
+                return 443
+            elif parsed.scheme == 'http':
+                return 80
+            return None
+        
+        # Get endpoints with screenshots
+        endpoints_with_screenshots = EndPoint.objects.filter(
+            screenshot_path__isnull=False
+        ).select_related('subdomain').prefetch_related(
+            'subdomain__ip_addresses',
+            'subdomain__technologies'
+        )
+        
+        # Filter by scan_id or target_id
+        if scan_id:
+            endpoints_with_screenshots = endpoints_with_screenshots.filter(
+                scan_history__id=scan_id
+            )
+        elif target_id:
+            endpoints_with_screenshots = endpoints_with_screenshots.filter(
+                scan_history__domain__id=target_id
+            )
+        
+        # Filter by subdomain if provided
+        if subdomain_id:
+            endpoints_with_screenshots = endpoints_with_screenshots.filter(
+                subdomain__id=subdomain_id
+            )
+        
+        # Filter by port if provided - handle default ports correctly
+        if port:
+            port_int = safe_int_cast(port)
+            filtered_endpoints = []
+            for endpoint in endpoints_with_screenshots:
+                endpoint_port = extract_port_from_url(endpoint.http_url)
+                if endpoint_port == port_int:
+                    filtered_endpoints.append(endpoint)
+            endpoints_with_screenshots = filtered_endpoints
+        
+        if not endpoints_with_screenshots:
+            return Response({
+                'status': False,
+                'message': 'No screenshots found'
+            })
+        
+        # Group by subdomain to maintain UI compatibility
+        screenshots_data = {}
+        for endpoint in endpoints_with_screenshots:
+            subdomain = endpoint.subdomain
+            if not subdomain:
+                continue
+                
+            subdomain_key = f"{subdomain.name}_{endpoint.id}"
+            endpoint_port = extract_port_from_url(endpoint.http_url)
+            
+            screenshots_data[subdomain_key] = {
+                'name': subdomain.name,
+                'http_url': endpoint.http_url,
+                'page_title': endpoint.page_title or subdomain.page_title,
+                'http_status': endpoint.http_status or subdomain.http_status,
+                'screenshot_path': endpoint.screenshot_path,
+                'is_interesting': subdomain.is_important,
+                'endpoint_id': endpoint.id,
+                'port': endpoint_port,  # Add port information
+                'ip_addresses': [
+                    {'address': ip.address, 'is_cdn': ip.is_cdn}
+                    for ip in subdomain.ip_addresses.all()
+                ],
+                'technologies': [
+                    {'name': tech.name}
+                    for tech in subdomain.technologies.all()
+                ]
+            }
+        
+        return Response(screenshots_data)
+
+
+class FetchSubscanResults(APIView):
+    def get(self, request):
+        req = self.request
+        # data = req.data
+        subscan_id = safe_int_cast(req.query_params.get('subscan_id'))
+        subscan = SubScan.objects.filter(id=subscan_id)
+        if not subscan.exists():
+            return Response({
+                'status': False,
+                'error': f'Subscan {subscan_id} does not exist'
+            })
+
+        subscan_data = SubScanResultSerializer(subscan.first(), many=False).data
+        task_name = subscan_data['type']
+        subscan_results = []
+
+        if task_name == 'port_scan':
+            ips_in_subscan = IpAddress.objects.filter(ip_subscan_ids__in=subscan)
+            subscan_results = IpSerializer(ips_in_subscan, many=True).data
+
+        elif task_name == 'vulnerability_scan':
+            vulns_in_subscan = Vulnerability.objects.filter(vuln_subscan_ids__in=subscan)
+            subscan_results = VulnerabilitySerializer(vulns_in_subscan, many=True).data
+
+        elif task_name == 'fetch_url':
+            endpoints_in_subscan = EndPoint.objects.filter(endpoint_subscan_ids__in=subscan)
+            subscan_results = EndpointSerializer(endpoints_in_subscan, many=True).data
+
+        elif task_name == 'dir_file_fuzz':
+            dirs_in_subscan = DirectoryScan.objects.filter(dir_subscan_ids__in=subscan)
+            subscan_results = DirectoryScanSerializer(dirs_in_subscan, many=True).data
+
+        elif task_name == 'subdomain_discovery':
+            subdomains_in_subscan = Subdomain.objects.filter(subdomain_subscan_ids__in=subscan)
+            subscan_results = SubdomainSerializer(subdomains_in_subscan, many=True).data
+
+        elif task_name == 'screenshot':
+            endpoints_in_subscan = EndPoint.objects.filter(endpoint_subscan_ids__in=subscan, screenshot_path__isnull=False)
+            subscan_results = EndpointSerializer(endpoints_in_subscan, many=True).data
+
+        logger.info(subscan_data)
+        logger.info(subscan_results)
+
+        return Response({'subscan': subscan_data, 'result': subscan_results, 'endpoint_url': reverse('api:endpoints-list'), 'vulnerability_url': reverse('api:vulnerabilities-list')})

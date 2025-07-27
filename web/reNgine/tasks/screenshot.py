@@ -25,7 +25,7 @@ from reNgine.utilities.data import extract_columns
 from reNgine.utilities.file import remove_file_or_pattern
 from reNgine.tasks.notification import send_file_to_discord
 from scanEngine.models import Notification
-from startScan.models import Subdomain
+from startScan.models import EndPoint
 
 logger = get_task_logger(__name__)
 
@@ -90,15 +90,28 @@ def screenshot(self, ctx={}, description=None):
             indices = [header.index(col) for col in ["Protocol", "Port", "Domain", "Request Status", "Screenshot Path", " Source Path"]]
             for row in reader:
                 protocol, port, subdomain_name, status, screenshot_path, source_path = extract_columns(row, indices)
-                subdomain_query = Subdomain.objects.filter(name=subdomain_name)
-                if self.scan:
-                    subdomain_query = subdomain_query.filter(scan_history=self.scan)
-                if status == 'Successful' and subdomain_query.exists():
-                    subdomain = subdomain_query.first()
+                
+                if status == 'Successful':
                     screenshot_paths.append(screenshot_path)
-                    subdomain.screenshot_path = screenshot_path.replace(RENGINE_RESULTS, '')
-                    subdomain.save()
-                    logger.warning(f'Added screenshot for {protocol}://{subdomain.name}:{port} to DB')
+                    
+                    # Construct the full URL from protocol, subdomain and port
+                    if port and port not in ['80', '443']:
+                        full_url = f'{protocol}://{subdomain_name}:{port}'
+                    else:
+                        full_url = f'{protocol}://{subdomain_name}'
+                    
+                    # Find the matching endpoint
+                    endpoint_query = EndPoint.objects.filter(http_url=full_url)
+                    if self.scan:
+                        endpoint_query = endpoint_query.filter(scan_history=self.scan)
+                    
+                    if endpoint_query.exists():
+                        endpoint = endpoint_query.first()
+                        endpoint.screenshot_path = screenshot_path.replace(RENGINE_RESULTS, '')
+                        endpoint.save()
+                        logger.warning(f'Added screenshot for {full_url} to endpoint in DB')
+                    else:
+                        logger.warning(f'No endpoint found for {full_url}, skipping screenshot assignment')
 
 
         # Remove all db, html extra files in screenshot results

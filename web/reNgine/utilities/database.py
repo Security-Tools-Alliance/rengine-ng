@@ -63,7 +63,11 @@ def save_endpoint(
     is_ip_scan = validators.ipv4(domain.name) or validators.ipv6(domain.name)
 
     # For regular domain scans, validate URL belongs to domain
-    if not is_ip_scan and domain.name not in http_url:
+    # Exception: Allow IP addresses discovered via DNS resolution
+    parsed_url = urlparse(http_url)
+    is_ip_url = validators.ipv4(parsed_url.hostname) or validators.ipv6(parsed_url.hostname)
+    
+    if not is_ip_scan and not is_ip_url and domain.name not in http_url:
         logger.error(f"{http_url} is not a URL of domain {domain.name}. Skipping.")
         return None, False
 
@@ -173,7 +177,10 @@ def save_subdomain(subdomain_name, ctx=None):
     is_ip_scan = validators.ipv4(domain.name) or validators.ipv6(domain.name)
 
     # For regular domain scans, validate subdomain belongs to domain
-    if not is_ip_scan and ctx.get('domain_id') and domain.name not in subdomain_name:
+    # Exception: Allow IP addresses discovered via DNS resolution to be saved as special subdomains
+    is_discovered_ip = validators.ipv4(subdomain_name) or validators.ipv6(subdomain_name)
+    
+    if not is_ip_scan and not is_discovered_ip and ctx.get('domain_id') and domain.name not in subdomain_name:
         logger.error(f"{subdomain_name} is not a subdomain of domain {domain.name}. Skipping.")
         return None, False
 

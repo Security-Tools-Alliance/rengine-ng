@@ -147,6 +147,13 @@ def port_scan(self, hosts=None, ctx=None, description=None):
             scan_history=self.scan
         ).first()
 
+        # If no subdomain exists for this host/IP, create one
+        if not subdomain:
+            from reNgine.utilities.database import save_subdomain
+            subdomain, created = save_subdomain(host, ctx=ctx)
+            if created:
+                logger.info(f'Created subdomain entry for host/IP: {host}')
+
         # Add IP DB
         ip, _ = save_ip_address(ip_address, subdomain, subscan=self.subscan)
         if self.subscan:
@@ -156,28 +163,62 @@ def port_scan(self, hosts=None, ctx=None, description=None):
         # Check if this is a web service port
         is_web_port = port_number in web_ports
         
+        # Create endpoints only for web service ports to avoid endpoint bloat
+        # Other services (SSH, FTP, etc.) don't need HTTP/HTTPS endpoints
+        endpoints_created = []
+        
         if is_web_port:
-            # Determine scheme based on port
-            scheme = 'https' if port_number in [443, 8443] or 'ssl' in str(port_number) else 'http'
-            
-            # Create web service endpoint
-            http_url = f'{scheme}://{host}:{port_number}'
-            endpoint, _ = save_endpoint(
-                http_url,
-                ctx=ctx,
-                subdomain=subdomain,
-                is_default=(port_number in [80, 443])
-            )
-            
-            if endpoint:
-                web_services.append({
-                    'host': host,
-                    'port': port_number,
-                    'scheme': scheme,
-                    'url': http_url
-                })
-                urls.append(http_url)
-                logger.info(f'Created web service endpoint: {http_url}')
+            if port_number == 80:
+                # Port 80: Only HTTP (default port)
+                http_url = f'http://{ip_address}'
+                endpoint, created = save_endpoint(
+                    http_url,
+                    ctx=ctx,
+                    subdomain=subdomain,
+                    is_default=True
+                )
+                if endpoint:
+                    endpoints_created.append({'url': http_url, 'scheme': 'http', 'port': port_number})
+                    urls.append(http_url)
+                    logger.info(f'Created HTTP endpoint: {http_url}')
+                    
+            elif port_number == 443:
+                # Port 443: Only HTTPS (default port) 
+                http_url = f'https://{ip_address}'
+                endpoint, created = save_endpoint(
+                    http_url,
+                    ctx=ctx,
+                    subdomain=subdomain,
+                    is_default=True
+                )
+                if endpoint:
+                    endpoints_created.append({'url': http_url, 'scheme': 'https', 'port': port_number})
+                    urls.append(http_url)
+                    logger.info(f'Created HTTPS endpoint: {http_url}')
+                    
+            else:
+                # For other web ports: Create both HTTP and HTTPS endpoints
+                for scheme in ['http', 'https']:
+                    http_url = f'{scheme}://{ip_address}:{port_number}'
+                    endpoint, created = save_endpoint(
+                        http_url,
+                        ctx=ctx,
+                        subdomain=subdomain,
+                        is_default=False
+                    )
+                    if endpoint:
+                        endpoints_created.append({'url': http_url, 'scheme': scheme, 'port': port_number})
+                        urls.append(http_url)
+                        logger.info(f'Created {scheme.upper()} endpoint: {http_url}')
+        
+        # Add to web_services list for notification
+        if is_web_port:
+            web_services.extend([{
+                'host': ip_address,
+                'port': port_number, 
+                'scheme': ep['scheme'],
+                'url': ep['url']
+            } for ep in endpoints_created])
 
         # Add Port in DB
         if any(c.isalpha() for c in ip_address):
@@ -190,13 +231,13 @@ def port_scan(self, hosts=None, ctx=None, description=None):
             number=port_number,
             defaults={
                 'service_name': 'http' if is_web_port else 'unknown',
-                'description': f'Web service on port {port_number}' if is_web_port else '',
+                'description': f'Web service on port {port_number}' if is_web_port else f'Service on port {port_number}',
                 'is_uncommon': port_number in UNCOMMON_WEB_PORTS
             }
         )
 
         if created:
-            logger.warning(f'Found opened port {port_number} on {ip_address} ({host})')
+            logger.warning(f'Found opened port {port_number} on {ip_address} ({host}) - Created {len(endpoints_created)} endpoint(s)')
         else:
             logger.debug(f'Port {port_number} already exists for {ip_address}')
 

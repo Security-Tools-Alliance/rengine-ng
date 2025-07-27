@@ -16,7 +16,8 @@ from reNgine.definitions import (
 from reNgine.settings import DEFAULT_THREADS
 from reNgine.tasks.command import stream_command
 from reNgine.utilities.endpoint import get_http_urls, smart_http_crawl_if_needed
-from reNgine.utilities.url import get_subdomain_from_url, extract_httpx_url
+from reNgine.utilities.url import get_subdomain_from_url, extract_httpx_url, add_port_urls_to_crawl
+from reNgine.utilities.dns import resolve_subdomain_ips
 from reNgine.utilities.command import generate_header_param
 from reNgine.utilities.proxy import get_random_proxy
 from reNgine.utilities.data import is_iterable
@@ -35,6 +36,7 @@ from startScan.models import (
 )
 
 logger = get_task_logger(__name__)
+
 
 @app.task(name='http_crawl', queue='io_queue', base=RengineTask, bind=True)
 def http_crawl(
@@ -351,12 +353,26 @@ def pre_crawl(self, ctx={}, description=None):
     total_subdomains = existing_subdomains.count()
     logger.info(f'Found {total_subdomains} existing subdomains')
 
-
     # Get URLs to crawl (both existing and newly created)
     urls_to_crawl = []
     additional_urls_to_test = []
+    total_ips_resolved = 0
+    all_discovered_ips = set()  # Collect all discovered IPs
 
     for subdomain in existing_subdomains:
+        # First, resolve DNS for this subdomain to discover IPs
+        ips_discovered = resolve_subdomain_ips(subdomain.name)
+        total_ips_resolved += len(ips_discovered)
+        all_discovered_ips.update(ips_discovered)  # Add to collection
+        
+        for ip_address in ips_discovered:
+            # Save IP to database and associate with subdomain
+            ip_obj, ip_created = save_ip_address(ip_address, subdomain)
+            if ip_created:
+                logger.info(f'DNS resolved new IP {ip_address} for subdomain {subdomain.name}')
+            else:
+                logger.debug(f'IP {ip_address} already known for subdomain {subdomain.name}')
+        
         # Get endpoints for this subdomain that need crawling
         subdomain_endpoints = get_http_urls(is_uncrawled=True, ctx={'subdomain_id': subdomain.id})
         urls_to_crawl.extend(subdomain_endpoints)
@@ -367,50 +383,53 @@ def pre_crawl(self, ctx={}, description=None):
                         is_default=True
                     ).first():
             
-            # Determine which ports to test based on configuration
-            ports_to_test = list(precrawl_ports)  # Start with configured common ports
+            # Use function to add port URLs for testing
+            add_port_urls_to_crawl(
+                subdomain.name, 
+                urls_to_crawl, 
+                additional_urls_to_test, 
+                precrawl_ports, 
+                precrawl_all_ports, 
+                precrawl_uncommon_ports, 
+                entity_type="subdomain"
+            )
+
+    # Now process all discovered IPs (outside the subdomain loop)
+    if all_discovered_ips:
+        logger.info(f'Processing {len(all_discovered_ips)} discovered IPs for endpoint creation and port testing')
+                             
+        # Create endpoints and test ports for each discovered IP
+        for ip_address in all_discovered_ips:
+            # Create a subdomain entry for the IP itself (for endpoint association)
+            ip_subdomain, ip_subdomain_created = save_subdomain(ip_address, ctx=ctx)
+            if ip_subdomain_created:
+                logger.info(f'Created subdomain entry for IP: {ip_address}')
             
-            if precrawl_all_ports:
-                # If all ports requested, combine common and uncommon
-                ports_to_test = list(set(COMMON_WEB_PORTS + UNCOMMON_WEB_PORTS))
-                logger.info(f'Found single default endpoint for {subdomain.name}, testing ALL ports (COMMON + UNCOMMON)')
-            elif precrawl_uncommon_ports:
-                # If uncommon ports requested, add them to the configured ports
-                ports_to_test = list(set(precrawl_ports + UNCOMMON_WEB_PORTS))
-                logger.info(f'Found single default endpoint for {subdomain.name}, testing COMMON and UNCOMMON ports')
-            else:
-                # Only test configured common ports (default behavior)
-                logger.info(f'Found single default endpoint for {subdomain.name}, testing configured ports: {precrawl_ports}')
-        
-            # Add port URLs to crawl list (not to database yet)
-            # Test both http and https schemes since we don't know which one is available
-            all_ports = ports_to_test
-            for port in all_ports:
-                # Special handling for default ports 80 and 443
-                if port == 80:
-                    # Port 80 is HTTP default, no need to specify port
-                    url = f'http://{subdomain.name}'
-                    if url not in urls_to_crawl:
-                        urls_to_crawl.append(url)
-                        additional_urls_to_test.append(url)
-                        logger.debug(f'Added port URL to crawl: {url}')
-                elif port == 443:
-                    # Port 443 is HTTPS default, no need to specify port
-                    url = f'https://{subdomain.name}'
-                    if url not in urls_to_crawl:
-                        urls_to_crawl.append(url)
-                        additional_urls_to_test.append(url)
-                        logger.debug(f'Added port URL to crawl: {url}')
-                else:
-                    # For all other ports, test both schemes
-                    for scheme in ['http', 'https']:
-                        url = f'{scheme}://{subdomain.name}:{port}'
-        
-                        # Don't add if it already exists in crawl list
-                        if url not in urls_to_crawl:
-                            urls_to_crawl.append(url)
-                            additional_urls_to_test.append(url)
-                            logger.debug(f'Added port URL to crawl: {url}')
+            # Create basic HTTP endpoint
+            url = f'http://{ip_address}'
+            if url not in urls_to_crawl:
+                # Create basic endpoint for this IP
+                endpoint, endpoint_created = save_endpoint(
+                    http_url=url,
+                    ctx=ctx,
+                    subdomain=ip_subdomain,
+                    is_default=True
+                )
+                if endpoint:
+                    urls_to_crawl.append(url)
+                    additional_urls_to_test.append(url)
+                    logger.debug(f'Created basic endpoint for IP: {url}')
+            
+            # Also test ports on this IP like we do for subdomains
+            add_port_urls_to_crawl(
+                ip_address, 
+                urls_to_crawl, 
+                additional_urls_to_test, 
+                precrawl_ports, 
+                precrawl_all_ports, 
+                precrawl_uncommon_ports, 
+                entity_type="IP"
+            )
 
     if additional_urls_to_test:
         logger.info(f'Added {len(additional_urls_to_test)} additional URLs to test on configured ports')
@@ -441,14 +460,17 @@ def pre_crawl(self, ctx={}, description=None):
         alive_count = len(get_http_urls(is_alive=True, ctx=ctx))
         new_alive = alive_count - alive_before
         logger.info(f'Pre-crawl completed. {new_alive} new alive endpoints discovered (total: {alive_count})')
+        logger.info(f'Processed {total_subdomains} subdomains and {total_ips_resolved} discovered IPs')
     else:
         alive_count = 0
         logger.info('No URLs to pre-crawl')
+        logger.info(f'Found {total_subdomains} subdomains and {total_ips_resolved} discovered IPs (no endpoints to test)')
 
     return {
         'urls_crawled': len(urls_to_crawl), 
         'alive_endpoints': alive_count,
         'total_subdomains': total_subdomains,
+        'total_ips': total_ips_resolved,
         'additional_urls_tested': len(additional_urls_to_test),
     }
 

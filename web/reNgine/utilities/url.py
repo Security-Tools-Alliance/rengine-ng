@@ -12,6 +12,66 @@ logger = get_task_logger(__name__)
 # URL utils #
 #-----------#
 
+def add_port_urls_to_crawl(name, urls_to_crawl, additional_urls_to_test, precrawl_ports, precrawl_all_ports, precrawl_uncommon_ports, entity_type="subdomain"):
+    """
+    Add port URLs to crawl list for a given name (subdomain or IP)
+    
+    Args:
+        name: subdomain name or IP address
+        urls_to_crawl: list to append URLs to
+        additional_urls_to_test: list to append additional URLs to
+        precrawl_ports: configured common ports
+        precrawl_all_ports: whether to test all ports
+        precrawl_uncommon_ports: whether to test uncommon ports
+        entity_type: "subdomain" or "IP" for logging
+    """
+    from reNgine.definitions import COMMON_WEB_PORTS, UNCOMMON_WEB_PORTS
+    
+    # Determine which ports to test based on configuration
+    ports_to_test = list(precrawl_ports)  # Start with configured common ports
+    
+    if precrawl_all_ports:
+        # If all ports requested, combine common and uncommon
+        ports_to_test = list(set(COMMON_WEB_PORTS + UNCOMMON_WEB_PORTS))
+        logger.info(f'Found single default endpoint for {entity_type} {name}, testing ALL ports (COMMON + UNCOMMON)')
+    elif precrawl_uncommon_ports:
+        # If uncommon ports requested, add them to the configured ports
+        ports_to_test = list(set(precrawl_ports + UNCOMMON_WEB_PORTS))
+        logger.info(f'Found single default endpoint for {entity_type} {name}, testing COMMON and UNCOMMON ports')
+    else:
+        # Only test configured common ports (default behavior)
+        logger.info(f'Found single default endpoint for {entity_type} {name}, testing configured ports: {precrawl_ports}')
+
+    # Add port URLs to crawl list (not to database yet)
+    # Test both http and https schemes since we don't know which one is available
+    for port in ports_to_test:
+        # Special handling for default ports 80 and 443
+        if port == 80:
+            # Port 80 is HTTP default, no need to specify port
+            url = f'http://{name}'
+            if url not in urls_to_crawl:
+                urls_to_crawl.append(url)
+                additional_urls_to_test.append(url)
+                logger.debug(f'Added port URL to crawl: {url}')
+        elif port == 443:
+            # Port 443 is HTTPS default, no need to specify port
+            url = f'https://{name}'
+            if url not in urls_to_crawl:
+                urls_to_crawl.append(url)
+                additional_urls_to_test.append(url)
+                logger.debug(f'Added port URL to crawl: {url}')
+        else:
+            # For all other ports, test both schemes
+            for scheme in ['http', 'https']:
+                url = f'{scheme}://{name}:{port}'
+
+                # Don't add if it already exists in crawl list
+                if url not in urls_to_crawl:
+                    urls_to_crawl.append(url)
+                    additional_urls_to_test.append(url)
+                    logger.debug(f'Added port URL to crawl: {url}')
+
+
 def get_subdomain_from_url(url):
     """Get subdomain from HTTP URL.
 

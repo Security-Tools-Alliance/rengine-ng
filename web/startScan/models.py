@@ -148,14 +148,53 @@ class ScanHistory(models.Model):
 		)
 
 	def get_progress(self):
-		"""Formulae to calculate count number of true things to do, for http
-		crawler, it is always +1 divided by total scan activity associated - 2
-		(start and stop).
+		"""Calculate scan progress percentage based on completed steps vs total steps.
 		"""
 		number_of_steps = len(self.tasks) if self.tasks else 0
 		steps_done = len(self.scanactivity_set.all())
 		if steps_done and number_of_steps:
-			return round((number_of_steps / (steps_done)) * 100, 2)
+			return round((steps_done / number_of_steps) * 100, 2)
+		return 0
+
+	def get_current_task(self):
+		"""Get the current running task name, formatted for display.
+		"""
+		from reNgine.definitions import RUNNING_TASK
+		
+		# Get the most recent running task
+		current_activity = (
+			self.scanactivity_set
+			.filter(status=RUNNING_TASK)
+			.order_by('-time')
+			.first()
+		)
+		
+		if current_activity:
+			# Format task name for display
+			task_name = current_activity.name
+			
+			# Map technical names to user-friendly names
+			task_display_names = {
+				'subdomain_discovery': 'Subdomain Discovery',
+				'osint': 'OSINT Gathering',
+				'pre_crawl': 'Pre-crawl Analysis',
+				'port_scan': 'Port Scanning',
+				'fetch_url': 'URL Discovery',
+				'intermediate_crawl': 'Intermediate Crawl',
+				'http_crawl': 'HTTP Crawling',
+				'screenshot': 'Taking Screenshots',
+				'vulnerability_scan': 'Vulnerability Scanning',
+				'nuclei_scan': 'Nuclei Scanning',
+				'waf_detection': 'WAF Detection',
+				'dir_file_fuzz': 'Directory Fuzzing',
+				'dalfox_xss_scan': 'XSS Scanning',
+				'crlfuzz_scan': 'CRLF Injection Scan',
+				'post_crawl': 'Post-crawl Analysis'
+			}
+			
+			return task_display_names.get(task_name, task_name.replace('_', ' ').title())
+		
+		return None
 
 	def get_completed_ago(self):
 		if self.stop_scan_date:
@@ -244,7 +283,6 @@ class Subdomain(models.Model):
 	is_imported_subdomain = models.BooleanField(default=False)
 	is_important = models.BooleanField(default=False, null=True, blank=True)
 	http_url = models.CharField(max_length=10000, null=True, blank=True)
-	screenshot_path = models.CharField(max_length=1000, null=True, blank=True)
 	http_header_path = models.CharField(max_length=1000, null=True, blank=True)
 	discovered_date = models.DateTimeField(blank=True, null=True)
 	cname = models.CharField(max_length=5000, blank=True, null=True)
@@ -597,6 +635,7 @@ class EndPoint(models.Model):
 	webserver = models.CharField(max_length=1000, blank=True, null=True)
 	is_default = models.BooleanField(null=True, blank=True, default=False)
 	matched_gf_patterns = models.CharField(max_length=10000, null=True, blank=True)
+	screenshot_path = models.CharField(max_length=1000, null=True, blank=True)
 	techs = models.ManyToManyField('Technology', related_name='techs', blank=True)
 	# used for subscans
 	endpoint_subscan_ids = models.ManyToManyField('SubScan', related_name='endpoint_subscan_ids', blank=True)

@@ -24,6 +24,7 @@ from startScan.models import (
 	IpAddress,
 	MetaFinderDocument,
 	Port,
+	ScanActivity,
 	ScanHistory,
 	Subdomain,
 	SubScan,
@@ -191,6 +192,7 @@ class ScanHistorySerializer(serializers.ModelSerializer):
 	endpoint_count = serializers.SerializerMethodField('get_endpoint_count')
 	vulnerability_count = serializers.SerializerMethodField('get_vulnerability_count')
 	current_progress = serializers.SerializerMethodField('get_progress')
+	current_task = serializers.SerializerMethodField('get_current_task')
 	completed_time = serializers.SerializerMethodField('get_total_scan_time_in_sec')
 	elapsed_time = serializers.SerializerMethodField('get_elapsed_time')
 	completed_ago = serializers.SerializerMethodField('get_completed_ago')
@@ -204,6 +206,7 @@ class ScanHistorySerializer(serializers.ModelSerializer):
 			'endpoint_count',
 			'vulnerability_count',
 			'current_progress',
+			'current_task',
 			'completed_time',
 			'elapsed_time',
 			'completed_ago',
@@ -235,6 +238,9 @@ class ScanHistorySerializer(serializers.ModelSerializer):
 	def get_progress(self, scan_history):
 		return scan_history.get_progress()
 
+	def get_current_task(self, scan_history):
+		return scan_history.get_current_task()
+
 	def get_total_scan_time_in_sec(self, scan_history):
 		return scan_history.get_total_scan_time_in_sec()
 
@@ -246,6 +252,75 @@ class ScanHistorySerializer(serializers.ModelSerializer):
 
 	def get_organizations(self, scan_history):
 		return [org.name for org in scan_history.domain.get_organization()]
+
+
+class ScanActivitySerializer(serializers.ModelSerializer):
+	domain_name = serializers.SerializerMethodField('get_domain_name')
+	scan_id = serializers.SerializerMethodField('get_scan_id')
+	engine_name = serializers.SerializerMethodField('get_engine_name')
+	formatted_task_name = serializers.SerializerMethodField('get_formatted_task_name')
+	elapsed_time = serializers.SerializerMethodField('get_elapsed_time')
+
+	class Meta:
+		model = ScanActivity
+		fields = [
+			'id',
+			'title',
+			'name', 
+			'time',
+			'status',
+			'domain_name',
+			'scan_id',
+			'engine_name',
+			'formatted_task_name',
+			'elapsed_time',
+			'error_message'
+		]
+
+	def get_domain_name(self, scan_activity):
+		if scan_activity.scan_of and scan_activity.scan_of.domain:
+			return scan_activity.scan_of.domain.name
+		return 'Unknown'
+
+	def get_scan_id(self, scan_activity):
+		if scan_activity.scan_of:
+			return scan_activity.scan_of.id
+		return None
+
+	def get_engine_name(self, scan_activity):
+		if scan_activity.scan_of and scan_activity.scan_of.scan_type:
+			return scan_activity.scan_of.scan_type.engine_name
+		return 'Unknown'
+
+	def get_formatted_task_name(self, scan_activity):
+		"""Format task name for display"""
+		task_name = scan_activity.name
+		
+		task_display_names = {
+			'subdomain_discovery': 'Subdomain Discovery',
+			'osint': 'OSINT Gathering',
+			'pre_crawl': 'Pre-crawl Analysis',
+			'port_scan': 'Port Scanning',
+			'fetch_url': 'URL Discovery',
+			'intermediate_crawl': 'Intermediate Crawl',
+			'http_crawl': 'HTTP Crawling',
+			'screenshot': 'Taking Screenshots',
+			'vulnerability_scan': 'Vulnerability Scanning',
+			'nuclei_scan': 'Nuclei Scanning',
+			'waf_detection': 'WAF Detection',
+			'dir_file_fuzz': 'Directory Fuzzing',
+			'dalfox_xss_scan': 'XSS Scanning',
+			'crlfuzz_scan': 'CRLF Injection Scan',
+			'post_crawl': 'Post-crawl Analysis'
+		}
+		
+		return task_display_names.get(task_name, task_name.replace('_', ' ').title())
+
+	def get_elapsed_time(self, scan_activity):
+		"""Get elapsed time since task started"""
+		from reNgine.utilities.time import get_time_taken
+		from django.utils import timezone
+		return get_time_taken(timezone.now(), scan_activity.time)
 
 
 class OrganizationSerializer(serializers.ModelSerializer):
@@ -432,11 +507,25 @@ class VisualiseSubdomainSerializer(serializers.ModelSerializer):
 
 		if vulnerability:
 			self._group_vulnerabilities_by_severity_(vulnerability, return_data)
-		if subdomain_name.screenshot_path:
+		
+		# Get screenshots from endpoints instead of subdomains
+		endpoints_with_screenshots = EndPoint.objects.filter(
+			scan_history=scan_history,
+			subdomain__name=subdomain_name.name,
+			screenshot_path__isnull=False
+		)
+		if endpoints_with_screenshots.exists():
+			screenshot_data = []
+			for endpoint in endpoints_with_screenshots:
+				screenshot_data.append({
+					'description': endpoint.http_url,
+					'screenshot_path': endpoint.screenshot_path
+				})
 			return_data.append({
-				'description': 'Screenshot',
-				'screenshot_path': subdomain_name.screenshot_path
+				'description': 'Screenshots',
+				'children': screenshot_data
 			})
+		
 		return return_data
 
 	def _group_vulnerabilities_by_severity_(self, vulnerability, return_data):
