@@ -193,6 +193,13 @@ SUBDOMAIN_SCAN_DEFAULT_TOOLS = ['subfinder', 'ctfr', 'sublist3r', 'tlsx']
 ENDPOINT_SCAN_DEFAULT_TOOLS = ['gospider']
 ENDPOINT_SCAN_DEFAULT_DUPLICATE_FIELDS = ['content_length', 'page_title']
 
+# http crawl
+HTTP_THREADS = 30
+HTTP_FOLLOW_REDIRECT = False
+HTTP_PRE_CRAWL_UNCOMMON_PORTS = False
+HTTP_PRE_CRAWL_ALL_PORTS = False
+HTTP_PRE_CRAWL_BATCH_SIZE = 350
+
 
 ###############################################################################
 # Logger DEFINITIONS

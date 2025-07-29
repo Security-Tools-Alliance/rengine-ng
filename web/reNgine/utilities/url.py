@@ -214,6 +214,7 @@ def extract_httpx_url(line, follow_redirect):
 
     Args:
         line (dict): URL data output by httpx.
+        follow_redirect (bool): Whether redirects were followed by httpx.
 
     Returns:
         tuple: (final_url, redirect_bool) tuple.
@@ -222,29 +223,30 @@ def extract_httpx_url(line, follow_redirect):
     final_url = line.get('final_url')
     location = line.get('location')
     chain_status_codes = line.get('chain_status_codes', [])
-    http_url = line.get('url')
+    original_url = line.get('url')
 
-    # Final URL is already looking nice, if it exists and follow redirect is enabled, return it
-    if final_url and follow_redirect:
-        return final_url, False
+    # Detect if there was a redirection based on status codes, location header, or URL change
+    REDIRECT_STATUS_CODES = [301, 302, 303, 307, 308]
+    has_redirect = (
+        status_code in REDIRECT_STATUS_CODES or  # Direct redirect status
+        location is not None or  # Location header present
+        (final_url is not None and final_url != original_url) or  # Final URL different from original
+        any(x in REDIRECT_STATUS_CODES for x in chain_status_codes)  # Redirect in chain
+    )
 
-    # Handle redirects manually if follow redirect is enabled
     if follow_redirect:
-        REDIRECT_STATUS_CODES = [301, 302]
-        is_redirect = (
-            status_code in REDIRECT_STATUS_CODES
-            or
-            any(x in REDIRECT_STATUS_CODES for x in chain_status_codes)
-        )
-        if is_redirect and location:
+        # When following redirects, return the final destination
+        if final_url:
+            # httpx followed redirects and gave us the final URL
+            return final_url, has_redirect
+        elif location:
+            # Fallback: use location header if final_url not provided
             if location.startswith(('http', 'https')):
-                http_url = location
+                return sanitize_url(location), has_redirect
             else:
-                http_url = f'{http_url}/{location.lstrip("/")}'
-    else:
-        is_redirect = False
-
-    # Sanitize URL
-    http_url = sanitize_url(http_url)
-
-    return http_url, is_redirect 
+                # Relative redirect
+                return sanitize_url(f'{original_url.rstrip("/")}/{location.lstrip("/")}'), has_redirect
+    
+    # When not following redirects, always return the original URL
+    # This ensures we record the actual endpoint that was tested
+    return sanitize_url(original_url), has_redirect 

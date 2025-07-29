@@ -50,6 +50,7 @@ queues=(
     "orchestrator_queue:orchestrator_worker"
     "io_queue:io_worker"
     "run_command_queue:run_command_worker"
+    "group_queue:group_worker"
     "cpu_queue:cpu_worker"
     "report_queue:report_worker"
     "send_notif_queue:send_notif_worker"

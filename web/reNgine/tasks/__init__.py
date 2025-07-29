@@ -25,7 +25,7 @@ from reNgine.tasks.port_scan import (
     nmap,
 )
 from reNgine.tasks.reporting import report
-from reNgine.tasks.scan import initiate_scan, initiate_subscan, check_and_finalize_scan
+from reNgine.tasks.scan import initiate_scan, initiate_subscan
 from reNgine.tasks.screenshot import screenshot
 from reNgine.tasks.subdomain import subdomain_discovery
 from reNgine.tasks.url import (
@@ -44,7 +44,6 @@ from reNgine.tasks.vulnerability import (
 
 # Export all tasks
 __all__ = [
-    'check_and_finalize_scan',
     'crlfuzz_scan',
     'dalfox_xss_scan', 
     'dir_file_fuzz',

@@ -28,7 +28,7 @@ from startScan.models import ScanHistory, Subdomain
 logger = get_task_logger(__name__)
 
 
-@app.task(name='osint', queue='io_queue', base=RengineTask, bind=True)
+@app.task(name='osint', queue='group_queue', base=RengineTask, bind=True)
 def osint(self, host=None, ctx=None, description=None):
     """Run Open-Source Intelligence tools on selected domain.
 

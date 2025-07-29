@@ -287,7 +287,7 @@ def port_scan(self, hosts=None, ctx=None, description=None):
     return ports_data
 
 
-@app.task(name='run_nmap', queue='io_queue', base=RengineTask, bind=True)
+@app.task(name='run_nmap', queue='group_queue', base=RengineTask, bind=True)
 def run_nmap(self, ctx, **nmap_args):
     """Run nmap scans in parallel for each host.
     

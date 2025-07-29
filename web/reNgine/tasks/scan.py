@@ -15,7 +15,6 @@ from reNgine.definitions import (
     RUNNING_TASK,
     FAILED_TASK,
     SUCCESS_TASK,
-    RUNNING_BACKGROUND,
     CELERY_TASK_STATUS_MAP
 )
 from reNgine.settings import (
@@ -24,7 +23,7 @@ from reNgine.settings import (
 from reNgine.tasks.notification import send_scan_notif
 from reNgine.tasks.reporting import report
 from reNgine.utilities.path import SafePath
-from reNgine.utilities.database import create_scan_object, save_imported_subdomains, save_subdomain
+from reNgine.utilities.database import create_scan_object, save_imported_subdomains, save_subdomain, create_default_endpoint_for_subdomain
 from reNgine.utilities.data import is_iterable
 from scanEngine.models import EngineType
 from startScan.models import ScanActivity, ScanHistory, SubScan
@@ -160,6 +159,9 @@ def initiate_scan(
         subdomain_name = domain.name
         subdomain, _ = save_subdomain(subdomain_name, ctx=ctx)
 
+        # Create default endpoint for the TLD subdomain
+        create_default_endpoint_for_subdomain(subdomain, ctx)
+
         # Create initial host - no more initial web service detection
         host = domain.name
         logger.info(f'Creating scan for {host} - web service detection will be handled by port_scan or pre_crawl')
@@ -184,12 +186,13 @@ def initiate_scan(
             initial_tasks.append(osint.si(ctx=ctx, description='OS Intelligence'))
 
         if initial_tasks:
-            workflow_tasks.extend(
-                (
-                    group(initial_tasks),
-                    pre_crawl.si(ctx=ctx, description='Pre-crawl endpoints'),
-                )
-            )
+            workflow_tasks.append(group(initial_tasks))
+
+        # Phase 1.5: Pre-crawl (always run if we have subdomains)
+        # This runs after initial discovery tasks (if any) or immediately if we have imported subdomains
+        if initial_tasks or imported_subdomains:
+            workflow_tasks.append(pre_crawl.si(ctx=ctx, description='Pre-crawl endpoints'))
+
         # Phase 2: Port scan (if enabled)
         reconnaissance_tasks = []
         if 'port_scan' in engine.tasks:
@@ -217,14 +220,11 @@ def initiate_scan(
             final_tasks.append(waf_detection.si(ctx=ctx, description='WAF detection'))
 
         if final_tasks:
-            workflow_tasks.extend(
-                (
-                    group(final_tasks),
-                    post_crawl.si(
-                        ctx=ctx, description='Post-crawl verification'
-                    ),
-                )
-            )
+            workflow_tasks.append(group(final_tasks))
+
+        # Add post_crawl after all final tasks (including vulnerability scans) are completed
+        workflow_tasks.append(post_crawl.si(ctx=ctx, description='Post-crawl verification'))
+
         # Create workflow chain
         workflow = chain(*workflow_tasks) if workflow_tasks else None
 
@@ -383,86 +383,4 @@ def initiate_subscan(
         return {
             'success': False,
             'error': str(e)
-        }    
-
-
-@app.task(name='check_and_finalize_scan', bind=False, queue='orchestrator_queue')
-def check_and_finalize_scan(scan_id, subscan_id=None):
-    """Check if async tasks are done and finalize scan status.
-    
-    Args:
-        scan_id (int): Scan history ID
-        subscan_id (int, optional): SubScan ID
-    """
-    scan = ScanHistory.objects.filter(pk=scan_id).first()
-    if not scan:
-        return
-
-    # Check if we're dealing with a subscan
-    subscan = None
-    if subscan_id:
-        subscan = SubScan.objects.filter(pk=subscan_id).first()
-        if not subscan:
-            logger.warning(f'SubScan {subscan_id} not found, skipping finalization')
-            return
-
-        # Check if subscan status is not RUNNING_BACKGROUND anymore
-        if subscan.status != RUNNING_BACKGROUND:
-            logger.info(f'SubScan {subscan_id} status is no longer RUNNING_BACKGROUND, skipping finalization')
-            return
-    elif scan.scan_status != RUNNING_BACKGROUND:
-        logger.info(f'Scan {scan_id} status is no longer RUNNING_BACKGROUND, skipping finalization')
-        return
-
-    # Check for recent async task activities (simplified approach)
-    recent_activities = ScanActivity.objects.filter(
-        scan_of=scan,
-        time__gte=timezone.now() - timezone.timedelta(minutes=10),  # Active in last 10 minutes
-        name__in=['http_crawl', 'nuclei_scan', 'vulnerability_scan', 'dalfox_xss_scan', 'crlfuzz_scan']
-    ).filter(status=RUNNING_TASK)
-
-    # If checking a subscan, filter activities by subscan's celery_ids
-    if subscan_id and subscan:
-        recent_activities = recent_activities.filter(celery_id__in=subscan.celery_ids)
-
-    if recent_activities.exists():
-        # Still have running async tasks, check again later
-        running_count = recent_activities.count()
-        scan_or_subscan = f'SubScan {subscan_id}' if subscan_id else f'Scan {scan_id}'
-        logger.info(f'{scan_or_subscan}: {running_count} async tasks still running, will check again in 2 minutes')
-        check_and_finalize_scan.apply_async(args=[scan_id, subscan_id], countdown=120)
-        return
-
-    # No more running async tasks, finalize the scan
-    scan_or_subscan = f'SubScan {subscan_id}' if subscan_id else f'Scan {scan_id}'
-    logger.info(f'{scan_or_subscan}: All async tasks completed, finalizing status')
-
-    # Check for failures in all tasks
-    all_tasks = ScanActivity.objects.filter(scan_of=scan)
-    if subscan_id and subscan:
-        all_tasks = all_tasks.filter(celery_id__in=subscan.celery_ids)
-
-    failed_tasks = all_tasks.filter(status=FAILED_TASK)
-    failed_count = failed_tasks.count()
-    final_status = SUCCESS_TASK if failed_count == 0 else FAILED_TASK
-    final_status_h = 'SUCCESS' if failed_count == 0 else 'FAILED'
-
-    # Update scan/subscan status
-    if subscan_id and subscan:
-        subscan.status = final_status
-        subscan.stop_scan_date = timezone.now()
-        subscan.save()
-    else:
-        scan.scan_status = final_status
-        scan.stop_scan_date = timezone.now()
-        scan.save()
-
-    # Send final notification
-    send_scan_notif.delay(
-        scan_history_id=scan_id,
-        subscan_id=subscan_id,
-        engine_id=scan.scan_type.id if scan.scan_type else None,
-        status=final_status_h
-    )
-
-    logger.info(f'{scan_or_subscan} finalized with status: {final_status_h}') 
+        } 

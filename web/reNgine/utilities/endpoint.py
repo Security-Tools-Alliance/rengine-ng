@@ -49,9 +49,9 @@ def get_http_urls(
     subdomain = Subdomain.objects.filter(pk=subdomain_id).first()
     scan = ScanHistory.objects.filter(pk=scan_id).first()
     if subdomain:
-        logger.info(f'Searching for endpoints to crawl on subdomain {subdomain}')
+        logger.info(f'Searching for endpoints on subdomain {subdomain}')
     else:
-        logger.info(f'Searching for endpoints to crawl on domain {domain}')
+        logger.info(f'Searching for endpoints on domain {domain}')
     log_header = 'Found a total of '
     log_found = ''
 
@@ -244,7 +244,7 @@ def ensure_endpoints_crawled_and_execute(task_function, ctx, description=None, m
         return None
 
 
-def smart_http_crawl_if_needed(urls, ctx, wait_for_completion=False, max_wait_time=120):
+def smart_http_crawl_if_needed(urls, ctx, wait_for_completion=False, max_wait_time=120, is_default=False, update_subdomain_metadatas=False):
     """
     Intelligently launch http_crawl only if endpoints need to be crawled.
     
@@ -253,6 +253,8 @@ def smart_http_crawl_if_needed(urls, ctx, wait_for_completion=False, max_wait_ti
         ctx: Task context
         wait_for_completion: Whether to wait for crawl completion
         max_wait_time: Maximum time to wait (seconds)
+        is_default: Whether discovered endpoints should be marked as default
+        update_subdomain_metadatas: Whether to update subdomain metadata
         
     Returns:
         True if crawl was launched/completed, False otherwise
@@ -281,11 +283,14 @@ def smart_http_crawl_if_needed(urls, ctx, wait_for_completion=False, max_wait_ti
         return True
     
     logger.info(f'Launching HTTP crawl for {len(urls_to_crawl)} uncrawled URLs')
+
+    for url in urls_to_crawl:
+        logger.debug(f'URL to crawl: {url}')
     
     custom_ctx = deepcopy(ctx)
     custom_ctx['track'] = False
     
-    task = http_crawl.delay(urls=urls_to_crawl, ctx=custom_ctx, update_subdomain_metadatas=True)
+    task = http_crawl.delay(urls=urls_to_crawl, ctx=custom_ctx, update_subdomain_metadatas=update_subdomain_metadatas, is_default=is_default)
     
     if not wait_for_completion:
         return True

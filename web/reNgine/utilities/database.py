@@ -434,14 +434,38 @@ def save_imported_subdomains(subdomains, ctx=None):
             output_file.write(f'{subdomain}\n')
 
             # Create base endpoint (for scan)
-            http_url = f'{subdomain_obj.name}{url_filter}' if url_filter else subdomain_obj.name
-            endpoint, _ = save_endpoint(
-                http_url=http_url,
-                ctx=ctx,
-                is_default=True,
-                subdomain=subdomain_obj
-            )
-            save_subdomain_metadata(subdomain_obj, endpoint)
+            create_default_endpoint_for_subdomain(subdomain_obj, ctx)
+
+
+def create_default_endpoint_for_subdomain(subdomain_obj, ctx=None):
+    """
+    Create a default endpoint for a subdomain with metadata.
+    
+    Args:
+        subdomain_obj: Subdomain object to create endpoint for
+        ctx: Context dictionary containing scan information
+        
+    Returns:
+        tuple: (endpoint, created) - endpoint object and whether it was created
+    """
+    if not ctx:
+        ctx = {}
+    
+    url_filter = ctx.get('url_filter')
+    http_url = f'{subdomain_obj.name}{url_filter}' if url_filter else subdomain_obj.name
+    
+    endpoint, created = save_endpoint(
+        http_url=http_url,
+        ctx=ctx,
+        is_default=True,
+        subdomain=subdomain_obj
+    )
+    
+    if endpoint:
+        save_subdomain_metadata(subdomain_obj, endpoint)
+        logger.info(f'Created default endpoint for subdomain {subdomain_obj.name}: {http_url}')
+    
+    return endpoint, created
 
 
 def save_metadata_info(meta_dict):

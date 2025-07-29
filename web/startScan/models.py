@@ -150,11 +150,24 @@ class ScanHistory(models.Model):
 	def get_progress(self):
 		"""Calculate scan progress percentage based on completed steps vs total steps.
 		"""
+		from reNgine.definitions import SUCCESS_TASK
+		
 		number_of_steps = len(self.tasks) if self.tasks else 0
-		steps_done = len(self.scanactivity_set.all())
-		if steps_done and number_of_steps:
-			return round((steps_done / number_of_steps) * 100, 2)
-		return 0
+		if number_of_steps == 0:
+			return 0
+		
+		# Get unique completed task names (avoid counting duplicates if tasks are retried)
+		completed_task_names = (
+			self.scanactivity_set
+			.filter(status=SUCCESS_TASK)
+			.values_list('name', flat=True)
+			.distinct()
+		)
+		steps_completed = len(completed_task_names)
+		
+		# Ensure we don't exceed 100%
+		progress = min((steps_completed / number_of_steps) * 100, 100)
+		return round(progress, 2)
 
 	def get_current_task(self):
 		"""Get the current running task name, formatted for display.

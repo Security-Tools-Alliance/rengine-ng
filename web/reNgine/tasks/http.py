@@ -8,16 +8,19 @@ from reNgine.celery_custom_task import RengineTask
 from reNgine.definitions import (
     HTTP_CRAWL,
     CUSTOM_HEADER,
+    HTTP_PRE_CRAWL_ALL_PORTS,
+    HTTP_PRE_CRAWL_BATCH_SIZE,
+    HTTP_PRE_CRAWL_UNCOMMON_PORTS,
     THREADS,
     FOLLOW_REDIRECT,
     COMMON_WEB_PORTS,
-    UNCOMMON_WEB_PORTS,
 )
 from reNgine.settings import DEFAULT_THREADS
 from reNgine.tasks.command import stream_command
 from reNgine.utilities.endpoint import get_http_urls, smart_http_crawl_if_needed
 from reNgine.utilities.url import get_subdomain_from_url, extract_httpx_url, add_port_urls_to_crawl
 from reNgine.utilities.dns import resolve_subdomain_ips
+from reNgine.utilities.engine import get_crawl_config_safe
 from reNgine.utilities.command import generate_header_param
 from reNgine.utilities.proxy import get_random_proxy
 from reNgine.utilities.data import is_iterable
@@ -48,6 +51,7 @@ def http_crawl(
         track=True,
         description=None,
         update_subdomain_metadatas=False,
+        is_default=False,
         should_remove_duplicate_endpoints=True,
         duplicate_removal_fields=[]):
     """Use httpx to query HTTP URLs for important info like page titles, http
@@ -71,8 +75,22 @@ def http_crawl(
     if urls is None:
         urls = []
 
-    config = self.yaml_configuration.get(HTTP_CRAWL) or {}
-    custom_header = config.get(CUSTOM_HEADER) or self.yaml_configuration.get(CUSTOM_HEADER)
+    # Config - use safe crawl config getter with fallback to defaults
+    config = get_crawl_config_safe(self, HTTP_CRAWL)
+
+    # Get custom header safely from config or global configuration
+    custom_header = config.get(CUSTOM_HEADER)
+    if not custom_header:
+        try:
+            yaml_config = self.yaml_configuration
+            if isinstance(yaml_config, str):
+                import yaml
+                yaml_config = yaml.safe_load(yaml_config)
+            if isinstance(yaml_config, dict):
+                custom_header = yaml_config.get(CUSTOM_HEADER)
+        except Exception as e:
+            logger.exception("Failed to extract custom header from YAML configuration")
+            custom_header = None
     if custom_header:
         custom_header = generate_header_param(custom_header, 'common')
     threads = config.get(THREADS, DEFAULT_THREADS)
@@ -89,6 +107,7 @@ def http_crawl(
     else:
         # No url provided, so it's a subscan launched from subdomain list
         update_subdomain_metadatas = True
+        is_default = True  # When scanning directly from subdomain, endpoints are default
         all_urls = []
 
         # Append the base subdomain to get subdomain info if task is launched directly from subscan
@@ -127,7 +146,7 @@ def http_crawl(
 
     # Run command
     cmd = 'httpx'
-    cmd += ' -cl -ct -rt -location -td -websocket -cname -asn -cdn -probe -random-agent'
+    cmd += ' -cl -ct -rt -location -td -websocket -cname -asn -cdn -probe -random-agent -nfs'
     cmd += f' -t {threads}' if threads > 0 else ''
     cmd += f' --http-proxy {proxy}' if proxy else ''
     cmd += f' {custom_header}' if custom_header else ''
@@ -195,7 +214,7 @@ def http_crawl(
             http_status=http_status,
             ctx=ctx,
             subdomain=subdomain,
-            is_default=update_subdomain_metadatas
+            is_default=is_default
         )
         if not endpoint:
             continue
@@ -338,12 +357,12 @@ def pre_crawl(self, ctx={}, description=None):
 
     domain_id = ctx.get('domain_id')
 
-    # Get configuration for pre-crawl limits
-    config = self.yaml_configuration.get('http_crawl') or {}
-    precrawl_batch_size = config.get('precrawl_batch_size', 350)
+    # Get configuration for pre-crawl limits - use safe config getter
+    config = get_crawl_config_safe(self, HTTP_CRAWL)
+    precrawl_batch_size = config.get('precrawl_batch_size', HTTP_PRE_CRAWL_BATCH_SIZE)
     precrawl_ports = config.get('precrawl_ports', COMMON_WEB_PORTS)
-    precrawl_uncommon_ports = config.get('precrawl_uncommon_ports', False)
-    precrawl_all_ports = config.get('precrawl_all_ports', False)
+    precrawl_uncommon_ports = config.get('precrawl_uncommon_ports', HTTP_PRE_CRAWL_UNCOMMON_PORTS)
+    precrawl_all_ports = config.get('precrawl_all_ports', HTTP_PRE_CRAWL_ALL_PORTS)
 
     # Get existing subdomains from current scan
     existing_subdomains = Subdomain.objects.filter(
@@ -453,7 +472,9 @@ def pre_crawl(self, ctx={}, description=None):
                 batch,
                 ctx,
                 wait_for_completion=True,
-                max_wait_time=dynamic_max_wait_time
+                max_wait_time=dynamic_max_wait_time,
+                is_default=True,
+                update_subdomain_metadatas=True
             )
 
         # Log results
@@ -489,8 +510,9 @@ def intermediate_crawl(self, ctx={}, description=None):
         logger.info('No uncrawled endpoints found for intermediate crawl')
         return {'urls_crawled': 0, 'alive_endpoints': 0}
     
-    # Get batch size from configuration
-    batch_size = self.yaml_configuration.get('precrawl_batch_size', 50)
+    # Get batch size from configuration - use safe config getter
+    config = get_crawl_config_safe(self, HTTP_CRAWL)
+    batch_size = config.get('precrawl_batch_size', HTTP_PRE_CRAWL_BATCH_SIZE)
     
     logger.info(f'Intermediate crawling {len(uncrawled_endpoints)} URLs (batch size: {batch_size})')
     
@@ -507,7 +529,9 @@ def intermediate_crawl(self, ctx={}, description=None):
             batch,
             ctx,
             wait_for_completion=True,
-            max_wait_time=dynamic_max_wait_time
+            max_wait_time=dynamic_max_wait_time,
+            is_default=False,
+            update_subdomain_metadatas=False
         )
     
     # Log results
@@ -527,13 +551,8 @@ def post_crawl(self, ctx={}, description=None):
     """
     logger.info('Starting post-crawl verification phase')
     
-    # Get all endpoints
-    all_endpoints = get_http_urls(ctx=ctx)
-    alive_endpoints = get_http_urls(is_alive=True, ctx=ctx)
-    
-    logger.info(f'Post-crawl verification: {len(alive_endpoints)} alive endpoints out of {len(all_endpoints)} total')
-    
     # Check for any remaining uncrawled endpoints and crawl them
+    logger.info(f'Getting uncrawled endpoints for post-crawl')
     uncrawled_endpoints = get_http_urls(is_uncrawled=True, ctx=ctx)
     
     if uncrawled_endpoints:
@@ -553,10 +572,13 @@ def post_crawl(self, ctx={}, description=None):
                 batch,
                 ctx,
                 wait_for_completion=True,
-                max_wait_time=dynamic_max_wait_time
+                max_wait_time=dynamic_max_wait_time,
+                is_default=False,
+                update_subdomain_metadatas=False
             )
     
     # Final statistics
+    logger.info(f'Getting endpoints statistics')
     final_alive_count = len(get_http_urls(is_alive=True, ctx=ctx))
     final_total_count = len(get_http_urls(ctx=ctx))
     
