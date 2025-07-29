@@ -1026,17 +1026,20 @@
                 </ul> -->
                 {% if vulnerability.references %}
                   <span class="mini-heading">References</span><br>
-                  {% if vulnerability.references|length > 0 and vulnerability.references.0 %}
-                      <ul>
-                          {% for reference in vulnerability.references %}
-                              <li>
-                                  <a href="{{ reference }}" target="_blank" rel="noopener noreferrer">{{ reference }}</a>
-                              </li>
-                          {% endfor %}
-                      </ul>
-                  {% else %}
-                      <p>{{ vulnerability.references }}</p>
-                  {% endif %}
+                  {% load custom_filters %}
+                  {% with vulnerability.references|parse_references as parsed_refs %}
+                      {% if parsed_refs %}
+                          <ul>
+                              {% for reference in parsed_refs %}
+                                  <li>
+                                      <a href="{{ reference }}" target="_blank" rel="noopener noreferrer">{{ reference }}</a>
+                                  </li>
+                              {% endfor %}
+                          </ul>
+                      {% else %}
+                          <p>{{ vulnerability.references }}</p>
+                      {% endif %}
+                  {% endwith %}
                 {% endif %}
                 <br>
                 <br>

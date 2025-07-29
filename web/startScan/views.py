@@ -1036,8 +1036,7 @@ def create_report(request, slug, id):
             vuln.impact = mark_safe(vuln.impact)
         if vuln.remediation:
             vuln.remediation = mark_safe(vuln.remediation)
-        if vuln.references:
-            vuln.references = mark_safe(vuln.references)
+        # Note: references are now handled by the parse_references template filter
 
     template = get_template('report/template.html')
     html = template.render(data)
