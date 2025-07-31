@@ -101,3 +101,63 @@ def get_netlas_key():
 # TODO Implement associated domains
 def get_associated_domains(keywords):
     return [] 
+
+def get_and_save_dork_results(lookup_target, results_dir, type, lookup_keywords=None, lookup_extensions=None, delay=3, page_count=2, scan_history=None):
+    """
+        Uses gofuzz to dork and store information
+
+        Args:
+            lookup_target (str): target to look into such as stackoverflow or even the target itself
+            results_dir (str): Results directory
+            type (str): Dork Type Title
+            lookup_keywords (str): comma separated keywords or paths to look for
+            lookup_extensions (str): comma separated extensions to look for
+            delay (int): delay between each requests
+            page_count (int): pages in google to extract information
+            scan_history (startScan.ScanHistory): Scan History Object
+    """
+    from reNgine.tasks.command import run_command
+    from reNgine.definitions import GOFUZZ_EXEC_PATH
+    from startScan.models import Dork
+
+    results = []
+    gofuzz_command = f'{GOFUZZ_EXEC_PATH} -t {lookup_target} -d {delay} -p {page_count}'
+
+    if lookup_extensions:
+        gofuzz_command += f' -e {lookup_extensions}'
+    elif lookup_keywords:
+        gofuzz_command += f' -w {lookup_keywords}'
+
+    output_file = str(Path(results_dir) / 'gofuzz.txt')
+    gofuzz_command += f' -o {output_file}'
+    history_file = str(Path(results_dir) / 'commands.txt')
+
+    try:
+        run_command(
+            gofuzz_command,
+            shell=False,
+            history_file=history_file,
+            scan_id=scan_history.id,
+        )
+
+        if not os.path.isfile(output_file):
+            return
+
+        with open(output_file) as f:
+            for line in f:
+                if url := line.strip():
+                    results.append(url)
+                    dork, created = Dork.objects.get_or_create(
+                        type=type,
+                        url=url
+                    )
+                    if scan_history:
+                        scan_history.dorks.add(dork)
+
+        # remove output file
+        os.remove(output_file)
+
+    except Exception as e:
+        logger.exception(e)
+
+    return results

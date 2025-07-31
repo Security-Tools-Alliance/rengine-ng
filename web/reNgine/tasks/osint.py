@@ -20,7 +20,7 @@ from reNgine.definitions import (
     OSINT_DEFAULT_CONFIG,
 )
 from reNgine.tasks.command import run_command
-from reNgine.utilities.misc import get_and_save_dork_results
+from reNgine.utilities.external import get_and_save_dork_results
 from reNgine.utilities.database import save_metadata_info, save_email, save_employee
 from scanEngine.models import Proxy
 from startScan.models import ScanHistory, Subdomain

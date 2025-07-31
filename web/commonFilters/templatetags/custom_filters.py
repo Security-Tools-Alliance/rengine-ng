@@ -2,9 +2,12 @@ from urllib.parse import urlparse
 import json
 import ast
 import re
+import logging
 
 from django import template
 from dashboard.utils import get_user_groups
+
+logger = logging.getLogger(__name__)
 register = template.Library()
 
 
@@ -83,18 +86,23 @@ def parse_references(value):
         return []
     
     try:
-        # Try to parse as JSON array
+        # Try to parse as array (JSON or Python list)
         if value.startswith('[') and value.endswith(']'):
+            # Try Python list literal first (more common in this context)
+            try:
+                return ast.literal_eval(value)
+            except (ValueError, SyntaxError):
+                pass
+            
+            # Try JSON format as fallback
             try:
                 return json.loads(value)
             except json.JSONDecodeError:
                 pass
             
-            # Try to parse as Python list literal
-            try:
-                return ast.literal_eval(value)
-            except (ValueError, SyntaxError):
-                pass
+            # Log error only if both parsing methods failed
+            logger.error(f"Failed to parse array format for value: {value}")
+            logger.debug(f"Both AST literal_eval and JSON parsing failed", exc_info=True)
         
         # Try to parse as JSON
         try:
@@ -103,8 +111,9 @@ def parse_references(value):
                 return parsed
             elif isinstance(parsed, str):
                 return [parsed]
-        except json.JSONDecodeError:
-            pass
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse JSON format for value: {value}")
+            logger.debug(f"JSON decode error details: {e}", exc_info=True)
         
         # Split by common separators and filter URLs
         # Look for URLs in the text

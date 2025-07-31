@@ -14,7 +14,6 @@ from reNgine.definitions import (
     SCHEDULED_SCAN,
     RUNNING_TASK,
     FAILED_TASK,
-    SUCCESS_TASK,
     CELERY_TASK_STATUS_MAP
 )
 from reNgine.settings import (
@@ -26,7 +25,7 @@ from reNgine.utilities.path import SafePath
 from reNgine.utilities.database import create_scan_object, save_imported_subdomains, save_subdomain, create_default_endpoint_for_subdomain
 from reNgine.utilities.data import is_iterable
 from scanEngine.models import EngineType
-from startScan.models import ScanActivity, ScanHistory, SubScan
+from startScan.models import ScanHistory, SubScan
 from targetApp.models import Domain
 
 logger = get_task_logger(__name__)

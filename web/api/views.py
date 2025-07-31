@@ -906,9 +906,11 @@ class ToggleSubdomainImportantStatus(APIView):
         req = self.request
         data = req.data
 
-        subdomain_id = safe_int_cast(data.get('subdomain_id'))
+        if not data.get('subdomain_id'):
+            response = {'status': False, 'message': 'No subdomain_id provided'}
+            return Response(response)
 
-        response = {'status': False, 'message': 'No subdomain_id provided'}
+        subdomain_id = safe_int_cast(data.get('subdomain_id'))
 
         name = Subdomain.objects.get(id=subdomain_id)
         name.is_important = not name.is_important
@@ -3427,49 +3429,3 @@ class FetchScreenshots(APIView):
             }
         
         return Response(screenshots_data)
-
-
-class FetchSubscanResults(APIView):
-    def get(self, request):
-        req = self.request
-        # data = req.data
-        subscan_id = safe_int_cast(req.query_params.get('subscan_id'))
-        subscan = SubScan.objects.filter(id=subscan_id)
-        if not subscan.exists():
-            return Response({
-                'status': False,
-                'error': f'Subscan {subscan_id} does not exist'
-            })
-
-        subscan_data = SubScanResultSerializer(subscan.first(), many=False).data
-        task_name = subscan_data['type']
-        subscan_results = []
-
-        if task_name == 'port_scan':
-            ips_in_subscan = IpAddress.objects.filter(ip_subscan_ids__in=subscan)
-            subscan_results = IpSerializer(ips_in_subscan, many=True).data
-
-        elif task_name == 'vulnerability_scan':
-            vulns_in_subscan = Vulnerability.objects.filter(vuln_subscan_ids__in=subscan)
-            subscan_results = VulnerabilitySerializer(vulns_in_subscan, many=True).data
-
-        elif task_name == 'fetch_url':
-            endpoints_in_subscan = EndPoint.objects.filter(endpoint_subscan_ids__in=subscan)
-            subscan_results = EndpointSerializer(endpoints_in_subscan, many=True).data
-
-        elif task_name == 'dir_file_fuzz':
-            dirs_in_subscan = DirectoryScan.objects.filter(dir_subscan_ids__in=subscan)
-            subscan_results = DirectoryScanSerializer(dirs_in_subscan, many=True).data
-
-        elif task_name == 'subdomain_discovery':
-            subdomains_in_subscan = Subdomain.objects.filter(subdomain_subscan_ids__in=subscan)
-            subscan_results = SubdomainSerializer(subdomains_in_subscan, many=True).data
-
-        elif task_name == 'screenshot':
-            endpoints_in_subscan = EndPoint.objects.filter(endpoint_subscan_ids__in=subscan, screenshot_path__isnull=False)
-            subscan_results = EndpointSerializer(endpoints_in_subscan, many=True).data
-
-        logger.info(subscan_data)
-        logger.info(subscan_results)
-
-        return Response({'subscan': subscan_data, 'result': subscan_results, 'endpoint_url': reverse('api:endpoints-list'), 'vulnerability_url': reverse('api:vulnerabilities-list')})
