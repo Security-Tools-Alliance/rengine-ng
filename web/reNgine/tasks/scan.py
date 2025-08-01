@@ -25,7 +25,7 @@ from reNgine.utilities.path import SafePath
 from reNgine.utilities.database import create_scan_object, save_imported_subdomains, save_subdomain, create_default_endpoint_for_subdomain
 from reNgine.utilities.data import is_iterable
 from scanEngine.models import EngineType
-from startScan.models import ScanHistory, SubScan
+from startScan.models import ScanHistory, SubScan, Subdomain
 from targetApp.models import Domain
 
 logger = get_task_logger(__name__)
@@ -54,17 +54,12 @@ def initiate_scan(
         out_of_scope_subdomains (list): Out-of-scope subdomains.
         url_filter (str): URL path. Default: ''.
         initiated_by (int): User ID initiating the scan.
-    """
-    # Import all necessary modules
-    from reNgine.tasks.subdomain import subdomain_discovery
-    from reNgine.tasks.osint import osint
-    from reNgine.tasks.http import pre_crawl, intermediate_crawl, post_crawl
-    from reNgine.tasks.port_scan import port_scan
-    from reNgine.tasks.url import fetch_url
-    from reNgine.tasks.fuzzing import dir_file_fuzz
-    from reNgine.tasks.vulnerability import vulnerability_scan
-    from reNgine.tasks.screenshot import screenshot
-    from reNgine.tasks.detect import waf_detection
+    """    
+    # Get all available tasks dynamically from the tasks module
+    from reNgine.tasks import get_scan_tasks
+    
+    # Get all tasks
+    available_tasks = get_scan_tasks()
 
     scan = None
     try:
@@ -179,50 +174,51 @@ def initiate_scan(
         # Phase 1: Initial discovery
         from celery import group
         initial_tasks = []
-        if 'subdomain_discovery' in engine.tasks:
-            initial_tasks.append(subdomain_discovery.si(ctx=ctx, description='Subdomain discovery'))
-        if 'osint' in engine.tasks:
-            initial_tasks.append(osint.si(ctx=ctx, description='OS Intelligence'))
+        
+        if 'subdomain_discovery' in engine.tasks and 'subdomain_discovery' in available_tasks:
+            initial_tasks.append(available_tasks['subdomain_discovery'].si(ctx=ctx, description='Subdomain discovery'))
+        if 'osint' in engine.tasks and 'osint' in available_tasks:
+            initial_tasks.append(available_tasks['osint'].si(ctx=ctx, description='OS Intelligence'))
 
         if initial_tasks:
             workflow_tasks.append(group(initial_tasks))
 
         # Phase 1.5: Pre-crawl (always run if we have subdomains)
         # This runs after initial discovery tasks (if any) or immediately if we have imported subdomains
-        if initial_tasks or imported_subdomains:
-            workflow_tasks.append(pre_crawl.si(ctx=ctx, description='Pre-crawl endpoints'))
+        if (initial_tasks or imported_subdomains) and 'pre_crawl' in available_tasks:
+            workflow_tasks.append(available_tasks['pre_crawl'].si(ctx=ctx, description='Pre-crawl endpoints'))
 
         # Phase 2: Port scan (if enabled)
         reconnaissance_tasks = []
-        if 'port_scan' in engine.tasks:
+        if 'port_scan' in engine.tasks and 'port_scan' in available_tasks:
             reconnaissance_tasks.append('port_scan')
-            workflow_tasks.append(port_scan.si(ctx=ctx, description='Port scan'))
+            workflow_tasks.append(available_tasks['port_scan'].si(ctx=ctx, description='Port scan'))
 
         # Phase 3: Fetch URLs (if enabled)
-        if 'fetch_url' in engine.tasks:
+        if 'fetch_url' in engine.tasks and 'fetch_url' in available_tasks:
             reconnaissance_tasks.append('fetch_url')
-            workflow_tasks.append(fetch_url.si(ctx=ctx, description='Fetch URLs'))
+            workflow_tasks.append(available_tasks['fetch_url'].si(ctx=ctx, description='Fetch URLs'))
 
-        if reconnaissance_tasks:
-            # Intermediate crawl of discovered endpoints
-            workflow_tasks.append(intermediate_crawl.si(ctx=ctx, description='Intermediate crawl'))
+        if reconnaissance_tasks and 'intermediate_crawl' in available_tasks:
+            workflow_tasks.append(available_tasks['intermediate_crawl'].si(ctx=ctx, description='Intermediate crawl'))
 
         # Phase 4: Final tasks
         final_tasks = []
-        if 'dir_file_fuzz' in engine.tasks:
-            final_tasks.append(dir_file_fuzz.si(ctx=ctx, description='Directory & file fuzzing'))
-        if 'vulnerability_scan' in engine.tasks:
-            final_tasks.append(vulnerability_scan.si(ctx=ctx, description='Vulnerability scan'))
-        if 'screenshot' in engine.tasks:
-            final_tasks.append(screenshot.si(ctx=ctx, description='Screenshot'))
-        if 'waf_detection' in engine.tasks:
-            final_tasks.append(waf_detection.si(ctx=ctx, description='WAF detection'))
+        if 'dir_file_fuzz' in engine.tasks and 'dir_file_fuzz' in available_tasks:
+            final_tasks.append(available_tasks['dir_file_fuzz'].si(ctx=ctx, description='Directory & file fuzzing'))
+        if 'vulnerability_scan' in engine.tasks and 'vulnerability_scan' in available_tasks:
+            final_tasks.append(available_tasks['vulnerability_scan'].si(ctx=ctx, description='Vulnerability scan'))
+        if 'screenshot' in engine.tasks and 'screenshot' in available_tasks:
+            final_tasks.append(available_tasks['screenshot'].si(ctx=ctx, description='Screenshot'))
+        if 'waf_detection' in engine.tasks and 'waf_detection' in available_tasks:
+            final_tasks.append(available_tasks['waf_detection'].si(ctx=ctx, description='WAF detection'))
 
         if final_tasks:
             workflow_tasks.append(group(final_tasks))
 
         # Add post_crawl after all final tasks (including vulnerability scans) are completed
-        workflow_tasks.append(post_crawl.si(ctx=ctx, description='Post-crawl verification'))
+        if 'post_crawl' in available_tasks:
+            workflow_tasks.append(available_tasks['post_crawl'].si(ctx=ctx, description='Post-crawl verification'))
 
         # Create workflow chain
         workflow = chain(*workflow_tasks) if workflow_tasks else None
@@ -262,7 +258,6 @@ def initiate_scan(
 
 @app.task(name='initiate_subscan', bind=False, queue='orchestrator_queue')
 def initiate_subscan(
-        scan_history_id,
         subdomain_id,
         engine_id=None,
         scan_type=None,
@@ -271,19 +266,21 @@ def initiate_subscan(
     """Initiate a new subscan.
 
     Args:
-        scan_history_id (int): ScanHistory id.
         subdomain_id (int): Subdomain id.
         engine_id (int): Engine ID.
         scan_type (int): Scan type (port_scan, subdomain_discovery, vulnerability_scan...).
         results_dir (str): Results directory.
         url_filter (str): URL path. Default: ''
     """
+    from reNgine.tasks import get_scan_tasks
     from reNgine.tasks.reporting import report
+
+    # Get all available tasks
+    available_tasks = get_scan_tasks()
 
     subscan = None
     try:
         # Get Subdomain, Domain and ScanHistory
-        from startScan.models import Subdomain
         subdomain = Subdomain.objects.get(pk=subdomain_id)
         scan = ScanHistory.objects.get(pk=subdomain.scan_history.id)
         domain = Domain.objects.get(pk=subdomain.target_domain.id)
@@ -297,7 +294,6 @@ def initiate_subscan(
         # Get YAML config
         config = yaml.safe_load(engine.yaml_configuration)
         config_subscan = config.get(scan_type)
-
 
         # Create scan activity of SubScan Model
         subscan = SubScan(
@@ -327,13 +323,22 @@ def initiate_subscan(
                 'error': subscan.error_message
             }
 
-        # Run task
-        method = globals().get(scan_type)
+        # Get task method from available tasks
+        method = available_tasks.get(scan_type)
         if not method:
-            logger.warning(f'Task {scan_type} is not supported by reNgine. Skipping')
-            return
-        scan.tasks.append(scan_type)
-        scan.save()
+            logger.warning(f'Task {scan_type} is not supported by reNgine-ng. Available tasks: {list(available_tasks.keys())}')
+            subscan.status = FAILED_TASK
+            subscan.error_message = f"Unsupported task type: {scan_type}"
+            subscan.save()
+            return {
+                'success': False,
+                'error': f'Task {scan_type} is not supported by reNgine-ng'
+            }
+
+        # Add task to scan history
+        if scan_type not in scan.tasks:
+            scan.tasks.append(scan_type)
+            scan.save()
 
         # Send start notif
         send_scan_notif.delay(
@@ -357,8 +362,6 @@ def initiate_subscan(
 
         ctx_str = json.dumps(ctx, indent=2)
         logger.warning(f'Starting subscan {subscan.id} with context:\n{ctx_str}')
-
-        # HTTP crawling is now handled by dedicated crawl tasks
 
         # Build header + callback
         workflow = method.si(ctx=ctx)

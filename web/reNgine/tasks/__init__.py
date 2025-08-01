@@ -86,3 +86,26 @@ __all__ = [
     'vulnerability_scan',
     'waf_detection'
 ] 
+
+def get_scan_tasks():
+    """Return dictionary of all available scan tasks."""
+    import sys
+    current_module = sys.modules[__name__]
+    
+    # All scan-compatible tasks
+    scan_compatible_tasks = [
+        'subdomain_discovery', 'osint', 'pre_crawl', 'intermediate_crawl', 
+        'post_crawl', 'port_scan', 'fetch_url', 'dir_file_fuzz', 
+        'vulnerability_scan', 'screenshot', 'waf_detection'
+    ]
+    
+    return {
+        task_name: getattr(current_module, task_name)
+        for task_name in scan_compatible_tasks
+        if hasattr(current_module, task_name)
+    }
+
+# Keep the old function for backward compatibility
+def get_subscan_tasks():
+    """Return dictionary of available subscan tasks."""
+    return get_scan_tasks() 

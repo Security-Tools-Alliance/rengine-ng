@@ -1164,7 +1164,6 @@ class InitiateSubTask(APIView):
             logger.info(f'Running subscans {scan_types} on subdomain "{subdomain_id}" ...')
             for stype in scan_types:
                 ctx = {
-                    'scan_history_id': None,
                     'subdomain_id': subdomain_id,
                     'scan_type': stype,
                     'engine_id': engine_id
