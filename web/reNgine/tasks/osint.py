@@ -69,14 +69,42 @@ def osint(self, host=None, ctx=None, description=None):
         )
         grouped_tasks.append(_task)
 
-    # Launch OSINT tasks asynchronously without waiting for completion
-    # This avoids Celery deadlock by not blocking the worker
+    # Launch OSINT tasks and wait for completion to ensure proper workflow ordering
     if grouped_tasks:
         celery_group = group(grouped_tasks)
         job = celery_group.apply_async()
-        logger.info(f'Started {len(grouped_tasks)} OSINT tasks asynchronously')
+        logger.info(f'Started {len(grouped_tasks)} OSINT tasks')
+        
+        # Wait for all OSINT tasks to complete using allow_join_result to avoid deadlocks
+        from celery.result import allow_join_result
+        with allow_join_result():
+            try:
+                results = job.get(propagate=False)  # Don't propagate exceptions
+                logger.info('All OSINT tasks completed')
+                
+                # Check individual task results and log any failures
+                # Convert any exceptions to serializable format
+                processed_results = []
+                for i, task_result in enumerate(results):
+                    if isinstance(task_result, Exception):
+                        error_msg = f'{type(task_result).__name__}: {str(task_result)}'
+                        logger.error(f'OSINT task {i} failed: {error_msg}')
+                        processed_results.append({'error': error_msg, 'success': False})
+                    else:
+                        processed_results.append(task_result)
+                
+                results = processed_results
+                    
+            except Exception as e:
+                error_msg = f'{type(e).__name__}: {str(e)}'
+                logger.error(f'OSINT tasks group failed: {error_msg}')
+                results = {'error': error_msg, 'success': False}
+                
     else:
         logger.info('No OSINT tasks to run')
+        results = {'success': True, 'message': 'No OSINT tasks configured'}
+
+    return results
 
 
 @app.task(name='osint_discovery', queue='io_queue', bind=False)
@@ -154,16 +182,42 @@ def osint_discovery(config, host, scan_history_id, activity_id, results_dir, ctx
         )
         grouped_tasks.append(_task)
 
-    # Launch OSINT discovery tasks asynchronously without waiting for completion
-    # This avoids Celery deadlock by not blocking the worker
+    # Launch OSINT discovery tasks and wait for completion to ensure proper workflow ordering
     if grouped_tasks:
         celery_group = group(grouped_tasks)
         job = celery_group.apply_async()
-        logger.info(f'Started {len(grouped_tasks)} OSINT discovery tasks asynchronously')
+        logger.info(f'Started {len(grouped_tasks)} OSINT discovery tasks')
+        
+        # Wait for all OSINT discovery tasks to complete using allow_join_result to avoid deadlocks
+        from celery.result import allow_join_result
+        with allow_join_result():
+            try:
+                results = job.get(propagate=False)  # Don't propagate exceptions
+                logger.info('All OSINT discovery tasks completed')
+                
+                # Check individual task results and log any failures
+                # Convert any exceptions to serializable format
+                processed_results = []
+                for i, task_result in enumerate(results):
+                    if isinstance(task_result, Exception):
+                        error_msg = f'{type(task_result).__name__}: {str(task_result)}'
+                        logger.error(f'OSINT discovery task {i} failed: {error_msg}')
+                        processed_results.append({'error': error_msg, 'success': False})
+                    else:
+                        processed_results.append(task_result)
+                
+                results = processed_results
+                        
+            except Exception as e:
+                error_msg = f'{type(e).__name__}: {str(e)}'
+                logger.error(f'OSINT discovery tasks group failed: {error_msg}')
+                results = {'error': error_msg, 'success': False}
+                
     else:
         logger.info('No OSINT discovery tasks to run')
+        results = {'success': True, 'message': 'No OSINT discovery tasks configured'}
 
-    return {}
+    return results
 
 
 @app.task(name='dorking', bind=False, queue='io_queue')
@@ -420,7 +474,7 @@ def dorking(config, host, scan_history_id, results_dir):
     return results
 
 
-@app.task(name='theHarvester', queue='io_queue', bind=False)
+@app.task(name='theHarvester', queue='run_command_queue', bind=False)
 def theHarvester(config, host, scan_history_id, activity_id, results_dir, ctx=None):
     """Run theHarvester to get save emails, hosts, employees found in domain.
 
@@ -444,7 +498,7 @@ def theHarvester(config, host, scan_history_id, activity_id, results_dir, ctx=No
     output_path_json = str(Path(results_dir) / 'theHarvester.json')
     theHarvester_dir = str(Path.home() / ".config"  / 'theHarvester')
     history_file = str(Path(results_dir) / 'commands.txt')
-    cmd  = f'theHarvester -d {host} -f {output_path_json} -b anubis,baidu,bevigil,bnaryedge,bing,bingapi,bufferoverun,brave,censys,certspotter,criminalip,crtsh,dnsdumpster,duckduckgo,fullhunt,hackertarget,hunter,hunterhow,intelx,netlas,onyphe,otx,pentesttools,projectdiscovery,rapiddns,rocketreach,securityTrails,sitedossier,subdomaincenter,subdomainfinderc99,threatminer,tomba,urlscan,virustotal,yahoo,zoomeye'
+    cmd  = f'theHarvester -d {host} -f {output_path_json} -b anubis,baidu,bevigil,binaryedge,bing,bingapi,bufferoverun,brave,censys,certspotter,criminalip,crtsh,dnsdumpster,duckduckgo,fullhunt,hackertarget,hunter,hunterhow,intelx,netlas,onyphe,otx,pentesttools,projectdiscovery,rapiddns,rocketreach,securityTrails,sitedossier,subdomaincenter,subdomainfinderc99,threatminer,tomba,urlscan,virustotal,yahoo,zoomeye'
 
     # Update proxies.yaml
     proxy_query = Proxy.objects.all()
@@ -538,7 +592,7 @@ def theHarvester(config, host, scan_history_id, activity_id, results_dir, ctx=No
     return data
 
 
-@app.task(name='h8mail', queue='io_queue', bind=False)
+@app.task(name='h8mail', queue='run_command_queue', bind=False)
 def h8mail(config, host, scan_history_id, activity_id, results_dir, ctx=None):
     """Run h8mail.
 

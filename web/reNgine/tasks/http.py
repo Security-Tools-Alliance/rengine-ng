@@ -366,7 +366,8 @@ def pre_crawl(self, ctx={}, description=None):
 
     # Get existing subdomains from current scan
     existing_subdomains = Subdomain.objects.filter(
-        target_domain_id=domain_id
+        target_domain_id=domain_id,
+        scan_history_id=ctx.get('scan_history_id')
     )
 
     total_subdomains = existing_subdomains.count()

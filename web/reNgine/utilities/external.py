@@ -1,4 +1,6 @@
 import requests
+import os
+from pathlib import Path
 from bs4 import BeautifulSoup
 from celery.utils.log import get_task_logger
 from dashboard.models import OpenAiAPIKey, NetlasAPIKey

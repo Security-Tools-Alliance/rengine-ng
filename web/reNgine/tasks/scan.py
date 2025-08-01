@@ -57,7 +57,7 @@ def initiate_scan(
     """    
     # Get all available tasks dynamically from the tasks module
     from reNgine.tasks import get_scan_tasks
-    
+
     # Get all tasks
     available_tasks = get_scan_tasks()
 
@@ -171,21 +171,28 @@ def initiate_scan(
 
         workflow_tasks = []
 
-        # Phase 1: Initial discovery
-        from celery import group
+        # Phase 1: Initial discovery - Use chord to wait for all tasks
+        from celery import group, chord
         initial_tasks = []
-        
+
         if 'subdomain_discovery' in engine.tasks and 'subdomain_discovery' in available_tasks:
             initial_tasks.append(available_tasks['subdomain_discovery'].si(ctx=ctx, description='Subdomain discovery'))
         if 'osint' in engine.tasks and 'osint' in available_tasks:
             initial_tasks.append(available_tasks['osint'].si(ctx=ctx, description='OS Intelligence'))
 
         if initial_tasks:
-            workflow_tasks.append(group(initial_tasks))
-
-        # Phase 1.5: Pre-crawl (always run if we have subdomains)
-        # This runs after initial discovery tasks (if any) or immediately if we have imported subdomains
-        if (initial_tasks or imported_subdomains) and 'pre_crawl' in available_tasks:
+            # Create a chord: run initial_tasks in parallel, then execute pre_crawl when all are done
+            if 'pre_crawl' in available_tasks:
+                initial_chord = chord(
+                    initial_tasks,
+                    available_tasks['pre_crawl'].si(ctx=ctx, description='Pre-crawl endpoints')
+                )
+                workflow_tasks.append(initial_chord)
+            else:
+                # If no pre_crawl, just use group
+                workflow_tasks.append(group(initial_tasks))
+        elif 'pre_crawl' in available_tasks:
+            # Only pre_crawl, no initial tasks
             workflow_tasks.append(available_tasks['pre_crawl'].si(ctx=ctx, description='Pre-crawl endpoints'))
 
         # Phase 2: Port scan (if enabled)
