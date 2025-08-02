@@ -18,7 +18,7 @@ logger = get_task_logger(__name__)
 
 
 @app.task(name='run_command', bind=False, queue='run_command_queue')
-def run_command(cmd, cwd=None, shell=False, history_file=None, scan_id=None, activity_id=None, remove_ansi_sequence=False):
+def run_command(cmd, cwd=None, shell=False, history_file=None, scan_id=None, activity_id=None, remove_ansi_sequence=False, combine_output=False):
     """
     Execute a command and return its output.
 
@@ -30,6 +30,7 @@ def run_command(cmd, cwd=None, shell=False, history_file=None, scan_id=None, act
         scan_id (int, optional): ID of the associated scan. Defaults to None.
         activity_id (int, optional): ID of the associated activity. Defaults to None.
         remove_ansi_sequence (bool, optional): Whether to remove ANSI escape sequences from output. Defaults to False.
+        combine_output (bool, optional): Whether to combine stdout and stderr. Defaults to False.
 
     Returns:
         tuple: A tuple containing the return code and output of the command.
@@ -43,8 +44,24 @@ def run_command(cmd, cwd=None, shell=False, history_file=None, scan_id=None, act
     output, error_output = process.communicate()
     return_code = process.returncode
 
-    if output:
-        output = re.sub(r'\x1b\[[0-9;]*[mGKH]', '', output) if remove_ansi_sequence else output 
+    # Combine stdout and stderr if requested
+    if combine_output:
+        combined_output = ""
+        if output:
+            combined_output += output
+        if error_output:
+            combined_output += error_output
+        
+        if combined_output:
+            combined_output = re.sub(r'\x1b\[[0-9;]*[mGKH]', '', combined_output) if remove_ansi_sequence else combined_output
+        
+        final_output = combined_output
+    else:
+        # Default behavior: only use stdout
+        if output:
+            final_output = re.sub(r'\x1b\[[0-9;]*[mGKH]', '', output) if remove_ansi_sequence else output
+        else:
+            final_output = ""
     
     if return_code != 0:
         error_msg = f"Command failed with exit code {return_code}"
@@ -52,15 +69,15 @@ def run_command(cmd, cwd=None, shell=False, history_file=None, scan_id=None, act
             error_msg += f"\nError output:\n{error_output}"
         logger.error(error_msg)
         
-    command_obj.output = output or None
+    command_obj.output = final_output or None
     command_obj.error_output = error_output or None
     command_obj.return_code = return_code
     command_obj.save()
     
     if history_file:
-        write_history(history_file, cmd, return_code, output)
+        write_history(history_file, cmd, return_code, final_output)
     
-    return return_code, output
+    return return_code, final_output
 
 
 def stream_command(cmd, cwd=None, shell=False, history_file=None, encoding='utf-8', scan_id=None, activity_id=None, trunc_char=None):

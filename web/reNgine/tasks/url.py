@@ -98,7 +98,7 @@ def fetch_url(self, urls=[], ctx={}, description=None):
         'hakrawler': 'hakrawler -subs -u',
         'waybackurls': 'waybackurls',
         'gospider': 'gospider --js -d 2 --sitemap --robots -w -r -a',
-        'katana': 'katana -silent -jc -kf all -d 3 -fs rdn',
+        'katana': 'katana -silent -jc -kf all -d 3 -fs rdn -td',
     }
     if proxy:
         cmd_map['gau'] += f' --proxy "{proxy}"'

@@ -1338,8 +1338,21 @@ class GetExternalToolCurrentVersion(APIView):
             return Response({'status': False, 'message': 'Version Lookup command not provided.'})
 
         version_number = None
-        _, stdout = run_command(tool.version_lookup_command)
-        version_number = re.search(re.compile(tool.version_match_regex), str(stdout))
+        try:
+            # Execute command in Celery container and wait for result
+            # Use combine_output=True for version commands that output to stderr
+            task_result = run_command.delay(tool.version_lookup_command, combine_output=True)
+            return_code, stdout = task_result.get(timeout=30)  # Wait max 30 seconds for command execution
+            
+            # Debug logs
+            logger.debug(f"Command: {tool.version_lookup_command}")
+            logger.debug(f"Return code: {return_code}")
+            logger.debug(f"Output: {stdout}")
+            
+            version_number = re.search(re.compile(tool.version_match_regex), str(stdout))
+        except Exception as e:
+            return Response({'status': False, 'message': f'Error executing version command: {str(e)}'})
+        
         if not version_number:
             return Response({'status': False, 'message': 'Invalid version lookup command.'})
 
