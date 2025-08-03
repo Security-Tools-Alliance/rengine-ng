@@ -6,9 +6,15 @@ changelog:
     - title: Fixed
       labels:
         - bug
-    - title: Miscellaneous
+    - title: Refactored
       labels:
         - refactor
+    - title: Dependencies
+      labels:
         - dependencies
-        - documentation
+    - title: CI/CD
+      labels:
         - ci
+    - title: documentation
+      labels:
+        - documentation
