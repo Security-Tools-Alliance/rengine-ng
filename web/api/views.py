@@ -2957,6 +2957,18 @@ class VulnerabilityViewSet(viewsets.ModelViewSet):
             qs = qs.filter(severity=severity)
         if subdomain_id:
             qs = qs.filter(subdomain__id=subdomain_id)
+        
+        # Optimize queries with prefetch_related to avoid N+1 queries
+        qs = qs.prefetch_related(
+            'cve_ids',
+            'cwe_ids',
+            'tags',
+            'subdomain',
+            'endpoint',
+            'target_domain',
+            'scan_history'
+        )
+        
         self.queryset = qs
         return self.queryset
 

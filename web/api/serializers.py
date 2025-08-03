@@ -1063,6 +1063,9 @@ class VulnerabilitySerializer(serializers.ModelSerializer):
 
 	discovered_date = serializers.SerializerMethodField()
 	severity = serializers.SerializerMethodField()
+	cve_ids = serializers.SerializerMethodField()
+	cwe_ids = serializers.SerializerMethodField()
+	tags = serializers.SerializerMethodField()
 
 	def get_discovered_date(self, Vulnerability):
 		return Vulnerability.discovered_date.strftime("%b %d, %Y %H:%M")
@@ -1081,10 +1084,22 @@ class VulnerabilitySerializer(serializers.ModelSerializer):
 		else:
 			return "Unknown"
 
+	def get_cve_ids(self, obj):
+		# Use prefetched data to avoid additional queries
+		return [{'name': cve.name} for cve in obj.cve_ids.all()]
+
+	def get_cwe_ids(self, obj):
+		# Use prefetched data to avoid additional queries
+		return [{'name': cwe.name} for cwe in obj.cwe_ids.all()]
+
+	def get_tags(self, obj):
+		# Use prefetched data to avoid additional queries
+		return [{'name': tag.name} for tag in obj.tags.all()]
+
 	class Meta:
 		model = Vulnerability
 		fields = '__all__'
-		depth = 2
+		depth = 1
 
 class ProjectSerializer(serializers.ModelSerializer):
     class Meta:

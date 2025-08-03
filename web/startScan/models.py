@@ -377,14 +377,30 @@ class Subdomain(models.Model):
 
 	@property
 	def get_vulnerabilities(self):
-		vulns = Vulnerability.objects.filter(subdomain__name=self.name)
+		vulns = Vulnerability.objects.filter(subdomain__name=self.name).prefetch_related(
+			'cve_ids',
+			'cwe_ids',
+			'tags',
+			'subdomain',
+			'endpoint',
+			'target_domain',
+			'scan_history'
+		)
 		if self.scan_history:
 			vulns = vulns.filter(scan_history=self.scan_history)
 		return vulns
 
 	@property
 	def get_vulnerabilities_without_info(self):
-		vulns = Vulnerability.objects.filter(subdomain__name=self.name).exclude(severity=0)
+		vulns = Vulnerability.objects.filter(subdomain__name=self.name).exclude(severity=0).prefetch_related(
+			'cve_ids',
+			'cwe_ids',
+			'tags',
+			'subdomain',
+			'endpoint',
+			'target_domain',
+			'scan_history'
+		)
 		if self.scan_history:
 			vulns = vulns.filter(scan_history=self.scan_history)
 		return vulns

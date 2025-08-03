@@ -67,7 +67,17 @@ def detail_scan(request, id, slug):
     employees = Employee.objects.filter(employees__in=[scan])
     subdomains = Subdomain.objects.filter(scan_history=scan)
     endpoints = EndPoint.objects.filter(scan_history=scan)
-    vulns = Vulnerability.objects.filter(scan_history=scan)
+    
+    # Optimize vulnerability queries with prefetch_related to avoid N+1 queries
+    vulns = Vulnerability.objects.filter(scan_history=scan).prefetch_related(
+        'cve_ids',
+        'cwe_ids', 
+        'tags',
+        'subdomain',
+        'endpoint',
+        'target_domain'
+    )
+    
     vulns_tags = VulnerabilityTags.objects.filter(vuln_tags__in=vulns)
     ip_addresses = IpAddress.objects.filter(
         ip_addresses__in=subdomains
