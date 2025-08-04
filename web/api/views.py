@@ -702,6 +702,17 @@ class FetchMostCommonVulnerability(APIView):
                 Vulnerability.objects.filter(target_domain__project__slug=project_slug)
                 if project_slug else Vulnerability.objects.all()
             )
+            
+            # Optimize queries with prefetch_related to avoid N+1 queries
+            vulnerabilities = vulnerabilities.prefetch_related(
+                'cve_ids',
+                'cwe_ids',
+                'tags',
+                'subdomain',
+                'endpoint',
+                'target_domain',
+                'scan_history'
+            )
 
             if scan_history_id:
                 vuln_query = vulnerabilities.filter(scan_history__id=scan_history_id).values("name", "severity")
@@ -765,7 +776,16 @@ class FetchMostVulnerable(APIView):
                         vuln_count=Count('vulnerability__name', filter=~Q(vulnerability__severity=0))
                     )
                     .order_by('-vuln_count')
-                    .exclude(vuln_count=0)[:limit]
+                    .exclude(vuln_count=0)
+                    .prefetch_related(
+                        'ip_addresses',
+                        'ip_addresses__ports',
+                        'technologies',
+                        'waf',
+                        'directories',
+                        'scan_history',
+                        'target_domain'
+                    )[:limit]
                 )
             else:
                 most_vulnerable_subdomains = (
@@ -791,14 +811,32 @@ class FetchMostVulnerable(APIView):
                     subdomain_query
                     .annotate(vuln_count=Count('vulnerability__name', filter=~Q(vulnerability__severity=0)))
                     .order_by('-vuln_count')
-                    .exclude(vuln_count=0)[:limit]
+                    .exclude(vuln_count=0)
+                    .prefetch_related(
+                        'ip_addresses',
+                        'ip_addresses__ports',
+                        'technologies',
+                        'waf',
+                        'directories',
+                        'scan_history',
+                        'target_domain'
+                    )[:limit]
                 )
             else:
                 most_vulnerable_subdomains = (
                     subdomain_query
                     .annotate(vuln_count=Count('vulnerability__name'))
                     .order_by('-vuln_count')
-                    .exclude(vuln_count=0)[:limit]
+                    .exclude(vuln_count=0)
+                    .prefetch_related(
+                        'ip_addresses',
+                        'ip_addresses__ports',
+                        'technologies',
+                        'waf',
+                        'directories',
+                        'scan_history',
+                        'target_domain'
+                    )[:limit]
                 )
 
             if most_vulnerable_subdomains:
@@ -1689,6 +1727,16 @@ class ListTodoNotes(APIView):
             notes = notes.filter(id=todo_id)
         if subdomain_id:
             notes = notes.filter(subdomain__id=subdomain_id)
+        
+        # Optimize queries with select_related to avoid N+1 queries
+        notes = notes.select_related(
+            'scan_history',
+            'scan_history__domain',
+            'subdomain',
+            'subdomain__target_domain',
+            'project'
+        )
+        
         notes = ReconNoteSerializer(notes, many=True)
         return Response({'notes': notes.data})
 
@@ -1797,9 +1845,16 @@ class ListTechnology(APIView):
         else:
             subdomain_filter = Subdomain.objects.all()
 
-        # Fetch technologies and serialize the results
+        # Fetch technologies and serialize the results with optimization
         tech = Technology.objects.filter(technologies__in=subdomain_filter).annotate(
             count=Count('name')).order_by('-count')
+        
+        # Optimize queries with select_related and prefetch_related to avoid N+1 queries
+        tech = tech.select_related().prefetch_related(
+            'technologies',
+            'techs'
+        )
+        
         serializer = TechnologyCountSerializer(tech, many=True)
 
         return Response({"technologies": serializer.data})
@@ -1940,6 +1995,17 @@ class ListSubdomains(APIView):
         if 'only_important' in req.query_params:
             subdomain_query = subdomain_query.filter(is_important=True)
 
+        # Optimize queries with select_related and prefetch_related to avoid N+1 queries
+        subdomain_query = subdomain_query.select_related(
+            'scan_history',
+            'target_domain'
+        ).prefetch_related(
+            'ip_addresses',
+            'ip_addresses__ports',
+            'technologies',
+            'waf',
+            'directories'
+        )
 
         if 'no_lookup_interesting' in req.query_params:
             serializer = OnlySubdomainNameSerializer(subdomain_query, many=True)
@@ -2055,11 +2121,26 @@ class SubdomainsViewSet(viewsets.ModelViewSet):
                     scan_history__id=scan_id,
                     screenshot_path__isnull=False
                 ).values_list('subdomain', flat=True).distinct()
-                return (
+                queryset = (
                     Subdomain.objects
                     .filter(scan_history__id=scan_id)
-                    .filter(id__in=endpoint_subdomains))
-            return Subdomain.objects.filter(scan_history=scan_id)
+                    .filter(id__in=endpoint_subdomains)
+                )
+            else:
+                queryset = Subdomain.objects.filter(scan_history=scan_id)
+            
+            # Optimize queries with prefetch_related to avoid N+1 queries
+            queryset = queryset.prefetch_related(
+                'ip_addresses',
+                'ip_addresses__ports',
+                'technologies',
+                'waf',
+                'directories',
+                'scan_history',
+                'target_domain'
+            )
+            return queryset
+        return Subdomain.objects.none()
 
     def paginate_queryset(self, queryset, view=None):
         if 'no_page' in self.request.query_params:
@@ -2082,67 +2163,86 @@ class SubdomainChangesViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         req = self.request
         scan_id = safe_int_cast(req.query_params.get('scan_id'))
-        changes = req.query_params.get('changes')
-        domain_id = safe_int_cast(ScanHistory.objects.filter(id=safe_int_cast(scan_id)).first().domain.id)
-        scan_history_query = (
-            ScanHistory.objects
-            .filter(domain=domain_id)
-            .filter(tasks__overlap=['subdomain_discovery'])
-            .filter(id__lte=scan_id)
-            .exclude(Q(scan_status=-1) | Q(scan_status=1))
-        )
-        if scan_history_query.count() > 1:
-            last_scan = scan_history_query.order_by('-start_scan_date')[1]
-            scanned_host_q1 = (
-                Subdomain.objects
-                .filter(scan_history__id=scan_id)
-                .values('name')
+        target_id = safe_int_cast(req.query_params.get('target_id'))
+        project = req.query_params.get('project')
+
+        if scan_id:
+            # Get the current scan
+            current_scan = ScanHistory.objects.get(id=scan_id)
+            domain = current_scan.domain
+
+            # Get all scans for this domain that have subdomain_discovery task
+            scans_with_subdomain_discovery = (
+                ScanHistory.objects
+                .filter(domain=domain)
+                .filter(tasks__overlap=['subdomain_discovery'])
+                .filter(scan_status=2)  # SUCCESS
+                .order_by('-start_scan_date')
             )
-            scanned_host_q2 = (
-                Subdomain.objects
-                .filter(scan_history__id=last_scan.id)
-                .values('name')
-            )
-            added_subdomain = scanned_host_q1.difference(scanned_host_q2)
-            removed_subdomains = scanned_host_q2.difference(scanned_host_q1)
-            if changes == 'added':
-                return (
+
+            if scans_with_subdomain_discovery.count() > 1:
+                # Get the previous scan
+                previous_scan = scans_with_subdomain_discovery[1]
+                
+                # Get subdomains from current scan
+                current_subdomains = (
                     Subdomain.objects
-                    .filter(scan_history=scan_id)
-                    .filter(name__in=added_subdomain)
-                    .annotate(
-                        change=Value('added', output_field=CharField())
-                    )
+                    .filter(scan_history=current_scan)
+                    .values_list('name', flat=True)
+                    .distinct()
                 )
-            elif changes == 'removed':
-                return (
+                
+                # Get subdomains from previous scan
+                previous_subdomains = (
                     Subdomain.objects
-                    .filter(scan_history=last_scan)
-                    .filter(name__in=removed_subdomains)
-                    .annotate(
-                        change=Value('removed', output_field=CharField())
-                    )
+                    .filter(scan_history=previous_scan)
+                    .values_list('name', flat=True)
+                    .distinct()
+                )
+                
+                # Calculate new subdomains
+                new_subdomains = set(current_subdomains) - set(previous_subdomains)
+                
+                # Get the actual subdomain objects for new subdomains
+                queryset = (
+                    Subdomain.objects
+                    .filter(scan_history=current_scan)
+                    .filter(name__in=new_subdomains)
+                    .annotate(change=Value('added', output_field=CharField()))
                 )
             else:
-                added_subdomain = (
-                    Subdomain.objects
-                    .filter(scan_history=scan_id)
-                    .filter(name__in=added_subdomain)
-                    .annotate(
-                        change=Value('added', output_field=CharField())
-                    )
-                )
-                removed_subdomains = (
-                    Subdomain.objects
-                    .filter(scan_history=last_scan)
-                    .filter(name__in=removed_subdomains)
-                    .annotate(
-                        change=Value('removed', output_field=CharField())
-                    )
-                )
-                changes = added_subdomain.union(removed_subdomains)
-                return changes
-        return self.queryset
+                # If this is the first scan, return empty queryset as changes are only meaningful from 2nd scan
+                queryset = Subdomain.objects.none()
+        elif target_id:
+            queryset = (
+                Subdomain.objects
+                .filter(target_domain__id=target_id)
+                .annotate(change=Value('unknown', output_field=CharField()))
+            )
+        elif project:
+            queryset = (
+                Subdomain.objects
+                .filter(target_domain__project__slug=project)
+                .annotate(change=Value('unknown', output_field=CharField()))
+            )
+        else:
+            queryset = (
+                Subdomain.objects.all()
+                .annotate(change=Value('unknown', output_field=CharField()))
+            )
+
+        # Optimize queries with prefetch_related to avoid N+1 queries
+        queryset = queryset.prefetch_related(
+            'ip_addresses',
+            'ip_addresses__ports',
+            'technologies',
+            'waf',
+            'directories',
+            'scan_history',
+            'target_domain'
+        )
+        
+        return queryset
 
     def paginate_queryset(self, queryset, view=None):
         if 'no_page' in self.request.query_params:
@@ -2163,13 +2263,13 @@ class EndPointChangesViewSet(viewsets.ModelViewSet):
         req = self.request
         scan_id = safe_int_cast(req.query_params.get('scan_id'))
         changes = req.query_params.get('changes')
-        domain_id = safe_int_cast(ScanHistory.objects.filter(id=scan_id).first().domain.id)
+        domain_id = safe_int_cast(ScanHistory.objects.filter(id=safe_int_cast(scan_id)).first().domain.id)
         scan_history = (
             ScanHistory.objects
             .filter(domain=domain_id)
-            .filter(tasks__overlap=['fetch_url'])
+            .filter(tasks__overlap=['subdomain_discovery'])
             .filter(id__lte=scan_id)
-            .filter(scan_status=2)
+            .exclude(Q(scan_status=-1) | Q(scan_status=1))
         )
         if scan_history.count() > 1:
             last_scan = scan_history.order_by('-start_scan_date')[1]
@@ -2183,38 +2283,57 @@ class EndPointChangesViewSet(viewsets.ModelViewSet):
                 .filter(scan_history__id=last_scan.id)
                 .values('http_url')
             )
-            added_endpoints = scanned_host_q1.difference(scanned_host_q2)
+            added_endpoint = scanned_host_q1.difference(scanned_host_q2)
             removed_endpoints = scanned_host_q2.difference(scanned_host_q1)
             if changes == 'added':
-                return (
+                queryset = (
                     EndPoint.objects
-                    .filter(scan_history=scan_id)
-                    .filter(http_url__in=added_endpoints)
-                    .annotate(change=Value('added', output_field=CharField()))
+                    .filter(scan_history__id=scan_id)
+                    .filter(http_url__in=added_endpoint)
+                    .annotate(
+                        change=Value('added', output_field=CharField())
+                    )
                 )
             elif changes == 'removed':
-                return (
+                queryset = (
                     EndPoint.objects
-                    .filter(scan_history=last_scan)
+                    .filter(scan_history__id=last_scan)
                     .filter(http_url__in=removed_endpoints)
-                    .annotate(change=Value('removed', output_field=CharField()))
+                    .annotate(
+                        change=Value('removed', output_field=CharField())
+                    )
                 )
             else:
-                added_endpoints = (
+                added_endpoint = (
                     EndPoint.objects
-                    .filter(scan_history=scan_id)
-                    .filter(http_url__in=added_endpoints)
-                    .annotate(change=Value('added', output_field=CharField()))
+                    .filter(scan_history__id=scan_id)
+                    .filter(http_url__in=added_endpoint)
+                    .annotate(
+                        change=Value('added', output_field=CharField())
+                    )
                 )
                 removed_endpoints = (
                     EndPoint.objects
-                    .filter(scan_history=last_scan)
+                    .filter(scan_history__id=last_scan)
                     .filter(http_url__in=removed_endpoints)
-                    .annotate(change=Value('removed', output_field=CharField()))
+                    .annotate(
+                        change=Value('removed', output_field=CharField())
+                    )
                 )
-                changes = added_endpoints.union(removed_endpoints)
-                return changes
-        return self.queryset
+                queryset = added_endpoint.union(removed_endpoints)
+        else:
+            # If this is the first scan, return empty queryset as changes are only meaningful from 2nd scan
+            queryset = EndPoint.objects.none()
+        
+        # Optimize queries with prefetch_related to avoid N+1 queries
+        queryset = queryset.prefetch_related(
+            'subdomain',
+            'target_domain',
+            'scan_history',
+            'techs'
+        )
+        
+        return queryset
 
     def paginate_queryset(self, queryset, view=None):
         if 'no_page' in self.request.query_params:
@@ -2231,17 +2350,31 @@ class InterestingSubdomainViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         req = self.request
         scan_id = safe_int_cast(req.query_params.get('scan_id'))
-        domain_id = safe_int_cast(req.query_params.get('target_id'))
+        target_id = safe_int_cast(req.query_params.get('target_id'))
 
         if 'only_subdomains' in self.request.query_params:
             self.serializer_class = InterestingSubdomainSerializer
 
         if scan_id:
-            self.queryset = get_interesting_subdomains(scan_history=scan_id)
-        elif domain_id:
-            self.queryset = get_interesting_subdomains(domain_id=domain_id)
+            queryset = get_interesting_subdomains(scan_history=scan_id)
+        elif target_id:
+            queryset = get_interesting_subdomains(domain_id=target_id)
         else:
-            self.queryset = get_interesting_subdomains()
+            queryset = get_interesting_subdomains()
+        
+        # Optimize queries with prefetch_related to avoid N+1 queries
+        if hasattr(queryset, 'prefetch_related'):
+            queryset = queryset.prefetch_related(
+                'ip_addresses',
+                'ip_addresses__ports',
+                'technologies',
+                'waf',
+                'directories',
+                'scan_history',
+                'target_domain'
+            )
+        
+        self.queryset = queryset
 
         return self.queryset
 
@@ -2291,11 +2424,22 @@ class InterestingEndpointViewSet(viewsets.ModelViewSet):
         if 'only_endpoints' in self.request.query_params:
             self.serializer_class = InterestingEndPointSerializer
         if scan_id:
-            return get_interesting_endpoints(scan_history=scan_id)
+            queryset = get_interesting_endpoints(scan_history=scan_id)
         elif target_id:
-            return get_interesting_endpoints(target=target_id)
+            queryset = get_interesting_endpoints(target=target_id)
         else:
-            return get_interesting_endpoints()
+            queryset = get_interesting_endpoints()
+        
+        # Optimize queries with prefetch_related to avoid N+1 queries
+        if hasattr(queryset, 'prefetch_related'):
+            queryset = queryset.prefetch_related(
+                'subdomain',
+                'target_domain',
+                'scan_history',
+                'techs'
+            )
+        
+        return queryset
 
     def paginate_queryset(self, queryset, view=None):
         if 'no_page' in self.request.query_params:
@@ -2958,15 +3102,28 @@ class VulnerabilityViewSet(viewsets.ModelViewSet):
         if subdomain_id:
             qs = qs.filter(subdomain__id=subdomain_id)
         
-        # Optimize queries with prefetch_related to avoid N+1 queries
-        qs = qs.prefetch_related(
-            'cve_ids',
-            'cwe_ids',
-            'tags',
+        # Optimize queries with select_related and prefetch_related to avoid N+1 queries
+        qs = qs.select_related(
             'subdomain',
             'endpoint',
             'target_domain',
-            'scan_history'
+            'scan_history',
+            'subdomain__scan_history',
+            'subdomain__target_domain'
+        ).prefetch_related(
+            'cve_ids',
+            'cwe_ids',
+            'tags',
+            'subdomain__technologies',
+            'subdomain__ip_addresses',
+            'subdomain__ip_addresses__ports',
+            'subdomain__directories',
+            'subdomain__waf',
+            'scan_history__emails',
+            'scan_history__employees',
+            'scan_history__buckets',
+            'scan_history__dorks',
+            'vuln_subscan_ids'
         )
         
         self.queryset = qs
