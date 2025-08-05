@@ -55,4 +55,29 @@ def remove_file_or_pattern(path, pattern=None, shell=True, history_file=None, sc
         
     except OSError as e:
         logger.error(f"Failed to delete {path}: {str(e)}")
-        return False 
+        return False
+
+def is_nuclei_config_valid(config_path):
+    """
+    Check if the Nuclei configuration file is not empty (has at least one non-commented line).
+    
+    Args:
+        config_path (str): Path to the Nuclei configuration file
+        
+    Returns:
+        bool: True if the config file has valid content, False otherwise
+    """
+    try:
+        if not os.path.exists(config_path):
+            return False
+            
+        with open(config_path, 'r') as f:
+            for line in f:
+                line = line.strip()
+                # Check if line is not empty and not a comment
+                if line and not line.startswith('#'):
+                    return True
+        return False
+    except Exception as e:
+        logger.warning(f'Could not read Nuclei config file {config_path}: {e}')
+        return False

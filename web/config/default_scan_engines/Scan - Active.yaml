@@ -84,9 +84,9 @@ vulnerability_scan: {
   'rate_limit': 25,
   'retries': 1,
   'timeout': 5,
-  'fetch_gpt_report': true,
+  'fetch_gpt_report': false,
   'nuclei': {
-    'use_nuclei_config': true,
+    'use_nuclei_config': false,
     'severities': ['unknown', 'info', 'low', 'medium', 'high', 'critical'],
     # 'tags': [],                 # Nuclei tags (https://github.com/projectdiscovery/nuclei-templates)
     # 'templates': [],            # Nuclei templates (https://github.com/projectdiscovery/nuclei-templates)
