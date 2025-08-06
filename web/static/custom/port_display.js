@@ -174,7 +174,7 @@ function createDataTable(containerId, columns, data, rowRenderer) {
 }
 
 // Function to fetch and display screenshot thumbnail
-async function getScreenshotThumbnail(subdomain_id, subdomain_name, port, scan_id, domain_id = null) {
+async function getScreenshotThumbnail(subdomain_id, subdomain_name, port, scan_id, domain_id = null, disableHoverPreview = false) {
     if (!subdomain_id) {
         return '-';
     }
@@ -187,7 +187,7 @@ async function getScreenshotThumbnail(subdomain_id, subdomain_name, port, scan_i
             const data = await response.json();
             
             if (data && Object.keys(data).length > 0) {
-                return await processScreenshotData(data, port, subdomain_id, subdomain_name, null, domain_id);
+                return await processScreenshotData(data, port, subdomain_id, subdomain_name, null, domain_id, disableHoverPreview);
             }
         } catch (error) {
             console.error('Error fetching screenshot for target:', error);
@@ -205,7 +205,7 @@ async function getScreenshotThumbnail(subdomain_id, subdomain_name, port, scan_i
         const data = await response.json();
         
         if (data && Object.keys(data).length > 0) {
-            return await processScreenshotData(data, port, subdomain_id, subdomain_name, scan_id, domain_id);
+            return await processScreenshotData(data, port, subdomain_id, subdomain_name, scan_id, domain_id, disableHoverPreview);
         } else {
             return '-';
         }
@@ -216,7 +216,7 @@ async function getScreenshotThumbnail(subdomain_id, subdomain_name, port, scan_i
 }
 
 // Helper function to process screenshot data
-async function processScreenshotData(data, port, subdomain_id, subdomain_name, scan_id, domain_id) {
+async function processScreenshotData(data, port, subdomain_id, subdomain_name, scan_id, domain_id, disableHoverPreview = false) {
     let screenshotHtml = '';
     let count = 0;
     
@@ -226,12 +226,17 @@ async function processScreenshotData(data, port, subdomain_id, subdomain_name, s
         if (endpoint.screenshot_path && endpoint.port == port) {
             count++;
             if (count <= 2) { // Show max 2 thumbnails
+                // Build hover events conditionally
+                const hoverEvents = disableHoverPreview ? '' : `
+                    onmouseover="showScreenshotPreview(this, '${endpoint.screenshot_path}', '${endpoint.http_url}')"
+                    onmouseout="hideScreenshotPreview()"
+                `;
+                
                 screenshotHtml += `
                     <img src="/media/${endpoint.screenshot_path}" 
                          class="screenshot-thumbnail me-1" 
                          style="width: 100px; height: 75px; object-fit: cover; cursor: pointer; border: 1px solid #ddd; border-radius: 3px;" 
-                         onmouseover="showScreenshotPreview(this, '${endpoint.screenshot_path}', '${endpoint.http_url}')"
-                         onmouseout="hideScreenshotPreview()"
+                         ${hoverEvents}
                          onclick="show_port_screenshots(${subdomain_id}, '${subdomain_name}', ${port}, ${scan_id || 'null'}, ${domain_id || 'null'})"
                          title="Click to view full screenshot"
                          onerror="this.style.display='none'">
@@ -252,31 +257,141 @@ function showScreenshotPreview(element, screenshotPath, httpUrl) {
     // Remove any existing preview
     hideScreenshotPreview();
     
-    const preview = $(`
-        <div id="screenshot-preview" style="
-            position: fixed; 
-            z-index: 10000; 
-            background: white; 
-            border: 1px solid #ddd; 
-            border-radius: 5px; 
-            padding: 8px; 
-            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-            max-width: 600px;
-        ">
-            <div style="font-size: 12px; color: #666; margin-bottom: 5px; font-weight: 500;">${httpUrl}</div>
-            <img src="/media/${screenshotPath}" style="max-width: 580px; max-height: 400px; object-fit: contain;" onerror="this.parentElement.style.display='none'">
-        </div>
-    `);
+    // Position the preview relative to the thumbnail
+    const $element = $(element);
+    const elementOffset = $element.offset();
+    const elementWidth = $element.outerWidth();
+    const elementHeight = $element.outerHeight();
+    const previewWidth = 600; // max-width of preview
+    const previewHeight = 400; // approximate height
     
-    $('body').append(preview);
+    // Check if we're in a table context (endpoints table or modal)
+    const isInTable = $element.closest('table').length > 0;
+    const isInModal = $element.closest('#modal_content_subdomain').length > 0;
     
-    // Position the preview near the mouse cursor
-    $(element).on('mousemove.screenshot-preview', function(e) {
+    let preview;
+    let parentContainer;
+    
+    if (isInTable && isInModal) {
+        // For modals, use absolute positioning relative to the modal content
+        const modalContainer = $('#modal_content_subdomain');
+        const modalContent = modalContainer.closest('.modal-content');
+        parentContainer = modalContent;
+        
+        // Make modal content relative if it's not already
+        if (modalContent.css('position') === 'static') {
+            modalContent.css('position', 'relative');
+        }
+        
+        preview = $(`
+            <div id="screenshot-preview" style="
+                position: absolute; 
+                z-index: 10000; 
+                background: white; 
+                border: 1px solid #ddd; 
+                border-radius: 5px; 
+                padding: 8px; 
+                box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+                max-width: 600px;
+            ">
+                <div style="font-size: 12px; color: #666; margin-bottom: 5px; font-weight: 500;">${httpUrl}</div>
+                <img src="/media/${screenshotPath}" style="max-width: 580px; max-height: 400px; object-fit: contain;" onerror="this.parentElement.style.display='none'">
+            </div>
+        `);
+        
+        modalContent.append(preview);
+        
+        // Calculate position relative to modal content
+        const modalContentOffset = modalContent.offset();
+        const relativeElementLeft = elementOffset.left - modalContentOffset.left;
+        const relativeElementTop = elementOffset.top - modalContentOffset.top;
+        
+        // Position to the left of the thumbnail
+        let leftPos = relativeElementLeft - previewWidth - 10;
+        let topPos = relativeElementTop - (previewHeight / 2) + (elementHeight / 2);
+        
+        // Check boundaries within modal
+        const modalWidth = modalContent.outerWidth();
+        const modalHeight = modalContent.outerHeight();
+        
+        // If not enough space on the left, show on the right
+        if (leftPos < 10) {
+            leftPos = relativeElementLeft + elementWidth + 10;
+        }
+        
+        // Make sure it doesn't exceed modal boundaries
+        if (leftPos + previewWidth > modalWidth - 10) {
+            leftPos = modalWidth - previewWidth - 10;
+        }
+        
+        // Adjust vertical position if needed
+        if (topPos < 10) {
+            topPos = 10;
+        } else if (topPos + previewHeight > modalHeight - 10) {
+            topPos = modalHeight - previewHeight - 10;
+        }
+        
         $('#screenshot-preview').css({
-            left: e.pageX + 15,
-            top: e.pageY - 200
+            left: leftPos,
+            top: topPos
         });
-    });
+        
+    } else {
+        // For non-modal contexts (endpoints table or other)
+        parentContainer = $('body');
+        
+        preview = $(`
+            <div id="screenshot-preview" style="
+                position: fixed; 
+                z-index: 10000; 
+                background: white; 
+                border: 1px solid #ddd; 
+                border-radius: 5px; 
+                padding: 8px; 
+                box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+                max-width: 600px;
+            ">
+                <div style="font-size: 12px; color: #666; margin-bottom: 5px; font-weight: 500;">${httpUrl}</div>
+                <img src="/media/${screenshotPath}" style="max-width: 580px; max-height: 400px; object-fit: contain;" onerror="this.parentElement.style.display='none'">
+            </div>
+        `);
+        
+        parentContainer.append(preview);
+        
+        if (isInTable) {
+            // Position to the left of the thumbnail, inside the table
+            let leftPos = elementOffset.left - previewWidth - 10;
+            let topPos = elementOffset.top - (previewHeight / 2) + (elementHeight / 2);
+            
+            // Make sure it doesn't go off-screen on the left
+            if (leftPos < 10) {
+                leftPos = elementOffset.left + elementWidth + 10;
+            }
+            
+            // Make sure it doesn't go off-screen on the top/bottom
+            const windowHeight = $(window).height();
+            const scrollTop = $(window).scrollTop();
+            
+            if (topPos < scrollTop + 10) {
+                topPos = scrollTop + 10;
+            } else if (topPos + previewHeight > scrollTop + windowHeight - 10) {
+                topPos = scrollTop + windowHeight - previewHeight - 10;
+            }
+            
+            $('#screenshot-preview').css({
+                left: leftPos,
+                top: topPos
+            });
+        } else {
+            // Original behavior for non-table contexts (follow mouse)
+            $(element).on('mousemove.screenshot-preview', function(e) {
+                $('#screenshot-preview').css({
+                    left: e.pageX + 15,
+                    top: e.pageY - 200
+                });
+            });
+        }
+    }
 }
 
 // Function to hide screenshot preview
@@ -366,7 +481,7 @@ function get_port_details(endpoint_ip_url, endpoint_subdomain_url, port, scan_id
                 // Fetch screenshots for all subdomains in parallel
                 const subdomainsWithScreenshots = await Promise.all(
                     subdomains.map(async (subdomain) => {
-                        const screenshots = await getScreenshotThumbnail(subdomain.id, subdomain.name, port, scan_id, domain_id);
+                        const screenshots = await getScreenshotThumbnail(subdomain.id, subdomain.name, port, scan_id, domain_id, true); // Disable hover preview in modal
                         return { ...subdomain, screenshots };
                     })
                 );

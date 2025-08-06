@@ -1051,10 +1051,26 @@ class SubdomainSerializer(serializers.ModelSerializer):
 class EndpointSerializer(serializers.ModelSerializer):
 
 	techs = TechnologySerializer(many=True)
+	subdomain_id = serializers.SerializerMethodField()
+	scan_history_id = serializers.SerializerMethodField()
+	target_domain_id = serializers.SerializerMethodField()
+	subdomain_name = serializers.SerializerMethodField()
 
 	class Meta:
 		model = EndPoint
 		fields = '__all__'
+	
+	def get_subdomain_id(self, obj):
+		return obj.subdomain.id if obj.subdomain else None
+	
+	def get_scan_history_id(self, obj):
+		return obj.scan_history.id if obj.scan_history else None
+	
+	def get_target_domain_id(self, obj):
+		return obj.target_domain.id if obj.target_domain else None
+	
+	def get_subdomain_name(self, obj):
+		return obj.subdomain.name if obj.subdomain else None
 
 
 class EndpointOnlyURLsSerializer(serializers.ModelSerializer):

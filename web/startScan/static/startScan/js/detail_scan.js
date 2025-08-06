@@ -69,6 +69,10 @@ function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, s
 		{'data': 'webserver'},
 		{'data': 'response_time', 'searchable': false},
 		{'data': 'screenshot_path', 'searchable': false},
+		{'data': 'subdomain_id', 'visible': false, 'searchable': false},
+		{'data': 'scan_history_id', 'visible': false, 'searchable': false},
+		{'data': 'target_domain_id', 'visible': false, 'searchable': false},
+		{'data': 'subdomain_name', 'visible': false, 'searchable': false},
 	];
 	var endpoint_table = $('#endpoint_results').DataTable({
 		"destroy": true,
@@ -112,15 +116,70 @@ function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, s
 				"visible": true,
 				"searchable": false,
 				"render": function(data, type, row) {
-					if (data && data.length > 0) {
-						return `<img src="/media/${data}" 
-								     class="screenshot-thumbnail" 
-								     style="width: 100px; height: 75px; object-fit: cover; cursor: pointer; border: 1px solid #ddd; border-radius: 3px;" 
-								     onclick="window.open('/media/${data}', '_blank')"
-								     title="Click to view full screenshot"
-								     onerror="this.style.display='none'">`;
+					// Extract port from URL
+					try {
+						const url = new URL(row['http_url']);
+						const port = url.port || (url.protocol === 'https:' ? 443 : 80);
+						
+											// Use the advanced screenshot system from port_display.js
+					const subdomain_id = row['subdomain_id'] || null;
+					const scan_id = row['scan_history_id'] || null;
+					const domain_id = row['target_domain_id'] || null;
+					
+					// Use subdomain name from API or extract from URL as fallback
+					const subdomain_name = row['subdomain_name'] || url.hostname;
+						
+						if (subdomain_id) {
+							// Return a placeholder that will be updated asynchronously
+							const cellId = `screenshot-cell-${row['id']}`;
+							setTimeout(async () => {
+								try {
+									const screenshotHtml = await getScreenshotThumbnail(
+										subdomain_id, 
+										subdomain_name, 
+										port, 
+										scan_id, 
+										domain_id
+									);
+									const cell = document.getElementById(cellId);
+									if (cell) {
+										cell.innerHTML = screenshotHtml;
+									}
+								} catch (error) {
+									console.error('Error loading screenshot:', error);
+									const cell = document.getElementById(cellId);
+									if (cell) {
+										cell.innerHTML = '-';
+									}
+								}
+							}, 0);
+							
+							return `<div id="${cellId}">Loading...</div>`;
+						}
+						
+						// Fallback to simple screenshot display if no subdomain_id
+						if (data && data.length > 0) {
+							return `<img src="/media/${data}" 
+									     class="screenshot-thumbnail" 
+									     style="width: 100px; height: 75px; object-fit: cover; cursor: pointer; border: 1px solid #ddd; border-radius: 3px;" 
+									     onclick="window.open('/media/${data}', '_blank')"
+									     title="Click to view full screenshot"
+									     onerror="this.style.display='none'">`;
+						}
+						return '-';
+					} catch (error) {
+						console.error('Error processing screenshot:', error);
+						// Fallback to simple screenshot display
+						if (data && data.length > 0) {
+							return `<img src="/media/${data}" 
+									     class="screenshot-thumbnail" 
+									     style="width: 100px; height: 75px; object-fit: cover; cursor: pointer; border: 1px solid #ddd; border-radius: 3px;" 
+									     onclick="window.open('/media/${data}', '_blank')"
+									     title="Click to view full screenshot"
+									     onerror="this.style.display='none'">`;
+						}
+						return '-';
 					}
-					return '-';
 				}
 			},
 			{
