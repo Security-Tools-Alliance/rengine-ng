@@ -209,8 +209,6 @@ class RengineTask(Task):
 				msg += f' | Error: {self.error}' if self.error else ''
 				logger.warning(msg)
 				
-				# Log before calling update_scan_activity
-				logger.debug(f'Task {task_identifier} - About to call update_scan_activity() with self.track={self.track}, self.activity={getattr(self, "activity", "NOT_SET")}')
 				self.update_scan_activity()
 
 		# Set task result in cache if task was successful
@@ -241,10 +239,8 @@ class RengineTask(Task):
 			task_identifier += f' ({self.description})'
 		
 		if not self.track:
-			logger.debug(f'Task {task_identifier} - create_scan_activity: self.track is False, skipping creation')
 			return
 		celery_id = self.request.id
-		logger.debug(f'Task {task_identifier} - create_scan_activity: Creating activity with celery_id {celery_id}')
 		
 		self.activity = ScanActivity(
 			name=self.task_name,
@@ -254,8 +250,6 @@ class RengineTask(Task):
 			celery_id=celery_id)
 		self.activity.save()
 		self.activity_id = self.activity.id
-		
-		logger.debug(f'Task {task_identifier} - create_scan_activity: Created activity ID {self.activity_id} with status {self.activity.status}')
 		
 		if self.scan:
 			self.activity.scan_of = self.scan
@@ -276,34 +270,33 @@ class RengineTask(Task):
 			task_identifier += f' ({self.description})'
 		
 		if not self.track:
-			logger.debug(f'Task {task_identifier} - update_scan_activity: self.track is False, skipping update')
 			return
-
-		if not hasattr(self, 'activity') or not self.activity:
-			logger.error(f'Task {task_identifier} - update_scan_activity: self.activity is None or missing')
-			return
-
-		# Log detailed info for debugging
-		logger.debug(f'Task {task_identifier} - update_scan_activity: Updating activity ID {self.activity.id} status from {self.activity.status} to {self.status}')
 
 		# Trim error before saving to DB
 		error_message = self.error
 		if self.error and len(self.error) > 300:
 			error_message = self.error[:288] + '...[trimmed]'
 
-		# Store old values for comparison
-		old_status = self.activity.status
-		
-		self.activity.status = self.status
-		self.activity.error_message = error_message
-		self.activity.traceback = self.traceback
-		self.activity.time = timezone.now()
-		
+		# Use celery_id to find the correct activity (more reliable than self.activity reference)
+		celery_id = getattr(self.request, 'id', 'NO_ID')
 		try:
-			self.activity.save()
-			logger.debug(f'Task {task_identifier} - update_scan_activity: Successfully saved activity ID {self.activity.id} with status {self.status} (was {old_status})')
+			fresh_activity = ScanActivity.objects.get(celery_id=celery_id)
+			
+			# Update the fresh instance
+			fresh_activity.status = self.status
+			fresh_activity.error_message = error_message
+			fresh_activity.traceback = self.traceback
+			fresh_activity.time = timezone.now()
+			fresh_activity.save()
+			
+			# Update our local reference
+			self.activity = fresh_activity
+			self.activity_id = fresh_activity.id
+			
+		except ScanActivity.DoesNotExist:
+			logger.error(f'Task {self.task_name} - No activity found with celery_id {celery_id}')
 		except Exception as e:
-			logger.error(f'Task {task_identifier} - update_scan_activity: Failed to save activity ID {self.activity.id}: {e}')
+			logger.error(f'Task {self.task_name} - Failed to update activity for celery_id {celery_id}: {e}')
 			
 		self.notify()
 
