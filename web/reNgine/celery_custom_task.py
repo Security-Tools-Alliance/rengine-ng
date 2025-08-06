@@ -74,7 +74,7 @@ class RengineTask(Task):
 
 		# Get reNgine context
 		ctx = kwargs.get('ctx', {})
-		self.track = ctx.pop('track', True)
+		self.track = ctx.get('track', True)
 		self.scan_id = ctx.get('scan_history_id')
 		self.subscan_id = ctx.get('subscan_id')
 		self.engine_id = ctx.get('engine_id')
@@ -140,10 +140,15 @@ class RengineTask(Task):
 
 			# Create ScanActivity for this task and send start scan notifs
 			if self.track:
+				# Build task identifier with description for better clarity
+				task_identifier = f'{self.task_name}'
+				if self.description and self.description != self.task_name.replace('_', ' ').capitalize():
+					task_identifier += f' ({self.description})'
+				
 				if self.domain:
-					logger.warning(f'Task {self.task_name} for {self.subdomain.name if self.subdomain else self.domain.name} is RUNNING')
+					logger.warning(f'Task {task_identifier} for {self.subdomain.name if self.subdomain else self.domain.name} is RUNNING')
 				else:
-					logger.warning(f'Task {self.task_name} is RUNNING')
+					logger.warning(f'Task {task_identifier} is RUNNING')
 				self.create_scan_activity()
 
 		if RENGINE_CACHE_ENABLED:
@@ -153,10 +158,15 @@ class RengineTask(Task):
 			if result and result != b'null':
 				self.status = SUCCESS_TASK
 				if RENGINE_RECORD_ENABLED and self.track:
+					# Build task identifier with description for better clarity
+					task_identifier = f'{self.task_name}'
+					if self.description and self.description != self.task_name.replace('_', ' ').capitalize():
+						task_identifier += f' ({self.description})'
+					
 					if self.domain:
-						logger.warning(f'Task {self.task_name} for {self.subdomain.name if self.subdomain else self.domain.name} status is SUCCESS (CACHED)')
+						logger.warning(f'Task {task_identifier} for {self.subdomain.name if self.subdomain else self.domain.name} status is SUCCESS (CACHED)')
 					else:
-						logger.warning(f'Task {self.task_name} status is SUCCESS (CACHED)')
+						logger.warning(f'Task {task_identifier} status is SUCCESS (CACHED)')
 					self.update_scan_activity()
 				return json.loads(result)
 
@@ -187,12 +197,20 @@ class RengineTask(Task):
 			self.write_results()
 
 			if RENGINE_RECORD_ENABLED and self.track:
+				# Build task identifier with description for better clarity
+				task_identifier = f'{self.task_name}'
+				if self.description and self.description != self.task_name.replace('_', ' ').capitalize():
+					task_identifier += f' ({self.description})'
+				
 				if self.domain:
-					msg = f'Task {self.task_name} for {self.subdomain.name if self.subdomain else self.domain.name} status is {self.status_str}'
+					msg = f'Task {task_identifier} for {self.subdomain.name if self.subdomain else self.domain.name} status is {self.status_str}'
 				else:
-					msg = f'Task {self.task_name} status is {self.status_str}'
+					msg = f'Task {task_identifier} status is {self.status_str}'
 				msg += f' | Error: {self.error}' if self.error else ''
 				logger.warning(msg)
+				
+				# Log before calling update_scan_activity
+				logger.debug(f'Task {task_identifier} - About to call update_scan_activity() with self.track={self.track}, self.activity={getattr(self, "activity", "NOT_SET")}')
 				self.update_scan_activity()
 
 		# Set task result in cache if task was successful
@@ -217,9 +235,17 @@ class RengineTask(Task):
 			logger.warning(f'Wrote {self.task_name} results to {self.output_path}')
 
 	def create_scan_activity(self):
+		# Build task identifier with description for better clarity
+		task_identifier = f'{self.task_name}'
+		if self.description and self.description != self.task_name.replace('_', ' ').capitalize():
+			task_identifier += f' ({self.description})'
+		
 		if not self.track:
+			logger.debug(f'Task {task_identifier} - create_scan_activity: self.track is False, skipping creation')
 			return
 		celery_id = self.request.id
+		logger.debug(f'Task {task_identifier} - create_scan_activity: Creating activity with celery_id {celery_id}')
+		
 		self.activity = ScanActivity(
 			name=self.task_name,
 			title=self.description,
@@ -228,6 +254,9 @@ class RengineTask(Task):
 			celery_id=celery_id)
 		self.activity.save()
 		self.activity_id = self.activity.id
+		
+		logger.debug(f'Task {task_identifier} - create_scan_activity: Created activity ID {self.activity_id} with status {self.activity.status}')
+		
 		if self.scan:
 			self.activity.scan_of = self.scan
 			self.activity.save()
@@ -241,19 +270,41 @@ class RengineTask(Task):
 		self.notify()
 
 	def update_scan_activity(self):
+		# Build task identifier with description for better clarity
+		task_identifier = f'{self.task_name}'
+		if self.description and self.description != self.task_name.replace('_', ' ').capitalize():
+			task_identifier += f' ({self.description})'
+		
 		if not self.track:
+			logger.debug(f'Task {task_identifier} - update_scan_activity: self.track is False, skipping update')
 			return
+
+		if not hasattr(self, 'activity') or not self.activity:
+			logger.error(f'Task {task_identifier} - update_scan_activity: self.activity is None or missing')
+			return
+
+		# Log detailed info for debugging
+		logger.debug(f'Task {task_identifier} - update_scan_activity: Updating activity ID {self.activity.id} status from {self.activity.status} to {self.status}')
 
 		# Trim error before saving to DB
 		error_message = self.error
 		if self.error and len(self.error) > 300:
 			error_message = self.error[:288] + '...[trimmed]'
 
+		# Store old values for comparison
+		old_status = self.activity.status
+		
 		self.activity.status = self.status
 		self.activity.error_message = error_message
 		self.activity.traceback = self.traceback
 		self.activity.time = timezone.now()
-		self.activity.save()
+		
+		try:
+			self.activity.save()
+			logger.debug(f'Task {task_identifier} - update_scan_activity: Successfully saved activity ID {self.activity.id} with status {self.status} (was {old_status})')
+		except Exception as e:
+			logger.error(f'Task {task_identifier} - update_scan_activity: Failed to save activity ID {self.activity.id}: {e}')
+			
 		self.notify()
 
 	def notify(self, name=None, severity=None, fields={}, add_meta_info=True):
