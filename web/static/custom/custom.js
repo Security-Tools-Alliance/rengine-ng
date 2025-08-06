@@ -1357,6 +1357,7 @@ function render_directories_in_xl_modal(directory_count, subdomain_name, result)
 		<table id="directory-modal-datatable" class="table dt-responsive w-100">
 		<thead>
 		<tr>
+		<th>Base URL</th>
 		<th>Directory</th>
 		<th class="text-center">HTTP Status</th>
 		<th>Content Length</th>
@@ -1372,8 +1373,10 @@ function render_directories_in_xl_modal(directory_count, subdomain_name, result)
 	$('#directory_tbody').empty();
 	for (var dir_obj in result) {
 		var dir = result[dir_obj];
+		var base_url = new URL(dir.url).origin;
 		$('#directory_tbody').append(`
 			<tr>
+			<td><a href="${base_url}" target="_blank">${base_url}</a></td>
 			<td><a href="${dir.url}" target="_blank">${atob(dir.name)}</a></td>
 			<td class="text-center">${get_http_status_badge(dir.http_status)}</td>
 			<td>${dir.length}</td>
@@ -1395,9 +1398,9 @@ function render_directories_in_xl_modal(directory_count, subdomain_name, result)
 			"sLengthMenu": "Results :  _MENU_",
 		},
 		"dom": "<'dt--top-section'<'row'<'col-12 col-sm-6 d-flex justify-content-sm-start justify-content-center'f><'col-12 col-sm-6 d-flex justify-content-sm-end justify-content-center'l>>>" + "<'table-responsive'tr>" + "<'dt--bottom-section d-sm-flex justify-content-sm-between text-center'<'dt--pages-count  mb-sm-0 mb-3'i><'dt--pagination'p>>",
-		"order": [
-			[2, "desc"]
-		],
+			"order": [
+		[1, "asc"]
+	],
 		drawCallback: function() {
 			$(".dataTables_paginate > .pagination").addClass("pagination-rounded");
 		}

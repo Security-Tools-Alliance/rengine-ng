@@ -296,6 +296,10 @@ class ScanActivitySerializer(serializers.ModelSerializer):
 		"""Format task name for display"""
 		task_name = scan_activity.name
 		
+		# If title is set and different from default name, use it (e.g. for Nuclei severity)
+		if scan_activity.title and scan_activity.title != task_name.replace('_', ' ').capitalize():
+			return scan_activity.title
+		
 		task_display_names = {
 			'subdomain_discovery': 'Subdomain Discovery',
 			'osint': 'OSINT Gathering',
@@ -307,6 +311,7 @@ class ScanActivitySerializer(serializers.ModelSerializer):
 			'screenshot': 'Taking Screenshots',
 			'vulnerability_scan': 'Vulnerability Scanning',
 			'nuclei_scan': 'Nuclei Scanning',
+			'nuclei_individual_severity_module': 'Nuclei Scanning',
 			'waf_detection': 'WAF Detection',
 			'dir_file_fuzz': 'Directory Fuzzing',
 			'dalfox_xss_scan': 'XSS Scanning',
