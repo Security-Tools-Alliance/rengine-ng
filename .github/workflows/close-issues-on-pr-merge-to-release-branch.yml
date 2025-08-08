@@ -11,15 +11,84 @@ jobs:
     if: github.event.pull_request.merged == true && startsWith(github.ref, 'refs/heads/release/')
     permissions:
       issues: write
+      contents: read
     steps:
-      - name: Extract issue number
-        id: extract_issue_number
+      - name: Extract and close all linked issues
         run: |
-          issue_number=$(echo "${{ github.event.pull_request.body }}" | grep -oE '#[0-9]+' | head -n 1 | tr -d '#')
-          echo "ISSUE_NUMBER=$issue_number" >> $GITHUB_ENV
-
-      - name: Close linked issues
-        uses: peter-evans/close-issue@v3
-        with:
-          issue-number: ${{ env.ISSUE_NUMBER }}
-          comment: "This issue is being closed because the related PR has been merged into a release branch."
+          # Get linked issues using GitHub's GraphQL API
+          # This matches exactly what GitHub shows in "Successfully merging this pull request may close these issues"
+          
+          echo "Fetching GitHub-linked issues..."
+          
+          # Use GraphQL to get the exact same data GitHub shows in the UI
+          linked_issues=$(curl -s -X POST \
+            -H "Accept: application/vnd.github.v4+json" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -d '{
+              "query": "query($owner: String!, $repo: String!, $number: Int!) { 
+                repository(owner: $owner, name: $repo) { 
+                  pullRequest(number: $number) { 
+                    closingIssuesReferences(first: 100) { 
+                      nodes { 
+                        number 
+                      } 
+                    } 
+                  } 
+                } 
+              }",
+              "variables": {
+                "owner": "${{ github.repository_owner }}",
+                "repo": "${{ github.event.repository.name }}",
+                "number": ${{ github.event.pull_request.number }}
+              }
+            }' \
+            https://api.github.com/graphql)
+          
+          # Extract issue numbers from GraphQL response
+          issue_numbers=$(echo "$linked_issues" | jq -r '.data.repository.pullRequest.closingIssuesReferences.nodes[].number // empty' | sort -u)
+          
+          if [ -z "$issue_numbers" ]; then
+            echo "No linked issues found that would be closed by GitHub's automatic linking"
+            exit 0
+          fi
+          
+          echo "Found GitHub-linked issues: $issue_numbers"
+          
+          # Close each issue individually
+          for issue_number in $issue_numbers; do
+            if [ -n "$issue_number" ]; then
+              echo "Closing issue #$issue_number"
+              
+              # Close the issue
+              close_response=$(curl -s -w "%{http_code}" -X PATCH \
+                -H "Accept: application/vnd.github.v3+json" \
+                -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                -H "X-GitHub-Api-Version: 2022-11-28" \
+                "https://api.github.com/repos/${{ github.repository }}/issues/$issue_number" \
+                -d '{"state":"closed"}')
+              
+              close_http_code="${close_response: -3}"
+              
+              if [ "$close_http_code" = "200" ]; then
+                echo "✅ Successfully closed issue #$issue_number"
+                
+                # Add a comment to explain why the issue was closed
+                comment_response=$(curl -s -w "%{http_code}" -X POST \
+                  -H "Accept: application/vnd.github.v3+json" \
+                  -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                  -H "X-GitHub-Api-Version: 2022-11-28" \
+                  "https://api.github.com/repos/${{ github.repository }}/issues/$issue_number/comments" \
+                  -d "{\"body\":\"This issue is being closed because the related PR #${{ github.event.pull_request.number }} has been merged into a release branch.\"}")
+                
+                comment_http_code="${comment_response: -3}"
+                
+                if [ "$comment_http_code" = "201" ]; then
+                  echo "✅ Added comment to issue #$issue_number"
+                else
+                  echo "⚠️ Failed to add comment to issue #$issue_number (HTTP $comment_http_code)"
+                fi
+              else
+                echo "❌ Failed to close issue #$issue_number (HTTP $close_http_code)"
+              fi
+            fi
+          done
