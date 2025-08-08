@@ -1,13 +1,12 @@
 # Global vars for all tools
 #
 # Custom header - FFUF, Nuclei, Dalfox, CRL Fuzz, HTTPx, Fetch URL (Hakrawler, Katana, Gospider)
-# custom_header: {
+# 'custom_header': {
 #   'Cookie':'Test',
 #   'User-Agent': 'Mozilla/5.0',
 #   'Custom-Header': 'My custom header'
 # }
 # 'user_agent': ''                    # Dalfox only
-# 'enable_http_crawl': true           # All tools
 # 'timeout': 10                       # Subdomain discovery, Screenshot, Port scan, FFUF, Nuclei                       
 # 'threads': 30                       # All tools
 # 'rate_limit': 150                   # Port scan, FFUF, Nuclei
@@ -16,7 +15,6 @@
 
 subdomain_discovery: {
   'uses_tools': ['subfinder', 'ctfr', 'sublist3r', 'tlsx', 'oneforall', 'netlas'],  # amass-passive, amass-active, All
-  'enable_http_crawl': true,
   'threads': 30,
   'timeout': 5,
   # 'use_subfinder_config': false,
@@ -29,10 +27,17 @@ http_crawl: {
   #   'User-Agent': 'Mozilla/5.0'
   # },
   # 'threads': 30,
-  # 'follow_redirect': false
+  # 'follow_redirect': false,
+  # Precrawl configuration - controls which ports are tested during initial crawl
+  # 'precrawl_ports': [80, 443, 8080, 8081, 8082, 8443, 3000, 3001, 5000, 9000],  # Common ports (always tested)
+  # 'precrawl_uncommon_ports': false,  # Set to true to also test uncommon ports (81-55672)
+  # 'precrawl_all_ports': false,       # Set to true to test all ports (common + uncommon), overrides precrawl_uncommon_ports
+  # Batch size for processing URLs
+  # Smaller batches = more granular control, better error handling
+  # Larger batches = potentially faster but higher memory usage and risk of overwhelming the system
+  # 'precrawl_batch_size': 350
 }
 port_scan: {
-  'enable_http_crawl': true,
   'timeout': 5,
   # 'exclude_ports': [],
   # 'exclude_subdomains': [],
@@ -79,7 +84,6 @@ dir_file_fuzz: {
   #   'Custom-Header': 'My custom header'
   # },
   'auto_calibration': true,
-  'enable_http_crawl': true,
   'rate_limit': 150,
   'extensions': [],
   # 'extensions': ['html', 'php','git','yaml','conf','cnf','config','gz','env','log','db','mysql','bak','asp','aspx','txt','conf','sql','json','yml','pdf'],
@@ -102,7 +106,6 @@ fetch_url: {
   'remove_duplicate_endpoints': true,
   'duplicate_fields': ['content_length', 'page_title'],
   'follow_redirect': false,
-  'enable_http_crawl': true,
   'gf_patterns': ['debug_logic', 'idor', 'interestingEXT', 'interestingparams', 'interestingsubs', 'lfi', 'rce', 'redirect', 'sqli', 'ssrf', 'ssti', 'xss'],
   'ignore_file_extensions': ['png', 'jpg', 'jpeg', 'gif', 'mp4', 'mpeg', 'mp3'],
   'threads': 30,
@@ -118,7 +121,6 @@ vulnerability_scan: {
   'run_dalfox': false,
   'run_crlfuzz': false,
   'run_s3scanner': false,
-  'enable_http_crawl': true,
   'concurrency': 50,
   'intensity': 'normal',
   'rate_limit': 150,
@@ -134,10 +136,8 @@ vulnerability_scan: {
   }
 }
 waf_detection: {
-  'enable_http_crawl': true
 }
 screenshot: {
-  'enable_http_crawl': true,
   'intensity': 'normal',
   'timeout': 10,
   'threads': 40

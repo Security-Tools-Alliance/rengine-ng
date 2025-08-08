@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 
 from reNgine.init import first_run
-from reNgine.utilities import RengineTaskFormatter
+from reNgine.utilities.logging import RengineTaskFormatter
 
 env = environ.FileAwareEnv()
 
@@ -45,7 +45,6 @@ DEBUG = env.bool('UI_DEBUG', default=False)
 DOMAIN_NAME = env('DOMAIN_NAME', default='localhost:8000')
 TEMPLATE_DEBUG = env.bool('TEMPLATE_DEBUG', default=False)
 SECRET_FILE = os.path.join(RENGINE_HOME, 'secret')
-DEFAULT_ENABLE_HTTP_CRAWL = env.bool('DEFAULT_ENABLE_HTTP_CRAWL', default=False)
 DEFAULT_RATE_LIMIT = env.int('DEFAULT_RATE_LIMIT', default=150) # requests / second
 DEFAULT_HTTP_TIMEOUT = env.int('DEFAULT_HTTP_TIMEOUT', default=5) # seconds
 DEFAULT_RETRIES = env.int('DEFAULT_RETRIES', default=1)
@@ -356,9 +355,7 @@ LOGGING = {
 
 # debug
 def show_toolbar(request):
-    if UI_DEBUG:
-        return True
-    return False
+    return bool(UI_DEBUG)
 
 if UI_DEBUG:
     DEBUG_TOOLBAR_CONFIG = {

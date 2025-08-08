@@ -119,6 +119,8 @@ SubScan History
             <span class="badge badge-soft-success">Successful</span>
             {% elif subscan.status == 3 %}
             <span class="badge badge-soft-danger">Aborted</span>
+            {% elif subscan.status == 4 %}
+            <span class="badge badge-soft-info">Finalizing</span>
             {% else %}
             <span class="badge badge-soft-danger">Unknown</span>
             {% endif %}

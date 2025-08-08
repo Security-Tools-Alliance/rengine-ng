@@ -2,13 +2,12 @@ const subdomain_datatable_columns = [
   {'data': 'id'},
   {'data': 'name'},
   {'data': 'endpoint_count'},
-  {'data': 'endpoint_count'},
+  {'data': 'vuln_count'},
   {'data': 'http_status'},
   {'data': 'page_title'},
   {'data': 'ip_addresses'},
   {'data': 'ip_addresses'},
   {'data': 'content_length', 'searchable': false},
-  {'data': 'screenshot_path', 'searchable': false},
   {'data': 'response_time'},
   {'data': 'technologies'},
   {'data': 'http_url'},
@@ -23,11 +22,11 @@ const subdomain_datatable_columns = [
   {'data': 'is_important'},
   {'data': 'webserver'},
   {'data': 'content_type'},
-  {'data': 'id'},
+  {'data': 'action', 'orderable': false, 'searchable': false},
   {'data': 'directories_count'},
   {'data': 'subscan_count'},
   {'data': 'waf'},
-  {'data': 'attack_surface'},
+  {'data': 'attack_surface'}
 ];
 
 const subdomain_datatable_page_length = 50;
@@ -43,28 +42,42 @@ const subdomain_oLanguage = {
 };
 
 function subdomain_datatable_col_visibility(subdomain_datatables){
-  if(!$('#sub_http_status_filter_checkbox').is(":checked")){
-    subdomain_datatables.column(get_datatable_col_index('http_status', subdomain_datatable_columns)).visible(false);
+  
+  // Centralized handler for column visibility toggling
+  function setupColumnVisibilityToggle(checkboxSelector, columnName, storageKey) {
+    // Set initial visibility based on checkbox state
+    const isChecked = $(checkboxSelector).is(":checked");
+    subdomain_datatables.column(get_datatable_col_index(columnName, subdomain_datatable_columns)).visible(isChecked);
+    
+    // Set up change handler
+    $(checkboxSelector).change(function() {
+      const visible = $(this).is(':checked');
+      subdomain_datatables.column(get_datatable_col_index(columnName, subdomain_datatable_columns)).visible(visible);
+      if (storageKey) {
+        window.localStorage.setItem(storageKey, visible);
+      }
+    });
   }
-  if(!$('#sub_page_title_filter_checkbox').is(":checked")){
-    subdomain_datatables.column(get_datatable_col_index('page_title', subdomain_datatable_columns)).visible(false);
+
+  // Special handler for ports column (uses ip_addresses + 1)
+  function setupPortsColumnToggle() {
+    const isChecked = $('#sub_ports_filter_checkbox').is(":checked");
+    subdomain_datatables.column(get_datatable_col_index('ip_addresses', subdomain_datatable_columns) + 1).visible(isChecked);
+    
+    $('input[name=sub_ports_filter_checkbox]').change(function() {
+      const visible = $(this).is(':checked');
+      subdomain_datatables.column(get_datatable_col_index('ip_addresses', subdomain_datatable_columns) + 1).visible(visible);
+      window.localStorage.setItem('sub_ports_filter_checkbox', visible);
+    });
   }
-  if(!$('#sub_ip_filter_checkbox').is(":checked")){
-    subdomain_datatables.column(get_datatable_col_index('ip_addresses', subdomain_datatable_columns)).visible(false);
-  }
-  if(!$('#sub_ports_filter_checkbox').is(":checked")){
-    subdomain_datatables.column(get_datatable_col_index('ip_addresses', subdomain_datatable_columns)).visible(false);
-  }
-  if(!$('#sub_content_length_filter_checkbox').is(":checked")){
-    subdomain_datatables.column(get_datatable_col_index('content_length', subdomain_datatable_columns)).visible(false);
-  }
-  if(!$('#sub_http_status_filter_checkbox').is(":checked")){
-    subdomain_datatables.column(get_datatable_col_index('http_status', subdomain_datatable_columns)).visible(false);
-  }
-  if(!$('#sub_response_time_filter_checkbox').is(":checked")){
-    subdomain_datatables.column(get_datatable_col_index('response_time', subdomain_datatable_columns)).visible(false);
-  }
-  if(!$('#sub_screenshot_filter_checkbox').is(":checked")){
-    subdomain_datatables.column(get_datatable_col_index('screenshot_path', subdomain_datatable_columns)).visible(false);
-  }
+
+  // Set up all column visibility toggles
+  setupColumnVisibilityToggle('input[name=sub_http_status_filter_checkbox]', 'http_status', 'sub_http_status_filter_checkbox');
+  setupColumnVisibilityToggle('input[name=sub_page_title_filter_checkbox]', 'page_title', 'sub_page_title_filter_checkbox');
+  setupColumnVisibilityToggle('input[name=sub_ip_filter_checkbox]', 'ip_addresses', 'sub_ip_filter_checkbox');
+  setupColumnVisibilityToggle('input[name=sub_content_length_filter_checkbox]', 'content_length', 'sub_content_length_filter_checkbox');
+  setupColumnVisibilityToggle('input[name=sub_response_time_filter_checkbox]', 'response_time', 'sub_response_time_filter_checkbox');
+  
+  // Handle ports column separately (special case)
+  setupPortsColumnToggle();
 }

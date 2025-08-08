@@ -19,10 +19,15 @@ from django.db.models.functions import Lower
 
 from api.serializers import IpSerializer
 from reNgine.celery import app
-from reNgine.common_func import logger, get_interesting_subdomains, create_scan_object, safe_int_cast
+from reNgine.utilities.database import create_scan_activity, create_scan_object
+from reNgine.utilities.subdomain import get_interesting_subdomains
+from reNgine.utilities.data import safe_int_cast
+from celery.utils.log import get_task_logger
+
+logger = get_task_logger(__name__)
 from reNgine.settings import RENGINE_RESULTS
 from reNgine.definitions import ABORTED_TASK, SUCCESS_TASK, RUNNING_TASK, LIVE_SCAN, SCHEDULED_SCAN, PERM_INITATE_SCANS_SUBSCANS, PERM_MODIFY_SCAN_RESULTS, PERM_MODIFY_SCAN_REPORT, PERM_MODIFY_SYSTEM_CONFIGURATIONS, FOUR_OH_FOUR_URL
-from reNgine.tasks import create_scan_activity, initiate_scan, run_command
+from reNgine.tasks import initiate_scan, run_command
 from scanEngine.models import EngineType, VulnerabilityReportSetting
 from startScan.models import ScanHistory, SubScan, Email, Employee, Subdomain, EndPoint, Vulnerability, VulnerabilityTags, IpAddress, CountryISO, ScanActivity, CveId, CweId
 from targetApp.models import Domain, Organization
@@ -62,7 +67,17 @@ def detail_scan(request, id, slug):
     employees = Employee.objects.filter(employees__in=[scan])
     subdomains = Subdomain.objects.filter(scan_history=scan)
     endpoints = EndPoint.objects.filter(scan_history=scan)
-    vulns = Vulnerability.objects.filter(scan_history=scan)
+    
+    # Optimize vulnerability queries with prefetch_related to avoid N+1 queries
+    vulns = Vulnerability.objects.filter(scan_history=scan).prefetch_related(
+        'cve_ids',
+        'cwe_ids', 
+        'tags',
+        'subdomain',
+        'endpoint',
+        'target_domain'
+    )
+    
     vulns_tags = VulnerabilityTags.objects.filter(vuln_tags__in=vulns)
     ip_addresses = IpAddress.objects.filter(
         ip_addresses__in=subdomains
@@ -1031,8 +1046,7 @@ def create_report(request, slug, id):
             vuln.impact = mark_safe(vuln.impact)
         if vuln.remediation:
             vuln.remediation = mark_safe(vuln.remediation)
-        if vuln.references:
-            vuln.references = mark_safe(vuln.references)
+        # Note: references are now handled by the parse_references template filter
 
     template = get_template('report/template.html')
     html = template.render(data)

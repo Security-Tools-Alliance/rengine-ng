@@ -47,7 +47,7 @@
       with increased threads.
     github_url: https://github.com/projectdiscovery/httpx
     license_url: https://github.com/projectdiscovery/httpx/blob/master/LICENSE.md
-    version_lookup_command: /go/bin/httpx -version
+    version_lookup_command: httpx -version
     update_command: go install -v github.com/projectdiscovery/httpx/cmd/httpx@latest
     install_command: go install -v github.com/projectdiscovery/httpx/cmd/httpx@latest
     version_match_regex: v(\d+\.)?(\d+\.)?(\*|\d+)
@@ -142,7 +142,7 @@
       and ReverseDNS.
     github_url: https://github.com/aboul3la/Sublist3r
     license_url: https://github.com/aboul3la/Sublist3r/blob/master/LICENSE
-    version_lookup_command: null
+    version_lookup_command: echo 'v1.1'
     update_command: git pull
     install_command: git clone https://github.com/aboul3la/Sublist3r.git
     version_match_regex: '[vV]*(\d+\.)?(\d+\.)?(\*|\d+)'
@@ -160,7 +160,7 @@
       This is basically a simple implementation of the awesome Gocolly library.
     github_url: https://github.com/hakluke/hakrawler
     license_url: https://github.com/hakluke/hakrawler/blob/master/LICENSE
-    version_lookup_command: null
+    version_lookup_command: echo 'v2.1'
     update_command: go install -v github.com/hakluke/hakrawler@latest
     install_command: go install -v github.com/hakluke/hakrawler@latest
     version_match_regex: '[vV]*(\d+\.)?(\d+\.)?(\*|\d+)'
@@ -198,7 +198,7 @@
       names, subdomains, IPs and URLs using multiple public data sources.
     github_url: https://github.com/laramies/theHarvester
     license_url: https://github.com/laramies/theHarvester/blob/master/README/LICENSES
-    version_lookup_command: cat /home/rengine/tools/.github/theHarvester/theHarvester/lib/version.py
+    version_lookup_command: cat /home/rengine/.local/share/pipx/venvs/theharvester/lib/python3.10/site-packages/theHarvester/lib/version.py
     update_command: git pull
     install_command: git clone https://github.com/laramies/theHarvester
     version_match_regex: \b\d+\.\d+\.\d+\b

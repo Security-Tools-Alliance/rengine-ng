@@ -50,11 +50,11 @@ NMAP_SCRIPT = 'nmap_script'
 NMAP_SCRIPT_ARGS = 'nmap_script_args'
 NAABU_PASSIVE = 'passive'
 NAABU_RATE = 'rate'
-NUCLEI_CUSTOM_TEMPLATE = 'custom_templates'
 NUCLEI_TAGS = 'tags'
-NUCLEI_TEMPLATE = 'templates'
 NUCLEI_SEVERITY = 'severities'
 NUCLEI_CONCURRENCY = 'concurrency'
+NUCLEI_TEMPLATES = 'templates'
+NUCLEI_CUSTOM_TEMPLATES = 'custom_templates'
 OSINT = 'osint'
 OSINT_DOCUMENTS_LIMIT = 'documents_limit'
 OSINT_DISCOVER = 'discover'
@@ -70,7 +70,6 @@ RETRIES = 'retries'
 SCREENSHOT = 'screenshot'
 SUBDOMAIN_DISCOVERY = 'subdomain_discovery'
 STOP_ON_ERROR = 'stop_on_error'
-ENABLE_HTTP_CRAWL = 'enable_http_crawl'
 THREADS = 'threads'
 TIMEOUT = 'timeout'
 USE_AMASS_CONFIG = 'use_amass_config'
@@ -194,6 +193,13 @@ SUBDOMAIN_SCAN_DEFAULT_TOOLS = ['subfinder', 'ctfr', 'sublist3r', 'tlsx']
 ENDPOINT_SCAN_DEFAULT_TOOLS = ['gospider']
 ENDPOINT_SCAN_DEFAULT_DUPLICATE_FIELDS = ['content_length', 'page_title']
 
+# http crawl
+HTTP_THREADS = 30
+HTTP_FOLLOW_REDIRECT = False
+HTTP_PRE_CRAWL_UNCOMMON_PORTS = False
+HTTP_PRE_CRAWL_ALL_PORTS = False
+HTTP_PRE_CRAWL_BATCH_SIZE = 350
+
 
 ###############################################################################
 # Logger DEFINITIONS
@@ -244,21 +250,24 @@ FAILED_TASK = 0
 RUNNING_TASK = 1
 SUCCESS_TASK = 2
 ABORTED_TASK = 3
+RUNNING_BACKGROUND = 4
 
 CELERY_TASK_STATUS_MAP = {
     INITIATED_TASK: 'INITITATED',
     FAILED_TASK: 'FAILED',
     RUNNING_TASK: 'RUNNING',
     SUCCESS_TASK: 'SUCCESS',
-    ABORTED_TASK: 'ABORTED'
+    ABORTED_TASK: 'ABORTED',
+    RUNNING_BACKGROUND: 'RUNNING_BACKGROUND'
 }
 
 CELERY_TASK_STATUSES = (
-    (INITIATED_TASK, INITIATED_TASK),
-    (FAILED_TASK, FAILED_TASK),
-    (RUNNING_TASK, RUNNING_TASK),
-    (SUCCESS_TASK, SUCCESS_TASK),
-    (ABORTED_TASK, ABORTED_TASK)
+    (INITIATED_TASK, "Pending"),
+    (FAILED_TASK, "Queued"), 
+    (RUNNING_TASK, "Running"),
+    (SUCCESS_TASK, "Completed"),
+    (ABORTED_TASK, "Failed"),
+    (RUNNING_BACKGROUND, "Running Background")
 )
 DYNAMIC_ID = -1
 
@@ -266,8 +275,13 @@ DYNAMIC_ID = -1
 # Uncommon Ports
 # Source: https://github.com/six2dez/reconftw/blob/main/reconftw.cfg
 ###############################################################################
+COMMON_WEB_PORTS = [
+    80, 443,
+    8000, 8001, 8080, 8081, 8082, 8443,
+    3000, 3001, 5000, 9000
+]
 UNCOMMON_WEB_PORTS = [
-    81, 82, 83, 84, 85, 86, 87, 88, 89,
+    81, 82, 83, 84, 85, 86, 87, 88, 89, 90,
     300,
     591,
     593,
@@ -278,7 +292,7 @@ UNCOMMON_WEB_PORTS = [
     1311,
     2082, 2083, 2086, 2087, 2095, 2096,
     2480,
-    3000, 3001, 3002, 3003, 3004, 3005,
+    3002, 3003, 3004, 3005,
     3128,
     3333,
     4000, 4001, 4002, 4003, 4004, 4005,
@@ -289,7 +303,7 @@ UNCOMMON_WEB_PORTS = [
     4711,
     4712,
     4993,
-    5000, 5001, 5002, 5003, 5004, 5005,
+    5001, 5002, 5003, 5004, 5005,
     5104,
     5108,
     5280,
@@ -300,12 +314,12 @@ UNCOMMON_WEB_PORTS = [
     7000, 7001, 7002,
     7396,
     7474,
-    8000, 8001, 8002, 8003, 8004, 8005, 8006, 8007, 8008, 8009,
+    8002, 8003, 8004, 8005, 8006, 8007, 8008, 8009,
     8014,
     8042,
     8060,
     8069,
-    8080, 8081, 8082, 8083, 8084, 8085, 8086, 8087, 8088, 8089,
+    8083, 8084, 8085, 8086, 8087, 8088, 8089,
     8090, 8091, 8092, 8093, 8094, 8095, 8096, 8097, 8098, 8099,
     8100,
     8118,
@@ -318,7 +332,7 @@ UNCOMMON_WEB_PORTS = [
     8281,
     8333,
     8337,
-    8443, 8444, 8445, 8446, 8447, 8448, 8449,
+    8444, 8445, 8446, 8447, 8448, 8449,
     8500,
     8800,
     8834,
@@ -326,7 +340,7 @@ UNCOMMON_WEB_PORTS = [
     8888,
     8889,
     8983,
-    9000, 9001, 9002, 9003, 9004, 9005,
+    9001, 9002, 9003, 9004, 9005,
     9043,
     9060,
     9080,

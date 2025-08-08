@@ -8,7 +8,6 @@ custom_header: {
   'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:126.0) Gecko/20100101 Firefox/126.0',
 }
 # 'user_agent': ''                    # Dalfox only
-# 'enable_http_crawl': true           # All tools
 # 'timeout': 10                       # Subdomain discovery, Screenshot, Port scan, FFUF, Nuclei                       
 # 'threads': 30                       # All tools
 # 'rate_limit': 150                   # Port scan, FFUF, Nuclei
@@ -19,7 +18,6 @@ fetch_url: {
   'uses_tools': ['gospider', 'hakrawler', 'waybackurls', 'katana', 'gau'],
   'remove_duplicate_endpoints': true,
   'duplicate_fields': ['content_length', 'page_title'],
-  'enable_http_crawl': true,
   'gf_patterns': ['debug_logic', 'idor', 'interestingEXT', 'interestingparams', 'interestingsubs', 'lfi', 'rce', 'redirect', 'sqli', 'ssrf', 'ssti', 'xss'],
   'ignore_file_extensions': ['png', 'jpg', 'jpeg', 'gif', 'mp4', 'mpeg', 'mp3'],
   'threads': 30

@@ -1,14 +1,26 @@
 import json
+import os
 
 from celery import Task
 from celery.utils.log import get_task_logger
 from celery.worker.request import Request
 from django.utils import timezone
 from redis import Redis
-from reNgine.common_func import (fmt_traceback, get_output_file_name,
-								 get_task_cache_key, get_traceback_path)
-from reNgine.definitions import *
-from reNgine.settings import *
+from reNgine.utilities.misc import fmt_traceback, get_traceback_path
+from reNgine.utilities.notification import get_output_file_name
+from reNgine.utilities.database import get_task_cache_key
+from reNgine.definitions import (
+	CELERY_TASK_STATUS_MAP,
+	FAILED_TASK,
+	RUNNING_TASK,
+	SUCCESS_TASK
+)
+from reNgine.settings import (
+	RENGINE_CACHE_ENABLED,
+	RENGINE_RECORD_ENABLED,
+	RENGINE_RAISE_ON_ERROR,
+	RENGINE_RESULTS
+)
 from scanEngine.models import EngineType
 from startScan.models import ScanActivity, ScanHistory, SubScan
 
@@ -62,7 +74,7 @@ class RengineTask(Task):
 
 		# Get reNgine context
 		ctx = kwargs.get('ctx', {})
-		self.track = ctx.pop('track', True)
+		self.track = ctx.get('track', True)
 		self.scan_id = ctx.get('scan_history_id')
 		self.subscan_id = ctx.get('subscan_id')
 		self.engine_id = ctx.get('engine_id')
@@ -110,7 +122,10 @@ class RengineTask(Task):
 							'http_crawl',
 							'scan_http_ports',
 							'run_nmap',
-							'nmap'
+							'nmap',
+							'pre_crawl',
+							'intermediate_crawl',
+							'post_crawl'
 					]
 
 					# Skip if task is not part of engine and not exempted
@@ -125,10 +140,15 @@ class RengineTask(Task):
 
 			# Create ScanActivity for this task and send start scan notifs
 			if self.track:
+				# Build task identifier with description for better clarity
+				task_identifier = f'{self.task_name}'
+				if self.description and self.description != self.task_name.replace('_', ' ').capitalize():
+					task_identifier += f' ({self.description})'
+				
 				if self.domain:
-					logger.warning(f'Task {self.task_name} for {self.subdomain.name if self.subdomain else self.domain.name} is RUNNING')
+					logger.warning(f'Task {task_identifier} for {self.subdomain.name if self.subdomain else self.domain.name} is RUNNING')
 				else:
-					logger.warning(f'Task {self.task_name} is RUNNING')
+					logger.warning(f'Task {task_identifier} is RUNNING')
 				self.create_scan_activity()
 
 		if RENGINE_CACHE_ENABLED:
@@ -138,10 +158,15 @@ class RengineTask(Task):
 			if result and result != b'null':
 				self.status = SUCCESS_TASK
 				if RENGINE_RECORD_ENABLED and self.track:
+					# Build task identifier with description for better clarity
+					task_identifier = f'{self.task_name}'
+					if self.description and self.description != self.task_name.replace('_', ' ').capitalize():
+						task_identifier += f' ({self.description})'
+					
 					if self.domain:
-						logger.warning(f'Task {self.task_name} for {self.subdomain.name if self.subdomain else self.domain.name} status is SUCCESS (CACHED)')
+						logger.warning(f'Task {task_identifier} for {self.subdomain.name if self.subdomain else self.domain.name} status is SUCCESS (CACHED)')
 					else:
-						logger.warning(f'Task {self.task_name} status is SUCCESS (CACHED)')
+						logger.warning(f'Task {task_identifier} status is SUCCESS (CACHED)')
 					self.update_scan_activity()
 				return json.loads(result)
 
@@ -172,12 +197,18 @@ class RengineTask(Task):
 			self.write_results()
 
 			if RENGINE_RECORD_ENABLED and self.track:
+				# Build task identifier with description for better clarity
+				task_identifier = f'{self.task_name}'
+				if self.description and self.description != self.task_name.replace('_', ' ').capitalize():
+					task_identifier += f' ({self.description})'
+				
 				if self.domain:
-					msg = f'Task {self.task_name} for {self.subdomain.name if self.subdomain else self.domain.name} status is {self.status_str}'
+					msg = f'Task {task_identifier} for {self.subdomain.name if self.subdomain else self.domain.name} status is {self.status_str}'
 				else:
-					msg = f'Task {self.task_name} status is {self.status_str}'
+					msg = f'Task {task_identifier} status is {self.status_str}'
 				msg += f' | Error: {self.error}' if self.error else ''
 				logger.warning(msg)
+				
 				self.update_scan_activity()
 
 		# Set task result in cache if task was successful
@@ -202,9 +233,15 @@ class RengineTask(Task):
 			logger.warning(f'Wrote {self.task_name} results to {self.output_path}')
 
 	def create_scan_activity(self):
+		# Build task identifier with description for better clarity
+		task_identifier = f'{self.task_name}'
+		if self.description and self.description != self.task_name.replace('_', ' ').capitalize():
+			task_identifier += f' ({self.description})'
+		
 		if not self.track:
 			return
 		celery_id = self.request.id
+		
 		self.activity = ScanActivity(
 			name=self.task_name,
 			title=self.description,
@@ -213,6 +250,7 @@ class RengineTask(Task):
 			celery_id=celery_id)
 		self.activity.save()
 		self.activity_id = self.activity.id
+		
 		if self.scan:
 			self.activity.scan_of = self.scan
 			self.activity.save()
@@ -226,6 +264,11 @@ class RengineTask(Task):
 		self.notify()
 
 	def update_scan_activity(self):
+		# Build task identifier with description for better clarity
+		task_identifier = f'{self.task_name}'
+		if self.description and self.description != self.task_name.replace('_', ' ').capitalize():
+			task_identifier += f' ({self.description})'
+		
 		if not self.track:
 			return
 
@@ -234,11 +277,27 @@ class RengineTask(Task):
 		if self.error and len(self.error) > 300:
 			error_message = self.error[:288] + '...[trimmed]'
 
-		self.activity.status = self.status
-		self.activity.error_message = error_message
-		self.activity.traceback = self.traceback
-		self.activity.time = timezone.now()
-		self.activity.save()
+		# Use celery_id to find the correct activity (more reliable than self.activity reference)
+		celery_id = getattr(self.request, 'id', 'NO_ID')
+		try:
+			fresh_activity = ScanActivity.objects.get(celery_id=celery_id)
+			
+			# Update the fresh instance
+			fresh_activity.status = self.status
+			fresh_activity.error_message = error_message
+			fresh_activity.traceback = self.traceback
+			fresh_activity.time = timezone.now()
+			fresh_activity.save()
+			
+			# Update our local reference
+			self.activity = fresh_activity
+			self.activity_id = fresh_activity.id
+			
+		except ScanActivity.DoesNotExist:
+			logger.error(f'Task {self.task_name} - No activity found with celery_id {celery_id}')
+		except Exception as e:
+			logger.error(f'Task {self.task_name} - Failed to update activity for celery_id {celery_id}: {e}')
+			
 		self.notify()
 
 	def notify(self, name=None, severity=None, fields={}, add_meta_info=True):

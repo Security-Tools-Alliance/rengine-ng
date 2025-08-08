@@ -8,7 +8,6 @@ custom_header: {
   'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:126.0) Gecko/20100101 Firefox/126.0',
 }
 # 'user_agent': ''                    # Dalfox only
-# 'enable_http_crawl': true           # All tools
 # 'timeout': 10                       # Subdomain discovery, Screenshot, Port scan, FFUF, Nuclei                       
 # 'threads': 30                       # All tools
 # 'rate_limit': 150                   # Port scan, FFUF, Nuclei
@@ -25,13 +24,12 @@ vulnerability_scan: {
   'run_dalfox': false,
   'run_crlfuzz': true,
   'run_s3scanner': true,
-  'enable_http_crawl': true,
   'concurrency': 50,
   'intensity': 'normal',
   'rate_limit': 150,
   'retries': 1,
   'timeout': 5,
-  'fetch_gpt_report': true,
+  'fetch_llm_report': false,
   'nuclei': {
     'use_nuclei_config': false,
     'severities': ['unknown', 'info', 'low', 'medium', 'high', 'critical'],

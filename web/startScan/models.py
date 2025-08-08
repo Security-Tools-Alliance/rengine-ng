@@ -10,7 +10,7 @@ from django.utils import timezone
 from reNgine.definitions import (CELERY_TASK_STATUSES,
 								 NUCLEI_REVERSE_SEVERITY_MAP,
 								 ENGINE_DISPLAY_NAMES)
-from reNgine.utilities import *
+from reNgine.utilities.time import get_time_taken
 from reNgine.llm.utils import convert_markdown_to_html
 from scanEngine.models import EngineType
 from targetApp.models import Domain
@@ -147,14 +147,66 @@ class ScanHistory(models.Model):
 		)
 
 	def get_progress(self):
-		"""Formulae to calculate count number of true things to do, for http
-		crawler, it is always +1 divided by total scan activity associated - 2
-		(start and stop).
+		"""Calculate scan progress percentage based on completed steps vs total steps.
 		"""
+		from reNgine.definitions import SUCCESS_TASK
+		
 		number_of_steps = len(self.tasks) if self.tasks else 0
-		steps_done = len(self.scanactivity_set.all())
-		if steps_done and number_of_steps:
-			return round((number_of_steps / (steps_done)) * 100, 2)
+		if number_of_steps == 0:
+			return 0
+		
+		# Get unique completed task names (avoid counting duplicates if tasks are retried)
+		completed_task_names = (
+			self.scanactivity_set
+			.filter(status=SUCCESS_TASK)
+			.values_list('name', flat=True)
+			.distinct()
+		)
+		steps_completed = len(completed_task_names)
+		
+		# Ensure we don't exceed 100%
+		progress = min((steps_completed / number_of_steps) * 100, 100)
+		return round(progress, 2)
+
+	def get_current_task(self):
+		"""Get the current running task name, formatted for display.
+		"""
+		from reNgine.definitions import RUNNING_TASK
+		
+		# Get the most recent running task
+		current_activity = (
+			self.scanactivity_set
+			.filter(status=RUNNING_TASK)
+			.order_by('-time')
+			.first()
+		)
+		
+		if current_activity:
+			# Format task name for display
+			task_name = current_activity.name
+			
+			# Map technical names to user-friendly names
+			task_display_names = {
+				'subdomain_discovery': 'Subdomain Discovery',
+				'osint': 'OSINT Gathering',
+				'pre_crawl': 'Pre-crawl Analysis',
+				'port_scan': 'Port Scanning',
+				'fetch_url': 'URL Discovery',
+				'intermediate_crawl': 'Intermediate Crawl',
+				'http_crawl': 'HTTP Crawling',
+				'screenshot': 'Taking Screenshots',
+				'vulnerability_scan': 'Vulnerability Scanning',
+				'nuclei_scan': 'Nuclei Scanning',
+				'waf_detection': 'WAF Detection',
+				'dir_file_fuzz': 'Directory Fuzzing',
+				'dalfox_xss_scan': 'XSS Scanning',
+				'crlfuzz_scan': 'CRLF Injection Scan',
+				'post_crawl': 'Post-crawl Analysis'
+			}
+			
+			return task_display_names.get(task_name, task_name.replace('_', ' ').title())
+		
+		return None
 
 	def get_completed_ago(self):
 		if self.stop_scan_date:
@@ -189,7 +241,8 @@ class ScanHistory(models.Model):
 			pending=Count('id', filter=models.Q(scan_status=0)),
 			running=Count('id', filter=models.Q(scan_status=1)),
 			completed=Count('id', filter=models.Q(scan_status=2)),
-			failed=Count('id', filter=models.Q(scan_status=3))
+			failed=Count('id', filter=models.Q(scan_status=3)),
+			running_background=Count('id', filter=models.Q(scan_status=4))
 		)
 
 	@classmethod
@@ -242,7 +295,6 @@ class Subdomain(models.Model):
 	is_imported_subdomain = models.BooleanField(default=False)
 	is_important = models.BooleanField(default=False, null=True, blank=True)
 	http_url = models.CharField(max_length=10000, null=True, blank=True)
-	screenshot_path = models.CharField(max_length=1000, null=True, blank=True)
 	http_header_path = models.CharField(max_length=1000, null=True, blank=True)
 	discovered_date = models.DateTimeField(blank=True, null=True)
 	cname = models.CharField(max_length=5000, blank=True, null=True)
@@ -325,14 +377,30 @@ class Subdomain(models.Model):
 
 	@property
 	def get_vulnerabilities(self):
-		vulns = Vulnerability.objects.filter(subdomain__name=self.name)
+		vulns = Vulnerability.objects.filter(subdomain__name=self.name).prefetch_related(
+			'cve_ids',
+			'cwe_ids',
+			'tags',
+			'subdomain',
+			'endpoint',
+			'target_domain',
+			'scan_history'
+		)
 		if self.scan_history:
 			vulns = vulns.filter(scan_history=self.scan_history)
 		return vulns
 
 	@property
 	def get_vulnerabilities_without_info(self):
-		vulns = Vulnerability.objects.filter(subdomain__name=self.name).exclude(severity=0)
+		vulns = Vulnerability.objects.filter(subdomain__name=self.name).exclude(severity=0).prefetch_related(
+			'cve_ids',
+			'cwe_ids',
+			'tags',
+			'subdomain',
+			'endpoint',
+			'target_domain',
+			'scan_history'
+		)
 		if self.scan_history:
 			vulns = vulns.filter(scan_history=self.scan_history)
 		return vulns
@@ -523,10 +591,12 @@ class SubScan(models.Model):
 		"""Aggregate total subscans and status distribution"""
 		return queryset.aggregate(
 			total=Count('id'),
-			pending=Count('id', filter=models.Q(status=0)),
+			pending=Count('id', filter=models.Q(status=-1)),
 			running=Count('id', filter=models.Q(status=1)),
 			completed=Count('id', filter=models.Q(status=2)),
-			failed=Count('id', filter=models.Q(status=3))
+			failed=Count('id', filter=models.Q(status=0)),
+			aborted=Count('id', filter=models.Q(status=3)),
+			finalizing=Count('id', filter=models.Q(status=4))
 		)
 
 	@classmethod
@@ -593,6 +663,7 @@ class EndPoint(models.Model):
 	webserver = models.CharField(max_length=1000, blank=True, null=True)
 	is_default = models.BooleanField(null=True, blank=True, default=False)
 	matched_gf_patterns = models.CharField(max_length=10000, null=True, blank=True)
+	screenshot_path = models.CharField(max_length=1000, null=True, blank=True)
 	techs = models.ManyToManyField('Technology', related_name='techs', blank=True)
 	# used for subscans
 	endpoint_subscan_ids = models.ManyToManyField('SubScan', related_name='endpoint_subscan_ids', blank=True)
@@ -665,13 +736,6 @@ class VulnerabilityTags(models.Model):
 			nused=Count('vuln_tags', filter=Q(vuln_tags__in=vulnerabilities))
 		).order_by('-nused')[:limit]
 
-
-class VulnerabilityReference(models.Model):
-	id = models.AutoField(primary_key=True)
-	url = models.CharField(max_length=5000)
-
-	def __str__(self):
-		return self.url
 
 
 class CveId(models.Model):

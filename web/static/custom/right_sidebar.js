@@ -31,6 +31,13 @@ function getScanStatusSidebar(endpoint_url, endpoint_stop_scan_url, endpoint_sca
       $('#current_scan_count').html(`${scans['scanning'].length} Scans Currently Running`)
       for (var scan in scans['scanning']) {
         scan_object = scans['scanning'][scan];
+        
+        // Format current task display
+        let currentTaskDisplay = '';
+        if (scan_object.current_task) {
+          currentTaskDisplay = `<br><small class="text-muted font-weight-bold">${scan_object.current_task}</small>`;
+        }
+        
         $('#currently_scanning').append(`
           <div class="card border-primary border mini-card">
           <a href="/scan/${project}/${scan_object.id}" class="text-reset item-hovered">
@@ -39,6 +46,7 @@ function getScanStatusSidebar(endpoint_url, endpoint_stop_scan_url, endpoint_sca
           <span class="badge badge-soft-primary float-end">
           ${scan_object.current_progress}%
           </span>
+          ${currentTaskDisplay}
           </div>
           <div class="card-body mini-card-body">
           <p class="card-text">
@@ -122,15 +130,17 @@ function getScanStatusSidebar(endpoint_url, endpoint_stop_scan_url, endpoint_sca
         $('#current_task_count').html(`${tasks['running'].length} Tasks are currently running`)
         for (var task in tasks['running']) {
           var task_object = tasks['running'][task];
-          var task_name = get_task_name(task_object);
+          var task_name = task_object.formatted_task_name || 'Unknown Task';
+          var domain_name = task_object.domain_name || 'Unknown';
+          var engine_name = task_object.engine_name || 'Unknown';
           var bg_color = 'bg-soft-info';
           var status_badge = '<span class="float-end badge bg-info">Running</span>';
 
           $('#currently_running_tasks').append(`
             <div class="card border-primary border mini-card">
-            <a href="#" onclick="show_subscan_results('${endpoint_scan_status_url}', ${task_object['id']})" class="text-reset item-hovered">
+            <a href="/scan/${project}/${task_object.scan_id}" class="text-reset item-hovered">
             <div class="card-header bg-soft-primary text-primary mini-card-header">
-            ${task_name} on <b>${task_object.subdomain_name}</b> using engine <b>${htmlEncode(task_object.engine)}</b>
+            ${task_name} on <b>${domain_name}</b> using engine <b>${htmlEncode(engine_name)}</b>
             </div>
             <div class="card-body mini-card-body">
             <p class="card-text">
@@ -143,7 +153,6 @@ function getScanStatusSidebar(endpoint_url, endpoint_stop_scan_url, endpoint_sca
             </p>
             <div>
             </div>
-            <a href="#" onclick="stop_scan('${endpoint_stop_scan_url}', scan_id=null, subscan_id=${task_object.id}, reload_scan_bar=true, reload_location=false)" class="btn btn-xs btn-soft-danger waves-effect waves-light mt-1 float-end"><i class="fe-alert-triangle"></i> Stop</a>
             </div>
             </a>
             </div>
@@ -157,40 +166,38 @@ function getScanStatusSidebar(endpoint_url, endpoint_stop_scan_url, endpoint_sca
       if (tasks['completed'].length > 0){
         for (var task in tasks['completed']) {
           var task_object = tasks['completed'][task];
-          var task_name = get_task_name(task_object);
+          var task_name = task_object.formatted_task_name || 'Unknown Task';
+          var domain_name = task_object.domain_name || 'Unknown';
+          var engine_name = task_object.engine_name || 'Unknown';
           var error_message = '';
 
-          if (task_object.status == 0 ) {
-            color = 'danger';
-            bg_color = 'bg-soft-danger';
-            status_badge = '<span class="float-end badge bg-danger">Failed</span>';
-            error_message = `</br><span class="text-danger">Error: ${task_object.error_message}`;
+          if (task_object.status == 0) {
+            var bg_color = 'bg-soft-danger';
+            var color = 'danger';
+            var status_badge = '<span class="float-end badge bg-danger">Failed</span>';
+            if (task_object.error_message) {
+              error_message = `<small class="text-danger">${task_object.error_message}</small><br>`;
+            }
           }
-          else if (task_object.status == 3) {
-            color = 'danger';
-            bg_color = 'bg-soft-danger';
-            status_badge = '<span class="float-end badge bg-danger">Aborted</span>';
-          }
-          else if (task_object.status == 2){
-            color = 'success';
-            bg_color = 'bg-soft-success';
-            status_badge = '<span class="float-end badge bg-success">Task Completed</span>';
+          else if (task_object.status == 2) {
+            var bg_color = 'bg-soft-success';
+            var color = 'success';
+            var status_badge = '<span class="float-end badge bg-success">Completed</span>';
           }
 
           $('#completed_tasks').append(`
             <div class="card border-${color} border mini-card">
-            <a href="#" class="text-reset item-hovered" onclick="show_subscan_results('${endpoint_scan_status_url}', ${task_object['id']})">
+            <a href="/scan/${project}/${task_object.scan_id}" class="text-reset item-hovered">
             <div class="card-header ${bg_color} text-${color} mini-card-header">
-            ${task_name} on <b>${task_object.subdomain_name}</b> using engine <b>${htmlEncode(task_object.engine)}</b>
+            ${task_name} on <b>${domain_name}</b>
             </div>
             <div class="card-body mini-card-body">
             <p class="card-text">
             ${status_badge}
-            <span class="">
-            Task Completed ${task_object.completed_ago} ago
-            </span>
-            Took ${task_object.time_taken}
             ${error_message}
+            <span class="">
+            Completed ${task_object.elapsed_time} ago
+            </span>
             </p>
             </div>
             </a>
@@ -205,7 +212,7 @@ function getScanStatusSidebar(endpoint_url, endpoint_stop_scan_url, endpoint_sca
       if (tasks['pending'].length > 0){
         for (var task in tasks['pending']) {
           task_object = tasks['pending'][task];
-          task_name = get_task_name(task_object);
+          task_name = task_object.formatted_task_name || 'Unknown Task';
 
           status_badge = '<span class="float-end badge bg-warning">Upcoming</span>';
 
@@ -244,8 +251,14 @@ function getScanStatusSidebar(endpoint_url, endpoint_stop_scan_url, endpoint_sca
 
   }
 
-
+// Compatibility function for other parts of the codebase
 function get_task_name(data){
+  // Use formatted_task_name if available (from ScanActivitySerializer)
+  if (data.formatted_task_name) {
+    return data.formatted_task_name;
+  }
+  
+  // Fallback to old type-based mapping for SubScan objects
   if (data['type'] == 'dir_file_fuzz') {
     return 'Directory Fuzzing';
   }

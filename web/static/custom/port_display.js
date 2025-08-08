@@ -173,7 +173,236 @@ function createDataTable(containerId, columns, data, rowRenderer) {
     });
 }
 
+// Function to fetch and display screenshot thumbnail
+async function getScreenshotThumbnail(subdomain_id, subdomain_name, port, scan_id, domain_id = null, disableHoverPreview = false) {
+    if (!subdomain_id) {
+        return '-';
+    }
+    
+    // If no scan_id but we have domain_id, try to get screenshots from any scan for this target
+    if (!scan_id && domain_id) {
+        try {
+            const url = `/api/fetchScreenshots/?target_id=${domain_id}&subdomain_id=${subdomain_id}&port=${port}`;
+            const response = await fetch(url);
+            const data = await response.json();
+            
+            if (data && Object.keys(data).length > 0) {
+                return await processScreenshotData(data, port, subdomain_id, subdomain_name, null, domain_id, disableHoverPreview);
+            }
+        } catch (error) {
+            console.error('Error fetching screenshot for target:', error);
+        }
+    }
+    
+    // Original logic for scan_id
+    if (!scan_id) {
+        return '-';
+    }
+    
+    try {
+        const url = `/api/fetchScreenshots/?scan_id=${scan_id}&subdomain_id=${subdomain_id}&port=${port}`;
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        if (data && Object.keys(data).length > 0) {
+            return await processScreenshotData(data, port, subdomain_id, subdomain_name, scan_id, domain_id, disableHoverPreview);
+        } else {
+            return '-';
+        }
+    } catch (error) {
+        console.error('Error fetching screenshot:', error);
+        return '-';
+    }
+}
+
+// Helper function to process screenshot data
+async function processScreenshotData(data, port, subdomain_id, subdomain_name, scan_id, domain_id, disableHoverPreview = false) {
+    let screenshotHtml = '';
+    let count = 0;
+    
+    for (let key in data) {
+        const endpoint = data[key];
+        
+        if (endpoint.screenshot_path && endpoint.port == port) {
+            count++;
+            if (count <= 2) { // Show max 2 thumbnails
+                // Build hover events conditionally
+                const hoverEvents = disableHoverPreview ? '' : `
+                    onmouseover="showScreenshotPreview(this, '${endpoint.screenshot_path}', '${endpoint.http_url}')"
+                    onmouseout="hideScreenshotPreview()"
+                `;
+                
+                screenshotHtml += `
+                    <img src="/media/${endpoint.screenshot_path}" 
+                         class="screenshot-thumbnail me-1" 
+                         style="width: 100px; height: 75px; object-fit: cover; cursor: pointer; border: 1px solid #ddd; border-radius: 3px;" 
+                         ${hoverEvents}
+                         onclick="show_port_screenshots(${subdomain_id}, '${subdomain_name}', ${port}, ${scan_id || 'null'}, ${domain_id || 'null'})"
+                         title="Click to view full screenshot"
+                         onerror="this.style.display='none'">
+                `;
+            }
+        }
+    }
+    
+    if (count > 2) {
+        screenshotHtml += `<span class="badge badge-soft-info text-xs">+${count - 2}</span>`;
+    }
+    
+    return screenshotHtml || '-';
+}
+
+// Function to show screenshot preview on hover
+function showScreenshotPreview(element, screenshotPath, httpUrl) {
+    // Remove any existing preview
+    hideScreenshotPreview();
+    
+    // Position the preview relative to the thumbnail
+    const $element = $(element);
+    const elementOffset = $element.offset();
+    const elementWidth = $element.outerWidth();
+    const elementHeight = $element.outerHeight();
+    const previewWidth = 600; // max-width of preview
+    const previewHeight = 400; // approximate height
+    
+    // Check if we're in a table context (endpoints table or modal)
+    const isInTable = $element.closest('table').length > 0;
+    const isInModal = $element.closest('#modal_content_subdomain').length > 0;
+    
+    let preview;
+    let parentContainer;
+    
+    if (isInTable && isInModal) {
+        // For modals, use absolute positioning relative to the modal content
+        const modalContainer = $('#modal_content_subdomain');
+        const modalContent = modalContainer.closest('.modal-content');
+        parentContainer = modalContent;
+        
+        // Make modal content relative if it's not already
+        if (modalContent.css('position') === 'static') {
+            modalContent.css('position', 'relative');
+        }
+        
+        preview = $(`
+            <div id="screenshot-preview" style="
+                position: absolute; 
+                z-index: 10000; 
+                background: white; 
+                border: 1px solid #ddd; 
+                border-radius: 5px; 
+                padding: 8px; 
+                box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+                max-width: 600px;
+            ">
+                <div style="font-size: 12px; color: #666; margin-bottom: 5px; font-weight: 500;">${httpUrl}</div>
+                <img src="/media/${screenshotPath}" style="max-width: 580px; max-height: 400px; object-fit: contain;" onerror="this.parentElement.style.display='none'">
+            </div>
+        `);
+        
+        modalContent.append(preview);
+        
+        // Calculate position relative to modal content
+        const modalContentOffset = modalContent.offset();
+        const relativeElementLeft = elementOffset.left - modalContentOffset.left;
+        const relativeElementTop = elementOffset.top - modalContentOffset.top;
+        
+        // Position to the left of the thumbnail
+        let leftPos = relativeElementLeft - previewWidth - 10;
+        let topPos = relativeElementTop - (previewHeight / 2) + (elementHeight / 2);
+        
+        // Check boundaries within modal
+        const modalWidth = modalContent.outerWidth();
+        const modalHeight = modalContent.outerHeight();
+        
+        // If not enough space on the left, show on the right
+        if (leftPos < 10) {
+            leftPos = relativeElementLeft + elementWidth + 10;
+        }
+        
+        // Make sure it doesn't exceed modal boundaries
+        if (leftPos + previewWidth > modalWidth - 10) {
+            leftPos = modalWidth - previewWidth - 10;
+        }
+        
+        // Adjust vertical position if needed
+        if (topPos < 10) {
+            topPos = 10;
+        } else if (topPos + previewHeight > modalHeight - 10) {
+            topPos = modalHeight - previewHeight - 10;
+        }
+        
+        $('#screenshot-preview').css({
+            left: leftPos,
+            top: topPos
+        });
+        
+    } else {
+        // For non-modal contexts (endpoints table or other)
+        parentContainer = $('body');
+        
+        preview = $(`
+            <div id="screenshot-preview" style="
+                position: fixed; 
+                z-index: 10000; 
+                background: white; 
+                border: 1px solid #ddd; 
+                border-radius: 5px; 
+                padding: 8px; 
+                box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+                max-width: 600px;
+            ">
+                <div style="font-size: 12px; color: #666; margin-bottom: 5px; font-weight: 500;">${httpUrl}</div>
+                <img src="/media/${screenshotPath}" style="max-width: 580px; max-height: 400px; object-fit: contain;" onerror="this.parentElement.style.display='none'">
+            </div>
+        `);
+        
+        parentContainer.append(preview);
+        
+        if (isInTable) {
+            // Position to the left of the thumbnail, inside the table
+            let leftPos = elementOffset.left - previewWidth - 10;
+            let topPos = elementOffset.top - (previewHeight / 2) + (elementHeight / 2);
+            
+            // Make sure it doesn't go off-screen on the left
+            if (leftPos < 10) {
+                leftPos = elementOffset.left + elementWidth + 10;
+            }
+            
+            // Make sure it doesn't go off-screen on the top/bottom
+            const windowHeight = $(window).height();
+            const scrollTop = $(window).scrollTop();
+            
+            if (topPos < scrollTop + 10) {
+                topPos = scrollTop + 10;
+            } else if (topPos + previewHeight > scrollTop + windowHeight - 10) {
+                topPos = scrollTop + windowHeight - previewHeight - 10;
+            }
+            
+            $('#screenshot-preview').css({
+                left: leftPos,
+                top: topPos
+            });
+        } else {
+            // Original behavior for non-table contexts (follow mouse)
+            $(element).on('mousemove.screenshot-preview', function(e) {
+                $('#screenshot-preview').css({
+                    left: e.pageX + 15,
+                    top: e.pageY - 200
+                });
+            });
+        }
+    }
+}
+
+// Function to hide screenshot preview
+function hideScreenshotPreview() {
+    $('#screenshot-preview').remove();
+    $('.screenshot-thumbnail').off('mousemove.screenshot-preview');
+}
+
 function get_port_details(endpoint_ip_url, endpoint_subdomain_url, port, scan_id=null, domain_id=null) {
+    // Store settings for use in subdomain rendering
+    const settings = { scan_id: scan_id, domain_id: domain_id };
     $.getJSON('/api/uncommon-web-ports/', function(portsData) {
         const webPorts = [...portsData.uncommon_web_ports, ...portsData.common_web_ports];
         
@@ -241,16 +470,25 @@ function get_port_details(endpoint_ip_url, endpoint_subdomain_url, port, scan_id
         });
 
         // Get Subdomains
-        $.getJSON(subdomain_url, function(data) {
+        $.getJSON(subdomain_url, async function(data) {
             $('#modal_content_subdomain').empty();
             const subdomains = data.subdomains || [];
             $('#modal-subdomain-count').html(`<b>${subdomains.length}</b>&nbsp;&nbsp;`);
 
             if (subdomains.length > 0) {
                 $('#modal_content_subdomain').append(`<p>${subdomains.length} Subdomains have Port ${port} Open</p>`);
+                
+                // Fetch screenshots for all subdomains in parallel
+                const subdomainsWithScreenshots = await Promise.all(
+                    subdomains.map(async (subdomain) => {
+                        const screenshots = await getScreenshotThumbnail(subdomain.id, subdomain.name, port, scan_id, domain_id, true); // Disable hover preview in modal
+                        return { ...subdomain, screenshots };
+                    })
+                );
+                
                 createDataTable('modal_content_subdomain',
-                    ['Subdomain', 'Status', 'Title'],
-                    subdomains,
+                    ['Subdomain', 'Status', 'Title', 'Screenshots'],
+                    subdomainsWithScreenshots,
                     (subdomain) => {
                         const badge_color = subdomain.http_status >= 400 ? 'danger' : '';
                         const isWebPort = webPorts.includes(parseInt(port));
@@ -279,6 +517,7 @@ function get_port_details(endpoint_ip_url, endpoint_subdomain_url, port, scan_id
                                 <td>${subdomain_link}</td>
                                 <td>${status_tags || '-'}</td>
                                 <td>${subdomain.page_title ? htmlEncode(subdomain.page_title) : '-'}</td>
+                                <td>${subdomain.screenshots || '-'}</td>
                             </tr>
                         `;
                     }
@@ -294,87 +533,68 @@ function get_port_details(endpoint_ip_url, endpoint_subdomain_url, port, scan_id
 }
 
 function get_ip_details(endpoint_ip_url, endpoint_subdomain_url, ip_address, scan_id=null, domain_id=null){
-    $.getJSON('/api/uncommon-web-ports/', function(portsData) {
-        const webPorts = [...portsData.uncommon_web_ports, ...portsData.common_web_ports];
+    // Store settings for use in subdomain rendering
+    const settings = { scan_id: scan_id, domain_id: domain_id };
         
-        let ip_url = `${endpoint_ip_url}?ip_address=${ip_address}`;
         let subdomain_url = `${endpoint_subdomain_url}?ip_address=${ip_address}`;
 
         if (scan_id) {
-            ip_url += `&scan_id=${scan_id}`;
             subdomain_url += `&scan_id=${scan_id}`;
         } else if(domain_id) {
-            ip_url += `&target_id=${domain_id}`;
             subdomain_url += `&target_id=${domain_id}`;
         }
 
         const loaders = {
-            port: `<span class="spinner-border spinner-border-sm me-1" id="port-modal-loader"></span>`,
             subdomain: `<span class="spinner-border spinner-border-sm me-1" id="subdomain-modal-loader"></span>`
         };
 
         setupModal(
             `Details for IP: <b>${ip_address}</b>`,
             [
-                { id: 'port', label: 'Open Ports', loader: loaders.port },
                 { id: 'subdomain', label: 'Subdomains', loader: loaders.subdomain }
             ]
         );
 
-        // Get IP details including ports
-        $.getJSON(ip_url, function(data) {
-            $('#modal_content_port').empty();
-            const ports = data.ports || [];
-            $('#modal-port-count').html(`<b>${ports.length}</b>&nbsp;&nbsp;`);
-            
-            if (ports.length > 0) {
-                $('#modal_content_port').append(`<p>IP Address ${ip_address} has ${ports.length} Open Ports</p>`);
-                createDataTable('modal_content_port',
-                    ['Port', 'Service', 'Description', 'HTTP', 'HTTPS', 'Tags'],
-                    ports,
-                    (port) => {
-                        const badge_color = port.is_uncommon ? 'danger' : 'primary';
-                        const tags = port.is_uncommon 
-                            ? `<span class="badge badge-soft-danger">Uncommon</span>` 
-                            : '';
-                        
-                        const isWebPort = webPorts.includes(port.number);
-                        const httpLink = isWebPort ? 
-                            `<a href="http://${ip_address}:${port.number}" target="_blank" class="badge badge-soft-primary">HTTP</a>` : 
-                            '-';
-                        const httpsLink = isWebPort ? 
-                            `<a href="https://${ip_address}:${port.number}" target="_blank" class="badge badge-soft-primary">HTTPS</a>` : 
-                            '-';
-                        
-                        return `
-                            <tr>
-                                <td><b class="text-${badge_color}">${port.number}</b></td>
-                                <td>${port.service_name}</td>
-                                <td>${port.description || '-'}</td>
-                                <td>${httpLink}</td>
-                                <td>${httpsLink}</td>
-                                <td>${tags}</td>
-                            </tr>
-                        `;
-                    }
-                );
-            } else {
-                $('#modal_content_port').append("<p>No open ports found</p>");
-            }
-            $("#port-modal-loader").remove();
-        });
-
         // Get associated subdomains
-        $.getJSON(subdomain_url, function(data) {
+    $.getJSON(subdomain_url, async function(data) {
             $('#modal_content_subdomain').empty();
             const subdomains = data.subdomains || [];
             $('#modal-subdomain-count').html(`<b>${subdomains.length}</b>&nbsp;&nbsp;`);
 
             if (subdomains.length > 0) {
                 $('#modal_content_subdomain').append(`<p>${subdomains.length} subdomains are associated with IP ${ip_address}</p>`);
+            
+            // Get screenshots for common web ports (80, 443)
+            const subdomainsWithScreenshots = await Promise.all(
+                subdomains.map(async (subdomain) => {
+                    let screenshots = '-';
+                    if (scan_id) {
+                        const httpsScreenshots = await getScreenshotThumbnail(subdomain.id, subdomain.name, 443, scan_id, domain_id);
+                        const httpScreenshots = await getScreenshotThumbnail(subdomain.id, subdomain.name, 80, scan_id, domain_id);
+                        
+                        let combinedScreenshots = '';
+                        if (httpsScreenshots !== '-') combinedScreenshots += httpsScreenshots;
+                        if (httpScreenshots !== '-') combinedScreenshots += httpScreenshots;
+                        
+                        screenshots = combinedScreenshots || '-';
+                    } else if (domain_id) {
+                        // Try to get screenshots using domain_id when scan_id is null
+                        const httpsScreenshots = await getScreenshotThumbnail(subdomain.id, subdomain.name, 443, null, domain_id);
+                        const httpScreenshots = await getScreenshotThumbnail(subdomain.id, subdomain.name, 80, null, domain_id);
+                        
+                        let combinedScreenshots = '';
+                        if (httpsScreenshots !== '-') combinedScreenshots += httpsScreenshots;
+                        if (httpScreenshots !== '-') combinedScreenshots += httpScreenshots;
+                        
+                        screenshots = combinedScreenshots || '-';
+                    }
+                    return { ...subdomain, screenshots };
+                })
+            );
+            
                 createDataTable('modal_content_subdomain',
-                    ['Subdomain', 'Status', 'Title'],
-                    subdomains,
+                ['Subdomain', 'Status', 'Title', 'Screenshots'],
+                subdomainsWithScreenshots,
                     (subdomain) => {
                         const badge_color = subdomain.http_status >= 400 ? 'danger' : '';
                         const subdomain_link = subdomain.http_url 
@@ -394,6 +614,7 @@ function get_ip_details(endpoint_ip_url, endpoint_subdomain_url, ip_address, sca
                                 <td>${subdomain_link}</td>
                                 <td>${status_tags || '-'}</td>
                                 <td>${subdomain.page_title ? htmlEncode(subdomain.page_title) : '-'}</td>
+                            <td>${subdomain.screenshots || '-'}</td>
                             </tr>
                         `;
                     }
@@ -405,5 +626,4 @@ function get_ip_details(endpoint_ip_url, endpoint_subdomain_url, ip_address, sca
         });
 
         $('#modal_dialog').modal('show');
-    });
 }

@@ -11,4 +11,8 @@ if [ "$CELERY_REMOTE_DEBUG" == "1" ]; then
     export MAX_CONCURRENCY=1
 fi
 
+RENGINE_FOLDER="/home/$USERNAME/rengine"
+export FLOWER_UNAUTHENTICATED_API=true
+poetry run -C $RENGINE_FOLDER celery flower &
+
 /entrypoint.sh

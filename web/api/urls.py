@@ -91,6 +91,10 @@ urlpatterns = [
         VisualiseData.as_view(),
         name='queryAllScanResultVisualise'),
     path(
+        'fetchScreenshots/',
+        FetchScreenshots.as_view(),
+        name='fetchScreenshots'),
+    path(
         'queryTargetsWithoutOrganization/',
         ListTargetsWithoutOrganization.as_view(),
         name='queryTargetsWithoutOrganization'),
