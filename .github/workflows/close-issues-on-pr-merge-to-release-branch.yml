@@ -91,8 +91,8 @@ jobs:
             pr_body="${{ github.event.pull_request.body }}"
             echo "PR Body: $pr_body"
             
-            # Extract issue numbers from PR body using common closing keywords
-            fallback_issues=$(echo "$pr_body" | grep -ioE '(close[sd]?|fix(e[sd])?|resolve[sd]?) #[0-9]+' | grep -oE '#[0-9]+' | sed 's/#//' | sort -u)
+            # Extract issue numbers from PR body using common closing keywords and multiple formats
+            fallback_issues=$(echo "$pr_body" | grep -ioE '(close[sd]?|fix(e[sd])?|resolve[sd]?)[: ]+((#[0-9]+([, ]+)?)+)' | grep -oE '#[0-9]+' | sed 's/#//' | sort -u)
             
             if [ -n "$fallback_issues" ]; then
               echo "Found issues via fallback method: $fallback_issues"
