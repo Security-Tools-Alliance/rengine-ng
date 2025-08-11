@@ -43,6 +43,10 @@ urlpatterns = [
         ListIPs.as_view(),
         name='listIPs'),
     path(
+        'queryIp/',
+        GetIpDetails.as_view(),
+        name='getIpDetails'),
+    path(
         'queryInterestingSubdomains/',
         QueryInterestingSubdomains.as_view(),
         name='queryInterestingSubdomains'),
@@ -86,6 +90,10 @@ urlpatterns = [
         'queryAllScanResultVisualise/',
         VisualiseData.as_view(),
         name='queryAllScanResultVisualise'),
+    path(
+        'fetchScreenshots/',
+        FetchScreenshots.as_view(),
+        name='fetchScreenshots'),
     path(
         'queryTargetsWithoutOrganization/',
         ListTargetsWithoutOrganization.as_view(),
@@ -159,13 +167,21 @@ urlpatterns = [
         GfList.as_view(),
         name='gf_list'),
     path(
-        'tools/gpt_vulnerability_report/',
-        GPTVulnerabilityReportGenerator.as_view(),
-        name='gpt_vulnerability_report_generator'),
+        'tools/llm_vulnerability_report/',
+        LLMVulnerabilityReportGenerator.as_view(),
+        name='llm_vulnerability_report_generator'),
     path(
-        'tools/gpt_get_possible_attacks/',
-        GPTAttackSuggestion.as_view(),
-        name='gpt_get_possible_attacks'),
+        'tools/llm_get_possible_attacks/',
+        LLMAttackSuggestion.as_view(),
+        name='llm_get_possible_attacks'),
+    path(
+        'tools/llm_models/',
+        LLMModelsManager.as_view(),
+        name='llm_models_manager'),
+    path(
+        'tools/available_ollama_models/',
+        AvailableOllamaModels.as_view(),
+        name='available_ollama_models'),
     path(
         'github/tool/get_latest_releases/',
         GithubToolCheckGetLatestRelease.as_view(),
@@ -186,6 +202,10 @@ urlpatterns = [
         'tool/ollama/',
         OllamaManager.as_view(),
         name='ollama_manager'),
+    path(
+        'tool/ollama/<path:model_name>/',
+        OllamaDetailManager.as_view(),
+        name='ollama_detail_manager'),        
     path(
         'rengine/update/',
         RengineUpdateCheck.as_view(),
@@ -243,6 +263,10 @@ urlpatterns = [
         'action/create/project',
         CreateProjectApi.as_view(),
         name='create_project'),
+    path(
+        'uncommon-web-ports/', 
+         UncommonWebPortsView.as_view(), 
+         name='uncommonWebPorts'),
 ]
 
 urlpatterns += router.urls

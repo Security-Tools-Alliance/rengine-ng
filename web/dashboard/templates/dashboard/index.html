@@ -81,6 +81,22 @@ Dashboard
 </div>
 <div class="row">
 	<div class="col-xl-3 col-lg-3 col-md-2 col-sm-12 col-12">
+		<div class="card" id="tooltip-container">
+			<div class="card-body">
+				<i class="fa fa-info-circle text-muted float-end" data-bs-container="#tooltip-container" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Total Number of Scans for all targets"></i>
+				<h4 class="mt-0 font-16">Total Scans</h4>
+				<h2 class="text-primary my-3 text-center"><span data-plugin="counterup">{{scan_count.total|intcomma}}</span></h2>
+				<div id="scans_chart"></div>
+			</div>
+		</div>
+		<div class="card" id="tooltip-container">
+			<div class="card-body">
+				<i class="fa fa-info-circle text-muted float-end" data-bs-container="#tooltip-container" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Total Number of Subscans for subdomains"></i>
+				<h4 class="mt-0 font-16">Total Subscans</h4>
+				<h2 class="text-primary my-3 text-center"><span data-plugin="counterup">{{subscan_count.total|intcomma}}</span></h2>
+				<div id="subscans_chart"></div>
+			</div>
+		</div>
 		<div class="card">
 			<div class="card-body">
 				<div class="d-flex align-items-start mb-3">
@@ -105,9 +121,9 @@ Dashboard
 								<div class="w-100">
 									<a class="mt-1 font-14 text-reset">
 										<strong>{{item.title}}</strong>
-										</br>
+										<br>
 										<span class="text-muted">
-											{% if item.status == 2 %} {% if item.title != 'Scan Completed' %} Completed {% endif %}{% elif item.status == 1 %} Initiated {% elif item.status == 0 %} {% if item.title != 'Scan aborted' %} Aborted {% endif %} {% endif %}</b>for <span class="badge badge-soft-info">{{item.scan_of.domain.name}}</span>
+											<b>{% if item.status == 2 %} {% if item.title != 'Scan Completed' %} Completed {% endif %}{% elif item.status == 1 %} Initiated {% elif item.status == 0 %} {% if item.title != 'Scan aborted' %} Aborted {% endif %} {% endif %}</b>for <span class="badge badge-soft-info">{{item.scan_of.domain.name}}</span>
 										</span>
 										<br>
 										<span>{{item.time|naturaltime}}</span>
@@ -269,7 +285,7 @@ Dashboard
 			<div class="col-xl-4">
 				<div class="card">
 					<div class="card-body">
-						<h4 class="header-title mb-0">Most common Technology</h4>
+						<h4 class="header-title mb-0">Most common Technologies</h4>
 						<div id="cardCollpase8" class="collapse pt-3 show" dir="ltr">
 							<div id="most_common_tech_chart" class="apex-charts"></div>
 						</div>
@@ -329,165 +345,375 @@ $(document).ready(function() {
 
 	{% include 'base/_items/most_common_cve_cwe_tags.js' %}
 
-	var label_dates = ['{{last_7_dates.6}}', '{{last_7_dates.5}}', '{{last_7_dates.4}}', '{{last_7_dates.3}}', '{{last_7_dates.2}}', '{{last_7_dates.1}}', '{{last_7_dates.0}}'];
+	{% with targets_in_last_week=targets_in_last_week subdomains_in_last_week=subdomains_in_last_week vulns_in_last_week=vulns_in_last_week endpoints_in_last_week=endpoints_in_last_week scans_in_last_week=scans_in_last_week subscans_in_last_week=subscans_in_last_week %}
+		var label_dates = [
+			{% for i in "6543210" %}
+				`Day -${6 - {{ forloop.counter0 }} }`{% if not forloop.last %},{% endif %}
+			{% endfor %}
+		];
 
-	var fill_options = {
-		type:"gradient",
-		gradient: {
-			type: "vertical",
-			shadeIntensity: 1,
-			inverseColors: !1,
-			opacityFrom: .30,
-			opacityTo: .05,
-			stops: [35, 100]
-		},
-	}
+		var target_chart_option = {
+			chart: {
+				type: "area",
+				height: 50,
+				sparkline: {
+					enabled: !0
+				}
+			},
+			stroke: {
+				width: 2,
+				curve: "smooth"
+			},
+			fill: {
+				opacity: .2
+			},
+			series: [{
+				name: "Targets Added",
+				data: {{ targets_in_last_week|safe }}.reverse()
+			}],
+			yaxis: {
+				min: 0
+			},
+			colors: ['#2196f3'],
+			subtitle: {
+				text: "",
+				offsetX: 10,
+				offsetY: 35,
+				style: {
+					fontSize: "13px"
+				}
+			},
+			fill: {
+				type:"gradient",
+				gradient: {
+					type: "vertical",
+					shadeIntensity: 1,
+					inverseColors: !1,
+					opacityFrom: .30,
+					opacityTo: .05,
+					stops: [35, 100]
+				},
+			},
+			labels: label_dates,
+			xaxis: {
+				type: 'category',
+				categories: label_dates,
+				labels: {
+					show: true,
+					formatter: function(value) {
+						return value;
+					}
+				}
+			},
+		};
+		new ApexCharts(document.querySelector("#targets_chart"), target_chart_option).render();
 
-	var target_chart_option = {
-		chart: {
-			type: "area",
-			height: 50,
-			sparkline: {
-				enabled: !0
-			}
-		},
-		stroke: {
-			width: 2,
-			curve: "smooth"
-		},
-		fill: {
-			opacity: .2
-		},
-		series: [{
-			name: "Targets Added",
-			data: [{{targets_in_last_week.0}},{{targets_in_last_week.1}},{{targets_in_last_week.2}},{{targets_in_last_week.3}},{{targets_in_last_week.4}},{{targets_in_last_week.5}},{{targets_in_last_week.6}}]
-		}],
-		yaxis: {
-			min: 0
-		},
-		labels: label_dates,
-		colors: ['#2196f3'],
-		subtitle: {
-			text: "",
-			offsetX: 10,
-			offsetY: 35,
-			style: {
-				fontSize: "13px"
-			}
-		},
-		fill: fill_options,
-	};
-	new ApexCharts(document.querySelector("#targets_chart"), target_chart_option).render();
+		var subdomains_chart_options = {
+			chart: {
+				type: "area",
+				height: 50,
+				sparkline: {
+					enabled: !0
+				}
+			},
+			stroke: {
+				width: 2,
+				curve: "smooth"
+			},
+			fill: {
+				opacity: .2
+			},
+			series: [{
+				name: "Subdomains Discovered",
+				data: {{ subdomains_in_last_week|safe }}.reverse()
+			}],
+			yaxis: {
+				min: 0
+			},
+			colors: ['#2196f3'],
+			subtitle: {
+				text: "",
+				offsetX: 10,
+				offsetY: 35,
+				style: {
+					fontSize: "13px"
+				}
+			},
+			fill: {
+				type:"gradient",
+				gradient: {
+					type: "vertical",
+					shadeIntensity: 1,
+					inverseColors: !1,
+					opacityFrom: .30,
+					opacityTo: .05,
+					stops: [35, 100]
+				},
+			},
+			labels: label_dates,
+			xaxis: {
+				type: 'category',
+				categories: label_dates,
+				labels: {
+					show: true,
+					formatter: function(value) {
+						return value;
+					}
+				}
+			},
+		};
+		new ApexCharts(document.querySelector("#subdomains_chart"), subdomains_chart_options).render();
 
-	var subdomains_chart_options = {
-		chart: {
-			type: "area",
-			height: 50,
-			sparkline: {
-				enabled: !0
-			}
-		},
-		stroke: {
-			width: 2,
-			curve: "smooth"
-		},
-		fill: {
-			opacity: .2
-		},
-		series: [{
-			name: "Subdomains Discovered",
-			data: [{{subdomains_in_last_week.0}},{{subdomains_in_last_week.1}},{{subdomains_in_last_week.2}},{{subdomains_in_last_week.3}},{{subdomains_in_last_week.4}},{{subdomains_in_last_week.5}},{{subdomains_in_last_week.6}}]
-		}],
-		yaxis: {
-			min: 0
-		},
-		labels: label_dates,
-		colors: ['#2196f3'],
-		subtitle: {
-			text: "",
-			offsetX: 10,
-			offsetY: 35,
-			style: {
-				fontSize: "13px"
-			}
-		},
-		fill: fill_options,
-	};
-	new ApexCharts(document.querySelector("#subdomains_chart"), subdomains_chart_options).render();
+		var endpoint_chart_options = {
+			chart: {
+				type: "area",
+				height: 50,
+				sparkline: {
+					enabled: !0
+				}
+			},
+			stroke: {
+				width: 2,
+				curve: "smooth"
+			},
+			fill: {
+				opacity: .2
+			},
+			series: [{
+				name: "Endpoints Discovered",
+				data: {{ endpoints_in_last_week|safe }}.reverse()
+			}],
+			yaxis: {
+				min: 0
+			},
+			colors: ['#2196f3'],
+			subtitle: {
+				text: "",
+				offsetX: 10,
+				offsetY: 35,
+				style: {
+					fontSize: "13px"
+				}
+			},
+			fill: {
+				type:"gradient",
+				gradient: {
+					type: "vertical",
+					shadeIntensity: 1,
+					inverseColors: !1,
+					opacityFrom: .30,
+					opacityTo: .05,
+					stops: [35, 100]
+				},
+			},
+			labels: label_dates,
+			xaxis: {
+				type: 'category',
+				categories: label_dates,
+				labels: {
+					show: true,
+					formatter: function(value) {
+						return value;
+					}
+				}
+			},
+		};
+		new ApexCharts(document.querySelector("#endpoint_chart"), endpoint_chart_options).render();
 
-	var endpoint_chart_options = {
-		chart: {
-			type: "area",
-			height: 50,
-			sparkline: {
-				enabled: !0
-			}
-		},
-		stroke: {
-			width: 2,
-			curve: "smooth"
-		},
-		fill: {
-			opacity: .2
-		},
-		series: [{
-			name: "Endpoints Discovered",
-			data: [{{endpoints_in_last_week.0}},{{endpoints_in_last_week.1}},{{endpoints_in_last_week.2}},{{endpoints_in_last_week.3}},{{endpoints_in_last_week.4}},{{endpoints_in_last_week.5}},{{endpoints_in_last_week.6}}]
-		}],
-		yaxis: {
-			min: 0
-		},
-		labels: label_dates,
-		colors: ['#2196f3'],
-		subtitle: {
-			text: "",
-			offsetX: 10,
-			offsetY: 35,
-			style: {
-				fontSize: "13px"
-			}
-		},
-		fill: fill_options,
-	};
-	new ApexCharts(document.querySelector("#endpoint_chart"), endpoint_chart_options).render();
+		var vuln_chart_options = {
+			chart: {
+				type: "area",
+				height: 50,
+				sparkline: {
+					enabled: !0
+				}
+			},
+			stroke: {
+				width: 2,
+				curve: "smooth"
+			},
+			fill: {
+				opacity: .2
+			},
+			series: [{
+				name: "Vulnerabilities Discovered",
+				data: {{ vulns_in_last_week|safe }}.reverse()
+			}],
+			yaxis: {
+				min: 0
+			},
+			colors: ['#e7515a'],
+			subtitle: {
+				text: "",
+				offsetX: 10,
+				offsetY: 35,
+				style: {
+					fontSize: "13px"
+				}
+			},
+			fill: {
+				type:"gradient",
+				gradient: {
+					type: "vertical",
+					shadeIntensity: 1,
+					inverseColors: !1,
+					opacityFrom: .30,
+					opacityTo: .05,
+					stops: [35, 100]
+				},
+			},
+			labels: label_dates,
+			xaxis: {
+				type: 'category',
+				categories: label_dates,
+				labels: {
+					show: true,
+					formatter: function(value) {
+						return value;
+					}
+				}
+			},
+		};
+		new ApexCharts(document.querySelector("#vuln_chart"), vuln_chart_options).render();
 
+		var scansOptions = {
+			chart: {
+				type: 'area',
+				height: 350
+			},
+			series: [
+				{
+					name: 'Pending',
+					data: {{ scans_in_last_week.pending|safe }}.reverse()
+				},
+				{
+					name: 'Running',
+					data: {{ scans_in_last_week.running|safe }}.reverse()
+				},
+				{
+					name: 'Completed', 
+					data: {{ scans_in_last_week.completed|safe }}.reverse()
+				},
+				{
+					name: 'Failed',
+					data: {{ scans_in_last_week.failed|safe }}.reverse()
+				}
+			],
+			xaxis: {
+				type: 'category',
+				categories: label_dates,
+				labels: {
+					show: true,
+					formatter: function(value) {
+						return value;
+					}
+				}
+			},
+			tooltip: {
+				x: {
+					formatter: function(value, { series, dataPointIndex }) {
+						const realDate = new Date({{ last_7_dates|last|date:"Y-m-d" }});
+						realDate.setDate(realDate.getDate() - (6 - dataPointIndex));
+						return `${realDate.toLocaleDateString()}`;
+					}
+				}
+			},
+			stroke: {
+				curve: 'smooth'
+			},
+			fill: {
+				opacity: .2
+			},
+			yaxis: {
+				min: 0,
+				max: Math.max(5, Math.max(...{{ scans_in_last_week.completed|safe }})),
+				tickAmount: 5,
+				labels: {
+					formatter: function(val) {
+						return val.toFixed(0);
+					}
+				}
+			},
+			colors: ['#ffc107', '#2196f3', '#0acf97', '#fa5c7c'],
+			legend: {
+				position: 'bottom',
+				horizontalAlign: 'right'
+			},
+			dataLabels: {
+				enabled: false
+			},
+		};
+		new ApexCharts(document.querySelector("#scans_chart"), scansOptions).render();
 
-	var vuln_chart_options = {
-		chart: {
-			type: "area",
-			height: 50,
-			sparkline: {
-				enabled: !0
-			}
-		},
-		stroke: {
-			width: 2,
-			curve: "smooth"
-		},
-		fill: {
-			opacity: .2
-		},
-		series: [{
-			name: "Vulnerabilities Discovered",
-			data: [{{vulns_in_last_week.0}},{{vulns_in_last_week.1}},{{vulns_in_last_week.2}},{{vulns_in_last_week.3}},{{vulns_in_last_week.4}},{{vulns_in_last_week.5}},{{vulns_in_last_week.6}}]
-		}],
-		yaxis: {
-			min: 0
-		},
-		labels: label_dates,
-		colors: ['#e7515a'],
-		subtitle: {
-			text: "",
-			offsetX: 10,
-			offsetY: 35,
-			style: {
-				fontSize: "13px"
-			}
-		},
-		fill: fill_options,
-	};
-	new ApexCharts(document.querySelector("#vuln_chart"), vuln_chart_options).render();
-
+		var subscansOptions = {
+			chart: {
+				type: 'area',
+				height: 350
+			},
+			series: [
+				{
+					name: 'Pending',
+					data: {{ subscans_in_last_week.pending|safe }}.reverse()
+				},
+				{
+					name: 'Running',
+					data: {{ subscans_in_last_week.running|safe }}.reverse()
+				},
+				{
+					name: 'Completed',
+					data: {{ subscans_in_last_week.completed|safe }}.reverse()
+				},
+				{
+					name: 'Failed',
+					data: {{ subscans_in_last_week.failed|safe }}.reverse()
+				}
+			],
+			xaxis: {
+				type: 'category',
+				categories: label_dates,
+				labels: {
+					show: true,
+					formatter: function(value) {
+						return value;
+					}
+				}
+			},
+			tooltip: {
+				x: {
+					formatter: function(value, { series, dataPointIndex }) {
+						const realDate = new Date({{ last_7_dates|last|date:"Y-m-d" }});
+						realDate.setDate(realDate.getDate() - (6 - dataPointIndex));
+						return `${realDate.toLocaleDateString()}`;
+					}
+				}
+			},
+			stroke: {
+				curve: 'smooth'
+			},
+			fill: {
+				opacity: .2
+			},
+			yaxis: {
+				min: 0,
+				max: Math.max(5, Math.max(...{{ subscans_in_last_week.completed|safe }})),
+				tickAmount: 5,
+				labels: {
+					formatter: function(val) {
+						return val.toFixed(0);
+					}
+				}
+			},
+			colors: ['#ffc107', '#2196f3', '#0acf97', '#fa5c7c'],
+			legend: {
+				position: 'bottom',
+				horizontalAlign: 'right'
+			},
+			dataLabels: {
+				enabled: false
+			},
+		};
+		new ApexCharts(document.querySelector("#subscans_chart"), subscansOptions).render();
+	{% endwith %}
 
 	// vulnerability summary pie chart
 	var options = {
@@ -577,81 +803,134 @@ $(document).ready(function() {
 
 	chart.render()
 
-	var options = {
-		series: [{
-			name: "Ip is Used By Subdomains",
-			data: [{{most_used_ip.6.count}}, {{most_used_ip.5.count}}, {{most_used_ip.4.count}}, {{most_used_ip.3.count}}, {{most_used_ip.2.count}}, {{most_used_ip.1.count}}, {{most_used_ip.0.count}}]
-		}],
-		chart: {
-			type: 'bar',
-			height: 350
-		},
-		plotOptions: {
-			bar: {
-				borderRadius: 4,
-				horizontal: true,
+	{% with ip_list=most_used_ip|slice:":7" %}
+		var options = {
+			series: [{
+				name: "Ip is Used By Subdomains",
+				data: [
+					{% for ip in ip_list reversed %}
+						{{ ip.count|floatformat:"0" }}{% if not forloop.last %},{% endif %}
+					{% endfor %}
+				]
+			}],
+			chart: {
+				type: 'bar',
+				height: 350
+			},
+			plotOptions: {
+				bar: {
+					borderRadius: 4,
+					horizontal: true,
+				}
+			},
+			dataLabels: {
+				enabled: false
+			},
+			xaxis: {
+				categories: [
+					{% for ip in ip_list reversed %}
+						'{{ ip.address }}'{% if not forloop.last %},{% endif %}
+					{% endfor %}
+				],
+				labels: {
+					rotate: 0,
+					rotateAlways: false,
+					formatter: function (val) {
+						return val.toFixed(0);
+					}
+				},
+				decimalsInFloat: 0,
 			}
-		},
-		dataLabels: {
-			enabled: false
-		},
-		xaxis: {
-			categories: ['{{most_used_ip.6.address}}', '{{most_used_ip.5.address}}', '{{most_used_ip.4.address}}', '{{most_used_ip.3.address}}', '{{most_used_ip.2.address}}', '{{most_used_ip.1.address}}', '{{most_used_ip.0.address}}'],
-		}
-	};
+		};
+	{% endwith %}
 
 	var chart = new ApexCharts(document.querySelector("#most_common_ip_chart"), options);
 	chart.render();
 
-	var options = {
-		series: [{
-			name: "Ports used by IPs",
-			data: [{{most_used_port.6.count}}, {{most_used_port.5.count}}, {{most_used_port.4.count}}, {{most_used_port.3.count}}, {{most_used_port.2.count}}, {{most_used_port.1.count}}, {{most_used_port.0.count}}]
-		}],
-		chart: {
-			type: 'bar',
-			height: 350
-		},
-		plotOptions: {
-			bar: {
-				borderRadius: 4,
-				horizontal: true,
+	{% with port_list=most_used_port|slice:":7" %}
+		var options = {
+			series: [{
+				name: "Ports used by IPs",
+				data: [
+					{% for port in port_list reversed %}
+						{{ port.count|floatformat:"0" }}{% if not forloop.last %},{% endif %}
+					{% endfor %}
+				]
+			}],
+			chart: {
+				type: 'bar',
+				height: 350
+			},
+			plotOptions: {
+				bar: {
+					borderRadius: 4,
+					horizontal: true,
+				}
+			},
+			dataLabels: {
+				enabled: false
+			},
+			xaxis: {
+				categories: [
+					{% for port in port_list reversed %}
+						'{{ port.number }}/{{ port.service_name }}'{% if not forloop.last %},{% endif %}
+					{% endfor %}
+				],
+				labels: {
+					rotate: 0,
+					rotateAlways: false,
+					formatter: function (val) {
+						return val.toFixed(0);
+					}
+				},
+				decimalsInFloat: 0,
 			}
-		},
-		dataLabels: {
-			enabled: false
-		},
-		xaxis: {
-			categories: ['{{most_used_port.6.number}}/{{most_used_port.6.service_name}}', '{{most_used_port.5.number}}/{{most_used_port.5.service_name}}', '{{most_used_port.4.number}}/{{most_used_port.4.service_name}}', '{{most_used_port.3.number}}/{{most_used_port.3.service_name}}', '{{most_used_port.2.number}}/{{most_used_port.2.service_name}}', '{{most_used_port.1.number}}/{{most_used_port.1.service_name}}', '{{most_used_port.0.number}}/{{most_used_port.0.service_name}}'],
-		}
-	};
+		};
+	{% endwith %}
 
 	var chart = new ApexCharts(document.querySelector("#most_common_port_chart"), options);
 	chart.render();
 
-
-	var options = {
-		series: [{
-			name: "Tech used by Subdomains",
-			data: [{{most_used_tech.6.count}}, {{most_used_tech.5.count}}, {{most_used_tech.4.count}}, {{most_used_tech.3.count}}, {{most_used_tech.2.count}}, {{most_used_tech.1.count}}, {{most_used_tech.0.count}}]
-		}],
-		chart: {
-			type: 'bar',
-			height: 350
-		},
-		plotOptions: {
-			bar: {
-				borderRadius: 4,
-				horizontal: true,
+	{% with tech_list=most_used_tech|slice:":7" %}
+		var options = {
+			series: [{
+				name: "Tech used by Subdomains",
+				data: [
+					{% for tech in tech_list reversed %}
+						{{ tech.count|floatformat:"0" }}{% if not forloop.last %},{% endif %}
+					{% endfor %}
+				]
+			}],
+			chart: {
+				type: 'bar',
+				height: 350
+			},
+			plotOptions: {
+				bar: {
+					borderRadius: 4,
+					horizontal: true,
+				}
+			},
+			dataLabels: {
+				enabled: false
+			},
+			xaxis: {
+				categories: [
+					{% for tech in tech_list reversed %}
+						'{{ tech.name }}'{% if not forloop.last %},{% endif %}
+					{% endfor %}
+				],
+				labels: {
+					rotate: 0,
+					rotateAlways: false,
+					formatter: function (val) {
+						return val.toFixed(0);
+					}
+				},
+				decimalsInFloat: 0,
 			}
-		},
-		dataLabels: {
-			enabled: false
-		},
-		xaxis: {
-			categories: ['{{most_used_tech.6.name}}', '{{most_used_tech.5.name}}', '{{most_used_tech.4.name}}', '{{most_used_tech.3.name}}', '{{most_used_tech.2.name}}', '{{most_used_tech.1.name}}', '{{most_used_tech.0.name}}'],
-		}
-	};
+		};
+	{% endwith %}
 
 	var chart = new ApexCharts(document.querySelector("#most_common_tech_chart"), options);
 	chart.render();
@@ -692,7 +971,6 @@ $(document).ready(function() {
 			}
 		}
 	});
-
 });
 </script>
 {% endblock page_level_script %}

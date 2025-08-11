@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 
 from reNgine.init import first_run
-from reNgine.utilities import RengineTaskFormatter
+from reNgine.utilities.logging import RengineTaskFormatter
 
 env = environ.FileAwareEnv()
 
@@ -45,12 +45,11 @@ DEBUG = env.bool('UI_DEBUG', default=False)
 DOMAIN_NAME = env('DOMAIN_NAME', default='localhost:8000')
 TEMPLATE_DEBUG = env.bool('TEMPLATE_DEBUG', default=False)
 SECRET_FILE = os.path.join(RENGINE_HOME, 'secret')
-DEFAULT_ENABLE_HTTP_CRAWL = env.bool('DEFAULT_ENABLE_HTTP_CRAWL', default=True)
 DEFAULT_RATE_LIMIT = env.int('DEFAULT_RATE_LIMIT', default=150) # requests / second
 DEFAULT_HTTP_TIMEOUT = env.int('DEFAULT_HTTP_TIMEOUT', default=5) # seconds
 DEFAULT_RETRIES = env.int('DEFAULT_RETRIES', default=1)
 DEFAULT_THREADS = env.int('DEFAULT_THREADS', default=30)
-DEFAULT_GET_GPT_REPORT = env.bool('DEFAULT_GET_GPT_REPORT', default=True)
+DEFAULT_GET_LLM_REPORT = env.bool('DEFAULT_GET_LLM_REPORT', default=True)
 
 # Globals
 ALLOWED_HOSTS = ['*']
@@ -94,7 +93,8 @@ INSTALLED_APPS = [
     'django_extensions',
     'mathfilters',
     'drf_yasg',
-    'rolepermissions'
+    'rolepermissions',
+    'channels',
 ]
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -282,7 +282,10 @@ LOGGING = {
         'simple': {
             'format': '%(levelname)s %(message)s',
             'datefmt': '%y %b %d, %H:%M:%S',
-        }
+        },
+        'migration': {
+            'format': '%(asctime)s [%(levelname)s] %(app)s: %(message)s (Migrations: %(migration_count)s)'
+        },
     },
     'loggers': {
         'django': {
@@ -337,6 +340,12 @@ LOGGING = {
             'level': 'DEBUG',
             'propagate': True,
         },
+        'migrations': {
+            'handlers': ['console', 'file'],
+            'level': 'DEBUG' if CELERY_DEBUG else 'INFO',
+            'formatter': 'migration',
+            'propagate': False,
+        },
     },
     'root': {
         'handlers': ['console'],
@@ -346,9 +355,7 @@ LOGGING = {
 
 # debug
 def show_toolbar(request):
-    if UI_DEBUG:
-        return True
-    return False
+    return bool(UI_DEBUG)
 
 if UI_DEBUG:
     DEBUG_TOOLBAR_CONFIG = {
@@ -357,3 +364,18 @@ if UI_DEBUG:
 
     INSTALLED_APPS.append('debug_toolbar')
     MIDDLEWARE.append('debug_toolbar.middleware.DebugToolbarMiddleware')
+
+# Channels configuration
+ASGI_APPLICATION = 'reNgine.routing.application'
+
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            'hosts': [('redis', 6379)],
+        },
+    },
+}
+
+# WebSocket settings
+WEBSOCKET_ACCEPT_ALL = True  # For development, change in production

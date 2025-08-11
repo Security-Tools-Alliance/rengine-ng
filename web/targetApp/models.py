@@ -1,6 +1,10 @@
 from django.apps import apps
 from django.db import models
+from django.db.models import Count
 from dashboard.models import Project
+from django.utils import timezone
+from datetime import datetime
+from django.db.models.functions import TruncDay
 
 
 class HistoricalIP(models.Model):
@@ -167,3 +171,52 @@ class Domain(models.Model):
 
 	def __str__(self):
 		return str(self.name)
+
+	@classmethod
+	def get_all_counts(cls, queryset):
+		return queryset.aggregate(
+			total=Count('id'),
+		)
+
+	@classmethod
+	def get_project_counts(cls, project):
+		"""Get all counts for a specific project"""
+		return cls.get_all_counts(cls.objects.filter(project=project))
+
+	@classmethod
+	def get_project_data(cls, project):
+		"""Get domain data for a specific project"""
+		queryset = cls.objects.filter(project=project)
+		return {
+			'total_count': queryset.count(),
+			'recent_domains': queryset.order_by('-insert_date')[:10]
+		}
+
+	@staticmethod
+	def get_counts_by_date(queryset, date_field, since_date):
+		"""Get daily domain counts for a queryset"""
+		counts = queryset.filter(
+			**{f"{date_field}__gte": since_date}
+		).annotate(
+			date=TruncDay(date_field)
+		).values("date").annotate(
+			count=Count('id')
+		).order_by("date")
+		
+		return {item['date']: item['count'] for item in counts}
+
+	@classmethod
+	def get_project_timeline(cls, project, date_range):
+		"""Get domain timeline data for a specific project"""
+		raw_data = cls.get_counts_by_date(
+			cls.objects.filter(project=project),
+			'insert_date',
+			date_range[0]
+		)
+		
+		results = []
+		for date in date_range:
+			aware_date = timezone.make_aware(datetime.combine(date, datetime.min.time()))
+			results.append(raw_data.get(aware_date, 0))
+		
+		return results[::-1]  # Reverse to match chart order

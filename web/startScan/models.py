@@ -3,10 +3,15 @@ from django.apps import apps
 from django.contrib.auth.models import User
 from django.contrib.postgres.fields import ArrayField
 from django.db import models
+from django.db.models import Count, Q
+from django.db.models.functions import TruncDay
+from datetime import datetime
 from django.utils import timezone
 from reNgine.definitions import (CELERY_TASK_STATUSES,
-								 NUCLEI_REVERSE_SEVERITY_MAP)
-from reNgine.utilities import *
+								 NUCLEI_REVERSE_SEVERITY_MAP,
+								 ENGINE_DISPLAY_NAMES)
+from reNgine.utilities.time import get_time_taken
+from reNgine.llm.utils import convert_markdown_to_html
 from scanEngine.models import EngineType
 from targetApp.models import Domain
 
@@ -142,14 +147,66 @@ class ScanHistory(models.Model):
 		)
 
 	def get_progress(self):
-		"""Formulae to calculate count number of true things to do, for http
-		crawler, it is always +1 divided by total scan activity associated - 2
-		(start and stop).
+		"""Calculate scan progress percentage based on completed steps vs total steps.
 		"""
+		from reNgine.definitions import SUCCESS_TASK
+		
 		number_of_steps = len(self.tasks) if self.tasks else 0
-		steps_done = len(self.scanactivity_set.all())
-		if steps_done and number_of_steps:
-			return round((number_of_steps / (steps_done)) * 100, 2)
+		if number_of_steps == 0:
+			return 0
+		
+		# Get unique completed task names (avoid counting duplicates if tasks are retried)
+		completed_task_names = (
+			self.scanactivity_set
+			.filter(status=SUCCESS_TASK)
+			.values_list('name', flat=True)
+			.distinct()
+		)
+		steps_completed = len(completed_task_names)
+		
+		# Ensure we don't exceed 100%
+		progress = min((steps_completed / number_of_steps) * 100, 100)
+		return round(progress, 2)
+
+	def get_current_task(self):
+		"""Get the current running task name, formatted for display.
+		"""
+		from reNgine.definitions import RUNNING_TASK
+		
+		# Get the most recent running task
+		current_activity = (
+			self.scanactivity_set
+			.filter(status=RUNNING_TASK)
+			.order_by('-time')
+			.first()
+		)
+		
+		if current_activity:
+			# Format task name for display
+			task_name = current_activity.name
+			
+			# Map technical names to user-friendly names
+			task_display_names = {
+				'subdomain_discovery': 'Subdomain Discovery',
+				'osint': 'OSINT Gathering',
+				'pre_crawl': 'Pre-crawl Analysis',
+				'port_scan': 'Port Scanning',
+				'fetch_url': 'URL Discovery',
+				'intermediate_crawl': 'Intermediate Crawl',
+				'http_crawl': 'HTTP Crawling',
+				'screenshot': 'Taking Screenshots',
+				'vulnerability_scan': 'Vulnerability Scanning',
+				'nuclei_scan': 'Nuclei Scanning',
+				'waf_detection': 'WAF Detection',
+				'dir_file_fuzz': 'Directory Fuzzing',
+				'dalfox_xss_scan': 'XSS Scanning',
+				'crlfuzz_scan': 'CRLF Injection Scan',
+				'post_crawl': 'Post-crawl Analysis'
+			}
+			
+			return task_display_names.get(task_name, task_name.replace('_', ' ').title())
+		
+		return None
 
 	def get_completed_ago(self):
 		if self.stop_scan_date:
@@ -175,7 +232,59 @@ class ScanHistory(models.Model):
 		elif not minutes:
 			return f'{hours} hours'
 		return f'{hours} hours {minutes} minutes'
+	
+	@classmethod
+	def get_all_counts(cls, queryset):
+		"""Aggregate total scans and status distribution"""
+		return queryset.aggregate(
+			total=Count('id'),
+			pending=Count('id', filter=models.Q(scan_status=0)),
+			running=Count('id', filter=models.Q(scan_status=1)),
+			completed=Count('id', filter=models.Q(scan_status=2)),
+			failed=Count('id', filter=models.Q(scan_status=3)),
+			running_background=Count('id', filter=models.Q(scan_status=4))
+		)
 
+	@classmethod
+	def get_project_counts(cls, project):
+		"""Get scan statistics for a specific project"""
+		return cls.get_all_counts(
+			cls.objects.filter(domain__project=project)
+		)
+
+	@staticmethod
+	def get_counts_by_date(queryset, date_field, since_date):
+		"""Get daily scan counts for a queryset"""
+		counts = queryset.filter(
+			**{f"{date_field}__gte": since_date}
+		).annotate(
+			date=TruncDay(date_field)
+		).values("date").annotate(
+			count=Count('id')
+		).order_by("date")
+		
+		return {item['date']: item['count'] for item in counts}
+
+	@classmethod
+	def get_project_timeline(cls, project, date_range, status=None):
+		"""Get scan timeline data with optional status filter"""
+		queryset = cls.objects.filter(domain__project=project)
+		
+		if status is not None:
+			queryset = queryset.filter(scan_status=status)
+		
+		raw_data = cls.get_counts_by_date(
+			queryset,
+			'start_scan_date',
+			date_range[0]
+		)
+		
+		results = []
+		for date in date_range:
+			aware_date = timezone.make_aware(datetime.combine(date, datetime.min.time()))
+			results.append(raw_data.get(aware_date, 0))
+		
+		return results[::-1]
 
 class Subdomain(models.Model):
 	# TODO: Add endpoint property instead of replicating endpoint fields here
@@ -186,7 +295,6 @@ class Subdomain(models.Model):
 	is_imported_subdomain = models.BooleanField(default=False)
 	is_important = models.BooleanField(default=False, null=True, blank=True)
 	http_url = models.CharField(max_length=10000, null=True, blank=True)
-	screenshot_path = models.CharField(max_length=1000, null=True, blank=True)
 	http_header_path = models.CharField(max_length=1000, null=True, blank=True)
 	discovered_date = models.DateTimeField(blank=True, null=True)
 	cname = models.CharField(max_length=5000, blank=True, null=True)
@@ -214,6 +322,14 @@ class Subdomain(models.Model):
 		if self.scan_history:
 			endpoints = endpoints.filter(scan_history=self.scan_history)
 		return endpoints.count()
+
+	@property
+	def get_unknown_vulnerability_count(self):
+		return (
+			self.get_vulnerabilities
+			.filter(severity=-1)
+			.count()
+		)
 
 	@property
 	def get_info_count(self):
@@ -261,14 +377,30 @@ class Subdomain(models.Model):
 
 	@property
 	def get_vulnerabilities(self):
-		vulns = Vulnerability.objects.filter(subdomain__name=self.name)
+		vulns = Vulnerability.objects.filter(subdomain__name=self.name).prefetch_related(
+			'cve_ids',
+			'cwe_ids',
+			'tags',
+			'subdomain',
+			'endpoint',
+			'target_domain',
+			'scan_history'
+		)
 		if self.scan_history:
 			vulns = vulns.filter(scan_history=self.scan_history)
 		return vulns
 
 	@property
 	def get_vulnerabilities_without_info(self):
-		vulns = Vulnerability.objects.filter(subdomain__name=self.name).exclude(severity=0)
+		vulns = Vulnerability.objects.filter(subdomain__name=self.name).exclude(severity=0).prefetch_related(
+			'cve_ids',
+			'cwe_ids',
+			'tags',
+			'subdomain',
+			'endpoint',
+			'target_domain',
+			'scan_history'
+		)
 		if self.scan_history:
 			vulns = vulns.filter(scan_history=self.scan_history)
 		return vulns
@@ -308,6 +440,124 @@ class Subdomain(models.Model):
 			.count()
 		)
 
+	@property
+	def formatted_attack_surface(self):
+		"""Format description as HTML with proper styling"""
+		return convert_markdown_to_html(self.attack_surface)
+
+	@property
+	def get_ports(self):
+		"""Get all ports associated with this subdomain's IP addresses"""
+		ports = []
+		for ip in self.ip_addresses.all():
+			ports.extend(port.number for port in ip.ports.all())
+		return sorted(list(set(ports)))
+
+	@property
+	def get_ports_by_ip(self):
+		"""Get ports grouped by IP address with their specific service information"""
+		return {
+			ip.address: {
+				'ports': [
+					{
+						'number': port.number,
+						'service_name': port.service_name,
+						'description': port.description,
+						'is_uncommon': port.is_uncommon,
+					}
+					for port in ip.ports.all().order_by('number')
+				],
+				'is_cdn': ip.is_cdn,
+			}
+			for ip in self.ip_addresses.all()
+		}
+
+	@classmethod
+	def get_counts(cls, queryset):
+		"""Get various subdomain counts in a single query"""
+		return {
+			'total': queryset.count(),
+			'with_ip': queryset.filter(ip_addresses__isnull=False).count(),
+			'alive': queryset.exclude(http_status__exact=0).count()
+		}
+
+	@classmethod
+	def get_all_counts(cls, queryset):
+		"""Get all vulnerability counts in a single query"""
+		# Get base counts first
+		base_counts = queryset.aggregate(
+			total=Count('id'),
+			with_ip=Count('id', filter=Q(ip_addresses__isnull=False)),
+			alive=Count('id', filter=~Q(http_status=0))
+		)
+		
+		# Initialize vulnerability counts
+		vuln_counts = {
+			'vuln_info': 0,
+			'vuln_low': 0,
+			'vuln_medium': 0,
+			'vuln_high': 0,
+			'vuln_critical': 0,
+			'vuln_unknown': 0
+		}
+
+		# Count vulnerabilities for each subdomain
+		for subdomain in queryset.all():
+			vuln_counts['vuln_info'] += subdomain.get_info_count
+			vuln_counts['vuln_low'] += subdomain.get_low_count
+			vuln_counts['vuln_medium'] += subdomain.get_medium_count
+			vuln_counts['vuln_high'] += subdomain.get_high_count
+			vuln_counts['vuln_critical'] += subdomain.get_critical_count
+			vuln_counts['vuln_unknown'] += subdomain.get_unknown_vulnerability_count
+		
+		# Combine and calculate totals
+		return {
+			**base_counts,
+			**vuln_counts,
+			'total_vuln_count': sum(vuln_counts.values()),
+			'total_vuln_ignore_info_count': sum([
+				vuln_counts['vuln_low'],
+				vuln_counts['vuln_medium'],
+				vuln_counts['vuln_high'],
+				vuln_counts['vuln_critical']
+			])
+		}
+
+
+	@classmethod
+	def get_project_counts(cls, project):
+		"""Get all counts for a specific project in a single query"""
+		queryset = cls.objects.filter(target_domain__project=project)
+		return cls.get_all_counts(queryset)
+
+	@staticmethod
+	def get_counts_by_date(queryset, date_field, since_date):
+		"""Get daily subdomain counts for a queryset"""
+		counts = queryset.filter(
+			**{f"{date_field}__gte": since_date}
+		).annotate(
+			date=TruncDay(date_field)
+		).values("date").annotate(
+			count=Count('id')
+		).order_by("date")
+		
+		return {item['date']: item['count'] for item in counts}
+
+	@classmethod
+	def get_project_timeline(cls, project, date_range):
+		"""Get subdomain timeline data for a specific project"""
+		raw_data = cls.get_counts_by_date(
+			cls.objects.filter(scan_history__domain__project=project),
+			'discovered_date',
+			date_range[0]
+		)
+		
+		results = []
+		for date in date_range:
+			aware_date = timezone.make_aware(datetime.combine(date, datetime.min.time()))
+			results.append(raw_data.get(aware_date, 0))
+		
+		return results[::-1]
 
 class SubScan(models.Model):
 	id = models.AutoField(primary_key=True)
@@ -334,17 +584,63 @@ class SubScan(models.Model):
 		return get_time_taken(timezone.now(), self.start_scan_date)
 
 	def get_task_name_str(self):
-		taskmap = {
-			'subdomain_discovery': 'Subdomain discovery',
-			'dir_file_fuzz': 'Directory and File fuzzing',
-			'port_scan': 'Port Scan',
-			'fetch_url': 'Fetch URLs',
-			'vulnerability_scan': 'Vulnerability Scan',
-			'screenshot': 'Screenshot',
-			'waf_detection': 'Waf Detection',
-			'osint': 'Open-Source Intelligence'
-		}
-		return taskmap.get(self.type, 'Unknown')
+		return dict(ENGINE_DISPLAY_NAMES).get(self.type, 'Unknown')
+
+	@classmethod
+	def get_all_counts(cls, queryset):
+		"""Aggregate total subscans and status distribution"""
+		return queryset.aggregate(
+			total=Count('id'),
+			pending=Count('id', filter=models.Q(status=-1)),
+			running=Count('id', filter=models.Q(status=1)),
+			completed=Count('id', filter=models.Q(status=2)),
+			failed=Count('id', filter=models.Q(status=0)),
+			aborted=Count('id', filter=models.Q(status=3)),
+			finalizing=Count('id', filter=models.Q(status=4))
+		)
+
+	@classmethod
+	def get_project_counts(cls, project):
+		"""Get subscan statistics for a specific project"""
+		return cls.get_all_counts(
+			cls.objects.filter(
+				scan_history__domain__project=project
+			)
+		)
+
+	@staticmethod
+	def get_counts_by_date(queryset, date_field, since_date):
+		"""Get daily subscan counts for a queryset"""
+		counts = queryset.filter(
+			**{f"{date_field}__gte": since_date}
+		).annotate(
+			date=TruncDay(date_field)
+		).values("date").annotate(
+			count=Count('id')
+		).order_by("date")
+		
+		return {item['date']: item['count'] for item in counts}
+
+	@classmethod
+	def get_project_timeline(cls, project, date_range, status=None):
+		"""Get subscan timeline data with optional status filter"""
+		queryset = cls.objects.filter(scan_history__domain__project=project)
+		
+		if status is not None:
+			queryset = queryset.filter(status=status)
+		
+		raw_data = cls.get_counts_by_date(
+			queryset,
+			'start_scan_date',
+			date_range[0]
+		)
+		
+		results = []
+		for date in date_range:
+			aware_date = timezone.make_aware(datetime.combine(date, datetime.min.time()))
+			results.append(raw_data.get(aware_date, 0))
+		
+		return results[::-1]
 
 class EndPoint(models.Model):
 	id = models.AutoField(primary_key=True)
@@ -367,6 +663,7 @@ class EndPoint(models.Model):
 	webserver = models.CharField(max_length=1000, blank=True, null=True)
 	is_default = models.BooleanField(null=True, blank=True, default=False)
 	matched_gf_patterns = models.CharField(max_length=10000, null=True, blank=True)
+	screenshot_path = models.CharField(max_length=1000, null=True, blank=True)
 	techs = models.ManyToManyField('Technology', related_name='techs', blank=True)
 	# used for subscans
 	endpoint_subscan_ids = models.ManyToManyField('SubScan', related_name='endpoint_subscan_ids', blank=True)
@@ -378,6 +675,48 @@ class EndPoint(models.Model):
 	def is_alive(self):
 		return self.http_status
 
+	@classmethod
+	def get_counts(cls, queryset):
+		"""Get endpoint counts in a single query"""
+		return {
+			'total': queryset.count(),
+			'alive': queryset.filter(http_status__gt=0).count()
+		}
+
+	@classmethod
+	def get_project_counts(cls, project):
+		"""Get endpoint counts for a specific project"""
+		queryset = cls.objects.filter(scan_history__domain__project=project)
+		return cls.get_counts(queryset)
+
+	@staticmethod
+	def get_counts_by_date(queryset, date_field, since_date):
+		"""Get daily vulnerability counts for a queryset"""
+		counts = queryset.filter(
+			**{f"{date_field}__gte": since_date}
+		).annotate(
+			date=TruncDay(date_field)
+		).values("date").annotate(
+			count=Count('id')
+		).order_by("date")
+		
+		return {item['date']: item['count'] for item in counts}
+
+	@classmethod
+	def get_project_timeline(cls, project, date_range):
+		"""Get vulnerability timeline data for a specific project"""
+		raw_data = cls.get_counts_by_date(
+			cls.objects.filter(scan_history__domain__project=project),
+			'discovered_date',
+			date_range[0]
+		)
+		
+		results = []
+		for date in date_range:
+			aware_date = timezone.make_aware(datetime.combine(date, datetime.min.time()))
+			results.append(raw_data.get(aware_date, 0))
+		
+		return results[::-1]
 
 class VulnerabilityTags(models.Model):
 	id = models.AutoField(primary_key=True)
@@ -386,13 +725,17 @@ class VulnerabilityTags(models.Model):
 	def __str__(self):
 		return self.name
 
+	@classmethod
+	def get_most_common(cls, vulnerabilities, limit=7):
+		"""Get most common vulnerability tags"""
+		return cls.objects.filter(
+			vuln_tags__in=vulnerabilities
+		).values(
+			'name'
+		).distinct().annotate(
+			nused=Count('vuln_tags', filter=Q(vuln_tags__in=vulnerabilities))
+		).order_by('-nused')[:limit]
 
-class VulnerabilityReference(models.Model):
-	id = models.AutoField(primary_key=True)
-	url = models.CharField(max_length=5000)
-
-	def __str__(self):
-		return self.url
 
 
 class CveId(models.Model):
@@ -402,6 +745,17 @@ class CveId(models.Model):
 	def __str__(self):
 		return self.name
 
+	@classmethod
+	def get_most_common(cls, vulnerabilities, limit=7):
+		"""Get most common CVEs in vulnerabilities"""
+		return cls.objects.filter(
+			cve_ids__in=vulnerabilities
+		).values(
+			'name'
+		).distinct().annotate(
+			nused=Count('cve_ids', filter=Q(cve_ids__in=vulnerabilities))
+		).order_by('-nused')[:limit]
+
 
 class CweId(models.Model):
 	id = models.AutoField(primary_key=True)
@@ -410,18 +764,48 @@ class CweId(models.Model):
 	def __str__(self):
 		return self.name
 
+	@classmethod
+	def get_most_common(cls, vulnerabilities, limit=7):
+		"""Get most common CWEs in vulnerabilities"""
+		return cls.objects.filter(
+			cwe_ids__in=vulnerabilities
+		).values(
+			'name'
+		).distinct().annotate(
+			nused=Count('cwe_ids', filter=Q(cwe_ids__in=vulnerabilities))
+		).order_by('-nused')[:limit]
 
-class GPTVulnerabilityReport(models.Model):
+
+class LLMVulnerabilityReport(models.Model):
 	url_path = models.CharField(max_length=2000)
 	title = models.CharField(max_length=2500)
 	description = models.TextField(null=True, blank=True)
 	impact = models.TextField(null=True, blank=True)
 	remediation = models.TextField(null=True, blank=True)
-	references = models.ManyToManyField('VulnerabilityReference', related_name='report_reference', blank=True)
+	references = models.TextField(null=True, blank=True)
 
 	def __str__(self):
 		return self.title
 
+	@property
+	def formatted_description(self):
+		"""Format description as HTML with proper styling"""
+		return convert_markdown_to_html(self.description)
+
+	@property
+	def formatted_impact(self):
+		"""Format impact as HTML with proper styling"""
+		return convert_markdown_to_html(self.impact)
+	
+	@property
+	def formatted_remediation(self):
+		"""Format remediation as HTML with proper styling"""
+		return convert_markdown_to_html(self.remediation)
+	
+	@property
+	def formatted_references(self):
+		"""Format references as HTML with proper styling"""
+		return convert_markdown_to_html(self.references)
 
 class Vulnerability(models.Model):
 	id = models.AutoField(primary_key=True)
@@ -454,7 +838,7 @@ class Vulnerability(models.Model):
 	)
 
 	tags = models.ManyToManyField('VulnerabilityTags', related_name='vuln_tags', blank=True)
-	references = models.ManyToManyField('VulnerabilityReference', related_name='vuln_reference', blank=True)
+	references = models.TextField(null=True, blank=True)
 	cve_ids = models.ManyToManyField('CveId', related_name='cve_ids', blank=True)
 	cwe_ids = models.ManyToManyField('CweId', related_name='cwe_ids', blank=True)
 
@@ -468,7 +852,7 @@ class Vulnerability(models.Model):
 	hackerone_report_id = models.CharField(max_length=50, null=True, blank=True)
 	request = models.TextField(blank=True, null=True)
 	response = models.TextField(blank=True, null=True)
-	is_gpt_used = models.BooleanField(null=True, blank=True, default=False)
+	is_llm_used = models.BooleanField(null=True, blank=True, default=False)
 	# used for subscans
 	vuln_subscan_ids = models.ManyToManyField('SubScan', related_name='vuln_subscan_ids', blank=True)
 
@@ -490,10 +874,70 @@ class Vulnerability(models.Model):
 		return ', '.join(f'`{tag.name}`' for tag in self.tags.all())
 
 	def get_refs_str(self):
-		return '•' + '\n• '.join(f'`{ref.url}`' for ref in self.references.all())
+		return self.references
 
 	def get_path(self):
 		return urlparse(self.http_url).path
+
+	@classmethod
+	def get_project_data(cls, project):
+		"""Get vulnerability data for a specific project"""
+		queryset = cls.objects.filter(scan_history__domain__project=project)
+		return {
+			'feed': queryset.order_by('-discovered_date')[:50],
+			'most_common_cve': CveId.get_most_common(queryset),
+			'most_common_cwe': CweId.get_most_common(queryset),
+			'most_common_tags': VulnerabilityTags.get_most_common(queryset)
+		}
+
+	@staticmethod
+	def get_counts_by_date(queryset, date_field, since_date):
+		"""Get daily vulnerability counts for a queryset"""
+		counts = queryset.filter(
+			**{f"{date_field}__gte": since_date}
+		).annotate(
+			date=TruncDay(date_field)
+		).values("date").annotate(
+			count=Count('id')
+		).order_by("date")
+		
+		return {item['date']: item['count'] for item in counts}
+
+	@classmethod
+	def get_project_timeline(cls, project, date_range):
+		"""Get vulnerability timeline data for a specific project"""
+		raw_data = cls.get_counts_by_date(
+			cls.objects.filter(scan_history__domain__project=project),
+			'discovered_date',
+			date_range[0]
+		)
+		
+		results = []
+		for date in date_range:
+			aware_date = timezone.make_aware(datetime.combine(date, datetime.min.time()))
+			results.append(raw_data.get(aware_date, 0))
+		
+		return results[::-1]
+
+	@property
+	def formatted_description(self):
+		"""Format description as HTML with proper styling"""
+		return convert_markdown_to_html(self.description)
+
+	@property
+	def formatted_impact(self):
+		"""Format impact as HTML with proper styling"""
+		return convert_markdown_to_html(self.impact)
+	
+	@property
+	def formatted_remediation(self):
+		"""Format remediation as HTML with proper styling"""
+		return convert_markdown_to_html(self.remediation)
+	
+	@property
+	def formatted_references(self):
+		"""Format references as HTML with proper styling"""
+		return convert_markdown_to_html(self.references)
 
 
 class ScanActivity(models.Model):
@@ -540,6 +984,25 @@ class Technology(models.Model):
 	def __str__(self):
 		return str(self.name)
 
+	@classmethod
+	def get_project_data(cls, project):
+		"""Get technology data for a specific project"""
+		subdomains = Subdomain.objects.filter(
+			scan_history__domain__project=project
+		)
+		return {
+			'most_used': cls.get_most_used(subdomains)
+		}
+
+	@classmethod
+	def get_most_used(cls, subdomains, limit=10):
+		"""Get most used technologies"""
+		return cls.objects.filter(
+			technologies__in=subdomains
+		).values('name').annotate(
+			count=Count('name')
+		).order_by('-count')[:limit]
+
 
 class CountryISO(models.Model):
 	id = models.AutoField(primary_key=True)
@@ -549,12 +1012,32 @@ class CountryISO(models.Model):
 	def __str__(self):
 		return str(self.name)
 
+	@classmethod
+	def get_project_data(cls, project):
+		"""Get country data for a specific project"""
+		ip_addresses = IpAddress.objects.filter(
+			ip_addresses__in=Subdomain.objects.filter(
+				scan_history__domain__project=project
+			)
+		)
+		return {
+			'asset_countries': cls.get_asset_countries(ip_addresses)
+		}
+
+	@classmethod
+	def get_asset_countries(cls, ip_addresses):
+		"""Get countries for assets"""
+		return cls.objects.filter(
+			ipaddress__in=ip_addresses
+		).annotate(
+			count=Count('iso')
+		).order_by('-count')
+
 
 class IpAddress(models.Model):
 	id = models.AutoField(primary_key=True)
 	address = models.CharField(max_length=100, blank=True, null=True)
 	is_cdn = models.BooleanField(default=False)
-	ports = models.ManyToManyField('Port', related_name='ports')
 	geo_iso = models.ForeignKey(
 		CountryISO, on_delete=models.CASCADE, null=True, blank=True)
 	version = models.IntegerField(blank=True, null=True)
@@ -566,16 +1049,71 @@ class IpAddress(models.Model):
 	def __str__(self):
 		return str(self.address)
 
+	@classmethod
+	def get_project_data(cls, project):
+		"""Get IP address data for a specific project"""
+		base_query = cls.objects.filter(
+			ip_addresses__in=Subdomain.objects.filter(
+				scan_history__domain__project=project
+			)
+		)
+		return {
+			'total_count': base_query.count(),
+			'most_used': cls.get_most_used(base_query)
+		}
+
+	@classmethod
+	def get_most_used(cls, queryset, subdomains=None, limit=7):
+		"""Get most common IP addresses with count annotation"""
+		return queryset.annotate(
+			count=Count('ip_addresses')
+		).order_by('-count').exclude(
+			ip_addresses__isnull=True
+		)[:limit]
+
 
 class Port(models.Model):
 	id = models.AutoField(primary_key=True)
 	number = models.IntegerField(default=0)
+	is_uncommon = models.BooleanField(default=False)
 	service_name = models.CharField(max_length=100, blank=True, null=True)
 	description = models.CharField(max_length=1000, blank=True, null=True)
-	is_uncommon = models.BooleanField(default=False)
+	ip_address = models.ForeignKey(
+		'IpAddress', 
+		on_delete=models.CASCADE, 
+		related_name='ports',
+		null=True,
+		blank=True
+	)
+
+	class Meta:
+		unique_together = ('ip_address', 'number')
 
 	def __str__(self):
-		return str(self.service_name)
+		return str(self.number)
+
+	@classmethod
+	def get_project_data(cls, project):
+		"""Get port data for a specific project"""
+		ip_addresses = IpAddress.objects.filter(
+			ip_addresses__in=Subdomain.objects.filter(
+				scan_history__domain__project=project
+			)
+		)
+		return {
+			'most_used': cls.get_most_used(ip_addresses)
+		}
+
+	@classmethod
+	def get_most_used(cls, ip_addresses, limit=10):
+		"""Get most used ports"""
+		return cls.objects.filter(
+			ip_address__in=ip_addresses
+		).values(
+			'number', 'service_name'
+		).annotate(
+			count=Count('number')
+		).order_by('-count')[:limit]
 
 
 class DirectoryFile(models.Model):

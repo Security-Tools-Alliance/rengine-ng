@@ -192,7 +192,7 @@ const dynamicBadgeNotification = function(setTodoCategoryCount) {
     }
   };
 
-  // Mettre à jour les badges en fonction de la catégorie
+  // Update badges based on the category
   if (todoCategoryCount === 'allList' || todoCategoryCount === undefined) {
     updateBadge(getBadgeTodoAllListDiv, get_TodoListElementsCount);
   }

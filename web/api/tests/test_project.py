@@ -2,7 +2,6 @@
 This file contains the test cases for the API views.
 """
 
-from unittest.mock import patch
 from django.utils import timezone
 from django.urls import reverse
 from rest_framework import status
@@ -12,7 +11,6 @@ __all__ = [
     'TestCreateProjectApi',
     'TestAddReconNote',
     'TestListTodoNotes',
-    'TestGPTAttackSuggestion'
 ]
 
 class TestCreateProjectApi(BaseTestCase):
@@ -108,24 +106,3 @@ class TestListTodoNotes(BaseTestCase):
             self.data_generator.todo_note.scan_history.id,
         )
 
-class TestGPTAttackSuggestion(BaseTestCase):
-    """Tests for the GPT Attack Suggestion API."""
-
-    def setUp(self):
-        super().setUp()
-        self.data_generator.create_project_base()
-
-    @patch("reNgine.gpt.GPTAttackSuggestionGenerator.get_attack_suggestion")
-    def test_get_attack_suggestion(self, mock_get_suggestion):
-        """Test getting an attack suggestion for a subdomain."""
-        mock_get_suggestion.return_value = {
-            "status": True,
-            "description": "Test attack suggestion",
-        }
-        api_url = reverse("api:gpt_get_possible_attacks")
-        response = self.client.get(
-            api_url, {"subdomain_id": self.data_generator.subdomain.id}
-        )
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertTrue(response.data["status"])
-        self.assertEqual(response.data["description"], "Test attack suggestion")

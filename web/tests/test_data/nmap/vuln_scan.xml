@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE nmaprun>
+<nmaprun scanner="nmap" args="nmap -sV --script vuln -Pn -p 80,443 example.com" start="1234567890" startstr="2024-01-01 12:00:00" version="7.80" xmloutputversion="1.04">
+  <scaninfo type="syn" protocol="tcp" numservices="2" services="80,443"/>
+  <verbose level="0"/>
+  <debugging level="0"/>
+  <host starttime="1234567890" endtime="1234567899">
+    <status state="up" reason="user-set" reason_ttl="0"/>
+    <address addr="93.184.216.34" addrtype="ipv4"/>
+    <hostnames>
+      <hostname name="example.com" type="user"/>
+    </hostnames>
+    <ports>
+      <port protocol="tcp" portid="80">
+        <state state="open" reason="syn-ack" reason_ttl="0"/>
+        <service name="http" product="nginx" version="1.18.0" method="probed" conf="10"/>
+        <script id="http-csrf" output="Couldn't find any CSRF vulnerabilities."/>
+        <script id="http-dombased-xss" output="Couldn't find any DOM based XSS."/>
+        <script id="http-stored-xss" output="Couldn't find any stored XSS vulnerabilities."/>
+      </port>
+      <port protocol="tcp" portid="443">
+        <state state="open" reason="syn-ack" reason_ttl="0"/>
+        <service name="https" product="nginx" version="1.18.0" tunnel="ssl" method="probed" conf="10"/>
+        <script id="ssl-ccs-injection" output="No reply from server (TIMEOUT)"/>
+        <script id="ssl-heartbleed" output="VULNERABLE:&#xa;  The Heartbleed Bug is a serious vulnerability in the popular OpenSSL cryptographic software library"/>
+        <script id="ssl-poodle" output="VULNERABLE:&#xa;  SSL POODLE information leak, CVE-2014-3566"/>
+        <script id="sslv2-drown" output="VULNERABLE:&#xa;  SSLv2 DROWN attack, CVE-2016-0800"/>
+      </port>
+    </ports>
+    <hostscript>
+      <script id="vulners" output="&#xa;  cpe:/a:nginx:nginx:1.18.0: &#xa;    &#x9;CVE-2021-23017&#x9;7.5&#x9;https://vulners.com/cve/CVE-2021-23017"/>
+    </hostscript>
+  </host>
+  <runstats>
+    <finished time="1234567899" timestr="2024-01-01 12:00:09"/>
+    <hosts up="1" down="0" total="1"/>
+  </runstats>
+</nmaprun>

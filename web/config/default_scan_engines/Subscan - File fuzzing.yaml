@@ -1,0 +1,34 @@
+# This scan engine is used to scan the files of the target
+# Use it from the subdomains list to scan the files of one or more selected subdomains
+
+# Global vars for all tools
+#
+# Custom header - FFUF, Nuclei, Dalfox, CRL Fuzz, HTTPx, Fetch URL (Hakrawler, Katana, Gospider)
+custom_header: {
+  'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:126.0) Gecko/20100101 Firefox/126.0',
+}
+# 'user_agent': ''                    # Dalfox only
+# 'timeout': 10                       # Subdomain discovery, Screenshot, Port scan, FFUF, Nuclei                       
+# 'threads': 30                       # All tools
+# 'rate_limit': 150                   # Port scan, FFUF, Nuclei
+# 'intensity': 'normal'               # Screenshot (grab only the root endpoints of each subdomain), Nuclei (reduce number of endpoints to scan), OSINT (not implemented yet)
+# 'retries': 1                        # Nuclei
+
+dir_file_fuzz: {
+  # 'custom_header': {
+  #   'Cookie':'Test',
+  #   'User-Agent': 'Mozilla/5.0',
+  #   'Custom-Header': 'My custom header'
+  # },
+  'auto_calibration': true,
+  'rate_limit': 150,
+  'extensions': [],
+  'follow_redirect': false,
+  'max_time': 0,
+  'match_http_status': [200, 204, 403, 500],
+  'recursive_level': 0,
+  'stop_on_error': false,
+  'timeout': 5,
+  'threads': 10,
+  'wordlist_name': 'default', # fuzz-Bo0oM
+}

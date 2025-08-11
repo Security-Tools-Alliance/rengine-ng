@@ -3,6 +3,7 @@ import logging
 import re
 from pathlib import Path
 from .settings import RENGINE_WORDLISTS
+import os
 
 ###############################################################################
 # TOOLS DEFINITIONS
@@ -23,7 +24,7 @@ ALL = 'all'
 AMASS_WORDLIST = 'amass_wordlist'
 AUTO_CALIBRATION = 'auto_calibration'
 CUSTOM_HEADER = 'custom_header'
-FETCH_GPT_REPORT = 'fetch_gpt_report'
+FETCH_LLM_REPORT = 'fetch_llm_report'
 RUN_NUCLEI = 'run_nuclei'
 RUN_CRLFUZZ = 'run_crlfuzz'
 RUN_DALFOX = 'run_dalfox'
@@ -49,11 +50,11 @@ NMAP_SCRIPT = 'nmap_script'
 NMAP_SCRIPT_ARGS = 'nmap_script_args'
 NAABU_PASSIVE = 'passive'
 NAABU_RATE = 'rate'
-NUCLEI_CUSTOM_TEMPLATE = 'custom_templates'
 NUCLEI_TAGS = 'tags'
-NUCLEI_TEMPLATE = 'templates'
 NUCLEI_SEVERITY = 'severities'
 NUCLEI_CONCURRENCY = 'concurrency'
+NUCLEI_TEMPLATES = 'templates'
+NUCLEI_CUSTOM_TEMPLATES = 'custom_templates'
 OSINT = 'osint'
 OSINT_DOCUMENTS_LIMIT = 'documents_limit'
 OSINT_DISCOVER = 'discover'
@@ -69,7 +70,6 @@ RETRIES = 'retries'
 SCREENSHOT = 'screenshot'
 SUBDOMAIN_DISCOVERY = 'subdomain_discovery'
 STOP_ON_ERROR = 'stop_on_error'
-ENABLE_HTTP_CRAWL = 'enable_http_crawl'
 THREADS = 'threads'
 TIMEOUT = 'timeout'
 USE_AMASS_CONFIG = 'use_amass_config'
@@ -193,6 +193,13 @@ SUBDOMAIN_SCAN_DEFAULT_TOOLS = ['subfinder', 'ctfr', 'sublist3r', 'tlsx']
 ENDPOINT_SCAN_DEFAULT_TOOLS = ['gospider']
 ENDPOINT_SCAN_DEFAULT_DUPLICATE_FIELDS = ['content_length', 'page_title']
 
+# http crawl
+HTTP_THREADS = 30
+HTTP_FOLLOW_REDIRECT = False
+HTTP_PRE_CRAWL_UNCOMMON_PORTS = False
+HTTP_PRE_CRAWL_ALL_PORTS = False
+HTTP_PRE_CRAWL_BATCH_SIZE = 350
+
 
 ###############################################################################
 # Logger DEFINITIONS
@@ -243,21 +250,24 @@ FAILED_TASK = 0
 RUNNING_TASK = 1
 SUCCESS_TASK = 2
 ABORTED_TASK = 3
+RUNNING_BACKGROUND = 4
 
 CELERY_TASK_STATUS_MAP = {
     INITIATED_TASK: 'INITITATED',
     FAILED_TASK: 'FAILED',
     RUNNING_TASK: 'RUNNING',
     SUCCESS_TASK: 'SUCCESS',
-    ABORTED_TASK: 'ABORTED'
+    ABORTED_TASK: 'ABORTED',
+    RUNNING_BACKGROUND: 'RUNNING_BACKGROUND'
 }
 
 CELERY_TASK_STATUSES = (
-    (INITIATED_TASK, INITIATED_TASK),
-    (FAILED_TASK, FAILED_TASK),
-    (RUNNING_TASK, RUNNING_TASK),
-    (SUCCESS_TASK, SUCCESS_TASK),
-    (ABORTED_TASK, ABORTED_TASK)
+    (INITIATED_TASK, "Pending"),
+    (FAILED_TASK, "Queued"), 
+    (RUNNING_TASK, "Running"),
+    (SUCCESS_TASK, "Completed"),
+    (ABORTED_TASK, "Failed"),
+    (RUNNING_BACKGROUND, "Running Background")
 )
 DYNAMIC_ID = -1
 
@@ -265,29 +275,35 @@ DYNAMIC_ID = -1
 # Uncommon Ports
 # Source: https://github.com/six2dez/reconftw/blob/main/reconftw.cfg
 ###############################################################################
+COMMON_WEB_PORTS = [
+    80, 443,
+    8000, 8001, 8080, 8081, 8082, 8443,
+    3000, 3001, 5000, 9000
+]
 UNCOMMON_WEB_PORTS = [
-    81,
+    81, 82, 83, 84, 85, 86, 87, 88, 89, 90,
     300,
     591,
     593,
     832,
     981,
     1010,
-    1311,
     1099,
-    2082,
-    2095,
-    2096,
+    1311,
+    2082, 2083, 2086, 2087, 2095, 2096,
     2480,
-    3000,
+    3002, 3003, 3004, 3005,
     3128,
     3333,
+    4000, 4001, 4002, 4003, 4004, 4005,
+    4200,
     4243,
+    4443, 4444, 4445, 4446, 4447, 4448, 4449,
     4567,
     4711,
     4712,
     4993,
-    5000,
+    5001, 5002, 5003, 5004, 5005,
     5104,
     5108,
     5280,
@@ -295,54 +311,48 @@ UNCOMMON_WEB_PORTS = [
     5601,
     5800,
     6543,
-    7000,
-    7001,
+    7000, 7001, 7002,
     7396,
     7474,
-    8000,
-    8001,
-    8008,
+    8002, 8003, 8004, 8005, 8006, 8007, 8008, 8009,
     8014,
     8042,
     8060,
     8069,
-    8080,
-    8081,
-    8083,
-    8088,
-    8090,
-    8091,
-    8095,
+    8083, 8084, 8085, 8086, 8087, 8088, 8089,
+    8090, 8091, 8092, 8093, 8094, 8095, 8096, 8097, 8098, 8099,
+    8100,
     8118,
     8123,
     8172,
-    8181,
+    8180, 8181, 8182, 8183, 8184, 8185, 8186, 8187, 8188, 8189,
     8222,
     8243,
     8280,
     8281,
     8333,
     8337,
-    8443,
+    8444, 8445, 8446, 8447, 8448, 8449,
     8500,
+    8800,
     8834,
     8880,
     8888,
+    8889,
     8983,
-    9000,
-    9001,
+    9001, 9002, 9003, 9004, 9005,
     9043,
     9060,
     9080,
-    9090,
-    9091,
+    9090, 9091, 9092, 9093, 9094, 9095,
     9200,
-    9443,
+    9443, 9444, 9445, 9446, 9447, 9448, 9449,
     9502,
     9800,
     9981,
-    10000,
+    10000, 10001, 10002, 10003, 10004,
     10250,
+    10443,
     11371,
     12443,
     15672,
@@ -350,10 +360,11 @@ UNCOMMON_WEB_PORTS = [
     17778,
     18091,
     18092,
+    20000,
     20720,
     32000,
     55440,
-    55672,
+    55672
 ]
 
 ###############################################################################
@@ -437,95 +448,33 @@ PERM_INITATE_SCANS_SUBSCANS = 'initiate_scans_subscans'
 # 404 page url
 FOUR_OH_FOUR_URL = '/404/'
 
-
-###############################################################################
-# OLLAMA DEFINITIONS
-###############################################################################
-OLLAMA_INSTANCE = 'http://ollama:11434'
-
-DEFAULT_GPT_MODELS = [
-    {
-        'name': 'gpt-3',
-        'model': 'gpt-3',
-        'modified_at': '',
-        'details': {
-            'family': 'GPT',
-            'parameter_size': '~175B',
-        }
-    },
-    {
-        'name': 'gpt-3.5-turbo',
-        'model': 'gpt-3.5-turbo',
-        'modified_at': '',
-        'details': {
-            'family': 'GPT',
-            'parameter_size': '~7B',
-        }
-    },
-    {
-        'name': 'gpt-4',
-        'model': 'gpt-4',
-        'modified_at': '',
-        'details': {
-            'family': 'GPT',
-            'parameter_size': '~1.7T',
-        }
-    },
-	{
-        'name': 'gpt-4-turbo',
-        'model': 'gpt-4',
-        'modified_at': '',
-        'details': {
-            'family': 'GPT',
-            'parameter_size': '~1.7T',
-        }
-    }
-]
-
-
-
-# GPT Vulnerability Report Generator
-VULNERABILITY_DESCRIPTION_SYSTEM_MESSAGE = """
-    You are a highly skilled penetration tester who has recently completed a penetration testing.
-    You will be given with a
-        - Vulnerability title
-        - Vulnerable URL
-        - and some description about the vulnerability.
-    Your job is to write a detailed technical penetration testing report based on the given Vulnerability details.
-    The purpose of this report is to provide an in-depth analysis of the vulnerabilities discovered during the penetration testing engagement.
-
-    The penetration testing report must contain all separated by \n\n
-
-    - Vulnerability description
-        Include a detailed vulnerability description, include any known CVE IDs, any known existing vulnerabilities.
-    - Impact
-        Include what this vulnerability can impact for web applications.
-    - Remediation
-        Include steps to remediate this vulnerability. Separate each new remediations by - and a new line \n
-    - References
-        Include any references URL about this vulnerability, any existing CVE ID, or news articles etc. Separate each new references by - and a new line \n. Only include http urls
-
-    Do not write 'Penetration Testing Report:' on the title.
-"""
-
-
-ATTACK_SUGGESTION_GPT_SYSTEM_PROMPT = """
-    You are a highly skilled penetration tester who has recently completed a reconnaissance on a target.
-    As a penetration tester, I've conducted a thorough reconnaissance on a specific subdomain.
-    Based on my reconnaissance you will be given with a
-        - Subdomain Name
-        - Subdomain Page Title
-        - Open Ports if any detected
-        - HTTP Status
-        - Technologies Detected
-        - Content Type
-        - Web Server
-        - Page Content Length
-    I'm seeking insights into potential technical web application attacks that could be executed on this subdomain, along with explanations for why these attacks are feasible given the discovered information.
-    Please provide a detailed list of these attack types and their underlying technical rationales on every attacks you suggested.
-    Also suggest if any CVE ID, known exploits, existing vulnerabilities, any news articles URL related to the information provided to you.
-"""
-
-
 # OSINT GooFuzz Path
 GOFUZZ_EXEC_PATH = 'GooFuzz'
+
+###############################################################################
+# LLM DEFINITIONS
+###############################################################################
+
+# Default Ollama instance URL if not set in environment
+DEFAULT_OLLAMA_INSTANCE = 'http://ollama:11434'
+
+# Get Ollama instance URL from environment or use default
+OLLAMA_INSTANCE = os.getenv('OLLAMA_INSTANCE', DEFAULT_OLLAMA_INSTANCE)
+
+###############################################################################
+# SCAN ENGINES DEFINITIONS
+###############################################################################
+
+ENGINE_DISPLAY_NAMES = [
+    ('subdomain_discovery', 'Subdomain Discovery'),
+    ('port_scan', 'Port Scan'),
+    ('fetch_url', 'Fetch URLs'),
+    ('dir_file_fuzz', 'Directory and File Fuzzing'),
+    ('vulnerability_scan', 'Vulnerability Scan'),
+    ('osint', 'Open-Source Intelligence'),
+    ('screenshot', 'Screenshot'),
+    ('waf_detection', 'WAF Detection')
+]
+
+# Engine names for internal use
+ENGINE_NAMES = [engine[0] for engine in ENGINE_DISPLAY_NAMES]

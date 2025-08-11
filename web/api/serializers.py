@@ -1,14 +1,44 @@
 from collections import defaultdict
-from dashboard.models import *
 from django.contrib.humanize.templatetags.humanize import (naturalday, naturaltime)
 from django.db.models import F, JSONField, Value
-from recon_note.models import *
-from reNgine.common_func import *
+from reNgine.utilities.subdomain import get_interesting_subdomains
 from rest_framework import serializers
-from scanEngine.models import *
-from startScan.models import *
-from targetApp.models import *
-from dashboard.models import *
+from dashboard.models import (
+	Project,
+	SearchHistory,
+)
+from recon_note.models import (
+	TodoNote,
+)
+from scanEngine.models import (
+	EngineType,
+)
+from startScan.models import (
+	Command,
+	DirectoryFile,
+	DirectoryScan,
+	Dork,
+	Email,
+	Employee,
+	EndPoint,
+	IpAddress,
+	MetaFinderDocument,
+	Port,
+	ScanActivity,
+	ScanHistory,
+	Subdomain,
+	SubScan,
+	Technology,
+	Vulnerability,
+	Waf
+)
+from targetApp.models import (
+	Domain,
+	Organization,
+)
+import yaml
+
+from reNgine.definitions import ENGINE_NAMES
 
 
 class SearchHistorySerializer(serializers.ModelSerializer):
@@ -34,7 +64,7 @@ class DomainSerializer(serializers.ModelSerializer):
 	def get_vuln_count(self, obj):
 		try:
 			return obj.vuln_count
-		except:
+		except Exception:
 			return None
 
 	def get_organization(self, obj):
@@ -89,9 +119,7 @@ class SubScanResultSerializer(serializers.ModelSerializer):
 		return subscan.type
 
 	def get_engine_name(self, subscan):
-		if subscan.engine:
-			return subscan.engine.engine_name
-		return ''
+		return subscan.engine.engine_name if subscan.engine else ''
 
 
 class ReconNoteSerializer(serializers.ModelSerializer):
@@ -148,9 +176,7 @@ class SubScanSerializer(serializers.ModelSerializer):
 		return subscan.get_completed_ago()
 
 	def get_engine_name(self, subscan):
-		if subscan.engine:
-			return subscan.engine.engine_name
-		return ''
+		return subscan.engine.engine_name if subscan.engine else ''
 
 
 class CommandSerializer(serializers.ModelSerializer):
@@ -166,6 +192,7 @@ class ScanHistorySerializer(serializers.ModelSerializer):
 	endpoint_count = serializers.SerializerMethodField('get_endpoint_count')
 	vulnerability_count = serializers.SerializerMethodField('get_vulnerability_count')
 	current_progress = serializers.SerializerMethodField('get_progress')
+	current_task = serializers.SerializerMethodField('get_current_task')
 	completed_time = serializers.SerializerMethodField('get_total_scan_time_in_sec')
 	elapsed_time = serializers.SerializerMethodField('get_elapsed_time')
 	completed_ago = serializers.SerializerMethodField('get_completed_ago')
@@ -179,6 +206,7 @@ class ScanHistorySerializer(serializers.ModelSerializer):
 			'endpoint_count',
 			'vulnerability_count',
 			'current_progress',
+			'current_task',
 			'completed_time',
 			'elapsed_time',
 			'completed_ago',
@@ -210,6 +238,9 @@ class ScanHistorySerializer(serializers.ModelSerializer):
 	def get_progress(self, scan_history):
 		return scan_history.get_progress()
 
+	def get_current_task(self, scan_history):
+		return scan_history.get_current_task()
+
 	def get_total_scan_time_in_sec(self, scan_history):
 		return scan_history.get_total_scan_time_in_sec()
 
@@ -223,6 +254,80 @@ class ScanHistorySerializer(serializers.ModelSerializer):
 		return [org.name for org in scan_history.domain.get_organization()]
 
 
+class ScanActivitySerializer(serializers.ModelSerializer):
+	domain_name = serializers.SerializerMethodField('get_domain_name')
+	scan_id = serializers.SerializerMethodField('get_scan_id')
+	engine_name = serializers.SerializerMethodField('get_engine_name')
+	formatted_task_name = serializers.SerializerMethodField('get_formatted_task_name')
+	elapsed_time = serializers.SerializerMethodField('get_elapsed_time')
+
+	class Meta:
+		model = ScanActivity
+		fields = [
+			'id',
+			'title',
+			'name', 
+			'time',
+			'status',
+			'domain_name',
+			'scan_id',
+			'engine_name',
+			'formatted_task_name',
+			'elapsed_time',
+			'error_message'
+		]
+
+	def get_domain_name(self, scan_activity):
+		if scan_activity.scan_of and scan_activity.scan_of.domain:
+			return scan_activity.scan_of.domain.name
+		return 'Unknown'
+
+	def get_scan_id(self, scan_activity):
+		if scan_activity.scan_of:
+			return scan_activity.scan_of.id
+		return None
+
+	def get_engine_name(self, scan_activity):
+		if scan_activity.scan_of and scan_activity.scan_of.scan_type:
+			return scan_activity.scan_of.scan_type.engine_name
+		return 'Unknown'
+
+	def get_formatted_task_name(self, scan_activity):
+		"""Format task name for display"""
+		task_name = scan_activity.name
+		
+		# If title is set and different from default name, use it (e.g. for Nuclei severity)
+		if scan_activity.title and scan_activity.title != task_name.replace('_', ' ').capitalize():
+			return scan_activity.title
+		
+		task_display_names = {
+			'subdomain_discovery': 'Subdomain Discovery',
+			'osint': 'OSINT Gathering',
+			'pre_crawl': 'Pre-crawl Analysis',
+			'port_scan': 'Port Scanning',
+			'fetch_url': 'URL Discovery',
+			'intermediate_crawl': 'Intermediate Crawl',
+			'http_crawl': 'HTTP Crawling',
+			'screenshot': 'Taking Screenshots',
+			'vulnerability_scan': 'Vulnerability Scanning',
+			'nuclei_scan': 'Nuclei Scanning',
+			'nuclei_individual_severity_module': 'Nuclei Scanning',
+			'waf_detection': 'WAF Detection',
+			'dir_file_fuzz': 'Directory Fuzzing',
+			'dalfox_xss_scan': 'XSS Scanning',
+			'crlfuzz_scan': 'CRLF Injection Scan',
+			'post_crawl': 'Post-crawl Analysis'
+		}
+		
+		return task_display_names.get(task_name, task_name.replace('_', ' ').title())
+
+	def get_elapsed_time(self, scan_activity):
+		"""Get elapsed time since task started"""
+		from reNgine.utilities.time import get_time_taken
+		from django.utils import timezone
+		return get_time_taken(timezone.now(), scan_activity.time)
+
+
 class OrganizationSerializer(serializers.ModelSerializer):
 
 	class Meta:
@@ -232,20 +337,23 @@ class OrganizationSerializer(serializers.ModelSerializer):
 
 class EngineSerializer(serializers.ModelSerializer):
 
-	tasks = serializers.SerializerMethodField('get_tasks')
+	tasks = serializers.SerializerMethodField()
 
-	def get_tasks(self, instance):
-		return instance.tasks
+	def get_tasks(self, obj):
+		try:
+			yaml_config = yaml.safe_load(obj.yaml_configuration)
+			if not isinstance(yaml_config, dict):
+				return []
+		except Exception:
+			return []
+		return sorted([
+			task for task in yaml_config.keys()
+			if task in ENGINE_NAMES
+		])
 
 	class Meta:
 		model = EngineType
-		fields = [
-			'id',
-			'default_engine',
-			'engine_name',
-			'yaml_configuration',
-			'tasks'
-		]
+		fields = ['id', 'engine_name', 'tasks']
 
 
 class OrganizationTargetsSerializer(serializers.ModelSerializer):
@@ -272,27 +380,6 @@ class VisualiseVulnerabilitySerializer(serializers.ModelSerializer):
 		return vulnerability.name
 
 
-class VisualisePortSerializer(serializers.ModelSerializer):
-
-	description = serializers.SerializerMethodField('get_description')
-	title = serializers.SerializerMethodField('get_title')
-
-	class Meta:
-		model = Port
-		fields = [
-			'description',
-			'is_uncommon',
-			'title',
-		]
-
-	def get_description(self, port):
-		return str(port.number) + "/" + str(port.service_name)
-
-	def get_title(self, port):
-		if port.is_uncommon:
-			return "Uncommon Port"
-
-
 class VisualiseTechnologySerializer(serializers.ModelSerializer):
 
 	description = serializers.SerializerMethodField('get_description')
@@ -306,29 +393,39 @@ class VisualiseTechnologySerializer(serializers.ModelSerializer):
 	def get_description(self, tech):
 		return tech.name
 
+class VisualisePortSerializer(serializers.ModelSerializer):
+    description = serializers.SerializerMethodField()
+    title = serializers.SerializerMethodField()
+    is_uncommon = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Port
+        fields = ['description', 'title', 'is_uncommon']
+
+    def get_description(self, port):
+        return f"{port.number}/{port.service_name}/{port.service_name}"
+
+    def get_title(self, port):
+        return "Uncommon Port" if port.is_uncommon else "Port"
+
+    def get_is_uncommon(self, port):
+        return port.is_uncommon
 
 class VisualiseIpSerializer(serializers.ModelSerializer):
+    description = serializers.SerializerMethodField('get_description')
+    children = serializers.SerializerMethodField('get_children')
 
-	description = serializers.SerializerMethodField('get_description')
-	children = serializers.SerializerMethodField('get_children')
+    class Meta:
+        model = IpAddress
+        fields = ['description', 'children']
 
-	class Meta:
-		model = IpAddress
-		fields = [
-			'description',
-			'children'
-		]
+    def get_description(self, ip):
+        return ip.address
 
-	def get_description(self, Ip):
-		return Ip.address
-
-	def get_children(self, ip):
-		port = Port.objects.filter(
-			ports__in=IpAddress.objects.filter(
-				address=ip))
-		serializer = VisualisePortSerializer(port, many=True)
-		return serializer.data
-
+    def get_children(self, ip):
+        ports = ip.ports.all()
+        serializer = VisualisePortSerializer(ports, many=True)
+        return serializer.data
 
 class VisualiseEndpointSerializer(serializers.ModelSerializer):
 
@@ -376,7 +473,11 @@ class VisualiseSubdomainSerializer(serializers.ModelSerializer):
 		)
 
 		ips = IpAddress.objects.filter(ip_addresses__in=subdomains)
-		ip_serializer = VisualiseIpSerializer(ips, many=True)
+		ip_serializer = VisualiseIpSerializer(
+			ips, 
+			many=True,
+			context={'scan_id': scan_history.id}
+		)
 
 		# endpoint = EndPoint.objects.filter(
 		#     scan_history=self.context.get('scan_history')).filter(
@@ -410,80 +511,90 @@ class VisualiseSubdomainSerializer(serializers.ModelSerializer):
 			})
 
 		if vulnerability:
-			vulnerability_data = []
-			critical = vulnerability.filter(severity=4)
-			if critical:
-				critical_serializer = VisualiseVulnerabilitySerializer(
-					critical,
-					many=True
-				)
-				vulnerability_data.append({
-					'description': 'Critical',
-					'children': critical_serializer.data
+			self._group_vulnerabilities_by_severity_(vulnerability, return_data)
+		
+		# Get screenshots from endpoints instead of subdomains
+		endpoints_with_screenshots = EndPoint.objects.filter(
+			scan_history=scan_history,
+			subdomain__name=subdomain_name.name,
+			screenshot_path__isnull=False
+		)
+		if endpoints_with_screenshots.exists():
+			screenshot_data = []
+			for endpoint in endpoints_with_screenshots:
+				screenshot_data.append({
+					'description': endpoint.http_url,
+					'screenshot_path': endpoint.screenshot_path
 				})
-			high = vulnerability.filter(severity=3)
-			if high:
-				high_serializer = VisualiseVulnerabilitySerializer(
-					high,
-					many=True
-				)
-				vulnerability_data.append({
-					'description': 'High',
-					'children': high_serializer.data
-				})
-			medium = vulnerability.filter(severity=2)
-			if medium:
-				medium_serializer = VisualiseVulnerabilitySerializer(
-					medium,
-					many=True
-				)
-				vulnerability_data.append({
-					'description': 'Medium',
-					'children': medium_serializer.data
-				})
-			low = vulnerability.filter(severity=1)
-			if low:
-				low_serializer = VisualiseVulnerabilitySerializer(
-					low,
-					many=True
-				)
-				vulnerability_data.append({
-					'description': 'Low',
-					'children': low_serializer.data
-				})
-			info = vulnerability.filter(severity=0)
-			if info:
-				info_serializer = VisualiseVulnerabilitySerializer(
-					info,
-					many=True
-				)
-				vulnerability_data.append({
-					'description': 'Informational',
-					'children': info_serializer.data
-				})
-			uknown = vulnerability.filter(severity=-1)
-			if uknown:
-				uknown_serializer = VisualiseVulnerabilitySerializer(
-					uknown,
-					many=True
-				)
-				vulnerability_data.append({
-					'description': 'Unknown',
-					'children': uknown_serializer.data
-				})
-
-			if vulnerability_data:
-				return_data.append({
-					'description': 'Vulnerabilities',
-					'children': vulnerability_data
-				})
-
-		if subdomain_name.screenshot_path:
 			return_data.append({
-				'description': 'Screenshot',
-				'screenshot_path': subdomain_name.screenshot_path
+				'description': 'Screenshots',
+				'children': screenshot_data
 			})
+		
 		return return_data
+
+	def _group_vulnerabilities_by_severity_(self, vulnerability, return_data):
+		vulnerability_data = []
+		if critical := vulnerability.filter(severity=4):
+			critical_serializer = VisualiseVulnerabilitySerializer(
+				critical,
+				many=True
+			)
+			vulnerability_data.append({
+				'description': 'Critical',
+				'children': critical_serializer.data
+			})
+		if high := vulnerability.filter(severity=3):
+			high_serializer = VisualiseVulnerabilitySerializer(
+				high,
+				many=True
+			)
+			vulnerability_data.append({
+				'description': 'High',
+				'children': high_serializer.data
+			})
+		if medium := vulnerability.filter(severity=2):
+			medium_serializer = VisualiseVulnerabilitySerializer(
+				medium,
+				many=True
+			)
+			vulnerability_data.append({
+				'description': 'Medium',
+				'children': medium_serializer.data
+			})
+		if low := vulnerability.filter(severity=1):
+			low_serializer = VisualiseVulnerabilitySerializer(
+				low,
+				many=True
+			)
+			vulnerability_data.append({
+				'description': 'Low',
+				'children': low_serializer.data
+			})
+		if info := vulnerability.filter(severity=0):
+			info_serializer = VisualiseVulnerabilitySerializer(
+				info,
+				many=True
+			)
+			vulnerability_data.append({
+				'description': 'Informational',
+				'children': info_serializer.data
+			})
+		if uknown := vulnerability.filter(severity=-1):
+			uknown_serializer = VisualiseVulnerabilitySerializer(
+				uknown,
+				many=True
+			)
+			vulnerability_data.append({
+				'description': 'Unknown',
+				'children': uknown_serializer.data
+			})
+
+		if vulnerability_data:
+			return_data.append({
+				'description': 'Vulnerabilities',
+				'children': vulnerability_data
+			})
 
 
 class VisualiseEmailSerializer(serializers.ModelSerializer):
@@ -497,10 +608,9 @@ class VisualiseEmailSerializer(serializers.ModelSerializer):
 			'password',
 			'title'
 		]
-
 	def get_description(self, email):
 		if email.password:
-			return email.address + " > " + email.password
+			return f"{email.address} > {email.password}"
 		return email.address
 
 	def get_title(self, email):
@@ -541,10 +651,9 @@ class VisualiseEmployeeSerializer(serializers.ModelSerializer):
 		fields = [
 			'description'
 		]
-
 	def get_description(self, employee):
 		if employee.designation:
-			return employee.name + '--' + employee.designation
+			return f'{employee.name}--{employee.designation}'
 		return employee.name
 
 
@@ -564,7 +673,6 @@ class VisualiseDataSerializer(serializers.ModelSerializer):
 
 	def get_description(self, scan_history):
 		return scan_history.domain.name
-
 	def get_children(self, history):
 		scan_history = ScanHistory.objects.filter(id=history.id)
 
@@ -611,63 +719,58 @@ class VisualiseDataSerializer(serializers.ModelSerializer):
 				'children': processed_dorks})
 
 		if metainfo:
-			metainfo_data = []
-			usernames = (
-				metainfo
-				.annotate(description=F('author'))
-				.values('description')
-				.distinct()
-				.annotate(children=Value([], output_field=JSONField()))
-				.filter(author__isnull=False)
-			)
-
-			if usernames:
-				metainfo_data.append({
-					'description': 'Usernames',
-					'children': usernames})
-
-			software = (
-				metainfo
-				.annotate(description=F('producer'))
-				.values('description')
-				.distinct()
-				.annotate(children=Value([], output_field=JSONField()))
-				.filter(producer__isnull=False)
-			)
-
-			if software:
-				metainfo_data.append({
-					'description': 'Software',
-					'children': software})
-
-			os = (
-				metainfo
-				.annotate(description=F('os'))
-				.values('description')
-				.distinct()
-				.annotate(children=Value([], output_field=JSONField()))
-				.filter(os__isnull=False)
-			)
-
-			if os:
-				metainfo_data.append({
-					'description': 'OS',
-					'children': os})
-
-			if metainfo:
-				osint_data.append({
-					'description':'Metainfo',
-					'children': metainfo_data})
-
-			return_data.append({
-				'description':'OSINT',
-				'children': osint_data})
-
+			self._extracted_from_get_children_(metainfo, osint_data, return_data)
 		if osint_data:
 			return_data.append({
 				'description':'OSINT',
 				'children': osint_data})
 
+		return return_data
+
+	# TODO Rename this here and in `get_children`
+	def _extracted_from_get_children_(self, metainfo, osint_data, return_data):
+		metainfo_data = []
+		if usernames := (
+			metainfo.annotate(description=F('author'))
+			.values('description')
+			.distinct()
+			.annotate(children=Value([], output_field=JSONField()))
+			.filter(author__isnull=False)
+		):
+			metainfo_data.append({
+				'description': 'Usernames',
+				'children': usernames})
+
+		if software := (
+			metainfo.annotate(description=F('producer'))
+			.values('description')
+			.distinct()
+			.annotate(children=Value([], output_field=JSONField()))
+			.filter(producer__isnull=False)
+		):
+			metainfo_data.append({
+				'description': 'Software',
+				'children': software})
+
+		if os := (
+			metainfo.annotate(description=F('os'))
+			.values('description')
+			.distinct()
+			.annotate(children=Value([], output_field=JSONField()))
+			.filter(os__isnull=False)
+		):
+			metainfo_data.append({
+				'description': 'OS',
+				'children': os})
+
+		if metainfo:
+			osint_data.append({
+				'description':'Metainfo',
+				'children': metainfo_data})
+
+		return_data.append({
+			'description':'OSINT',
+			'children': osint_data})
 		return return_data
 
 	def process_subdomains(self, subdomains):
@@ -686,8 +789,7 @@ class VisualiseDataSerializer(serializers.ModelSerializer):
 				# Reconstruct vulnerabilities structure without duplicates
 				new_vuln_structure = []
 				for severity in ['Critical', 'High', 'Medium', 'Low', 'Informational', 'Unknown']:
-					severity_vulns = [v for k, v in vuln_dict.items() if k[1] == severity]
-					if severity_vulns:
+					if severity_vulns := [v for k, v in vuln_dict.items() if k[1] == severity]:
 						new_vuln_structure.append({
 							'description': severity,
 							'children': severity_vulns
@@ -816,12 +918,31 @@ class PortSerializer(serializers.ModelSerializer):
 
 
 class IpSerializer(serializers.ModelSerializer):
+    ports = PortSerializer(many=True)
+    subdomain_count = serializers.SerializerMethodField()
+    subdomain_names = serializers.SerializerMethodField()
 
-	ports = PortSerializer(many=True)
+    class Meta:
+        model = IpAddress
+        fields = '__all__'
 
-	class Meta:
-		model = IpAddress
-		fields = '__all__'
+    def get_base_subdomain_query(self, obj):
+        query = Subdomain.objects.filter(ip_addresses=obj)
+        scan_id = self.context.get('scan_id')
+        target_id = self.context.get('target_id')
+        
+        if scan_id:
+            query = query.filter(scan_history_id=scan_id)
+        elif target_id:
+            query = query.filter(target_domain_id=target_id)
+            
+        return query.distinct('name')
+
+    def get_subdomain_count(self, obj):
+        return self.get_base_subdomain_query(obj).count()
+
+    def get_subdomain_names(self, obj):
+        return list(self.get_base_subdomain_query(obj).values_list('name', flat=True))
 
 
 class DirectoryFileSerializer(serializers.ModelSerializer):
@@ -920,21 +1041,36 @@ class SubdomainSerializer(serializers.ModelSerializer):
 
 	def get_todos_count(self, subdomain):
 		return len(subdomain.get_todos.filter(is_done=False))
-
 	def get_vuln_count(self, obj):
 		try:
 			return obj.vuln_count
-		except:
+		except Exception:
 			return None
 
 
 class EndpointSerializer(serializers.ModelSerializer):
 
 	techs = TechnologySerializer(many=True)
+	subdomain_id = serializers.SerializerMethodField()
+	scan_history_id = serializers.SerializerMethodField()
+	target_domain_id = serializers.SerializerMethodField()
+	subdomain_name = serializers.SerializerMethodField()
 
 	class Meta:
 		model = EndPoint
 		fields = '__all__'
+	
+	def get_subdomain_id(self, obj):
+		return obj.subdomain.id if obj.subdomain else None
+	
+	def get_scan_history_id(self, obj):
+		return obj.scan_history.id if obj.scan_history else None
+	
+	def get_target_domain_id(self, obj):
+		return obj.target_domain.id if obj.target_domain else None
+	
+	def get_subdomain_name(self, obj):
+		return obj.subdomain.name if obj.subdomain else None
 
 
 class EndpointOnlyURLsSerializer(serializers.ModelSerializer):
@@ -948,6 +1084,9 @@ class VulnerabilitySerializer(serializers.ModelSerializer):
 
 	discovered_date = serializers.SerializerMethodField()
 	severity = serializers.SerializerMethodField()
+	cve_ids = serializers.SerializerMethodField()
+	cwe_ids = serializers.SerializerMethodField()
+	tags = serializers.SerializerMethodField()
 
 	def get_discovered_date(self, Vulnerability):
 		return Vulnerability.discovered_date.strftime("%b %d, %Y %H:%M")
@@ -963,15 +1102,25 @@ class VulnerabilitySerializer(serializers.ModelSerializer):
 			return "High"
 		elif Vulnerability.severity == 4:
 			return "Critical"
-		elif Vulnerability.severity == -1:
-			return "Unknown"
 		else:
 			return "Unknown"
+
+	def get_cve_ids(self, obj):
+		# Use prefetched data to avoid additional queries
+		return [{'name': cve.name} for cve in obj.cve_ids.all()]
+
+	def get_cwe_ids(self, obj):
+		# Use prefetched data to avoid additional queries
+		return [{'name': cwe.name} for cwe in obj.cwe_ids.all()]
+
+	def get_tags(self, obj):
+		# Use prefetched data to avoid additional queries
+		return [{'name': tag.name} for tag in obj.tags.all()]
 
 	class Meta:
 		model = Vulnerability
 		fields = '__all__'
-		depth = 2
+		depth = 1
 
 class ProjectSerializer(serializers.ModelSerializer):
     class Meta:

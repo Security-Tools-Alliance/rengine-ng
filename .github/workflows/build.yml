@@ -32,11 +32,10 @@ env:
 
 jobs:
   build-and-push:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     strategy:
       matrix:
         image: [celery, web, postgres, redis, ollama, certs, proxy]
-        platform: [linux/amd64, linux/arm64]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -44,11 +43,23 @@ jobs:
       - name: Get version
         id: get_version
         run: |
-          if [[ $GITHUB_REF == refs/tags/* ]]; then
-            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-          else
-            echo "VERSION=latest" >> $GITHUB_OUTPUT
-          fi
+          VERSION=$(cat web/reNgine/version.txt)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ env.PROJECT }}
+          tags: |
+            type=ref,event=branch,enable=${{ !contains(github.ref, 'release/') }}
+            type=ref,event=pr
+            type=semver,pattern={{version}},enable=${{ github.event_name == 'release' || startsWith(github.ref, 'refs/tags/v') }}
+            type=raw,value=v${{ steps.get_version.outputs.version }},enable=${{ contains(github.ref, 'release/') }}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ github.event_name == 'release' || startsWith(github.ref, 'refs/tags/v') }}
+            type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', 'master') }}
+          flavor: |
+            prefix=rengine-${{ matrix.image }}-,onlatest=true
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -70,15 +81,17 @@ jobs:
           context: ./docker/${{ matrix.image }}
           file: ./docker/${{ matrix.image }}/Dockerfile
           push: ${{ github.event_name != 'pull_request' || github.event.inputs.push_image == 'true' }}
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ env.PROJECT }}:rengine-${{ matrix.image }}-${{ steps.get_version.outputs.VERSION }}
-            ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ env.PROJECT }}:rengine-${{ matrix.image }}-latest
-          platforms: ${{ matrix.platform }}
+          build-args: |
+            HOST_UID=1000
+            HOST_GID=1000
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          platforms: linux/amd64,linux/arm64
 
   update-release:
     needs: build-and-push
     if: github.event_name == 'release' && github.event.action == 'published'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

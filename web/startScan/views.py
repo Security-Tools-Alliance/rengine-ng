@@ -2,23 +2,32 @@ import markdown, json
 
 from celery import group
 from pathlib import Path
-from weasyprint import HTML
+from weasyprint import HTML, CSS
 from datetime import datetime, timedelta
 from django.contrib import messages
+from django.core.serializers.json import DjangoJSONEncoder
 from django.db.models import Count
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.template.loader import get_template
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.html import mark_safe
 from django_celery_beat.models import ClockedSchedule, IntervalSchedule, PeriodicTask
 from rolepermissions.decorators import has_permission_decorator
+from django.db.models.functions import Lower
 
+from api.serializers import IpSerializer
 from reNgine.celery import app
-from reNgine.common_func import logger, get_interesting_subdomains, create_scan_object, safe_int_cast
+from reNgine.utilities.database import create_scan_activity, create_scan_object
+from reNgine.utilities.subdomain import get_interesting_subdomains
+from reNgine.utilities.data import safe_int_cast
+from celery.utils.log import get_task_logger
+
+logger = get_task_logger(__name__)
 from reNgine.settings import RENGINE_RESULTS
 from reNgine.definitions import ABORTED_TASK, SUCCESS_TASK, RUNNING_TASK, LIVE_SCAN, SCHEDULED_SCAN, PERM_INITATE_SCANS_SUBSCANS, PERM_MODIFY_SCAN_RESULTS, PERM_MODIFY_SCAN_REPORT, PERM_MODIFY_SYSTEM_CONFIGURATIONS, FOUR_OH_FOUR_URL
-from reNgine.tasks import create_scan_activity, initiate_scan, run_command
+from reNgine.tasks import initiate_scan, run_command
 from scanEngine.models import EngineType, VulnerabilityReportSetting
 from startScan.models import ScanHistory, SubScan, Email, Employee, Subdomain, EndPoint, Vulnerability, VulnerabilityTags, IpAddress, CountryISO, ScanActivity, CveId, CweId
 from targetApp.models import Domain, Organization
@@ -41,7 +50,9 @@ def detail_scan(request, id, slug):
     # Get scan objects
     scan = get_object_or_404(ScanHistory, id=id)
     domain_id = safe_int_cast( scan.domain.id)
-    scan_engines = EngineType.objects.order_by('engine_name').all()
+    scan_engines = EngineType.objects.annotate(
+        lower_name=Lower('engine_name')
+    ).order_by('lower_name')
     recent_scans = ScanHistory.objects.filter(domain__id=domain_id)
     last_scans = (
         ScanHistory.objects
@@ -56,9 +67,29 @@ def detail_scan(request, id, slug):
     employees = Employee.objects.filter(employees__in=[scan])
     subdomains = Subdomain.objects.filter(scan_history=scan)
     endpoints = EndPoint.objects.filter(scan_history=scan)
-    vulns = Vulnerability.objects.filter(scan_history=scan)
+    
+    # Optimize vulnerability queries with prefetch_related to avoid N+1 queries
+    vulns = Vulnerability.objects.filter(scan_history=scan).prefetch_related(
+        'cve_ids',
+        'cwe_ids', 
+        'tags',
+        'subdomain',
+        'endpoint',
+        'target_domain'
+    )
+    
     vulns_tags = VulnerabilityTags.objects.filter(vuln_tags__in=vulns)
-    ip_addresses = IpAddress.objects.filter(ip_addresses__in=subdomains)
+    ip_addresses = IpAddress.objects.filter(
+        ip_addresses__in=subdomains
+    ).distinct('address')
+    ip_serializer = IpSerializer(
+        ip_addresses.all(), 
+        many=True, 
+        context={
+            'scan_id': id,
+            'target_id': domain_id
+        }
+    )
     geo_isos = CountryISO.objects.filter(ipaddress__in=ip_addresses)
     scan_activity = ScanActivity.objects.filter(scan_of__id=id).order_by('time')
     cves = CveId.objects.filter(cve_ids__in=vulns)
@@ -167,6 +198,7 @@ def detail_scan(request, id, slug):
         'scan_history_id': id,
         'history': scan,
         'scan_activity': scan_activity,
+        'ip_addresses': json.dumps(ip_serializer.data, cls=DjangoJSONEncoder),
         'subdomain_count': subdomain_count,
         'alive_count': alive_count,
         'important_count': important_count,
@@ -216,7 +248,9 @@ def detail_scan(request, id, slug):
 
 def all_subdomains(request, slug):
     subdomains = Subdomain.objects.filter(target_domain__project__slug=slug)
-    scan_engines = EngineType.objects.order_by('engine_name').all()
+    scan_engines = EngineType.objects.annotate(
+        lower_name=Lower('engine_name')
+    ).order_by('lower_name')
     alive_subdomains = subdomains.filter(http_status__gt=0) # TODO: replace this with is_alive() function
     important_subdomains = (
         subdomains
@@ -299,7 +333,9 @@ def start_scan_ui(request, slug, domain_id):
         return HttpResponseRedirect(reverse('scan_history', kwargs={'slug': slug}))
 
     # GET request
-    engine = EngineType.objects.order_by('engine_name')
+    engine = EngineType.objects.annotate(
+        lower_name=Lower('engine_name')
+    ).order_by('lower_name')
     custom_engine_count = (
         EngineType.objects
         .filter(default_engine=False)
@@ -717,7 +753,9 @@ def start_organization_scan(request, id, slug):
         return HttpResponseRedirect(reverse('scan_history', kwargs={'slug': slug}))
 
     # GET request
-    engine = EngineType.objects.order_by('engine_name')
+    engine = EngineType.objects.annotate(
+        lower_name=Lower('engine_name')
+    ).order_by('lower_name')
     custom_engine_count = EngineType.objects.filter(default_engine=False).count()
     domain_list = organization.get_domains()
     context = {
@@ -808,7 +846,9 @@ def schedule_organization_scan(request, slug, id):
         return HttpResponseRedirect(reverse('scheduled_scan_view', kwargs={'slug': slug}))
 
     # GET request
-    engine = EngineType.objects
+    engine = EngineType.objects.annotate(
+        lower_name=Lower('engine_name')
+    ).order_by('lower_name')
     custom_engine_count = EngineType.objects.filter(default_engine=False).count()
     context = {
         'scan_history_active': 'active',
@@ -911,8 +951,12 @@ def create_report(request, slug, id):
     ip_addresses = (
         IpAddress.objects
         .filter(ip_addresses__in=subdomains)
+        .prefetch_related(
+            'ports',
+        )
         .distinct()
     )
+    
     data = {
         'scan_object': scan,
         'unique_vulnerabilities': unique_vulns,
@@ -922,6 +966,7 @@ def create_report(request, slug, id):
         'interesting_subdomains': interesting_subdomains,
         'subdomains': subdomains,
         'ip_addresses': ip_addresses,
+        'ip_addresses_count': ip_addresses.count(),
         'show_recon': show_recon,
         'show_vuln': show_vuln,
         'report_name': report_name,
@@ -966,9 +1011,51 @@ def create_report(request, slug, id):
     data['primary_color'] = primary_color
     data['secondary_color'] = secondary_color
 
+    # Configure WeasyPrint with the necessary CSS styles
+    css = CSS(string='''
+        /* General styles */
+        body { font-family: Arial, sans-serif; }
+        
+        /* Styles for markdown */
+        h1, h2, h3, h4 { margin-top: 1em; }
+        ul, ol { margin-left: 2em; }
+        pre, code { 
+            background-color: #f5f5f5;
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+        }
+        
+        /* Styles for tables */
+        table { 
+            border-collapse: collapse;
+            width: 100%;
+            margin: 1em 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+    ''')
+
+    # Preprocess HTML/Markdown fields
+    for vuln in data['all_vulnerabilities']:
+        if vuln.description:
+            vuln.description = mark_safe(vuln.description)
+        if vuln.impact:
+            vuln.impact = mark_safe(vuln.impact)
+        if vuln.remediation:
+            vuln.remediation = mark_safe(vuln.remediation)
+        # Note: references are now handled by the parse_references template filter
+
     template = get_template('report/template.html')
     html = template.render(data)
-    pdf = HTML(string=html).write_pdf()
+
+    # Generate the PDF with the CSS styles
+    pdf = HTML(string=html).write_pdf(
+        stylesheets=[css],
+        presentational_hints=True
+    )
 
     if 'download' in request.GET:
         response = HttpResponse(pdf, content_type='application/octet-stream')

@@ -2,25 +2,24 @@ import glob
 import json
 import os
 import re
+import requests
 import shutil
 
-from datetime import datetime
 from django import http
 from django.contrib import messages
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from rolepermissions.decorators import has_permission_decorator
+from reNgine.utilities.notification import send_discord_message, send_slack_message, send_lark_message, send_telegram_message
+from reNgine.tasks import run_command, run_gf_list
 
-from reNgine.common_func import get_open_ai_key
-from reNgine.definitions import OLLAMA_INSTANCE, DEFAULT_GPT_MODELS
-from reNgine.tasks import run_command, send_discord_message, send_slack_message, send_lark_message, send_telegram_message, run_gf_list
 from scanEngine.forms import AddEngineForm, UpdateEngineForm, AddWordlistForm, ExternalToolForm, InterestingLookupForm, NotificationForm, ProxyForm, HackeroneForm, ReportForm
 from scanEngine.models import EngineType, Wordlist, InstalledExternalTool, InterestingLookupModel, Notification, Hackerone, Proxy, VulnerabilityReportSetting
-from dashboard.models import OpenAiAPIKey, NetlasAPIKey, OllamaSettings
+from dashboard.models import OpenAiAPIKey, NetlasAPIKey
+from api.views import LLMModelsManager
 from reNgine.definitions import PERM_MODIFY_SCAN_CONFIGURATIONS, PERM_MODIFY_SCAN_REPORT, PERM_MODIFY_WORDLISTS, PERM_MODIFY_INTERESTING_LOOKUP, PERM_MODIFY_SYSTEM_CONFIGURATIONS, FOUR_OH_FOUR_URL
 from reNgine.settings import RENGINE_WORDLISTS, RENGINE_HOME, RENGINE_TOOL_GITHUB_PATH
 from pathlib import Path
-import requests
 
 def index(request):
     engine_type = EngineType.objects.order_by('engine_name').all()
@@ -223,9 +222,9 @@ def handle_post_request(request):
         'nuclei_config_text_area': lambda r: update_config(r, 'nuclei', 'Nuclei'),
         'subfinder_config_text_area': lambda r: update_config(r, 'subfinder', 'Subfinder'),
         'naabu_config_text_area': lambda r: update_config(r, 'naabu', 'Naabu'),
-        'amass_config_text_area': lambda r: update_config(r, 'amass', 'Amass', '.ini'),
-        'theharvester_config_text_area': lambda r: update_config(r, 'theHarvester/api-keys', 'theHarvester'),
-        'gau_config_text_area': lambda r: update_config(r, '.gau', 'GAU', '.toml'),
+        'amass_config_text_area': lambda r: update_config(r, 'amass', 'Amass', 'config', '.ini'),
+        'theHarvester_config_text_area': lambda r: update_config(r, 'theHarvester', 'theHarvester', 'api-keys', '.yaml'),
+        'gau_config_text_area': lambda r: update_config(r, 'gau', 'GAU', 'config', '.toml'),
     }
     for key, handler in handlers.items():
         if key in request.FILES or key in request.POST:
@@ -250,8 +249,8 @@ def handle_file_upload(request, file_key, directory, expected_extension, pattern
             file.write(uploaded_file.read().decode("utf-8"))
         messages.info(request, f'{pattern_name} {uploaded_file.name[:4]} successfully uploaded')
 
-def update_config(request, tool_name, display_name, file_extension='.yaml'):
-    config_path = Path.home() / '.config' / tool_name / f'config{file_extension}'
+def update_config(request, tool_name, display_name, file_name='config', file_extension='.yaml'):
+    config_path = Path.home() / '.config' / tool_name / f'{file_name}{file_extension}'
     with open(config_path, "w", encoding='utf-8') as fhandle:
         fhandle.write(request.POST.get(f'{tool_name}_config_text_area'))
     messages.info(request, f'{display_name} config updated!')
@@ -415,28 +414,19 @@ def api_vault_delete(request):
     return http.JsonResponse(response)
 
 def llm_toolkit_section(request):
-    all_models = DEFAULT_GPT_MODELS.copy()
-    response = requests.get(f'{OLLAMA_INSTANCE}/api/tags')
-    if response.status_code == 200:
-        ollama_models = response.json().get('models', [])
-        date_format = "%Y-%m-%dT%H:%M:%S"
-        all_models.extend([{**model, 
-            'modified_at': datetime.strptime(model['modified_at'].split('.')[0], date_format),
-            'is_local': True,
-        } for model in ollama_models])
-
-    selected_model = OllamaSettings.objects.first()
-    selected_model_name = selected_model.selected_model if selected_model else 'gpt-3.5-turbo'
-
-    for model in all_models:
-        if model['name'] == selected_model_name:
-            model['selected'] = True
-
-    context = {
-        'installed_models': all_models,
-        'openai_key_error': not get_open_ai_key() and 'gpt' in selected_model_name
-    }
-    return render(request, 'scanEngine/settings/llm_toolkit.html', context)
+    try:
+        # Direct call to the API
+        api_response = LLMModelsManager().get(request)
+        data = api_response.data
+        
+        context = {
+            'installed_models': data['models'],
+            'openai_key_error': data['openai_key_error']
+        }
+        return render(request, 'scanEngine/settings/llm_toolkit.html', context)
+    except Exception as e:
+        messages.error(request, f'Error fetching LLM models: {str(e)}')
+        return render(request, 'scanEngine/settings/llm_toolkit.html', {'installed_models': []})
 
 @has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
 def api_vault(request):
@@ -462,7 +452,7 @@ def api_vault(request):
             "optional": True,
             "experimental": True,
             "name": "OpenAI",
-            "text": "OpenAI keys will be used to generate vulnerability description, remediation, impact and vulnerability report writing using ChatGPT.",
+            "text": "OpenAI keys will be used to generate vulnerability description, remediation, impact and vulnerability report writing using LLM.",
             "hasKey": OpenAiAPIKey.objects.first() is not None
         },
         {

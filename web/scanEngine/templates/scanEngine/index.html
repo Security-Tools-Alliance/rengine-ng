@@ -43,7 +43,7 @@ Scan Engines
         <thead>
           <tr>
             <th>ID</th>
-            <th>Engine Name</th>
+            <th>Name</th>
             <th class="text-center">Type</th>
             <th class="text-center">Subdomain Discovery</th>
             <th class="text-center">WAF Detection</th>
@@ -57,15 +57,19 @@ Scan Engines
           </tr>
         </thead>
         <tbody>
-          {% for engine in engine_type.all %}
+          {% for engine in engine_type %}
           <tr>
             <td>{{engine.id}}</td>
-            <td class="text-primary">{{engine.engine_name}}</td>
+            <td class="text-primary">
+              <a href="{% url 'update_engine' engine.id %}" class="open-domain">
+                {{engine.engine_name}}
+              </a>
+            </td>
             <td class="text-center">
               {% if engine.default_engine %}
-              <span class="badge badge-soft-primary p-1">Default Engine</span>
+              <span class="badge badge-soft-primary p-1">Default</span>
               {% else %}
-              <span class="badge badge-soft-danger p-1">Custom Engine</span>
+              <span class="badge badge-soft-danger p-1">Custom</span>
               {% endif %}
             </td>
             <td class="text-center">
@@ -168,6 +172,7 @@ Scan Engines
       "columnDefs":[
       { 'visible': false, 'targets': [0] },
       ],
+      "order": [[ 1, "asc" ]],
       "stripeClasses": [],
       "lengthMenu": [20, 30, 40, 50],
       "pageLength": 20,

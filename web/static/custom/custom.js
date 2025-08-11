@@ -1081,6 +1081,9 @@ function show_subscan_results(endpoint_url, subscan_id) {
 			badge_color = 'success';
 		} else if (response['subscan']['status'] == 3) {
 			scan_status = 'Aborted';
+		} else if (response['subscan']['status'] == 4) {
+			badge_color = 'info';
+			scan_status = 'Finalizing';
 		} else {
 			scan_status = 'Unknown';
 		}
@@ -1354,6 +1357,7 @@ function render_directories_in_xl_modal(directory_count, subdomain_name, result)
 		<table id="directory-modal-datatable" class="table dt-responsive w-100">
 		<thead>
 		<tr>
+		<th>Base URL</th>
 		<th>Directory</th>
 		<th class="text-center">HTTP Status</th>
 		<th>Content Length</th>
@@ -1369,8 +1373,10 @@ function render_directories_in_xl_modal(directory_count, subdomain_name, result)
 	$('#directory_tbody').empty();
 	for (var dir_obj in result) {
 		var dir = result[dir_obj];
+		var base_url = new URL(dir.url).origin;
 		$('#directory_tbody').append(`
 			<tr>
+			<td><a href="${base_url}" target="_blank">${base_url}</a></td>
 			<td><a href="${dir.url}" target="_blank">${atob(dir.name)}</a></td>
 			<td class="text-center">${get_http_status_badge(dir.http_status)}</td>
 			<td>${dir.length}</td>
@@ -1392,9 +1398,9 @@ function render_directories_in_xl_modal(directory_count, subdomain_name, result)
 			"sLengthMenu": "Results :  _MENU_",
 		},
 		"dom": "<'dt--top-section'<'row'<'col-12 col-sm-6 d-flex justify-content-sm-start justify-content-center'f><'col-12 col-sm-6 d-flex justify-content-sm-end justify-content-center'l>>>" + "<'table-responsive'tr>" + "<'dt--bottom-section d-sm-flex justify-content-sm-between text-center'<'dt--pages-count  mb-sm-0 mb-3'i><'dt--pagination'p>>",
-		"order": [
-			[2, "desc"]
-		],
+			"order": [
+		[1, "asc"]
+	],
 		drawCallback: function() {
 			$(".dataTables_paginate > .pagination").addClass("pagination-rounded");
 		}
@@ -1456,6 +1462,14 @@ function get_and_render_subscan_history(endpoint, subdomain_id, subdomain_name) 
 					color = 'success';
 					bg_color = 'bg-soft-success';
 					status_badge = '<span class="float-end badge bg-success">Task Completed</span>';
+				} else if (result_obj.status == 1) {
+					color = 'primary';
+					bg_color = 'bg-soft-primary';
+					status_badge = '<span class="float-end badge bg-primary">Running</span>';
+				} else if (result_obj.status == 4) {
+					color = 'info';
+					bg_color = 'bg-soft-info';
+					status_badge = '<span class="float-end badge bg-info">Finalizing</span>';
 				}
 
 				$('#subscan_history_table').append(`
@@ -1925,7 +1939,10 @@ function display_whois_on_modal(response, addTargetUrl, project_slug, show_add_t
 		</div>`
 	}
 
-	$('#whoisLookupResultModal .modal-body').append(content);
+	// Sanitize with DOMPurify before inserting into the DOM
+	$('#whoisLookupResultModal .modal-body').append(
+		DOMPurify.sanitize(content)
+	);
 	$('[data-toggle="tooltip"]').tooltip();
 
 }
@@ -2058,6 +2075,10 @@ function loadSubscanHistoryWidget(endpoint, scan_history_id = null, domain_id = 
 					color = 'primary';
 					bg_color = 'bg-soft-primary';
 					status_badge = '<span class="float-end badge bg-primary">Running</span>';
+				} else if (result_obj.status == 4) {
+					color = 'info';
+					bg_color = 'bg-soft-info';
+					status_badge = '<span class="float-end badge bg-info">Finalizing</span>';
 				}
 
 				$('#subscan_history_widget').append(`
@@ -2094,39 +2115,6 @@ function loadSubscanHistoryWidget(endpoint, scan_history_id = null, domain_id = 
 	});
 }
 
-function get_ips(endpoint, scan_id=null, domain_id=null){
-	// this function will fetch and render ips in widget
-	var url = `${endpoint}?`;
-
-	if (scan_id) {
-		url += `scan_id=${scan_id}`;
-	}
-
-	if (domain_id) {
-		url += `target_id=${domain_id}`;
-	}
-
-	url += `&format=json`;
-
-	$.getJSON(url, function(data) {
-		$('#ip-address-count').empty();
-		for (var val in data['ips']){
-			ip = data['ips'][val]
-			badge_color = ip['is_cdn'] ? 'warning' : 'primary';
-			if (scan_id) {
-				$("#ip-address").append(`<span class='badge badge-soft-${badge_color}  m-1 badge-link' data-toggle="tooltip" title="${ip['ports'].length} Ports Open." onclick="get_ip_details('${ip['address']}', scan_id=${scan_id}, domain_id=null)">${ip['address']}</span>`);
-			}
-			else if (domain_id) {
-				$("#ip-address").append(`<span class='badge badge-soft-${badge_color}  m-1 badge-link' data-toggle="tooltip" title="${ip['ports'].length} Ports Open." onclick="get_ip_details('${ip['address']}', scan_id=null, domain_id=${domain_id})">${ip['address']}</span>`);
-			}
-			// $("#ip-address").append(`<span class='badge badge-soft-${badge_color}  m-1' data-toggle="modal" data-target="#tabsModal">${ip['address']}</span>`);
-		}
-		$('#ip-address-count').html(`<span class="badge badge-soft-primary me-1">${data['ips'].length}</span>`);
-		$("body").tooltip({ selector: '[data-toggle=tooltip]' });
-	});
-}
-
-
 function get_technologies(endpoint_url, scan_id=null, domain_id=null){
 	// this function will fetch and render tech in widget
 	var url = `${endpoint_url}?`;
@@ -2154,209 +2142,6 @@ function get_technologies(endpoint_url, scan_id=null, domain_id=null){
 		}
 		$('#technologies-count').html(`<span class="badge badge-soft-primary me-1">${data['technologies'].length}</span>`);
 		$("body").tooltip({ selector: '[data-toggle=tooltip]' });
-	});
-}
-
-
-function get_ports(endpoint_url, scan_id=null, domain_id=null){
-	// this function will fetch and render ports in widget
-	var url = `${endpoint_url}?`;
-
-	if (scan_id) {
-		url += `scan_id=${scan_id}`;
-	}
-
-	if (domain_id) {
-		url += `target_id=${domain_id}`;
-	}
-
-	url += `&format=json`;
-	$.getJSON(url, function(data) {
-		$('#ports-count').empty();
-		for (var val in data['ports']){
-			port = data['ports'][val]
-			badge_color = port['is_uncommon'] ? 'danger' : 'primary';
-			if (scan_id) {
-				$("#ports").append(`<span class='badge badge-soft-${badge_color}  m-1 badge-link' data-toggle="tooltip" title="${port['description']}" onclick="get_port_details('${port['number']}', scan_id=${scan_id}, domain_id=null)">${port['number']}/${port['service_name']}</span>`);
-			}
-			else if (domain_id){
-				$("#ports").append(`<span class='badge badge-soft-${badge_color}  m-1 badge-link' data-toggle="tooltip" title="${port['description']}" onclick="get_port_details('${port['number']}', scan_id=null, domain_id=${domain_id})">${port['number']}/${port['service_name']}</span>`);
-			}
-		}
-		$('#ports-count').html(`<span class="badge badge-soft-primary me-1">${data['ports'].length}</span>`);
-		$("body").tooltip({ selector: '[data-toggle=tooltip]' });
-	});
-}
-
-
-function get_ip_details(endpoint_port_url, endpoint_subdomain_url, ip_address, scan_id=null, domain_id=null){
-	var port_url = `${endpoint_port_url}?ip_address=${ip_address}`;
-	var subdomain_url = `${endpoint_subdomain_url}?ip_address=${ip_address}`;
-
-	if (scan_id) {
-		port_url += `&scan_id=${scan_id}`;
-		subdomain_url += `&scan_id=${scan_id}`;
-	}
-	else if(domain_id){
-		port_url += `&target_id=${domain_id}`;
-		subdomain_url += `&target_id=${domain_id}`;
-	}
-
-	port_url += `&format=json`;
-	subdomain_url += `&format=json`;
-
-	var interesting_badge = `<span class="m-1 badge  badge-soft-danger bs-tooltip" title="Interesting Subdomain">Interesting</span>`;
-
-	var port_loader = `<span class="inner-div spinner-border text-primary align-self-center loader-sm" id="port-modal-loader"></span>`;
-	var subdomain_loader = `<span class="inner-div spinner-border text-primary align-self-center loader-sm" id="subdomain-modal-loader"></span>`;
-
-	// add tab modal title
-	$('#modal_dialog .modal-title').html('Details for IP: <b>' + ip_address + '</b>');
-
-	$('#modal_dialog .modal-text').empty();
-	$('#modal-tabs').empty();
-
-	$('#modal_dialog .modal-text').append(`<ul class='nav nav-tabs nav-bordered' id="modal_tab_nav"></ul><div id="modal_tab_content" class="tab-content"></div>`);
-
-	$('#modal_tab_nav').append(`<li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#modal_content_port" aria-expanded="true"><span id="modal-open-ports-count"></span>Open Ports &nbsp;${port_loader}</a></li>`);
-	$('#modal_tab_nav').append(`<li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#modal_content_subdomain" aria-expanded="false"><span id="modal-subdomain-count"></span>Subdomains &nbsp;${subdomain_loader}</a></li>`)
-
-	// add content area
-	$('#modal_tab_content').empty();
-	$('#modal_tab_content').append(`<div class="tab-pane show active" id="modal_content_port"></div><div class="tab-pane" id="modal_content_subdomain"></div>`);
-
-	$('#modal-open-ports').append(`<div class="modal-text" id="modal-text-open-port"></div>`);
-	$('#modal-text-open-port').append(`<ul id="modal-open-port-text"></ul>`);
-
-	$('#modal_content_port').append(`<ul id="modal_port_ul"></ul>`);
-	$('#modal_content_subdomain').append(`<ul id="modal_subdomain_ul"></ul>`);
-
-	$.getJSON(port_url, function(data) {
-		$('#modal_content_port').empty();
-		$('#modal_content_port').append(`<p> IP Addresses ${ip_address} has ${data['ports'].length} Open Ports`);
-		$('#modal-open-ports-count').html(`<b>${data['ports'].length}</b>&nbsp;&nbsp;`);
-		for (port in data['ports']){
-			port_obj = data['ports'][port];
-			badge_color = port_obj['is_uncommon'] ? 'danger' : 'info';
-			$("#modal_content_port").append(`<li class="mt-1">${port_obj['description']} <b class="text-${badge_color}">(${port_obj['number']}/${port_obj['service_name']})</b></li>`)
-		}
-		$("#port-modal-loader").remove();
-	});
-
-	$('#modal_dialog').modal('show');
-
-	// query subdomains
-	$.getJSON(subdomain_url, function(data) {
-		$('#modal_content_subdomain').empty();
-		$('#modal_content_subdomain').append(`<p>${data['subdomains'].length} Subdomains are associated with IP ${ip_address}`);
-		$('#modal-subdomain-count').html(`<b>${data['subdomains'].length}</b>&nbsp;&nbsp;`);
-		for (subdomain in data['subdomains']){
-			subdomain_obj = data['subdomains'][subdomain];
-			badge_color = subdomain_obj['http_status'] >= 400 ? 'danger' : '';
-			li_id = get_randid();
-			if (subdomain_obj['http_url']) {
-				$("#modal_content_subdomain").append(`<li class="mt-1" id="${li_id}"><a href='${subdomain_obj['http_url']}' target="_blank" class="text-${badge_color}">${subdomain_obj['name']}</a></li>`)
-			}
-			else {
-				$("#modal_content_subdomain").append(`<li class="mt-1 text-${badge_color}" id="${li_id}">${subdomain_obj['name']}</li>`);
-			}
-
-			if (subdomain_obj['http_status']) {
-				$("#"+li_id).append(get_http_badge(subdomain_obj['http_status']));
-				$('.bs-tooltip').tooltip();
-			}
-
-			if (subdomain_obj['is_interesting']) {
-				$("#"+li_id).append(interesting_badge)
-			}
-
-		}
-		$("#modal-text-subdomain").append(`<span class="float-end text-danger">*Subdomains highlighted are 40X HTTP Status</span>`);
-		$("#subdomain-modal-loader").remove();
-	});
-}
-
-function get_port_details(endpoint_ip_url, endpoint_subdomain_url, port, scan_id=null, domain_id=null){
-
-	var ip_url = `${endpoint_ip_url}?port=${port}`;
-	var subdomain_url = `${endpoint_subdomain_url}?port=${port}`;
-
-	if (scan_id) {
-		ip_url += `&scan_id=${scan_id}`;
-		subdomain_url += `&scan_id=${scan_id}`;
-	}
-	else if(domain_id){
-		ip_url += `&target_id=${domain_id}`;
-		subdomain_url += `&target_id=${domain_id}`;
-	}
-
-	ip_url += `&format=json`;
-	subdomain_url += `&format=json`;
-
-	var interesting_badge = `<span class="m-1 badge  badge-soft-danger bs-tooltip" title="Interesting Subdomain">Interesting</span>`;
-	var ip_spinner = `<span class="spinner-border spinner-border-sm me-1" id="ip-modal-loader"></span>`;
-	var subdomain_spinner = `<span class="spinner-border spinner-border-sm me-1" id="subdomain-modal-loader"></span>`;
-
-	$('#modal_dialog .modal-title').html('Details for Port: <b>' + port + '</b>');
-
-	$('#modal_dialog .modal-text').empty();
-	$('#modal-tabs').empty();
-
-
-	$('#modal_dialog .modal-text').append(`<ul class='nav nav-tabs nav-bordered' id="modal_tab_nav"></ul><div id="modal_tab_content" class="tab-content"></div>`);
-
-	$('#modal_tab_nav').append(`<li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#modal_content_ip" aria-expanded="true"><span id="modal-ip-count"></span>IP Address&nbsp;${ip_spinner}</a></li>`);
-	$('#modal_tab_nav').append(`<li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#modal_content_subdomain" aria-expanded="false"><span id="modal-subdomain-count"></span>Subdomains&nbsp;${subdomain_spinner}</a></li>`)
-
-	// add content area
-	$('#modal_tab_content').append(`<div class="tab-pane show active" id="modal_content_ip"></div><div class="tab-pane" id="modal_content_subdomain"></div>`);
-
-	$('#modal_content_ip').append(`<ul id="modal_ip_ul"></ul>`);
-	$('#modal_content_subdomain').append(`<ul id="modal_subdomain_ul"></ul>`);
-
-	$('#modal_dialog').modal('show');
-
-	$.getJSON(ip_url, function(data) {
-		$('#modal_ip_ul').empty();
-		$('#modal_ip_ul').append(`<p>${data['ips'].length} IP Addresses have Port ${port} Open`);
-		$('#modal-ip-count').html(`<b>${data['ips'].length}</b>&nbsp;&nbsp;`);
-		for (ip in data['ips']){
-			ip_obj = data['ips'][ip];
-			text_color = ip_obj['is_cdn'] ? 'warning' : '';
-			$("#modal_ip_ul").append(`<li class='mt-1 text-${text_color}'>${ip_obj['address']}</li>`)
-		}
-		$('#modal_ip_ul').append(`<span class="float-end text-warning">*IP Address highlighted are CDN IP Address</span>`);
-		$("#ip-modal-loader").remove();
-	});
-
-	// query subdomains
-	$.getJSON(subdomain_url, function(data) {
-		$('#modal_subdomain_ul').empty();
-		$('#modal_subdomain_ul').append(`<p>${data['subdomains'].length} Subdomains have Port ${port} Open`);
-		$('#modal-subdomain-count').html(`<b>${data['subdomains'].length}</b>&nbsp;&nbsp;`);
-		for (subdomain in data['subdomains']){
-			subdomain_obj = data['subdomains'][subdomain];
-			badge_color = subdomain_obj['http_status'] >= 400 ? 'danger' : '';
-			li_id = get_randid();
-			if (subdomain_obj['http_url']) {
-				$("#modal_subdomain_ul").append(`<li id="${li_id}" class="mt-1"><a href='${subdomain_obj['http_url']}' target="_blank" class="text-${badge_color}">${subdomain_obj['name']}</a></li>`)
-			}
-			else {
-				$("#modal_subdomain_ul").append(`<li class="mt-1 text-${badge_color}" id="${li_id}">${subdomain_obj['name']}</li>`);
-			}
-
-			if (subdomain_obj['http_status']) {
-				$("#"+li_id).append(get_http_badge(subdomain_obj['http_status']));
-				$('.bs-tooltip').tooltip();
-			}
-
-			if (subdomain_obj['is_interesting']) {
-				$("#"+li_id).append(interesting_badge)
-			}
-
-		}
-		$("#modal_subdomain_ul").append(`<span class="float-end text-danger">*Subdomains highlighted are 40X HTTP Status</span>`);
-		$("#subdomain-modal-loader").remove();
 	});
 }
 
@@ -2525,16 +2310,30 @@ function get_and_render_cve_details(endpoint_url, cve_id){
 				</div>
 				`;
 
-				content += `<div class="tab-pane fade" id="v-pills-cve-references" role="tabpanel" aria-labelledby="v-pills-cve-references-tab" data-simplebar style="max-height: 600px; min-height: 600px;">
-				<ul>`;
+				let references = response.result.references;
 
-				for (var reference in response.result.references) {
-					content += `<li><a href="${response.result.references[reference]}" target="_blank">${response.result.references[reference]}</a></li>`;
+				// Check if references is a string representation of an array
+				if (typeof references === 'string' && references.startsWith('[') && references.endsWith(']')) {
+					// Remove the brackets and split by comma
+					references = references.slice(1, -1).split(',').map(ref => ref.trim().replace(/^'|'$/g, ''));
 				}
-
-				content += `</ul></div>`;
-
-
+				
+				// Generate HTML content
+				let referencesContent = '';
+				if (Array.isArray(references)) {
+					referencesContent = '<ul>';
+					references.forEach(ref => {
+						referencesContent += `<li><a href="${ref}" target="_blank" rel="noopener noreferrer">${ref}</a></li>`;
+					});
+					referencesContent += '</ul>';
+				} else {
+					referencesContent = `<p>${references}</p>`;
+				}
+				
+				content += `<div class="tab-pane fade" id="v-pills-cve-references" role="tabpanel" aria-labelledby="v-pills-cve-references-tab" data-simplebar style="max-height: 600px; min-height: 600px;">
+					${referencesContent}
+				</div>`;
+				
 				content += `<div class="tab-pane fade" id="v-pills-affected-products" role="tabpanel" aria-labelledby="v-pills-affected-products-tab" data-simplebar style="max-height: 600px; min-height: 600px;">
 				<ul>`;
 
@@ -2609,7 +2408,7 @@ function get_most_vulnerable_target(endpoint_url, endpoint_vuln_url, slug=null, 
 				</tr>
 				</thead>
 				<tbody id="most_vulnerable_target_tbody">
-				</tbody>²
+				</tbody>
 				</table>
 				`);
 
@@ -2749,10 +2548,10 @@ function validURL(str) {
 	// checks for valid http url
 	var pattern = new RegExp('^(https?:\\/\\/)?'+ // protocol
 		'((([a-z\\d]([a-z\\d-]*[a-z\\d])*)\\.)+[a-z]{2,}|'+ // domain name
-		'((\\d{1,3}\\.){3}\\d{1,3}))'+ // OR ip (v4) address
-		'(\\:\\d+)?(\\/[-a-z\\d%_.~+]*)*'+ // port and path
-		'(\\?[;&a-z\\d%_.~+=-]*)?'+ // query string
-		'(\\#[-a-z\\d_]*)?$','i'); // fragment locator
+		'((\\\d{1,3}\\.){3}\\d{1,3}))'+ // OR ip (v4) address
+		'(\\\:\\d+)?(\\/[-a-z\\d%_.~+]*)*'+ // port and path
+		'(\\\?[;&a-z\\d%_.~+=-]*)?'+ // query string
+		'(\\\#[-a-z\\d_]*)?$','i'); // fragment locator
 	return !!pattern.test(str);
 }
 
@@ -2866,7 +2665,7 @@ function render_vuln_offcanvas(vuln){
 	body += `<p><b>Severity: </b>${vuln.severity}<br><b>Type: </b>${vuln.type.toUpperCase()}<br><b>Source: </b> ${vuln.source.toUpperCase()}</p>`;
 
 	if (vuln.description) {
-		description = vuln.description.replace(new RegExp('\r?\n','g'), '<br />');
+		// Sanitize with DOMPurify before inserting into the DOM
 		body += `<div class="accordion custom-accordion mt-2">
 		<h5 class="m-0 position-relative">
 		<a class="custom-accordion-title text-reset d-block"
@@ -2877,7 +2676,7 @@ function render_vuln_offcanvas(vuln){
 		</a>
 		</h5>
 		<div id="description" class="collapse show mt-2">
-		<p>${description}</p>
+		<p>${DOMPurify.sanitize(vuln.description.replace(new RegExp('\r?\n','g'), '<br />'))}</p>
 		</div>
 		</div>`;
 	}
@@ -2894,7 +2693,7 @@ function render_vuln_offcanvas(vuln){
 		</a>
 		</h5>
 		<div id="impact" class="collapse show mt-2">
-		<p>${impact}</p>
+		<p>${DOMPurify.sanitize(impact)}</p>
 		</div>
 		</div>`;
 	}
@@ -2911,7 +2710,7 @@ function render_vuln_offcanvas(vuln){
 		</a>
 		</h5>
 		<div id="remediation" class="collapse show mt-2">
-		<p>${remediation}</p>
+		<p>${DOMPurify.sanitize(remediation)}</p>
 		</div>
 		</div>`;
 	}
@@ -3095,31 +2894,41 @@ function render_vuln_offcanvas(vuln){
 	</div>
 	</div>`;
 
-	if (vuln.references.length) {
-		body += `<div class="accordion custom-accordion mt-2">
-		<h5 class="m-0 position-relative">
-		<a class="custom-accordion-title text-reset d-block"
-		data-bs-toggle="collapse" href="#references"
-		aria-expanded="true" aria-controls="collapseNine">
-		References <i
-		class="mdi mdi-chevron-down accordion-arrow"></i>
-		</a>
-		</h5>
-		<div id="references" class="collapse show mt-2">
-		<ul>`;
+	let references = vuln.references;
 
-		vuln.references.forEach(reference => {
-			body += `<li><a href="${htmlEncode(reference.url)}" target="_blank">${htmlEncode(reference.url)}</a></li>`;
-		});
-
-		body += `
-		</ul>
-		</div>
-		</div>`;
+	// Check if references is a string representation of an array
+	if (typeof references === 'string' && references.startsWith('[') && references.endsWith(']')) {
+		// Remove the brackets and split by comma
+		references = references.slice(1, -1).split(',').map(ref => ref.trim().replace(/^'|'$/g, ''));
 	}
 
-	if (vuln.is_gpt_used) {
-		body += `<small class="text-muted float-end">(GPT was used to generate vulnerability details.)</small>`;
+	// Generate HTML content
+	let referencesContent = '';
+	if (Array.isArray(references)) {
+		referencesContent = '<ul>';
+		references.forEach(ref => {
+			referencesContent += `<li><a href="${ref}" target="_blank" rel="noopener noreferrer">${ref}</a></li>`;
+		});
+		referencesContent += '</ul>';
+	} else {
+		referencesContent = `<p>${references}</p>`;
+	}
+
+	body += `<div class="accordion custom-accordion mt-2">
+    <h5 class="m-0 position-relative">
+        <a class="custom-accordion-title text-reset d-block"
+           data-bs-toggle="collapse" href="#references"
+           aria-expanded="true" aria-controls="collapseNine">
+           References <i class="mdi mdi-chevron-down accordion-arrow"></i>
+        </a>
+    </h5>
+    <div id="references" class="collapse show mt-2">
+        ${referencesContent}
+    </div>
+</div>`;
+
+	if (vuln.is_llm_used) {
+		body += `<small class="text-muted float-end">(LLM was used to generate vulnerability details.)</small>`;
 	}
 
 
@@ -3143,7 +2952,7 @@ function showSwalLoader(title, text){
 	});
 }
 
-async function send_gpt_api_request(endpoint_url, vuln_id){
+async function send_llm_api_request(endpoint_url, vuln_id){
 	const api = `${endpoint_url}?format=json&id=${vuln_id}`;
 	try {
 		const response = await fetch(api, {
@@ -3156,23 +2965,22 @@ async function send_gpt_api_request(endpoint_url, vuln_id){
 		if (!response.ok) {
 			throw new Error('Request failed');
 		}
-		const data = await response.json();
-		return data;
+		return await response.json();
 	} catch (error) {
 		throw new Error('Request failed');
 	}
 }
 
 
-async function fetch_gpt_vuln_details(endpoint_url, id, title) {
+async function fetch_llm_vuln_details(endpoint_url, id, title) {
 	var loader_title = "Loading...";
-	var text = 'Please wait while the GPT is generating vulnerability description.'
+	var text = 'Please wait while the LLM is generating vulnerability description.';
 	try {
 		showSwalLoader(loader_title, text);
-		const data = await send_gpt_api_request(endpoint_url, id);
+		const data = await send_llm_api_request(endpoint_url, id);
 		Swal.close();
 		if (data.status) {
-			render_gpt_vuln_modal(data, title);
+			render_llm_vuln_modal(data, title);
 		}
 		else{
 			Swal.close();
@@ -3194,7 +3002,10 @@ async function fetch_gpt_vuln_details(endpoint_url, id, title) {
 }
 
 
-function render_gpt_vuln_modal(data, title){
+function render_llm_vuln_modal(data, title){
+	// Change modal size to xl
+	$('#modal_dialog .modal-dialog').removeClass('modal-lg').addClass('modal-xl');
+
 	$('#modal_dialog .modal-title').empty();
 	$('#modal_dialog .modal-text').empty();
 	$('#modal_dialog .modal-footer').empty();
@@ -3208,16 +3019,13 @@ function render_gpt_vuln_modal(data, title){
 		<h4>Remediation</h4>
 		<p>${data.remediation}</p>
 		<h4>References</h4>
-		<p><ul>
+		<p>${data.references}</p>
 	`;
 
-	data.references.forEach(reference => {
-		modal_content += `<li><a href="${reference}" target="_blank">${reference}</a></li>`;
-	});
-
-	modal_content += '</ul></p>';
-
-	$('#modal_dialog .modal-text').append(modal_content);
+	// Sanitize with DOMPurify before inserting into the DOM
+	$('#modal_dialog .modal-text').append(
+		DOMPurify.sanitize(modal_content)
+	);
 	$('#modal_dialog').modal('show');
 }
 
@@ -3250,59 +3058,282 @@ function endpoint_datatable_col_visibility(endpoint_table){
 }
 
 
-async function send_gpt__attack_surface_api_request(endpoint_url, subdomain_id){
-	const api = `${endpoint_url}?format=json&subdomain_id=${subdomain_id}`;
-	try {
-		const response = await fetch(api, {
-				method: 'GET',
-				credentials: "same-origin",
-				headers: {
-					"X-CSRFToken": getCookie("csrftoken")
+async function send_llm__attack_surface_api_request(endpoint_url, id, force_regenerate = false, check_only = false, llm_model = null) {
+    const params = new URLSearchParams({
+        subdomain_id: id,
+        force_regenerate: force_regenerate,
+        check_only: check_only
+    });
+    
+    // Only add llm_model if it's not null
+    if (llm_model) {
+        params.append('llm_model', llm_model);
+    }
+    
+    const response = await fetch(`${endpoint_url}?${params}`);
+    return await response.json();
+}
+
+async function regenerateAttackSurface(endpoint_url, id) {
+    try {
+        // Show model selection dialog with force_regenerate flag
+        await showModelSelectionDialog(endpoint_url, id, true);
+    } catch (error) {
+        console.error(error);
+        Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: 'Something went wrong while regenerating the analysis.',
+        });
+    }
+}
+
+async function show_attack_surface_modal(endpoint_url, id) {
+    try {
+        // First check if we have cached results without triggering analysis
+        const initialResponse = await send_llm__attack_surface_api_request(endpoint_url, id, false, true);
+        
+        if (initialResponse.status && initialResponse.description) {
+            showAttackSurfaceModal(initialResponse, endpoint_url, id);
+            return;
+        }
+        
+        // If no cached results, show model selection
+        await showModelSelectionDialog(endpoint_url, id);
+    } catch (error) {
+        console.error(error);
+        Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: 'Something went wrong!',
+        });
+    }
+}
+
+async function showModelSelectionDialog(endpoint_url, id, force_regenerate = false) {
+    try {
+        // Fetch models from the unified endpoint that combines GPT and Ollama models
+        const response = await fetch('/api/tools/llm_models');
+        const data = await response.json();
+        
+        if (!data.status) {
+            throw new Error(data.error || 'Failed to fetch models');
+        }
+
+        // Change modal size to xl
+        $('#modal_dialog .modal-dialog').removeClass('modal-lg').addClass('modal-xl');
+
+        // Keep all the existing model selection code
+		window.generateAttackSurface = async () => {
+			const selectedModel = $('input[name="llm_model"]:checked').val();
+			if (!selectedModel) {
+				Swal.fire({
+					title: 'Error',
+					text: 'Please select a model',
+					icon: 'error'
+				});
+				return;
+			}
+		
+			try {
+				// Update selected model in database first
+				const encoded_model = encodeURIComponent(selectedModel);
+				const updateResponse = await fetch(`/api/tool/ollama/${encoded_model}/`, {
+					method: 'PUT',
+					headers: {
+						'Content-Type': 'application/json',
+						'X-CSRFToken': getCookie('csrftoken')
+					},
+					body: JSON.stringify({ model: selectedModel })
+				});
+				
+				const updateData = await updateResponse.json();
+				if (!updateData.status) {
+					throw new Error('Failed to update selected model');
 				}
-		});
-		if (!response.ok) {
-			throw new Error('Request failed');
-		}
-		const data = await response.json();
-		return data;
-	} catch (error) {
-		throw new Error('Request failed');
-	}
+		
+				// Then proceed with attack surface analysis
+				var loader_title = "Loading...";
+				var text = 'Please wait while the LLM is generating attack surface.';
+				showSwalLoader(loader_title, text);
+				const data = await send_llm__attack_surface_api_request(endpoint_url, id, force_regenerate, false, selectedModel);
+				Swal.close();
+                
+                if (data.status) {
+					showAttackSurfaceModal(data, endpoint_url, id);
+                } else {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Oops...',
+                        text: data.error,
+                    });
+                }
+            } catch (error) {
+                console.error(error);
+                Swal.close();
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Oops...',
+                    text: 'Something went wrong!',
+                });
+            }
+        };
+
+        // Continue with existing model selection UI code...
+        const allModels = data.models;
+        const selectedModel = data.selected_model;
+
+        let modelOptions = '';
+        allModels.forEach(model => {
+            const modelName = model.name;
+            const capabilities = model.capabilities || {};
+            const isLocal = model.is_local || false;
+            
+            modelOptions += `
+                <div class="col-md-4 mt-2">
+                    <div class="card project-box h-100" style="cursor: pointer" 
+                         onclick="document.getElementById('${modelName}').click()">
+                        <div class="card-body p-2 pt-3 d-flex flex-column">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="llm_model" 
+                                    id="${modelName}" value="${modelName}" 
+                                    ${modelName === selectedModel ? 'checked' : ''}>
+                                <h5 class="mt-0">
+                                    <span class="${modelName === selectedModel ? 'text-success' : ''}">${modelName} 
+                                        ${modelName === selectedModel ? '<span class="badge bg-soft-primary text-primary ms-2">Selected</span>' : ''}
+                                    </span>
+                                </h5>
+                                <p>${!isLocal ? '<span class="badge bg-soft-warning text-warning mt-auto">Remote Model - API Key Required</span>' : '<span class="badge bg-soft-success text-success mt-auto">Locally installed model</span>'}</p>
+                                <p class="mb-1 small flex-grow-1">
+                                    <span class="pe-2 text-nowrap d-inline-block">
+                                        <i class="mdi mdi-database text-info"></i>
+                                        ${isLocal ? 'Local model' : 'OpenAI'}
+                                    </span>
+                                    ${model.details ? `
+                                        <span class="text-nowrap d-inline-block">
+                                            <i class="mdi mdi-family-tree text-success"></i>
+                                            ${model.details.family}
+                                        </span>
+                                        <br>
+                                        <span class="text-nowrap d-inline-block">
+                                            <i class="mdi mdi-numeric text-info"></i>
+                                            <b>${model.details.parameter_size}</b> Parameters
+                                        </span>
+                                    ` : ''}
+                                    <br>
+                                    <br>
+                                    <span class="text-muted w-100 d-inline-block">
+                                        <i class="mdi mdi-star text-warning"></i>
+                                        Best for:
+                                        <ul class="list-unstyled mt-1 ms-3">
+                                            ${capabilities.best_for ? capabilities.best_for.map(cap => 
+                                                `<li><i class="mdi mdi-check-circle text-success me-1"></i>${cap}</li>`
+                                            ).join('') : '<li><i class="mdi mdi-check-circle text-success me-1"></i>General analysis</li>'}
+                                        </ul>
+                                    </span>
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+        });
+
+        $('#modal_dialog .modal-title').html('Select LLM Model for Attack Surface Analysis');
+        $('#modal_dialog .modal-text').empty();
+        $('#modal_dialog .modal-text').append(`
+            <div class="mb-3 row">
+                <p>Select the LLM model to use:</p>
+                ${modelOptions}
+            </div>
+            <div class="mb-3 text-center">
+                <button class="btn btn-primary" type="button" onclick="window.generateAttackSurface()">
+                    Continue Analysis
+                </button>
+            </div>
+        `);
+        
+        $('#modal_dialog').modal('show');
+    } catch (error) {
+        console.error(error);
+        Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: 'Unable to fetch LLM models. Please check configuration.',
+            footer: '<a href="/scanEngine/llm_toolkit/">Configure LLM models</a>'
+        });
+    }
 }
 
+async function deleteAttackSurfaceAnalysis(endpoint_url, id) {
+    try {
+        const result = await Swal.fire({
+            title: 'Delete Analysis?',
+            text: "This will permanently delete the current attack surface analysis. This action cannot be undone.",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            cancelButtonColor: '#3085d6',
+            confirmButtonText: 'Yes, delete it!',
+            cancelButtonText: 'Cancel'
+        });
 
-async function show_attack_surface_modal(endpoint_url, id){
-	var loader_title = "Loading...";
-	var text = 'Please wait while the GPT is generating attack surface.'
-	try {
-		showSwalLoader(loader_title, text);
-		const data = await send_gpt__attack_surface_api_request(endpoint_url,id);
-		Swal.close();
-		if (data.status) {
-			$('#modal_dialog .modal-title').html(`Attack Surface Suggestion for ${data.subdomain_name} (BETA)`);
-			$('#modal_dialog .modal-text').empty();
-			$('#modal_dialog .modal-text').append(data.description.replace(new RegExp('\r?\n','g'), '<br />'));
-			$('#modal_dialog').modal('show');
-		}
-		else{
-			Swal.close();
-			Swal.fire({
-				icon: 'error',
-				title: 'Oops...',
-				text: data.error,
-			});
-		}
-	} catch (error) {
-		console.error(error);
-		Swal.close();
-		Swal.fire({
-			icon: 'error',
-			title: 'Oops...',
-			text: 'Something went wrong!',
-		});
-	}
+        if (result.isConfirmed) {
+            showSwalLoader("Deleting...", "Please wait while the analysis is being deleted.");
+            
+            const response = await fetch(`${endpoint_url}?subdomain_id=${id}`, {
+                method: 'DELETE',
+                headers: {
+                    'X-CSRFToken': getCookie('csrftoken')
+                }
+            });
+            
+            const data = await response.json();
+            Swal.close();
+            
+            if (data.status) {
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Deleted!',
+                    text: 'The analysis has been deleted successfully.',
+                    showConfirmButton: false,
+                    timer: 1500
+                });
+                $('#modal_dialog').modal('hide');
+            } else {
+                throw new Error(data.error || 'Failed to delete analysis');
+            }
+        }
+    } catch (error) {
+        console.error(error);
+        Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: error.message || 'Something went wrong while deleting the analysis!'
+        });
+    }
 }
 
+function showAttackSurfaceModal(data, endpoint_url, id) {
+    $('#modal_dialog .modal-dialog').removeClass('modal-lg').addClass('modal-xl');
+    $('#modal_dialog .modal-title').html(`Attack Surface Suggestion for ${data.subdomain_name}`);
+    $('#modal_dialog .modal-text').empty();
+    $('#modal_dialog .modal-text').append(
+        DOMPurify.sanitize(data.description) +
+        `<div class="text-center mt-4">
+            <div class="btn-group" role="group">
+                <button class="btn btn-primary" onclick="regenerateAttackSurface('${endpoint_url}', ${id})">
+                    <i class="fe-refresh-cw me-1"></i>
+                    Generate New Analysis
+                </button>
+                <button class="btn btn-danger" onclick="deleteAttackSurfaceAnalysis('${endpoint_url}', ${id})">
+                    <i class="fe-trash-2 me-1"></i>
+                    Delete Current Analysis
+                </button>
+            </div>
+        </div>`
+    );
+    $('#modal_dialog').modal('show');
+}
 
 function convertToCamelCase(inputString) {
 	// Converts camel case string to title
@@ -3327,4 +3358,81 @@ function handleHashInUrl(){
 			}, 100);
 		}
 	}
+}
+
+function showLLMModelSelectionModal(callback) {
+    $('#modal_dialog .modal-title').html('Select LLM Model');
+    $('#modal_dialog .modal-text').empty();
+    
+    // Get available models
+    fetch('/api/tool/ollama/')
+        .then(response => response.json())
+        .then(data => {
+            const models = data.models;
+            const selectedModel = data.selected_model;
+            
+            let modelOptions = '';
+            models.forEach(model => {
+                modelOptions += `
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="llm_model" 
+                            id="${model.name}" value="${model.name}" 
+                            ${model.name === selectedModel ? 'checked' : ''}>
+                        <label class="form-check-label" for="${model.name}">
+                            ${model.name} (${model.details.family})
+                        </label>
+                    </div>`;
+            });
+
+            $('#modal_dialog .modal-text').append(`
+                <div class="mb-3">
+                    <p>Select the LLM model to use for vulnerability analysis:</p>
+                    ${modelOptions}
+                </div>
+                <div class="mb-3 text-center">
+                    <button class="btn btn-primary float-end" type="submit" onclick="selectLLMModel()">
+                        Continue
+                    </button>
+                </div>
+            `);
+            
+            $('#modal_dialog').modal('show');
+        });
+}
+
+function selectLLMModel() {
+    const selectedModel = $('input[name="llm_model"]:checked').val();
+    if (!selectedModel) {
+        Swal.fire({
+            title: 'Error',
+            text: 'Please select a model',
+            icon: 'error'
+        });
+        return;
+    }
+    
+    // Update selected model in database
+	const encoded_model = encodeURIComponent(selectedModel);
+    fetch(`/api/tool/ollama/${encoded_model}/`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: JSON.stringify({ model: selectedModel })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status) {
+            $('#modal_dialog').modal('hide');
+            // Continue with scan
+            startScan();
+        } else {
+            Swal.fire({
+                title: 'Error',
+                text: 'Unable to set selected model',
+                icon: 'error'
+            });
+        }
+    });
 }

@@ -1,0 +1,21 @@
+# This scan engine is used to scan the vulnerabilities of the target
+# Use it from the subdomains list to scan the vulnerabilities of one or more selected subdomains
+
+# Global vars for all tools
+#
+# Custom header - FFUF, Nuclei, Dalfox, CRL Fuzz, HTTPx, Fetch URL (Hakrawler, Katana, Gospider)
+custom_header: {
+  'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:126.0) Gecko/20100101 Firefox/126.0',
+}
+# 'user_agent': ''                    # Dalfox only
+# 'timeout': 10                       # Subdomain discovery, Screenshot, Port scan, FFUF, Nuclei                       
+# 'threads': 30                       # All tools
+# 'rate_limit': 150                   # Port scan, FFUF, Nuclei
+# 'intensity': 'normal'               # Screenshot (grab only the root endpoints of each subdomain), Nuclei (reduce number of endpoints to scan), OSINT (not implemented yet)
+# 'retries': 1                        # Nuclei
+
+screenshot: {
+  'intensity': 'normal',
+  'timeout': 10,
+  'threads': 40
+}

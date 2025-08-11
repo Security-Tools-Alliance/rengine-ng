@@ -68,6 +68,11 @@ function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, s
 		{'data': 'techs'},
 		{'data': 'webserver'},
 		{'data': 'response_time', 'searchable': false},
+		{'data': 'screenshot_path', 'searchable': false},
+		{'data': 'subdomain_id', 'visible': false, 'searchable': false},
+		{'data': 'scan_history_id', 'visible': false, 'searchable': false},
+		{'data': 'target_domain_id', 'visible': false, 'searchable': false},
+		{'data': 'subdomain_name', 'visible': false, 'searchable': false},
 	];
 	var endpoint_table = $('#endpoint_results').DataTable({
 		"destroy": true,
@@ -105,6 +110,77 @@ function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, s
 				"targets": [ 7, 8 ],
 				"visible": false,
 				"searchable": true,
+			},
+			{
+				"targets": [ get_datatable_col_index('screenshot_path', endpoint_datatable_columns) ],
+				"visible": true,
+				"searchable": false,
+				"render": function(data, type, row) {
+					// Extract port from URL
+					try {
+						const url = new URL(row['http_url']);
+						const port = url.port || (url.protocol === 'https:' ? 443 : 80);
+						
+											// Use the advanced screenshot system from port_display.js
+					const subdomain_id = row['subdomain_id'] || null;
+					const scan_id = row['scan_history_id'] || null;
+					const domain_id = row['target_domain_id'] || null;
+					
+					// Use subdomain name from API or extract from URL as fallback
+					const subdomain_name = row['subdomain_name'] || url.hostname;
+						
+						if (subdomain_id) {
+							// Return a placeholder that will be updated asynchronously
+							const cellId = `screenshot-cell-${row['id']}`;
+							setTimeout(async () => {
+								try {
+									const screenshotHtml = await getScreenshotThumbnail(
+										subdomain_id, 
+										subdomain_name, 
+										port, 
+										scan_id, 
+										domain_id
+									);
+									const cell = document.getElementById(cellId);
+									if (cell) {
+										cell.innerHTML = screenshotHtml;
+									}
+								} catch (error) {
+									console.error('Error loading screenshot:', error);
+									const cell = document.getElementById(cellId);
+									if (cell) {
+										cell.innerHTML = '-';
+									}
+								}
+							}, 0);
+							
+							return `<div id="${cellId}">Loading...</div>`;
+						}
+						
+						// Fallback to simple screenshot display if no subdomain_id
+						if (data && data.length > 0) {
+							return `<img src="/media/${data}" 
+									     class="screenshot-thumbnail" 
+									     style="width: 100px; height: 75px; object-fit: cover; cursor: pointer; border: 1px solid #ddd; border-radius: 3px;" 
+									     onclick="window.open('/media/${data}', '_blank')"
+									     title="Click to view full screenshot"
+									     onerror="this.style.display='none'">`;
+						}
+						return '-';
+					} catch (error) {
+						console.error('Error processing screenshot:', error);
+						// Fallback to simple screenshot display
+						if (data && data.length > 0) {
+							return `<img src="/media/${data}" 
+									     class="screenshot-thumbnail" 
+									     style="width: 100px; height: 75px; object-fit: cover; cursor: pointer; border: 1px solid #ddd; border-radius: 3px;" 
+									     onclick="window.open('/media/${data}', '_blank')"
+									     title="Click to view full screenshot"
+									     onerror="this.style.display='none'">`;
+						}
+						return '-';
+					}
+				}
 			},
 			{
 				"render": function ( data, type, row ) {
@@ -508,7 +584,8 @@ function get_screenshot(endpoint, scan_id){
 	gridzyElement.setAttribute('data-gridzy-desiredwidth', 350);
 	gridzyElement.setAttribute('data-gridzySearchField', "#screenshot-search");
 	var interesting_badge = `<span class="m-1 float-end badge  badge-soft-danger">Interesting</span>`;
-	$.getJSON(`${endpoint}?scan_id=${scan_id}&no_page&only_screenshot`, function(data) {
+	// Use the screenshots API endpoint
+	$.getJSON(`${endpoint}?scan_id=${scan_id}`, function(data) {
 		$("#screenshot-loader").remove();
 		$("#filter-screenshot").show();
 		for (var subdomain in data) {
@@ -1530,39 +1607,57 @@ $('#btn-initiate-subtask').on('click', function(){
 
 
 // Load engine tasks on modal load and engine input change
-function load_engine_tasks(engine_name){
-	var tasks = []
-	var html = ''
-	var url = `/api/listEngines/?format=json`;
-	$.getJSON(url, function(data) {
-		var engines = data.engines
-		$.each(engines, function(i, engine){
-			if (engine.engine_name === engine_name){
-				tasks = engine.tasks
-			}
-		})
-		$.each(tasks, function(i, task){
-			html += `
-			<div class="mt-1">
-				<div class="form-check">
-					<input type="checkbox" class="form-check-input" id="${task}">
-					<label class="form-check-label" for="${task}">${task}</label>
-				</div>
-			</div>`
+function load_engine_tasks(engine_id){
+    const url = `/api/listEngines/?engine_id=${engine_id}`;
+    
+    $.getJSON(url)
+    .done(function(data) {
+        if(data.engines.length > 0) {
+            const {tasks} = data.engines[0];
+            
+            if (tasks.length === 0) {
+                $('#engineTasks').html('');
+                Swal.fire({
+                    title: 'No tasks available',
+                    text: 'This engine does not contain any valid tasks. Please select another engine.',
+                    icon: 'warning',
+                });
+                return;
+            }
+
+            const html = tasks.map(task => `
+                <div class="mt-1">
+                    <div class="form-check">
+                        <input type="checkbox" class="form-check-input" id="${task}">
+                        <label class="form-check-label" for="${task}">${task}</label>
+                    </div>
+                </div>`
+            ).join('');
+            $('#engineTasks').html(html);
+        } else {
+            Swal.fire({
+				title: 'No engine found. Please select another one.',
+				icon: 'warning',
+			});
+        }
+    })
+    .fail(function() {
+        Swal.fire({
+			title: 'Error loading tasks',
+			icon: 'error',
 		});
-		$('#engineTasks').html(html);
-	})
+    });
 }
 
-$('#subscan-modal').on('shown.bs.modal', function () {
-	var engine_name = $('#subtaskScanEngine option:selected').text();
-	load_engine_tasks(engine_name);
-})
+$('#subscan-modal').on('shown.bs.modal', function() {
+    const engine_id = $('#subtaskScanEngine').val();
+    load_engine_tasks(engine_id);
+});
 
 $('#subtaskScanEngine').on('change', function(){
-	var engine_name = $('#subtaskScanEngine option:selected').text();
-	load_engine_tasks(engine_name);
-})
+    const engine_id = $(this).val();
+    load_engine_tasks(engine_id);
+});
 
 // download subdomains
 function downloadSelectedSubdomains(domain_name){
@@ -1730,3 +1825,160 @@ $(document).on('click', '.detect_subdomain_cms_link', function(){
 		cms_detector_api_call(cmsDetectorUrl,url);
 	}
 });
+
+function show_port_screenshots(subdomain_id, subdomain_name, port, scan_id, domain_id = null) {
+	// Show loading modal
+	Swal.fire({
+		title: `Loading screenshots for ${subdomain_name}:${port}...`,
+		allowOutsideClick: false
+	});
+	swal.showLoading();
+	
+	// Build API URL based on available parameters
+	let apiUrl = `/api/fetchScreenshots/?subdomain_id=${subdomain_id}&port=${port}`;
+	if (scan_id && scan_id !== 'null') {
+		apiUrl += `&scan_id=${scan_id}`;
+	} else if (domain_id) {
+		apiUrl += `&target_id=${domain_id}`;
+	} else {
+		swal.close();
+		Swal.fire({
+			title: 'Error',
+			text: 'No scan or target information available',
+			icon: 'error'
+		});
+		return;
+	}
+	
+	// Fetch screenshots for this subdomain and port
+	fetch(apiUrl)
+	.then(response => response.json())
+	.then(data => {
+		swal.close();
+		
+		if (data && Object.keys(data).length > 0) {
+			// Create modal content with screenshots
+			let modalContent = '';
+			let screenshotCount = 0;
+			
+			for (let key in data) {
+				const endpoint = data[key];
+				// Use the port from API response instead of checking URL
+				if (endpoint.screenshot_path && endpoint.port == port) {
+					screenshotCount++;
+					modalContent += `
+						<div class="mb-4 text-center">
+							<h6><a href="${endpoint.http_url}" target="_blank" class="text-primary">${endpoint.http_url}</a></h6>
+							<div class="d-flex justify-content-center">
+								<img src="/media/${endpoint.screenshot_path}" class="img-fluid rounded screenshot-popup" 
+									 style="max-width: 90%; max-height: 80vh; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.15);" 
+									 onclick="window.open('/media/${endpoint.screenshot_path}', '_blank')">
+							</div>
+						</div>
+					`;
+				}
+			}
+			
+			if (screenshotCount > 0) {
+				$('#xl-modal_title').html(`Screenshots for ${subdomain_name}:${port} (${screenshotCount})`);
+				$('#xl-modal-content').html(modalContent);
+				$('#xl-modal-footer').html('');
+				$('#modal_xl_scroll_dialog').modal('show');
+			} else {
+				Swal.fire({
+					title: 'No screenshots',
+					text: `No screenshots found for ${subdomain_name}:${port}`,
+					icon: 'info'
+				});
+			}
+		} else {
+			Swal.fire({
+				title: 'No screenshots',
+				text: `No screenshots found for ${subdomain_name}:${port}`,
+				icon: 'info'
+			});
+		}
+	})
+	.catch(error => {
+		swal.close();
+		console.error('Error loading screenshots:', error);
+		Swal.fire({
+			title: 'Error',
+			text: 'Unable to load screenshots',
+			icon: 'error'
+		});
+	});
+}
+
+function show_subdomain_screenshots(subdomain_id, subdomain_name, scan_id) {
+	// Show loading modal
+	Swal.fire({
+		title: `Loading screenshots for ${subdomain_name}...`,
+		allowOutsideClick: false
+	});
+	swal.showLoading();
+	
+	// Fetch screenshots for this subdomain
+	fetch(`/api/fetchScreenshots/?scan_id=${scan_id}&subdomain_id=${subdomain_id}`)
+	.then(response => response.json())
+	.then(data => {
+		swal.close();
+		
+		if (data && Object.keys(data).length > 0) {
+			// Create modal content with screenshots
+			let modalContent = '';
+			let screenshotCount = 0;
+			
+			for (let key in data) {
+				const endpoint = data[key];
+				if (endpoint.screenshot_path) {
+					screenshotCount++;
+					const portDisplay = endpoint.port ? `:${endpoint.port}` : '';
+					modalContent += `
+						<div class="mb-4 text-center">
+							<h6>
+								<a href="${endpoint.http_url}" target="_blank" class="text-primary">${endpoint.http_url}</a>
+								<span class="badge badge-soft-info ms-2">Port ${endpoint.port}</span>
+							</h6>
+							<div class="d-flex justify-content-center">
+								<img src="/media/${endpoint.screenshot_path}" class="img-fluid rounded screenshot-popup" 
+									 style="max-width: 90%; max-height: 80vh; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.15);" 
+									 onclick="window.open('/media/${endpoint.screenshot_path}', '_blank')">
+							</div>
+						</div>
+					`;
+				}
+			}
+			
+			if (screenshotCount > 0) {
+				$('#xl-modal_title').html(`Screenshots for ${subdomain_name} (${screenshotCount})`);
+				$('#xl-modal-content').html(modalContent);
+				$('#xl-modal-footer').html('');
+				$('#modal_xl_scroll_dialog').modal('show');
+			} else {
+				Swal.fire({
+					title: 'No screenshots',
+					text: `No screenshots found for ${subdomain_name}`,
+					icon: 'info'
+				});
+			}
+		} else {
+			Swal.fire({
+				title: 'No screenshots',
+				text: `No screenshots found for ${subdomain_name}`,
+				icon: 'info'
+			});
+		}
+	})
+	.catch(error => {
+		swal.close();
+		console.error('Error loading screenshots:', error);
+		Swal.fire({
+			title: 'Error',
+			text: 'Unable to load screenshots',
+			icon: 'error'
+		});
+	});
+}
+
+

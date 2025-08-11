@@ -39,11 +39,11 @@ $(document).ready(function() {
 	var is_subd_grouping = false;
 	var subd_grouping_col = 8;
 	{% if request.GET.ip_address %}
-	var url = '/api/listDatatableSubdomain/?&project={{current_project.slug}}&format=datatables&ip_address={{request.GET.ip_address}}';
+	var url = '/api/listDatatableSubdomain/?project={{current_project.slug}}&format=datatables&ip_address={{request.GET.ip_address}}';
 	{% elif request.GET.name %}
-	var url = '/api/listDatatableSubdomain/?&project={{current_project.slug}}&format=datatables&name={{request.GET.name}}';
+	var url = '/api/listDatatableSubdomain/?project={{current_project.slug}}&format=datatables&name={{request.GET.name}}';
 	{% else %}
-	var url = '/api/listDatatableSubdomain/?&project={{current_project.slug}}&format=datatables';
+	var url = '/api/listDatatableSubdomain/?project={{current_project.slug}}&format=datatables';
 	{% endif %}
 	var subdomain_datatables = $('#subdomain_scan_results').DataTable({
 		"headerCallback": function(e, a, t, n, s) {
@@ -70,18 +70,53 @@ $(document).ready(function() {
 		"order": [[ 8, "desc" ]],
 		"columns": subdomain_datatable_columns,
 		"columnDefs": [
-			{ "orderable": false, "targets": [2, 3, 6, 7, 9]},
+			{ "orderable": false, "targets": [
+				get_datatable_col_index('ip_addresses', subdomain_datatable_columns),
+				get_datatable_col_index('ports', subdomain_datatable_columns), 
+				get_datatable_col_index('ports', subdomain_datatable_columns),
+				get_datatable_col_index('open_ports', subdomain_datatable_columns),
+				get_datatable_col_index('content_length', subdomain_datatable_columns)
+			]},
 			{
-				"targets": [ 2, 3, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 25, 26, 27, 28],
+				"targets": [
+					get_datatable_col_index('ip_addresses', subdomain_datatable_columns),
+					get_datatable_col_index('ports', subdomain_datatable_columns),
+					get_datatable_col_index('content_discovery_count', subdomain_datatable_columns),
+					get_datatable_col_index('nuclei_cvss_score', subdomain_datatable_columns),
+					get_datatable_col_index('nuclei_cwe_id', subdomain_datatable_columns),
+					get_datatable_col_index('nuclei_cve_id', subdomain_datatable_columns),
+					get_datatable_col_index('nuclei_reference', subdomain_datatable_columns),
+					get_datatable_col_index('nuclei_tags', subdomain_datatable_columns),
+					get_datatable_col_index('nuclei_description', subdomain_datatable_columns),
+					get_datatable_col_index('nuclei_extracted_results', subdomain_datatable_columns),
+					get_datatable_col_index('nuclei_template', subdomain_datatable_columns),
+					get_datatable_col_index('nuclei_severity', subdomain_datatable_columns),
+					get_datatable_col_index('cms', subdomain_datatable_columns),
+					get_datatable_col_index('webserver', subdomain_datatable_columns),
+					get_datatable_col_index('cname', subdomain_datatable_columns),
+					get_datatable_col_index('content_type', subdomain_datatable_columns)
+				],
 				"visible": false,
 				"searchable": false,
 			},
 			{
-				"targets": [ 11, 13, 21, 22, 23 ],
+				"targets": [
+					get_datatable_col_index('technologies', subdomain_datatable_columns),
+					get_datatable_col_index('nuclei_cwe_id', subdomain_datatable_columns),
+					get_datatable_col_index('nuclei_severity', subdomain_datatable_columns),
+					get_datatable_col_index('nuclei_tags', subdomain_datatable_columns),
+					get_datatable_col_index('nuclei_cve_id', subdomain_datatable_columns)
+				],
 				"visible": false,
 				"searchable": true,
 			},
-			{"className": "text-start text-lg-center", "targets": [2, 3, 4, 8, 10]},
+			{"className": "text-start text-lg-center", "targets": [
+				get_datatable_col_index('ip_addresses', subdomain_datatable_columns),
+				get_datatable_col_index('ports', subdomain_datatable_columns),
+				get_datatable_col_index('http_status', subdomain_datatable_columns),
+				get_datatable_col_index('content_length', subdomain_datatable_columns),
+				get_datatable_col_index('technologies', subdomain_datatable_columns)
+			]},
 			// checkbox
 			{
 				"targets":0, "width":"15px", "className":"", "orderable":!1, render:function(e, a, t, n) {
@@ -176,7 +211,17 @@ $(document).ready(function() {
 						}
 						return badges + `<div class="clipboard copy-txt"><a href="https://` + data + `" class="text-primary" target="_blank"><span id='subdomain-${row['id']}'>` + data + `${copy_icon} </span></a>` + `</div>` + waf_badge + end_vuln_badge + tech_badge + todo_badge;
 					},
-					"targets": 1
+					"targets": get_datatable_col_index('name', subdomain_datatable_columns)
+				},
+				// vulnerability count
+				{
+					"render": function ( data, type, row ) {
+						if (row['info_count'] + row['low_count'] + row['high_count'] + row['medium_count'] + row['critical_count'] > 0) {
+							return `<span class='badge badge-critical bs-tooltip badge-link' title="All Vulnerabilities" onclick="get_vulnerability_modal('{% url 'api:vulnerabilities-list' %}', scan_id=null, severity=null, subdomain_id=${row['id']}, subdomain_name='${row['name']}')">${row['info_count'] + row['low_count'] + row['high_count'] + row['medium_count'] + row['critical_count']} <i class="fas fa-bug"></i></span>`;
+						}
+						return "";
+					},
+					"targets": get_datatable_col_index('vuln_count', subdomain_datatable_columns),
 				},
 				// http_status
 				{
@@ -195,7 +240,7 @@ $(document).ready(function() {
 						}
 						return `<span class='badge bg-danger'>`+data+`</span>`;
 					},
-					"targets": 4,
+					"targets": get_datatable_col_index('http_status', subdomain_datatable_columns),
 				},
 				// page title
 				{
@@ -205,47 +250,37 @@ $(document).ready(function() {
 						}
 						return "";
 					},
-					"targets": 5,
+					"targets": get_datatable_col_index('page_title', subdomain_datatable_columns),
 				},
 				// ip address
 				{
 					"render": function ( data, type, row ) {
 						ip_badge = ''
-						if (data)
-						{
+						if (data) {
 							Object.entries(data).forEach(([key, value]) => {
 								if (value['is_cdn']) {
-									ip_badge += `<span class='m-1 badge badge-soft-warning badge-link' title="CDN IP Address" onclick="get_ip_details('${value.address}', scan_id=null, domain_id=null)">${value.address}</span>`
-								}
-								else{
-									ip_badge += `<span class='m-1 badge badge-soft-primary badge-link' onclick="get_ip_details('${value.address}', scan_id=null, domain_id=null)">${value.address}</span>`
+									ip_badge += `<span class='m-1 badge badge-soft-warning badge-link' title="CDN IP Address" onclick="get_ip_details('{% url 'api:getIpDetails' %}', '{% url 'api:querySubdomains' %}', '${value.address}', {{scan_history_id}})">${value.address}</span>`
+								} else {
+									ip_badge += `<span class='m-1 badge badge-soft-primary badge-link' onclick="get_ip_details('{% url 'api:getIpDetails' %}', '{% url 'api:querySubdomains' %}', '${value.address}', {{scan_history_id}})">${value.address}</span>`
 								}
 							});
 							return ip_badge;
 						}
 						return "";
 					},
-					"targets": 6,
+					"targets": get_datatable_col_index('ip_addresses', subdomain_datatable_columns),
 				},
 				// open ports
 				{
 					"render": function ( data, type, row ) {
-						port_badge = ''
-						if (data){
-							for (ip in data){
-								ports = data[ip]['ports']
-								for (port in ports){
-									port_obj = data[ip]['ports'][port]
-									badge_color = port_obj['is_uncommon'] ? 'danger' : 'primary';
-									title = port_obj['is_uncommon'] ? 'Uncommon Port - ' + port_obj['description'] : port_obj['description'];
-									port_badge += `<span class='m-1 badge badge-soft-${badge_color} bs-tooltip badge-link' title='${title}' onclick="get_port_details(${port_obj['number']}, scan_id=null, domain_id=null)">${port_obj['number']}/${port_obj['service_name']}</span>`
-								}
-							}
-							return port_badge;
-						}
-						return "";
+						return renderBadge(data, {
+							api_ips_url: '{% url 'api:listIPs' %}',
+							api_subdomains_url: '{% url 'api:querySubdomains' %}',
+							scan_id: null,
+							domain_id: null
+						});
 					},
-					"targets": 7,
+					"targets": get_datatable_col_index('open_ports', subdomain_datatable_columns),
 				},
 				{
 					"render": function ( data, type, row ) {
@@ -255,19 +290,9 @@ $(document).ready(function() {
 						}
 						return 0;
 					},
-					"targets": 8,
+					"targets": get_datatable_col_index('content_length', subdomain_datatable_columns),
 				},
-				// screenshot
-				{
-					"render": function ( data, type, row ) {
-						if (data){
-							//return lightbox with caption as http link
-							return `<a href="/media/`+data+`" data-lightbox="screenshots" data-title="&lt;a target='_blank' href='`+row['http_url']+`'&gt;&lt;h3 style=&quot;color:white&quot;&gt;`+row['name']+`&lt;/h3&gt;&lt;/a&gt;"><img src="/media/`+data+`" class="img-fluid rounded mb-4 mt-4 screenshot" onerror="removeImageElement(this)"></a>`;
-						}
-						return "";
-					},
-					"targets": 9,
-				},
+
 				// response_time
 				{
 					"render": function ( data, type, row ) {
@@ -276,7 +301,7 @@ $(document).ready(function() {
 						}
 						return "";
 					},
-					"targets": 10,
+					"targets": get_datatable_col_index('response_time', subdomain_datatable_columns),
 				},
 				// Action
 				{
@@ -284,7 +309,7 @@ $(document).ready(function() {
 						const cms_detector_http_url = row['http_url'] ? row['http_url'] : 'https://' + row['name'];
 						return `
 						<div class="btn-group mt-2">
-							<button type="button" data-toggle="tooltip" data-placement="top" title="Show Attack Surface" class="btn btn-primary me-1 bs-tooltip" onclick="show_attack_surface_modal('{% url 'api:gpt_get_possible_attacks' %}', ${row['id']})"><i class="fe-eye"></i></button>
+							<button type="button" data-toggle="tooltip" data-placement="top" title="Show Attack Surface" class="btn btn-primary me-1 bs-tooltip" onclick="show_attack_surface_modal('{% url 'api:llm_get_possible_attacks' %}', ${row['id']})"><i class="fe-eye"></i></button>
 							<button type="button" data-toggle="tooltip" data-placement="top" title="Further Scan Subdomain" class="btn btn-primary btn-scan-subdomain me-1 bs-tooltip" id="${row['id']}"><i class="fe-zap"></i></button>
 							<button type="button" data-toggle="tooltip" data-placement="top" title="Add Recon To-do/Note" class="btn btn-primary me-1 bs-tooltip" id="${row['id']}" onclick="add_note_for_subdomain(${row['id']}, '${row['name']}', '{{current_project.slug}}')"><i class="fe-file-plus"></i></button>
 							<button class="btn btn-primary me-1 dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false"><i class="mdi mdi-dots-horizontal"></i></button>
@@ -296,7 +321,7 @@ $(document).ready(function() {
 						</div>
 						`;
 					},
-					"targets": 24,
+					"targets": get_datatable_col_index('action', subdomain_datatable_columns),
 				},
 			],
 			"dom": "<'dt--top-section'<'row'<'col-12 mb-3 mb-sm-0 col-sm-4 col-md-3 col-lg-4 d-flex justify-content-sm-start justify-content-center'l><'dt--pages-count col-12 col-sm-6 col-md-4 col-lg-4 d-flex justify-content-sm-middle justify-content-center'i><'dt--pagination col-12 col-sm-2 col-md-5 col-lg-4 d-flex justify-content-sm-end justify-content-center'p>>>" +
@@ -353,63 +378,7 @@ $(document).ready(function() {
 			subdomain_datatables.search('is_important=true').draw();
 		});
 
-		$('input[name=sub_http_status_filter_checkbox]').change(function() {
-			if ($(this).is(':checked')) {
-				subdomain_datatables.column(4).visible(true);
-			} else {
-				subdomain_datatables.column(4).visible(false);
-			}
-			window.localStorage.setItem('sub_http_status_filter_checkbox', $(this).is(':checked'));
-		});
-
-		$('input[name=sub_page_title_filter_checkbox]').change(function() {
-			if ($(this).is(':checked')) {
-				subdomain_datatables.column(5).visible(true);
-			} else {
-				subdomain_datatables.column(5).visible(false);
-			}
-			window.localStorage.setItem('sub_page_title_filter_checkbox', $(this).is(':checked'));
-		});
-		$('input[name=sub_ip_filter_checkbox]').change(function() {
-			if ($(this).is(':checked')) {
-				subdomain_datatables.column(6).visible(true);
-			} else {
-				subdomain_datatables.column(6).visible(false);
-			}
-			window.localStorage.setItem('sub_ip_filter_checkbox', $(this).is(':checked'));
-		});
-		$('input[name=sub_ports_filter_checkbox]').change(function() {
-			if ($(this).is(':checked')) {
-				subdomain_datatables.column(7).visible(true);
-			} else {
-				subdomain_datatables.column(7).visible(false);
-			}
-			window.localStorage.setItem('sub_ports_filter_checkbox', $(this).is(':checked'));
-		});
-		$('input[name=sub_content_length_filter_checkbox]').change(function() {
-			if ($(this).is(':checked')) {
-				subdomain_datatables.column(8).visible(true);
-			} else {
-				subdomain_datatables.column(8).visible(false);
-			}
-			window.localStorage.setItem('sub_content_length_filter_checkbox', $(this).is(':checked'));
-		});
-		$('input[name=sub_response_time_filter_checkbox]').change(function() {
-			if ($(this).is(':checked')) {
-				subdomain_datatables.column(10).visible(true);
-			} else {
-				subdomain_datatables.column(10).visible(false);
-			}
-			window.localStorage.setItem('sub_response_time_filter_checkbox', $(this).is(':checked'));
-		});
-		$('input[name=sub_screenshot_filter_checkbox]').change(function() {
-			if ($(this).is(':checked')) {
-				subdomain_datatables.column(9).visible(true);
-			} else {
-				subdomain_datatables.column(9).visible(false);
-			}
-			window.localStorage.setItem('sub_screenshot_filter_checkbox', $(this).is(':checked'));
-		});
+		// Column visibility handlers are now centralized in subdomain_datatable.js
 
 
 		$("#subdomain_scan_results").on('click', '.btn-delete-subdomain', function () {

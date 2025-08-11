@@ -3,6 +3,9 @@
 # Import common functions
 source "$(pwd)/scripts/common_functions.sh" # Open the file if you want to know the meaning of each color
 
+# Import GPU support script
+source "$(pwd)/scripts/gpu_support.sh"
+
 # Fetch the internal and external IP address
 external_ip=$(curl -s https://ipecho.net/plain)
 internal_ips=$(ip -4 -br addr | awk '$2 == "UP" {print $3} /^lo/ {print $3}' | cut -d'/' -f1)
@@ -142,6 +145,223 @@ install_make() {
   install_package "make"
 }
 
+# Remove old Docker images from version 2.0.7
+remove_old_images() {
+  log "Checking for old reNgine 2.0.7 Docker containers and images..." $COLOR_CYAN
+  
+  # Stop and remove all containers
+  if docker ps -a --format '{{.Names}}' | grep -qE '^rengine-|^postgres$|^redis$'; then
+    log "Stopping existing reNgine containers..." $COLOR_YELLOW
+    if ! make down; then
+      log "Error: Failed to stop existing containers. Please stop them manually with 'make down' before continuing." $COLOR_RED
+      exit 1
+    fi
+  fi
+  
+  declare -a old_images=(
+    "rengine-celery"
+    "rengine-celery-beat"
+    "docker.pkg.github.com/yogeshojha/rengine/rengine"
+    "rengine-certs",
+    "nginx",
+    "postgres",
+    "redis"
+  )
+
+  local failed_removals=false
+  
+  for image in "${old_images[@]}"; do
+    if docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^${image}$"; then
+      log "Removing old image: $image" $COLOR_YELLOW
+      if ! docker rmi -f "$image"; then
+        log "Failed to remove image: $image" $COLOR_RED
+        failed_removals=true
+      fi
+    fi
+  done
+
+  if [ "$failed_removals" = true ]; then
+    log "Error: Some old images could not be removed." $COLOR_RED
+    log "Please remove them manually using these commands:" $COLOR_RED
+    log "docker ps -a  # to check if containers are still running" $COLOR_YELLOW
+    log "docker rm -f \$(docker ps -a -q)  # to force remove all containers" $COLOR_YELLOW
+    log "docker images  # to list all images" $COLOR_YELLOW
+    log "docker rmi -f <image_id>  # to force remove specific images" $COLOR_YELLOW
+    log "Then run the installation script again." $COLOR_RED
+    exit 1
+  fi
+}
+
+fix_volumes_permissions() {
+  local user_id=$1
+  local group_id=$1
+  
+  log "Fixing permissions for Docker volumes..." $COLOR_CYAN
+  
+  declare -a volumes=(
+    "rengine_gf_patterns"
+    "rengine_github_repos"
+    "rengine_nuclei_templates"
+    "rengine_scan_results"
+    "rengine_tool_config"
+    "rengine_wordlist"
+  )
+
+  for volume in "${volumes[@]}"; do
+    if docker volume inspect "$volume" >/dev/null 2>&1; then
+      log "Setting permissions for volume: $volume" $COLOR_YELLOW
+      if ! docker run --rm -v "$volume:/data" alpine sh -c "chown -R $user_id:$group_id /data"; then
+        log "Failed to set permissions for volume: $volume" $COLOR_RED
+        return 1
+      fi
+    else
+      log "Volume $volume not found, skipping..." $COLOR_YELLOW
+    fi
+  done
+  
+  log "Volume permissions updated successfully" $COLOR_GREEN
+  return 0
+}
+
+fix_project_ownership() {
+  local user_id=$1
+  local group_id=$1
+  
+  log "Setting correct ownership of the project directory..." $COLOR_CYAN
+  project_dir=$(pwd)
+  
+  # Set ownership for both hidden and regular files in one command
+  if ! find "$project_dir" \( -name ".*" -o -true \) -exec chown ${user_id}:${group_id} {} +; then
+      log "Failed to set ownership of project directory to $user_id" $COLOR_RED
+      return 1
+  fi
+  
+  log "Project directory ownership set to $user_id" $COLOR_GREEN
+  return 0
+}
+# Check GPU support and install required dependencies
+check_gpu_support() {
+    log "Checking for GPU support..." $COLOR_CYAN
+    
+    # Execute GPU detection with error handling
+    if ! GPU_TYPE=$(./scripts/gpu_support.sh 2>/dev/null); then
+        log "GPU detection script failed, continuing with CPU-only setup" $COLOR_YELLOW
+        # Add default GPU configuration
+        {
+            echo "GPU=0"
+            echo "GPU_TYPE=none"
+            echo "DOCKER_RUNTIME=none"
+        } >> .env
+        return 1
+    fi
+    
+    # Validate GPU_TYPE output
+    if [[ ! "$GPU_TYPE" =~ ^(nvidia|amd|none)$ ]]; then
+        log "Invalid GPU type detected: $GPU_TYPE, continuing with CPU-only setup" $COLOR_YELLOW
+        # Add default GPU configuration
+        {
+            echo "GPU=0"
+            echo "GPU_TYPE=none"
+            echo "DOCKER_RUNTIME=none"
+        } >> .env
+        return 1
+    fi
+    
+    case $GPU_TYPE in
+        "nvidia")
+            log "NVIDIA GPU detected" $COLOR_GREEN
+            if ! command -v nvidia-container-toolkit &> /dev/null; then
+                log "Installing NVIDIA Container Toolkit..." $COLOR_CYAN
+                
+                # Add NVIDIA repository key
+                if ! curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg; then
+                    log "Failed to add NVIDIA repository key" $COLOR_RED
+                    return 1
+                fi
+                
+                # Add NVIDIA repository
+                if ! curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
+                    sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
+                    sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list > /dev/null; then
+                    log "Failed to add NVIDIA repository" $COLOR_RED
+                    return 1
+                fi
+                
+                # Update package list
+                if ! sudo apt-get update; then
+                    log "Failed to update package list" $COLOR_RED
+                    return 1
+                fi
+                
+                # Install NVIDIA Container Toolkit
+                if ! sudo apt-get install -y nvidia-container-toolkit; then
+                    log "Failed to install NVIDIA Container Toolkit" $COLOR_RED
+                    return 1
+                fi
+                
+                # Configure Docker runtime
+                if ! sudo nvidia-ctk runtime configure --runtime=docker; then
+                    log "Failed to configure Docker runtime for NVIDIA" $COLOR_RED
+                    return 1
+                fi
+                
+                # Restart Docker service
+                if ! sudo systemctl restart docker; then
+                    log "Failed to restart Docker service" $COLOR_RED
+                    return 1
+                fi
+                
+                log "NVIDIA Container Toolkit installed successfully" $COLOR_GREEN
+            fi
+            return 0
+            ;;
+            
+        "amd")
+            log "AMD GPU detected" $COLOR_GREEN
+            if ! command -v amdgpu-install &> /dev/null; then
+                log "Installing ROCm..." $COLOR_CYAN
+                
+                # Add ROCm repository key
+                if ! curl -fsSL https://repo.radeon.com/rocm/rocm.gpg.key | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/rocm.gpg; then
+                    log "Failed to add ROCm repository key" $COLOR_RED
+                    return 1
+                fi
+                
+                # Add ROCm repository
+                if ! echo "deb [arch=amd64] https://repo.radeon.com/rocm/apt/debian ubuntu main" | sudo tee /etc/apt/sources.list.d/rocm.list > /dev/null; then
+                    log "Failed to add ROCm repository" $COLOR_RED
+                    return 1
+                fi
+                
+                # Update package list
+                if ! sudo apt-get update; then
+                    log "Failed to update package list" $COLOR_RED
+                    return 1
+                fi
+                
+                # Install ROCm
+                if ! sudo apt-get install -y rocm-dev; then
+                    log "Failed to install ROCm" $COLOR_RED
+                    return 1
+                fi
+                
+                # Configure user groups
+                if ! sudo usermod -aG render $USER || ! sudo usermod -aG video $USER; then
+                    log "Failed to configure user groups" $COLOR_RED
+                    return 1
+                fi
+                
+                log "ROCm installed successfully" $COLOR_GREEN
+            fi
+            return 0
+            ;;
+            
+        *)
+            log "No supported GPU detected, continuing with CPU-only setup" $COLOR_YELLOW
+            return 1
+            ;;
+    esac
+}
 
 # Check for root privileges
 if [ $EUID -eq 0 ]; then
@@ -157,19 +377,6 @@ if [ -z "$SUDO_USER" ]; then
   log "Error: This script must be run with sudo." $COLOR_RED
   log "Example: 'sudo ./install.sh'" $COLOR_RED
   exit 1
-fi
-
-# Check that the project directory is not owned by root
-project_dir=$(pwd)
-if [ "$(stat -c '%U' $project_dir)" = "root" ]; then
-  log "The project directory is owned by root. Changing ownership..." $COLOR_YELLOW
-  sudo chown -R $SUDO_USER:$SUDO_USER $project_dir
-  if [ $? -eq 0 ]; then
-    log "Project directory ownership successfully changed." $COLOR_GREEN
-  else
-    log "Failed to change project directory ownership." $COLOR_RED
-    exit 1
-  fi
 fi
 
 usageFunction()
@@ -195,13 +402,91 @@ main() {
   tput setaf 1;
 
   isNonInteractive=false
-  while getopts nh opt; do
-     case $opt in
-        n) isNonInteractive=true ;;
-        h) usageFunction ;;
-        ?) usageFunction ;;
-     esac
+  # Get args from sudo or directly
+  args="${@:-${SUDO_COMMAND#*/install.sh }}"
+  for arg in $args
+  do
+    case $arg in
+      -n|--non-interactive)
+        isNonInteractive=true
+        ;;
+      -h|--help)
+        usageFunction
+        ;;
+      ./install.sh)
+        # Skip the script name
+        ;;
+      *)
+        log "Unknown argument: $arg" $COLOR_RED
+        usageFunction
+        ;;
+    esac
   done
+
+  log "Checking and installing reNgine-ng prerequisites..." $COLOR_CYAN
+
+  install_curl
+  install_make
+  check_docker
+  check_docker_compose
+
+  # Add GPU support check here
+  if check_gpu_support; then
+    if [ $isNonInteractive = true ]; then
+        # Load existing GPU configuration from .env
+        if [ -f .env ]; then
+            GPU_ENABLED=$(grep "^GPU=" .env | cut -d '=' -f2)
+            if [ "$GPU_ENABLED" = "1" ]; then
+                # Remove existing GPU-related configurations
+                sed -i '/^GPU=/d' .env
+                sed -i '/^GPU_TYPE=/d' .env
+                sed -i '/^DOCKER_RUNTIME=/d' .env
+                
+                # Add GPU configuration to environment
+                {
+                    echo "GPU=1"
+                    echo "GPU_TYPE=$GPU_TYPE"
+                    echo "DOCKER_RUNTIME=$GPU_TYPE"
+                } >> .env
+                log "GPU support has been enabled from existing configuration" $COLOR_GREEN
+            else
+                log "GPU support is disabled in .env" $COLOR_YELLOW
+            fi
+        fi
+    else
+        log "Do you want to enable GPU support for Ollama? (recommended for better LLM performance) [y/n] " $COLOR_CYAN
+        read -p "" gpu_choice
+        case $gpu_choice in
+            [Yy]* )
+                # Remove existing GPU-related configurations
+                sed -i '/^GPU=/d' .env
+                sed -i '/^GPU_TYPE=/d' .env
+                sed -i '/^DOCKER_RUNTIME=/d' .env
+                
+                # Add GPU configuration to environment
+                {
+                    echo "GPU=1"
+                    echo "GPU_TYPE=$GPU_TYPE"
+                    echo "DOCKER_RUNTIME=$GPU_TYPE"
+                } >> .env
+                log "GPU support will be enabled" $COLOR_GREEN
+                ;;
+            * )
+                # Remove existing GPU-related configurations
+                sed -i '/^GPU=/d' .env
+                sed -i '/^GPU_TYPE=/d' .env
+                sed -i '/^DOCKER_RUNTIME=/d' .env
+                # Add default GPU configuration
+                {
+                    echo "GPU=0"
+                    echo "GPU_TYPE=none"
+                    echo "DOCKER_RUNTIME=none"
+                } >> .env
+                log "Continuing without GPU support" $COLOR_YELLOW
+                ;;
+        esac
+    fi
+  fi
 
   if [ $isNonInteractive = false ]; then
     read -p "Are you sure you made changes to the '.env' file (y/n)? " answer
@@ -214,6 +499,7 @@ main() {
           nano .env
         ;;
     esac
+  fi
 
   log "Checking and installing reNgine-ng prerequisites..." $COLOR_CYAN
 
@@ -222,29 +508,58 @@ main() {
   check_docker
   check_docker_compose
 
-    log "Do you want to build Docker images from source or use pre-built images (recommended)? \nThis saves significant build time but requires good download speeds for it to complete fast." $COLOR_RED
-    log "1) From source" $COLOR_YELLOW
-    log "2) Use pre-built images (default)" $COLOR_YELLOW
-    read -p "Enter your choice (1 or 2, default is 2): " choice
+  # Remove old Docker images from version 2.0.7
+  remove_old_images
 
-    case $choice in
-        1)
-            INSTALL_TYPE="source"
-            ;;
-        2|"")
-            INSTALL_TYPE="prebuilt"
-            ;;
-        *)
-            log "Invalid choice. Defaulting to pre-built images." $COLOR_RED
-            INSTALL_TYPE="prebuilt"
-            ;;
-    esac
+  if [ -n "$SUDO_USER" ]; then
+    current_id=$(id -u "$SUDO_USER")
+  else
+    current_id=$(id -u)
+  fi
 
-    log "Selected installation type: $INSTALL_TYPE" $COLOR_CYAN
+  # Fix project directory ownership
+  if ! fix_project_ownership "$current_id"; then
+      log "Failed to fix project directory ownership" $COLOR_RED
+      exit 1
+  fi
+
+  # Fix Docker volumes permissions
+  if ! fix_volumes_permissions "$current_id"; then
+      log "Failed to fix Docker volumes permissions" $COLOR_RED
+      exit 1
+  fi
+
+  # Install type
+  if [ "$current_id" -ne 1000 ]; then
+      # If the user is not 1000, force source install because pre-built images are not compatible with user > 1000
+      INSTALL_TYPE="source"
+      log "Build has been forced because your user ID is not the same as the pre-built images. If you want to use pre-built images, your current user installing reNgine-ng must be 1000." $COLOR_RED
+  else
+      if [ "$isNonInteractive" = false ]; then
+          log "Do you want to build Docker images from source or use pre-built images (recommended)?\nThis saves significant build time but requires good download speeds for it to complete fast." $COLOR_RED
+          log "1) From source" $COLOR_YELLOW
+          log "2) Use pre-built images (default)" $COLOR_YELLOW
+          read -p "Enter your choice (1 or 2, default is 2): " choice
+
+          case $choice in
+              1)
+                  INSTALL_TYPE="source"
+                  ;;
+              2|"")
+                  INSTALL_TYPE="prebuilt"
+                  ;;
+              *)
+                  log "Invalid choice. Defaulting to pre-built images." $COLOR_RED
+                  INSTALL_TYPE="prebuilt"
+                  ;;
+          esac
+      elif [ "$isNonInteractive" = true ]; then
+        INSTALL_TYPE="${INSTALL_TYPE:-prebuilt}"
+      fi
   fi
 
   # Non-interactive install
-  if [ $isNonInteractive = true ]; then
+  if [ "$isNonInteractive" = true ]; then
     # Load and verify .env file
     if [ -f .env ]; then
         export $(grep -v '^#' .env | xargs)
@@ -258,12 +573,11 @@ main() {
       exit 1
     fi
 
-    INSTALL_TYPE=${INSTALL_TYPE:-prebuilt}
     log "Non-interactive installation parameter set. Installation begins." $COLOR_GREEN
   fi
 
   if [ -z "$INSTALL_TYPE" ]; then
-    log "Error: INSTALL_TYPE is not set" $COLOR_RED
+    log "Error: INSTALL_TYPE is not set in .env, please set it to either 'prebuilt' or 'source'" $COLOR_RED
     exit 1
   elif [ "$INSTALL_TYPE" != "prebuilt" ] && [ "$INSTALL_TYPE" != "source" ]; then
     log "Error: INSTALL_TYPE must be either 'prebuilt' or 'source'" $COLOR_RED
@@ -289,6 +603,32 @@ main() {
   log "Docker containers starting, please wait as starting the Celery container could take a while..." $COLOR_CYAN
   sleep 5
   make up && log "reNgine-ng is started!" $COLOR_GREEN || { log "reNgine-ng start failed!" $COLOR_RED; exit 1; }
+
+  # Add configuration files management
+  log "Setting up tool configurations..." $COLOR_CYAN
+  
+  declare -A config_files=(
+    ["theHarvester/api-keys.yaml"]="docker/celery/config/the-harvester-api-keys.yaml"
+    ["amass/config.ini"]="docker/celery/config/amass.ini"
+    ["gau/config.toml"]="docker/celery/config/gau.toml"
+  )
+
+  for target in "${!config_files[@]}"; do
+    target_path="/home/rengine/.config/$target"
+    source_path="${config_files[$target]}"
+    
+    if [ ! -f "$target_path" ]; then
+      log "Copying $target configuration..." $COLOR_CYAN
+      docker exec -u rengine rengine-celery-1 mkdir -p "$(dirname "$target_path")"
+      docker cp "$(pwd)/$source_path" "rengine-celery-1:$target_path"
+      docker exec -u rengine rengine-celery-1 chmod 644 "$target_path"
+    else
+      log "Configuration file $target already exists, skipping..." $COLOR_YELLOW
+    fi
+  done
+
+  # Create symbolic link for theHarvester if it doesn't exist
+  docker exec -u rengine rengine-celery-1 bash -c '[ ! -L "/home/rengine/.theHarvester" ] && ln -s /home/rengine/.config/theHarvester /home/rengine/.theHarvester || true'
 
   log "Creating an account..." $COLOR_CYAN
   make superuser_create isNonInteractive=$isNonInteractive

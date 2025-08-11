@@ -596,7 +596,7 @@
         {% elif scan_object.scan_status == 2 %}
           {% if scan_object.get_completed_time_in_sec < 60 %}
             Completed in < 1 minutes {% else %} Completed in {{ scan_object.start_scan_date|timesince:scan_object.stop_scan_date }} {% endif %} {% elif scan_object.scan_status == 3 %} Aborted in
-          {{ scan_object.start_scan_date|timesince:scan_object.stop_scan_date }} {% endif %} <br>
+          {{ scan_object.start_scan_date|timesince:scan_object.stop_scan_date }} {% elif scan_object.scan_status == 4 %} Finalizing - {{ scan_object.get_elapsed_time }} {% endif %} <br>
         Report Generated on: {% now "F j, Y" %}
       </p>
     </article>
@@ -825,11 +825,15 @@
                       <li>{{ip.address}}
                         {% if ip.ports.all %}
                           <ul>
-                            <li>Open Ports: &nbsp;
-                              {% for port in ip.ports.all %}
-                                {{port.number}}/{{port.service_name}}{% if not forloop.last %},{% endif %}
-                              {% endfor %}
-                            </li>
+                            {% for port in ip.ports.all %}
+                              <li>
+                                {{port.number}}/{{port.service_name}}
+                                {% if port.description %}
+                                  <br>
+                                  <span style="padding-left: 20px; color: #666;">Description: {{port.description}}</span>
+                                {% endif %}
+                              </li>
+                            {% endfor %}
                           </ul>
                         {% endif %}
                       </li>
@@ -936,7 +940,7 @@
           {% regroup all_vulnerabilities by get_path as grouped_vulnerabilities %}
           {% for vulnerabilities in grouped_vulnerabilities %}
             {% for vulnerability in vulnerabilities.list %}
-              <div>
+              <div style="page-break-before: always">
                 <h4 class="content-heading" id="vuln_{{vulnerability.name.split|join:'_'}}">
                   <span>{{vulnerability.name}}
                     <br>in {{vulnerabilities.grouper}}</span>
@@ -986,17 +990,17 @@
                 {% if vulnerability.description %}
                   <br>
                   <span class="mini-heading">Description</span><br>
-                  {{vulnerability.description|linebreaks}}
+                  {{vulnerability.description|linebreaks|safe}}
                 {% endif %}
                 {% if vulnerability.impact %}
                   <br>
                   <span class="mini-heading">Impact</span><br>
-                  {{vulnerability.impact|linebreaks}}
+                  {{vulnerability.impact|linebreaks|safe}}
                 {% endif %}
                 {% if vulnerability.remediation %}
                   <br>
                   <span class="mini-heading">Remediation</span><br>
-                  {{vulnerability.remediation|linebreaks}}
+                  {{vulnerability.remediation|linebreaks|safe}}
                 {% endif %}
                 <br>
                 <span class="mini-heading">Vulnerable URL(s)</span><br>
@@ -1020,15 +1024,22 @@
                     {% endfor %}
                   {% endfor %}
                 </ul> -->
-                {% if vulnerability.references.all %}
+                {% if vulnerability.references %}
                   <span class="mini-heading">References</span><br>
-                  <ul>
-                    {% for ref in vulnerability.references.all %}
-                    <li>
-                      <span class="text-blue"><a href="{{ref}}" target="_blank" rel="noopener noreferrer">{{ref}}</a></span>
-                    </li>
-                    {% endfor %}
-                  </ul>
+                  {% load custom_filters %}
+                  {% with vulnerability.references|parse_references as parsed_refs %}
+                      {% if parsed_refs %}
+                          <ul>
+                              {% for reference in parsed_refs %}
+                                  <li>
+                                      <a href="{{ reference }}" target="_blank" rel="noopener noreferrer">{{ reference }}</a>
+                                  </li>
+                              {% endfor %}
+                          </ul>
+                      {% else %}
+                          <p>{{ vulnerability.references }}</p>
+                      {% endif %}
+                  {% endwith %}
                 {% endif %}
                 <br>
                 <br>
