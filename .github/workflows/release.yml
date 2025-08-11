@@ -19,4 +19,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
-          body: "Make sure you have read our [breaking changes](https://github.com/Security-Tools-Alliance/rengine-ng/wiki/Installation#breaking-changes) and [how to update](https://github.com/Security-Tools-Alliance/rengine-ng/wiki/Installation#-updating-rengine-ng). The changelog is as follows:"
+          body: |
+            Make sure you have read our [breaking changes](https://github.com/Security-Tools-Alliance/rengine-ng/wiki/Installation#breaking-changes) and [how to update](https://github.com/Security-Tools-Alliance/rengine-ng/wiki/Installation#-updating-rengine-ng).
+            
+            📋 **For a detailed user-friendly changelog, see: [CHANGELOG.md](https://github.com/Security-Tools-Alliance/rengine-ng/blob/master/CHANGELOG.md)**
+            
+            ## Technical Changes (Auto-generated from PR titles)
