@@ -2953,22 +2953,38 @@ function showSwalLoader(title, text){
 }
 
 async function send_llm_api_request(endpoint_url, vuln_id){
-	const api = `${endpoint_url}?format=json&id=${vuln_id}`;
-	try {
-		const response = await fetch(api, {
-				method: 'GET',
-				credentials: "same-origin",
-				headers: {
-					"X-CSRFToken": getCookie("csrftoken")
-				}
-		});
-		if (!response.ok) {
-			throw new Error('Request failed');
-		}
-		return await response.json();
-	} catch (error) {
-		throw new Error('Request failed');
-	}
+    const api = `${endpoint_url}?format=json&id=${vuln_id}`;
+    try {
+        const response = await fetch(api, {
+            method: 'GET',
+            credentials: 'same-origin',
+            headers: {
+                'X-CSRFToken': getCookie('csrftoken')
+            }
+        });
+        // Always try to parse JSON to allow UI handling of non-2xx responses
+        let data;
+        try {
+            data = await response.json();
+        } catch (jsonError) {
+            // Log the error for debugging without masking server-side issues
+            console.error('JSON parse error:', jsonError);
+            return {
+                status: false,
+                error: 'Failed to parse server response as JSON',
+                details: jsonError.message || jsonError.toString()
+            };
+        }
+        if (!response.ok) {
+            // Return structured error so caller can decide next step (e.g., show config dialog)
+            return (data && typeof data === 'object')
+                ? data
+                : { status: false, error: 'Request failed' };
+        }
+        return data;
+    } catch (error) {
+        return { status: false, error: 'Network error', details: error.message || error.toString() };
+    }
 }
 
 
@@ -2984,11 +3000,15 @@ async function fetch_llm_vuln_details(endpoint_url, id, title) {
 		}
 		else{
 			Swal.close();
-			Swal.fire({
-				icon: 'error',
-				title: 'Oops...',
-				text: data.error,
-			});
+			if (data.error_code === 'LLM_CONFIG_REQUIRED') {
+				showLLMConfigChoiceDialog(endpoint_url, id, title, data);
+			} else {
+				Swal.fire({
+					icon: 'error',
+					title: 'Oops...',
+					text: data.error,
+				});
+			}
 		}
 	} catch (error) {
 		console.error(error);
@@ -3027,6 +3047,148 @@ function render_llm_vuln_modal(data, title){
 		DOMPurify.sanitize(modal_content)
 	);
 	$('#modal_dialog').modal('show');
+}
+
+// Show configuration choice dialog when LLM config is missing/invalid
+function showLLMConfigChoiceDialog(endpoint_url, vuln_id, title, info){
+    const options = [];
+    // Option: add GPT API key (if GPT selected without key)
+    if (info && info.is_gpt_selected && info.openai_key_missing) {
+        options.push(`
+            <button class="btn btn-primary w-100 mb-2" onclick="window.location.href='/scanEngine/api_vault'">
+                Add OpenAI API Key
+            </button>
+        `);
+    }
+    // Option: choose Ollama model (if server reachable and at least one model)
+    if (info && info.ollama_available && info.has_ollama_models) {
+        options.push(`
+            <button class="btn btn-success w-100 mb-2" id="btn-choose-ollama-model" type="button">
+                Choose Ollama Model
+            </button>
+        `);
+    }
+    // Always include cancel
+    options.push(`
+        <button class="btn btn-outline-secondary w-100" data-bs-dismiss="modal" onclick="Swal.close()">Cancel</button>
+    `);
+
+    $('#modal_dialog .modal-dialog').removeClass('modal-xl').addClass('modal-lg');
+    $('#modal_dialog .modal-title').html('LLM configuration required');
+    $('#modal_dialog .modal-text').html(`
+        <p>
+            The current LLM configuration is incomplete. Please choose an option:
+        </p>
+        <div class="d-grid gap-2">
+            ${options.join('')}
+        </div>
+    `);
+    $('#modal_dialog .modal-footer').empty();
+    $('#modal_dialog').modal('show');
+
+    // Bind click handler safely (no inline JS)
+    const chooseBtn = document.getElementById('btn-choose-ollama-model');
+    if (chooseBtn) {
+        chooseBtn.addEventListener('click', function() {
+            $('#modal_dialog').modal('hide');
+            showModelSelectionDialog(endpoint_url, vuln_id, {
+                mode: 'vuln',
+                force_regenerate: false,
+                vuln_title: title || ''
+            });
+        });
+    }
+}
+
+// Model selection specifically for Vulnerability Details flow
+async function showVulnModelSelectionDialog(endpoint_url, vuln_id, title) {
+    try {
+        const response = await fetch('/api/tools/llm_models');
+        const data = await response.json();
+        if (!data.status) {
+            throw new Error(data.error || 'Failed to fetch models');
+        }
+
+        $('#modal_dialog .modal-dialog').removeClass('modal-lg').addClass('modal-xl');
+        const allModels = data.models;
+        const selectedModel = data.selected_model;
+
+        let modelOptions = '';
+        allModels.forEach(model => {
+            const modelName = model.name;
+            const capabilities = model.capabilities || {};
+            const isLocal = !!model.is_local;
+            const badges = [
+                capabilities.best_for ? `<span class=\"badge bg-soft-primary text-primary me-1\">${capabilities.best_for[0] || 'General'}</span>` : '',
+                isLocal ? '<span class=\"badge bg-soft-success text-success me-1\">Local</span>' : ''
+            ].join('');
+
+            modelOptions += `
+                <div class=\"card mb-2\">
+                    <div class=\"card-body p-2 pt-3 d-flex flex-column\">
+                        <div class=\"form-check\">
+                            <input class=\"form-check-input\" type=\"radio\" name=\"llm_model\" 
+                                id=\"${modelName}\" value=\"${modelName}\" 
+                                ${modelName === selectedModel ? 'checked' : ''}>
+                            <label class=\"form-check-label\" for=\"${modelName}\">
+                                <span class=\"fw-semibold\">${modelName}</span>
+                                <span class=\"ms-2\">${badges}</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>`;
+        });
+
+        $('#modal_dialog .modal-title').html('Select LLM Model');
+        $('#modal_dialog .modal-text').html(`
+            <div class=\"mb-3 row\">
+                <p>Select the LLM model to use:</p>
+                ${modelOptions}
+            </div>
+            <div class=\"text-end\">
+                <button class=\"btn btn-primary\" id=\"confirmVulnModel\">Continue</button>
+            </div>
+        `);
+        $('#modal_dialog .modal-footer').empty();
+        $('#modal_dialog').modal('show');
+
+        $('#confirmVulnModel').off('click').on('click', async () => {
+            const chosen = $('input[name="llm_model"]:checked').val();
+            if (!chosen) {
+                Swal.fire({ icon: 'error', title: 'Error', text: 'Please select a model' });
+                return;
+            }
+            try {
+                const encoded = encodeURIComponent(chosen);
+                const updateResponse = await fetch(`/api/tool/ollama/${encoded}/`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken')
+                    },
+                    body: JSON.stringify({ model: chosen })
+                });
+                const updateData = await updateResponse.json();
+                if (!updateData.status) {
+                    throw new Error('Unable to set selected model');
+                }
+                $('#modal_dialog').modal('hide');
+                // Retry vulnerability fetch
+                await fetch_llm_vuln_details(endpoint_url, vuln_id, title);
+            } catch (err) {
+                console.error(err);
+                Swal.fire({ icon: 'error', title: 'Error', text: err.message || 'Something went wrong!' });
+            }
+        });
+    } catch (error) {
+        console.error(error);
+        Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: 'Unable to fetch LLM models. Please check configuration.',
+            footer: '<a href="/scanEngine/llm_toolkit/">Configure LLM models</a>'
+        });
+    }
 }
 
 
@@ -3099,7 +3261,7 @@ async function show_attack_surface_modal(endpoint_url, id) {
         }
         
         // If no cached results, show model selection
-        await showModelSelectionDialog(endpoint_url, id);
+        await showModelSelectionDialog(endpoint_url, id, { mode: 'attack' });
     } catch (error) {
         console.error(error);
         Swal.fire({
@@ -3110,7 +3272,7 @@ async function show_attack_surface_modal(endpoint_url, id) {
     }
 }
 
-async function showModelSelectionDialog(endpoint_url, id, force_regenerate = false) {
+async function showModelSelectionDialog(endpoint_url, id, optsOrForce = false) {
     try {
         // Fetch models from the unified endpoint that combines GPT and Ollama models
         const response = await fetch('/api/tools/llm_models');
@@ -3123,8 +3285,20 @@ async function showModelSelectionDialog(endpoint_url, id, force_regenerate = fal
         // Change modal size to xl
         $('#modal_dialog .modal-dialog').removeClass('modal-lg').addClass('modal-xl');
 
-        // Keep all the existing model selection code
-		window.generateAttackSurface = async () => {
+        // Resolve options for reuse in attack surface and vulnerabilities
+        let mode = 'attack';
+        let force_regenerate = false;
+        let vuln_title = '';
+        if (typeof optsOrForce === 'boolean') {
+            force_regenerate = optsOrForce;
+        } else if (optsOrForce && typeof optsOrForce === 'object') {
+            mode = optsOrForce.mode || 'attack';
+            force_regenerate = !!optsOrForce.force_regenerate;
+            vuln_title = optsOrForce.vuln_title || '';
+        }
+
+        // Unified confirm handler
+        window.confirmLLMModelSelection = async () => {
 			const selectedModel = $('input[name="llm_model"]:checked').val();
 			if (!selectedModel) {
 				Swal.fire({
@@ -3151,22 +3325,27 @@ async function showModelSelectionDialog(endpoint_url, id, force_regenerate = fal
 				if (!updateData.status) {
 					throw new Error('Failed to update selected model');
 				}
-		
-				// Then proceed with attack surface analysis
-				var loader_title = "Loading...";
-				var text = 'Please wait while the LLM is generating attack surface.';
-				showSwalLoader(loader_title, text);
-				const data = await send_llm__attack_surface_api_request(endpoint_url, id, force_regenerate, false, selectedModel);
-				Swal.close();
-                
-                if (data.status) {
-					showAttackSurfaceModal(data, endpoint_url, id);
+                if (mode === 'attack') {
+                    // Then proceed with attack surface analysis
+                    var loader_title = 'Loading...';
+                    var text = 'Please wait while the LLM is generating attack surface.';
+                    showSwalLoader(loader_title, text);
+                    const result = await send_llm__attack_surface_api_request(endpoint_url, id, force_regenerate, false, selectedModel);
+                    Swal.close();
+                    
+                    if (result.status) {
+                        showAttackSurfaceModal(result, endpoint_url, id);
+                    } else {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Oops...',
+                            text: result.error,
+                        });
+                    }
                 } else {
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'Oops...',
-                        text: data.error,
-                    });
+                    // Vulnerability details flow: close modal and retry fetch
+                    $('#modal_dialog').modal('hide');
+                    await fetch_llm_vuln_details(endpoint_url, id, vuln_title);
                 }
             } catch (error) {
                 console.error(error);
@@ -3238,7 +3417,7 @@ async function showModelSelectionDialog(endpoint_url, id, force_regenerate = fal
                 </div>`;
         });
 
-        $('#modal_dialog .modal-title').html('Select LLM Model for Attack Surface Analysis');
+        $('#modal_dialog .modal-title').html('Select LLM Model');
         $('#modal_dialog .modal-text').empty();
         $('#modal_dialog .modal-text').append(`
             <div class="mb-3 row">
@@ -3246,9 +3425,7 @@ async function showModelSelectionDialog(endpoint_url, id, force_regenerate = fal
                 ${modelOptions}
             </div>
             <div class="mb-3 text-center">
-                <button class="btn btn-primary" type="button" onclick="window.generateAttackSurface()">
-                    Continue Analysis
-                </button>
+                <button class="btn btn-primary" type="button" onclick="window.confirmLLMModelSelection()">Continue</button>
             </div>
         `);
         

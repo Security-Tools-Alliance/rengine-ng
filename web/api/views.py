@@ -504,6 +504,57 @@ class LLMVulnerabilityReportGenerator(APIView):
                 'status': False,
                 'error': 'Missing GET param Vulnerability `id`'
             })
+        # Preflight checks for LLM configuration
+        try:
+            from dashboard.models import OpenAiAPIKey, OllamaSettings
+            from reNgine.llm.utils import get_default_llm_model
+            from reNgine.llm.config import LLM_CONFIG
+
+            selected_model = get_default_llm_model()
+            is_gpt = selected_model.startswith('gpt')
+
+            openai_key_missing = is_gpt and not OpenAiAPIKey.objects.exists()
+
+            # Detect missing default Ollama selection if Ollama is preferred
+            ollama_default_missing = False
+            try:
+                ollama_settings = OllamaSettings.objects.first()
+                if ollama_settings and ollama_settings.use_ollama and not (ollama_settings.selected_model and ollama_settings.selected_model.strip()):
+                    ollama_default_missing = True
+            except Exception:
+                ollama_default_missing = False
+
+            # Check Ollama availability only if not GPT or to offer alternative
+            ollama_ok = False
+            available_ollama_models = []
+            try:
+                import requests
+                from reNgine.definitions import OLLAMA_INSTANCE
+                r = requests.get(f"{OLLAMA_INSTANCE}/api/tags", timeout=3)
+                if r.ok:
+                    data = r.json()
+                    available_ollama_models = [m.get('name') for m in data.get('models', []) if m.get('name')]
+                    ollama_ok = len(available_ollama_models) > 0
+            except Exception:
+                ollama_ok = False
+
+            # If GPT selected without API key, or no default local model selected while Ollama usable
+            if openai_key_missing or ollama_default_missing:
+                return Response({
+                    'status': False,
+                    'error_code': 'LLM_CONFIG_REQUIRED',
+                    'error': "LLM configuration is incomplete.",
+                    'is_gpt_selected': is_gpt,
+                    'openai_key_missing': openai_key_missing,
+                    'ollama_available': ollama_ok,
+                    'has_ollama_models': bool(available_ollama_models),
+                    'ollama_default_missing': ollama_default_missing,
+                }, status=400)
+
+        except Exception:
+            # If preflight fails, proceed to task but keep robustness
+            pass
+
         task = llm_vulnerability_report.apply_async(args=(vulnerability_id,))
         response = task.wait()
         return Response(response)

@@ -55,7 +55,17 @@ def get_llm_vuln_input_description(title, path):
 def convert_markdown_to_html(markdown_text):
     if markdown_text is None:
         return ""
-    
+
+    # Normalize non-string inputs to string
+    if not isinstance(markdown_text, str):
+        if isinstance(markdown_text, (list, tuple)):
+            try:
+                markdown_text = "\n".join(str(item) for item in markdown_text)
+            except Exception:
+                markdown_text = str(markdown_text)
+        else:
+            markdown_text = str(markdown_text)
+
     # Extract LLM badge if present (at the beginning of the text)
     llm_badge = ""
     if markdown_text.startswith('[LLM:'):
