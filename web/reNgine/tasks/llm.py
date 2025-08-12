@@ -38,9 +38,38 @@ def llm_vulnerability_report(vulnerability_id=None, vuln_tuple=None):
 
         logger.info(f'Processing vulnerability: {title}, PATH: {path}')
 
-        if stored := LLMVulnerabilityReport.objects.filter(
+        stored = LLMVulnerabilityReport.objects.filter(
             url_path=path, title=title
-        ).first():
+        ).first()
+
+        def _is_empty_text(value) -> bool:
+            try:
+                if value is None:
+                    return True
+                text = str(value).strip()
+                if not text:
+                    return True
+                # Treat list-like empties as empty as well
+                normalized = text.replace('\n', '').replace('\r', '').replace(' ', '')
+                if normalized in ('[]', '[\"\"]', '[\'\']', 'null', 'None'):
+                    return True
+                return False
+            except Exception:
+                return True
+
+        def _is_empty_report(model_obj: LLMVulnerabilityReport) -> bool:
+            try:
+                fields = [
+                    model_obj.description,
+                    model_obj.impact,
+                    model_obj.remediation,
+                    model_obj.references,
+                ]
+                return all(_is_empty_text(f) for f in fields)
+            except Exception:
+                return True
+
+        if stored and not _is_empty_report(stored):
             response = {
                 'status': True,
                 'description': stored.formatted_description,
@@ -50,21 +79,51 @@ def llm_vulnerability_report(vulnerability_id=None, vuln_tuple=None):
             }
             logger.info(f'Found stored report: {stored}')
         else:
-            # Generate new report
+            # Generate or regenerate report when not found or empty
             vulnerability_description = get_llm_vuln_input_description(title, path)
             llm_generator = LLMVulnerabilityReportGenerator()
             response = llm_generator.get_vulnerability_report(vulnerability_description)
 
-            # Store new report in database
-            llm_report = LLMVulnerabilityReport()
-            llm_report.url_path = path
-            llm_report.title = title
-            llm_report.description = response.get('description')
-            llm_report.impact = response.get('impact')
-            llm_report.remediation = response.get('remediation')
-            llm_report.references = response.get('references')
-            llm_report.save()
-            logger.info('Added new report to database')
+            # Only persist non-empty successful responses
+            raw_description = response.get('description')
+            raw_impact = response.get('impact')
+            raw_remediation = response.get('remediation')
+            raw_references = response.get('references')
+
+            # Normalize list-like empty references
+            if _is_empty_text(raw_references):
+                raw_references = ''
+
+            has_content = any(not _is_empty_text(v) for v in [raw_description, raw_impact, raw_remediation, raw_references])
+
+            if response.get('status') and has_content:
+                if stored:
+                    # Update existing empty record
+                    stored.description = raw_description
+                    stored.impact = raw_impact
+                    stored.remediation = raw_remediation
+                    stored.references = raw_references
+                    stored.save()
+                    logger.info('Updated existing empty LLM report in database')
+                else:
+                    # Store new report
+                    llm_report = LLMVulnerabilityReport(
+                        url_path=path,
+                        title=title,
+                        description=raw_description,
+                        impact=raw_impact,
+                        remediation=raw_remediation,
+                        references=raw_references,
+                    )
+                    llm_report.save()
+                    logger.info('Added new report to database')
+            else:
+                logger.warning('LLM report generation returned empty content; skipping DB save')
+                # Ensure response reports failure to trigger UI fallback instead of showing empty fields
+                response = {
+                    'status': False,
+                    'error': 'LLM returned empty response. Please try again or choose a different model.'
+                }
 
         # Update all matching vulnerabilities
         vulnerabilities = Vulnerability.objects.filter(
@@ -73,20 +132,28 @@ def llm_vulnerability_report(vulnerability_id=None, vuln_tuple=None):
         )
 
         for vuln in vulnerabilities:
-            # Update vulnerability fields
-            vuln.description = response.get('description', vuln.description)
-            vuln.impact = response.get('impact')
-            vuln.remediation = response.get('remediation')
+            # Update vulnerability fields only when present
+            if isinstance(response.get('description'), str) and not _is_empty_text(response.get('description')):
+                vuln.description = response.get('description')
+            if isinstance(response.get('impact'), str) and not _is_empty_text(response.get('impact')):
+                vuln.impact = response.get('impact')
+            if isinstance(response.get('remediation'), str) and not _is_empty_text(response.get('remediation')):
+                vuln.remediation = response.get('remediation')
+            if isinstance(response.get('references'), str) and not _is_empty_text(response.get('references')):
+                vuln.references = response.get('references')
             vuln.is_llm_used = True
-            vuln.references = response.get('references')
 
             vuln.save()
             logger.info(f'Updated vulnerability {vuln.id} with LLM report')
 
-        response['description'] = convert_markdown_to_html(response.get('description', ''))
-        response['impact'] = convert_markdown_to_html(response.get('impact', ''))
-        response['remediation'] = convert_markdown_to_html(response.get('remediation', ''))
-        response['references'] = convert_markdown_to_html(response.get('references', ''))
+        if response.get('status'):
+            # Normalize list-like empty references again for rendering
+            if _is_empty_text(response.get('references')):
+                response['references'] = ''
+            response['description'] = convert_markdown_to_html(response.get('description', ''))
+            response['impact'] = convert_markdown_to_html(response.get('impact', ''))
+            response['remediation'] = convert_markdown_to_html(response.get('remediation', ''))
+            response['references'] = convert_markdown_to_html(response.get('references', ''))
 
         return response
 

@@ -411,8 +411,19 @@ class LLMAttackSuggestion(APIView):
                 'error': f'Subdomain not found with id {subdomain_id}'
             })
 
-        # Return cached result only if not forcing regeneration
-        if subdomain.attack_surface and not force_regenerate:
+        # Return cached result only if not forcing regeneration and not empty
+        def _is_empty_attack_surface(value: str) -> bool:
+            try:
+                if not value:
+                    return True
+                text = str(value)
+                if text.startswith('[LLM:') and ']' in text:
+                    text = text[text.index(']') + 1:]
+                return len(text.strip()) == 0
+            except Exception:
+                return True
+
+        if subdomain.attack_surface and not force_regenerate and not _is_empty_attack_surface(subdomain.attack_surface):
             sanitized_html = subdomain.formatted_attack_surface
             return Response({
                 'status': True,
@@ -458,12 +469,16 @@ class LLMAttackSuggestion(APIView):
         response['subdomain_name'] = subdomain.name
         
         if response.get('status'):
-            # Use the actual selected model name
-            markdown_content = f'[LLM:{selected_model}]\n{response.get("description")}'
-            subdomain.attack_surface = markdown_content
-            subdomain.save()
-            
-            response['description'] = convert_markdown_to_html(markdown_content)
+            raw_desc = response.get('description')
+            if isinstance(raw_desc, str) and raw_desc.strip():
+                # Use the actual selected model name
+                markdown_content = f'[LLM:{selected_model}]\n{raw_desc}'
+                subdomain.attack_surface = markdown_content
+                subdomain.save()
+                response['description'] = convert_markdown_to_html(markdown_content)
+            else:
+                # Do not save empty content
+                response['description'] = ''
         
         return Response(response)
 
