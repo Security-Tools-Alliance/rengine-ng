@@ -429,7 +429,7 @@ function showScreenshotImageModal(screenshotPath, httpUrl = '') {
                 </div>
             </div>`;
 
-        $('#xl-modal_title').html('Screenshot');
+        $('#xl-modal-title').html('Screenshot');
         $('#xl-modal-content').html(content);
         $('#modal_xl_scroll_dialog').modal('show');
     } catch (e) {

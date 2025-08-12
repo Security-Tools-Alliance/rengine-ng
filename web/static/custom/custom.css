@@ -143,6 +143,14 @@ div.dataTables_wrapper div.dataTables_filter input:focus {
   cursor: pointer;
 }
 
+/* Always hide endpoint ID column by class to prevent flicker on (re)load */
+#endpoint_results thead th.endpoint-id-col,
+#endpoint_results tbody td.endpoint-id-col,
+#endpoint_results thead th.dt-col-hidden,
+#endpoint_results tbody td.dt-col-hidden {
+  display: none !important;
+}
+
 .right-bar{
   width: 460px;
   right: -470px;

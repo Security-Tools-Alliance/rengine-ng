@@ -42,10 +42,10 @@ function render_ips(data)
 
 
 function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, scan_history_id=null, domain_id=null, gf_tags=null){
-	var is_endpoint_grouping = false;
-	var endpoint_grouping_col = 6;
+    const is_endpoint_grouping = false;
+    const endpoint_grouping_col = 6;
 
-	var lookup_url = endpoint_endpoint_url + '?format=datatables&project=' + project;
+    let lookup_url = endpoint_endpoint_url + '?format=datatables&project=' + project;
 
 	if (scan_history_id) {
 		lookup_url += `&scan_history=${scan_history_id}`;
@@ -57,14 +57,14 @@ function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, s
 	if (gf_tags){
 		lookup_url += `&gf_tag=${gf_tags}`
 	}
-    // Ensure columns count matches thead (11 columns)
-	var endpoint_datatable_columns = [
-        { 'data': 'id', 'defaultContent': '', 'visible': false, 'searchable': false },
+    // Ensure columns count matches thead
+    const endpoint_datatable_columns = [
+        { 'data': 'id', 'title': 'ID', 'defaultContent': '', 'visible': false, 'searchable': false, 'className': 'endpoint-id-col dt-col-hidden' },
         { 
-            'data': 'http_url', 'defaultContent': '',
+            'data': 'http_url', 'title': 'HTTP URL', 'defaultContent': '',
             'render': function ( data, type, row ) {
-                var tech_badge = '';
-                var web_server = '';
+                let tech_badge = '';
+                let web_server = '';
                 if (row['techs']){
                     tech_badge = `</br>` + parse_technology(endpoint_subdomain_url, row['techs'], "primary", true, false, true);
                 }
@@ -73,8 +73,8 @@ function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, s
                     web_server = `<span class='m-1 badge badge-soft-info' data-toggle="tooltip" data-placement="top" title="Web Server">${row['webserver']}</span>`;
                 }
 
-                var url = split_into_lines(data, 70);
-                var action_icons = `
+                const url = split_into_lines(data, 70);
+                const action_icons = `
                 <div class="float-left subdomain-table-action-icons mt-2">
                 <span class="m-1">
                 <a href="javascript:;" data-clipboard-action="copy" class="badge-link text-primary copyable text-primary" data-toggle="tooltip" data-placement="top" title="Copy Url!" data-clipboard-target="#url-${row['id']}" id="#url-${row['id']}" onclick="setTooltip(this.id, 'Copied!')">
@@ -88,7 +88,7 @@ function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, s
             }
         },
         { 
-            'data': 'http_status', 'defaultContent': '',
+            'data': 'http_status', 'title': 'Status', 'defaultContent': '',
             'render': function ( data, type, row ) {
                 if (data) {
                     return get_http_status_badge(data);
@@ -96,15 +96,15 @@ function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, s
                 return '';
             }
         },
-        { 'data': 'page_title', 'defaultContent': '', 'render': function ( data ) { return htmlEncode(data); } },
-        { 'data': 'matched_gf_patterns', 'defaultContent': '', 'render': function ( data ) { return data ? parse_comma_values_into_span(data, "danger", outline=true) : ""; } },
-        { 'data': 'content_type', 'defaultContent': '' },
-        { 'data': 'content_length', 'searchable': false, 'defaultContent': '' },
-        { 'data': 'techs', 'defaultContent': '', 'visible': false },
-        { 'data': 'webserver', 'defaultContent': '', 'visible': false, 'render': function ( data ) { return data ? parse_comma_values_into_span(data, "info") : ""; } },
-        { 'data': 'response_time', 'searchable': false, 'defaultContent': '', 'render': function ( data ) { return data ? get_response_time_text(data) : ""; } },
+        { 'data': 'page_title', 'title': 'Page Title', 'defaultContent': '', 'render': function ( data ) { return htmlEncode(data); } },
+        { 'data': 'matched_gf_patterns', 'title': 'Tags', 'defaultContent': '', 'render': function ( data ) { return data ? parse_comma_values_into_span(data, "danger", outline=true) : ""; } },
+        { 'data': 'content_type', 'title': 'Content Type', 'defaultContent': '' },
+        { 'data': 'content_length', 'title': 'Content Length', 'searchable': false, 'defaultContent': '' },
+        { 'data': 'techs', 'title': 'Technology', 'defaultContent': '', 'visible': false, 'className': 'dt-col-hidden' },
+        { 'data': 'webserver', 'title': 'Webserver', 'defaultContent': '', 'visible': false, 'className': 'dt-col-hidden', 'render': function ( data ) { return data ? parse_comma_values_into_span(data, "info") : ""; } },
+        { 'data': 'response_time', 'title': 'Response time', 'searchable': false, 'defaultContent': '', 'render': function ( data ) { return data ? get_response_time_text(data) : ""; } },
         { 
-            'data': 'screenshot_path', 
+            'data': 'screenshot_path', 'title': 'Screenshot', 
             'searchable': false,
             'defaultContent': '',
             'render': function(data, type, row) {
@@ -180,43 +180,72 @@ function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, s
     ];
     // If already initialized, destroy cleanly to avoid index drift
     if ($.fn.DataTable.isDataTable('#endpoint_results')) {
-        var existing = $('#endpoint_results').DataTable();
-        existing.clear();
+        const existing = $('#endpoint_results').DataTable();
         existing.destroy();
     }
-    // Hard reset table head/body to keep header <-> columns aligned
-    var $table = $('#endpoint_results');
-    var headerHtml = `
-        <tr>
-            <th>ID</th>
-            <th>HTTP URL</th>
-            <th>Status</th>
-            <th>Page Title</th>
-            <th>Tags</th>
-            <th>Content Type</th>
-            <th>Content Length</th>
-            <th>Technology</th>
-            <th>Webserver</th>
-            <th>Response time</th>
-            <th>Screenshot</th>
-        </tr>`;
-    var $thead = $table.find('thead');
-    if ($thead.length === 0) {
-        $table.prepend('<thead></thead>');
-        $thead = $table.find('thead');
+    // Dynamically generate thead based on column definitions to prevent mismatches
+    function generateTableHead(tableId, columns) {
+        const table = document.getElementById(tableId);
+        if (!table) { return; }
+        const thead = document.createElement('thead');
+        const tr = document.createElement('tr');
+        columns.forEach(function(col) {
+            const th = document.createElement('th');
+            th.textContent = col.title || col.data || '';
+            if (col.visible === false) {
+                th.style.display = 'none';
+                if (col.className) {
+                    th.className = col.className;
+                }
+            } else if (col.className) {
+                th.className = col.className;
+            }
+            tr.appendChild(th);
+        });
+        thead.appendChild(tr);
+        const oldThead = table.querySelector('thead');
+        if (oldThead) {
+            table.removeChild(oldThead);
+        }
+        table.insertBefore(thead, table.firstChild);
+        const tbody = table.querySelector('tbody');
+        if (!tbody) {
+            table.appendChild(document.createElement('tbody'));
+        }
     }
-    $thead.html(headerHtml);
-    var $tbody = $table.find('tbody');
-    if ($tbody.length === 0) {
-        $table.append('<tbody></tbody>');
-        $tbody = $table.find('tbody');
-    }
-    $tbody.empty();
-    // Remove any colgroup left by previous DT instances
-    $table.find('colgroup').remove();
-    var endpoint_table = $('#endpoint_results').DataTable({
+
+    generateTableHead('endpoint_results', endpoint_datatable_columns);
+
+    // Precompute indices by data name to avoid hard-coded numbers
+    const colIndexMap = {
+        http_status: get_datatable_col_index('http_status', endpoint_datatable_columns),
+        page_title: get_datatable_col_index('page_title', endpoint_datatable_columns),
+        matched_gf_patterns: get_datatable_col_index('matched_gf_patterns', endpoint_datatable_columns),
+        content_type: get_datatable_col_index('content_type', endpoint_datatable_columns),
+        content_length: get_datatable_col_index('content_length', endpoint_datatable_columns),
+        response_time: get_datatable_col_index('response_time', endpoint_datatable_columns),
+    };
+
+    // Validate indices; replace -1 with null to avoid runtime issues
+    Object.entries(colIndexMap).forEach(([key, value]) => {
+        if (value === -1) {
+            console.warn(`Column "${key}" not found in endpoint_datatable_columns. Some DataTable features may not work as expected.`);
+            colIndexMap[key] = null;
+        }
+    });
+
+    // Choose a safe default order column
+    const defaultOrderIndex = (
+        colIndexMap.content_length ??
+        colIndexMap.response_time ??
+        0
+    );
+
+    const endpoint_table = $('#endpoint_results').DataTable({
 		"destroy": true,
 		"processing": true,
+        "autoWidth": false,
+        "deferRender": true,
 		"oLanguage": {
 			"oPaginate": { "sPrevious": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-left"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>', "sNext": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-right"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>' },
 			"sInfo": "Showing page _PAGE_ of _PAGES_",
@@ -238,11 +267,11 @@ function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, s
 				return group + ' (' + rows.count() + ' Endpoints)';
 			}
 		},
-		"order": [[ 6, "desc" ]],
+        "order": [[ defaultOrderIndex, "desc" ]],
         "columns": endpoint_datatable_columns,
         // No columnDefs with index targets to avoid index drift issues
 		"initComplete": function(settings, json) {
-			endpoint_datatable_col_visibility(endpoint_table);
+			endpoint_datatable_col_visibility(endpoint_table, endpoint_datatable_columns);
 			$(".dtrg-group th:contains('No group')").remove();
 		},
 		"drawCallback": function () {
@@ -251,7 +280,7 @@ function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, s
 			$('.badge').tooltip({ template: '<div class="tooltip status" role="tooltip"><div class="arrow"></div><div class="tooltip-inner"></div></div>' })
 			$('.dtrg-group').remove();
 			$('.bs-tooltip').tooltip();
-			var clipboard = new Clipboard('.copyable');
+            const clipboard = new Clipboard('.copyable');
 			$('.bs-tooltip').tooltip();
 			clipboard.on('success', function(e) {
 				setTooltip(e.trigger, 'Copied!');
@@ -264,11 +293,11 @@ function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, s
 	});
 
     $('input[name=grouping_endpoint_row]').off('change').on('change', function() {
-	    if (this.checked) {
-				var col_index = get_datatable_col_index(this.value, endpoint_datatable_columns);
-            var api = $('#endpoint_results').DataTable();
-				api.page.len(-1).draw();
-				api.order([col_index, 'asc']).draw();
+        if (this.checked) {
+                const col_index = get_datatable_col_index(this.value, endpoint_datatable_columns);
+            const api = $('#endpoint_results').DataTable();
+                api.page.len(-1).draw();
+                api.order([col_index, 'asc']).draw();
             api.rowGroup().dataSrc(this.value);
 	      Snackbar.show({
 	        text: 'Endpoints grouped by ' + this.value,
@@ -279,56 +308,28 @@ function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, s
 	});
 
     $('#endpoint-search-button').off('click').on('click', function () {
-		endpoint_table.search($('#endpoints-search').val()).draw() ;
-	});
-    $('input[name=end_http_status_filter_checkbox]').off('change').on('change', function() {
-		if ($(this).is(':checked')) {
-			endpoint_table.column(2).visible(true);
-		} else {
-			endpoint_table.column(2).visible(false);
-		}
-		window.localStorage.setItem('end_http_status_filter_checkbox', $(this).is(':checked'));
-	});
-    $('input[name=end_page_title_filter_checkbox]').off('change').on('change', function() {
-		if ($(this).is(':checked')) {
-			endpoint_table.column(3).visible(true);
-		} else {
-			endpoint_table.column(3).visible(false);
-		}
-		window.localStorage.setItem('end_page_title_filter_checkbox', $(this).is(':checked'));
-	});
-    $('input[name=end_tags_filter_checkbox]').off('change').on('change', function() {
-		if ($(this).is(':checked')) {
-			endpoint_table.column(4).visible(true);
-		} else {
-			endpoint_table.column(4).visible(false);
-		}
-		window.localStorage.setItem('end_tags_filter_checkbox', $(this).is(':checked'));
-	});
-    $('input[name=end_content_type_filter_checkbox]').off('change').on('change', function() {
-		if ($(this).is(':checked')) {
-			endpoint_table.column(5).visible(true);
-		} else {
-			endpoint_table.column(5).visible(false);
-		}
-		window.localStorage.setItem('end_content_type_filter_checkbox', $(this).is(':checked'));
-	});
-    $('input[name=end_content_length_filter_checkbox]').off('change').on('change', function() {
-		if ($(this).is(':checked')) {
-			endpoint_table.column(6).visible(true);
-		} else {
-			endpoint_table.column(6).visible(false);
-		}
-		window.localStorage.setItem('end_content_length_filter_checkbox', $(this).is(':checked'));
-	});
-    $('input[name=end_response_time_filter_checkbox]').off('change').on('change', function() {
-		if ($(this).is(':checked')) {
-			endpoint_table.column(9).visible(true);
-		} else {
-			endpoint_table.column(9).visible(false);
-		}
-		window.localStorage.setItem('end_response_time_filter_checkbox', $(this).is(':checked'));
-	});
+        endpoint_table.search($('#endpoints-search').val()).draw() ;
+    });
+
+    const filterBindings = [
+        { checkbox: 'end_http_status_filter_checkbox', column: 'http_status' },
+        { checkbox: 'end_page_title_filter_checkbox', column: 'page_title' },
+        { checkbox: 'end_tags_filter_checkbox', column: 'matched_gf_patterns' },
+        { checkbox: 'end_content_type_filter_checkbox', column: 'content_type' },
+        { checkbox: 'end_content_length_filter_checkbox', column: 'content_length' },
+        { checkbox: 'end_response_time_filter_checkbox', column: 'response_time' },
+        { checkbox: 'end_screenshot_filter_checkbox', column: 'screenshot_path' },
+    ];
+    filterBindings.forEach(binding => {
+        const selector = `input[name=${binding.checkbox}]`;
+        $(selector).off('change').on('change', function() {
+            const idx = get_datatable_col_index(binding.column, endpoint_datatable_columns);
+            if (idx > -1) {
+                endpoint_table.column(idx).visible($(this).is(':checked'));
+            }
+            window.localStorage.setItem(binding.checkbox, $(this).is(':checked'));
+        });
+    });
 }
 
 function get_subdomain_changes(endpoint, scan_history_id){
@@ -992,7 +993,7 @@ function get_vulnerability_modal(endpoint_url, scan_id=null, severity=null, subd
 		},
 	}).then(response => response.json()).then(function(response) {
 		swal.close();
-		$('#xl-modal_title').html(`${subdomain_name}`);
+		$('#xl-modal-title').html(`${subdomain_name}`);
 		render_vulnerability_in_xl_modal(endpoint_url, response['count'], subdomain_name, response['results'])
 	});
 	$('#modal_xl_scroll_dialog').modal('show');
@@ -1032,7 +1033,7 @@ function get_endpoint_modal(endpoint_url, project, scan_id, subdomain_id, subdom
 		},
 	}).then(response => response.json()).then(function(response) {
 		swal.close();
-		$('#xl-modal_title').html(`${subdomain_name}`);
+		$('#xl-modal-title').html(`${subdomain_name}`);
 		render_endpoint_in_xl_modal(response['count'], subdomain_name, response['results'])
 	});
 	$('#modal_xl_scroll_dialog').modal('show');
@@ -1071,7 +1072,7 @@ function get_directory_modal(endpoint_url, scan_id=null, subdomain_id=null, subd
 		},
 	}).then(response => response.json()).then(function(response) {
 		swal.close();
-		$('#xl-modal_title').html(`${subdomain_name}`);
+		$('#xl-modal-title').html(`${subdomain_name}`);
 		render_directories_in_xl_modal(response['count'], subdomain_name, response['results'])
 	});
 	$('#modal_xl_scroll_dialog').modal('show');
@@ -1123,7 +1124,7 @@ function get_logs_modal(scan_id=null, activity_id=null) {
 	.then(response => response.json())
 	.then(data => {
 		swal.close();
-		$('#xl-modal_title').html(`Logs for scan #${scan_history_id}`);
+		$('#xl-modal-title').html(`Logs for scan #${scan_history_id}`);
 		data.results.forEach(log => {
 			$('#xl-modal-content').append(create_log_element(log));
 		})
@@ -1860,7 +1861,7 @@ function show_port_screenshots(subdomain_id, subdomain_name, port, scan_id, doma
 			}
 			
 			if (screenshotCount > 0) {
-				$('#xl-modal_title').html(`Screenshots for ${subdomain_name}:${port} (${screenshotCount})`);
+				$('#xl-modal-title').html(`Screenshots for ${subdomain_name}:${port} (${screenshotCount})`);
 				$('#xl-modal-content').html(modalContent);
 				$('#xl-modal-footer').html('');
 				$('#modal_xl_scroll_dialog').modal('show');
@@ -1931,7 +1932,7 @@ function show_subdomain_screenshots(subdomain_id, subdomain_name, scan_id) {
 			}
 			
 			if (screenshotCount > 0) {
-				$('#xl-modal_title').html(`Screenshots for ${subdomain_name} (${screenshotCount})`);
+				$('#xl-modal-title').html(`Screenshots for ${subdomain_name} (${screenshotCount})`);
 				$('#xl-modal-content').html(modalContent);
 				$('#xl-modal-footer').html('');
 				$('#modal_xl_scroll_dialog').modal('show');

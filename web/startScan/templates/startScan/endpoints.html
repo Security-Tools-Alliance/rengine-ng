@@ -25,7 +25,7 @@ All Endpoints
 <script type="text/javascript">
 $(document).ready(function() {
   const ps = new PerfectScrollbar(document.querySelector('.endpoint-search'));
-  get_endpoints('{% url 'api:endpoints-list' %}', '{% url 'api:subdomains-list' %}', '{{current_project.slug}}', null, null, null);
+  get_endpoints("{% url 'api:endpoints-list' %}", "{% url 'api:subdomains-list' %}", "{{current_project.slug}}", null, null, null);
   var filter_cols = [
     'end_http_status_filter_checkbox',
     'end_page_title_filter_checkbox',
@@ -33,6 +33,7 @@ $(document).ready(function() {
     'end_content_type_filter_checkbox',
     'end_content_length_filter_checkbox',
     'end_response_time_filter_checkbox',
+    'end_screenshot_filter_checkbox',
   ];
 
   for (var col in filter_cols) {

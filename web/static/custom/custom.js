@@ -1067,7 +1067,7 @@ function show_subscan_results(endpoint_url, subscan_id) {
 		} else if (response['subscan']['task'] == 'dir_file_fuzz') {
 			task_name = 'Directory and Files Fuzzing';
 		}
-		$('#xl-modal_title').html(`${task_name} Results on ${response['subscan']['subdomain_name']}`);
+		$('#xl-modal-title').html(`${task_name} Results on ${response['subscan']['subdomain_name']}`);
 		var scan_status = '';
 		var badge_color = 'danger';
 		if (response['subscan']['status'] == 1) {
@@ -2242,7 +2242,7 @@ function get_and_render_cve_details(endpoint_url, cve_id){
 			$('#xl-modal-title').empty();
 			$('#xl-modal-content').empty();
 			$('#xl-modal-footer').empty();
-			$('#xl-modal_title').html(`CVE Details of ${cve_id}`);
+			$('#xl-modal-title').html(`CVE Details of ${cve_id}`);
 
 			var cvss_score_badge = 'danger';
 
@@ -3036,25 +3036,38 @@ function get_datatable_col_index(lookup, cols){
 }
 
 
-function endpoint_datatable_col_visibility(endpoint_table){
-	if(!$('#end_http_status_filter_checkbox').is(":checked")){
-		endpoint_table.column(2).visible(false);
-	}
-	if(!$('#end_page_title_filter_checkbox').is(":checked")){
-		endpoint_table.column(3).visible(false);
-	}
-	if(!$('#end_tags_filter_checkbox').is(":checked")){
-		endpoint_table.column(4).visible(false);
-	}
-	if(!$('#end_content_type_filter_checkbox').is(":checked")){
-		endpoint_table.column(5).visible(false);
-	}
-	if(!$('#end_content_length_filter_checkbox').is(":checked")){
-		endpoint_table.column(6).visible(false);
-	}
-	if(!$('#end_response_time_filter_checkbox').is(":checked")){
-		endpoint_table.column(9).visible(false);
-	}
+function endpoint_datatable_col_visibility(endpoint_table, columns){
+    const getIndex = (name) => get_datatable_col_index(name, columns);
+    if(!$('#end_http_status_filter_checkbox').is(":checked")){
+        endpoint_table.column(getIndex('http_status')).visible(false);
+    }
+    if(!$('#end_page_title_filter_checkbox').is(":checked")){
+        endpoint_table.column(getIndex('page_title')).visible(false);
+    }
+    if(!$('#end_tags_filter_checkbox').is(":checked")){
+        endpoint_table.column(getIndex('matched_gf_patterns')).visible(false);
+    }
+    if(!$('#end_content_type_filter_checkbox').is(":checked")){
+        endpoint_table.column(getIndex('content_type')).visible(false);
+    }
+    if(!$('#end_content_length_filter_checkbox').is(":checked")){
+        endpoint_table.column(getIndex('content_length')).visible(false);
+    }
+    // Always keep techs and webserver hidden in columns; they are shown inline under HTTP URL
+    const idxTechs = getIndex('techs');
+    if (idxTechs > -1) {
+        endpoint_table.column(idxTechs).visible(false);
+    }
+    const idxWebserver = getIndex('webserver');
+    if (idxWebserver > -1) {
+        endpoint_table.column(idxWebserver).visible(false);
+    }
+    if(!$('#end_response_time_filter_checkbox').is(":checked")){
+        endpoint_table.column(getIndex('response_time')).visible(false);
+    }
+    if(!$('#end_screenshot_filter_checkbox').is(":checked")){
+        endpoint_table.column(getIndex('screenshot_path')).visible(false);
+    }
 }
 
 
