@@ -85,6 +85,7 @@ from startScan.models import (
     SubScan,
     Technology,
     Vulnerability,
+    LLMVulnerabilityReport,
 )
 from targetApp.models import Domain, Organization
 
@@ -523,7 +524,6 @@ class LLMVulnerabilityReportGenerator(APIView):
         try:
             from dashboard.models import OpenAiAPIKey, OllamaSettings
             from reNgine.llm.utils import get_default_llm_model
-            from reNgine.llm.config import LLM_CONFIG
 
             selected_model = get_default_llm_model()
             is_gpt = selected_model.startswith('gpt')
@@ -570,9 +570,46 @@ class LLMVulnerabilityReportGenerator(APIView):
             # If preflight fails, proceed to task but keep robustness
             pass
 
-        task = llm_vulnerability_report.apply_async(args=(vulnerability_id,))
+        force_regenerate = request.query_params.get('force_regenerate') == 'true'
+        task = llm_vulnerability_report.apply_async(args=(vulnerability_id, None, force_regenerate))
         response = task.wait()
         return Response(response)
+
+    def delete(self, request):
+        req = self.request
+        vulnerability_id = safe_int_cast(req.query_params.get('id'))
+        if not vulnerability_id:
+            return Response({
+                'status': False,
+                'error': 'Missing GET param Vulnerability `id`'
+            }, status=400)
+
+        try:
+            from urllib.parse import urlparse as _urlparse
+            vuln = Vulnerability.objects.get(id=vulnerability_id)
+            lookup_url = _urlparse(vuln.http_url)
+            title = vuln.name
+            path = lookup_url.path
+
+            deleted, _ = LLMVulnerabilityReport.objects.filter(
+                url_path=path, title=title
+            ).delete()
+
+            return Response({
+                'status': True,
+                'deleted': deleted
+            })
+        except Vulnerability.DoesNotExist:
+            return Response({
+                'status': False,
+                'error': f'Vulnerability not found with id {vulnerability_id}'
+            }, status=404)
+        except Exception as e:
+            logger.error(f"Error deleting LLM vulnerability report: {str(e)}")
+            return Response({
+                'status': False,
+                'error': 'An error occurred while deleting the analysis'
+            }, status=500)
 
 
 class CreateProjectApi(APIView):
