@@ -359,25 +359,32 @@ function showScreenshotPreview(element, screenshotPath, httpUrl) {
         parentContainer.append(preview);
         
         if (isInTable) {
-            // Position to the left of the thumbnail, inside the table
-            let leftPos = elementOffset.left - previewWidth - 10;
-            let topPos = elementOffset.top - (previewHeight / 2) + (elementHeight / 2);
-            
-            // Make sure it doesn't go off-screen on the left
-            if (leftPos < 10) {
-                leftPos = elementOffset.left + elementWidth + 10;
-            }
-            
-            // Make sure it doesn't go off-screen on the top/bottom
+            // Use viewport coordinates for fixed positioning to avoid scroll drift
+            const rect = element.getBoundingClientRect();
+            const windowWidth = $(window).width();
             const windowHeight = $(window).height();
-            const scrollTop = $(window).scrollTop();
             
-            if (topPos < scrollTop + 10) {
-                topPos = scrollTop + 10;
-            } else if (topPos + previewHeight > scrollTop + windowHeight - 10) {
-                topPos = scrollTop + windowHeight - previewHeight - 10;
+            // Preferred: left of the thumbnail
+            let leftPos = rect.left - previewWidth - 10;
+            let topPos = rect.top + (rect.height / 2) - (previewHeight / 2);
+
+            // If not enough space on the left, place to the right
+            if (leftPos < 10) {
+                leftPos = rect.right + 10;
             }
-            
+
+            // Clamp horizontally within viewport
+            if (leftPos + previewWidth > windowWidth - 10) {
+                leftPos = Math.max(10, windowWidth - previewWidth - 10);
+            }
+
+            // Clamp vertically within viewport
+            if (topPos < 10) {
+                topPos = 10;
+            } else if (topPos + previewHeight > windowHeight - 10) {
+                topPos = windowHeight - previewHeight - 10;
+            }
+
             $('#screenshot-preview').css({
                 left: leftPos,
                 top: topPos
@@ -398,6 +405,37 @@ function showScreenshotPreview(element, screenshotPath, httpUrl) {
 function hideScreenshotPreview() {
     $('#screenshot-preview').remove();
     $('.screenshot-thumbnail').off('mousemove.screenshot-preview');
+}
+
+// Simple modal to display a single screenshot image when no subdomain/scan context is available
+function showScreenshotImageModal(screenshotPath, httpUrl = '') {
+    try {
+        $('#xl-modal-title').empty();
+        $('#xl-modal-content').empty();
+        $('#xl-modal-footer').empty();
+
+        const linkBlock = httpUrl ? `
+            <div class="mb-2" style="font-size: 12px; font-weight: 500;">
+                <a href="${httpUrl}" target="_blank" rel="noopener noreferrer" class="text-primary">${httpUrl}</a>
+            </div>
+        ` : '';
+        const content = `
+            <div class="mb-4 text-center">
+                ${linkBlock}
+                <div class="d-flex justify-content-center">
+                    <img src="/media/${screenshotPath}" class="img-fluid rounded screenshot-popup"
+                         style="max-width: 90%; max-height: 80vh; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.15);"
+                         onclick="window.open('/media/${screenshotPath}', '_blank')">
+                </div>
+            </div>`;
+
+        $('#xl-modal_title').html('Screenshot');
+        $('#xl-modal-content').html(content);
+        $('#modal_xl_scroll_dialog').modal('show');
+    } catch (e) {
+        console.error('Error showing screenshot modal:', e);
+        window.open(`/media/${screenshotPath}`, '_blank');
+    }
 }
 
 function get_port_details(endpoint_ip_url, endpoint_subdomain_url, port, scan_id=null, domain_id=null) {

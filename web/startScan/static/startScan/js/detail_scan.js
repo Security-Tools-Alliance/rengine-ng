@@ -57,80 +57,66 @@ function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, s
 	if (gf_tags){
 		lookup_url += `&gf_tag=${gf_tags}`
 	}
+    // Ensure columns count matches thead (11 columns)
 	var endpoint_datatable_columns = [
-		{'data': 'id'},
-		{'data': 'http_url'},
-		{'data': 'http_status'},
-		{'data': 'page_title'},
-		{'data': 'matched_gf_patterns'},
-		{'data': 'content_type'},
-		{'data': 'content_length', 'searchable': false},
-		{'data': 'techs'},
-		{'data': 'webserver'},
-		{'data': 'response_time', 'searchable': false},
-		{'data': 'screenshot_path', 'searchable': false},
-		{'data': 'subdomain_id', 'visible': false, 'searchable': false},
-		{'data': 'scan_history_id', 'visible': false, 'searchable': false},
-		{'data': 'target_domain_id', 'visible': false, 'searchable': false},
-		{'data': 'subdomain_name', 'visible': false, 'searchable': false},
-	];
-	var endpoint_table = $('#endpoint_results').DataTable({
-		"destroy": true,
-		"processing": true,
-		"oLanguage": {
-			"oPaginate": { "sPrevious": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-left"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>', "sNext": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-right"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>' },
-			"sInfo": "Showing page _PAGE_ of _PAGES_",
-			"sLengthMenu": "Results :  _MENU_",
-			"sProcessing": "Processing... Please wait..."
-		},
-		"dom": "<'dt--top-section'<'row'<'col-12 mb-3 mb-sm-0 col-sm-4 col-md-3 col-lg-4 d-flex justify-content-sm-start justify-content-center'l><'dt--pages-count col-12 col-sm-6 col-md-4 col-lg-4 d-flex justify-content-sm-middle justify-content-center'i><'dt--pagination col-12 col-sm-2 col-md-5 col-lg-4 d-flex justify-content-sm-end justify-content-center'p>>>" +
-		"<'table-responsive'tr>" +
-		"<'dt--bottom-section'<'row'<'col-12 mb-3 mb-sm-0 col-sm-4 col-md-3 col-lg-4 d-flex justify-content-sm-start justify-content-center'l><'dt--pages-count col-12 col-sm-6 col-md-4 col-lg-4 d-flex justify-content-sm-middle justify-content-center'i><'dt--pagination col-12 col-sm-2 col-md-5 col-lg-4 d-flex justify-content-sm-end justify-content-center'p>>>",
-		"stripeClasses": [],
-		"lengthMenu": [100, 200, 300, 500, 1000],
-		"pageLength": 100,
-		'serverSide': true,
-		"ajax": {
-				'url': lookup_url,
-		},
-		"rowGroup": {
-			"startRender": function(rows, group) {
-				return group + ' (' + rows.count() + ' Endpoints)';
-			}
-		},
-		"order": [[ 6, "desc" ]],
-		"columns": endpoint_datatable_columns,
-		"columnDefs": [
-			{
-				"targets": [ 0 ],
-				"visible": false,
-				"searchable": false,
-			},
-			{
-				"targets": [ 7, 8 ],
-				"visible": false,
-				"searchable": true,
-			},
-			{
-				"targets": [ get_datatable_col_index('screenshot_path', endpoint_datatable_columns) ],
-				"visible": true,
-				"searchable": false,
-				"render": function(data, type, row) {
-					// Extract port from URL
+        { 'data': 'id', 'defaultContent': '', 'visible': false, 'searchable': false },
+        { 
+            'data': 'http_url', 'defaultContent': '',
+            'render': function ( data, type, row ) {
+                var tech_badge = '';
+                var web_server = '';
+                if (row['techs']){
+                    tech_badge = `</br>` + parse_technology(endpoint_subdomain_url, row['techs'], "primary", true, false, true);
+                }
+
+                if (row['webserver']) {
+                    web_server = `<span class='m-1 badge badge-soft-info' data-toggle="tooltip" data-placement="top" title="Web Server">${row['webserver']}</span>`;
+                }
+
+                var url = split_into_lines(data, 70);
+                var action_icons = `
+                <div class="float-left subdomain-table-action-icons mt-2">
+                <span class="m-1">
+                <a href="javascript:;" data-clipboard-action="copy" class="badge-link text-primary copyable text-primary" data-toggle="tooltip" data-placement="top" title="Copy Url!" data-clipboard-target="#url-${row['id']}" id="#url-${row['id']}" onclick="setTooltip(this.id, 'Copied!')">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-copy"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></span>
+                </a>
+                </div>
+                `;
+                tech_badge += web_server;
+
+                return `<div class="clipboard copy-txt">` + "<a href='"+ data +`' id="url-${row['id']}" target='_blank' class='text-primary'>`+ url +"</a>" + tech_badge + "<br>" + action_icons ;
+            }
+        },
+        { 
+            'data': 'http_status', 'defaultContent': '',
+            'render': function ( data, type, row ) {
+                if (data) {
+                    return get_http_status_badge(data);
+                }
+                return '';
+            }
+        },
+        { 'data': 'page_title', 'defaultContent': '', 'render': function ( data ) { return htmlEncode(data); } },
+        { 'data': 'matched_gf_patterns', 'defaultContent': '', 'render': function ( data ) { return data ? parse_comma_values_into_span(data, "danger", outline=true) : ""; } },
+        { 'data': 'content_type', 'defaultContent': '' },
+        { 'data': 'content_length', 'searchable': false, 'defaultContent': '' },
+        { 'data': 'techs', 'defaultContent': '', 'visible': false },
+        { 'data': 'webserver', 'defaultContent': '', 'visible': false, 'render': function ( data ) { return data ? parse_comma_values_into_span(data, "info") : ""; } },
+        { 'data': 'response_time', 'searchable': false, 'defaultContent': '', 'render': function ( data ) { return data ? get_response_time_text(data) : ""; } },
+        { 
+            'data': 'screenshot_path', 
+            'searchable': false,
+            'defaultContent': '',
+            'render': function(data, type, row) {
 					try {
 						const url = new URL(row['http_url']);
 						const port = url.port || (url.protocol === 'https:' ? 443 : 80);
-						
-											// Use the advanced screenshot system from port_display.js
 					const subdomain_id = row['subdomain_id'] || null;
 					const scan_id = row['scan_history_id'] || null;
 					const domain_id = row['target_domain_id'] || null;
-					
-					// Use subdomain name from API or extract from URL as fallback
 					const subdomain_name = row['subdomain_name'] || url.hostname;
 						
 						if (subdomain_id) {
-							// Return a placeholder that will be updated asynchronously
 							const cellId = `screenshot-cell-${row['id']}`;
 							setTimeout(async () => {
 								try {
@@ -157,106 +143,105 @@ function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, s
 							return `<div id="${cellId}">Loading...</div>`;
 						}
 						
-						// Fallback to simple screenshot display if no subdomain_id
 						if (data && data.length > 0) {
+                        // Fallback: enable hover preview and modal click even without async thumbnail load
+                        const hover = `onmouseover=\"showScreenshotPreview(this, '${data}', '${row['http_url'] || ''}')\" onmouseout=\"hideScreenshotPreview()\"`;
+                        const click = subdomain_id
+                            ? `onclick=\"show_port_screenshots(${subdomain_id}, '${subdomain_name}', ${port}, ${scan_id || 'null'}, ${domain_id || 'null'})\"`
+                            : `onclick=\"showScreenshotImageModal('${data}', '${row['http_url'] || ''}')\"`;
 							return `<img src="/media/${data}" 
 									     class="screenshot-thumbnail" 
 									     style="width: 100px; height: 75px; object-fit: cover; cursor: pointer; border: 1px solid #ddd; border-radius: 3px;" 
-									     onclick="window.open('/media/${data}', '_blank')"
+                                     ${hover}
+                                     ${click}
 									     title="Click to view full screenshot"
 									     onerror="this.style.display='none'">`;
 						}
 						return '-';
 					} catch (error) {
 						console.error('Error processing screenshot:', error);
-						// Fallback to simple screenshot display
 						if (data && data.length > 0) {
+                        const hover = `onmouseover=\"showScreenshotPreview(this, '${data}', '${row['http_url'] || ''}')\" onmouseout=\"hideScreenshotPreview()\"`;
+                        const click = (row && row['subdomain_id'])
+                            ? `onclick=\"show_port_screenshots(${row['subdomain_id']}, '${row['subdomain_name'] || ''}', ${(new URL(row['http_url']||'http://x')).port || ((new URL(row['http_url']||'http://x')).protocol === 'https:' ? 443 : 80)}, ${row['scan_history_id'] || 'null'}, ${row['target_domain_id'] || 'null'})\"`
+                            : `onclick=\"showScreenshotImageModal('${data}', '${row['http_url'] || ''}')\"`;
 							return `<img src="/media/${data}" 
 									     class="screenshot-thumbnail" 
 									     style="width: 100px; height: 75px; object-fit: cover; cursor: pointer; border: 1px solid #ddd; border-radius: 3px;" 
-									     onclick="window.open('/media/${data}', '_blank')"
+                                     ${hover}
+                                     ${click}
 									     title="Click to view full screenshot"
 									     onerror="this.style.display='none'">`;
 						}
 						return '-';
 					}
 				}
-			},
-			{
-				"render": function ( data, type, row ) {
-					var tech_badge = '';
-					var web_server = '';
-					if (row['techs']){
-						tech_badge = `</br>` + parse_technology(endpoint_subdomain_url, row['techs'], "primary", true, false, true);
-					}
-
-					if (row['webserver']) {
-						web_server = `<span class='m-1 badge badge-soft-info' data-toggle="tooltip" data-placement="top" title="Web Server">${row['webserver']}</span>`;
-					}
-
-					var url = split_into_lines(data, 70);
-					var action_icons = `
-					<div class="float-left subdomain-table-action-icons mt-2">
-					<span class="m-1">
-					<a href="javascript:;" data-clipboard-action="copy" class="badge-link text-primary copyable text-primary" data-toggle="tooltip" data-placement="top" title="Copy Url!" data-clipboard-target="#url-${row['id']}" id="#url-${row['id']}" onclick="setTooltip(this.id, 'Copied!')">
-					<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-copy"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></span>
-					</a>
-					</div>
-					`;
-					tech_badge += web_server;
-
-					return `<div class="clipboard copy-txt">` + "<a href='"+ data +`' id="url-${row['id']}" target='_blank' class='text-primary'>`+ url +"</a>" + tech_badge + "<br>" + action_icons ;
-				},
-				"targets": 1,
-			},
-			{
-				"render": function ( data, type, row ) {
-					// display badge based on http status
-					// green for http status 2XX, orange for 3XX and warning for everything else
-					if (data) {
-						return get_http_status_badge(data);
-					}
-					return '';
-
-				},
-				"targets": 2,
-			},
-			{
-				"render": function ( data, type, row ) {
-					return htmlEncode(data);
-				},
-				"targets": 3,
-			},
-			{
-				"render": function ( data, type, row ) {
-					if (data){
-						return parse_comma_values_into_span(data, "info");
-					}
-					return "";
-				},
-				"targets": 8,
-			},
-			{
-				"render": function ( data, type, row ) {
-					if (data){
-						return parse_comma_values_into_span(data, "danger", outline=true);
-					}
-					return "";
-				},
-				"targets": 4,
-			},
-			{
-				"render": function ( data, type, row ) {
-					if (data){
-						return get_response_time_text(data);
-					}
-					return "";
-				},
-				"targets": 9,
-			},
-		],
+        }
+    ];
+    // If already initialized, destroy cleanly to avoid index drift
+    if ($.fn.DataTable.isDataTable('#endpoint_results')) {
+        var existing = $('#endpoint_results').DataTable();
+        existing.clear();
+        existing.destroy();
+    }
+    // Hard reset table head/body to keep header <-> columns aligned
+    var $table = $('#endpoint_results');
+    var headerHtml = `
+        <tr>
+            <th>ID</th>
+            <th>HTTP URL</th>
+            <th>Status</th>
+            <th>Page Title</th>
+            <th>Tags</th>
+            <th>Content Type</th>
+            <th>Content Length</th>
+            <th>Technology</th>
+            <th>Webserver</th>
+            <th>Response time</th>
+            <th>Screenshot</th>
+        </tr>`;
+    var $thead = $table.find('thead');
+    if ($thead.length === 0) {
+        $table.prepend('<thead></thead>');
+        $thead = $table.find('thead');
+    }
+    $thead.html(headerHtml);
+    var $tbody = $table.find('tbody');
+    if ($tbody.length === 0) {
+        $table.append('<tbody></tbody>');
+        $tbody = $table.find('tbody');
+    }
+    $tbody.empty();
+    // Remove any colgroup left by previous DT instances
+    $table.find('colgroup').remove();
+    var endpoint_table = $('#endpoint_results').DataTable({
+		"destroy": true,
+		"processing": true,
+		"oLanguage": {
+			"oPaginate": { "sPrevious": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-left"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>', "sNext": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-right"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>' },
+			"sInfo": "Showing page _PAGE_ of _PAGES_",
+			"sLengthMenu": "Results :  _MENU_",
+			"sProcessing": "Processing... Please wait..."
+		},
+		"dom": "<'dt--top-section'<'row'<'col-12 mb-3 mb-sm-0 col-sm-4 col-md-3 col-lg-4 d-flex justify-content-sm-start justify-content-center'l><'dt--pages-count col-12 col-sm-6 col-md-4 col-lg-4 d-flex justify-content-sm-middle justify-content-center'i><'dt--pagination col-12 col-sm-2 col-md-5 col-lg-4 d-flex justify-content-sm-end justify-content-center'p>>>" +
+		"<'table-responsive'tr>" +
+		"<'dt--bottom-section'<'row'<'col-12 mb-3 mb-sm-0 col-sm-4 col-md-3 col-lg-4 d-flex justify-content-sm-start justify-content-center'l><'dt--pages-count col-12 col-sm-6 col-md-4 col-lg-4 d-flex justify-content-sm-middle justify-content-center'i><'dt--pagination col-12 col-sm-2 col-md-5 col-lg-4 d-flex justify-content-sm-end justify-content-center'p>>>",
+		"stripeClasses": [],
+		"lengthMenu": [100, 200, 300, 500, 1000],
+		"pageLength": 100,
+		'serverSide': true,
+		"ajax": {
+				'url': lookup_url,
+		},
+		"rowGroup": {
+			"startRender": function(rows, group) {
+				return group + ' (' + rows.count() + ' Endpoints)';
+			}
+		},
+		"order": [[ 6, "desc" ]],
+        "columns": endpoint_datatable_columns,
+        // No columnDefs with index targets to avoid index drift issues
 		"initComplete": function(settings, json) {
-			api = this.api();
 			endpoint_datatable_col_visibility(endpoint_table);
 			$(".dtrg-group th:contains('No group')").remove();
 		},
@@ -272,36 +257,31 @@ function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, s
 				setTooltip(e.trigger, 'Copied!');
 				hideTooltip(e.trigger);
 			});
-			drawCallback_api = this.api();
 			setTimeout(function() {
 				$(".dtrg-group th:contains('No group')").remove();
 			}, 1);
 		}
 	});
 
-	var radioGroup = document.getElementsByName('grouping_endpoint_row');
-	radioGroup.forEach(function(radioButton) {
-	  radioButton.addEventListener('change', function() {
+    $('input[name=grouping_endpoint_row]').off('change').on('change', function() {
 	    if (this.checked) {
-	      var groupRows = document.querySelectorAll('tr.group');
-	      // Remove each group row
 				var col_index = get_datatable_col_index(this.value, endpoint_datatable_columns);
+            var api = $('#endpoint_results').DataTable();
 				api.page.len(-1).draw();
 				api.order([col_index, 'asc']).draw();
-				endpoint_table.rowGroup().dataSrc(this.value);
+            api.rowGroup().dataSrc(this.value);
 	      Snackbar.show({
 	        text: 'Endpoints grouped by ' + this.value,
 	        pos: 'top-right',
 	        duration: 2500
 	      });
 	    }
-	  });
 	});
 
-	$('#endpoint-search-button').click(function () {
+    $('#endpoint-search-button').off('click').on('click', function () {
 		endpoint_table.search($('#endpoints-search').val()).draw() ;
 	});
-	$('input[name=end_http_status_filter_checkbox]').change(function() {
+    $('input[name=end_http_status_filter_checkbox]').off('change').on('change', function() {
 		if ($(this).is(':checked')) {
 			endpoint_table.column(2).visible(true);
 		} else {
@@ -309,7 +289,7 @@ function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, s
 		}
 		window.localStorage.setItem('end_http_status_filter_checkbox', $(this).is(':checked'));
 	});
-	$('input[name=end_page_title_filter_checkbox]').change(function() {
+    $('input[name=end_page_title_filter_checkbox]').off('change').on('change', function() {
 		if ($(this).is(':checked')) {
 			endpoint_table.column(3).visible(true);
 		} else {
@@ -317,7 +297,7 @@ function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, s
 		}
 		window.localStorage.setItem('end_page_title_filter_checkbox', $(this).is(':checked'));
 	});
-	$('input[name=end_tags_filter_checkbox]').change(function() {
+    $('input[name=end_tags_filter_checkbox]').off('change').on('change', function() {
 		if ($(this).is(':checked')) {
 			endpoint_table.column(4).visible(true);
 		} else {
@@ -325,7 +305,7 @@ function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, s
 		}
 		window.localStorage.setItem('end_tags_filter_checkbox', $(this).is(':checked'));
 	});
-	$('input[name=end_content_type_filter_checkbox]').change(function() {
+    $('input[name=end_content_type_filter_checkbox]').off('change').on('change', function() {
 		if ($(this).is(':checked')) {
 			endpoint_table.column(5).visible(true);
 		} else {
@@ -333,7 +313,7 @@ function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, s
 		}
 		window.localStorage.setItem('end_content_type_filter_checkbox', $(this).is(':checked'));
 	});
-	$('input[name=end_content_length_filter_checkbox]').change(function() {
+    $('input[name=end_content_length_filter_checkbox]').off('change').on('change', function() {
 		if ($(this).is(':checked')) {
 			endpoint_table.column(6).visible(true);
 		} else {
@@ -341,7 +321,7 @@ function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, s
 		}
 		window.localStorage.setItem('end_content_length_filter_checkbox', $(this).is(':checked'));
 	});
-	$('input[name=end_response_time_filter_checkbox]').change(function() {
+    $('input[name=end_response_time_filter_checkbox]').off('change').on('change', function() {
 		if ($(this).is(':checked')) {
 			endpoint_table.column(9).visible(true);
 		} else {
