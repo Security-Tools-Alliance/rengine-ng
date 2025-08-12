@@ -3106,7 +3106,7 @@ function render_llm_vuln_modal(data, title, endpoint_url, vuln_id){
 
     $('#btn-delete-vuln-llm').off('click').on('click', async () => {
         try {
-            const api = `${endpoint_url}?id=${encodeURIComponent(vuln_id)}`;
+            const api = setUrlParam(endpoint_url, 'id', vuln_id);
             const result = await Swal.fire({
                 title: 'Delete Analysis?',
                 text: 'This will permanently delete the current vulnerability analysis. This action cannot be undone.',
@@ -3598,6 +3598,17 @@ function showAttackSurfaceModal(data, endpoint_url, id) {
     );
     $('#modal_dialog').modal('show');
     $('#btn-as-regenerate').off('click').on('click', async () => {
+        const $btn = $('#btn-as-regenerate');
+        const $otherBtn = $('#btn-as-delete');
+        const $modal = $('#modal_dialog');
+        let $spinner = $modal.find('.modal-spinner');
+        if ($spinner.length === 0) {
+            $spinner = $('<div class="modal-spinner text-center my-3"><span class="spinner-border" role="status" aria-hidden="true"></span> Regenerating...</div>');
+            $modal.find('.modal-footer').prepend($spinner);
+        }
+        $spinner.show();
+        $btn.prop('disabled', true);
+        $otherBtn.prop('disabled', true);
         try {
             await regenerateAttackSurface(endpoint_url, id);
         } catch (error) {
@@ -3607,9 +3618,24 @@ function showAttackSurfaceModal(data, endpoint_url, id) {
                 title: 'Error',
                 text: 'Failed to regenerate attack surface analysis. Please try again.'
             });
+        } finally {
+            $spinner.hide();
+            $btn.prop('disabled', false);
+            $otherBtn.prop('disabled', false);
         }
     });
     $('#btn-as-delete').off('click').on('click', async () => {
+        const $btn = $('#btn-as-delete');
+        const $otherBtn = $('#btn-as-regenerate');
+        const $modal = $('#modal_dialog');
+        let $spinner = $modal.find('.modal-spinner');
+        if ($spinner.length === 0) {
+            $spinner = $('<div class="modal-spinner text-center my-3"><span class="spinner-border" role="status" aria-hidden="true"></span> Deleting...</div>');
+            $modal.find('.modal-footer').prepend($spinner);
+        }
+        $spinner.show();
+        $btn.prop('disabled', true);
+        $otherBtn.prop('disabled', true);
         try {
             await deleteAttackSurfaceAnalysis(endpoint_url, id);
         } catch (error) {
@@ -3619,6 +3645,10 @@ function showAttackSurfaceModal(data, endpoint_url, id) {
                 title: 'Error',
                 text: 'Failed to delete attack surface analysis. Please try again.'
             });
+        } finally {
+            $spinner.hide();
+            $btn.prop('disabled', false);
+            $otherBtn.prop('disabled', false);
         }
     });
 }

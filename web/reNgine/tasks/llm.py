@@ -1,4 +1,5 @@
 from urllib.parse import urlparse
+from typing import Optional, Tuple
 
 from celery.utils.log import get_task_logger
 
@@ -11,14 +12,25 @@ logger = get_task_logger(__name__)
 
 
 @app.task(name='llm_vulnerability_report', bind=False, queue='cpu_queue')
-def llm_vulnerability_report(vulnerability_id=None, vuln_tuple=None, force_regenerate: bool = False):
+def llm_vulnerability_report(
+    vulnerability_id: Optional[int] = None,
+    vuln_tuple: Optional[Tuple[str, str]] = None,
+    force_regenerate: bool = False,
+):
     """
     Generate and store Vulnerability Report using LLM.
-    Can be called either with a vulnerability_id or a vuln_tuple (title, path)
+    Can be called either with a vulnerability_id or a vuln_tuple (title, url_or_path).
 
     Args:
         vulnerability_id (int, optional): Vulnerability ID to fetch Description
-        vuln_tuple (tuple, optional): Tuple containing (title, path)
+        vuln_tuple (tuple[str, str], optional):
+            Contract: (title, url_or_path)
+            - url_or_path may be:
+              - A full URL (e.g. "https://example.com/login"): will be used as-is for LLM context,
+                and its path component will be extracted for DB matching.
+              - A URL path only (e.g. "/login" or "login"): will be treated as the path used for
+                DB matching. For the LLM context, it will be passed through as provided; for best
+                results, pass a full URL when available.
     
     Returns:
         dict: LLM response containing description, impact, remediation and references
@@ -37,15 +49,23 @@ def llm_vulnerability_report(vulnerability_id=None, vuln_tuple=None, force_regen
             # If provided looks like a full URL, use as full_url and derive path; else treat as path
             try:
                 parsed = urlparse(provided)
-                if parsed.scheme in ('http', 'https') and parsed.netloc:
+                if parsed.scheme in ("http", "https") and parsed.netloc:
                     full_url = provided
-                    path = parsed.path
+                    path = parsed.path or "/"
+                    logger.debug("vuln_tuple second element treated as full URL: %s", full_url)
                 else:
-                    path = provided
+                    # Treat as path-only; normalize to start with '/'
+                    normalized_path = provided if str(provided).startswith("/") else f"/{provided}"
+                    path = normalized_path
+                    # No domain context available; use the provided value for LLM context as-is
                     full_url = provided
+                    logger.debug("vuln_tuple second element treated as path: %s", path)
             except Exception:
-                path = provided
+                # Fallback to treating the provided value as path-like
+                normalized_path = provided if str(provided).startswith("/") else f"/{provided}"
+                path = normalized_path
                 full_url = provided
+                logger.debug("vuln_tuple parsing failed; treated as path: %s", path)
         else:
             raise ValueError("Either vulnerability_id or vuln_tuple must be provided")
 
