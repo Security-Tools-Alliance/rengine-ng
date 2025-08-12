@@ -2242,7 +2242,7 @@ function get_and_render_cve_details(endpoint_url, cve_id){
 			$('#xl-modal-title').empty();
 			$('#xl-modal-content').empty();
 			$('#xl-modal-footer').empty();
-			$('#xl-modal-title').html(`CVE Details of ${cve_id}`);
+			$('#xl-modal-title').text(`CVE Details of ${cve_id}`);
 
 			var cvss_score_badge = 'danger';
 
