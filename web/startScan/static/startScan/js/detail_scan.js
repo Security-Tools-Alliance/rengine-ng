@@ -42,8 +42,6 @@ function render_ips(data)
 
 
 function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, scan_history_id=null, domain_id=null, gf_tags=null){
-    const is_endpoint_grouping = false;
-    const endpoint_grouping_col = 6;
 
     let lookup_url = endpoint_endpoint_url + '?format=datatables&project=' + project;
 
