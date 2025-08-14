@@ -1,6 +1,6 @@
-# This scan engine is used to import subdomains from a given list and scan them passively
-# The fastest scan for retrieving a lot of informations on a given scope of urls
-# QUICK SCAN - USE LESS RESOURCES - NO SUBDOMAIN RECOVERY - RECOMMENDED ON INITIAL SCAN
+# This scan engine is used to discover subdomains and scan them passively with screenshots
+# The fastest scan for retrieving a lot of informations on the target
+# QUICK SCAN - USE LESS RESOURCES - HIGHLY RECOMMENDED ON INITIAL SCAN
 
 # Global vars for all tools
 #
@@ -9,12 +9,20 @@ custom_header: {
   'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:126.0) Gecko/20100101 Firefox/126.0',
 }
 # 'user_agent': ''                    # Dalfox only
-# 'timeout': 10                       # Subdomain discovery, Screenshot, Port scan, FFUF, Nuclei
+# 'timeout': 10                       # Subdomain discovery, Screenshot, Port scan, FFUF, Nuclei                       
 # 'threads': 30                       # All tools
 # 'rate_limit': 150                   # Port scan, FFUF, Nuclei
 # 'intensity': 'normal'               # Screenshot (grab only the root endpoints of each subdomain), Nuclei (reduce number of endpoints to scan), OSINT (not implemented yet)
 # 'retries': 1                        # Nuclei
 
+subdomain_discovery: {
+  'uses_tools': ['subfinder', 'ctfr', 'sublist3r', 'tlsx', 'oneforall', 'netlas'],  # amass-passive, amass-active, All
+  'threads': 30,
+  'timeout': 5,
+  # 'use_subfinder_config': false,
+  # 'use_amass_config': false,
+  # 'amass_wordlist': 'deepmagic.com-prefixes-top50000'
+}
 http_crawl: {
   # 'custom_header': {
   #   'Cookie':'Test',
