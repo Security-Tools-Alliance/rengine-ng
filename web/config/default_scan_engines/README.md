@@ -32,12 +32,15 @@ python3 manage.py loaddefaultengines
 
 ## 📋 Available engines
 
-The following engines are available in this directory:
+The following engines are currently provided (engine name equals the filename without the `.yaml` extension):
 
 - **Initial Scan - reNgine recommended**: Recommended scan for initial analysis
-- **Initial Scan - Passive**: Fast passive scan
-- **Initial Scan - Passive with screenshots**: Passive scan with screenshots
-- **Scan - Active**: Complete active scan (resource intensive)
+- **Initial Scan - Passive (import subdomains)**: Fast passive scan importing subdomains
+- **Initial Scan - Passive with screenshots (common ports)**: Passive scan with screenshots on common ports
+- **Initial Scan - Passive with screenshots (common-uncommon ports)**: Passive scan with screenshots on common and uncommon ports
+- **Scan - Active (common ports)**: Active scan targeting common ports
+- **Scan - Active (common-uncommon ports)**: Active scan targeting common and uncommon ports
+- **Scan - Active (import subdomains - common ports)**: Active scan importing subdomains on common ports
 - **Subscan - Screenshots**: Screenshots only
 - **Subscan - Port scan**: Port scan only
 - **Subscan - Vulnerabilities**: Vulnerability scan only
