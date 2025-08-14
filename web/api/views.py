@@ -12,7 +12,7 @@ import requests
 import validators
 from django.urls import reverse
 from django.core.cache import cache
-from dashboard.models import OllamaSettings, Project, SearchHistory
+from dashboard.models import OllamaSettings, Project, SearchHistory, OpenAiAPIKey, OllamaSettings
 from django.db.models import CharField, Count, F, Q, Value
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -65,7 +65,7 @@ from reNgine.tasks import (
     send_hackerone_report
 )
 from reNgine.llm.llm import LLMAttackSuggestionGenerator
-from reNgine.llm.utils import convert_markdown_to_html
+from reNgine.llm.utils import convert_markdown_to_html, is_empty_attack_surface, get_default_llm_model
 from reNgine.utilities.path import is_safe_path, remove_lead_and_trail_slash
 from scanEngine.models import EngineType, InstalledExternalTool
 from startScan.models import (
@@ -413,18 +413,7 @@ class LLMAttackSuggestion(APIView):
             })
 
         # Return cached result only if not forcing regeneration and not empty
-        def _is_empty_attack_surface(value: str) -> bool:
-            try:
-                if not value:
-                    return True
-                text = str(value)
-                if text.startswith('[LLM:') and ']' in text:
-                    text = text[text.index(']') + 1:]
-                return len(text.strip()) == 0
-            except Exception:
-                return True
-
-        if subdomain.attack_surface and not force_regenerate and not _is_empty_attack_surface(subdomain.attack_surface):
+        if subdomain.attack_surface and not force_regenerate and not is_empty_attack_surface(subdomain.attack_surface):
             sanitized_html = subdomain.formatted_attack_surface
             return Response({
                 'status': True,
@@ -522,8 +511,6 @@ class LLMVulnerabilityReportGenerator(APIView):
             })
         # Preflight checks for LLM configuration
         try:
-            from dashboard.models import OpenAiAPIKey, OllamaSettings
-            from reNgine.llm.utils import get_default_llm_model
 
             selected_model = get_default_llm_model()
             is_gpt = selected_model.startswith('gpt')

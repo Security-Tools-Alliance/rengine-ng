@@ -30,6 +30,7 @@ def get_default_llm_model():
 def validate_llm_model(request, model_name):
     """Check if LLM model exists and is available"""
     try:
+        from reNgine.llm.llm import LLMToolkit
         # Check if model exists in LLMToolkit
         if not LLMToolkit.is_model_available(model_name):
             messages.info(
@@ -95,3 +96,66 @@ def convert_markdown_to_html(markdown_text):
     )
     
     return llm_badge + html_content
+
+def is_empty_text(value) -> bool:
+    """
+    Check if a text value is empty or contains only whitespace/null-like values.
+    
+    Args:
+        value: Any value to check for emptiness
+        
+    Returns:
+        bool: True if the value is considered empty, False otherwise
+    """
+    try:
+        if value is None:
+            return True
+        text = str(value).strip()
+        if not text:
+            return True
+        # Treat list-like empties as empty as well
+        normalized = text.replace('\n', '').replace('\r', '').replace(' ', '')
+        if normalized in ('[]', '[\"\"]', '[\'\']', 'null', 'None'):
+            return True
+        return False
+    except Exception:
+        return True
+
+def is_empty_attack_surface(value) -> bool:
+    """
+    Check if an attack surface value is empty, considering LLM tags.
+    
+    Args:
+        value: The attack surface text to check
+        
+    Returns:
+        bool: True if the value is considered empty, False otherwise
+    """
+    try:
+        if not value:
+            return True
+        text = str(value)
+        # Strip LLM tag if present
+        if text.startswith('[LLM:') and ']' in text:
+            text = text[text.index(']') + 1:]
+        return len(text.strip()) == 0
+    except Exception:
+        return True
+
+def is_empty_llm_report(model_obj) -> bool:
+    """
+    Check if an LLM vulnerability report is empty by checking all relevant fields.
+    
+    Args:
+        model_obj: LLMVulnerabilityReport instance to check
+        
+    Returns:
+        bool: True if all report fields are empty, False otherwise
+    """
+    fields = [
+        getattr(model_obj, 'description', None),
+        getattr(model_obj, 'impact', None),
+        getattr(model_obj, 'remediation', None),
+        getattr(model_obj, 'references', None),
+    ]
+    return all(is_empty_text(f) for f in fields)

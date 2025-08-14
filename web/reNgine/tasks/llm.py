@@ -5,7 +5,7 @@ from celery.utils.log import get_task_logger
 
 from reNgine.celery import app
 from reNgine.llm.llm import LLMVulnerabilityReportGenerator
-from reNgine.llm.utils import get_llm_vuln_input_description, convert_markdown_to_html
+from reNgine.llm.utils import get_llm_vuln_input_description, convert_markdown_to_html, is_empty_text, is_empty_llm_report
 from startScan.models import Vulnerability, LLMVulnerabilityReport
 
 logger = get_task_logger(__name__)
@@ -75,31 +75,9 @@ def llm_vulnerability_report(
             url_path=path, title=title
         ).first()
 
-        def _is_empty_text(value) -> bool:
-            try:
-                if value is None:
-                    return True
-                text = str(value).strip()
-                if not text:
-                    return True
-                # Treat list-like empties as empty as well
-                normalized = text.replace('\n', '').replace('\r', '').replace(' ', '')
-                if normalized in ('[]', '[\"\"]', '[\'\']', 'null', 'None'):
-                    return True
-                return False
-            except Exception:
-                return True
 
-        def _is_empty_report(model_obj: LLMVulnerabilityReport) -> bool:
-            fields = [
-                getattr(model_obj, 'description', None),
-                getattr(model_obj, 'impact', None),
-                getattr(model_obj, 'remediation', None),
-                getattr(model_obj, 'references', None),
-            ]
-            return all(_is_empty_text(f) for f in fields)
 
-        if stored and not _is_empty_report(stored) and not force_regenerate:
+        if stored and not is_empty_llm_report(stored) and not force_regenerate:
             # Try to extract model name from raw stored description tag [LLM:model]
             model_from_tag = None
             stripped_desc = stored.description or ''
@@ -137,10 +115,10 @@ def llm_vulnerability_report(
             raw_references = response.get('references')
 
             # Normalize list-like empty references
-            if _is_empty_text(raw_references):
+            if is_empty_text(raw_references):
                 raw_references = ''
 
-            has_content = any(not _is_empty_text(v) for v in [raw_description, raw_impact, raw_remediation, raw_references])
+            has_content = any(not is_empty_text(v) for v in [raw_description, raw_impact, raw_remediation, raw_references])
 
             if response.get('status') and has_content:
                 if stored:
@@ -184,13 +162,13 @@ def llm_vulnerability_report(
 
         for vuln in vulnerabilities:
             # Update vulnerability fields only when present
-            if isinstance(response.get('description'), str) and not _is_empty_text(response.get('description')):
+            if isinstance(response.get('description'), str) and not is_empty_text(response.get('description')):
                 vuln.description = response.get('description')
-            if isinstance(response.get('impact'), str) and not _is_empty_text(response.get('impact')):
+            if isinstance(response.get('impact'), str) and not is_empty_text(response.get('impact')):
                 vuln.impact = response.get('impact')
-            if isinstance(response.get('remediation'), str) and not _is_empty_text(response.get('remediation')):
+            if isinstance(response.get('remediation'), str) and not is_empty_text(response.get('remediation')):
                 vuln.remediation = response.get('remediation')
-            if isinstance(response.get('references'), str) and not _is_empty_text(response.get('references')):
+            if isinstance(response.get('references'), str) and not is_empty_text(response.get('references')):
                 vuln.references = response.get('references')
             vuln.is_llm_used = True
 
@@ -199,7 +177,7 @@ def llm_vulnerability_report(
 
         if response.get('status'):
             # Normalize list-like empty references again for rendering
-            if _is_empty_text(response.get('references')):
+            if is_empty_text(response.get('references')):
                 response['references'] = ''
             # Strip leading [LLM:...] tag from description for UI placement under the title
             if isinstance(response.get('description'), str) and response['description'].startswith('[LLM:') and ']' in response['description']:
