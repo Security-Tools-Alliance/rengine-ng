@@ -21,7 +21,7 @@ from reNgine.settings import (
 )
 from reNgine.tasks.notification import send_scan_notif
 from reNgine.tasks.reporting import report
-from reNgine.utilities.path import SafePath
+from reNgine.utilities.path import SafePath, get_scan_results_dir, get_subscan_results_dir
 from reNgine.utilities.database import create_scan_object, save_imported_subdomains, save_subdomain, create_default_endpoint_for_subdomain
 from reNgine.utilities.data import is_iterable
 from scanEngine.models import EngineType
@@ -107,12 +107,10 @@ def initiate_scan(
         scan.tasks = engine.tasks
 
         # Create results directory
+        # Fix for issue #1519: Use domain ID instead of domain name to avoid
+        # database field length limits with long domain names
         try:
-            uuid_scan = uuid.uuid1()
-            scan.results_dir = SafePath.create_safe_path(
-                base_dir=RENGINE_RESULTS,
-                components=[domain.name, 'scans', str(uuid_scan)]
-            )
+            scan.results_dir = get_scan_results_dir(RENGINE_RESULTS, domain.id, scan.id)
         except (ValueError, OSError) as e:
             logger.error(f"Failed to create results directory: {str(e)}")
             scan.scan_status = FAILED_TASK
@@ -313,13 +311,10 @@ def initiate_subscan(
             engine=engine)
         subscan.save()
 
-        # Create results directory
+        # Create results directory  
+        # Fix for issue #1519: Use domain ID for subscan paths too
         try:
-            uuid_scan = uuid.uuid1()
-            results_dir = SafePath.create_safe_path(
-                base_dir=RENGINE_RESULTS,
-                components=[domain.name, 'subscans', str(uuid_scan)]
-            )
+            results_dir = get_subscan_results_dir(RENGINE_RESULTS, domain.id, subscan.id)
         except (ValueError, OSError) as e:
             logger.error(f"Failed to create results directory: {str(e)}")
             subscan.scan_status = FAILED_TASK

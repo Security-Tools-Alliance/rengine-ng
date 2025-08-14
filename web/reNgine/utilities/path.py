@@ -110,4 +110,65 @@ class SafePath:
             check_path = check_path.resolve() if follow_symlinks else check_path.absolute()
             return str(check_path).startswith(str(base_path))
         except Exception:
-            return False 
+            return False
+
+
+def get_scan_results_dir(results_base_dir, domain_id, scan_id):
+    """Generate a clean results directory path using domain ID instead of domain name.
+    
+    This function addresses issue #1519 by avoiding database field length limits
+    that can occur when domain names are very long. Instead of using unpredictable
+    domain names in paths, it uses predictable domain IDs.
+    
+    Args:
+        results_base_dir (str): Base results directory path (e.g., '/usr/src/app/scan_results').
+        domain_id (int): Domain database ID.
+        scan_id (int): Scan database ID.
+        
+    Returns:
+        str: Safe directory path that fits within database field limits.
+        
+    Example:
+        >>> get_scan_results_dir('/usr/src/app/scan_results', 42, 123)
+        '/usr/src/app/scan_results/domain_42_scan_123'
+    
+    Note:
+        The generated path will always be short and predictable, typically under
+        50 characters even with large ID numbers, well within the 500-character
+        database field limit.
+    """
+    # Use SafePath to create the directory safely
+    return SafePath.create_safe_path(
+        base_dir=results_base_dir,
+        components=[f'domain_{domain_id}_scan_{scan_id}']
+    )
+
+
+def get_subscan_results_dir(results_base_dir, domain_id, subscan_id):
+    """Generate a clean subscan results directory path using domain ID.
+    
+    Similar to get_scan_results_dir, this function generates safe paths for
+    subscans using domain IDs instead of potentially long domain names.
+    
+    Args:
+        results_base_dir (str): Base results directory path.
+        domain_id (int): Domain database ID.
+        subscan_id (int): Subscan database ID.
+        
+    Returns:
+        str: Safe subscan directory path with UUID component.
+        
+    Example:
+        >>> get_subscan_results_dir('/usr/src/app/scan_results', 42, 456)
+        '/usr/src/app/scan_results/domain_42_subscans/uuid-string'
+    
+    Note:
+        Includes a UUID component to ensure uniqueness for concurrent subscans.
+        Total path length will typically be under 100 characters.
+    """
+    import uuid
+    uuid_scan = uuid.uuid1()
+    return SafePath.create_safe_path(
+        base_dir=results_base_dir,
+        components=[f'domain_{domain_id}_subscans', str(uuid_scan)]
+    ) 
