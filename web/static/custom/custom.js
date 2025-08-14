@@ -3158,7 +3158,7 @@ function showLLMConfigChoiceDialog(endpoint_url, vuln_id, title, info){
     `);
 
     $('#modal_dialog .modal-dialog').removeClass('modal-xl').addClass('modal-lg');
-    $('#modal_dialog .modal-title').html('LLM configuration required');
+    $('#modal_dialog .modal-title').text('LLM configuration required');
     $('#modal_dialog .modal-text').html(`
         <p>
             The current LLM configuration is incomplete. Please choose an option:
