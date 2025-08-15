@@ -194,28 +194,13 @@ def dir_file_fuzz(self, ctx=None, description=None):
                 endpoint.save()
 
                 # Save directory file output from FFUF output with race condition handling
-                try:
-                    with transaction.atomic():
-                        dfile, created = DirectoryFile.objects.get_or_create(
-                            name=name,
-                            length=length,
-                            words=words,
-                            lines=lines,
-                            content_type=content_type,
-                            url=url,
-                            http_status=status)
-                except IntegrityError:
-                    # Handle race condition - another thread created the record
+                dfile = None
+                created = False
+                max_retries = 3
+                retry_count = 0
+                
+                while retry_count < max_retries:
                     try:
-                        # Get the record that was created by another thread
-                        dfile = DirectoryFile.objects.get(
-                            name=name,
-                            url=url,
-                            http_status=status)
-                        created = False
-                        logger.debug(f'Race condition handled: found existing DirectoryFile {dfile.id} for {url}')
-                    except DirectoryFile.DoesNotExist:
-                        # Extremely rare case - retry the creation once more with atomic transaction
                         with transaction.atomic():
                             dfile, created = DirectoryFile.objects.get_or_create(
                                 name=name,
@@ -225,6 +210,36 @@ def dir_file_fuzz(self, ctx=None, description=None):
                                 content_type=content_type,
                                 url=url,
                                 http_status=status)
+                        break  # Success - exit the retry loop
+                        
+                    except IntegrityError:
+                        # Handle race condition - another thread created the record
+                        try:
+                            # Get the record that was created by another thread
+                            dfile = DirectoryFile.objects.get(
+                                name=name,
+                                url=url,
+                                http_status=status)
+                            created = False
+                            logger.debug(f'Race condition handled: found existing DirectoryFile {dfile.id} for {url}')
+                            break  # Success - exit the retry loop
+                            
+                        except DirectoryFile.DoesNotExist:
+                            # Record was deleted between IntegrityError and get() - retry
+                            retry_count += 1
+                            if retry_count >= max_retries:
+                                logger.error(f'Failed to create DirectoryFile after {max_retries} retries for {url}')
+                                continue  # Skip this directory entry
+                            logger.debug(f'Retrying DirectoryFile creation for {url} (attempt {retry_count + 1}/{max_retries})')
+                            
+                    except Exception as e:
+                        # Unexpected error - log and skip
+                        logger.error(f'Unexpected error creating DirectoryFile for {url}: {e}')
+                        break  # Exit retry loop and skip this entry
+                
+                # Skip processing if we couldn't create/find the DirectoryFile
+                if dfile is None:
+                    continue
 
                 # Log newly created file or directory if debug activated
                 if created and CELERY_DEBUG:
