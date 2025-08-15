@@ -235,7 +235,6 @@ async function processScreenshotData(data, port, subdomain_id, subdomain_name, s
                 screenshotHtml += `
                     <img src="/media/${endpoint.screenshot_path}" 
                          class="screenshot-thumbnail me-1" 
-                         style="width: 100px; height: 75px; object-fit: cover; cursor: pointer; border: 1px solid #ddd; border-radius: 3px;" 
                          ${hoverEvents}
                          onclick="show_port_screenshots(${subdomain_id}, '${subdomain_name}', ${port}, ${scan_id || 'null'}, ${domain_id || 'null'})"
                          title="Click to view full screenshot"
@@ -250,6 +249,19 @@ async function processScreenshotData(data, port, subdomain_id, subdomain_name, s
     }
     
     return screenshotHtml || '-';
+}
+
+// Helper function to create screenshot preview element
+function createScreenshotPreviewElement(screenshotPath, httpUrl) {
+    const preview = $('<div id="screenshot-preview" class="screenshot-preview"></div>');
+    
+    const $urlDiv = $('<div class="screenshot-preview-url"></div>').text(httpUrl);
+    const $img = $('<img class="screenshot-preview-img">').attr('src', '/media/' + screenshotPath)
+        .on('error', function() {
+            $(this).parent().hide();
+        });
+    
+    return preview.append($urlDiv).append($img);
 }
 
 // Function to show screenshot preview on hover
@@ -283,21 +295,7 @@ function showScreenshotPreview(element, screenshotPath, httpUrl) {
             modalContent.css('position', 'relative');
         }
         
-        preview = $(`
-            <div id="screenshot-preview" style="
-                position: absolute; 
-                z-index: 10000; 
-                background: white; 
-                border: 1px solid #ddd; 
-                border-radius: 5px; 
-                padding: 8px; 
-                box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-                max-width: 600px;
-            ">
-                <div style="font-size: 12px; color: #666; margin-bottom: 5px; font-weight: 500;">${httpUrl}</div>
-                <img src="/media/${screenshotPath}" style="max-width: 580px; max-height: 400px; object-fit: contain;" onerror="this.parentElement.style.display='none'">
-            </div>
-        `);
+        preview = createScreenshotPreviewElement(screenshotPath, httpUrl).css('position', 'absolute');
         
         modalContent.append(preview);
         
@@ -331,7 +329,7 @@ function showScreenshotPreview(element, screenshotPath, httpUrl) {
             topPos = modalHeight - previewHeight - 10;
         }
         
-        $('#screenshot-preview').css({
+        preview.css({
             left: leftPos,
             top: topPos
         });
@@ -340,21 +338,7 @@ function showScreenshotPreview(element, screenshotPath, httpUrl) {
         // For non-modal contexts (endpoints table or other)
         parentContainer = $('body');
         
-        preview = $(`
-            <div id="screenshot-preview" style="
-                position: fixed; 
-                z-index: 10000; 
-                background: white; 
-                border: 1px solid #ddd; 
-                border-radius: 5px; 
-                padding: 8px; 
-                box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-                max-width: 600px;
-            ">
-                <div style="font-size: 12px; color: #666; margin-bottom: 5px; font-weight: 500;">${httpUrl}</div>
-                <img src="/media/${screenshotPath}" style="max-width: 580px; max-height: 400px; object-fit: contain;" onerror="this.parentElement.style.display='none'">
-            </div>
-        `);
+        preview = createScreenshotPreviewElement(screenshotPath, httpUrl).css('position', 'fixed');
         
         parentContainer.append(preview);
         
@@ -385,17 +369,22 @@ function showScreenshotPreview(element, screenshotPath, httpUrl) {
                 topPos = windowHeight - previewHeight - 10;
             }
 
-            $('#screenshot-preview').css({
+            preview.css({
                 left: leftPos,
                 top: topPos
             });
         } else {
-            // Original behavior for non-table contexts (follow mouse)
-            $(element).on('mousemove.screenshot-preview', function(e) {
-                $('#screenshot-preview').css({
-                    left: e.pageX + 15,
-                    top: e.pageY - 200
-                });
+            // For non-table contexts, position relative to element
+            let leftPos = elementOffset.left - previewWidth - 10;
+            let topPos = elementOffset.top - (previewHeight / 2) + (elementHeight / 2);
+
+            if (leftPos < 10) {
+                leftPos = elementOffset.left + elementWidth + 10;
+            }
+
+            preview.css({
+                left: leftPos,
+                top: topPos
             });
         }
     }
@@ -414,27 +403,35 @@ function showScreenshotImageModal(screenshotPath, httpUrl = '') {
         $('#xl-modal-content').empty();
         $('#xl-modal-footer').empty();
 
-        const linkBlock = httpUrl ? `
-            <div class="mb-2" style="font-size: 12px; font-weight: 500;">
-                <a href="${httpUrl}" target="_blank" rel="noopener noreferrer" class="text-primary">${httpUrl}</a>
-            </div>
-        ` : '';
-        const content = `
-            <div class="mb-4 text-center">
-                ${linkBlock}
-                <div class="d-flex justify-content-center">
-                    <img src="/media/${screenshotPath}" class="img-fluid rounded screenshot-popup"
-                         style="max-width: 90%; max-height: 80vh; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.15);"
-                         onclick="window.open('/media/${screenshotPath}', '_blank')">
-                </div>
-            </div>`;
+        // Create modal content using DOM manipulation to avoid XSS
+        const $content = $('<div class="mb-4 text-center"></div>');
+        if (httpUrl) {
+            const $linkBlock = $('<div class="mb-2 screenshot-modal-link"></div>');
+            const $link = $('<a></a>')
+                .attr('href', httpUrl)
+                .attr('target', '_blank')
+                .attr('rel', 'noopener noreferrer')
+                .addClass('text-primary')
+                .text(httpUrl);
+            $linkBlock.append($link);
+            $content.append($linkBlock);
+        }
+        const $imgContainer = $('<div class="d-flex justify-content-center"></div>');
+        const $img = $('<img>')
+            .addClass('img-fluid rounded screenshot-popup screenshot-modal-img')
+            .attr('src', '/media/' + screenshotPath)
+            .on('click', function() {
+                window.open('/media/' + screenshotPath, '_blank');
+            });
+        $imgContainer.append($img);
+        $content.append($imgContainer);
 
         $('#xl-modal-title').html('Screenshot');
-        $('#xl-modal-content').html(content);
+        $('#xl-modal-content').html($content);
         $('#modal_xl_scroll_dialog').modal('show');
     } catch (e) {
         console.error('Error showing screenshot modal:', e);
-        window.open(`/media/${screenshotPath}`, '_blank');
+        window.open('/media/' + screenshotPath, '_blank');
     }
 }
 
