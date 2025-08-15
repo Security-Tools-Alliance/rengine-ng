@@ -1126,6 +1126,14 @@ class DirectoryFile(models.Model):
 	url = models.CharField(max_length=5000, blank=True, null=True)
 	content_type = models.CharField(max_length=100, blank=True, null=True)
 
+	class Meta:
+		# Add unique constraint to prevent duplicate files during parallel fuzzing
+		unique_together = [['name', 'url', 'http_status']]
+		indexes = [
+			models.Index(fields=['name', 'url']),
+			models.Index(fields=['http_status']),
+		]
+
 	def __str__(self):
 		return str(self.name)
 
