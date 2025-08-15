@@ -4,6 +4,7 @@ from urllib.parse import urlparse
 
 from celery.utils.log import get_task_logger
 from django.utils import timezone
+from django.db import IntegrityError, transaction
 
 from reNgine.celery import app
 from reNgine.celery_custom_task import RengineTask
@@ -46,15 +47,20 @@ logger = get_task_logger(__name__)
 
 
 @app.task(name='dir_file_fuzz', queue='io_queue', base=RengineTask, bind=True)
-def dir_file_fuzz(self, ctx={}, description=None):
+def dir_file_fuzz(self, ctx=None, description=None):
     """Perform directory scan, and currently uses `ffuf` as a default tool.
 
     Args:
+        ctx (dict, optional): Context dictionary with scan information.
         description (str, optional): Task description shown in UI.
 
     Returns:
         list: List of URLs discovered.
     """
+    
+    # Initialize ctx if None to avoid mutable default argument issues
+    if ctx is None:
+        ctx = {}
     
     def _execute_dir_file_fuzz(ctx, description):
         # Config
@@ -187,15 +193,37 @@ def dir_file_fuzz(self, ctx={}, description=None):
                 endpoint.content_length = length
                 endpoint.save()
 
-                # Save directory file output from FFUF output
-                dfile, created = DirectoryFile.objects.get_or_create(
-                    name=name,
-                    length=length,
-                    words=words,
-                    lines=lines,
-                    content_type=content_type,
-                    url=url,
-                    http_status=status)
+                # Save directory file output from FFUF output with race condition handling
+                try:
+                    with transaction.atomic():
+                        dfile, created = DirectoryFile.objects.get_or_create(
+                            name=name,
+                            length=length,
+                            words=words,
+                            lines=lines,
+                            content_type=content_type,
+                            url=url,
+                            http_status=status)
+                except IntegrityError:
+                    # Handle race condition - another thread created the record
+                    try:
+                        # Get the record that was created by another thread
+                        dfile = DirectoryFile.objects.get(
+                            name=name,
+                            url=url,
+                            http_status=status)
+                        created = False
+                        logger.debug(f'Race condition handled: found existing DirectoryFile {dfile.id} for {url}')
+                    except DirectoryFile.DoesNotExist:
+                        # Extremely rare case - retry the creation once more
+                        dfile, created = DirectoryFile.objects.get_or_create(
+                            name=name,
+                            length=length,
+                            words=words,
+                            lines=lines,
+                            content_type=content_type,
+                            url=url,
+                            http_status=status)
 
                 # Log newly created file or directory if debug activated
                 if created and CELERY_DEBUG:
