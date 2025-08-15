@@ -144,7 +144,7 @@ def llm_vulnerability_report(
                     )
                     llm_report.save()
                     logger.info('Added new report to database')
-                response['llm_model'] = llm_generator.model_name
+                response['llm_model'] = llm_generator.model_name if llm_generator and hasattr(llm_generator, 'model_name') else None
                 response['id'] = vulnerability_id
             else:
                 logger.warning('LLM report generation returned empty content; skipping DB save')

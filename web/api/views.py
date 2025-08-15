@@ -12,7 +12,7 @@ import requests
 import validators
 from django.urls import reverse
 from django.core.cache import cache
-from dashboard.models import OllamaSettings, Project, SearchHistory, OpenAiAPIKey, OllamaSettings
+from dashboard.models import OllamaSettings, Project, SearchHistory, OpenAiAPIKey
 from django.db.models import CharField, Count, F, Q, Value
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -510,10 +510,16 @@ class LLMVulnerabilityReportGenerator(APIView):
                 'error': 'Missing GET param Vulnerability `id`'
             })
         # Preflight checks for LLM configuration
+        # Get default model first - if this fails, log and proceed to task
         try:
-
             selected_model = get_default_llm_model()
-            is_gpt = selected_model.startswith('gpt')
+        except Exception as e:
+            # If fetching the default model fails, log and proceed to task but keep robustness
+            logger.error(f"Error fetching default LLM model: {e}")
+            selected_model = None
+
+        try:
+            is_gpt = selected_model.startswith('gpt') if selected_model else False
 
             openai_key_missing = is_gpt and not OpenAiAPIKey.objects.exists()
 
