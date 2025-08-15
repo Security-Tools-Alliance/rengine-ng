@@ -229,7 +229,7 @@ def dir_file_fuzz(self, ctx=None, description=None):
                             retry_count += 1
                             if retry_count >= max_retries:
                                 logger.error(f'Failed to create DirectoryFile after {max_retries} retries for {url}')
-                                continue  # Skip this directory entry
+                                break  # Exit retry loop and skip this directory entry
                             logger.debug(f'Retrying DirectoryFile creation for {url} (attempt {retry_count + 1}/{max_retries})')
                             
                     except Exception as e:
