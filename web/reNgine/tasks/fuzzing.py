@@ -215,15 +215,16 @@ def dir_file_fuzz(self, ctx=None, description=None):
                         created = False
                         logger.debug(f'Race condition handled: found existing DirectoryFile {dfile.id} for {url}')
                     except DirectoryFile.DoesNotExist:
-                        # Extremely rare case - retry the creation once more
-                        dfile, created = DirectoryFile.objects.get_or_create(
-                            name=name,
-                            length=length,
-                            words=words,
-                            lines=lines,
-                            content_type=content_type,
-                            url=url,
-                            http_status=status)
+                        # Extremely rare case - retry the creation once more with atomic transaction
+                        with transaction.atomic():
+                            dfile, created = DirectoryFile.objects.get_or_create(
+                                name=name,
+                                length=length,
+                                words=words,
+                                lines=lines,
+                                content_type=content_type,
+                                url=url,
+                                http_status=status)
 
                 # Log newly created file or directory if debug activated
                 if created and CELERY_DEBUG:
