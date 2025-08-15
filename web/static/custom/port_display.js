@@ -1,3 +1,21 @@
+/**
+ * Escapes HTML special characters to prevent XSS attacks
+ * @param {string} str - The string to escape
+ * @return {string} The escaped string
+ */
+function escapeHtml(str) {
+	if (str == null || str === undefined) {
+		return '';
+	}
+	return String(str)
+		.replace(/&/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;')
+		.replace(/"/g, '&quot;')
+		.replace(/'/g, '&#x27;')
+		.replace(/\//g, '&#x2F;');
+}
+
 function renderBadge(data, settings) {
     let badge = '';
     
@@ -227,19 +245,51 @@ async function processScreenshotData(data, port, subdomain_id, subdomain_name, s
             count++;
             if (count <= 2) { // Show max 2 thumbnails
                 // Build hover events conditionally
-                const hoverEvents = disableHoverPreview ? '' : `
-                    onmouseover="showScreenshotPreview(this, '${endpoint.screenshot_path}', '${endpoint.http_url}')"
-                    onmouseout="hideScreenshotPreview()"
-                `;
+                // Note: hover events will be added securely via event listeners instead of inline handlers
+                
+                // Generate unique identifier for this screenshot image
+                const screenshotImageId = `port-screenshot-${Math.random().toString(36).substr(2, 9)}`;
                 
                 screenshotHtml += `
-                    <img src="/media/${endpoint.screenshot_path}" 
+                    <img id="${screenshotImageId}"
+                         src="/media/${escapeHtml(endpoint.screenshot_path)}" 
                          class="screenshot-thumbnail me-1" 
-                         ${hoverEvents}
-                         onclick="show_port_screenshots(${subdomain_id}, '${subdomain_name}', ${port}, ${scan_id || 'null'}, ${domain_id || 'null'})"
+                         data-subdomain-id="${escapeHtml(subdomain_id || '')}"
+                         data-subdomain-name="${escapeHtml(subdomain_name || '')}"
+                         data-port="${escapeHtml(port || '')}"
+                         data-scan-id="${escapeHtml(scan_id || '')}"
+                         data-domain-id="${escapeHtml(domain_id || '')}"
+                         data-screenshot-path="${escapeHtml(endpoint.screenshot_path)}"
+                         data-http-url="${escapeHtml(endpoint.http_url || '')}"
+                         data-disable-hover="${disableHoverPreview}"
                          title="Click to view full screenshot"
                          onerror="this.style.display='none'">
                 `;
+                
+                // Add secure event listeners after DOM insertion
+                setTimeout(() => {
+                    const screenshotImgElement = document.getElementById(screenshotImageId);
+                    if (screenshotImgElement) {
+                        // Add click event listener
+                        screenshotImgElement.addEventListener('click', function() {
+                            show_port_screenshots(
+                                parseInt(this.dataset.subdomainId) || null,
+                                this.dataset.subdomainName,
+                                parseInt(this.dataset.port) || null,
+                                parseInt(this.dataset.scanId) || null,
+                                parseInt(this.dataset.domainId) || null
+                            );
+                        });
+                        
+                        // Add hover event listeners if not disabled
+                        if (this.dataset.disableHover !== 'true') {
+                            screenshotImgElement.addEventListener('mouseover', function() {
+                                showScreenshotPreview(this, this.dataset.screenshotPath, this.dataset.httpUrl);
+                            });
+                            screenshotImgElement.addEventListener('mouseout', hideScreenshotPreview);
+                        }
+                    }
+                }, 0);
             }
         }
     }

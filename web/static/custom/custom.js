@@ -1,3 +1,21 @@
+/**
+ * Escapes HTML special characters to prevent XSS attacks
+ * @param {string} str - The string to escape
+ * @return {string} The escaped string
+ */
+function escapeHtml(str) {
+	if (str == null || str === undefined) {
+		return '';
+	}
+	return String(str)
+		.replace(/&/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;')
+		.replace(/"/g, '&quot;')
+		.replace(/'/g, '&#x27;')
+		.replace(/\//g, '&#x2F;');
+}
+
 function checkall(clickchk, relChkbox) {
 	var checker = $('#' + clickchk);
 	var multichk = $('.' + relChkbox);
@@ -1906,7 +1924,19 @@ function display_whois_on_modal(response, addTargetUrl, project_slug, show_add_t
 					if (response.related_tlds.length > 0) {
 						for (var domain in response.related_tlds) {
 							var dom_object = response.related_tlds[domain];
-							content += `<span class="badge badge-soft-primary badge-link waves-effect waves-light me-1" data-toggle="tooltip" title="Add ${dom_object} as target." onclick="add_target('${addTargetUrl}', '${project_slug}', '${dom_object}'')">${dom_object}</span>`;
+							// Generate unique ID for secure event handling
+							var badgeId = `tld-badge-${Math.random().toString(36).substr(2, 9)}`;
+							content += `<span id="${badgeId}" class="badge badge-soft-primary badge-link waves-effect waves-light me-1" data-toggle="tooltip" title="Add ${escapeHtml(dom_object)} as target." data-add-url="${escapeHtml(addTargetUrl)}" data-project="${escapeHtml(project_slug)}" data-domain="${escapeHtml(dom_object)}">${escapeHtml(dom_object)}</span>`;
+							
+							// Add secure event listener after DOM insertion
+							setTimeout(function() {
+								var badgeElement = document.getElementById(badgeId);
+								if (badgeElement) {
+									badgeElement.addEventListener('click', function() {
+										add_target(this.dataset.addUrl, this.dataset.project, this.dataset.domain);
+									});
+								}
+							}, 0);
 						}
 					}
 					else{
@@ -1920,7 +1950,19 @@ function display_whois_on_modal(response, addTargetUrl, project_slug, show_add_t
 					if (response.related_domains.length > 0) {
 						for (var domain in response.related_domains) {
 							var dom_object = response.related_domains[domain];
-							content += `<span class="badge badge-soft-primary badge-link waves-effect waves-light me-1" data-toggle="tooltip" title="Add ${dom_object} as target." onclick="add_target('${addTargetUrl}', '${project_slug}', '${dom_object}')">${dom_object}</span>`;
+							// Generate unique ID for secure event handling
+							var relatedBadgeId = `related-badge-${Math.random().toString(36).substr(2, 9)}`;
+							content += `<span id="${relatedBadgeId}" class="badge badge-soft-primary badge-link waves-effect waves-light me-1" data-toggle="tooltip" title="Add ${escapeHtml(dom_object)} as target." data-add-url="${escapeHtml(addTargetUrl)}" data-project="${escapeHtml(project_slug)}" data-domain="${escapeHtml(dom_object)}">${escapeHtml(dom_object)}</span>`;
+							
+							// Add secure event listener after DOM insertion
+							setTimeout(function() {
+								var relatedBadgeElement = document.getElementById(relatedBadgeId);
+								if (relatedBadgeElement) {
+									relatedBadgeElement.addEventListener('click', function() {
+										add_target(this.dataset.addUrl, this.dataset.project, this.dataset.domain);
+									});
+								}
+							}, 0);
 						}
 					}
 					else{

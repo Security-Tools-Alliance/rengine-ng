@@ -1,3 +1,21 @@
+/**
+ * Escapes HTML special characters to prevent XSS attacks
+ * @param {string} str - The string to escape
+ * @return {string} The escaped string
+ */
+function escapeHtml(str) {
+	if (str == null || str === undefined) {
+		return '';
+	}
+	return String(str)
+		.replace(/&/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;')
+		.replace(/"/g, '&quot;')
+		.replace(/'/g, '&#x27;')
+		.replace(/\//g, '&#x2F;');
+}
+
 function get_ips_from_port(port_number, history_id){
 	document.getElementById("detailScanModalLabel").innerHTML='IPs with port ' + port_number + ' OPEN';
 	var ip_badge = '';
@@ -142,34 +160,114 @@ function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, s
 						}
 						
 						if (data && data.length > 0) {
-                        // Fallback: enable hover preview and modal click even without async thumbnail load
-                        const hover = `onmouseover=\"showScreenshotPreview(this, '${data}', '${row['http_url'] || ''}')\" onmouseout=\"hideScreenshotPreview()\"`;
-                        const click = subdomain_id
-                            ? `onclick=\"show_port_screenshots(${subdomain_id}, '${subdomain_name}', ${port}, ${scan_id || 'null'}, ${domain_id || 'null'})\"`
-                            : `onclick=\"showScreenshotImageModal('${data}', '${row['http_url'] || ''}')\"`;
-							return `<img src="/media/${data}" 
-									     class="screenshot-thumbnail" 
-									     style="width: 100px; height: 75px; object-fit: cover; cursor: pointer; border: 1px solid #ddd; border-radius: 3px;" 
-                                     ${hover}
-                                     ${click}
-									     title="Click to view full screenshot"
-									     onerror="this.style.display='none'">`;
+                        // Generate unique identifier for this image element
+                        const imageId = `screenshot-${Math.random().toString(36).substr(2, 9)}`;
+                        
+                        // Create secure image element with data attributes instead of inline handlers
+                        const imgHtml = `<img id="${imageId}" 
+                                     src="/media/${escapeHtml(data)}" 
+                                     class="screenshot-thumbnail" 
+                                     style="width: 100px; height: 75px; object-fit: cover; cursor: pointer; border: 1px solid #ddd; border-radius: 3px;" 
+                                     data-screenshot-path="${escapeHtml(data)}"
+                                     data-http-url="${escapeHtml(row['http_url'] || '')}"
+                                     data-subdomain-id="${escapeHtml(subdomain_id || '')}"
+                                     data-subdomain-name="${escapeHtml(subdomain_name || '')}"
+                                     data-port="${escapeHtml(port || '')}"
+                                     data-scan-id="${escapeHtml(scan_id || '')}"
+                                     data-domain-id="${escapeHtml(domain_id || '')}"
+                                     title="Click to view full screenshot"
+                                     onerror="this.style.display='none'">`;
+                        
+                        // Add secure event listeners after DOM insertion
+                        setTimeout(() => {
+                            const imgElement = document.getElementById(imageId);
+                            if (imgElement) {
+                                // Add hover events
+                                imgElement.addEventListener('mouseover', function() {
+                                    showScreenshotPreview(this, this.dataset.screenshotPath, this.dataset.httpUrl);
+                                });
+                                imgElement.addEventListener('mouseout', hideScreenshotPreview);
+                                
+                                // Add click event
+                                imgElement.addEventListener('click', function() {
+                                    const subdomainId = this.dataset.subdomainId;
+                                    if (subdomainId) {
+                                        show_port_screenshots(
+                                            parseInt(subdomainId) || null,
+                                            this.dataset.subdomainName,
+                                            parseInt(this.dataset.port) || null,
+                                            parseInt(this.dataset.scanId) || null,
+                                            parseInt(this.dataset.domainId) || null
+                                        );
+                                    } else {
+                                        showScreenshotImageModal(this.dataset.screenshotPath, this.dataset.httpUrl);
+                                    }
+                                });
+                            }
+                        }, 0);
+                        
+                        return imgHtml;
 						}
 						return '-';
 					} catch (error) {
 						console.error('Error processing screenshot:', error);
 						if (data && data.length > 0) {
-                        const hover = `onmouseover=\"showScreenshotPreview(this, '${data}', '${row['http_url'] || ''}')\" onmouseout=\"hideScreenshotPreview()\"`;
-                        const click = (row && row['subdomain_id'])
-                            ? `onclick=\"show_port_screenshots(${row['subdomain_id']}, '${row['subdomain_name'] || ''}', ${(new URL(row['http_url']||'http://x')).port || ((new URL(row['http_url']||'http://x')).protocol === 'https:' ? 443 : 80)}, ${row['scan_history_id'] || 'null'}, ${row['target_domain_id'] || 'null'})\"`
-                            : `onclick=\"showScreenshotImageModal('${data}', '${row['http_url'] || ''}')\"`;
-							return `<img src="/media/${data}" 
-									     class="screenshot-thumbnail" 
-									     style="width: 100px; height: 75px; object-fit: cover; cursor: pointer; border: 1px solid #ddd; border-radius: 3px;" 
-                                     ${hover}
-                                     ${click}
-									     title="Click to view full screenshot"
-									     onerror="this.style.display='none'">`;
+                        // Generate unique identifier for this fallback image element
+                        const fallbackImageId = `screenshot-fallback-${Math.random().toString(36).substr(2, 9)}`;
+                        
+                        // Extract port safely
+                        let extractedPort;
+                        try {
+                            const url = new URL(row['http_url'] || 'http://x');
+                            extractedPort = url.port || (url.protocol === 'https:' ? 443 : 80);
+                        } catch (urlError) {
+                            extractedPort = 80; // Default fallback
+                        }
+                        
+                        // Create secure fallback image element with data attributes
+                        const fallbackImgHtml = `<img id="${fallbackImageId}" 
+                                     src="/media/${escapeHtml(data)}" 
+                                     class="screenshot-thumbnail" 
+                                     style="width: 100px; height: 75px; object-fit: cover; cursor: pointer; border: 1px solid #ddd; border-radius: 3px;" 
+                                     data-screenshot-path="${escapeHtml(data)}"
+                                     data-http-url="${escapeHtml(row['http_url'] || '')}"
+                                     data-subdomain-id="${escapeHtml((row && row['subdomain_id']) || '')}"
+                                     data-subdomain-name="${escapeHtml((row && row['subdomain_name']) || '')}"
+                                     data-port="${escapeHtml(extractedPort || '')}"
+                                     data-scan-id="${escapeHtml((row && row['scan_history_id']) || '')}"
+                                     data-domain-id="${escapeHtml((row && row['target_domain_id']) || '')}"
+                                     title="Click to view full screenshot"
+                                     onerror="this.style.display='none'">`;
+                        
+                        // Add secure event listeners after DOM insertion for fallback image
+                        setTimeout(() => {
+                            const fallbackImgElement = document.getElementById(fallbackImageId);
+                            if (fallbackImgElement) {
+                                // Add hover events
+                                fallbackImgElement.addEventListener('mouseover', function() {
+                                    showScreenshotPreview(this, this.dataset.screenshotPath, this.dataset.httpUrl);
+                                });
+                                fallbackImgElement.addEventListener('mouseout', hideScreenshotPreview);
+                                
+                                // Add click event
+                                fallbackImgElement.addEventListener('click', function() {
+                                    const subdomainId = this.dataset.subdomainId;
+                                    if (subdomainId) {
+                                        show_port_screenshots(
+                                            parseInt(subdomainId) || null,
+                                            this.dataset.subdomainName,
+                                            parseInt(this.dataset.port) || null,
+                                            parseInt(this.dataset.scanId) || null,
+                                            parseInt(this.dataset.domainId) || null
+                                        );
+                                    } else {
+                                        showScreenshotImageModal(this.dataset.screenshotPath, this.dataset.httpUrl);
+                                    }
+                                });
+                            }
+                        }, 0);
+                        
+                        return fallbackImgHtml;
 						}
 						return '-';
 					}
