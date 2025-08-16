@@ -76,8 +76,8 @@ def llm_vulnerability_report(
         ).first()
 
 
-
-        if stored and not is_empty_llm_report(stored) and not force_regenerate:
+        should_use_cached = stored and not is_empty_llm_report(stored) and not force_regenerate
+        if should_use_cached:
             # Try to extract model name from raw stored description tag [LLM:model]
             model_from_tag = None
             stripped_desc = stored.description or ''
@@ -121,10 +121,10 @@ def llm_vulnerability_report(
             has_content = any(not is_empty_text(v) for v in [raw_description, raw_impact, raw_remediation, raw_references])
 
             if response.get('status') and has_content:
+                # Update existing empty record
+                # Save with model tag for consistent display and future cache
+                tagged_desc = f"[LLM:{llm_generator.model_name}]\n{raw_description}" if llm_generator and llm_generator.model_name else raw_description
                 if stored:
-                    # Update existing empty record
-                    # Save with model tag for consistent display and future cache
-                    tagged_desc = f"[LLM:{llm_generator.model_name}]\n{raw_description}" if llm_generator and llm_generator.model_name else raw_description
                     stored.description = tagged_desc
                     stored.impact = raw_impact
                     stored.remediation = raw_remediation
@@ -132,8 +132,6 @@ def llm_vulnerability_report(
                     stored.save()
                     logger.info('Updated existing empty LLM report in database')
                 else:
-                    # Store new report
-                    tagged_desc = f"[LLM:{llm_generator.model_name}]\n{raw_description}" if llm_generator and llm_generator.model_name else raw_description
                     llm_report = LLMVulnerabilityReport(
                         url_path=path,
                         title=title,

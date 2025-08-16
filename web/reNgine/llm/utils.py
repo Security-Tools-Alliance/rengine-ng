@@ -1,7 +1,9 @@
+import contextlib
+import json
+import logging
 from django.contrib import messages
 from dashboard.models import OllamaSettings
 from reNgine.llm.config import LLM_CONFIG
-import logging
 from markdown import markdown
 
 logger = logging.getLogger(__name__)
@@ -96,11 +98,22 @@ def is_empty_text(value) -> bool:
         text = str(value).strip()
         if not text:
             return True
-        # Treat list-like empties as empty as well
+
+        # Remove whitespace for normalized checking
         normalized = text.replace('\n', '').replace('\r', '').replace(' ', '')
-        if normalized in ('[]', '[\"\"]', '[\'\']', 'null', 'None'):
+
+        # Try to parse as JSON and check for empty containers, but only if likely JSON
+        if normalized and normalized[0] in ('[', '{'):
+            with contextlib.suppress(json.JSONDecodeError):
+                parsed = json.loads(normalized)
+                if parsed in ("", [], {}):
+                    return True
+        # Also treat some common null-like strings as empty
+        if normalized.lower() in {'null', 'none'}:
             return True
-        return False
+
+        # Legacy check for string representations of empty containers
+        return normalized in {'[]', '[\"\"]', '[\'\']'}
     except Exception:
         return True
 

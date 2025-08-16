@@ -3148,7 +3148,7 @@ function showLLMConfigChoiceDialog(endpoint_url, vuln_id, title, info){
     // Option: add GPT API key (if GPT selected without key)
     if (info && info.is_gpt_selected && info.openai_key_missing) {
         options.push(`
-            <button class="btn btn-primary w-100 mb-2" onclick="window.location.href='/scanEngine/api_vault'">
+            <button class="btn btn-primary w-100 mb-2" id="btn-add-openai-key" type="button">
                 Add OpenAI API Key
             </button>
         `);
@@ -3163,7 +3163,7 @@ function showLLMConfigChoiceDialog(endpoint_url, vuln_id, title, info){
     }
     // Always include cancel
     options.push(`
-        <button class="btn btn-outline-secondary w-100" data-bs-dismiss="modal" onclick="Swal.close()">Cancel</button>
+        <button class="btn btn-outline-secondary w-100" id="btn-cancel-llm-config" type="button">Cancel</button>
     `);
 
     $('#modal_dialog .modal-dialog').removeClass('modal-xl').addClass('modal-lg');
@@ -3179,7 +3179,7 @@ function showLLMConfigChoiceDialog(endpoint_url, vuln_id, title, info){
     $('#modal_dialog .modal-footer').empty();
     $('#modal_dialog').modal('show');
 
-    // Bind click handler safely (no inline JS)
+    // Bind click handlers safely (no inline JS)
     const chooseBtn = document.getElementById('btn-choose-ollama-model');
     if (chooseBtn) {
         chooseBtn.addEventListener('click', function() {
@@ -3189,6 +3189,20 @@ function showLLMConfigChoiceDialog(endpoint_url, vuln_id, title, info){
                 force_regenerate: false,
                 vuln_title: title || ''
             });
+        });
+    }
+    
+    const addOpenAIBtn = document.getElementById('btn-add-openai-key');
+    if (addOpenAIBtn) {
+        addOpenAIBtn.addEventListener('click', function() {
+            window.location.href = '/scanEngine/api_vault';
+        });
+    }
+    
+    const cancelBtn = document.getElementById('btn-cancel-llm-config');
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', function() {
+            $('#modal_dialog').modal('hide');
         });
     }
 }
