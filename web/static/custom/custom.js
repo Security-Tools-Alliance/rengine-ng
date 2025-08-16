@@ -3049,7 +3049,7 @@ function render_llm_vuln_modal(data, title, endpoint_url, vuln_id){
     $('#modal_dialog .modal-text').empty();
     $('#modal_dialog .modal-footer').empty();
     // Set title as text to prevent XSS
-    $('#modal_dialog .modal-title').text(`Vulnerability detail for ${title}`);
+    $('#modal_dialog .modal-title').text('Vulnerability detail for ' + title);
 
     // Create badge element using textContent assignment to prevent XSS
     let $modelBadge = null;
@@ -3494,7 +3494,7 @@ async function deleteAttackSurfaceAnalysis(endpoint_url, id) {
 }
 
 function showAttackSurfaceModal(data, endpoint_url, id) {
-    const header = `Attack Surface Suggestion for ${data.subdomain_name}`;
+    const header = 'Attack Surface Suggestion for ' + data.subdomain_name;
     const html = data.description;
     $('#modal_dialog .modal-dialog').removeClass('modal-lg').addClass('modal-xl');
     // Use text() to avoid HTML injection via subdomain name
