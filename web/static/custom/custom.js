@@ -2952,23 +2952,58 @@ function showSwalLoader(title, text){
 	});
 }
 
+// Ensures a query param is set exactly once on a URL (works with relative URLs)
+function setUrlParam(url, key, value) {
+    try {
+        const u = new URL(url, window.location.origin);
+        u.searchParams.set(key, value);
+        return u.pathname + (u.search || '') + (u.hash || '');
+    } catch (e) {
+        // Fallback simple append/replace
+        const hasQuestion = url.includes('?');
+        const regex = new RegExp(`([?&])${key}=[^&]*`);
+        if (regex.test(url)) {
+            // Use a function to preserve the original separator from the match
+            return url.replace(regex, (match, sep) => `${sep}${key}=${encodeURIComponent(value)}`);
+        }
+        return url + (hasQuestion ? '&' : '?') + `${key}=${encodeURIComponent(value)}`;
+    }
+}
+
 async function send_llm_api_request(endpoint_url, vuln_id){
-	const api = `${endpoint_url}?format=json&id=${vuln_id}`;
-	try {
-		const response = await fetch(api, {
-				method: 'GET',
-				credentials: "same-origin",
-				headers: {
-					"X-CSRFToken": getCookie("csrftoken")
-				}
-		});
-		if (!response.ok) {
-			throw new Error('Request failed');
-		}
-		return await response.json();
-	} catch (error) {
-		throw new Error('Request failed');
-	}
+    const sep = endpoint_url.includes('?') ? '&' : '?';
+    const api = `${endpoint_url}${sep}format=json&id=${vuln_id}`;
+    try {
+        const response = await fetch(api, {
+            method: 'GET',
+            credentials: 'same-origin',
+            headers: {
+                'X-CSRFToken': getCookie('csrftoken')
+            }
+        });
+        // Always try to parse JSON to allow UI handling of non-2xx responses
+        let data;
+        try {
+            data = await response.json();
+        } catch (jsonError) {
+            // Log the error for debugging without masking server-side issues
+            console.error('JSON parse error:', jsonError);
+            return {
+                status: false,
+                error: 'Failed to parse server response as JSON',
+                details: jsonError.message || jsonError.toString()
+            };
+        }
+        if (!response.ok) {
+            // Return structured error so caller can decide next step (e.g., show config dialog)
+            return (data && typeof data === 'object')
+                ? data
+                : { status: false, error: 'Request failed' };
+        }
+        return data;
+    } catch (error) {
+        return { status: false, error: 'Network error', details: error.message || error.toString() };
+    }
 }
 
 
@@ -2977,18 +3012,22 @@ async function fetch_llm_vuln_details(endpoint_url, id, title) {
 	var text = 'Please wait while the LLM is generating vulnerability description.';
 	try {
 		showSwalLoader(loader_title, text);
-		const data = await send_llm_api_request(endpoint_url, id);
+        const data = await send_llm_api_request(endpoint_url, id);
 		Swal.close();
-		if (data.status) {
-			render_llm_vuln_modal(data, title);
+        if (data.status) {
+            render_llm_vuln_modal(data, title, endpoint_url, id);
 		}
 		else{
 			Swal.close();
-			Swal.fire({
-				icon: 'error',
-				title: 'Oops...',
-				text: data.error,
-			});
+			if (data.error_code === 'LLM_CONFIG_REQUIRED') {
+				showLLMConfigChoiceDialog(endpoint_url, id, title, data);
+			} else {
+				Swal.fire({
+					icon: 'error',
+					title: 'Oops...',
+					text: data.error,
+				});
+			}
 		}
 	} catch (error) {
 		console.error(error);
@@ -3002,32 +3041,172 @@ async function fetch_llm_vuln_details(endpoint_url, id, title) {
 }
 
 
-function render_llm_vuln_modal(data, title){
-	// Change modal size to xl
-	$('#modal_dialog .modal-dialog').removeClass('modal-lg').addClass('modal-xl');
+function render_llm_vuln_modal(data, title, endpoint_url, vuln_id){
+    // Change modal size to xl
+    $('#modal_dialog .modal-dialog').removeClass('modal-lg').addClass('modal-xl');
 
-	$('#modal_dialog .modal-title').empty();
-	$('#modal_dialog .modal-text').empty();
-	$('#modal_dialog .modal-footer').empty();
-	$('#modal_dialog .modal-title').html(`Vulnerability detail for ${title}`);
+    $('#modal_dialog .modal-title').empty();
+    $('#modal_dialog .modal-text').empty();
+    $('#modal_dialog .modal-footer').empty();
+    // Set title as text to prevent XSS
+    $('#modal_dialog .modal-title').text('Vulnerability detail for ' + title);
 
-	var modal_content = `
-		<h4>Description</h4>
-		<p>${data.description}</p>
-		<h4>Impact</h4>
-		<p>${data.impact}</p>
-		<h4>Remediation</h4>
-		<p>${data.remediation}</p>
-		<h4>References</h4>
-		<p>${data.references}</p>
-	`;
+    // Create badge element using textContent assignment to prevent XSS
+    let $modelBadge = null;
+    const safeModel = data.llm_model ? DOMPurify.sanitize(String(data.llm_model), {ALLOWED_TAGS: [], ALLOWED_ATTR: []}) : null;
+    if (safeModel) {
+        $modelBadge = $('<span>')
+            .addClass('badge bg-soft-primary text-primary mb-3 d-inline-block')
+            .text(`Generated by ${safeModel}`);
+    }
+    const bodyHtml = `
+        <h4>Description</h4>
+        <p>${data.description}</p>
+        <h4>Impact</h4>
+        <p>${data.impact}</p>
+        <h4>Remediation</h4>
+        <p>${data.remediation}</p>
+        <h4>References</h4>
+        <p>${data.references}</p>
+        <div class="text-center mt-4">
+            <div class="btn-group" role="group">
+                <button class="btn btn-primary" id="btn-regenerate-vuln-llm">
+                    <i class="fe-refresh-cw me-1"></i>
+                    Generate New Analysis
+                </button>
+                <button class="btn btn-danger" id="btn-delete-vuln-llm">
+                    <i class="fe-trash-2 me-1"></i>
+                    Delete Current Analysis
+                </button>
+            </div>
+        </div>`;
 
-	// Sanitize with DOMPurify before inserting into the DOM
-	$('#modal_dialog .modal-text').append(
-		DOMPurify.sanitize(modal_content)
-	);
-	$('#modal_dialog').modal('show');
+    const $modalText = $('#modal_dialog .modal-text');
+    if ($modelBadge) {
+        $modalText.append($modelBadge);
+    }
+    $modalText.append(
+        DOMPurify.sanitize(bodyHtml)
+    );
+    $('#modal_dialog').modal('show');
+
+    // Bind actions
+    $('#btn-regenerate-vuln-llm').off('click').on('click', async () => {
+        const $btn = $('#btn-regenerate-vuln-llm');
+        const $modal = $('#modal_dialog');
+        let $spinner = $modal.find('.modal-spinner');
+        if ($spinner.length === 0) {
+            $spinner = $('<div class="modal-spinner text-center my-3"><span class="spinner-border" role="status" aria-hidden="true"></span> Regenerating...</div>');
+            $modal.find('.modal-footer').prepend($spinner);
+        }
+        $spinner.show();
+        $btn.prop('disabled', true);
+        try {
+            const forcedUrl = setUrlParam(endpoint_url, 'force_regenerate', 'true');
+            await showModelSelectionDialog(forcedUrl, vuln_id, { mode: 'vuln', force_regenerate: true, vuln_title: title });
+        } catch (e) {
+            console.error(e);
+            Swal.fire({ icon: 'error', title: 'Error', text: 'Failed to regenerate analysis.' });
+        } finally {
+            $spinner.hide();
+            $btn.prop('disabled', false);
+        }
+    });
+
+    $('#btn-delete-vuln-llm').off('click').on('click', async () => {
+        try {
+            const api = setUrlParam(endpoint_url, 'id', vuln_id);
+            const result = await Swal.fire({
+                title: 'Delete Analysis?',
+                text: 'This will permanently delete the current vulnerability analysis. This action cannot be undone.',
+                icon: 'warning', showCancelButton: true,
+                confirmButtonColor: '#d33', cancelButtonColor: '#3085d6',
+                confirmButtonText: 'Yes, delete it!', cancelButtonText: 'Cancel'
+            });
+            if (!result.isConfirmed) return;
+
+            showSwalLoader('Deleting...', 'Please wait while the analysis is being deleted.');
+            const resp = await fetch(api, { method: 'DELETE', headers: { 'X-CSRFToken': getCookie('csrftoken') } });
+            const js = await resp.json();
+            Swal.close();
+            if (js.status) {
+                Swal.fire({ icon: 'success', title: 'Deleted!', text: 'The analysis has been deleted successfully.', showConfirmButton: false, timer: 1500 });
+                $('#modal_dialog').modal('hide');
+            } else {
+                throw new Error(js.error || 'Failed to delete analysis');
+            }
+        } catch (e) {
+            console.error(e);
+            Swal.fire({ icon: 'error', title: 'Error', text: e.message || 'Something went wrong while deleting the analysis!' });
+        }
+    });
 }
+
+// Show configuration choice dialog when LLM config is missing/invalid
+function showLLMConfigChoiceDialog(endpoint_url, vuln_id, title, info){
+    const options = [];
+    // Option: add GPT API key (if GPT selected without key)
+    if (info && info.is_gpt_selected && info.openai_key_missing) {
+        options.push(`
+            <button class="btn btn-primary w-100 mb-2" id="btn-add-openai-key" type="button">
+                Add OpenAI API Key
+            </button>
+        `);
+    }
+    // Option: choose Ollama model (if server reachable and at least one model)
+    if (info && info.ollama_available && info.has_ollama_models) {
+        options.push(`
+            <button class="btn btn-success w-100 mb-2" id="btn-choose-ollama-model" type="button">
+                Choose Ollama Model
+            </button>
+        `);
+    }
+    // Always include cancel
+    options.push(`
+        <button class="btn btn-outline-secondary w-100" id="btn-cancel-llm-config" type="button">Cancel</button>
+    `);
+
+    $('#modal_dialog .modal-dialog').removeClass('modal-xl').addClass('modal-lg');
+    $('#modal_dialog .modal-title').text('LLM configuration required');
+    $('#modal_dialog .modal-text').html(`
+        <p>
+            The current LLM configuration is incomplete. Please choose an option:
+        </p>
+        <div class="d-grid gap-2">
+            ${options.join('')}
+        </div>
+    `);
+    $('#modal_dialog .modal-footer').empty();
+    $('#modal_dialog').modal('show');
+
+    // Bind click handlers safely (no inline JS)
+    const chooseBtn = document.getElementById('btn-choose-ollama-model');
+    if (chooseBtn) {
+        chooseBtn.addEventListener('click', function() {
+            $('#modal_dialog').modal('hide');
+            showModelSelectionDialog(endpoint_url, vuln_id, {
+                mode: 'vuln',
+                force_regenerate: false,
+                vuln_title: title || ''
+            });
+        });
+    }
+    
+    const addOpenAIBtn = document.getElementById('btn-add-openai-key');
+    if (addOpenAIBtn) {
+        addOpenAIBtn.addEventListener('click', function() {
+            window.location.href = '/scanEngine/api_vault';
+        });
+    }
+    
+    const cancelBtn = document.getElementById('btn-cancel-llm-config');
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', function() {
+            $('#modal_dialog').modal('hide');
+        });
+    }
+}
+
 
 
 function get_datatable_col_index(lookup, cols){
@@ -3099,7 +3278,7 @@ async function show_attack_surface_modal(endpoint_url, id) {
         }
         
         // If no cached results, show model selection
-        await showModelSelectionDialog(endpoint_url, id);
+        await showModelSelectionDialog(endpoint_url, id, { mode: 'attack' });
     } catch (error) {
         console.error(error);
         Swal.fire({
@@ -3110,10 +3289,10 @@ async function show_attack_surface_modal(endpoint_url, id) {
     }
 }
 
-async function showModelSelectionDialog(endpoint_url, id, force_regenerate = false) {
+async function showModelSelectionDialog(endpoint_url, id, optsOrForce = false) {
     try {
         // Fetch models from the unified endpoint that combines GPT and Ollama models
-        const response = await fetch('/api/tools/llm_models');
+        const response = await fetch('/api/tools/llm_models/');
         const data = await response.json();
         
         if (!data.status) {
@@ -3123,8 +3302,20 @@ async function showModelSelectionDialog(endpoint_url, id, force_regenerate = fal
         // Change modal size to xl
         $('#modal_dialog .modal-dialog').removeClass('modal-lg').addClass('modal-xl');
 
-        // Keep all the existing model selection code
-		window.generateAttackSurface = async () => {
+        // Resolve options for reuse in attack surface and vulnerabilities
+        let mode = 'attack';
+        let force_regenerate = false;
+        let vuln_title = '';
+        if (typeof optsOrForce === 'boolean') {
+            force_regenerate = optsOrForce;
+        } else if (optsOrForce && typeof optsOrForce === 'object') {
+            mode = optsOrForce.mode || 'attack';
+            force_regenerate = !!optsOrForce.force_regenerate;
+            vuln_title = optsOrForce.vuln_title || '';
+        }
+
+        // Unified confirm handler
+        window.confirmLLMModelSelection = async () => {
 			const selectedModel = $('input[name="llm_model"]:checked').val();
 			if (!selectedModel) {
 				Swal.fire({
@@ -3151,22 +3342,27 @@ async function showModelSelectionDialog(endpoint_url, id, force_regenerate = fal
 				if (!updateData.status) {
 					throw new Error('Failed to update selected model');
 				}
-		
-				// Then proceed with attack surface analysis
-				var loader_title = "Loading...";
-				var text = 'Please wait while the LLM is generating attack surface.';
-				showSwalLoader(loader_title, text);
-				const data = await send_llm__attack_surface_api_request(endpoint_url, id, force_regenerate, false, selectedModel);
-				Swal.close();
-                
-                if (data.status) {
-					showAttackSurfaceModal(data, endpoint_url, id);
+                if (mode === 'attack') {
+                    // Then proceed with attack surface analysis
+                    var loader_title = 'Loading...';
+                    var text = 'Please wait while the LLM is generating attack surface.';
+                    showSwalLoader(loader_title, text);
+                    const result = await send_llm__attack_surface_api_request(endpoint_url, id, force_regenerate, false, selectedModel);
+                    Swal.close();
+                    
+                    if (result.status) {
+                        showAttackSurfaceModal(result, endpoint_url, id);
+                    } else {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Oops...',
+                            text: result.error,
+                        });
+                    }
                 } else {
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'Oops...',
-                        text: data.error,
-                    });
+                    // Vulnerability details flow: close modal and retry fetch
+                    $('#modal_dialog').modal('hide');
+                    await fetch_llm_vuln_details(endpoint_url, id, vuln_title);
                 }
             } catch (error) {
                 console.error(error);
@@ -3238,7 +3434,7 @@ async function showModelSelectionDialog(endpoint_url, id, force_regenerate = fal
                 </div>`;
         });
 
-        $('#modal_dialog .modal-title').html('Select LLM Model for Attack Surface Analysis');
+        $('#modal_dialog .modal-title').html('Select LLM Model');
         $('#modal_dialog .modal-text').empty();
         $('#modal_dialog .modal-text').append(`
             <div class="mb-3 row">
@@ -3246,9 +3442,7 @@ async function showModelSelectionDialog(endpoint_url, id, force_regenerate = fal
                 ${modelOptions}
             </div>
             <div class="mb-3 text-center">
-                <button class="btn btn-primary" type="button" onclick="window.generateAttackSurface()">
-                    Continue Analysis
-                </button>
+                <button class="btn btn-primary" type="button" onclick="window.confirmLLMModelSelection()">Continue</button>
             </div>
         `);
         
@@ -3314,18 +3508,21 @@ async function deleteAttackSurfaceAnalysis(endpoint_url, id) {
 }
 
 function showAttackSurfaceModal(data, endpoint_url, id) {
+    const header = 'Attack Surface Suggestion for ' + data.subdomain_name;
+    const html = data.description;
     $('#modal_dialog .modal-dialog').removeClass('modal-lg').addClass('modal-xl');
-    $('#modal_dialog .modal-title').html(`Attack Surface Suggestion for ${data.subdomain_name}`);
+    // Use text() to avoid HTML injection via subdomain name
+    $('#modal_dialog .modal-title').text(header);
     $('#modal_dialog .modal-text').empty();
     $('#modal_dialog .modal-text').append(
-        DOMPurify.sanitize(data.description) +
+        DOMPurify.sanitize(html) +
         `<div class="text-center mt-4">
             <div class="btn-group" role="group">
-                <button class="btn btn-primary" onclick="regenerateAttackSurface('${endpoint_url}', ${id})">
+                <button class="btn btn-primary" id="btn-as-regenerate">
                     <i class="fe-refresh-cw me-1"></i>
                     Generate New Analysis
                 </button>
-                <button class="btn btn-danger" onclick="deleteAttackSurfaceAnalysis('${endpoint_url}', ${id})">
+                <button class="btn btn-danger" id="btn-as-delete">
                     <i class="fe-trash-2 me-1"></i>
                     Delete Current Analysis
                 </button>
@@ -3333,6 +3530,60 @@ function showAttackSurfaceModal(data, endpoint_url, id) {
         </div>`
     );
     $('#modal_dialog').modal('show');
+    $('#btn-as-regenerate').off('click').on('click', async () => {
+        const $btn = $('#btn-as-regenerate');
+        const $otherBtn = $('#btn-as-delete');
+        const $modal = $('#modal_dialog');
+        let $spinner = $modal.find('.modal-spinner');
+        if ($spinner.length === 0) {
+            $spinner = $('<div class="modal-spinner text-center my-3"><span class="spinner-border" role="status" aria-hidden="true"></span> Regenerating...</div>');
+            $modal.find('.modal-footer').prepend($spinner);
+        }
+        $spinner.show();
+        $btn.prop('disabled', true);
+        $otherBtn.prop('disabled', true);
+        try {
+            await regenerateAttackSurface(endpoint_url, id);
+        } catch (error) {
+            console.error(error);
+            Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: 'Failed to regenerate attack surface analysis. Please try again.'
+            });
+        } finally {
+            $spinner.hide();
+            $btn.prop('disabled', false);
+            $otherBtn.prop('disabled', false);
+        }
+    });
+    $('#btn-as-delete').off('click').on('click', async () => {
+        const $btn = $('#btn-as-delete');
+        const $otherBtn = $('#btn-as-regenerate');
+        const $modal = $('#modal_dialog');
+        let $spinner = $modal.find('.modal-spinner');
+        if ($spinner.length === 0) {
+            $spinner = $('<div class="modal-spinner text-center my-3"><span class="spinner-border" role="status" aria-hidden="true"></span> Deleting...</div>');
+            $modal.find('.modal-footer').prepend($spinner);
+        }
+        $spinner.show();
+        $btn.prop('disabled', true);
+        $otherBtn.prop('disabled', true);
+        try {
+            await deleteAttackSurfaceAnalysis(endpoint_url, id);
+        } catch (error) {
+            console.error(error);
+            Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: 'Failed to delete attack surface analysis. Please try again.'
+            });
+        } finally {
+            $spinner.hide();
+            $btn.prop('disabled', false);
+            $otherBtn.prop('disabled', false);
+        }
+    });
 }
 
 function convertToCamelCase(inputString) {
