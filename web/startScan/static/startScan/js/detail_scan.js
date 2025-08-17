@@ -42,10 +42,8 @@ function render_ips(data)
 
 
 function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, scan_history_id=null, domain_id=null, gf_tags=null){
-	var is_endpoint_grouping = false;
-	var endpoint_grouping_col = 6;
 
-	var lookup_url = endpoint_endpoint_url + '?format=datatables&project=' + project;
+    let lookup_url = endpoint_endpoint_url + '?format=datatables&project=' + project;
 
 	if (scan_history_id) {
 		lookup_url += `&scan_history=${scan_history_id}`;
@@ -57,80 +55,66 @@ function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, s
 	if (gf_tags){
 		lookup_url += `&gf_tag=${gf_tags}`
 	}
-	var endpoint_datatable_columns = [
-		{'data': 'id'},
-		{'data': 'http_url'},
-		{'data': 'http_status'},
-		{'data': 'page_title'},
-		{'data': 'matched_gf_patterns'},
-		{'data': 'content_type'},
-		{'data': 'content_length', 'searchable': false},
-		{'data': 'techs'},
-		{'data': 'webserver'},
-		{'data': 'response_time', 'searchable': false},
-		{'data': 'screenshot_path', 'searchable': false},
-		{'data': 'subdomain_id', 'visible': false, 'searchable': false},
-		{'data': 'scan_history_id', 'visible': false, 'searchable': false},
-		{'data': 'target_domain_id', 'visible': false, 'searchable': false},
-		{'data': 'subdomain_name', 'visible': false, 'searchable': false},
-	];
-	var endpoint_table = $('#endpoint_results').DataTable({
-		"destroy": true,
-		"processing": true,
-		"oLanguage": {
-			"oPaginate": { "sPrevious": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-left"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>', "sNext": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-right"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>' },
-			"sInfo": "Showing page _PAGE_ of _PAGES_",
-			"sLengthMenu": "Results :  _MENU_",
-			"sProcessing": "Processing... Please wait..."
-		},
-		"dom": "<'dt--top-section'<'row'<'col-12 mb-3 mb-sm-0 col-sm-4 col-md-3 col-lg-4 d-flex justify-content-sm-start justify-content-center'l><'dt--pages-count col-12 col-sm-6 col-md-4 col-lg-4 d-flex justify-content-sm-middle justify-content-center'i><'dt--pagination col-12 col-sm-2 col-md-5 col-lg-4 d-flex justify-content-sm-end justify-content-center'p>>>" +
-		"<'table-responsive'tr>" +
-		"<'dt--bottom-section'<'row'<'col-12 mb-3 mb-sm-0 col-sm-4 col-md-3 col-lg-4 d-flex justify-content-sm-start justify-content-center'l><'dt--pages-count col-12 col-sm-6 col-md-4 col-lg-4 d-flex justify-content-sm-middle justify-content-center'i><'dt--pagination col-12 col-sm-2 col-md-5 col-lg-4 d-flex justify-content-sm-end justify-content-center'p>>>",
-		"stripeClasses": [],
-		"lengthMenu": [100, 200, 300, 500, 1000],
-		"pageLength": 100,
-		'serverSide': true,
-		"ajax": {
-				'url': lookup_url,
-		},
-		"rowGroup": {
-			"startRender": function(rows, group) {
-				return group + ' (' + rows.count() + ' Endpoints)';
-			}
-		},
-		"order": [[ 6, "desc" ]],
-		"columns": endpoint_datatable_columns,
-		"columnDefs": [
-			{
-				"targets": [ 0 ],
-				"visible": false,
-				"searchable": false,
-			},
-			{
-				"targets": [ 7, 8 ],
-				"visible": false,
-				"searchable": true,
-			},
-			{
-				"targets": [ get_datatable_col_index('screenshot_path', endpoint_datatable_columns) ],
-				"visible": true,
-				"searchable": false,
-				"render": function(data, type, row) {
-					// Extract port from URL
+    // Ensure columns count matches thead
+    const endpoint_datatable_columns = [
+        { 'data': 'id', 'title': 'ID', 'defaultContent': '', 'visible': false, 'searchable': false, 'className': 'endpoint-id-col dt-col-hidden' },
+        { 
+            'data': 'http_url', 'title': 'HTTP URL', 'defaultContent': '',
+            'render': function ( data, type, row ) {
+                let tech_badge = '';
+                let web_server = '';
+                if (row['techs']){
+                    tech_badge = `</br>` + parse_technology(endpoint_subdomain_url, row['techs'], "primary", true, false, true);
+                }
+
+                if (row['webserver']) {
+                    web_server = `<span class='m-1 badge badge-soft-info' data-toggle="tooltip" data-placement="top" title="Web Server">${row['webserver']}</span>`;
+                }
+
+                const url = split_into_lines(data, 70);
+                const action_icons = `
+                <div class="float-left subdomain-table-action-icons mt-2">
+                <span class="m-1">
+                <a href="javascript:;" data-clipboard-action="copy" class="badge-link text-primary copyable text-primary" data-toggle="tooltip" data-placement="top" title="Copy Url!" data-clipboard-target="#url-${row['id']}" id="#url-${row['id']}" onclick="setTooltip(this.id, 'Copied!')">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-copy"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></span>
+                </a>
+                </div>
+                `;
+                tech_badge += web_server;
+
+                return `<div class="clipboard copy-txt">` + "<a href='"+ data +`' id="url-${escapeHtml(row['id'])}" target='_blank' class='text-primary'>`+ url +"</a>" + tech_badge + "<br>" + action_icons ;
+            }
+        },
+        { 
+            'data': 'http_status', 'title': 'Status', 'defaultContent': '',
+            'render': function ( data, type, row ) {
+                if (data) {
+                    return get_http_status_badge(data);
+                }
+                return '';
+            }
+        },
+        { 'data': 'page_title', 'title': 'Page Title', 'defaultContent': '', 'render': function ( data ) { return htmlEncode(data); } },
+        { 'data': 'matched_gf_patterns', 'title': 'Tags', 'defaultContent': '', 'render': function ( data ) { return data ? parse_comma_values_into_span(data, "danger", outline=true) : ""; } },
+        { 'data': 'content_type', 'title': 'Content Type', 'defaultContent': '' },
+        { 'data': 'content_length', 'title': 'Content Length', 'searchable': false, 'defaultContent': '' },
+        { 'data': 'techs', 'title': 'Technology', 'defaultContent': '', 'visible': false, 'className': 'dt-col-hidden' },
+        { 'data': 'webserver', 'title': 'Webserver', 'defaultContent': '', 'visible': false, 'className': 'dt-col-hidden', 'render': function ( data ) { return data ? parse_comma_values_into_span(data, "info") : ""; } },
+        { 'data': 'response_time', 'title': 'Response time', 'searchable': false, 'defaultContent': '', 'render': function ( data ) { return data ? get_response_time_text(data) : ""; } },
+        { 
+            'data': 'screenshot_path', 'title': 'Screenshot', 
+            'searchable': false,
+            'defaultContent': '',
+            'render': function(data, type, row) {
 					try {
 						const url = new URL(row['http_url']);
 						const port = url.port || (url.protocol === 'https:' ? 443 : 80);
-						
-											// Use the advanced screenshot system from port_display.js
 					const subdomain_id = row['subdomain_id'] || null;
 					const scan_id = row['scan_history_id'] || null;
 					const domain_id = row['target_domain_id'] || null;
-					
-					// Use subdomain name from API or extract from URL as fallback
 					const subdomain_name = row['subdomain_name'] || url.hostname;
 						
 						if (subdomain_id) {
-							// Return a placeholder that will be updated asynchronously
 							const cellId = `screenshot-cell-${row['id']}`;
 							setTimeout(async () => {
 								try {
@@ -157,107 +141,215 @@ function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, s
 							return `<div id="${cellId}">Loading...</div>`;
 						}
 						
-						// Fallback to simple screenshot display if no subdomain_id
 						if (data && data.length > 0) {
-							return `<img src="/media/${data}" 
-									     class="screenshot-thumbnail" 
-									     style="width: 100px; height: 75px; object-fit: cover; cursor: pointer; border: 1px solid #ddd; border-radius: 3px;" 
-									     onclick="window.open('/media/${data}', '_blank')"
-									     title="Click to view full screenshot"
-									     onerror="this.style.display='none'">`;
+                        // Generate unique identifier for this image element
+                        const imageId = `screenshot-${Math.random().toString(36).substr(2, 9)}`;
+                        
+                        // Create secure image element with data attributes instead of inline handlers
+                        const imgHtml = `<img id="${imageId}" 
+                                     src="/media/${escapeHtml(data)}" 
+                                     class="screenshot-thumbnail" 
+                                     style="width: 100px; height: 75px; object-fit: cover; cursor: pointer; border: 1px solid #ddd; border-radius: 3px;" 
+                                     data-screenshot-path="${escapeHtml(data)}"
+                                     data-http-url="${escapeHtml(row['http_url'] || '')}"
+                                     data-subdomain-id="${escapeHtml(subdomain_id || '')}"
+                                     data-subdomain-name="${escapeHtml(subdomain_name || '')}"
+                                     data-port="${escapeHtml(port || '')}"
+                                     data-scan-id="${escapeHtml(scan_id || '')}"
+                                     data-domain-id="${escapeHtml(domain_id || '')}"
+                                     title="Click to view full screenshot"
+                                     onerror="this.style.display='none'">`;
+                        
+                        // Add secure event listeners after DOM insertion
+                        setTimeout(() => {
+                            const imgElement = document.getElementById(imageId);
+                            if (imgElement) {
+                                // Add hover events
+                                imgElement.addEventListener('mouseover', function() {
+                                    showScreenshotPreview(this, this.dataset.screenshotPath, this.dataset.httpUrl);
+                                });
+                                imgElement.addEventListener('mouseout', hideScreenshotPreview);
+                                
+                                // Add click event
+                                imgElement.addEventListener('click', function() {
+                                    const subdomainId = this.dataset.subdomainId;
+                                    if (subdomainId) {
+                                        show_port_screenshots(
+                                            parseInt(subdomainId) || null,
+                                            this.dataset.subdomainName,
+                                            parseInt(this.dataset.port) || null,
+                                            parseInt(this.dataset.scanId) || null,
+                                            parseInt(this.dataset.domainId) || null
+                                        );
+                                    } else {
+                                        showScreenshotImageModal(this.dataset.screenshotPath, this.dataset.httpUrl);
+                                    }
+                                });
+                            }
+                        }, 0);
+                        
+                        return imgHtml;
 						}
 						return '-';
 					} catch (error) {
 						console.error('Error processing screenshot:', error);
-						// Fallback to simple screenshot display
 						if (data && data.length > 0) {
-							return `<img src="/media/${data}" 
-									     class="screenshot-thumbnail" 
-									     style="width: 100px; height: 75px; object-fit: cover; cursor: pointer; border: 1px solid #ddd; border-radius: 3px;" 
-									     onclick="window.open('/media/${data}', '_blank')"
-									     title="Click to view full screenshot"
-									     onerror="this.style.display='none'">`;
+                        // Generate unique identifier for this fallback image element
+                        const fallbackImageId = `screenshot-fallback-${Math.random().toString(36).substr(2, 9)}`;
+                        
+                        // Extract port safely
+                        let extractedPort;
+                        try {
+                            const url = new URL(row['http_url'] || 'http://x');
+                            extractedPort = url.port || (url.protocol === 'https:' ? 443 : 80);
+                        } catch (urlError) {
+                            extractedPort = 80; // Default fallback
+                        }
+                        
+                        // Create secure fallback image element with data attributes
+                        const fallbackImgHtml = `<img id="${fallbackImageId}" 
+                                     src="/media/${escapeHtml(data)}" 
+                                     class="screenshot-thumbnail" 
+                                     style="width: 100px; height: 75px; object-fit: cover; cursor: pointer; border: 1px solid #ddd; border-radius: 3px;" 
+                                     data-screenshot-path="${escapeHtml(data)}"
+                                     data-http-url="${escapeHtml(row['http_url'] || '')}"
+                                     data-subdomain-id="${escapeHtml((row && row['subdomain_id']) || '')}"
+                                     data-subdomain-name="${escapeHtml((row && row['subdomain_name']) || '')}"
+                                     data-port="${escapeHtml(extractedPort || '')}"
+                                     data-scan-id="${escapeHtml((row && row['scan_history_id']) || '')}"
+                                     data-domain-id="${escapeHtml((row && row['target_domain_id']) || '')}"
+                                     title="Click to view full screenshot"
+                                     onerror="this.style.display='none'">`;
+                        
+                        // Add secure event listeners after DOM insertion for fallback image
+                        setTimeout(() => {
+                            const fallbackImgElement = document.getElementById(fallbackImageId);
+                            if (fallbackImgElement) {
+                                // Add hover events
+                                fallbackImgElement.addEventListener('mouseover', function() {
+                                    showScreenshotPreview(this, this.dataset.screenshotPath, this.dataset.httpUrl);
+                                });
+                                fallbackImgElement.addEventListener('mouseout', hideScreenshotPreview);
+                                
+                                // Add click event
+                                fallbackImgElement.addEventListener('click', function() {
+                                    const subdomainId = this.dataset.subdomainId;
+                                    if (subdomainId) {
+                                        show_port_screenshots(
+                                            parseInt(subdomainId) || null,
+                                            this.dataset.subdomainName,
+                                            parseInt(this.dataset.port) || null,
+                                            parseInt(this.dataset.scanId) || null,
+                                            parseInt(this.dataset.domainId) || null
+                                        );
+                                    } else {
+                                        showScreenshotImageModal(this.dataset.screenshotPath, this.dataset.httpUrl);
+                                    }
+                                });
+                            }
+                        }, 0);
+                        
+                        return fallbackImgHtml;
 						}
 						return '-';
 					}
 				}
-			},
-			{
-				"render": function ( data, type, row ) {
-					var tech_badge = '';
-					var web_server = '';
-					if (row['techs']){
-						tech_badge = `</br>` + parse_technology(endpoint_subdomain_url, row['techs'], "primary", true, false, true);
-					}
+        }
+    ];
+    // If already initialized, destroy cleanly to avoid index drift
+    if ($.fn.DataTable.isDataTable('#endpoint_results')) {
+        const existing = $('#endpoint_results').DataTable();
+        existing.destroy();
+    }
+    // Dynamically generate thead based on column definitions to prevent mismatches
+    function generateTableHead(tableId, columns) {
+        const table = document.getElementById(tableId);
+        if (!table) { return; }
+        const thead = document.createElement('thead');
+        const tr = document.createElement('tr');
+        columns.forEach(function(col) {
+            const th = document.createElement('th');
+            th.textContent = col.title || col.data || '';
+            if (col.visible === false) {
+                th.style.display = 'none';
+                if (col.className) {
+                    th.className = col.className;
+                }
+            } else if (col.className) {
+                th.className = col.className;
+            }
+            tr.appendChild(th);
+        });
+        thead.appendChild(tr);
+        const oldThead = table.querySelector('thead');
+        if (oldThead) {
+            table.removeChild(oldThead);
+        }
+        table.insertBefore(thead, table.firstChild);
+        const tbody = table.querySelector('tbody');
+        if (!tbody) {
+            table.appendChild(document.createElement('tbody'));
+        }
+    }
 
-					if (row['webserver']) {
-						web_server = `<span class='m-1 badge badge-soft-info' data-toggle="tooltip" data-placement="top" title="Web Server">${row['webserver']}</span>`;
-					}
+    generateTableHead('endpoint_results', endpoint_datatable_columns);
 
-					var url = split_into_lines(data, 70);
-					var action_icons = `
-					<div class="float-left subdomain-table-action-icons mt-2">
-					<span class="m-1">
-					<a href="javascript:;" data-clipboard-action="copy" class="badge-link text-primary copyable text-primary" data-toggle="tooltip" data-placement="top" title="Copy Url!" data-clipboard-target="#url-${row['id']}" id="#url-${row['id']}" onclick="setTooltip(this.id, 'Copied!')">
-					<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-copy"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></span>
-					</a>
-					</div>
-					`;
-					tech_badge += web_server;
+    // Precompute indices by data name to avoid hard-coded numbers
+    const colIndexMap = {
+        http_status: get_datatable_col_index('http_status', endpoint_datatable_columns),
+        page_title: get_datatable_col_index('page_title', endpoint_datatable_columns),
+        matched_gf_patterns: get_datatable_col_index('matched_gf_patterns', endpoint_datatable_columns),
+        content_type: get_datatable_col_index('content_type', endpoint_datatable_columns),
+        content_length: get_datatable_col_index('content_length', endpoint_datatable_columns),
+        response_time: get_datatable_col_index('response_time', endpoint_datatable_columns),
+    };
 
-					return `<div class="clipboard copy-txt">` + "<a href='"+ data +`' id="url-${row['id']}" target='_blank' class='text-primary'>`+ url +"</a>" + tech_badge + "<br>" + action_icons ;
-				},
-				"targets": 1,
-			},
-			{
-				"render": function ( data, type, row ) {
-					// display badge based on http status
-					// green for http status 2XX, orange for 3XX and warning for everything else
-					if (data) {
-						return get_http_status_badge(data);
-					}
-					return '';
+    // Validate indices; replace -1 with null to avoid runtime issues
+    Object.entries(colIndexMap).forEach(([key, value]) => {
+        if (value === -1) {
+            console.warn(`Column "${key}" not found in endpoint_datatable_columns. Some DataTable features may not work as expected.`);
+            colIndexMap[key] = null;
+        }
+    });
 
-				},
-				"targets": 2,
-			},
-			{
-				"render": function ( data, type, row ) {
-					return htmlEncode(data);
-				},
-				"targets": 3,
-			},
-			{
-				"render": function ( data, type, row ) {
-					if (data){
-						return parse_comma_values_into_span(data, "info");
-					}
-					return "";
-				},
-				"targets": 8,
-			},
-			{
-				"render": function ( data, type, row ) {
-					if (data){
-						return parse_comma_values_into_span(data, "danger", outline=true);
-					}
-					return "";
-				},
-				"targets": 4,
-			},
-			{
-				"render": function ( data, type, row ) {
-					if (data){
-						return get_response_time_text(data);
-					}
-					return "";
-				},
-				"targets": 9,
-			},
-		],
+    // Choose a safe default order column
+    const defaultOrderIndex = (
+        colIndexMap.content_length ??
+        colIndexMap.response_time ??
+        0
+    );
+
+    const endpoint_table = $('#endpoint_results').DataTable({
+		"destroy": true,
+		"processing": true,
+        "autoWidth": false,
+        "deferRender": true,
+		"oLanguage": {
+			"oPaginate": { "sPrevious": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-left"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>', "sNext": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-right"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>' },
+			"sInfo": "Showing page _PAGE_ of _PAGES_",
+			"sLengthMenu": "Results :  _MENU_",
+			"sProcessing": "Processing... Please wait..."
+		},
+		"dom": "<'dt--top-section'<'row'<'col-12 mb-3 mb-sm-0 col-sm-4 col-md-3 col-lg-4 d-flex justify-content-sm-start justify-content-center'l><'dt--pages-count col-12 col-sm-6 col-md-4 col-lg-4 d-flex justify-content-sm-middle justify-content-center'i><'dt--pagination col-12 col-sm-2 col-md-5 col-lg-4 d-flex justify-content-sm-end justify-content-center'p>>>" +
+		"<'table-responsive'tr>" +
+		"<'dt--bottom-section'<'row'<'col-12 mb-3 mb-sm-0 col-sm-4 col-md-3 col-lg-4 d-flex justify-content-sm-start justify-content-center'l><'dt--pages-count col-12 col-sm-6 col-md-4 col-lg-4 d-flex justify-content-sm-middle justify-content-center'i><'dt--pagination col-12 col-sm-2 col-md-5 col-lg-4 d-flex justify-content-sm-end justify-content-center'p>>>",
+		"stripeClasses": [],
+		"lengthMenu": [100, 200, 300, 500, 1000],
+		"pageLength": 100,
+		'serverSide': true,
+		"ajax": {
+				'url': lookup_url,
+		},
+		"rowGroup": {
+			"startRender": function(rows, group) {
+				return group + ' (' + rows.count() + ' Endpoints)';
+			}
+		},
+        "order": [[ defaultOrderIndex, "desc" ]],
+        "columns": endpoint_datatable_columns,
+        // No columnDefs with index targets to avoid index drift issues
 		"initComplete": function(settings, json) {
-			api = this.api();
-			endpoint_datatable_col_visibility(endpoint_table);
+			endpoint_datatable_col_visibility(endpoint_table, endpoint_datatable_columns);
 			$(".dtrg-group th:contains('No group')").remove();
 		},
 		"drawCallback": function () {
@@ -266,89 +358,56 @@ function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, s
 			$('.badge').tooltip({ template: '<div class="tooltip status" role="tooltip"><div class="arrow"></div><div class="tooltip-inner"></div></div>' })
 			$('.dtrg-group').remove();
 			$('.bs-tooltip').tooltip();
-			var clipboard = new Clipboard('.copyable');
+            const clipboard = new Clipboard('.copyable');
 			$('.bs-tooltip').tooltip();
 			clipboard.on('success', function(e) {
 				setTooltip(e.trigger, 'Copied!');
 				hideTooltip(e.trigger);
 			});
-			drawCallback_api = this.api();
 			setTimeout(function() {
 				$(".dtrg-group th:contains('No group')").remove();
 			}, 1);
 		}
 	});
 
-	var radioGroup = document.getElementsByName('grouping_endpoint_row');
-	radioGroup.forEach(function(radioButton) {
-	  radioButton.addEventListener('change', function() {
-	    if (this.checked) {
-	      var groupRows = document.querySelectorAll('tr.group');
-	      // Remove each group row
-				var col_index = get_datatable_col_index(this.value, endpoint_datatable_columns);
-				api.page.len(-1).draw();
-				api.order([col_index, 'asc']).draw();
-				endpoint_table.rowGroup().dataSrc(this.value);
+    $('input[name=grouping_endpoint_row]').off('change').on('change', function() {
+        if (this.checked) {
+                const col_index = get_datatable_col_index(this.value, endpoint_datatable_columns);
+            const api = $('#endpoint_results').DataTable();
+                api.page.len(-1).draw();
+                api.order([col_index, 'asc']).draw();
+            api.rowGroup().dataSrc(this.value);
 	      Snackbar.show({
 	        text: 'Endpoints grouped by ' + this.value,
 	        pos: 'top-right',
 	        duration: 2500
 	      });
 	    }
-	  });
 	});
 
-	$('#endpoint-search-button').click(function () {
-		endpoint_table.search($('#endpoints-search').val()).draw() ;
-	});
-	$('input[name=end_http_status_filter_checkbox]').change(function() {
-		if ($(this).is(':checked')) {
-			endpoint_table.column(2).visible(true);
-		} else {
-			endpoint_table.column(2).visible(false);
-		}
-		window.localStorage.setItem('end_http_status_filter_checkbox', $(this).is(':checked'));
-	});
-	$('input[name=end_page_title_filter_checkbox]').change(function() {
-		if ($(this).is(':checked')) {
-			endpoint_table.column(3).visible(true);
-		} else {
-			endpoint_table.column(3).visible(false);
-		}
-		window.localStorage.setItem('end_page_title_filter_checkbox', $(this).is(':checked'));
-	});
-	$('input[name=end_tags_filter_checkbox]').change(function() {
-		if ($(this).is(':checked')) {
-			endpoint_table.column(4).visible(true);
-		} else {
-			endpoint_table.column(4).visible(false);
-		}
-		window.localStorage.setItem('end_tags_filter_checkbox', $(this).is(':checked'));
-	});
-	$('input[name=end_content_type_filter_checkbox]').change(function() {
-		if ($(this).is(':checked')) {
-			endpoint_table.column(5).visible(true);
-		} else {
-			endpoint_table.column(5).visible(false);
-		}
-		window.localStorage.setItem('end_content_type_filter_checkbox', $(this).is(':checked'));
-	});
-	$('input[name=end_content_length_filter_checkbox]').change(function() {
-		if ($(this).is(':checked')) {
-			endpoint_table.column(6).visible(true);
-		} else {
-			endpoint_table.column(6).visible(false);
-		}
-		window.localStorage.setItem('end_content_length_filter_checkbox', $(this).is(':checked'));
-	});
-	$('input[name=end_response_time_filter_checkbox]').change(function() {
-		if ($(this).is(':checked')) {
-			endpoint_table.column(9).visible(true);
-		} else {
-			endpoint_table.column(9).visible(false);
-		}
-		window.localStorage.setItem('end_response_time_filter_checkbox', $(this).is(':checked'));
-	});
+    $('#endpoint-search-button').off('click').on('click', function () {
+        endpoint_table.search($('#endpoints-search').val()).draw() ;
+    });
+
+    const filterBindings = [
+        { checkbox: 'end_http_status_filter_checkbox', column: 'http_status' },
+        { checkbox: 'end_page_title_filter_checkbox', column: 'page_title' },
+        { checkbox: 'end_tags_filter_checkbox', column: 'matched_gf_patterns' },
+        { checkbox: 'end_content_type_filter_checkbox', column: 'content_type' },
+        { checkbox: 'end_content_length_filter_checkbox', column: 'content_length' },
+        { checkbox: 'end_response_time_filter_checkbox', column: 'response_time' },
+        { checkbox: 'end_screenshot_filter_checkbox', column: 'screenshot_path' },
+    ];
+    filterBindings.forEach(binding => {
+        const selector = `input[name=${binding.checkbox}]`;
+        $(selector).off('change').on('change', function() {
+            const idx = get_datatable_col_index(binding.column, endpoint_datatable_columns);
+            if (idx > -1) {
+                endpoint_table.column(idx).visible($(this).is(':checked'));
+            }
+            window.localStorage.setItem(binding.checkbox, $(this).is(':checked'));
+        });
+    });
 }
 
 function get_subdomain_changes(endpoint, scan_history_id){
@@ -1012,7 +1071,7 @@ function get_vulnerability_modal(endpoint_url, scan_id=null, severity=null, subd
 		},
 	}).then(response => response.json()).then(function(response) {
 		swal.close();
-		$('#xl-modal_title').html(`${subdomain_name}`);
+		$('#xl-modal-title').html(`${subdomain_name}`);
 		render_vulnerability_in_xl_modal(endpoint_url, response['count'], subdomain_name, response['results'])
 	});
 	$('#modal_xl_scroll_dialog').modal('show');
@@ -1052,7 +1111,7 @@ function get_endpoint_modal(endpoint_url, project, scan_id, subdomain_id, subdom
 		},
 	}).then(response => response.json()).then(function(response) {
 		swal.close();
-		$('#xl-modal_title').html(`${subdomain_name}`);
+		$('#xl-modal-title').html(`${subdomain_name}`);
 		render_endpoint_in_xl_modal(response['count'], subdomain_name, response['results'])
 	});
 	$('#modal_xl_scroll_dialog').modal('show');
@@ -1091,7 +1150,7 @@ function get_directory_modal(endpoint_url, scan_id=null, subdomain_id=null, subd
 		},
 	}).then(response => response.json()).then(function(response) {
 		swal.close();
-		$('#xl-modal_title').html(`${subdomain_name}`);
+		$('#xl-modal-title').html(`${subdomain_name}`);
 		render_directories_in_xl_modal(response['count'], subdomain_name, response['results'])
 	});
 	$('#modal_xl_scroll_dialog').modal('show');
@@ -1143,7 +1202,7 @@ function get_logs_modal(scan_id=null, activity_id=null) {
 	.then(response => response.json())
 	.then(data => {
 		swal.close();
-		$('#xl-modal_title').html(`Logs for scan #${scan_history_id}`);
+		$('#xl-modal-title').html(`Logs for scan #${scan_history_id}`);
 		data.results.forEach(log => {
 			$('#xl-modal-content').append(create_log_element(log));
 		})
@@ -1880,7 +1939,7 @@ function show_port_screenshots(subdomain_id, subdomain_name, port, scan_id, doma
 			}
 			
 			if (screenshotCount > 0) {
-				$('#xl-modal_title').html(`Screenshots for ${subdomain_name}:${port} (${screenshotCount})`);
+				$('#xl-modal-title').html(`Screenshots for ${subdomain_name}:${port} (${screenshotCount})`);
 				$('#xl-modal-content').html(modalContent);
 				$('#xl-modal-footer').html('');
 				$('#modal_xl_scroll_dialog').modal('show');
@@ -1951,7 +2010,7 @@ function show_subdomain_screenshots(subdomain_id, subdomain_name, scan_id) {
 			}
 			
 			if (screenshotCount > 0) {
-				$('#xl-modal_title').html(`Screenshots for ${subdomain_name} (${screenshotCount})`);
+				$('#xl-modal-title').html(`Screenshots for ${subdomain_name} (${screenshotCount})`);
 				$('#xl-modal-content').html(modalContent);
 				$('#xl-modal-footer').html('');
 				$('#modal_xl_scroll_dialog').modal('show');

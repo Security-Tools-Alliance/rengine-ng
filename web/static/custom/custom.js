@@ -1,3 +1,21 @@
+/**
+ * Escapes HTML special characters to prevent XSS attacks
+ * @param {string} str - The string to escape
+ * @return {string} The escaped string
+ */
+function escapeHtml(str) {
+	if (str == null) {
+		return '';
+	}
+	return String(str)
+		.replace(/&/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;')
+		.replace(/"/g, '&quot;')
+		.replace(/'/g, '&#x27;')
+		.replace(/\//g, '&#x2F;');
+}
+
 function checkall(clickchk, relChkbox) {
 	var checker = $('#' + clickchk);
 	var multichk = $('.' + relChkbox);
@@ -1067,7 +1085,7 @@ function show_subscan_results(endpoint_url, subscan_id) {
 		} else if (response['subscan']['task'] == 'dir_file_fuzz') {
 			task_name = 'Directory and Files Fuzzing';
 		}
-		$('#xl-modal_title').html(`${task_name} Results on ${response['subscan']['subdomain_name']}`);
+		$('#xl-modal-title').html(`${task_name} Results on ${response['subscan']['subdomain_name']}`);
 		var scan_status = '';
 		var badge_color = 'danger';
 		if (response['subscan']['status'] == 1) {
@@ -1636,7 +1654,7 @@ function display_whois_on_modal(response, addTargetUrl, project_slug, show_add_t
 		</div>
 		<div class="col-sm-9">
 			<div class="tab-content pt-0">
-			<div class="tab-pane fade active show" id="v-pills-domain" role="tabpanel" aria-labelledby="v-pills-domain-tab" data-simplebar style="min-height: 300px;">
+			<div class="tab-pane fade active show tab-pane-300" id="v-pills-domain" role="tabpanel" aria-labelledby="v-pills-domain-tab" data-simplebar>
 				<div class="row">
 					<div class="col-4">
 						<small class="sub-header">Domain</small>
@@ -1841,7 +1859,7 @@ function display_whois_on_modal(response, addTargetUrl, project_slug, show_add_t
 				</div>`;
 
 				content += `
-				<div class="tab-pane fade" id="v-pills-dns" role="tabpanel" aria-labelledby="v-pills-dns-tab" data-simplebar style="min-height: 300px;">
+				<div class="tab-pane fade tab-pane-300" id="v-pills-dns" role="tabpanel" aria-labelledby="v-pills-dns-tab" data-simplebar>
 					<h4>A Records</h4>`;
 					for (var a in response.dns.a) {
 						var a_object = response.dns.a[a];
@@ -1860,7 +1878,7 @@ function display_whois_on_modal(response, addTargetUrl, project_slug, show_add_t
 					}
 					content += `</div>`;
 
-					content += `<div class="tab-pane fade" id="v-pills-history" role="tabpanel" aria-labelledby="v-pills-history-tab" data-simplebar style="max-height: 300px; min-height: 300px;">
+					content += `<div class="tab-pane fade tab-pane-300-scroll" id="v-pills-history" role="tabpanel" aria-labelledby="v-pills-history-tab" data-simplebar>
 						<div class="alert alert-success">${response.historical_ips.length} Historical Ips</div>
 						<table id="basic-datatable" class="table dt-responsive w-100">
 							<thead>
@@ -1888,7 +1906,7 @@ function display_whois_on_modal(response, addTargetUrl, project_slug, show_add_t
 						</table>
 					</div>`;
 
-					content += `<div class="tab-pane fade" id="v-pills-nameserver" role="tabpanel" aria-labelledby="v-pills-nameserver-tab" data-simplebar style="max-height: 300px; min-height: 300px;">`;
+					content += `<div class="tab-pane fade tab-pane-300-scroll" id="v-pills-nameserver" role="tabpanel" aria-labelledby="v-pills-nameserver-tab" data-simplebar>`;
 
 					if (response.nameservers && response.nameservers.length > 0) {
 						content += `<div class="alert alert-success">${response.nameservers.length} NameServers identified</div>`;
@@ -1901,12 +1919,24 @@ function display_whois_on_modal(response, addTargetUrl, project_slug, show_add_t
 						content += `<div class="alert alert-info">No NameServer identified</div>`;
 					}
 					
-					content += `</div><div class="tab-pane fade" id="v-pills-similar" role="tabpanel" aria-labelledby="v-pills-similar-tab" data-simplebar style="max-height: 300px; min-height: 300px;">`;
+					content += `</div><div class="tab-pane fade tab-pane-300-scroll" id="v-pills-similar" role="tabpanel" aria-labelledby="v-pills-similar-tab" data-simplebar>`;
 
 					if (response.related_tlds.length > 0) {
 						for (var domain in response.related_tlds) {
 							var dom_object = response.related_tlds[domain];
-							content += `<span class="badge badge-soft-primary badge-link waves-effect waves-light me-1" data-toggle="tooltip" title="Add ${dom_object} as target." onclick="add_target('${addTargetUrl}', '${project_slug}', '${dom_object}'')">${dom_object}</span>`;
+							// Generate unique ID for secure event handling
+							var badgeId = `tld-badge-${Math.random().toString(36).substr(2, 9)}`;
+							content += `<span id="${badgeId}" class="badge badge-soft-primary badge-link waves-effect waves-light me-1" data-toggle="tooltip" title="Add ${escapeHtml(dom_object)} as target." data-add-url="${escapeHtml(addTargetUrl)}" data-project="${escapeHtml(project_slug)}" data-domain="${escapeHtml(dom_object)}">${escapeHtml(dom_object)}</span>`;
+							
+							// Add secure event listener after DOM insertion
+							setTimeout(function() {
+								var badgeElement = document.getElementById(badgeId);
+								if (badgeElement) {
+									badgeElement.addEventListener('click', function() {
+										add_target(this.dataset.addUrl, this.dataset.project, this.dataset.domain);
+									});
+								}
+							}, 0);
 						}
 					}
 					else{
@@ -1915,12 +1945,24 @@ function display_whois_on_modal(response, addTargetUrl, project_slug, show_add_t
 					content += `</div>`
 
 
-					content += `<div class="tab-pane fade" id="v-pills-related" role="tabpanel" aria-labelledby="v-pills-related-tab" data-simplebar style="max-height: 300px; min-height: 300px;">`;
+					content += `<div class="tab-pane fade tab-pane-300-scroll" id="v-pills-related" role="tabpanel" aria-labelledby="v-pills-related-tab" data-simplebar>`;
 
 					if (response.related_domains.length > 0) {
 						for (var domain in response.related_domains) {
 							var dom_object = response.related_domains[domain];
-							content += `<span class="badge badge-soft-primary badge-link waves-effect waves-light me-1" data-toggle="tooltip" title="Add ${dom_object} as target." onclick="add_target('${addTargetUrl}', '${project_slug}', '${dom_object}')">${dom_object}</span>`;
+							// Generate unique ID for secure event handling
+							var relatedBadgeId = `related-badge-${Math.random().toString(36).substr(2, 9)}`;
+							content += `<span id="${relatedBadgeId}" class="badge badge-soft-primary badge-link waves-effect waves-light me-1" data-toggle="tooltip" title="Add ${escapeHtml(dom_object)} as target." data-add-url="${escapeHtml(addTargetUrl)}" data-project="${escapeHtml(project_slug)}" data-domain="${escapeHtml(dom_object)}">${escapeHtml(dom_object)}</span>`;
+							
+							// Add secure event listener after DOM insertion
+							setTimeout(function() {
+								var relatedBadgeElement = document.getElementById(relatedBadgeId);
+								if (relatedBadgeElement) {
+									relatedBadgeElement.addEventListener('click', function() {
+										add_target(this.dataset.addUrl, this.dataset.project, this.dataset.domain);
+									});
+								}
+							}, 0);
 						}
 					}
 					else{
@@ -2242,7 +2284,7 @@ function get_and_render_cve_details(endpoint_url, cve_id){
 			$('#xl-modal-title').empty();
 			$('#xl-modal-content').empty();
 			$('#xl-modal-footer').empty();
-			$('#xl-modal_title').html(`CVE Details of ${cve_id}`);
+			$('#xl-modal-title').text(`CVE Details of ${cve_id}`);
 
 			var cvss_score_badge = 'danger';
 
@@ -2266,7 +2308,7 @@ function get_and_render_cve_details(endpoint_url, cve_id){
 				<div class="tab-content pt-0">`;
 
 				content += `
-				<div class="tab-pane fade active show" id="v-pills-cve-details" role="tabpanel" aria-labelledby="v-pills-cve-details-tab" data-simplebar style="max-height: 600px; min-height: 600px;">
+				<div class="tab-pane fade active show tab-pane-600-scroll" id="v-pills-cve-details" role="tabpanel" aria-labelledby="v-pills-cve-details-tab" data-simplebar>
 					<h4 class="header-title">${cve_id}</h4>
 					<div class="alert alert-warning" role="alert">
 						${response.result.summary}
@@ -2330,11 +2372,11 @@ function get_and_render_cve_details(endpoint_url, cve_id){
 					referencesContent = `<p>${references}</p>`;
 				}
 				
-				content += `<div class="tab-pane fade" id="v-pills-cve-references" role="tabpanel" aria-labelledby="v-pills-cve-references-tab" data-simplebar style="max-height: 600px; min-height: 600px;">
+				content += `<div class="tab-pane fade tab-pane-600-scroll" id="v-pills-cve-references" role="tabpanel" aria-labelledby="v-pills-cve-references-tab" data-simplebar>
 					${referencesContent}
 				</div>`;
 				
-				content += `<div class="tab-pane fade" id="v-pills-affected-products" role="tabpanel" aria-labelledby="v-pills-affected-products-tab" data-simplebar style="max-height: 600px; min-height: 600px;">
+				content += `<div class="tab-pane fade tab-pane-600-scroll" id="v-pills-affected-products" role="tabpanel" aria-labelledby="v-pills-affected-products-tab" data-simplebar>
 				<ul>`;
 
 				for (var prod in response.result.vulnerable_product) {
@@ -2343,7 +2385,7 @@ function get_and_render_cve_details(endpoint_url, cve_id){
 
 				content += `</ul></div>`;
 
-				content += `<div class="tab-pane fade" id="v-pills-affected-versions" role="tabpanel" aria-labelledby="v-pills-affected-versions-tab" data-simplebar style="max-height: 600px; min-height: 600px;">
+				content += `<div class="tab-pane fade tab-pane-600-scroll" id="v-pills-affected-versions" role="tabpanel" aria-labelledby="v-pills-affected-versions-tab" data-simplebar>
 				<ul>`;
 
 				for (var conf in response.result.vulnerable_configuration) {
@@ -2403,8 +2445,8 @@ function get_most_vulnerable_target(endpoint_url, endpoint_vuln_url, slug=null, 
 				<table class="table table-borderless table-nowrap table-hover table-centered m-0">
 				<thead>
 				<tr>
-				<th style="width: 60%">Target</th>
-				<th style="width: 30%">Vulnerabilities Count</th>
+				<th class="col-width-60">Target</th>
+				<th class="col-width-30">Vulnerabilities Count</th>
 				</tr>
 				</thead>
 				<tbody id="most_vulnerable_target_tbody">
@@ -2414,9 +2456,9 @@ function get_most_vulnerable_target(endpoint_url, endpoint_vuln_url, slug=null, 
 
 			for (var res in response.result) {
 				var targ_obj = response.result[res];
-				var tr = `<tr onclick="window.location='${endpoint_vuln_url}?domain=${targ_obj.name}';" style="cursor: pointer;">`;
+				var tr = `<tr onclick="window.location='${endpoint_vuln_url}?domain=${targ_obj.name}';" class="clickable-row">`;
 				if (scan_id || target_id) {
-					tr = `<tr onclick="window.location='${endpoint_vuln_url}?subdomain=${targ_obj.name}';" style="cursor: pointer;">`;
+					tr = `<tr onclick="window.location='${endpoint_vuln_url}?subdomain=${targ_obj.name}';" class="clickable-row">`;
 				}
 				$('#most_vulnerable_target_tbody').append(`
 					${tr}
@@ -2475,9 +2517,9 @@ function get_most_common_vulnerability(endpoint_url, endpoint_vuln_url, slug=nul
 				<table class="table table-borderless table-nowrap table-hover table-centered m-0">
 					<thead>
 						<tr>
-							<th style="width: 60%">Vulnerability Name</th>
-							<th style="width: 20%">Count</th>
-							<th style="width: 20%">Severity</th>
+							<th class="col-width-60">Vulnerability Name</th>
+							<th class="col-width-20">Count</th>
+							<th class="col-width-20">Severity</th>
 						</tr>
 					</thead>
 				<tbody id="most_common_vuln_tbody">
@@ -2511,7 +2553,7 @@ function get_most_common_vulnerability(endpoint_url, endpoint_vuln_url, slug=nul
 						vuln_badge = get_severity_badge('Unknown');
 				}
 				$('#most_common_vuln_tbody').append(`
-					<tr onclick="window.location='${endpoint_vuln_url}?vulnerability_name=${vuln_obj.name}';" style="cursor: pointer;">
+					<tr onclick="window.location='${endpoint_vuln_url}?vulnerability_name=${vuln_obj.name}';" class="clickable-row">
 						<td>
 							<h5 class="m-0 fw-normal">${vuln_obj.name}</h5>
 						</td>
@@ -2729,7 +2771,7 @@ function render_vuln_offcanvas(vuln){
 
 	if (vuln.cve_ids.length) {
 		body += `<tr>
-		<td style="width:30%">
+		<td class="col-width-30">
 		<b>CVE IDs</b>
 		</td>
 		<td>`;
@@ -2744,7 +2786,7 @@ function render_vuln_offcanvas(vuln){
 
 	if (vuln.cwe_ids != null && vuln.cwe_ids.length) {
 		body += `<tr>
-		<td style="width:30%">
+		<td class="col-width-30">
 		<b>CWE IDs</b>
 		</td>
 		<td>`
@@ -2767,7 +2809,7 @@ function render_vuln_offcanvas(vuln){
 		}
 
 		body += `<tr>
-		<td style="width:30%">
+		<td class="col-width-30">
 		<b>CVSS Score</b>
 		</td>
 		<td>
@@ -2778,7 +2820,7 @@ function render_vuln_offcanvas(vuln){
 
 	if (vuln.cvss_metrics) {
 		body += `<tr>
-		<td style="width:30%">
+		<td class="col-width-30">
 		<b>CVSS Metrics</b>
 		</td>
 		<td>
@@ -2804,19 +2846,19 @@ function render_vuln_offcanvas(vuln){
 		<div id="nuclei_div" class="collapse mt-2">
 		<table>
 		<tr>
-		<td style="width:20%"><b>Template</b></td>
+		<td class="col-width-20"><b>Template</b></td>
 		<td>${vuln.template}</td>
 		</tr>
 		<tr>
-		<td style="width:20%"><b>Template URL</b></td>
+		<td class="col-width-20"><b>Template URL</b></td>
 		<td><a target="_blank" href="${vuln.template_url}">${vuln.template_url}</a></td>
 		</tr>
 		<tr>
-		<td style="width:20%"><b>Template ID</b></td>
+		<td class="col-width-20"><b>Template ID</b></td>
 		<td>${vuln.template_id}</td>
 		</tr>
 		<tr>
-		<td style="width:20%"><b>Matcher Name</b></td>
+		<td class="col-width-20"><b>Matcher Name</b></td>
 		<td>${vuln.matcher_name}</td>
 		</tr>
 		</table>
@@ -3215,25 +3257,38 @@ function get_datatable_col_index(lookup, cols){
 }
 
 
-function endpoint_datatable_col_visibility(endpoint_table){
-	if(!$('#end_http_status_filter_checkbox').is(":checked")){
-		endpoint_table.column(2).visible(false);
-	}
-	if(!$('#end_page_title_filter_checkbox').is(":checked")){
-		endpoint_table.column(3).visible(false);
-	}
-	if(!$('#end_tags_filter_checkbox').is(":checked")){
-		endpoint_table.column(4).visible(false);
-	}
-	if(!$('#end_content_type_filter_checkbox').is(":checked")){
-		endpoint_table.column(5).visible(false);
-	}
-	if(!$('#end_content_length_filter_checkbox').is(":checked")){
-		endpoint_table.column(6).visible(false);
-	}
-	if(!$('#end_response_time_filter_checkbox').is(":checked")){
-		endpoint_table.column(9).visible(false);
-	}
+function endpoint_datatable_col_visibility(endpoint_table, columns){
+    const getIndex = (name) => get_datatable_col_index(name, columns);
+    if(!$('#end_http_status_filter_checkbox').is(":checked")){
+        endpoint_table.column(getIndex('http_status')).visible(false);
+    }
+    if(!$('#end_page_title_filter_checkbox').is(":checked")){
+        endpoint_table.column(getIndex('page_title')).visible(false);
+    }
+    if(!$('#end_tags_filter_checkbox').is(":checked")){
+        endpoint_table.column(getIndex('matched_gf_patterns')).visible(false);
+    }
+    if(!$('#end_content_type_filter_checkbox').is(":checked")){
+        endpoint_table.column(getIndex('content_type')).visible(false);
+    }
+    if(!$('#end_content_length_filter_checkbox').is(":checked")){
+        endpoint_table.column(getIndex('content_length')).visible(false);
+    }
+    // Always keep techs and webserver hidden in columns; they are shown inline under HTTP URL
+    const idxTechs = getIndex('techs');
+    if (idxTechs > -1) {
+        endpoint_table.column(idxTechs).visible(false);
+    }
+    const idxWebserver = getIndex('webserver');
+    if (idxWebserver > -1) {
+        endpoint_table.column(idxWebserver).visible(false);
+    }
+    if(!$('#end_response_time_filter_checkbox').is(":checked")){
+        endpoint_table.column(getIndex('response_time')).visible(false);
+    }
+    if(!$('#end_screenshot_filter_checkbox').is(":checked")){
+        endpoint_table.column(getIndex('screenshot_path')).visible(false);
+    }
 }
 
 
@@ -3387,7 +3442,7 @@ async function showModelSelectionDialog(endpoint_url, id, optsOrForce = false) {
             
             modelOptions += `
                 <div class="col-md-4 mt-2">
-                    <div class="card project-box h-100" style="cursor: pointer" 
+                    <div class="card project-box h-100 model-selection-card" 
                          onclick="document.getElementById('${modelName}').click()">
                         <div class="card-body p-2 pt-3 d-flex flex-column">
                             <div class="form-check">

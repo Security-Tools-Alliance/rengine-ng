@@ -227,20 +227,51 @@ async function processScreenshotData(data, port, subdomain_id, subdomain_name, s
             count++;
             if (count <= 2) { // Show max 2 thumbnails
                 // Build hover events conditionally
-                const hoverEvents = disableHoverPreview ? '' : `
-                    onmouseover="showScreenshotPreview(this, '${endpoint.screenshot_path}', '${endpoint.http_url}')"
-                    onmouseout="hideScreenshotPreview()"
-                `;
+                // Note: hover events will be added securely via event listeners instead of inline handlers
+                
+                // Generate unique identifier for this screenshot image
+                const screenshotImageId = `port-screenshot-${Math.random().toString(36).substr(2, 9)}`;
                 
                 screenshotHtml += `
-                    <img src="/media/${endpoint.screenshot_path}" 
+                    <img id="${screenshotImageId}"
+                         src="/media/${escapeHtml(endpoint.screenshot_path)}" 
                          class="screenshot-thumbnail me-1" 
-                         style="width: 100px; height: 75px; object-fit: cover; cursor: pointer; border: 1px solid #ddd; border-radius: 3px;" 
-                         ${hoverEvents}
-                         onclick="show_port_screenshots(${subdomain_id}, '${subdomain_name}', ${port}, ${scan_id || 'null'}, ${domain_id || 'null'})"
+                         data-subdomain-id="${escapeHtml(subdomain_id || '')}"
+                         data-subdomain-name="${escapeHtml(subdomain_name || '')}"
+                         data-port="${escapeHtml(port || '')}"
+                         data-scan-id="${escapeHtml(scan_id || '')}"
+                         data-domain-id="${escapeHtml(domain_id || '')}"
+                         data-screenshot-path="${escapeHtml(endpoint.screenshot_path)}"
+                         data-http-url="${escapeHtml(endpoint.http_url || '')}"
+                         data-disable-hover="${disableHoverPreview}"
                          title="Click to view full screenshot"
                          onerror="this.style.display='none'">
                 `;
+                
+                // Add secure event listeners after DOM insertion
+                setTimeout(() => {
+                    const screenshotImgElement = document.getElementById(screenshotImageId);
+                    if (screenshotImgElement) {
+                        // Add click event listener
+                        screenshotImgElement.addEventListener('click', function() {
+                            show_port_screenshots(
+                                parseInt(this.dataset.subdomainId) || null,
+                                this.dataset.subdomainName,
+                                parseInt(this.dataset.port) || null,
+                                parseInt(this.dataset.scanId) || null,
+                                parseInt(this.dataset.domainId) || null
+                            );
+                        });
+                        
+                        // Add hover event listeners if not disabled
+                        if (this.dataset.disableHover !== 'true') {
+                            screenshotImgElement.addEventListener('mouseover', function() {
+                                showScreenshotPreview(this, this.dataset.screenshotPath, this.dataset.httpUrl);
+                            });
+                            screenshotImgElement.addEventListener('mouseout', hideScreenshotPreview);
+                        }
+                    }
+                }, 0);
             }
         }
     }
@@ -250,6 +281,19 @@ async function processScreenshotData(data, port, subdomain_id, subdomain_name, s
     }
     
     return screenshotHtml || '-';
+}
+
+// Helper function to create screenshot preview element
+function createScreenshotPreviewElement(screenshotPath, httpUrl) {
+    const preview = $('<div id="screenshot-preview" class="screenshot-preview"></div>');
+    
+    const $urlDiv = $('<div class="screenshot-preview-url"></div>').text(httpUrl);
+    const $img = $('<img class="screenshot-preview-img">').attr('src', '/media/' + screenshotPath)
+        .on('error', function() {
+            $(this).parent().hide();
+        });
+    
+    return preview.append($urlDiv).append($img);
 }
 
 // Function to show screenshot preview on hover
@@ -283,21 +327,7 @@ function showScreenshotPreview(element, screenshotPath, httpUrl) {
             modalContent.css('position', 'relative');
         }
         
-        preview = $(`
-            <div id="screenshot-preview" style="
-                position: absolute; 
-                z-index: 10000; 
-                background: white; 
-                border: 1px solid #ddd; 
-                border-radius: 5px; 
-                padding: 8px; 
-                box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-                max-width: 600px;
-            ">
-                <div style="font-size: 12px; color: #666; margin-bottom: 5px; font-weight: 500;">${httpUrl}</div>
-                <img src="/media/${screenshotPath}" style="max-width: 580px; max-height: 400px; object-fit: contain;" onerror="this.parentElement.style.display='none'">
-            </div>
-        `);
+        preview = createScreenshotPreviewElement(screenshotPath, httpUrl).css('position', 'absolute');
         
         modalContent.append(preview);
         
@@ -331,7 +361,7 @@ function showScreenshotPreview(element, screenshotPath, httpUrl) {
             topPos = modalHeight - previewHeight - 10;
         }
         
-        $('#screenshot-preview').css({
+        preview.css({
             left: leftPos,
             top: topPos
         });
@@ -340,55 +370,53 @@ function showScreenshotPreview(element, screenshotPath, httpUrl) {
         // For non-modal contexts (endpoints table or other)
         parentContainer = $('body');
         
-        preview = $(`
-            <div id="screenshot-preview" style="
-                position: fixed; 
-                z-index: 10000; 
-                background: white; 
-                border: 1px solid #ddd; 
-                border-radius: 5px; 
-                padding: 8px; 
-                box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-                max-width: 600px;
-            ">
-                <div style="font-size: 12px; color: #666; margin-bottom: 5px; font-weight: 500;">${httpUrl}</div>
-                <img src="/media/${screenshotPath}" style="max-width: 580px; max-height: 400px; object-fit: contain;" onerror="this.parentElement.style.display='none'">
-            </div>
-        `);
+        preview = createScreenshotPreviewElement(screenshotPath, httpUrl).css('position', 'fixed');
         
         parentContainer.append(preview);
         
         if (isInTable) {
-            // Position to the left of the thumbnail, inside the table
-            let leftPos = elementOffset.left - previewWidth - 10;
-            let topPos = elementOffset.top - (previewHeight / 2) + (elementHeight / 2);
-            
-            // Make sure it doesn't go off-screen on the left
-            if (leftPos < 10) {
-                leftPos = elementOffset.left + elementWidth + 10;
-            }
-            
-            // Make sure it doesn't go off-screen on the top/bottom
+            // Use viewport coordinates for fixed positioning to avoid scroll drift
+            const rect = element.getBoundingClientRect();
+            const windowWidth = $(window).width();
             const windowHeight = $(window).height();
-            const scrollTop = $(window).scrollTop();
             
-            if (topPos < scrollTop + 10) {
-                topPos = scrollTop + 10;
-            } else if (topPos + previewHeight > scrollTop + windowHeight - 10) {
-                topPos = scrollTop + windowHeight - previewHeight - 10;
+            // Preferred: left of the thumbnail
+            let leftPos = rect.left - previewWidth - 10;
+            let topPos = rect.top + (rect.height / 2) - (previewHeight / 2);
+
+            // If not enough space on the left, place to the right
+            if (leftPos < 10) {
+                leftPos = rect.right + 10;
             }
-            
-            $('#screenshot-preview').css({
+
+            // Clamp horizontally within viewport
+            if (leftPos + previewWidth > windowWidth - 10) {
+                leftPos = Math.max(10, windowWidth - previewWidth - 10);
+            }
+
+            // Clamp vertically within viewport
+            if (topPos < 10) {
+                topPos = 10;
+            } else if (topPos + previewHeight > windowHeight - 10) {
+                topPos = windowHeight - previewHeight - 10;
+            }
+
+            preview.css({
                 left: leftPos,
                 top: topPos
             });
         } else {
-            // Original behavior for non-table contexts (follow mouse)
-            $(element).on('mousemove.screenshot-preview', function(e) {
-                $('#screenshot-preview').css({
-                    left: e.pageX + 15,
-                    top: e.pageY - 200
-                });
+            // For non-table contexts, position relative to element
+            let leftPos = elementOffset.left - previewWidth - 10;
+            let topPos = elementOffset.top - (previewHeight / 2) + (elementHeight / 2);
+
+            if (leftPos < 10) {
+                leftPos = elementOffset.left + elementWidth + 10;
+            }
+
+            preview.css({
+                left: leftPos,
+                top: topPos
             });
         }
     }
@@ -398,6 +426,45 @@ function showScreenshotPreview(element, screenshotPath, httpUrl) {
 function hideScreenshotPreview() {
     $('#screenshot-preview').remove();
     $('.screenshot-thumbnail').off('mousemove.screenshot-preview');
+}
+
+// Simple modal to display a single screenshot image when no subdomain/scan context is available
+function showScreenshotImageModal(screenshotPath, httpUrl = '') {
+    try {
+        $('#xl-modal-title').empty();
+        $('#xl-modal-content').empty();
+        $('#xl-modal-footer').empty();
+
+        // Create modal content using DOM manipulation to avoid XSS
+        const $content = $('<div class="mb-4 text-center"></div>');
+        if (httpUrl) {
+            const $linkBlock = $('<div class="mb-2 screenshot-modal-link"></div>');
+            const $link = $('<a></a>')
+                .attr('href', httpUrl)
+                .attr('target', '_blank')
+                .attr('rel', 'noopener noreferrer')
+                .addClass('text-primary')
+                .text(httpUrl);
+            $linkBlock.append($link);
+            $content.append($linkBlock);
+        }
+        const $imgContainer = $('<div class="d-flex justify-content-center"></div>');
+        const $img = $('<img>')
+            .addClass('img-fluid rounded screenshot-popup screenshot-modal-img')
+            .attr('src', '/media/' + screenshotPath)
+            .on('click', function() {
+                window.open('/media/' + screenshotPath, '_blank');
+            });
+        $imgContainer.append($img);
+        $content.append($imgContainer);
+
+        $('#xl-modal-title').html('Screenshot');
+        $('#xl-modal-content').html($content);
+        $('#modal_xl_scroll_dialog').modal('show');
+    } catch (e) {
+        console.error('Error showing screenshot modal:', e);
+        window.open('/media/' + screenshotPath, '_blank');
+    }
 }
 
 function get_port_details(endpoint_ip_url, endpoint_subdomain_url, port, scan_id=null, domain_id=null) {
