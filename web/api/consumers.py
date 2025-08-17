@@ -6,10 +6,13 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Constants
+CHANNEL_NAME_PATTERN = r'[^a-zA-Z0-9\-\.]'
+
 class OllamaDownloadConsumer(WebsocketConsumer):
     def clean_channel_name(self, name):
         """Clean channel name to only contain valid characters"""
-        return re.sub(r'[^a-zA-Z0-9\-\.]', '-', name)
+        return re.sub(CHANNEL_NAME_PATTERN, '-', name)
 
     def connect(self):
         try:
@@ -47,7 +50,11 @@ class OllamaDownloadConsumer(WebsocketConsumer):
         try:
             logger.info(f"WebSocket received data: {text_data}")
             text_data_json = json.loads(text_data)
-            message = text_data_json['message']
+            message = text_data_json.get('message')
+            
+            if not message:
+                logger.warning("No 'message' field in received WebSocket data")
+                return
 
             # Send message to room group
             async_to_sync(self.channel_layer.group_send)(
@@ -57,6 +64,8 @@ class OllamaDownloadConsumer(WebsocketConsumer):
                     'message': message
                 }
             )
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON in WebSocket receive: {e}")
         except Exception as e:
             logger.error(f"Error in WebSocket receive: {e}")
 
