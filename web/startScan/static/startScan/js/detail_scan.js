@@ -1,21 +1,3 @@
-/**
- * Escapes HTML special characters to prevent XSS attacks
- * @param {string} str - The string to escape
- * @return {string} The escaped string
- */
-function escapeHtml(str) {
-	if (str == null){
-		return '';
-	}
-	return String(str)
-		.replace(/&/g, '&amp;')
-		.replace(/</g, '&lt;')
-		.replace(/>/g, '&gt;')
-		.replace(/"/g, '&quot;')
-		.replace(/'/g, '&#x27;')
-		.replace(/\//g, '&#x2F;');
-}
-
 function get_ips_from_port(port_number, history_id){
 	document.getElementById("detailScanModalLabel").innerHTML='IPs with port ' + port_number + ' OPEN';
 	var ip_badge = '';
@@ -100,7 +82,7 @@ function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, s
                 `;
                 tech_badge += web_server;
 
-                return `<div class="clipboard copy-txt">` + "<a href='"+ data +`' id="url-${row['id']}" target='_blank' class='text-primary'>`+ url +"</a>" + tech_badge + "<br>" + action_icons ;
+                return `<div class="clipboard copy-txt">` + "<a href='"+ data +`' id="url-${escapeHtml(row['id'])}" target='_blank' class='text-primary'>`+ url +"</a>" + tech_badge + "<br>" + action_icons ;
             }
         },
         { 
