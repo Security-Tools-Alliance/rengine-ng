@@ -4,7 +4,7 @@
  * @return {string} The escaped string
  */
 function escapeHtml(str) {
-	if (str == null || str === undefined) {
+	if (str == null) {
 		return '';
 	}
 	return String(str)
