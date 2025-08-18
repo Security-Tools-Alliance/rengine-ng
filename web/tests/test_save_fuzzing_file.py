@@ -16,7 +16,6 @@ os.environ.setdefault('CELERY_ALWAYS_EAGER', 'True')
 os.environ.setdefault('DOMAIN_NAME', 'test.example.com')
 
 import unittest
-import threading
 import time
 from unittest.mock import patch, MagicMock
 from concurrent.futures import ThreadPoolExecutor
@@ -246,6 +245,7 @@ class TestSaveFuzzingFile(TestCase):
         # Verify all records exist in database
         self.assertEqual(DirectoryFile.objects.count(), num_threads)
     
+
     def test_performance_characteristics(self):
         """Test performance characteristics of save_fuzzing_file."""
         # Create a file that will be found (not created)

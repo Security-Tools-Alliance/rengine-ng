@@ -1,7 +1,6 @@
 import validators
 from urllib.parse import urlparse
 from django.utils import timezone
-from django.db import transaction, IntegrityError
 from celery.utils.log import get_task_logger
 
 from reNgine.settings import RENGINE_RESULTS, RENGINE_TASK_IGNORE_CACHE_KWARGS
