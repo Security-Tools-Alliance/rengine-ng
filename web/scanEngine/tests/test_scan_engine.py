@@ -24,7 +24,6 @@ class TestScanEngineViews(BaseTestCase):
         Creates test objects for engines, wordlists, settings, and tools.
         """
         super().setUp()
-        self.data_generator.create_project_full()
 
     def test_index_view(self):
         """

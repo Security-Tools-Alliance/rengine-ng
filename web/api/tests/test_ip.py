@@ -24,7 +24,6 @@ class TestIpAddressViewSet(BaseTestCase):
     def setUp(self):
         """Set up test environment."""
         super().setUp()
-        self.data_generator.create_project_base()
 
     def test_ip_address_viewset(self):
         """Test retrieving IP addresses for a scan."""
@@ -45,7 +44,6 @@ class TestIPToDomain(BaseTestCase):
     def setUp(self):
         """Set up test environment."""
         super().setUp()
-        self.data_generator.create_project_base()
 
     @patch("api.views.socket.gethostbyaddr")
     def test_ip_to_domain(self, mock_gethostbyaddr):
@@ -93,7 +91,6 @@ class TestDomainIPHistory(BaseTestCase):
     def setUp(self):
         """Set up test environment."""
         super().setUp()
-        self.data_generator.create_project_base()
 
     @patch("api.views.query_ip_history.apply_async")
     def test_domain_ip_history(self, mock_apply_async):
@@ -114,7 +111,6 @@ class TestListIPs(BaseTestCase):
     def setUp(self):
         """Set up test environment."""
         super().setUp()
-        self.data_generator.create_project_base()
 
     def test_list_ips(self):
         """Test listing IP addresses for a target."""
@@ -133,7 +129,8 @@ class TestListPorts(BaseTestCase):
     def setUp(self):
         """Set up test environment."""
         super().setUp()
-        self.data_generator.create_project_full()
+        # Link IP to subscans for API filtering to work properly
+        self.data_generator.link_ip_to_subscans()
 
     def test_list_ports(self):
         """Test listing ports for a target and scan."""
@@ -158,7 +155,6 @@ class TestWhois(BaseTestCase):
     def setUp(self):
         """Set up test environment."""
         super().setUp()
-        self.data_generator.create_project_base()
 
     @patch("api.views.query_whois.apply_async")
     def test_whois(self, mock_apply_async):
@@ -179,7 +175,6 @@ class TestReverseWhois(BaseTestCase):
     def setUp(self):
         """Set up test environment."""
         super().setUp()
-        self.data_generator.create_project_base()
 
     @patch("api.views.query_reverse_whois.apply_async")
     def test_reverse_whois(self, mock_apply_async):

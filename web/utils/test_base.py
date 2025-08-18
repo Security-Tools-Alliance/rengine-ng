@@ -46,6 +46,11 @@ class BaseTestCase(TestCase):
         # Create minimal celery setup
         self.data_generator.create_minimal_celery_setup()
         
+        # Create full project setup by default to avoid foreign key issues
+        # Tests can override this behavior by setting self.use_full_setup = False in setUp()
+        if not getattr(self, 'use_minimal_setup', False):
+            self.data_generator.create_project_full()
+        
         # Disable logging for tests
         logging.disable(logging.CRITICAL)
     
