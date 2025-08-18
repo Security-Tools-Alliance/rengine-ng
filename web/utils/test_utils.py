@@ -60,8 +60,8 @@ __all__ = [
 
 class TestDataGenerator:
     """
-    Base test case for all API tests.
-    Sets up common fixtures and mocks the user login process.
+    Test data generator for creating test objects programmatically.
+    Replaces Django fixtures with clean, maintainable object creation.
     """
 
 
@@ -466,6 +466,96 @@ class TestDataGenerator:
             name='Test Tool',
             github_url='https://github.com/test/tool')
         return self.external_tool
+
+    def create_minimal_auth_setup(self):
+        """
+        Create minimal auth setup instead of auth.json fixture.
+        Creates essential permissions and a test user programmatically.
+        """
+        from django.contrib.auth import get_user_model
+        from django.contrib.auth.models import Permission, Group
+        from django.contrib.contenttypes.models import ContentType
+        
+        User = get_user_model()
+        
+        # Create test user if not exists
+        if not User.objects.filter(username="rengine").exists():
+            self.test_user = User.objects.create_user(
+                username="rengine",
+                email="test@rengine.com",
+                password="testpassword123",
+                is_superuser=True,
+                is_staff=True,
+                is_active=True
+            )
+        else:
+            self.test_user = User.objects.get(username="rengine")
+        
+        return self.test_user
+
+    def create_essential_scan_engine_setup(self):
+        """
+        Create essential scan engine setup instead of scanEngine.json fixture.
+        Creates minimal EngineType objects needed for testing.
+        """
+        from scanEngine.models import EngineType, InstalledExternalTool
+        
+        # Create default engine type if not exists
+        if not EngineType.objects.filter(engine_name="Test Engine").exists():
+            self.default_engine = EngineType.objects.create(
+                engine_name="Test Engine",
+                yaml_configuration="""
+subdomain_discovery: {
+  'uses_tools': ['subfinder'],
+  'enable_http_crawl': true,
+  'threads': 10,
+  'timeout': 5
+}
+http_crawl: {}
+""",
+                default_engine=True
+            )
+        else:
+            self.default_engine = EngineType.objects.filter(engine_name="Test Engine").first()
+        
+        # Create essential external tool
+        if not InstalledExternalTool.objects.filter(name="subfinder").exists():
+            self.subfinder_tool = InstalledExternalTool.objects.create(
+                name="subfinder",
+                description="Test subfinder tool",
+                github_url="https://github.com/projectdiscovery/subfinder",
+                version_lookup_command="subfinder -version",
+                update_command="go install subfinder@latest",
+                install_command="go install subfinder@latest",
+                is_default=True,
+                is_subdomain_gathering=True,
+                is_github_cloned=False
+            )
+        else:
+            self.subfinder_tool = InstalledExternalTool.objects.filter(name="subfinder").first()
+        
+        return self.default_engine
+
+    def create_minimal_celery_setup(self):
+        """
+        Create minimal Celery Beat setup instead of django_celery_beat.json fixture.
+        """
+        try:
+            from django_celery_beat.models import IntervalSchedule, PeriodicTask
+            
+            # Create minimal interval schedule
+            if not IntervalSchedule.objects.filter(every=1, period='minutes').exists():
+                self.test_interval = IntervalSchedule.objects.create(
+                    every=1,
+                    period='minutes'
+                )
+            else:
+                self.test_interval = IntervalSchedule.objects.filter(every=1, period='minutes').first()
+            
+            return self.test_interval
+        except ImportError:
+            # Django celery beat not installed, skip
+            return None
 
 class TestValidation:
 
