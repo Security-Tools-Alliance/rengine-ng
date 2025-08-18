@@ -1,6 +1,10 @@
 import validators
+import hashlib
+import time
+import redis
 from urllib.parse import urlparse
 from django.utils import timezone
+from django.conf import settings
 from celery.utils.log import get_task_logger
 
 from reNgine.settings import RENGINE_RESULTS, RENGINE_TASK_IGNORE_CACHE_KWARGS
@@ -524,11 +528,10 @@ def save_metadata_info(meta_dict):
 
 def save_fuzzing_file(name, url, http_status, length=0, words=0, lines=0, content_type=None):
     """
-    Save or retrieve DirectoryFile with race condition handling.
+    Save or retrieve DirectoryFile with Redis-based distributed locking for race condition prevention.
     
-    Uses filter().first() to check for existing records before creating new ones.
-    This approach avoids relying on database unique constraints while still 
-    preventing duplicates in most cases.
+    Uses Redis for distributed locks to ensure only one process can create a specific file record
+    at a time, completely eliminating race conditions across multiple processes/containers.
     
     Args:
         name (str): File/directory name
@@ -542,49 +545,147 @@ def save_fuzzing_file(name, url, http_status, length=0, words=0, lines=0, conten
     Returns:
         tuple: (DirectoryFile, created) where created is boolean
     """
-    # First, try to find existing record
-    existing_file = DirectoryFile.objects.filter(
-        name=name,
-        url=url,
-        http_status=http_status
-    ).first()
+    # Create a unique lock key based on name + url + status combination
+    lock_key = f"fuzzing_file_lock:{hashlib.md5(f'{name}:{url}:{http_status}'.encode()).hexdigest()}"
     
-    if existing_file:
-        logger.debug(f'Found existing DirectoryFile: {name} -> {url}')
-        return existing_file, False
+    # Create the base data for querying
+    base_data = {
+        'name': name,
+        'url': url,
+        'http_status': http_status
+    }
     
-    # No existing record found, create new one
+    # Create full data for creation
+    full_data = base_data.copy()
+    full_data.update({
+        'length': length,
+        'words': words,
+        'lines': lines,
+        'content_type': content_type
+    })
+    
+    # Try to get Redis connection
+    redis_client = None
     try:
-        dfile = DirectoryFile.objects.create(
-            name=name,
-            url=url,
-            http_status=http_status,
-            length=length,
-            words=words,
-            lines=lines,
-            content_type=content_type
+        # Get Redis connection from Django cache or create new one
+        redis_client = _get_redis_client()
+        
+        # Try to acquire lock with timeout
+        lock_acquired = redis_client.set(lock_key, "locked", nx=True, ex=30)  # 30 second timeout
+        
+        if lock_acquired:
+            try:
+                # We have the lock, check if record exists
+                existing_file = DirectoryFile.objects.filter(**base_data).first()
+                if existing_file:
+                    logger.debug(f'Found existing DirectoryFile in locked section: {name} -> {url}')
+                    return existing_file, False
+                
+                # Create new record safely
+                dfile = DirectoryFile.objects.create(**full_data)
+                logger.debug(f'Created new DirectoryFile with Redis lock: {name} -> {url}')
+                return dfile, True
+                
+            finally:
+                # Always release the lock
+                try:
+                    redis_client.delete(lock_key)
+                except Exception:
+                    pass  # Ignore cleanup errors
+        else:
+            # Could not acquire lock, wait briefly and check if record exists
+            logger.debug(f'Could not acquire lock for {name} -> {url}, checking for existing record')
+            
+            # Wait briefly for the locked operation to complete
+            for attempt in range(5):
+                existing_file = DirectoryFile.objects.filter(**base_data).first()
+                if existing_file:
+                    logger.debug(f'Found existing DirectoryFile while waiting for lock: {name} -> {url}')
+                    return existing_file, False
+                time.sleep(0.1)  # Wait 100ms
+            
+            # If still no record exists, fall back to regular creation attempt
+            logger.debug(f'No record found after waiting, falling back to get_or_create for: {name} -> {url}')
+            return _fallback_save_fuzzing_file(base_data, full_data, name, url)
+            
+    except Exception as redis_error:
+        # Redis unavailable, fall back to get_or_create approach
+        logger.debug(f'Redis locking failed for {name} -> {url}: {redis_error}, falling back')
+        return _fallback_save_fuzzing_file(base_data, full_data, name, url)
+    finally:
+        # Ensure Redis connection is properly closed if we created a new one
+        if redis_client and hasattr(redis_client, 'close'):
+            try:
+                redis_client.close()
+            except Exception:
+                pass  # Ignore cleanup errors
+
+
+def _get_redis_client():
+    """Get Redis client from Django cache or create a new connection with proper cleanup."""
+    try:
+        from django.core.cache import cache
+        # Try to use Django's cache Redis connection
+        if hasattr(cache, '_cache') and hasattr(cache._cache, '_client'):
+            return cache._cache._client
+    except Exception:
+        pass
+    
+    # Fall back to creating direct Redis connection with connection pooling
+    try:
+        import redis
+        # Extract Redis URL from Celery broker URL
+        from celery import current_app
+        broker_url = current_app.conf.broker_url
+        if broker_url.startswith('redis://'):
+            # Use connection pool to avoid too many connections
+            return redis.from_url(broker_url, max_connections=5, retry_on_timeout=True)
+    except Exception:
+        pass
+    
+    # Final fallback - default Redis connection with pool
+    import redis
+    pool = redis.ConnectionPool(host='redis', port=6379, db=0, max_connections=5)
+    return redis.Redis(connection_pool=pool, decode_responses=True)
+
+
+def _fallback_save_fuzzing_file(base_data, full_data, name, url):
+    """Fallback method when Redis locking is unavailable."""
+    try:
+        dfile, created = DirectoryFile.objects.get_or_create(
+            defaults=full_data,
+            **base_data
         )
-        logger.debug(f'Created new DirectoryFile: {name} -> {url}')
-        return dfile, True
+        if created:
+            logger.debug(f'Created new DirectoryFile via fallback get_or_create: {name} -> {url}')
+        else:
+            logger.debug(f'Found existing DirectoryFile via fallback get_or_create: {name} -> {url}')
+        return dfile, created
         
     except Exception as e:
-        # In case of any error during creation, try to find if record was created by another thread
-        logger.warning(f'Error creating DirectoryFile {name} -> {url}: {e}')
+        # get_or_create failed, try manual approach
+        logger.debug(f'Fallback get_or_create failed for {name} -> {url}: {e}')
         
-        # Double-check if record now exists (potential race condition)
-        existing_file = DirectoryFile.objects.filter(
-            name=name,
-            url=url,
-            http_status=http_status
-        ).first()
-        
+        existing_file = DirectoryFile.objects.filter(**base_data).first()
         if existing_file:
-            logger.debug(f'Race condition resolved: found DirectoryFile created by another thread: {name} -> {url}')
+            logger.debug(f'Found existing DirectoryFile after fallback failure: {name} -> {url}')
             return existing_file, False
         
-        # If still no record exists, re-raise the original error
-        logger.error(f'Failed to create DirectoryFile {name} -> {url}: {e}')
-        raise
+        # Try direct creation as last resort
+        try:
+            dfile = DirectoryFile.objects.create(**full_data)
+            logger.debug(f'Created DirectoryFile via fallback direct create: {name} -> {url}')
+            return dfile, True
+            
+        except Exception as create_error:
+            # Final check
+            final_check = DirectoryFile.objects.filter(**base_data).first()
+            if final_check:
+                logger.debug(f'Found DirectoryFile on final fallback check: {name} -> {url}')
+                return final_check, False
+            
+            logger.error(f'All fallback attempts failed for DirectoryFile {name} -> {url}: {e}, {create_error}')
+            raise create_error
 
 
 def get_task_cache_key(func_name, *args, **kwargs):
