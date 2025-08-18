@@ -46,7 +46,6 @@ class TestTargetAppViews(BaseTestCase):
         Creates test objects for projects, domains, and organizations.
         """
         super().setUp()
-        self.data_generator.create_project_full()
 
     def test_index_view(self):
         """
