@@ -1,10 +1,8 @@
 import validators
 import hashlib
 import time
-import redis
 from urllib.parse import urlparse
 from django.utils import timezone
-from django.conf import settings
 from celery.utils.log import get_task_logger
 
 from reNgine.settings import RENGINE_RESULTS, RENGINE_TASK_IGNORE_CACHE_KWARGS
@@ -629,6 +627,8 @@ def _get_redis_client():
         if hasattr(cache, '_cache') and hasattr(cache._cache, '_client'):
             return cache._cache._client
     except Exception:
+        # Ignore Django cache access errors - cache backend may not be Redis
+        # or may not be configured yet. We'll fall back to direct connection.
         pass
     
     # Fall back to creating direct Redis connection with connection pooling
@@ -641,6 +641,8 @@ def _get_redis_client():
             # Use connection pool to avoid too many connections
             return redis.from_url(broker_url, max_connections=5, retry_on_timeout=True)
     except Exception:
+        # Ignore Celery broker URL access errors - celery may not be configured
+        # or Redis may not be available. We'll fall back to default connection.
         pass
     
     # Final fallback - default Redis connection with pool
