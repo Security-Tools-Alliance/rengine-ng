@@ -1,6 +1,7 @@
 import validators
 from urllib.parse import urlparse
 from django.utils import timezone
+from django.db import transaction, IntegrityError
 from celery.utils.log import get_task_logger
 
 from reNgine.settings import RENGINE_RESULTS, RENGINE_TASK_IGNORE_CACHE_KWARGS
@@ -8,7 +9,8 @@ from reNgine.utilities.data import replace_nulls, is_iterable
 from reNgine.utilities.url import sanitize_url, is_valid_url, get_domain_from_subdomain
 from startScan.models import (
     ScanHistory, EndPoint, Subdomain, IpAddress, Vulnerability, 
-    Email, Employee, CveId, CweId, VulnerabilityTags, ScanActivity, MetaFinderDocument
+    Email, Employee, CveId, CweId, VulnerabilityTags, ScanActivity, MetaFinderDocument,
+    DirectoryFile
 )
 from targetApp.models import Domain
 from dashboard.models import User
@@ -519,6 +521,71 @@ def save_metadata_info(meta_dict):
         meta_finder_document.save()
         results.append(data)
     return results
+
+
+def save_fuzzing_file(name, url, http_status, length=0, words=0, lines=0, content_type=None):
+    """
+    Save or retrieve DirectoryFile with race condition handling.
+    
+    Uses filter().first() to check for existing records before creating new ones.
+    This approach avoids relying on database unique constraints while still 
+    preventing duplicates in most cases.
+    
+    Args:
+        name (str): File/directory name
+        url (str): Full URL  
+        http_status (int): HTTP status code
+        length (int): Content length
+        words (int): Word count
+        lines (int): Line count
+        content_type (str): Content type header
+        
+    Returns:
+        tuple: (DirectoryFile, created) where created is boolean
+    """
+    # First, try to find existing record
+    existing_file = DirectoryFile.objects.filter(
+        name=name,
+        url=url,
+        http_status=http_status
+    ).first()
+    
+    if existing_file:
+        logger.debug(f'Found existing DirectoryFile: {name} -> {url}')
+        return existing_file, False
+    
+    # No existing record found, create new one
+    try:
+        dfile = DirectoryFile.objects.create(
+            name=name,
+            url=url,
+            http_status=http_status,
+            length=length,
+            words=words,
+            lines=lines,
+            content_type=content_type
+        )
+        logger.debug(f'Created new DirectoryFile: {name} -> {url}')
+        return dfile, True
+        
+    except Exception as e:
+        # In case of any error during creation, try to find if record was created by another thread
+        logger.warning(f'Error creating DirectoryFile {name} -> {url}: {e}')
+        
+        # Double-check if record now exists (potential race condition)
+        existing_file = DirectoryFile.objects.filter(
+            name=name,
+            url=url,
+            http_status=http_status
+        ).first()
+        
+        if existing_file:
+            logger.debug(f'Race condition resolved: found DirectoryFile created by another thread: {name} -> {url}')
+            return existing_file, False
+        
+        # If still no record exists, re-raise the original error
+        logger.error(f'Failed to create DirectoryFile {name} -> {url}: {e}')
+        raise
 
 
 def get_task_cache_key(func_name, *args, **kwargs):

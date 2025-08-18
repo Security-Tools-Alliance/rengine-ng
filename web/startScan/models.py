@@ -1127,10 +1127,9 @@ class DirectoryFile(models.Model):
 	content_type = models.CharField(max_length=100, blank=True, null=True)
 
 	class Meta:
-		# Add unique constraint to prevent duplicate files during parallel fuzzing
-		unique_together = [['name', 'url', 'http_status']]
+		# Indexes for performance without unique constraints
 		indexes = [
-			models.Index(fields=['name', 'url']),
+			models.Index(fields=['name', 'url', 'http_status']),
 			models.Index(fields=['http_status']),
 		]
 

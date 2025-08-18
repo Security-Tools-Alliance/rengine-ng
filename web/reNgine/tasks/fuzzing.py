@@ -4,7 +4,6 @@ from urllib.parse import urlparse
 
 from celery.utils.log import get_task_logger
 from django.utils import timezone
-from django.db import IntegrityError, transaction
 
 from reNgine.celery import app
 from reNgine.celery_custom_task import RengineTask
@@ -29,6 +28,7 @@ from reNgine.definitions import (
     FFUF_DEFAULT_WORDLIST_PATH,
     WORDLIST
 )
+from reNgine.utilities.database import save_fuzzing_file
 from reNgine.settings import (
     DEFAULT_HTTP_TIMEOUT,
     DEFAULT_RATE_LIMIT,
@@ -193,53 +193,20 @@ def dir_file_fuzz(self, ctx=None, description=None):
                 endpoint.content_length = length
                 endpoint.save()
 
-                # Save directory file output from FFUF output with race condition handling
-                dfile = None
-                created = False
-                max_retries = 3
-                retry_count = 0
-                
-                while retry_count < max_retries:
-                    try:
-                        with transaction.atomic():
-                            dfile, created = DirectoryFile.objects.get_or_create(
-                                name=name,
-                                length=length,
-                                words=words,
-                                lines=lines,
-                                content_type=content_type,
-                                url=url,
-                                http_status=status)
-                        break  # Success - exit the retry loop
-                        
-                    except IntegrityError:
-                        # Handle race condition - another thread created the record
-                        try:
-                            # Get the record that was created by another thread
-                            dfile = DirectoryFile.objects.get(
-                                name=name,
-                                url=url,
-                                http_status=status)
-                            created = False
-                            logger.debug(f'Race condition handled: found existing DirectoryFile {dfile.id} for {url}')
-                            break  # Success - exit the retry loop
-                            
-                        except DirectoryFile.DoesNotExist:
-                            # Record was deleted between IntegrityError and get() - retry
-                            retry_count += 1
-                            if retry_count >= max_retries:
-                                logger.error(f'Failed to create DirectoryFile after {max_retries} retries for {url}')
-                                break  # Exit retry loop and skip this directory entry
-                            logger.debug(f'Retrying DirectoryFile creation for {url} (attempt {retry_count + 1}/{max_retries})')
-                            
-                    except Exception as e:
-                        # Unexpected error - log and skip
-                        logger.error(f'Unexpected error creating DirectoryFile for {url}: {e}')
-                        break  # Exit retry loop and skip this entry
-                
-                # Skip processing if we couldn't create/find the DirectoryFile
-                if dfile is None:
-                    continue
+                # Save directory file output from FFUF with race condition handling
+                try:
+                    dfile, created = save_fuzzing_file(
+                        name=name,
+                        url=url,
+                        http_status=status,
+                        length=length,
+                        words=words,
+                        lines=lines,
+                        content_type=content_type
+                    )
+                except Exception as e:
+                    logger.error(f'Failed to save DirectoryFile for {url}: {e}')
+                    continue  # Skip this entry and continue processing
 
                 # Log newly created file or directory if debug activated
                 if created and CELERY_DEBUG:
