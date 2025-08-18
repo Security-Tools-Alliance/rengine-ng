@@ -155,21 +155,176 @@ function setupModal(title, tabs) {
 }
 
 function createDataTable(containerId, columns, data, rowRenderer) {
+    const tableId = `${containerId}-datatable`;
     const table = `
-        <table class="table table-striped table-sm">
+        <table id="${tableId}" class="table table-striped table-sm">
             <thead>
                 <tr>
                     ${columns.map(col => `<th>${col}</th>`).join('')}
                 </tr>
             </thead>
-            <tbody id="${containerId}-table-body">
+            <tbody>
+                ${data.map(item => rowRenderer(item)).join('')}
             </tbody>
         </table>
     `;
     
-    $(`#${containerId}`).append(table);
-    data.forEach(item => {
-        $(`#${containerId}-table-body`).append(rowRenderer(item));
+    $(`#${containerId}`).html(table);
+    
+    // Initialize DataTable with configuration
+    const dataTableConfig = {
+        "oLanguage": {
+            "oPaginate": {
+                "sPrevious": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-left"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>',
+                "sNext": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-right"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>'
+            },
+            "sInfo": "Showing page _PAGE_ of _PAGES_",
+            "sSearch": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-search"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>',
+            "sSearchPlaceholder": "Search...",
+            "sLengthMenu": "Results : _MENU_"
+        },
+        "dom": "<'dt--top-section'<'row'<'col-12 col-sm-6 d-flex justify-content-sm-start justify-content-center'f><'col-12 col-sm-6 d-flex justify-content-sm-end justify-content-center'l>>>" + 
+               "<'table-responsive'tr>" + 
+               "<'dt--bottom-section d-sm-flex justify-content-sm-between text-center'<'dt--pages-count mb-sm-0 mb-3'i><'dt--pagination'p>>",
+        "pageLength": 25,
+        "lengthMenu": [10, 25, 50, 100],
+        "order": [[0, "asc"]],
+        "drawCallback": function() {
+            // Add event delegation for screenshot thumbnails after each draw
+            $(`#${containerId}`).off('click.screenshot').on('click.screenshot', '.screenshot-thumbnail', function() {
+                const $this = $(this);
+                const subdomainId = parseInt($this.data('subdomain-id')) || null;
+                const subdomainName = $this.data('subdomain-name');
+                const port = parseInt($this.data('port')) || null;
+                const scanId = parseInt($this.data('scan-id')) || null;
+                const domainId = parseInt($this.data('domain-id')) || null;
+                
+                show_port_screenshots(subdomainId, subdomainName, port, scanId, domainId);
+            });
+            
+            // Use event delegation for hover events on screenshot thumbnails (if not disabled)
+            $(`#${containerId}`).off('mouseenter.screenshot').on('mouseenter.screenshot', '.screenshot-thumbnail:not([data-disable-hover="true"])', function() {
+                const $this = $(this);
+                showScreenshotPreview(this, $this.data('screenshot-path'), $this.data('http-url'));
+            });
+            
+            $(`#${containerId}`).off('mouseleave.screenshot').on('mouseleave.screenshot', '.screenshot-thumbnail:not([data-disable-hover="true"])', function() {
+                hideScreenshotPreview();
+            });
+        }
+    };
+    
+    // Destroy existing DataTable if it exists
+    if ($.fn.DataTable.isDataTable(`#${tableId}`)) {
+        $(`#${tableId}`).DataTable().destroy();
+    }
+    
+    // Initialize DataTable
+    $(`#${tableId}`).DataTable(dataTableConfig);
+}
+
+// Enhanced DataTable function with lazy screenshot loading
+function createDataTableWithLazyScreenshots(containerId, columns, data, port, scan_id, domain_id, rowRenderer) {
+    const tableId = `${containerId}-datatable`;
+    const table = `
+        <table id="${tableId}" class="table table-striped table-sm">
+            <thead>
+                <tr>
+                    ${columns.map(col => `<th>${col}</th>`).join('')}
+                </tr>
+            </thead>
+            <tbody>
+                ${data.map(item => rowRenderer(item)).join('')}
+            </tbody>
+        </table>
+    `;
+    
+    $(`#${containerId}`).html(table);
+    
+    // Initialize DataTable with lazy loading configuration
+    const dataTableConfig = {
+        "oLanguage": {
+            "oPaginate": {
+                "sPrevious": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-left"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>',
+                "sNext": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-right"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>'
+            },
+            "sInfo": "Showing page _PAGE_ of _PAGES_",
+            "sSearch": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-search"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>',
+            "sSearchPlaceholder": "Search...",
+            "sLengthMenu": "Results : _MENU_"
+        },
+        "dom": "<'dt--top-section'<'row'<'col-12 col-sm-6 d-flex justify-content-sm-start justify-content-center'f><'col-12 col-sm-6 d-flex justify-content-sm-end justify-content-center'l>>>" + 
+               "<'table-responsive'tr>" + 
+               "<'dt--bottom-section d-sm-flex justify-content-sm-between text-center'<'dt--pages-count mb-sm-0 mb-3'i><'dt--pagination'p>>",
+        "pageLength": 25,
+        "lengthMenu": [10, 25, 50, 100],
+        "order": [[0, "asc"]],
+        "initComplete": function() {
+            // Load screenshots for the initial page
+            loadVisibleScreenshots(containerId, port, scan_id, domain_id);
+            
+            // Add event delegation for screenshot thumbnails after initial load
+            $(`#${containerId}`).off('click.screenshot').on('click.screenshot', '.screenshot-thumbnail', function() {
+                const $this = $(this);
+                const subdomainId = parseInt($this.data('subdomain-id')) || null;
+                const subdomainName = $this.data('subdomain-name');
+                const port = parseInt($this.data('port')) || null;
+                const scanId = parseInt($this.data('scan-id')) || null;
+                const domainId = parseInt($this.data('domain-id')) || null;
+                
+                show_port_screenshots(subdomainId, subdomainName, port, scanId, domainId);
+            });
+            
+            // Use event delegation for hover events on screenshot thumbnails (if not disabled)
+            $(`#${containerId}`).off('mouseenter.screenshot').on('mouseenter.screenshot', '.screenshot-thumbnail:not([data-disable-hover="true"])', function() {
+                const $this = $(this);
+                showScreenshotPreview(this, $this.data('screenshot-path'), $this.data('http-url'));
+            });
+            
+            $(`#${containerId}`).off('mouseleave.screenshot').on('mouseleave.screenshot', '.screenshot-thumbnail:not([data-disable-hover="true"])', function() {
+                hideScreenshotPreview();
+            });
+        },
+        "drawCallback": function() {
+            // Load screenshots only for visible rows on page change/search/sort
+            loadVisibleScreenshots(containerId, port, scan_id, domain_id);
+        }
+    };
+    
+    // Destroy existing DataTable if it exists
+    if ($.fn.DataTable.isDataTable(`#${tableId}`)) {
+        $(`#${tableId}`).DataTable().destroy();
+    }
+    
+    // Initialize DataTable
+    $(`#${tableId}`).DataTable(dataTableConfig);
+}
+
+// Function to load screenshots only for visible rows
+async function loadVisibleScreenshots(containerId, port, scan_id, domain_id) {
+    const $visibleCells = $(`#${containerId} .screenshot-cell[data-loading="true"]:visible`);
+    
+    $visibleCells.each(async function() {
+        const $cell = $(this);
+        const $row = $cell.closest('tr');
+        const subdomainId = $row.data('subdomain-id');
+        const subdomainName = $row.data('subdomain-name');
+        
+        if (subdomainId && subdomainName) {
+            try {
+                // Remove loading indicator
+                $cell.removeAttr('data-loading');
+                
+                // Load screenshot thumbnail
+                const screenshots = await getScreenshotThumbnail(subdomainId, subdomainName, port, scan_id, domain_id, true);
+                
+                // Update cell content
+                $cell.html(screenshots || '-');
+            } catch (error) {
+                console.error('Error loading screenshot for subdomain:', subdomainName, error);
+                $cell.html('-');
+            }
+        }
     });
 }
 
@@ -226,11 +381,10 @@ async function processScreenshotData(data, port, subdomain_id, subdomain_name, s
         if (endpoint.screenshot_path && endpoint.port == port) {
             count++;
             if (count <= 2) { // Show max 2 thumbnails
-                // Build hover events conditionally
-                // Note: hover events will be added securely via event listeners instead of inline handlers
-                
-                // Generate unique identifier for this screenshot image
-                const screenshotImageId = `port-screenshot-${Math.random().toString(36).substr(2, 9)}`;
+                // Generate unique identifier using timestamp and random
+                const timestamp = Date.now();
+                const randomId = Math.random().toString(36).substr(2, 9);
+                const screenshotImageId = `port-screenshot-${subdomain_id}-${port}-${timestamp}-${randomId}`;
                 
                 screenshotHtml += `
                     <img id="${screenshotImageId}"
@@ -247,31 +401,6 @@ async function processScreenshotData(data, port, subdomain_id, subdomain_name, s
                          title="Click to view full screenshot"
                          onerror="this.style.display='none'">
                 `;
-                
-                // Add secure event listeners after DOM insertion
-                setTimeout(() => {
-                    const screenshotImgElement = document.getElementById(screenshotImageId);
-                    if (screenshotImgElement) {
-                        // Add click event listener
-                        screenshotImgElement.addEventListener('click', function() {
-                            show_port_screenshots(
-                                parseInt(this.dataset.subdomainId) || null,
-                                this.dataset.subdomainName,
-                                parseInt(this.dataset.port) || null,
-                                parseInt(this.dataset.scanId) || null,
-                                parseInt(this.dataset.domainId) || null
-                            );
-                        });
-                        
-                        // Add hover event listeners if not disabled
-                        if (this.dataset.disableHover !== 'true') {
-                            screenshotImgElement.addEventListener('mouseover', function() {
-                                showScreenshotPreview(this, this.dataset.screenshotPath, this.dataset.httpUrl);
-                            });
-                            screenshotImgElement.addEventListener('mouseout', hideScreenshotPreview);
-                        }
-                    }
-                }, 0);
             }
         }
     }
@@ -545,17 +674,11 @@ function get_port_details(endpoint_ip_url, endpoint_subdomain_url, port, scan_id
             if (subdomains.length > 0) {
                 $('#modal_content_subdomain').append(`<p>${subdomains.length} Subdomains have Port ${port} Open</p>`);
                 
-                // Fetch screenshots for all subdomains in parallel
-                const subdomainsWithScreenshots = await Promise.all(
-                    subdomains.map(async (subdomain) => {
-                        const screenshots = await getScreenshotThumbnail(subdomain.id, subdomain.name, port, scan_id, domain_id, true); // Disable hover preview in modal
-                        return { ...subdomain, screenshots };
-                    })
-                );
-                
-                createDataTable('modal_content_subdomain',
+                // Create DataTable immediately without waiting for screenshots
+                createDataTableWithLazyScreenshots('modal_content_subdomain',
                     ['Subdomain', 'Status', 'Title', 'Screenshots'],
-                    subdomainsWithScreenshots,
+                    subdomains,
+                    port, scan_id, domain_id,
                     (subdomain) => {
                         const badge_color = subdomain.http_status >= 400 ? 'danger' : '';
                         const isWebPort = webPorts.includes(parseInt(port));
@@ -580,11 +703,14 @@ function get_port_details(endpoint_ip_url, endpoint_subdomain_url, port, scan_id
                         }
 
                         return `
-                            <tr>
+                            <tr data-subdomain-id="${subdomain.id}" data-subdomain-name="${subdomain.name}">
                                 <td>${subdomain_link}</td>
                                 <td>${status_tags || '-'}</td>
                                 <td>${subdomain.page_title ? htmlEncode(subdomain.page_title) : '-'}</td>
-                                <td>${subdomain.screenshots || '-'}</td>
+                                <td class="screenshot-cell" data-loading="true">
+                                    <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                                    Loading...
+                                </td>
                             </tr>
                         `;
                     }
@@ -631,37 +757,11 @@ function get_ip_details(endpoint_ip_url, endpoint_subdomain_url, ip_address, sca
             if (subdomains.length > 0) {
                 $('#modal_content_subdomain').append(`<p>${subdomains.length} subdomains are associated with IP ${ip_address}</p>`);
             
-            // Get screenshots for common web ports (80, 443)
-            const subdomainsWithScreenshots = await Promise.all(
-                subdomains.map(async (subdomain) => {
-                    let screenshots = '-';
-                    if (scan_id) {
-                        const httpsScreenshots = await getScreenshotThumbnail(subdomain.id, subdomain.name, 443, scan_id, domain_id);
-                        const httpScreenshots = await getScreenshotThumbnail(subdomain.id, subdomain.name, 80, scan_id, domain_id);
-                        
-                        let combinedScreenshots = '';
-                        if (httpsScreenshots !== '-') combinedScreenshots += httpsScreenshots;
-                        if (httpScreenshots !== '-') combinedScreenshots += httpScreenshots;
-                        
-                        screenshots = combinedScreenshots || '-';
-                    } else if (domain_id) {
-                        // Try to get screenshots using domain_id when scan_id is null
-                        const httpsScreenshots = await getScreenshotThumbnail(subdomain.id, subdomain.name, 443, null, domain_id);
-                        const httpScreenshots = await getScreenshotThumbnail(subdomain.id, subdomain.name, 80, null, domain_id);
-                        
-                        let combinedScreenshots = '';
-                        if (httpsScreenshots !== '-') combinedScreenshots += httpsScreenshots;
-                        if (httpScreenshots !== '-') combinedScreenshots += httpScreenshots;
-                        
-                        screenshots = combinedScreenshots || '-';
-                    }
-                    return { ...subdomain, screenshots };
-                })
-            );
-            
-                createDataTable('modal_content_subdomain',
-                ['Subdomain', 'Status', 'Title', 'Screenshots'],
-                subdomainsWithScreenshots,
+                // Create DataTable immediately without waiting for screenshots (IP modal uses ports 80,443)
+                createDataTableWithLazyScreenshotsForIP('modal_content_subdomain',
+                    ['Subdomain', 'Status', 'Title', 'Screenshots'],
+                    subdomains,
+                    scan_id, domain_id,
                     (subdomain) => {
                         const badge_color = subdomain.http_status >= 400 ? 'danger' : '';
                         const subdomain_link = subdomain.http_url 
@@ -677,11 +777,14 @@ function get_ip_details(endpoint_ip_url, endpoint_subdomain_url, ip_address, sca
                         }
 
                         return `
-                            <tr>
+                            <tr data-subdomain-id="${subdomain.id}" data-subdomain-name="${subdomain.name}">
                                 <td>${subdomain_link}</td>
                                 <td>${status_tags || '-'}</td>
                                 <td>${subdomain.page_title ? htmlEncode(subdomain.page_title) : '-'}</td>
-                            <td>${subdomain.screenshots || '-'}</td>
+                                <td class="screenshot-cell" data-loading="true">
+                                    <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                                    Loading...
+                                </td>
                             </tr>
                         `;
                     }
@@ -693,4 +796,132 @@ function get_ip_details(endpoint_ip_url, endpoint_subdomain_url, ip_address, sca
         });
 
         $('#modal_dialog').modal('show');
+}
+
+// Specialized DataTable function for IP details with lazy loading of screenshots for ports 80,443
+function createDataTableWithLazyScreenshotsForIP(containerId, columns, data, scan_id, domain_id, rowRenderer) {
+    const tableId = `${containerId}-datatable`;
+    const table = `
+        <table id="${tableId}" class="table table-striped table-sm">
+            <thead>
+                <tr>
+                    ${columns.map(col => `<th>${col}</th>`).join('')}
+                </tr>
+            </thead>
+            <tbody>
+                ${data.map(item => rowRenderer(item)).join('')}
+            </tbody>
+        </table>
+    `;
+    
+    $(`#${containerId}`).html(table);
+    
+    // Initialize DataTable with lazy loading configuration
+    const dataTableConfig = {
+        "oLanguage": {
+            "oPaginate": {
+                "sPrevious": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-left"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>',
+                "sNext": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-right"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>'
+            },
+            "sInfo": "Showing page _PAGE_ of _PAGES_",
+            "sSearch": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-search"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>',
+            "sSearchPlaceholder": "Search...",
+            "sLengthMenu": "Results : _MENU_"
+        },
+        "dom": "<'dt--top-section'<'row'<'col-12 col-sm-6 d-flex justify-content-sm-start justify-content-center'f><'col-12 col-sm-6 d-flex justify-content-sm-end justify-content-center'l>>>" + 
+               "<'table-responsive'tr>" + 
+               "<'dt--bottom-section d-sm-flex justify-content-sm-between text-center'<'dt--pages-count mb-sm-0 mb-3'i><'dt--pagination'p>>",
+        "pageLength": 25,
+        "lengthMenu": [10, 25, 50, 100],
+        "order": [[0, "asc"]],
+        "initComplete": function() {
+            // Load screenshots for common web ports (80, 443) for the initial page
+            loadVisibleScreenshotsForIP(containerId, scan_id, domain_id);
+            
+            // Add event delegation for screenshot thumbnails after initial load
+            $(`#${containerId}`).off('click.screenshot').on('click.screenshot', '.screenshot-thumbnail', function() {
+                const $this = $(this);
+                const subdomainId = parseInt($this.data('subdomain-id')) || null;
+                const subdomainName = $this.data('subdomain-name');
+                const port = parseInt($this.data('port')) || null;
+                const scanId = parseInt($this.data('scan-id')) || null;
+                const domainId = parseInt($this.data('domain-id')) || null;
+                
+                show_port_screenshots(subdomainId, subdomainName, port, scanId, domainId);
+            });
+            
+            // Use event delegation for hover events on screenshot thumbnails (if not disabled)
+            $(`#${containerId}`).off('mouseenter.screenshot').on('mouseenter.screenshot', '.screenshot-thumbnail:not([data-disable-hover="true"])', function() {
+                const $this = $(this);
+                showScreenshotPreview(this, $this.data('screenshot-path'), $this.data('http-url'));
+            });
+            
+            $(`#${containerId}`).off('mouseleave.screenshot').on('mouseleave.screenshot', '.screenshot-thumbnail:not([data-disable-hover="true"])', function() {
+                hideScreenshotPreview();
+            });
+        },
+        "drawCallback": function() {
+            // Load screenshots for common web ports (80, 443) only for visible rows on page change/search/sort
+            loadVisibleScreenshotsForIP(containerId, scan_id, domain_id);
+        }
+    };
+    
+    // Destroy existing DataTable if it exists
+    if ($.fn.DataTable.isDataTable(`#${tableId}`)) {
+        $(`#${tableId}`).DataTable().destroy();
+    }
+    
+    // Initialize DataTable
+    $(`#${tableId}`).DataTable(dataTableConfig);
+}
+
+// Function to load screenshots for common web ports (80, 443) only for visible rows
+async function loadVisibleScreenshotsForIP(containerId, scan_id, domain_id) {
+    const $visibleCells = $(`#${containerId} .screenshot-cell[data-loading="true"]:visible`);
+    
+    $visibleCells.each(async function() {
+        const $cell = $(this);
+        const $row = $cell.closest('tr');
+        const subdomainId = $row.data('subdomain-id');
+        const subdomainName = $row.data('subdomain-name');
+        
+        if (subdomainId && subdomainName) {
+            try {
+                // Remove loading indicator
+                $cell.removeAttr('data-loading');
+                
+                let combinedScreenshots = '';
+                
+                // Get screenshots for common web ports (80, 443)
+                if (scan_id) {
+                    const httpsScreenshots = await getScreenshotThumbnail(subdomainId, subdomainName, 443, scan_id, domain_id, true);
+                    const httpScreenshots = await getScreenshotThumbnail(subdomainId, subdomainName, 80, scan_id, domain_id, true);
+                    
+                    if (httpsScreenshots !== '-') {
+                        combinedScreenshots += httpsScreenshots;
+                    }
+                    if (httpScreenshots !== '-') {
+                        combinedScreenshots += httpScreenshots;
+                    }
+                } else if (domain_id) {
+                    // Try to get screenshots using domain_id when scan_id is null
+                    const httpsScreenshots = await getScreenshotThumbnail(subdomainId, subdomainName, 443, null, domain_id, true);
+                    const httpScreenshots = await getScreenshotThumbnail(subdomainId, subdomainName, 80, null, domain_id, true);
+                    
+                    if (httpsScreenshots !== '-') {
+                        combinedScreenshots += httpsScreenshots;
+                    }
+                    if (httpScreenshots !== '-') {
+                        combinedScreenshots += httpScreenshots;
+                    }
+                }
+                
+                // Update cell content
+                $cell.html(combinedScreenshots || '-');
+            } catch (error) {
+                console.error('Error loading screenshots for subdomain:', subdomainName, error);
+                $cell.html('-');
+            }
+        }
+    });
 }
