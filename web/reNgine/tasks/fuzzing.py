@@ -39,7 +39,7 @@ from reNgine.utilities.endpoint import get_http_urls, ensure_endpoints_crawled_a
 from reNgine.utilities.proxy import get_random_proxy
 from reNgine.utilities.command import generate_header_param
 from reNgine.utilities.url import extract_path_from_url, get_subdomain_from_url
-from reNgine.utilities.database import save_endpoint
+from reNgine.utilities.database import save_endpoint, save_fuzzing_file
 from startScan.models import DirectoryScan, DirectoryFile, Subdomain
 
 logger = get_task_logger(__name__)
@@ -187,15 +187,15 @@ def dir_file_fuzz(self, ctx={}, description=None):
                 endpoint.content_length = length
                 endpoint.save()
 
-                # Save directory file output from FFUF output
-                dfile, created = DirectoryFile.objects.get_or_create(
+                # Save directory file output from FFUF output using race condition-safe function
+                dfile, created = save_fuzzing_file(
                     name=name,
+                    url=url,
+                    http_status=status,
                     length=length,
                     words=words,
                     lines=lines,
-                    content_type=content_type,
-                    url=url,
-                    http_status=status)
+                    content_type=content_type)
 
                 # Log newly created file or directory if debug activated
                 if created and CELERY_DEBUG:
