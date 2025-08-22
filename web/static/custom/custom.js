@@ -2157,7 +2157,7 @@ function loadSubscanHistoryWidget(endpoint, scan_history_id = null, domain_id = 
 	});
 }
 
-function get_technologies(endpoint_url, scan_id=null, domain_id=null){
+function get_technologies(endpoint_url, subdomain_endpoint_url, scan_id=null, domain_id=null){
 	// this function will fetch and render tech in widget
 	var url = `${endpoint_url}?`;
 
@@ -2176,10 +2176,10 @@ function get_technologies(endpoint_url, scan_id=null, domain_id=null){
 		for (var val in data['technologies']){
 			tech = data['technologies'][val]
 			if (scan_id) {
-				$("#technologies").append(`<span class='badge badge-soft-primary  m-1 badge-link' data-toggle="tooltip" title="${tech['count']} Subdomains use this technology." onclick="get_tech_details('${endpoint_url}', '${tech['name']}', scan_id=${scan_id}, domain_id=null)">${tech['name']}</span>`);
+				$("#technologies").append(`<span class='badge badge-soft-primary  m-1 badge-link' data-toggle="tooltip" title="${tech['count']} Subdomains use this technology." onclick="get_tech_details('${subdomain_endpoint_url}', '${tech['name']}', scan_id=${scan_id}, domain_id=null)">${tech['name']}</span>`);
 			}
 			else if (domain_id) {
-				$("#technologies").append(`<span class='badge badge-soft-primary  m-1 badge-link' data-toggle="tooltip" title="${tech['count']} Subdomains use this technology." onclick="get_tech_details('${endpoint_url}', '${tech['name']}', scan_id=null, domain_id=${domain_id})">${tech['name']}</span>`);
+				$("#technologies").append(`<span class='badge badge-soft-primary  m-1 badge-link' data-toggle="tooltip" title="${tech['count']} Subdomains use this technology." onclick="get_tech_details('${subdomain_endpoint_url}', '${tech['name']}', scan_id=null, domain_id=${domain_id})">${tech['name']}</span>`);
 			}
 		}
 		$('#technologies-count').html(`<span class="badge badge-soft-primary me-1">${data['technologies'].length}</span>`);

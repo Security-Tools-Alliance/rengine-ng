@@ -145,12 +145,31 @@ function setupModal(title, tabs) {
         const expanded = index === 0 ? 'true' : 'false';
         $('#modal_tab_nav').append(`
             <li class="nav-item">
-                <a class="nav-link ${isActive}" data-bs-toggle="tab" href="#modal_content_${tab.id}" aria-expanded="${expanded}">
+                <a class="nav-link ${isActive}" data-bs-toggle="tab" href="#modal_content_${tab.id}" aria-expanded="${expanded}" data-tab-id="${tab.id}">
                     <span id="modal-${tab.id}-count"></span>${tab.label} &nbsp;${tab.loader}
                 </a>
             </li>
         `);
         $('#modal_tab_content').append(`<div class="tab-pane ${isActive ? 'show active' : ''}" id="modal_content_${tab.id}"></div>`);
+    });
+    
+    // Add event listener for subdomain tab clicks to load screenshots
+    $('#modal_tab_nav').off('shown.bs.tab').on('shown.bs.tab', 'a[data-tab-id="subdomain"]', function() {
+        // Trigger screenshot loading when subdomain tab is shown
+        setTimeout(() => {
+            const containerId = 'modal_content_subdomain';
+            if (window.currentModalData) {
+                const { port, scan_id, domain_id } = window.currentModalData;
+                
+                if (port !== undefined) {
+                    // Port modal: use specific port
+                    loadVisibleScreenshots(containerId, port, scan_id, domain_id);
+                } else {
+                    // IP modal: use ports 80, 443
+                    loadVisibleScreenshotsForIP(containerId, scan_id, domain_id);
+                }
+            }
+        }, 100);
     });
 }
 
@@ -260,9 +279,6 @@ function createDataTableWithLazyScreenshots(containerId, columns, data, port, sc
         "lengthMenu": [10, 25, 50, 100],
         "order": [[0, "asc"]],
         "initComplete": function() {
-            // Load screenshots for the initial page
-            loadVisibleScreenshots(containerId, port, scan_id, domain_id);
-            
             // Add event delegation for screenshot thumbnails after initial load
             $(`#${containerId}`).off('click.screenshot').on('click.screenshot', '.screenshot-thumbnail', function() {
                 const $this = $(this);
@@ -284,6 +300,8 @@ function createDataTableWithLazyScreenshots(containerId, columns, data, port, sc
             $(`#${containerId}`).off('mouseleave.screenshot').on('mouseleave.screenshot', '.screenshot-thumbnail:not([data-disable-hover="true"])', function() {
                 hideScreenshotPreview();
             });
+            
+
         },
         "drawCallback": function() {
             // Load screenshots only for visible rows on page change/search/sort
@@ -599,6 +617,9 @@ function showScreenshotImageModal(screenshotPath, httpUrl = '') {
 function get_port_details(endpoint_ip_url, endpoint_subdomain_url, port, scan_id=null, domain_id=null) {
     // Store settings for use in subdomain rendering
     const settings = { scan_id: scan_id, domain_id: domain_id };
+    
+    // Store modal data globally for tab click events
+    window.currentModalData = { port: port, scan_id: scan_id, domain_id: domain_id };
     $.getJSON('/api/uncommon-web-ports/', function(portsData) {
         const webPorts = [...portsData.uncommon_web_ports, ...portsData.common_web_ports];
         
@@ -728,6 +749,9 @@ function get_port_details(endpoint_ip_url, endpoint_subdomain_url, port, scan_id
 function get_ip_details(endpoint_ip_url, endpoint_subdomain_url, ip_address, scan_id=null, domain_id=null){
     // Store settings for use in subdomain rendering
     const settings = { scan_id: scan_id, domain_id: domain_id };
+    
+    // Store modal data globally for tab click events (no port for IP modals)
+    window.currentModalData = { scan_id: scan_id, domain_id: domain_id };
         
         let subdomain_url = `${endpoint_subdomain_url}?ip_address=${ip_address}`;
 
@@ -835,9 +859,6 @@ function createDataTableWithLazyScreenshotsForIP(containerId, columns, data, sca
         "lengthMenu": [10, 25, 50, 100],
         "order": [[0, "asc"]],
         "initComplete": function() {
-            // Load screenshots for common web ports (80, 443) for the initial page
-            loadVisibleScreenshotsForIP(containerId, scan_id, domain_id);
-            
             // Add event delegation for screenshot thumbnails after initial load
             $(`#${containerId}`).off('click.screenshot').on('click.screenshot', '.screenshot-thumbnail', function() {
                 const $this = $(this);
@@ -859,6 +880,8 @@ function createDataTableWithLazyScreenshotsForIP(containerId, columns, data, sca
             $(`#${containerId}`).off('mouseleave.screenshot').on('mouseleave.screenshot', '.screenshot-thumbnail:not([data-disable-hover="true"])', function() {
                 hideScreenshotPreview();
             });
+            
+
         },
         "drawCallback": function() {
             // Load screenshots for common web ports (80, 443) only for visible rows on page change/search/sort
