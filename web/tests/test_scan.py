@@ -136,10 +136,6 @@ class TestOnlineScan(BaseTestCase):
                 results.append((file_obj.id if file_obj else None, created))
             except Exception as e:
                 errors.append(str(e))
-            finally:
-                # Ensure database connections are closed in this thread
-                from django.db import connections
-                connections.close_all()
         
         # Run 3 threads concurrently
         threads = []
@@ -151,10 +147,6 @@ class TestOnlineScan(BaseTestCase):
         # Wait for all threads to complete
         for thread in threads:
             thread.join()
-        
-        # Ensure main thread connections are also closed
-        from django.db import connections
-        connections.close_all()
         
         # Verify results
         self.assertEqual(len(errors), 0, f"Errors occurred: {errors}")

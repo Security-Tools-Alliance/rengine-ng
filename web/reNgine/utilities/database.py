@@ -693,7 +693,6 @@ def save_fuzzing_file(name, url, http_status, length=0, words=0, lines=0, conten
                     dfile, created = DirectoryFile.objects.get_or_create(
                         **base_data,
                         defaults={
-                            'http_status': http_status,
                             'content_length': length,
                             'response_time': 0,
                             'lines': lines,
@@ -703,9 +702,8 @@ def save_fuzzing_file(name, url, http_status, length=0, words=0, lines=0, conten
                     )
                     if not created:
                         fields_to_update = []
-                        if dfile.http_status != http_status:
-                            dfile.http_status = http_status
-                            fields_to_update.append('http_status')
+                        # Note: http_status is part of lookup criteria, so it should always match
+                        # No need to update it since it was used to find this record
                         if dfile.content_length != length:
                             dfile.content_length = length
                             fields_to_update.append('content_length')
@@ -766,8 +764,10 @@ def save_fuzzing_file(name, url, http_status, length=0, words=0, lines=0, conten
 def _fallback_save_fuzzing_file(base_data, full_data, name, url):
     """Fallback method when Redis locking is unavailable."""
     try:
+        # Only pass fields not used for lookup in defaults to avoid confusion
+        defaults_data = {k: v for k, v in full_data.items() if k not in base_data}
         dfile, created = DirectoryFile.objects.get_or_create(
-            defaults=full_data,
+            defaults=defaults_data,
             **base_data
         )
         if created:
