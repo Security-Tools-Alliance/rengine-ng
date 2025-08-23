@@ -61,18 +61,37 @@ class RengineTask(Task):
 		return CELERY_TASK_STATUS_MAP.get(self.status)
 
 	def __call__(self, *args, **kwargs):
+		# Reset ALL instance variables to prevent context pollution between tasks
 		self.result = None
 		self.error = None
 		self.traceback = None
 		self.output_path = None
 		self.status = RUNNING_TASK
+		self.track = None
+		self.scan_id = None
+		self.subscan_id = None
+		self.engine_id = None
+		self.filename = None
+		self.url_filter = None
+		self.results_dir = None
+		self.yaml_configuration = None
+		self.out_of_scope_subdomains = None
+		self.history_file = None
+		self.scan = None
+		self.subscan = None
+		self.engine = None
+		self.domain = None
+		self.domain_id = None
+		self.subdomain = None
+		self.subdomain_id = None
+		self.activity_id = None
 
 		# Get task info
 		self.task_name = self.name.split('.')[-1]
 		self.description = kwargs.get('description') or ' '.join(self.task_name.split('_')).capitalize()
 		logger = get_task_logger(self.task_name)
 
-		# Get reNgine context
+		# Get reNgine context - FRESH context for each task execution
 		ctx = kwargs.get('ctx', {})
 		self.track = ctx.get('track', True)
 		self.scan_id = ctx.get('scan_history_id')

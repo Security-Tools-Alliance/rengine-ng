@@ -1,9 +1,13 @@
 import validators
 import hashlib
 import time
+import redis
+from django.db import IntegrityError
+from django.core.exceptions import ValidationError
 from urllib.parse import urlparse
 from django.utils import timezone
 from celery.utils.log import get_task_logger
+from django.conf import settings
 
 from reNgine.settings import RENGINE_RESULTS, RENGINE_TASK_IGNORE_CACHE_KWARGS
 from reNgine.utilities.data import replace_nulls, is_iterable
@@ -17,6 +21,39 @@ from targetApp.models import Domain
 from dashboard.models import User
 
 logger = get_task_logger(__name__)
+
+# Global Redis connection pool for efficient connection reuse
+_redis_pool = None
+
+def get_redis_connection():
+    """Get a Redis connection from a connection pool for efficient reuse."""
+    global _redis_pool
+    
+    if _redis_pool is None:
+        try:
+            _redis_pool = redis.ConnectionPool(
+                host=settings.REDIS_HOST,
+                port=settings.REDIS_PORT,
+                db=settings.REDIS_DB,
+                password=settings.REDIS_PASSWORD,
+                socket_timeout=5,
+                socket_connect_timeout=5,
+                retry_on_timeout=True,
+                socket_keepalive=True,
+                socket_keepalive_options={},
+                max_connections=50,  # Pool size for concurrent operations
+                health_check_interval=30  # Check connection health every 30 seconds
+            )
+            logger.debug("Created Redis connection pool")
+        except Exception as e:
+            logger.warning(f"Failed to create Redis connection pool: {e}")
+            return None
+    
+    try:
+        return redis.Redis(connection_pool=_redis_pool)
+    except Exception as e:
+        logger.warning(f"Failed to get Redis connection from pool: {e}")
+        return None
 
 
 #-------------------------------#
@@ -140,7 +177,7 @@ def save_endpoint(
 
 
 def save_subdomain(subdomain_name, ctx=None):
-    """Get or create Subdomain object.
+    """Get or create Subdomain object with race condition protection.
 
     Args:
         subdomain_name (str): Subdomain name.
@@ -188,20 +225,100 @@ def save_subdomain(subdomain_name, ctx=None):
         logger.error(f"{subdomain_name} is not a subdomain of domain {domain.name}. Skipping.")
         return None, False
 
-    # Create or get subdomain object
-    subdomain, created = Subdomain.objects.get_or_create(
-        scan_history=scan,
-        target_domain=domain,
-        name=subdomain_name)
+    # Use Redis distributed locking to prevent race conditions during concurrent scans
+    lock_key = f"subdomain_creation:{subdomain_name}:{scan_id}:{domain.id if domain else 'no_domain'}"
+    
+    # Get Redis connection from pool (more efficient than creating new connections)
+    redis_conn = get_redis_connection()
+    
+    if redis_conn:
+        from redis.exceptions import LockError, RedisError
 
-    if created:
-        logger.info(f'Found new subdomain/rDNS: {subdomain_name}')
-        subdomain.discovered_date = timezone.now()
-        if subscan_id:
-            subdomain.subdomain_subscan_ids.add(subscan_id)
-        subdomain.save()
-
-    return subdomain, created
+        try:
+            with redis_conn.lock(lock_key, timeout=30, blocking_timeout=5):
+                # Use get_or_create within the lock for additional safety against edge cases
+                subdomain, created = Subdomain.objects.get_or_create(
+                    scan_history=scan,
+                    target_domain=domain,
+                    name=subdomain_name,
+                    defaults={
+                        'discovered_date': timezone.now()
+                    }
+                )
+                
+                if created:
+                    logger.info(f'Found new subdomain/rDNS: {subdomain_name}')
+                else:
+                    logger.debug(f'Subdomain {subdomain_name} already exists for scan {scan_id}')
+                
+                return subdomain, created
+                
+        except LockError:
+            # Handle lock contention (could log or raise a custom exception)
+            logger.warning(f"Could not acquire Redis lock for subdomain {subdomain_name}")
+            # Fall through to fallback logic
+        except RedisError as e:
+            # Handle Redis connection or other Redis-related errors
+            logger.warning(f"Redis error for subdomain {subdomain_name}: {e}")
+            # Fall through to fallback logic
+    
+    # Fallback logic when Redis is unavailable or lock acquisition fails
+    logger.debug(f'Using fallback get_or_create for subdomain {subdomain_name}')
+    
+    # Fallback with intelligent retry for race condition handling
+    for attempt in range(3):
+        try:
+            subdomain, created = Subdomain.objects.get_or_create(
+                scan_history=scan,
+                target_domain=domain,
+                name=subdomain_name,
+                defaults={
+                    'discovered_date': timezone.now()
+                }
+            )
+            
+            if created:
+                logger.info(f'Found new subdomain/rDNS: {subdomain_name}')
+            
+            return subdomain, created
+            
+        except IntegrityError:
+            # Handle race condition - another process created the subdomain
+            if attempt < 2:  # Don't sleep on the last attempt
+                time.sleep(0.1 * (attempt + 1))  # Progressive backoff
+            continue
+            
+    # Final attempt without exception handling
+    try:
+        subdomain, created = Subdomain.objects.get_or_create(
+            scan_history=scan,
+            target_domain=domain,
+            name=subdomain_name,
+            defaults={
+                'discovered_date': timezone.now()
+            }
+        )
+        
+        if created:
+            logger.info(f'Found new subdomain/rDNS: {subdomain_name}')
+        
+        return subdomain, created
+        
+    except (IntegrityError, ValidationError) as e:
+        # Log database constraint violations but continue processing other subdomains
+        logger.warning(f'Database constraint error for subdomain {subdomain_name}: {e}')
+        # Return None to indicate this subdomain failed but others can continue
+        return None, False
+    except Exception as e:
+        # Log the exception for debugging and re-raise critical errors
+        logger.error(f'Critical error saving subdomain {subdomain_name} in final fallback: {e}', exc_info=True)
+        # Re-raise critical exceptions like database connection failures, memory errors, etc.
+        # Only suppress if it's a non-critical validation issue
+        if isinstance(e, (ConnectionError, MemoryError, SystemExit, KeyboardInterrupt)):
+            raise  # Re-raise critical system errors
+        # For other exceptions, log and continue with other subdomains
+        logger.warning(f'Non-critical error for subdomain {subdomain_name}, continuing with others: {e}')
+        return None, False
 
 
 def save_subdomain_metadata(subdomain, endpoint, extra_datas=None):
@@ -562,93 +679,88 @@ def save_fuzzing_file(name, url, http_status, length=0, words=0, lines=0, conten
         'content_type': content_type
     })
     
-    # Try to get Redis connection
-    redis_client = None
-    try:
-        # Get Redis connection from Django cache or create new one
-        redis_client = _get_redis_client()
-        
-        # Try to acquire lock with timeout
-        lock_acquired = redis_client.set(lock_key, "locked", nx=True, ex=30)  # 30 second timeout
-        
-        if lock_acquired:
-            try:
-                # We have the lock, check if record exists
-                existing_file = DirectoryFile.objects.filter(**base_data).first()
-                if existing_file:
-                    logger.debug(f'Found existing DirectoryFile in locked section: {name} -> {url}')
-                    return existing_file, False
-                
-                # Create new record safely
-                dfile = DirectoryFile.objects.create(**full_data)
-                logger.debug(f'Created new DirectoryFile with Redis lock: {name} -> {url}')
-                return dfile, True
-                
-            finally:
-                # Always release the lock
+    # Get Redis connection from shared pool (more efficient than creating new connections)
+    redis_client = get_redis_connection()
+    
+    if redis_client:
+        try:
+            # Try to acquire lock with timeout
+            lock_acquired = redis_client.set(lock_key, "locked", nx=True, ex=30)  # 30 second timeout
+            
+            if lock_acquired:
                 try:
-                    redis_client.delete(lock_key)
-                except Exception:
-                    pass  # Ignore cleanup errors
-        else:
-            # Could not acquire lock, wait briefly and check if record exists
-            logger.debug(f'Could not acquire lock for {name} -> {url}, checking for existing record')
-            
-            # Wait briefly for the locked operation to complete
-            for attempt in range(5):
-                existing_file = DirectoryFile.objects.filter(**base_data).first()
-                if existing_file:
-                    logger.debug(f'Found existing DirectoryFile while waiting for lock: {name} -> {url}')
-                    return existing_file, False
-                time.sleep(0.1)  # Wait 100ms
-            
-            # If still no record exists, fall back to regular creation attempt
-            logger.debug(f'No record found after waiting, falling back to get_or_create for: {name} -> {url}')
+                    # Use get_or_create within the lock for additional safety against edge cases
+                    dfile, created = DirectoryFile.objects.get_or_create(
+                        **base_data,
+                        defaults={
+                            'http_status': http_status,
+                            'content_length': length,
+                            'response_time': 0,
+                            'lines': lines,
+                            'words': words,
+                            'content_type': content_type or ''
+                        }
+                    )
+                    if not created:
+                        fields_to_update = []
+                        if dfile.http_status != http_status:
+                            dfile.http_status = http_status
+                            fields_to_update.append('http_status')
+                        if dfile.content_length != length:
+                            dfile.content_length = length
+                            fields_to_update.append('content_length')
+                        if dfile.response_time != 0:
+                            dfile.response_time = 0
+                            fields_to_update.append('response_time')
+                        if dfile.lines != lines:
+                            dfile.lines = lines
+                            fields_to_update.append('lines')
+                        if dfile.words != words:
+                            dfile.words = words
+                            fields_to_update.append('words')
+                        if dfile.content_type != (content_type or ''):
+                            dfile.content_type = content_type or ''
+                            fields_to_update.append('content_type')
+                        if fields_to_update:
+                            dfile.save(update_fields=fields_to_update)
+                    
+                    if created:
+                        logger.debug(f'Created new DirectoryFile with Redis lock: {name} -> {url}')
+                    else:
+                        logger.debug(f'Found existing DirectoryFile in locked section: {name} -> {url}')
+                    
+                    return dfile, created
+                    
+                finally:
+                    # Always release the lock
+                    try:
+                        redis_client.delete(lock_key)
+                    except Exception:
+                        pass  # Ignore cleanup errors
+            else:
+                # Could not acquire lock, wait briefly and check if record exists
+                logger.debug(f'Could not acquire lock for {name} -> {url}, checking for existing record')
+                
+                # Wait briefly for the locked operation to complete
+                for attempt in range(5):
+                    existing_file = DirectoryFile.objects.filter(**base_data).first()
+                    if existing_file:
+                        logger.debug(f'Found existing DirectoryFile while waiting for lock: {name} -> {url}')
+                        return existing_file, False
+                    time.sleep(0.1)  # Wait 100ms
+                
+                # If still no record exists, fall back to regular creation attempt
+                logger.debug(f'No record found after waiting, falling back to get_or_create for: {name} -> {url}')
+                return _fallback_save_fuzzing_file(base_data, full_data, name, url)
+                
+        except Exception as redis_error:
+            # Redis unavailable, fall back to get_or_create approach
+            logger.debug(f'Redis locking failed for {name} -> {url}: {redis_error}, falling back')
             return _fallback_save_fuzzing_file(base_data, full_data, name, url)
-            
-    except Exception as redis_error:
-        # Redis unavailable, fall back to get_or_create approach
-        logger.debug(f'Redis locking failed for {name} -> {url}: {redis_error}, falling back')
-        return _fallback_save_fuzzing_file(base_data, full_data, name, url)
-    finally:
-        # Ensure Redis connection is properly closed if we created a new one
-        if redis_client and hasattr(redis_client, 'close'):
-            try:
-                redis_client.close()
-            except Exception:
-                pass  # Ignore cleanup errors
-
-
-def _get_redis_client():
-    """Get Redis client from Django cache or create a new connection with proper cleanup."""
-    try:
-        from django.core.cache import cache
-        # Try to use Django's cache Redis connection
-        if hasattr(cache, '_cache') and hasattr(cache._cache, '_client'):
-            return cache._cache._client
-    except Exception:
-        # Ignore Django cache access errors - cache backend may not be Redis
-        # or may not be configured yet. We'll fall back to direct connection.
-        pass
     
-    # Fall back to creating direct Redis connection with connection pooling
-    try:
-        import redis
-        # Extract Redis URL from Celery broker URL
-        from celery import current_app
-        broker_url = current_app.conf.broker_url
-        if broker_url.startswith('redis://'):
-            # Use connection pool to avoid too many connections
-            return redis.from_url(broker_url, max_connections=5, retry_on_timeout=True)
-    except Exception:
-        # Ignore Celery broker URL access errors - celery may not be configured
-        # or Redis may not be available. We'll fall back to default connection.
-        pass
-    
-    # Final fallback - default Redis connection with pool
-    import redis
-    pool = redis.ConnectionPool(host='redis', port=6379, db=0, max_connections=5)
-    return redis.Redis(connection_pool=pool, decode_responses=True)
+    # Redis connection not available, use fallback
+    logger.debug(f'Redis connection not available for {name} -> {url}, using fallback')
+    return _fallback_save_fuzzing_file(base_data, full_data, name, url)
 
 
 def _fallback_save_fuzzing_file(base_data, full_data, name, url):
