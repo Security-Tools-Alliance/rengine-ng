@@ -370,6 +370,7 @@ class RengineTask(Task):
 					logger.warning(f'Task {task_identifier} is RUNNING')
 				self.create_scan_activity()
 
+		record_key = None
 		if RENGINE_CACHE_ENABLED:
 			# Check for result in cache and return it if it's a hit
 			record_key = get_task_cache_key(self.name, *args, **kwargs)
@@ -431,7 +432,7 @@ class RengineTask(Task):
 				self.update_scan_activity()
 
 		# Set task result in cache if task was successful
-		if RENGINE_CACHE_ENABLED and context.status == SUCCESS_TASK and context.result:
+		if RENGINE_CACHE_ENABLED and record_key is not None and context.status == SUCCESS_TASK and context.result:
 			cache.set(record_key, json.dumps(context.result))
 			cache.expire(record_key, 600) # 10mn cache
 
