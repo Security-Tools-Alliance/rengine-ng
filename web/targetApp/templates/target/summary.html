@@ -1657,7 +1657,7 @@ $(document).ready(function(){
 	get_recon_notes('{% url 'api:listTodoNotes' %}', target_id={{target.id}}, scan_history_id=null);
 
 	get_ips('{{ ip_addresses|safe }}', '{% url 'api:getIpDetails' %}', '{% url 'api:querySubdomains' %}', scan_id=null, domain_id={{target.id}});
-	get_technologies('{% url 'api:listTechnologies' %}', scan_id=null, domain_id={{target.id}});
+	get_technologies('{% url 'api:listTechnologies' %}', '{% url 'api:querySubdomains' %}', scan_id=null, domain_id={{target.id}});
 	get_ports('{{ ip_addresses }}', '{% url 'api:listIPs' %}', '{% url 'api:querySubdomains' %}', scan_id=null, domain_id={{target.id}});
 
 	var clipboard = new Clipboard('.copyable');
