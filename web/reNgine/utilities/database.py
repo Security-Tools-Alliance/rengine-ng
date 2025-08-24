@@ -655,8 +655,8 @@ def save_fuzzing_file(name, url, http_status, length=0, words=0, lines=0, conten
     )
     
     if directory_file:
-        # Determine if it was created or updated (simplified logic)
-        was_created = hasattr(directory_file, '_was_created') and directory_file._was_created
+        # Return the created flag from our DistributedLock implementation
+        was_created = getattr(directory_file, '_was_created', False)
         return directory_file, was_created
     else:
         # Fallback failed, return None

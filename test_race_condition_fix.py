@@ -9,7 +9,7 @@ import sys
 import time
 import threading
 import concurrent.futures
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 
 # Add the web directory to Python path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'web'))

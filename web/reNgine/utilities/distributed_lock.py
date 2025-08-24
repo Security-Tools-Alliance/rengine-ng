@@ -27,9 +27,7 @@ Usage:
 
 import hashlib
 import time
-import threading
-from contextlib import contextmanager
-from typing import Optional, Callable, Any, Tuple
+from typing import Optional, Callable, Any
 from celery.utils.log import get_task_logger
 from django.conf import settings
 
