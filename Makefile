@@ -1,9 +1,19 @@
 include .env
 .DEFAULT_GOAL:=help
 
-# Export host UID & GID
+# macOS and Linux compatibility
+# This Makefile supports both macOS and Linux with appropriate OS-specific behavior
+
+# Export host UID & GID (cross-platform handling)
+ifeq ($(IS_MACOS),yes)
+# On macOS, use actual user IDs - Docker Desktop handles mapping properly
+export HOST_UID=$(shell id -u)
+export HOST_GID=$(shell id -g)
+else
+# On Linux, respect sudo context for proper permissions
 export HOST_UID=$(if $(SUDO_USER),$(shell id -u $(SUDO_USER)),$(shell id -u))
 export HOST_GID=$(if $(SUDO_USER),$(shell id -g $(SUDO_USER)),$(shell id -g))
+endif
 
 
 # Define RENGINE_VERSION
@@ -33,11 +43,23 @@ ifeq ($(DOCKER_COMPOSE),)
 $(error Docker Compose not found. Please install Docker Compose)
 endif
 
-# Check if user is in docker group or is root
-DOCKER_GROUP_CHECK := $(shell if [ -n "$$(getent group docker)" ]; then echo "yes"; else echo "no"; fi)
+# Operating system detection
+UNAME_S := $(shell uname -s)
+IS_MACOS := $(shell if [ "$(UNAME_S)" = "Darwin" ]; then echo "yes"; else echo "no"; fi)
 
+# Check if user has Docker access (different on macOS vs Linux)
+ifeq ($(IS_MACOS),yes)
+# On macOS, Docker Desktop handles permissions differently
+DOCKER_ACCESS_CHECK := $(shell if docker version > /dev/null 2>&1; then echo "yes"; else echo "no"; fi)
+ifeq ($(DOCKER_ACCESS_CHECK),no)
+$(error Docker is not accessible. Please ensure Docker Desktop is running)
+endif
+else
+# On Linux, check if user is in docker group or is root
+DOCKER_GROUP_CHECK := $(shell if [ -n "$$(getent group docker 2>/dev/null)" ]; then echo "yes"; else echo "no"; fi)
 ifeq ($(DOCKER_GROUP_CHECK),no)
 $(error This command must be run with sudo or by a user in the docker group)
+endif
 endif
 
 $(info Using: $(DOCKER_COMPOSE))
@@ -197,12 +219,13 @@ prune:			## Remove containers, delete volume data, and prune Docker system.
 
 help:			## Show this help.
 	@echo "Manage Docker images, containers and Django commands using Docker Compose files."
+	@echo "Compatible with both macOS and Linux systems."
 	@echo ""
 	@echo "Usage:"
 	@echo "  make <target> [GPU=1] (default: help)"
 	@echo ""
 	@echo "Options:"
-	@echo "  GPU=1                                    Enable GPU support for Ollama LLM"
+	@echo "  GPU=1                                    Enable GPU support for Ollama LLM (Linux only)"
 	@echo ""
 	@echo "Targets:"
 	@echo "  make restart [service1] [service2] ...  				Restart specific services in production mode"

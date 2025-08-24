@@ -78,9 +78,93 @@ class TestOnlineScan(BaseTestCase):
             print(urls)
         self.assertGreater(len(urls), 0)
 
-    # def test_dir_file_fuzz(self):
-    #     urls = dir_file_fuzz(ctx=self.ctx)
-    #     self.assertGreater(len(urls), 0)
+    def test_dir_file_fuzz(self):
+        """Test directory file fuzzing functionality with race condition handling."""
+        import threading
+        from reNgine.utilities.database import save_fuzzing_file
+        
+        # Test basic functionality - create new file (use unique data different from TestDataGenerator)
+        directory_file, created = save_fuzzing_file(
+            name="test_admin",
+            url="https://test.example.com/admin", 
+            http_status=200,
+            length=1024,
+            words=50,
+            lines=25,
+            content_type="text/html"
+        )
+        self.assertIsNotNone(directory_file)
+        self.assertTrue(created)
+        self.assertEqual(directory_file.name, "test_admin")
+        self.assertEqual(directory_file.url, "https://test.example.com/admin")
+        self.assertEqual(directory_file.http_status, 200)
+        
+        # Test finding existing file
+        existing_file, created = save_fuzzing_file(
+            name="test_admin",
+            url="https://test.example.com/admin",
+            http_status=200,
+            length=2048,  # Different values
+            words=100
+        )
+        self.assertIsNotNone(existing_file)
+        self.assertFalse(created)
+        self.assertEqual(existing_file.id, directory_file.id)
+        
+        # Test different files are created separately 
+        different_file, created = save_fuzzing_file(
+            name="test_login",
+            url="https://test.example.com/login",
+            http_status=200
+        )
+        self.assertIsNotNone(different_file)
+        self.assertTrue(created)
+        self.assertNotEqual(different_file.id, directory_file.id)
+        
+        # Test concurrent access with same data (race condition test)
+        results = []
+        errors = []
+        
+        def create_concurrent_file():
+            try:
+                file_obj, created = save_fuzzing_file(
+                    name="test_concurrent",
+                    url="https://test.example.com/concurrent",
+                    http_status=200,
+                    length=512
+                )
+                results.append((file_obj.id if file_obj else None, created))
+            except Exception as e:
+                errors.append(str(e))
+        
+        # Run 3 threads concurrently
+        threads = []
+        for i in range(3):
+            thread = threading.Thread(target=create_concurrent_file)
+            threads.append(thread)
+            thread.start()
+        
+        # Wait for all threads to complete
+        for thread in threads:
+            thread.join()
+        
+        # Verify results
+        self.assertEqual(len(errors), 0, f"Errors occurred: {errors}")
+        self.assertEqual(len(results), 3, "All threads should complete")
+        
+        # Check that all threads got the same file ID (no duplicates)
+        file_ids = [result[0] for result in results if result[0] is not None]
+        unique_ids = set(file_ids)
+        self.assertEqual(len(unique_ids), 1, f"Expected 1 unique file ID, got {len(unique_ids)}: {unique_ids}")
+        
+        # Exactly one thread should have created=True, others should have created=False
+        created_flags = [result[1] for result in results]
+        created_count = sum(created_flags)
+        self.assertEqual(created_count, 1, f"Expected exactly 1 creation, got {created_count}")
+        
+        if CELERY_DEBUG:
+            print(f"Concurrent test results: {results}")
+            print(f"Unique file IDs: {unique_ids}")
 
     def test_vulnerability_scan(self):
         vulns = vulnerability_scan(urls=[self.url], ctx=self.ctx)

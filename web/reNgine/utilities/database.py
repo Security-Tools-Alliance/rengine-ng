@@ -1,4 +1,8 @@
 import validators
+import hashlib
+import time
+from django.db import IntegrityError
+from django.core.exceptions import ValidationError
 from urllib.parse import urlparse
 from django.utils import timezone
 from celery.utils.log import get_task_logger
@@ -6,9 +10,11 @@ from celery.utils.log import get_task_logger
 from reNgine.settings import RENGINE_RESULTS, RENGINE_TASK_IGNORE_CACHE_KWARGS
 from reNgine.utilities.data import replace_nulls, is_iterable
 from reNgine.utilities.url import sanitize_url, is_valid_url, get_domain_from_subdomain
+from reNgine.utilities.distributed_lock import DistributedLock
 from startScan.models import (
     ScanHistory, EndPoint, Subdomain, IpAddress, Vulnerability, 
-    Email, Employee, CveId, CweId, VulnerabilityTags, ScanActivity, MetaFinderDocument
+    Email, Employee, CveId, CweId, VulnerabilityTags, ScanActivity, MetaFinderDocument,
+    DirectoryFile
 )
 from targetApp.models import Domain
 from dashboard.models import User
@@ -137,7 +143,7 @@ def save_endpoint(
 
 
 def save_subdomain(subdomain_name, ctx=None):
-    """Get or create Subdomain object.
+    """Get or create Subdomain object with race condition protection.
 
     Args:
         subdomain_name (str): Subdomain name.
@@ -185,20 +191,100 @@ def save_subdomain(subdomain_name, ctx=None):
         logger.error(f"{subdomain_name} is not a subdomain of domain {domain.name}. Skipping.")
         return None, False
 
-    # Create or get subdomain object
-    subdomain, created = Subdomain.objects.get_or_create(
-        scan_history=scan,
-        target_domain=domain,
-        name=subdomain_name)
+    # Use Redis distributed locking to prevent race conditions during concurrent scans
+    lock_key = f"subdomain_creation:{subdomain_name}:{scan_id}:{domain.id if domain else 'no_domain'}"
+    
+    # Get Redis connection from pool (more efficient than creating new connections)
+    redis_conn = get_redis_connection()
+    
+    if redis_conn:
+        from redis.exceptions import LockError, RedisError
 
-    if created:
-        logger.info(f'Found new subdomain/rDNS: {subdomain_name}')
-        subdomain.discovered_date = timezone.now()
-        if subscan_id:
-            subdomain.subdomain_subscan_ids.add(subscan_id)
-        subdomain.save()
-
-    return subdomain, created
+        try:
+            with redis_conn.lock(lock_key, timeout=30, blocking_timeout=5):
+                # Use get_or_create within the lock for additional safety against edge cases
+                subdomain, created = Subdomain.objects.get_or_create(
+                    scan_history=scan,
+                    target_domain=domain,
+                    name=subdomain_name,
+                    defaults={
+                        'discovered_date': timezone.now()
+                    }
+                )
+                
+                if created:
+                    logger.info(f'Found new subdomain/rDNS: {subdomain_name}')
+                else:
+                    logger.debug(f'Subdomain {subdomain_name} already exists for scan {scan_id}')
+                
+                return subdomain, created
+                
+        except LockError:
+            # Handle lock contention (could log or raise a custom exception)
+            logger.warning(f"Could not acquire Redis lock for subdomain {subdomain_name}")
+            # Fall through to fallback logic
+        except RedisError as e:
+            # Handle Redis connection or other Redis-related errors
+            logger.warning(f"Redis error for subdomain {subdomain_name}: {e}")
+            # Fall through to fallback logic
+    
+    # Fallback logic when Redis is unavailable or lock acquisition fails
+    logger.debug(f'Using fallback get_or_create for subdomain {subdomain_name}')
+    
+    # Fallback with intelligent retry for race condition handling
+    for attempt in range(3):
+        try:
+            subdomain, created = Subdomain.objects.get_or_create(
+                scan_history=scan,
+                target_domain=domain,
+                name=subdomain_name,
+                defaults={
+                    'discovered_date': timezone.now()
+                }
+            )
+            
+            if created:
+                logger.info(f'Found new subdomain/rDNS: {subdomain_name}')
+            
+            return subdomain, created
+            
+        except IntegrityError:
+            # Handle race condition - another process created the subdomain
+            if attempt < 2:  # Don't sleep on the last attempt
+                time.sleep(0.1 * (attempt + 1))  # Progressive backoff
+            continue
+            
+    # Final attempt without exception handling
+    try:
+        subdomain, created = Subdomain.objects.get_or_create(
+            scan_history=scan,
+            target_domain=domain,
+            name=subdomain_name,
+            defaults={
+                'discovered_date': timezone.now()
+            }
+        )
+        
+        if created:
+            logger.info(f'Found new subdomain/rDNS: {subdomain_name}')
+        
+        return subdomain, created
+        
+    except (IntegrityError, ValidationError) as e:
+        # Log database constraint violations but continue processing other subdomains
+        logger.warning(f'Database constraint error for subdomain {subdomain_name}: {e}')
+        # Return None to indicate this subdomain failed but others can continue
+        return None, False
+    except Exception as e:
+        # Log the exception for debugging and re-raise critical errors
+        logger.error(f'Critical error saving subdomain {subdomain_name} in final fallback: {e}', exc_info=True)
+        # Re-raise critical exceptions like database connection failures, memory errors, etc.
+        # Only suppress if it's a non-critical validation issue
+        if isinstance(e, (ConnectionError, MemoryError, SystemExit, KeyboardInterrupt)):
+            raise  # Re-raise critical system errors
+        # For other exceptions, log and continue with other subdomains
+        logger.warning(f'Non-critical error for subdomain {subdomain_name}, continuing with others: {e}')
+        return None, False
 
 
 def save_subdomain_metadata(subdomain, endpoint, extra_datas=None):
@@ -519,6 +605,86 @@ def save_metadata_info(meta_dict):
         meta_finder_document.save()
         results.append(data)
     return results
+
+
+def save_fuzzing_file(name, url, http_status, length=0, words=0, lines=0, content_type=None):
+    """
+    Save or retrieve DirectoryFile with Redis-based distributed locking for race condition prevention.
+    
+    Uses our reusable DistributedLock class for clean, modular distributed locking
+    that ensures only one process can create a specific file record at a time.
+    
+    Args:
+        name (str): File/directory name
+        url (str): Full URL  
+        http_status (int): HTTP status code
+        length (int): Content length
+        words (int): Word count
+        lines (int): Line count
+        content_type (str): Content type header
+        
+    Returns:
+        tuple: (DirectoryFile, created) where created is boolean
+    """
+    # Create a unique lock key based on name + url + status combination
+    lock_key = f"fuzzing_file_lock:{hashlib.md5(f'{name}:{url}:{http_status}'.encode()).hexdigest()}"
+    
+    # Create the base data for querying
+    base_data = {
+        'name': name,
+        'url': url,
+        'http_status': http_status
+    }
+    
+    # Create full data for creation
+    full_data = base_data.copy()
+    full_data.update({
+        'length': length,  # DirectoryFile uses 'length', not 'content_length'
+        'lines': lines,
+        'words': words,
+        'content_type': content_type or ''
+    })
+    
+    # Use our reusable DistributedLock for race condition protection
+    directory_file = DistributedLock.safe_get_or_create_with_lock(
+        model_class=DirectoryFile,
+        lock_key=lock_key,
+        get_kwargs=base_data,
+        create_kwargs=full_data,
+        update_existing_callback=lambda obj: _update_directory_file_fields(obj, full_data)
+    )
+    
+    if directory_file:
+        # Return the created flag from our DistributedLock implementation
+        was_created = getattr(directory_file, '_was_created', False)
+        return directory_file, was_created
+    else:
+        # Fallback failed, return None
+        return None, False
+
+
+def _update_directory_file_fields(directory_file, full_data):
+    """Helper function to update DirectoryFile fields when record exists."""
+    fields_to_update = []
+    
+    # Compare and update fields if they differ (using correct field names)
+    if directory_file.length != full_data['length']:
+        directory_file.length = full_data['length']
+        fields_to_update.append('length')
+    if directory_file.lines != full_data['lines']:
+        directory_file.lines = full_data['lines']
+        fields_to_update.append('lines')
+    if directory_file.words != full_data['words']:
+        directory_file.words = full_data['words']
+        fields_to_update.append('words')
+    if directory_file.content_type != full_data['content_type']:
+        directory_file.content_type = full_data['content_type']
+        fields_to_update.append('content_type')
+    
+    if fields_to_update:
+        directory_file.save(update_fields=fields_to_update)
+    
+    return directory_file
 
 
 def get_task_cache_key(func_name, *args, **kwargs):
