@@ -44,7 +44,6 @@ class TestAddReconNote(BaseTestCase):
     def setUp(self):
         """Set up test environment."""
         super().setUp()
-        self.data_generator.create_project_base()
 
     def test_add_recon_note(self):
         """Test adding a recon note."""
@@ -74,7 +73,6 @@ class TestListTodoNotes(BaseTestCase):
     def setUp(self):
         """Set up test environment."""
         super().setUp()
-        self.data_generator.create_project_full()
         self.data_generator.create_todo_note()
 
     def test_list_todo_notes(self):

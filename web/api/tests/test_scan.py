@@ -29,7 +29,6 @@ class TestScanStatus(BaseTestCase):
     def setUp(self):
         """Set up test environment."""
         super().setUp()
-        self.data_generator.create_project_full()
 
     def test_scan_status(self):
         """Test checking the status of a scan."""
@@ -50,7 +49,6 @@ class TestListScanHistory(BaseTestCase):
     def setUp(self):
         """Set up test environment."""
         super().setUp()
-        self.data_generator.create_project_full()
 
     def test_list_scan_history(self):
         """Test listing scan history for a project."""
@@ -66,7 +64,6 @@ class TestListActivityLogsViewSet(BaseTestCase):
     def setUp(self):
         """Set up test environment."""
         super().setUp()
-        self.data_generator.create_project_base()
         self.data_generator.create_scan_history()
         self.data_generator.create_scan_activity()
         self.data_generator.create_command()
@@ -97,7 +94,6 @@ class TestListScanLogsViewSet(BaseTestCase):
     def setUp(self):
         """Set up test environment."""
         super().setUp()
-        self.data_generator.create_project_full()
 
     def test_list_scan_logs(self):
         """Test retrieving scan logs."""
@@ -114,7 +110,6 @@ class TestStopScan(BaseTestCase):
     def setUp(self):
         """Set up test environment."""
         super().setUp()
-        self.data_generator.create_project_full()
 
     @patch("api.views.StopScan")
     def test_stop_scan(self, mock_stop_scan):
@@ -132,7 +127,6 @@ class TestInitiateSubTask(BaseTestCase):
     def setUp(self):
         """Set up test environment."""
         super().setUp()
-        self.data_generator.create_project_full()
 
     @patch("api.views.initiate_subscan")
     def test_initiate_subtask(self, mock_initiate_subscan):
@@ -154,7 +148,6 @@ class TestListEngines(BaseTestCase):
     def setUp(self):
         """Set up test environment."""
         super().setUp()
-        self.data_generator.create_project_full()
 
     def test_list_engines(self):
         """Test listing all available engines."""
@@ -173,7 +166,6 @@ class TestVisualiseData(BaseTestCase):
     def setUp(self):
         """Set up test environment."""
         super().setUp()
-        self.data_generator.create_project_full()
 
     def test_visualise_data(self):
         """Test retrieving visualisation data for a scan."""
@@ -192,7 +184,6 @@ class TestListTechnology(BaseTestCase):
     def setUp(self):
         """Set up test environment."""
         super().setUp()
-        self.data_generator.create_project_full()
 
     def test_list_technology(self):
         """Test listing technologies for a target."""
@@ -211,7 +202,6 @@ class TestDirectoryViewSet(BaseTestCase):
 
     def setUp(self):
         super().setUp()
-        self.data_generator.create_project_base()
         self.data_generator.create_directory_scan()
         self.data_generator.create_directory_file()
         self.data_generator.directory_scan.directory_files.add(
@@ -253,8 +243,9 @@ class TestListSubScans(BaseTestCase):
     def setUp(self):
         """Set up test environment."""
         super().setUp()
-        self.data_generator.create_project_base()
+
         self.subscans = self.data_generator.create_subscan()
+        # Now self.subscans is a list with the created subscan
         self.subscans[-1].celery_ids = ["test_celery_id"]
         self.subscans[-1].save()
 
@@ -269,8 +260,8 @@ class TestListSubScans(BaseTestCase):
         self.assertTrue(response.data["status"])
         self.assertGreaterEqual(len(response.data["results"]), 1)
         
-        # Test if the created subscan is in the results
-        found_subscan = next((s for s in response.data["results"] if s["celery_ids"][0] == "test_celery_id"), None)
+        # Test if the created subscan is in the results  
+        found_subscan = next((s for s in response.data["results"] if s["celery_ids"] and len(s["celery_ids"]) > 0 and s["celery_ids"][0] == "test_celery_id"), None)
         self.assertIsNotNone(found_subscan, "Le subscan créé n'a pas été trouvé dans les résultats")
         self.assertEqual(found_subscan["id"], self.subscans[-1].id)
 
@@ -280,7 +271,6 @@ class TestFetchSubscanResults(BaseTestCase):
     def setUp(self):
         """Set up test environment."""
         super().setUp()
-        self.data_generator.create_project_full()
         self.data_generator.create_subscan()
 
     def test_fetch_subscan_results(self):

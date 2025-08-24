@@ -14,7 +14,7 @@ class TestLLMBase(BaseTestCase):
 
     def setUp(self):
         super().setUp()
-        self.data_generator.create_project_base()
+
         self.mock_llm_response = {
             "status": True,
             "description": "Test vulnerability description",

@@ -60,8 +60,8 @@ __all__ = [
 
 class TestDataGenerator:
     """
-    Base test case for all API tests.
-    Sets up common fixtures and mocks the user login process.
+    Test data generator for creating test objects programmatically.
+    Replaces Django fixtures with clean, maintainable object creation.
     """
 
 
@@ -74,6 +74,8 @@ class TestDataGenerator:
 
     def create_project_base(self):
         """Create a basic project setup with essential objects."""
+        # Create engine type FIRST to avoid foreign key issues
+        self.create_engine_type()
         self.create_project()
         self.create_domain()
         self.create_scan_history()
@@ -84,15 +86,26 @@ class TestDataGenerator:
 
     def create_project_full(self):
         """Create a full project setup with all related objects."""
-        self.create_project_base()
+        # Start with engine type to ensure it exists for scan_history
+        self.create_engine_type()
+        self.create_project()
+        self.create_domain()
+        self.create_scan_history()
+        self.create_subdomain()
+        self.create_endpoint()
+        
+        # Create subscan before IP address so they can be linked properly
+        self.create_subscan()
+        self.create_ip_address()
+        self.create_port()
+        
+        # Add full features
         self.create_vulnerability()
         self.create_directory_scan()
         self.create_directory_file()
-        self.create_subscan()
         self.create_interesting_lookup_model()
         self.create_search_history()
         self.create_todo_note()
-        self.create_engine_type()
         self.create_organization()
         self.create_employee()
         self.create_email()
@@ -136,10 +149,16 @@ class TestDataGenerator:
 
     def create_scan_history(self):
         """Create and return a test scan history."""
+        # Use the engine type created earlier instead of hardcoded ID
+        scan_type = getattr(self, 'engine_type', None)
+        if not scan_type:
+            # Fallback: create engine type if not exists
+            scan_type = self.create_engine_type()
+            
         self.scan_history = ScanHistory.objects.create(
             domain=self.domain,
             start_scan_date=timezone.now(),
-            scan_type_id=1,
+            scan_type=scan_type,
             scan_status=2,
             tasks=[
                 'fetch_url',
@@ -385,10 +404,12 @@ class TestDataGenerator:
     def create_port(self):
         """Create and return a test port."""
         self.port = Port.objects.create(
-            number=80, service_name="http", description="open", is_uncommon=True
+            number=80, 
+            service_name="http", 
+            description="open", 
+            is_uncommon=True,
+            ip_address=self.ip_address if hasattr(self, 'ip_address') else None
         )
-        if hasattr(self, 'ip_address'):
-            self.ip_address.ports.add(self.port)
         return self.port
 
     def create_metafinder_document(self):
@@ -466,6 +487,112 @@ class TestDataGenerator:
             name='Test Tool',
             github_url='https://github.com/test/tool')
         return self.external_tool
+
+    def create_minimal_auth_setup(self):
+        """
+        Create minimal auth setup instead of auth.json fixture.
+        Creates essential permissions and a test user programmatically.
+        """
+        from django.contrib.auth import get_user_model
+        from django.contrib.auth.models import Permission, Group
+        from django.contrib.contenttypes.models import ContentType
+        
+        User = get_user_model()
+        
+        # Create test user if not exists
+        if not User.objects.filter(username="rengine").exists():
+            self.test_user = User.objects.create_user(
+                username="rengine",
+                email="test@rengine.com",
+                password="testpassword123",
+                is_superuser=True,
+                is_staff=True,
+                is_active=True
+            )
+        else:
+            self.test_user = User.objects.get(username="rengine")
+        
+        return self.test_user
+
+    def create_essential_scan_engine_setup(self):
+        """
+        Create essential scan engine setup instead of scanEngine.json fixture.
+        Creates minimal EngineType objects needed for testing.
+        """
+        from scanEngine.models import EngineType, InstalledExternalTool
+        
+        # Create default engine type if not exists
+        if not EngineType.objects.filter(engine_name="Test Engine").exists():
+            self.default_engine = EngineType.objects.create(
+                engine_name="Test Engine",
+                yaml_configuration="""
+subdomain_discovery: {
+  'uses_tools': ['subfinder'],
+  'enable_http_crawl': true,
+  'threads': 10,
+  'timeout': 5
+}
+http_crawl: {}
+""",
+                default_engine=True
+            )
+        else:
+            self.default_engine = EngineType.objects.filter(engine_name="Test Engine").first()
+        
+        # Create essential external tool
+        if not InstalledExternalTool.objects.filter(name="subfinder").exists():
+            self.subfinder_tool = InstalledExternalTool.objects.create(
+                name="subfinder",
+                description="Test subfinder tool",
+                github_url="https://github.com/projectdiscovery/subfinder",
+                version_lookup_command="subfinder -version",
+                update_command="go install subfinder@latest",
+                install_command="go install subfinder@latest",
+                is_default=True,
+                is_subdomain_gathering=True,
+                is_github_cloned=False
+            )
+        else:
+            self.subfinder_tool = InstalledExternalTool.objects.filter(name="subfinder").first()
+        
+        return self.default_engine
+
+    def create_minimal_celery_setup(self):
+        """
+        Create minimal Celery Beat setup instead of django_celery_beat.json fixture.
+        """
+        try:
+            from django_celery_beat.models import IntervalSchedule, PeriodicTask
+            
+            # Create minimal interval schedule
+            if not IntervalSchedule.objects.filter(every=1, period='minutes').exists():
+                self.test_interval = IntervalSchedule.objects.create(
+                    every=1,
+                    period='minutes'
+                )
+            else:
+                self.test_interval = IntervalSchedule.objects.filter(every=1, period='minutes').first()
+            
+            return self.test_interval
+        except ImportError:
+            # Django celery beat not installed, skip
+            return None
+
+    def link_ip_to_subscans(self):
+        """Link IP addresses to subscans for proper API filtering."""
+        if hasattr(self, 'ip_address') and hasattr(self, 'subscans') and self.subscans:
+            # Get fresh subscans from database to avoid stale references
+            from startScan.models import SubScan
+            fresh_subscans = SubScan.objects.filter(pk__in=[s.pk for s in self.subscans if s.pk])
+            
+            for subscan in fresh_subscans:
+                # Only link if not already linked
+                if not self.ip_address.ip_subscan_ids.filter(pk=subscan.pk).exists():
+                    try:
+                        self.ip_address.ip_subscan_ids.add(subscan)
+                    except Exception:
+                        # Ignore linking errors in test environment 
+                        pass
 
 class TestValidation:
 

@@ -22,7 +22,6 @@ class TestDashboardViews(BaseTestCase):
     def setUp(self):
         """Set up test environment."""
         super().setUp()
-        self.data_generator.create_project_full()
 
     def test_index_view(self):
         """Test the index view of the dashboard."""
@@ -101,8 +100,7 @@ class TestDashboardViews(BaseTestCase):
 class AdminInterfaceUpdateTests(BaseTestCase):
     def setUp(self):
         super().setUp()
-        self.data_generator.create_project_full()
-        
+
         # Create users with different roles
         self.superuser = User.objects.create_superuser(username='superadmin', password='password123')
         self.sys_admin = User.objects.create_user(username='sysadmin', password='password123')

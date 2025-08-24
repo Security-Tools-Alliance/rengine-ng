@@ -21,7 +21,6 @@ class TestListDorkTypes(BaseTestCase):
     def setUp(self):
         """Set up test environment."""
         super().setUp()
-        self.data_generator.create_project_full()
 
     def test_list_dork_types(self):
         """Test listing dork types for a scan."""
@@ -42,7 +41,6 @@ class TestListEmails(BaseTestCase):
     def setUp(self):
         """Set up test environment."""
         super().setUp()
-        self.data_generator.create_project_full()
 
     def test_list_emails(self):
         """Test listing emails for a scan."""
@@ -63,7 +61,6 @@ class TestListDorks(BaseTestCase):
     def setUp(self):
         """Set up test environment."""
         super().setUp()
-        self.data_generator.create_project_full()
 
     def test_list_dorks(self):
         """Test listing dorks for a scan."""
@@ -86,7 +83,6 @@ class TestListEmployees(BaseTestCase):
     def setUp(self):
         """Set up test environment."""
         super().setUp()
-        self.data_generator.create_project_full()
 
     def test_list_employees(self):
         """Test listing employees for a scan."""
@@ -107,7 +103,6 @@ class TestListOsintUsers(BaseTestCase):
     def setUp(self):
         """Set up test environment."""
         super().setUp()
-        self.data_generator.create_project_base()
         self.data_generator.create_metafinder_document()
 
     def test_list_osint_users(self):
@@ -130,7 +125,6 @@ class TestListMetadata(BaseTestCase):
     def setUp(self):
         """Set up test environment."""
         super().setUp()
-        self.data_generator.create_project_base()
         self.data_generator.create_metafinder_document()
 
     def test_list_metadata(self):

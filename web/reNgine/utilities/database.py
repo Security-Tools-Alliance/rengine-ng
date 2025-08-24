@@ -45,6 +45,7 @@ def save_endpoint(
     if not scheme:
         logger.error(f'{http_url} is missing scheme (http or https). Creating default endpoint with http scheme.')
         http_url = f'http://{http_url.strip()}'
+        is_default = True
 
     if not is_valid_url(http_url):
         logger.error(f'{http_url} is not a valid URL. Skipping.')

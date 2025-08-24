@@ -18,7 +18,7 @@ class TestAddTarget(BaseTestCase):
     def setUp(self):
         """Set up test environment."""
         super().setUp()
-        self.data_generator.create_project_base()
+
         Domain.objects.all().delete()
 
     def test_add_target(self):
@@ -49,7 +49,6 @@ class TestListTargetsDatatableViewSet(BaseTestCase):
 
     def setUp(self):
         super().setUp()
-        self.data_generator.create_project_base()
 
     def test_list_targets(self):
         """Test listing targets."""

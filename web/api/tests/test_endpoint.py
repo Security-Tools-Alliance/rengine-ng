@@ -18,7 +18,6 @@ class TestEndPointViewSet(BaseTestCase):
     def setUp(self):
         """Set up test environment."""
         super().setUp()
-        self.data_generator.create_project_base()
         self.data_generator.create_endpoint()
 
     def test_list_endpoints(self):
@@ -65,7 +64,6 @@ class TestEndPointChangesViewSet(BaseTestCase):
     def setUp(self):
         """Set up test environment."""
         super().setUp()
-        self.data_generator.create_project_base()
         self.data_generator.create_endpoint()
         self.data_generator.create_scan_history()
         self.data_generator.create_endpoint(name="endpoint2")
@@ -90,7 +88,6 @@ class TestInterestingEndpointViewSet(BaseTestCase):
     def setUp(self):
         """Set up test environment."""
         super().setUp()
-        self.data_generator.create_project_base()
         self.data_generator.create_endpoint()
 
     def test_interesting_endpoint_viewset(self):

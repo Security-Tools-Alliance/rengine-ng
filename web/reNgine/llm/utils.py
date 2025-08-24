@@ -1,7 +1,9 @@
+import contextlib
+import json
+import logging
 from django.contrib import messages
 from dashboard.models import OllamaSettings
 from reNgine.llm.config import LLM_CONFIG
-import logging
 from markdown import markdown
 
 logger = logging.getLogger(__name__)
@@ -27,23 +29,7 @@ def get_default_llm_model():
         logger.error(f"Error while getting default model from config: {e}")
         return 'gpt-3.5-turbo'  # Ultimate fallback
 
-def validate_llm_model(request, model_name):
-    """Check if LLM model exists and is available"""
-    try:
-        # Check if model exists in LLMToolkit
-        if not LLMToolkit.is_model_available(model_name):
-            messages.info(
-                request,
-                f"Model {model_name} is not available. "
-                f'<a href="/llm/settings/">Configure your LLM models here</a>.',
-                extra_tags='safe'
-            )
-            return False
-        return True
-    except Exception as e:
-        logger.error(f"Error while validating LLM model: {e}")
-        return False 
-    
+
 def get_llm_vuln_input_description(title, path):
 	vulnerability_description = ''
 	vulnerability_description += f'Vulnerability Title: {title}'
@@ -55,7 +41,17 @@ def get_llm_vuln_input_description(title, path):
 def convert_markdown_to_html(markdown_text):
     if markdown_text is None:
         return ""
-    
+
+    # Normalize non-string inputs to string
+    if not isinstance(markdown_text, str):
+        if isinstance(markdown_text, (list, tuple)):
+            try:
+                markdown_text = "\n".join(str(item) for item in markdown_text)
+            except Exception:
+                markdown_text = str(markdown_text)
+        else:
+            markdown_text = str(markdown_text)
+
     # Extract LLM badge if present (at the beginning of the text)
     llm_badge = ""
     if markdown_text.startswith('[LLM:'):
@@ -85,3 +81,77 @@ def convert_markdown_to_html(markdown_text):
     )
     
     return llm_badge + html_content
+
+def is_empty_text(value) -> bool:
+    """
+    Check if a text value is empty or contains only whitespace/null-like values.
+    
+    Args:
+        value: Any value to check for emptiness
+        
+    Returns:
+        bool: True if the value is considered empty, False otherwise
+    """
+    try:
+        if value is None:
+            return True
+        text = str(value).strip()
+        if not text:
+            return True
+
+        # Remove whitespace for normalized checking
+        normalized = text.replace('\n', '').replace('\r', '').replace(' ', '')
+
+        # Try to parse as JSON and check for empty containers, but only if likely JSON
+        if normalized and normalized[0] in ('[', '{'):
+            with contextlib.suppress(json.JSONDecodeError):
+                parsed = json.loads(normalized)
+                if parsed in ("", [], {}):
+                    return True
+        # Also treat some common null-like strings as empty
+        if normalized.lower() in {'null', 'none'}:
+            return True
+
+        # Legacy check for string representations of empty containers
+        return normalized in {'[]', '[\"\"]', '[\'\']'}
+    except Exception:
+        return True
+
+def is_empty_attack_surface(value) -> bool:
+    """
+    Check if an attack surface value is empty, considering LLM tags.
+    
+    Args:
+        value: The attack surface text to check
+        
+    Returns:
+        bool: True if the value is considered empty, False otherwise
+    """
+    try:
+        if not value:
+            return True
+        text = str(value)
+        # Strip LLM tag if present
+        if text.startswith('[LLM:') and ']' in text:
+            text = text[text.index(']') + 1:]
+        return len(text.strip()) == 0
+    except Exception:
+        return True
+
+def is_empty_llm_report(model_obj) -> bool:
+    """
+    Check if an LLM vulnerability report is empty by checking all relevant fields.
+    
+    Args:
+        model_obj: LLMVulnerabilityReport instance to check
+        
+    Returns:
+        bool: True if all report fields are empty, False otherwise
+    """
+    fields = [
+        getattr(model_obj, 'description', None),
+        getattr(model_obj, 'impact', None),
+        getattr(model_obj, 'remediation', None),
+        getattr(model_obj, 'references', None),
+    ]
+    return all(is_empty_text(f) for f in fields)

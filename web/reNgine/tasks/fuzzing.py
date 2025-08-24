@@ -133,7 +133,7 @@ def dir_file_fuzz(self, ctx={}, description=None):
             # Build final cmd
             fcmd = cmd
             fcmd += f' -x {proxy}' if proxy else ''
-            fcmd += f' -u {url} -json'
+            fcmd += f' -u {url} -s -json'
 
             # Initialize DirectoryScan object
             dirscan = DirectoryScan()
