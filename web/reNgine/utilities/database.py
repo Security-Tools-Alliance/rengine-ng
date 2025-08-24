@@ -1,17 +1,16 @@
 import validators
 import hashlib
 import time
-import redis
 from django.db import IntegrityError
 from django.core.exceptions import ValidationError
 from urllib.parse import urlparse
 from django.utils import timezone
 from celery.utils.log import get_task_logger
-from django.conf import settings
 
 from reNgine.settings import RENGINE_RESULTS, RENGINE_TASK_IGNORE_CACHE_KWARGS
 from reNgine.utilities.data import replace_nulls, is_iterable
 from reNgine.utilities.url import sanitize_url, is_valid_url, get_domain_from_subdomain
+from reNgine.utilities.distributed_lock import DistributedLock
 from startScan.models import (
     ScanHistory, EndPoint, Subdomain, IpAddress, Vulnerability, 
     Email, Employee, CveId, CweId, VulnerabilityTags, ScanActivity, MetaFinderDocument,
@@ -21,39 +20,6 @@ from targetApp.models import Domain
 from dashboard.models import User
 
 logger = get_task_logger(__name__)
-
-# Global Redis connection pool for efficient connection reuse
-_redis_pool = None
-
-def get_redis_connection():
-    """Get a Redis connection from a connection pool for efficient reuse."""
-    global _redis_pool
-    
-    if _redis_pool is None:
-        try:
-            _redis_pool = redis.ConnectionPool(
-                host=settings.REDIS_HOST,
-                port=settings.REDIS_PORT,
-                db=settings.REDIS_DB,
-                password=settings.REDIS_PASSWORD,
-                socket_timeout=5,
-                socket_connect_timeout=5,
-                retry_on_timeout=True,
-                socket_keepalive=True,
-                socket_keepalive_options={},
-                max_connections=50,  # Pool size for concurrent operations
-                health_check_interval=30  # Check connection health every 30 seconds
-            )
-            logger.debug("Created Redis connection pool")
-        except Exception as e:
-            logger.warning(f"Failed to create Redis connection pool: {e}")
-            return None
-    
-    try:
-        return redis.Redis(connection_pool=_redis_pool)
-    except Exception as e:
-        logger.warning(f"Failed to get Redis connection from pool: {e}")
-        return None
 
 
 #-------------------------------#
@@ -645,8 +611,8 @@ def save_fuzzing_file(name, url, http_status, length=0, words=0, lines=0, conten
     """
     Save or retrieve DirectoryFile with Redis-based distributed locking for race condition prevention.
     
-    Uses Redis for distributed locks to ensure only one process can create a specific file record
-    at a time, completely eliminating race conditions across multiple processes/containers.
+    Uses our reusable DistributedLock class for clean, modular distributed locking
+    that ensures only one process can create a specific file record at a time.
     
     Args:
         name (str): File/directory name
@@ -673,133 +639,52 @@ def save_fuzzing_file(name, url, http_status, length=0, words=0, lines=0, conten
     # Create full data for creation
     full_data = base_data.copy()
     full_data.update({
-        'length': length,
-        'words': words,
+        'length': length,  # DirectoryFile uses 'length', not 'content_length'
         'lines': lines,
-        'content_type': content_type
+        'words': words,
+        'content_type': content_type or ''
     })
     
-    # Get Redis connection from shared pool (more efficient than creating new connections)
-    redis_client = get_redis_connection()
+    # Use our reusable DistributedLock for race condition protection
+    directory_file = DistributedLock.safe_get_or_create_with_lock(
+        model_class=DirectoryFile,
+        lock_key=lock_key,
+        get_kwargs=base_data,
+        create_kwargs=full_data,
+        update_existing_callback=lambda obj: _update_directory_file_fields(obj, full_data)
+    )
     
-    if redis_client:
-        try:
-            # Try to acquire lock with timeout
-            lock_acquired = redis_client.set(lock_key, "locked", nx=True, ex=30)  # 30 second timeout
-            
-            if lock_acquired:
-                try:
-                    # Use get_or_create within the lock for additional safety against edge cases
-                    dfile, created = DirectoryFile.objects.get_or_create(
-                        **base_data,
-                        defaults={
-                            'content_length': length,
-                            'response_time': 0,
-                            'lines': lines,
-                            'words': words,
-                            'content_type': content_type or ''
-                        }
-                    )
-                    if not created:
-                        fields_to_update = []
-                        # Note: http_status is part of lookup criteria, so it should always match
-                        # No need to update it since it was used to find this record
-                        if dfile.content_length != length:
-                            dfile.content_length = length
-                            fields_to_update.append('content_length')
-                        if dfile.response_time != 0:
-                            dfile.response_time = 0
-                            fields_to_update.append('response_time')
-                        if dfile.lines != lines:
-                            dfile.lines = lines
-                            fields_to_update.append('lines')
-                        if dfile.words != words:
-                            dfile.words = words
-                            fields_to_update.append('words')
-                        if dfile.content_type != (content_type or ''):
-                            dfile.content_type = content_type or ''
-                            fields_to_update.append('content_type')
-                        if fields_to_update:
-                            dfile.save(update_fields=fields_to_update)
-                    
-                    if created:
-                        logger.debug(f'Created new DirectoryFile with Redis lock: {name} -> {url}')
-                    else:
-                        logger.debug(f'Found existing DirectoryFile in locked section: {name} -> {url}')
-                    
-                    return dfile, created
-                    
-                finally:
-                    # Always release the lock
-                    try:
-                        redis_client.delete(lock_key)
-                    except Exception:
-                        pass  # Ignore cleanup errors
-            else:
-                # Could not acquire lock, wait briefly and check if record exists
-                logger.debug(f'Could not acquire lock for {name} -> {url}, checking for existing record')
-                
-                # Wait briefly for the locked operation to complete
-                for attempt in range(5):
-                    existing_file = DirectoryFile.objects.filter(**base_data).first()
-                    if existing_file:
-                        logger.debug(f'Found existing DirectoryFile while waiting for lock: {name} -> {url}')
-                        return existing_file, False
-                    time.sleep(0.1)  # Wait 100ms
-                
-                # If still no record exists, fall back to regular creation attempt
-                logger.debug(f'No record found after waiting, falling back to get_or_create for: {name} -> {url}')
-                return _fallback_save_fuzzing_file(base_data, full_data, name, url)
-                
-        except Exception as redis_error:
-            # Redis unavailable, fall back to get_or_create approach
-            logger.debug(f'Redis locking failed for {name} -> {url}: {redis_error}, falling back')
-            return _fallback_save_fuzzing_file(base_data, full_data, name, url)
-    
-    # Redis connection not available, use fallback
-    logger.debug(f'Redis connection not available for {name} -> {url}, using fallback')
-    return _fallback_save_fuzzing_file(base_data, full_data, name, url)
+    if directory_file:
+        # Determine if it was created or updated (simplified logic)
+        was_created = hasattr(directory_file, '_was_created') and directory_file._was_created
+        return directory_file, was_created
+    else:
+        # Fallback failed, return None
+        return None, False
 
 
-def _fallback_save_fuzzing_file(base_data, full_data, name, url):
-    """Fallback method when Redis locking is unavailable."""
-    try:
-        # Only pass fields not used for lookup in defaults to avoid confusion
-        defaults_data = {k: v for k, v in full_data.items() if k not in base_data}
-        dfile, created = DirectoryFile.objects.get_or_create(
-            defaults=defaults_data,
-            **base_data
-        )
-        if created:
-            logger.debug(f'Created new DirectoryFile via fallback get_or_create: {name} -> {url}')
-        else:
-            logger.debug(f'Found existing DirectoryFile via fallback get_or_create: {name} -> {url}')
-        return dfile, created
-        
-    except Exception as e:
-        # get_or_create failed, try manual approach
-        logger.debug(f'Fallback get_or_create failed for {name} -> {url}: {e}')
-        
-        existing_file = DirectoryFile.objects.filter(**base_data).first()
-        if existing_file:
-            logger.debug(f'Found existing DirectoryFile after fallback failure: {name} -> {url}')
-            return existing_file, False
-        
-        # Try direct creation as last resort
-        try:
-            dfile = DirectoryFile.objects.create(**full_data)
-            logger.debug(f'Created DirectoryFile via fallback direct create: {name} -> {url}')
-            return dfile, True
-            
-        except Exception as create_error:
-            # Final check
-            final_check = DirectoryFile.objects.filter(**base_data).first()
-            if final_check:
-                logger.debug(f'Found DirectoryFile on final fallback check: {name} -> {url}')
-                return final_check, False
-            
-            logger.error(f'All fallback attempts failed for DirectoryFile {name} -> {url}: {e}, {create_error}')
-            raise create_error
+def _update_directory_file_fields(directory_file, full_data):
+    """Helper function to update DirectoryFile fields when record exists."""
+    fields_to_update = []
+    
+    # Compare and update fields if they differ (using correct field names)
+    if directory_file.length != full_data['length']:
+        directory_file.length = full_data['length']
+        fields_to_update.append('length')
+    if directory_file.lines != full_data['lines']:
+        directory_file.lines = full_data['lines']
+        fields_to_update.append('lines')
+    if directory_file.words != full_data['words']:
+        directory_file.words = full_data['words']
+        fields_to_update.append('words')
+    if directory_file.content_type != full_data['content_type']:
+        directory_file.content_type = full_data['content_type']
+        fields_to_update.append('content_type')
+    
+    if fields_to_update:
+        directory_file.save(update_fields=fields_to_update)
+    
+    return directory_file
 
 
 def get_task_cache_key(func_name, *args, **kwargs):
