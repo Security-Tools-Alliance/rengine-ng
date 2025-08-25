@@ -1,14 +1,16 @@
 include .env
 .DEFAULT_GOAL:=help
 
-# macOS and Linux compatibility
-# This Makefile supports both macOS and Linux with appropriate OS-specific behavior
+# Operating system detection (must be early to use in conditional exports)
+UNAME_S := $(shell uname -s)
+IS_MACOS := $(shell if [ "$(UNAME_S)" = "Darwin" ]; then echo "yes"; else echo "no"; fi)
 
 # Export host UID & GID (cross-platform handling)
 ifeq ($(IS_MACOS),yes)
-# On macOS, use actual user IDs - Docker Desktop handles mapping properly
-export HOST_UID=$(shell id -u)
-export HOST_GID=$(shell id -g)
+# On macOS, use safe defaults to avoid conflicts with system groups (GID 20 = staff)
+# Docker Desktop handles file permission mapping automatically
+export HOST_UID=1000
+export HOST_GID=1000
 else
 # On Linux, respect sudo context for proper permissions
 export HOST_UID=$(if $(SUDO_USER),$(shell id -u $(SUDO_USER)),$(shell id -u))
@@ -42,10 +44,6 @@ DOCKER_COMPOSE := $(shell if command -v docker > /dev/null && docker compose ver
 ifeq ($(DOCKER_COMPOSE),)
 $(error Docker Compose not found. Please install Docker Compose)
 endif
-
-# Operating system detection
-UNAME_S := $(shell uname -s)
-IS_MACOS := $(shell if [ "$(UNAME_S)" = "Darwin" ]; then echo "yes"; else echo "no"; fi)
 
 # Check if user has Docker access (different on macOS vs Linux)
 ifeq ($(IS_MACOS),yes)
@@ -219,13 +217,12 @@ prune:			## Remove containers, delete volume data, and prune Docker system.
 
 help:			## Show this help.
 	@echo "Manage Docker images, containers and Django commands using Docker Compose files."
-	@echo "Compatible with both macOS and Linux systems."
 	@echo ""
 	@echo "Usage:"
 	@echo "  make <target> [GPU=1] (default: help)"
 	@echo ""
 	@echo "Options:"
-	@echo "  GPU=1                                    Enable GPU support for Ollama LLM (Linux only)"
+	@echo "  GPU=1                                    Enable GPU support for Ollama LLM"
 	@echo ""
 	@echo "Targets:"
 	@echo "  make restart [service1] [service2] ...  				Restart specific services in production mode"
