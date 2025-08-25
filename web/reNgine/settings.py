@@ -203,6 +203,14 @@ CELERY_IGNORE_RESULTS = False
 CELERY_EAGER_PROPAGATES_EXCEPTIONS = True
 CELERY_TRACK_STARTED = True
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+
+'''
+Redis settings for distributed locking
+'''
+REDIS_HOST = env("REDIS_HOST", default="redis")
+REDIS_PORT = env("REDIS_PORT", default=6379)
+REDIS_DB = env("REDIS_DB", default=0)
+REDIS_PASSWORD = env("REDIS_PASSWORD", default=None)
 '''
 ROLES and PERMISSIONS
 '''
