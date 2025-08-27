@@ -7,6 +7,8 @@ from urllib.parse import urlparse
 from django.utils import timezone
 from celery.utils.log import get_task_logger
 
+from reNgine.utilities.distributed_lock import get_redis_connection
+
 from reNgine.settings import RENGINE_RESULTS, RENGINE_TASK_IGNORE_CACHE_KWARGS
 from reNgine.utilities.data import replace_nulls, is_iterable
 from reNgine.utilities.url import sanitize_url, is_valid_url, get_domain_from_subdomain

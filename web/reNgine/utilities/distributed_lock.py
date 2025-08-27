@@ -244,10 +244,7 @@ class DistributedLock:
         Returns:
             Model instance (with _was_created attribute if created)
         """
-        from django.db import IntegrityError
-        from celery.utils.log import get_task_logger
-        
-        logger = get_task_logger(__name__)
+    from django.db import IntegrityError
         
         def locked_operation():
             try:
