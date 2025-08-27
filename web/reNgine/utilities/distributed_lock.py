@@ -244,7 +244,7 @@ class DistributedLock:
         Returns:
             Model instance (with _was_created attribute if created)
         """
-    from django.db import IntegrityError
+        from django.db import IntegrityError
         
         def locked_operation():
             try:
