@@ -218,29 +218,11 @@ class TestDataGenerator:
         )
         return self.directory_scan
 
-    def create_directory_file(self, name="admin", url="https://example.com/admin", http_status=200, **kwargs):
-        """Create and return a test directory file with comprehensive fuzzing data.
-        
-        Args:
-            name (str): File/directory name (default: "admin")
-            url (str): Full URL (default: "https://example.com/admin") 
-            http_status (int): HTTP status code (default: 200)
-            **kwargs: Additional fields (length, words, lines, content_type)
-        """
-        # Set default values for fuzzing-specific fields
-        defaults = {
-            'length': 1024,
-            'words': 50,
-            'lines': 25,
-            'content_type': 'text/html'
-        }
-        defaults.update(kwargs)
-        
+    def create_directory_file(self):
+        """Create and return a test directory file."""
         self.directory_file = DirectoryFile.objects.create(
-            name=name,
-            url=url,
-            http_status=http_status,
-            **defaults
+            name="test.txt",
+            url="https://example.com/test.txt"
         )
         return self.directory_file
 
