@@ -1,6 +1,5 @@
 #!/bin/bash
 
-#!/bin/bash
 
 # GPU Detection Script for reNgine-ng
 # Supports both macOS and Linux systems
