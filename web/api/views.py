@@ -2391,14 +2391,26 @@ class EndPointChangesViewSet(viewsets.ModelViewSet):
                     .annotate(
                         change=Value('added', output_field=CharField())
                     )
+                    .prefetch_related(
+                        'subdomain',
+                        'target_domain',
+                        'scan_history',
+                        'techs'
+                    )
                 )
             elif changes == 'removed':
                 queryset = (
                     EndPoint.objects
-                    .filter(scan_history__id=last_scan)
+                    .filter(scan_history__id=last_scan.id)
                     .filter(http_url__in=removed_endpoints)
                     .annotate(
                         change=Value('removed', output_field=CharField())
+                    )
+                    .prefetch_related(
+                        'subdomain',
+                        'target_domain',
+                        'scan_history',
+                        'techs'
                     )
                 )
             else:
@@ -2409,27 +2421,31 @@ class EndPointChangesViewSet(viewsets.ModelViewSet):
                     .annotate(
                         change=Value('added', output_field=CharField())
                     )
+                    .prefetch_related(
+                        'subdomain',
+                        'target_domain',
+                        'scan_history',
+                        'techs'
+                    )
                 )
                 removed_endpoints = (
                     EndPoint.objects
-                    .filter(scan_history__id=last_scan)
+                    .filter(scan_history__id=last_scan.id)
                     .filter(http_url__in=removed_endpoints)
                     .annotate(
                         change=Value('removed', output_field=CharField())
+                    )
+                    .prefetch_related(
+                        'subdomain',
+                        'target_domain',
+                        'scan_history',
+                        'techs'
                     )
                 )
                 queryset = added_endpoint.union(removed_endpoints)
         else:
             # If this is the first scan, return empty queryset as changes are only meaningful from 2nd scan
             queryset = EndPoint.objects.none()
-        
-        # Optimize queries with prefetch_related to avoid N+1 queries
-        queryset = queryset.prefetch_related(
-            'subdomain',
-            'target_domain',
-            'scan_history',
-            'techs'
-        )
         
         return queryset
 
