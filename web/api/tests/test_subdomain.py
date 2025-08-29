@@ -23,7 +23,6 @@ class TestQueryInterestingSubdomains(BaseTestCase):
 
     def setUp(self):
         super().setUp()
-        self.data_generator.create_project_base()
         self.data_generator.create_interesting_lookup_model()
 
     def test_query_interesting_subdomains(self):
@@ -41,7 +40,6 @@ class TestDeleteSubdomain(BaseTestCase):
 
     def setUp(self):
         super().setUp()
-        self.data_generator.create_project_base()
 
     def test_delete_subdomain(self):
         """Test deleting a subdomain."""
@@ -67,7 +65,6 @@ class TestListSubdomains(BaseTestCase):
     def setUp(self):
         """Set up test environment."""
         super().setUp()
-        self.data_generator.create_project_full()
 
     def test_list_subdomains(self):
         """Test listing subdomains for a target."""
@@ -86,7 +83,6 @@ class TestSubdomainsViewSet(BaseTestCase):
     def setUp(self):
         """Set up test environment."""
         super().setUp()
-        self.data_generator.create_project_full()
 
     def test_subdomains_viewset(self):
         """Test retrieving subdomains for a scan."""
@@ -106,7 +102,6 @@ class TestSubdomainChangesViewSet(BaseTestCase):
     def setUp(self):
         """Set up test environment."""
         super().setUp()
-        self.data_generator.create_project_base()
         self.data_generator.create_scan_history()
         self.data_generator.create_subdomain("admin1.example.com")
 
@@ -129,7 +124,6 @@ class TestToggleSubdomainImportantStatus(BaseTestCase):
     def setUp(self):
         """Set up test environment."""
         super().setUp()
-        self.data_generator.create_project_base()
 
     def test_toggle_subdomain_important_status(self):
         """Test toggling the important status of a subdomain."""
@@ -149,7 +143,6 @@ class TestSubdomainDatatableViewSet(BaseTestCase):
     def setUp(self):
         """Set up test environment."""
         super().setUp()
-        self.data_generator.create_project_base()
 
     def test_list_subdomains(self):
         """Test listing subdomains."""
@@ -185,7 +178,6 @@ class TestInterestingSubdomainViewSet(BaseTestCase):
     def setUp(self):
         """Set up test environment."""
         super().setUp()
-        self.data_generator.create_project_base()
         self.data_generator.create_interesting_lookup_model()
 
     def test_list_interesting_subdomains(self):

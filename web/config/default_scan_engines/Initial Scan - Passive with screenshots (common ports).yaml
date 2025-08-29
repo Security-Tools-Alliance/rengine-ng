@@ -1,0 +1,57 @@
+# This scan engine is used to discover subdomains and scan them passively with screenshots
+# The fastest scan for retrieving a lot of informations on the target
+# QUICK SCAN - USE LESS RESOURCES - HIGHLY RECOMMENDED ON INITIAL SCAN
+
+# Global vars for all tools
+#
+# Custom header - FFUF, Nuclei, Dalfox, CRL Fuzz, HTTPx, Fetch URL (Hakrawler, Katana, Gospider)
+custom_header: {
+  'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:126.0) Gecko/20100101 Firefox/126.0',
+}
+# 'user_agent': ''                    # Dalfox only
+# 'timeout': 10                       # Subdomain discovery, Screenshot, Port scan, FFUF, Nuclei                       
+# 'threads': 30                       # All tools
+# 'rate_limit': 150                   # Port scan, FFUF, Nuclei
+# 'intensity': 'normal'               # Screenshot (grab only the root endpoints of each subdomain), Nuclei (reduce number of endpoints to scan), OSINT (not implemented yet)
+# 'retries': 1                        # Nuclei
+
+subdomain_discovery: {
+  'uses_tools': ['subfinder', 'ctfr', 'sublist3r', 'tlsx', 'oneforall', 'netlas'],  # amass-passive, amass-active, All
+  'threads': 30,
+  'timeout': 5,
+  # 'use_subfinder_config': false,
+  # 'use_amass_config': false,
+  # 'amass_wordlist': 'deepmagic.com-prefixes-top50000'
+}
+http_crawl: {
+  # 'custom_header': {
+  #   'Cookie':'Test',
+  #   'User-Agent': 'Mozilla/5.0'
+  # },
+  # 'threads': 30,
+  # 'follow_redirect': false,
+  # Precrawl configuration - controls which ports are tested during initial crawl
+  # 'precrawl_ports': [80, 443, 8080, 8081, 8082, 8443, 3000, 3001, 5000, 9000],  # Common ports (always tested)
+  # 'precrawl_uncommon_ports': false,  # Set to true to also test uncommon ports (81-55672)
+  # 'precrawl_all_ports': false,       # Set to true to test all ports (common + uncommon), overrides precrawl_uncommon_ports
+  # Batch size for processing URLs
+  # Smaller batches = more granular control, better error handling
+  # Larger batches = potentially faster but higher memory usage and risk of overwhelming the system
+  # 'precrawl_batch_size': 350
+}
+osint: {
+  'discover': [
+      'emails',
+      'metainfo',
+      'employees'
+    ],
+  'intensity': 'normal',
+  'documents_limit': 50
+}
+waf_detection: {
+}
+screenshot: {
+  'intensity': 'normal',
+  'timeout': 10,
+  'threads': 40
+}

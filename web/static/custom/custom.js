@@ -1,3 +1,21 @@
+/**
+ * Escapes HTML special characters to prevent XSS attacks
+ * @param {string} str - The string to escape
+ * @return {string} The escaped string
+ */
+function escapeHtml(str) {
+	if (str == null) {
+		return '';
+	}
+	return String(str)
+		.replace(/&/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;')
+		.replace(/"/g, '&quot;')
+		.replace(/'/g, '&#x27;')
+		.replace(/\//g, '&#x2F;');
+}
+
 function checkall(clickchk, relChkbox) {
 	var checker = $('#' + clickchk);
 	var multichk = $('.' + relChkbox);
@@ -1067,7 +1085,7 @@ function show_subscan_results(endpoint_url, subscan_id) {
 		} else if (response['subscan']['task'] == 'dir_file_fuzz') {
 			task_name = 'Directory and Files Fuzzing';
 		}
-		$('#xl-modal_title').html(`${task_name} Results on ${response['subscan']['subdomain_name']}`);
+		$('#xl-modal-title').html(`${task_name} Results on ${response['subscan']['subdomain_name']}`);
 		var scan_status = '';
 		var badge_color = 'danger';
 		if (response['subscan']['status'] == 1) {
@@ -1636,7 +1654,7 @@ function display_whois_on_modal(response, addTargetUrl, project_slug, show_add_t
 		</div>
 		<div class="col-sm-9">
 			<div class="tab-content pt-0">
-			<div class="tab-pane fade active show" id="v-pills-domain" role="tabpanel" aria-labelledby="v-pills-domain-tab" data-simplebar style="min-height: 300px;">
+			<div class="tab-pane fade active show tab-pane-300" id="v-pills-domain" role="tabpanel" aria-labelledby="v-pills-domain-tab" data-simplebar>
 				<div class="row">
 					<div class="col-4">
 						<small class="sub-header">Domain</small>
@@ -1841,7 +1859,7 @@ function display_whois_on_modal(response, addTargetUrl, project_slug, show_add_t
 				</div>`;
 
 				content += `
-				<div class="tab-pane fade" id="v-pills-dns" role="tabpanel" aria-labelledby="v-pills-dns-tab" data-simplebar style="min-height: 300px;">
+				<div class="tab-pane fade tab-pane-300" id="v-pills-dns" role="tabpanel" aria-labelledby="v-pills-dns-tab" data-simplebar>
 					<h4>A Records</h4>`;
 					for (var a in response.dns.a) {
 						var a_object = response.dns.a[a];
@@ -1860,7 +1878,7 @@ function display_whois_on_modal(response, addTargetUrl, project_slug, show_add_t
 					}
 					content += `</div>`;
 
-					content += `<div class="tab-pane fade" id="v-pills-history" role="tabpanel" aria-labelledby="v-pills-history-tab" data-simplebar style="max-height: 300px; min-height: 300px;">
+					content += `<div class="tab-pane fade tab-pane-300-scroll" id="v-pills-history" role="tabpanel" aria-labelledby="v-pills-history-tab" data-simplebar>
 						<div class="alert alert-success">${response.historical_ips.length} Historical Ips</div>
 						<table id="basic-datatable" class="table dt-responsive w-100">
 							<thead>
@@ -1888,7 +1906,7 @@ function display_whois_on_modal(response, addTargetUrl, project_slug, show_add_t
 						</table>
 					</div>`;
 
-					content += `<div class="tab-pane fade" id="v-pills-nameserver" role="tabpanel" aria-labelledby="v-pills-nameserver-tab" data-simplebar style="max-height: 300px; min-height: 300px;">`;
+					content += `<div class="tab-pane fade tab-pane-300-scroll" id="v-pills-nameserver" role="tabpanel" aria-labelledby="v-pills-nameserver-tab" data-simplebar>`;
 
 					if (response.nameservers && response.nameservers.length > 0) {
 						content += `<div class="alert alert-success">${response.nameservers.length} NameServers identified</div>`;
@@ -1901,12 +1919,24 @@ function display_whois_on_modal(response, addTargetUrl, project_slug, show_add_t
 						content += `<div class="alert alert-info">No NameServer identified</div>`;
 					}
 					
-					content += `</div><div class="tab-pane fade" id="v-pills-similar" role="tabpanel" aria-labelledby="v-pills-similar-tab" data-simplebar style="max-height: 300px; min-height: 300px;">`;
+					content += `</div><div class="tab-pane fade tab-pane-300-scroll" id="v-pills-similar" role="tabpanel" aria-labelledby="v-pills-similar-tab" data-simplebar>`;
 
 					if (response.related_tlds.length > 0) {
 						for (var domain in response.related_tlds) {
 							var dom_object = response.related_tlds[domain];
-							content += `<span class="badge badge-soft-primary badge-link waves-effect waves-light me-1" data-toggle="tooltip" title="Add ${dom_object} as target." onclick="add_target('${addTargetUrl}', '${project_slug}', '${dom_object}'')">${dom_object}</span>`;
+							// Generate unique ID for secure event handling
+							var badgeId = `tld-badge-${Math.random().toString(36).substr(2, 9)}`;
+							content += `<span id="${badgeId}" class="badge badge-soft-primary badge-link waves-effect waves-light me-1" data-toggle="tooltip" title="Add ${escapeHtml(dom_object)} as target." data-add-url="${escapeHtml(addTargetUrl)}" data-project="${escapeHtml(project_slug)}" data-domain="${escapeHtml(dom_object)}">${escapeHtml(dom_object)}</span>`;
+							
+							// Add secure event listener after DOM insertion
+							setTimeout(function() {
+								var badgeElement = document.getElementById(badgeId);
+								if (badgeElement) {
+									badgeElement.addEventListener('click', function() {
+										add_target(this.dataset.addUrl, this.dataset.project, this.dataset.domain);
+									});
+								}
+							}, 0);
 						}
 					}
 					else{
@@ -1915,12 +1945,24 @@ function display_whois_on_modal(response, addTargetUrl, project_slug, show_add_t
 					content += `</div>`
 
 
-					content += `<div class="tab-pane fade" id="v-pills-related" role="tabpanel" aria-labelledby="v-pills-related-tab" data-simplebar style="max-height: 300px; min-height: 300px;">`;
+					content += `<div class="tab-pane fade tab-pane-300-scroll" id="v-pills-related" role="tabpanel" aria-labelledby="v-pills-related-tab" data-simplebar>`;
 
 					if (response.related_domains.length > 0) {
 						for (var domain in response.related_domains) {
 							var dom_object = response.related_domains[domain];
-							content += `<span class="badge badge-soft-primary badge-link waves-effect waves-light me-1" data-toggle="tooltip" title="Add ${dom_object} as target." onclick="add_target('${addTargetUrl}', '${project_slug}', '${dom_object}')">${dom_object}</span>`;
+							// Generate unique ID for secure event handling
+							var relatedBadgeId = `related-badge-${Math.random().toString(36).substr(2, 9)}`;
+							content += `<span id="${relatedBadgeId}" class="badge badge-soft-primary badge-link waves-effect waves-light me-1" data-toggle="tooltip" title="Add ${escapeHtml(dom_object)} as target." data-add-url="${escapeHtml(addTargetUrl)}" data-project="${escapeHtml(project_slug)}" data-domain="${escapeHtml(dom_object)}">${escapeHtml(dom_object)}</span>`;
+							
+							// Add secure event listener after DOM insertion
+							setTimeout(function() {
+								var relatedBadgeElement = document.getElementById(relatedBadgeId);
+								if (relatedBadgeElement) {
+									relatedBadgeElement.addEventListener('click', function() {
+										add_target(this.dataset.addUrl, this.dataset.project, this.dataset.domain);
+									});
+								}
+							}, 0);
 						}
 					}
 					else{
@@ -2115,7 +2157,7 @@ function loadSubscanHistoryWidget(endpoint, scan_history_id = null, domain_id = 
 	});
 }
 
-function get_technologies(endpoint_url, scan_id=null, domain_id=null){
+function get_technologies(endpoint_url, subdomain_endpoint_url, scan_id=null, domain_id=null){
 	// this function will fetch and render tech in widget
 	var url = `${endpoint_url}?`;
 
@@ -2134,10 +2176,10 @@ function get_technologies(endpoint_url, scan_id=null, domain_id=null){
 		for (var val in data['technologies']){
 			tech = data['technologies'][val]
 			if (scan_id) {
-				$("#technologies").append(`<span class='badge badge-soft-primary  m-1 badge-link' data-toggle="tooltip" title="${tech['count']} Subdomains use this technology." onclick="get_tech_details('${endpoint_url}', '${tech['name']}', scan_id=${scan_id}, domain_id=null)">${tech['name']}</span>`);
+				$("#technologies").append(`<span class='badge badge-soft-primary  m-1 badge-link' data-toggle="tooltip" title="${tech['count']} Subdomains use this technology." onclick="get_tech_details('${subdomain_endpoint_url}', '${tech['name']}', scan_id=${scan_id}, domain_id=null)">${tech['name']}</span>`);
 			}
 			else if (domain_id) {
-				$("#technologies").append(`<span class='badge badge-soft-primary  m-1 badge-link' data-toggle="tooltip" title="${tech['count']} Subdomains use this technology." onclick="get_tech_details('${endpoint_url}', '${tech['name']}', scan_id=null, domain_id=${domain_id})">${tech['name']}</span>`);
+				$("#technologies").append(`<span class='badge badge-soft-primary  m-1 badge-link' data-toggle="tooltip" title="${tech['count']} Subdomains use this technology." onclick="get_tech_details('${subdomain_endpoint_url}', '${tech['name']}', scan_id=null, domain_id=${domain_id})">${tech['name']}</span>`);
 			}
 		}
 		$('#technologies-count').html(`<span class="badge badge-soft-primary me-1">${data['technologies'].length}</span>`);
@@ -2242,7 +2284,7 @@ function get_and_render_cve_details(endpoint_url, cve_id){
 			$('#xl-modal-title').empty();
 			$('#xl-modal-content').empty();
 			$('#xl-modal-footer').empty();
-			$('#xl-modal_title').html(`CVE Details of ${cve_id}`);
+			$('#xl-modal-title').text(`CVE Details of ${cve_id}`);
 
 			var cvss_score_badge = 'danger';
 
@@ -2266,7 +2308,7 @@ function get_and_render_cve_details(endpoint_url, cve_id){
 				<div class="tab-content pt-0">`;
 
 				content += `
-				<div class="tab-pane fade active show" id="v-pills-cve-details" role="tabpanel" aria-labelledby="v-pills-cve-details-tab" data-simplebar style="max-height: 600px; min-height: 600px;">
+				<div class="tab-pane fade active show tab-pane-600-scroll" id="v-pills-cve-details" role="tabpanel" aria-labelledby="v-pills-cve-details-tab" data-simplebar>
 					<h4 class="header-title">${cve_id}</h4>
 					<div class="alert alert-warning" role="alert">
 						${response.result.summary}
@@ -2330,11 +2372,11 @@ function get_and_render_cve_details(endpoint_url, cve_id){
 					referencesContent = `<p>${references}</p>`;
 				}
 				
-				content += `<div class="tab-pane fade" id="v-pills-cve-references" role="tabpanel" aria-labelledby="v-pills-cve-references-tab" data-simplebar style="max-height: 600px; min-height: 600px;">
+				content += `<div class="tab-pane fade tab-pane-600-scroll" id="v-pills-cve-references" role="tabpanel" aria-labelledby="v-pills-cve-references-tab" data-simplebar>
 					${referencesContent}
 				</div>`;
 				
-				content += `<div class="tab-pane fade" id="v-pills-affected-products" role="tabpanel" aria-labelledby="v-pills-affected-products-tab" data-simplebar style="max-height: 600px; min-height: 600px;">
+				content += `<div class="tab-pane fade tab-pane-600-scroll" id="v-pills-affected-products" role="tabpanel" aria-labelledby="v-pills-affected-products-tab" data-simplebar>
 				<ul>`;
 
 				for (var prod in response.result.vulnerable_product) {
@@ -2343,7 +2385,7 @@ function get_and_render_cve_details(endpoint_url, cve_id){
 
 				content += `</ul></div>`;
 
-				content += `<div class="tab-pane fade" id="v-pills-affected-versions" role="tabpanel" aria-labelledby="v-pills-affected-versions-tab" data-simplebar style="max-height: 600px; min-height: 600px;">
+				content += `<div class="tab-pane fade tab-pane-600-scroll" id="v-pills-affected-versions" role="tabpanel" aria-labelledby="v-pills-affected-versions-tab" data-simplebar>
 				<ul>`;
 
 				for (var conf in response.result.vulnerable_configuration) {
@@ -2403,8 +2445,8 @@ function get_most_vulnerable_target(endpoint_url, endpoint_vuln_url, slug=null, 
 				<table class="table table-borderless table-nowrap table-hover table-centered m-0">
 				<thead>
 				<tr>
-				<th style="width: 60%">Target</th>
-				<th style="width: 30%">Vulnerabilities Count</th>
+				<th class="col-width-60">Target</th>
+				<th class="col-width-30">Vulnerabilities Count</th>
 				</tr>
 				</thead>
 				<tbody id="most_vulnerable_target_tbody">
@@ -2414,9 +2456,9 @@ function get_most_vulnerable_target(endpoint_url, endpoint_vuln_url, slug=null, 
 
 			for (var res in response.result) {
 				var targ_obj = response.result[res];
-				var tr = `<tr onclick="window.location='${endpoint_vuln_url}?domain=${targ_obj.name}';" style="cursor: pointer;">`;
+				var tr = `<tr onclick="window.location='${endpoint_vuln_url}?domain=${targ_obj.name}';" class="clickable-row">`;
 				if (scan_id || target_id) {
-					tr = `<tr onclick="window.location='${endpoint_vuln_url}?subdomain=${targ_obj.name}';" style="cursor: pointer;">`;
+					tr = `<tr onclick="window.location='${endpoint_vuln_url}?subdomain=${targ_obj.name}';" class="clickable-row">`;
 				}
 				$('#most_vulnerable_target_tbody').append(`
 					${tr}
@@ -2475,9 +2517,9 @@ function get_most_common_vulnerability(endpoint_url, endpoint_vuln_url, slug=nul
 				<table class="table table-borderless table-nowrap table-hover table-centered m-0">
 					<thead>
 						<tr>
-							<th style="width: 60%">Vulnerability Name</th>
-							<th style="width: 20%">Count</th>
-							<th style="width: 20%">Severity</th>
+							<th class="col-width-60">Vulnerability Name</th>
+							<th class="col-width-20">Count</th>
+							<th class="col-width-20">Severity</th>
 						</tr>
 					</thead>
 				<tbody id="most_common_vuln_tbody">
@@ -2511,7 +2553,7 @@ function get_most_common_vulnerability(endpoint_url, endpoint_vuln_url, slug=nul
 						vuln_badge = get_severity_badge('Unknown');
 				}
 				$('#most_common_vuln_tbody').append(`
-					<tr onclick="window.location='${endpoint_vuln_url}?vulnerability_name=${vuln_obj.name}';" style="cursor: pointer;">
+					<tr onclick="window.location='${endpoint_vuln_url}?vulnerability_name=${vuln_obj.name}';" class="clickable-row">
 						<td>
 							<h5 class="m-0 fw-normal">${vuln_obj.name}</h5>
 						</td>
@@ -2729,7 +2771,7 @@ function render_vuln_offcanvas(vuln){
 
 	if (vuln.cve_ids.length) {
 		body += `<tr>
-		<td style="width:30%">
+		<td class="col-width-30">
 		<b>CVE IDs</b>
 		</td>
 		<td>`;
@@ -2744,7 +2786,7 @@ function render_vuln_offcanvas(vuln){
 
 	if (vuln.cwe_ids != null && vuln.cwe_ids.length) {
 		body += `<tr>
-		<td style="width:30%">
+		<td class="col-width-30">
 		<b>CWE IDs</b>
 		</td>
 		<td>`
@@ -2767,7 +2809,7 @@ function render_vuln_offcanvas(vuln){
 		}
 
 		body += `<tr>
-		<td style="width:30%">
+		<td class="col-width-30">
 		<b>CVSS Score</b>
 		</td>
 		<td>
@@ -2778,7 +2820,7 @@ function render_vuln_offcanvas(vuln){
 
 	if (vuln.cvss_metrics) {
 		body += `<tr>
-		<td style="width:30%">
+		<td class="col-width-30">
 		<b>CVSS Metrics</b>
 		</td>
 		<td>
@@ -2804,19 +2846,19 @@ function render_vuln_offcanvas(vuln){
 		<div id="nuclei_div" class="collapse mt-2">
 		<table>
 		<tr>
-		<td style="width:20%"><b>Template</b></td>
+		<td class="col-width-20"><b>Template</b></td>
 		<td>${vuln.template}</td>
 		</tr>
 		<tr>
-		<td style="width:20%"><b>Template URL</b></td>
+		<td class="col-width-20"><b>Template URL</b></td>
 		<td><a target="_blank" href="${vuln.template_url}">${vuln.template_url}</a></td>
 		</tr>
 		<tr>
-		<td style="width:20%"><b>Template ID</b></td>
+		<td class="col-width-20"><b>Template ID</b></td>
 		<td>${vuln.template_id}</td>
 		</tr>
 		<tr>
-		<td style="width:20%"><b>Matcher Name</b></td>
+		<td class="col-width-20"><b>Matcher Name</b></td>
 		<td>${vuln.matcher_name}</td>
 		</tr>
 		</table>
@@ -2952,23 +2994,58 @@ function showSwalLoader(title, text){
 	});
 }
 
+// Ensures a query param is set exactly once on a URL (works with relative URLs)
+function setUrlParam(url, key, value) {
+    try {
+        const u = new URL(url, window.location.origin);
+        u.searchParams.set(key, value);
+        return u.pathname + (u.search || '') + (u.hash || '');
+    } catch (e) {
+        // Fallback simple append/replace
+        const hasQuestion = url.includes('?');
+        const regex = new RegExp(`([?&])${key}=[^&]*`);
+        if (regex.test(url)) {
+            // Use a function to preserve the original separator from the match
+            return url.replace(regex, (match, sep) => `${sep}${key}=${encodeURIComponent(value)}`);
+        }
+        return url + (hasQuestion ? '&' : '?') + `${key}=${encodeURIComponent(value)}`;
+    }
+}
+
 async function send_llm_api_request(endpoint_url, vuln_id){
-	const api = `${endpoint_url}?format=json&id=${vuln_id}`;
-	try {
-		const response = await fetch(api, {
-				method: 'GET',
-				credentials: "same-origin",
-				headers: {
-					"X-CSRFToken": getCookie("csrftoken")
-				}
-		});
-		if (!response.ok) {
-			throw new Error('Request failed');
-		}
-		return await response.json();
-	} catch (error) {
-		throw new Error('Request failed');
-	}
+    const sep = endpoint_url.includes('?') ? '&' : '?';
+    const api = `${endpoint_url}${sep}format=json&id=${vuln_id}`;
+    try {
+        const response = await fetch(api, {
+            method: 'GET',
+            credentials: 'same-origin',
+            headers: {
+                'X-CSRFToken': getCookie('csrftoken')
+            }
+        });
+        // Always try to parse JSON to allow UI handling of non-2xx responses
+        let data;
+        try {
+            data = await response.json();
+        } catch (jsonError) {
+            // Log the error for debugging without masking server-side issues
+            console.error('JSON parse error:', jsonError);
+            return {
+                status: false,
+                error: 'Failed to parse server response as JSON',
+                details: jsonError.message || jsonError.toString()
+            };
+        }
+        if (!response.ok) {
+            // Return structured error so caller can decide next step (e.g., show config dialog)
+            return (data && typeof data === 'object')
+                ? data
+                : { status: false, error: 'Request failed' };
+        }
+        return data;
+    } catch (error) {
+        return { status: false, error: 'Network error', details: error.message || error.toString() };
+    }
 }
 
 
@@ -2977,18 +3054,22 @@ async function fetch_llm_vuln_details(endpoint_url, id, title) {
 	var text = 'Please wait while the LLM is generating vulnerability description.';
 	try {
 		showSwalLoader(loader_title, text);
-		const data = await send_llm_api_request(endpoint_url, id);
+        const data = await send_llm_api_request(endpoint_url, id);
 		Swal.close();
-		if (data.status) {
-			render_llm_vuln_modal(data, title);
+        if (data.status) {
+            render_llm_vuln_modal(data, title, endpoint_url, id);
 		}
 		else{
 			Swal.close();
-			Swal.fire({
-				icon: 'error',
-				title: 'Oops...',
-				text: data.error,
-			});
+			if (data.error_code === 'LLM_CONFIG_REQUIRED') {
+				showLLMConfigChoiceDialog(endpoint_url, id, title, data);
+			} else {
+				Swal.fire({
+					icon: 'error',
+					title: 'Oops...',
+					text: data.error,
+				});
+			}
 		}
 	} catch (error) {
 		console.error(error);
@@ -3002,32 +3083,172 @@ async function fetch_llm_vuln_details(endpoint_url, id, title) {
 }
 
 
-function render_llm_vuln_modal(data, title){
-	// Change modal size to xl
-	$('#modal_dialog .modal-dialog').removeClass('modal-lg').addClass('modal-xl');
+function render_llm_vuln_modal(data, title, endpoint_url, vuln_id){
+    // Change modal size to xl
+    $('#modal_dialog .modal-dialog').removeClass('modal-lg').addClass('modal-xl');
 
-	$('#modal_dialog .modal-title').empty();
-	$('#modal_dialog .modal-text').empty();
-	$('#modal_dialog .modal-footer').empty();
-	$('#modal_dialog .modal-title').html(`Vulnerability detail for ${title}`);
+    $('#modal_dialog .modal-title').empty();
+    $('#modal_dialog .modal-text').empty();
+    $('#modal_dialog .modal-footer').empty();
+    // Set title as text to prevent XSS
+    $('#modal_dialog .modal-title').text('Vulnerability detail for ' + title);
 
-	var modal_content = `
-		<h4>Description</h4>
-		<p>${data.description}</p>
-		<h4>Impact</h4>
-		<p>${data.impact}</p>
-		<h4>Remediation</h4>
-		<p>${data.remediation}</p>
-		<h4>References</h4>
-		<p>${data.references}</p>
-	`;
+    // Create badge element using textContent assignment to prevent XSS
+    let $modelBadge = null;
+    const safeModel = data.llm_model ? DOMPurify.sanitize(String(data.llm_model), {ALLOWED_TAGS: [], ALLOWED_ATTR: []}) : null;
+    if (safeModel) {
+        $modelBadge = $('<span>')
+            .addClass('badge bg-soft-primary text-primary mb-3 d-inline-block')
+            .text(`Generated by ${safeModel}`);
+    }
+    const bodyHtml = `
+        <h4>Description</h4>
+        <p>${data.description}</p>
+        <h4>Impact</h4>
+        <p>${data.impact}</p>
+        <h4>Remediation</h4>
+        <p>${data.remediation}</p>
+        <h4>References</h4>
+        <p>${data.references}</p>
+        <div class="text-center mt-4">
+            <div class="btn-group" role="group">
+                <button class="btn btn-primary" id="btn-regenerate-vuln-llm">
+                    <i class="fe-refresh-cw me-1"></i>
+                    Generate New Analysis
+                </button>
+                <button class="btn btn-danger" id="btn-delete-vuln-llm">
+                    <i class="fe-trash-2 me-1"></i>
+                    Delete Current Analysis
+                </button>
+            </div>
+        </div>`;
 
-	// Sanitize with DOMPurify before inserting into the DOM
-	$('#modal_dialog .modal-text').append(
-		DOMPurify.sanitize(modal_content)
-	);
-	$('#modal_dialog').modal('show');
+    const $modalText = $('#modal_dialog .modal-text');
+    if ($modelBadge) {
+        $modalText.append($modelBadge);
+    }
+    $modalText.append(
+        DOMPurify.sanitize(bodyHtml)
+    );
+    $('#modal_dialog').modal('show');
+
+    // Bind actions
+    $('#btn-regenerate-vuln-llm').off('click').on('click', async () => {
+        const $btn = $('#btn-regenerate-vuln-llm');
+        const $modal = $('#modal_dialog');
+        let $spinner = $modal.find('.modal-spinner');
+        if ($spinner.length === 0) {
+            $spinner = $('<div class="modal-spinner text-center my-3"><span class="spinner-border" role="status" aria-hidden="true"></span> Regenerating...</div>');
+            $modal.find('.modal-footer').prepend($spinner);
+        }
+        $spinner.show();
+        $btn.prop('disabled', true);
+        try {
+            const forcedUrl = setUrlParam(endpoint_url, 'force_regenerate', 'true');
+            await showModelSelectionDialog(forcedUrl, vuln_id, { mode: 'vuln', force_regenerate: true, vuln_title: title });
+        } catch (e) {
+            console.error(e);
+            Swal.fire({ icon: 'error', title: 'Error', text: 'Failed to regenerate analysis.' });
+        } finally {
+            $spinner.hide();
+            $btn.prop('disabled', false);
+        }
+    });
+
+    $('#btn-delete-vuln-llm').off('click').on('click', async () => {
+        try {
+            const api = setUrlParam(endpoint_url, 'id', vuln_id);
+            const result = await Swal.fire({
+                title: 'Delete Analysis?',
+                text: 'This will permanently delete the current vulnerability analysis. This action cannot be undone.',
+                icon: 'warning', showCancelButton: true,
+                confirmButtonColor: '#d33', cancelButtonColor: '#3085d6',
+                confirmButtonText: 'Yes, delete it!', cancelButtonText: 'Cancel'
+            });
+            if (!result.isConfirmed) return;
+
+            showSwalLoader('Deleting...', 'Please wait while the analysis is being deleted.');
+            const resp = await fetch(api, { method: 'DELETE', headers: { 'X-CSRFToken': getCookie('csrftoken') } });
+            const js = await resp.json();
+            Swal.close();
+            if (js.status) {
+                Swal.fire({ icon: 'success', title: 'Deleted!', text: 'The analysis has been deleted successfully.', showConfirmButton: false, timer: 1500 });
+                $('#modal_dialog').modal('hide');
+            } else {
+                throw new Error(js.error || 'Failed to delete analysis');
+            }
+        } catch (e) {
+            console.error(e);
+            Swal.fire({ icon: 'error', title: 'Error', text: e.message || 'Something went wrong while deleting the analysis!' });
+        }
+    });
 }
+
+// Show configuration choice dialog when LLM config is missing/invalid
+function showLLMConfigChoiceDialog(endpoint_url, vuln_id, title, info){
+    const options = [];
+    // Option: add GPT API key (if GPT selected without key)
+    if (info && info.is_gpt_selected && info.openai_key_missing) {
+        options.push(`
+            <button class="btn btn-primary w-100 mb-2" id="btn-add-openai-key" type="button">
+                Add OpenAI API Key
+            </button>
+        `);
+    }
+    // Option: choose Ollama model (if server reachable and at least one model)
+    if (info && info.ollama_available && info.has_ollama_models) {
+        options.push(`
+            <button class="btn btn-success w-100 mb-2" id="btn-choose-ollama-model" type="button">
+                Choose Ollama Model
+            </button>
+        `);
+    }
+    // Always include cancel
+    options.push(`
+        <button class="btn btn-outline-secondary w-100" id="btn-cancel-llm-config" type="button">Cancel</button>
+    `);
+
+    $('#modal_dialog .modal-dialog').removeClass('modal-xl').addClass('modal-lg');
+    $('#modal_dialog .modal-title').text('LLM configuration required');
+    $('#modal_dialog .modal-text').html(`
+        <p>
+            The current LLM configuration is incomplete. Please choose an option:
+        </p>
+        <div class="d-grid gap-2">
+            ${options.join('')}
+        </div>
+    `);
+    $('#modal_dialog .modal-footer').empty();
+    $('#modal_dialog').modal('show');
+
+    // Bind click handlers safely (no inline JS)
+    const chooseBtn = document.getElementById('btn-choose-ollama-model');
+    if (chooseBtn) {
+        chooseBtn.addEventListener('click', function() {
+            $('#modal_dialog').modal('hide');
+            showModelSelectionDialog(endpoint_url, vuln_id, {
+                mode: 'vuln',
+                force_regenerate: false,
+                vuln_title: title || ''
+            });
+        });
+    }
+    
+    const addOpenAIBtn = document.getElementById('btn-add-openai-key');
+    if (addOpenAIBtn) {
+        addOpenAIBtn.addEventListener('click', function() {
+            window.location.href = '/scanEngine/api_vault';
+        });
+    }
+    
+    const cancelBtn = document.getElementById('btn-cancel-llm-config');
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', function() {
+            $('#modal_dialog').modal('hide');
+        });
+    }
+}
+
 
 
 function get_datatable_col_index(lookup, cols){
@@ -3036,25 +3257,38 @@ function get_datatable_col_index(lookup, cols){
 }
 
 
-function endpoint_datatable_col_visibility(endpoint_table){
-	if(!$('#end_http_status_filter_checkbox').is(":checked")){
-		endpoint_table.column(2).visible(false);
-	}
-	if(!$('#end_page_title_filter_checkbox').is(":checked")){
-		endpoint_table.column(3).visible(false);
-	}
-	if(!$('#end_tags_filter_checkbox').is(":checked")){
-		endpoint_table.column(4).visible(false);
-	}
-	if(!$('#end_content_type_filter_checkbox').is(":checked")){
-		endpoint_table.column(5).visible(false);
-	}
-	if(!$('#end_content_length_filter_checkbox').is(":checked")){
-		endpoint_table.column(6).visible(false);
-	}
-	if(!$('#end_response_time_filter_checkbox').is(":checked")){
-		endpoint_table.column(9).visible(false);
-	}
+function endpoint_datatable_col_visibility(endpoint_table, columns){
+    const getIndex = (name) => get_datatable_col_index(name, columns);
+    if(!$('#end_http_status_filter_checkbox').is(":checked")){
+        endpoint_table.column(getIndex('http_status')).visible(false);
+    }
+    if(!$('#end_page_title_filter_checkbox').is(":checked")){
+        endpoint_table.column(getIndex('page_title')).visible(false);
+    }
+    if(!$('#end_tags_filter_checkbox').is(":checked")){
+        endpoint_table.column(getIndex('matched_gf_patterns')).visible(false);
+    }
+    if(!$('#end_content_type_filter_checkbox').is(":checked")){
+        endpoint_table.column(getIndex('content_type')).visible(false);
+    }
+    if(!$('#end_content_length_filter_checkbox').is(":checked")){
+        endpoint_table.column(getIndex('content_length')).visible(false);
+    }
+    // Always keep techs and webserver hidden in columns; they are shown inline under HTTP URL
+    const idxTechs = getIndex('techs');
+    if (idxTechs > -1) {
+        endpoint_table.column(idxTechs).visible(false);
+    }
+    const idxWebserver = getIndex('webserver');
+    if (idxWebserver > -1) {
+        endpoint_table.column(idxWebserver).visible(false);
+    }
+    if(!$('#end_response_time_filter_checkbox').is(":checked")){
+        endpoint_table.column(getIndex('response_time')).visible(false);
+    }
+    if(!$('#end_screenshot_filter_checkbox').is(":checked")){
+        endpoint_table.column(getIndex('screenshot_path')).visible(false);
+    }
 }
 
 
@@ -3099,7 +3333,7 @@ async function show_attack_surface_modal(endpoint_url, id) {
         }
         
         // If no cached results, show model selection
-        await showModelSelectionDialog(endpoint_url, id);
+        await showModelSelectionDialog(endpoint_url, id, { mode: 'attack' });
     } catch (error) {
         console.error(error);
         Swal.fire({
@@ -3110,10 +3344,10 @@ async function show_attack_surface_modal(endpoint_url, id) {
     }
 }
 
-async function showModelSelectionDialog(endpoint_url, id, force_regenerate = false) {
+async function showModelSelectionDialog(endpoint_url, id, optsOrForce = false) {
     try {
         // Fetch models from the unified endpoint that combines GPT and Ollama models
-        const response = await fetch('/api/tools/llm_models');
+        const response = await fetch('/api/tools/llm_models/');
         const data = await response.json();
         
         if (!data.status) {
@@ -3123,8 +3357,20 @@ async function showModelSelectionDialog(endpoint_url, id, force_regenerate = fal
         // Change modal size to xl
         $('#modal_dialog .modal-dialog').removeClass('modal-lg').addClass('modal-xl');
 
-        // Keep all the existing model selection code
-		window.generateAttackSurface = async () => {
+        // Resolve options for reuse in attack surface and vulnerabilities
+        let mode = 'attack';
+        let force_regenerate = false;
+        let vuln_title = '';
+        if (typeof optsOrForce === 'boolean') {
+            force_regenerate = optsOrForce;
+        } else if (optsOrForce && typeof optsOrForce === 'object') {
+            mode = optsOrForce.mode || 'attack';
+            force_regenerate = !!optsOrForce.force_regenerate;
+            vuln_title = optsOrForce.vuln_title || '';
+        }
+
+        // Unified confirm handler
+        window.confirmLLMModelSelection = async () => {
 			const selectedModel = $('input[name="llm_model"]:checked').val();
 			if (!selectedModel) {
 				Swal.fire({
@@ -3151,22 +3397,27 @@ async function showModelSelectionDialog(endpoint_url, id, force_regenerate = fal
 				if (!updateData.status) {
 					throw new Error('Failed to update selected model');
 				}
-		
-				// Then proceed with attack surface analysis
-				var loader_title = "Loading...";
-				var text = 'Please wait while the LLM is generating attack surface.';
-				showSwalLoader(loader_title, text);
-				const data = await send_llm__attack_surface_api_request(endpoint_url, id, force_regenerate, false, selectedModel);
-				Swal.close();
-                
-                if (data.status) {
-					showAttackSurfaceModal(data, endpoint_url, id);
+                if (mode === 'attack') {
+                    // Then proceed with attack surface analysis
+                    var loader_title = 'Loading...';
+                    var text = 'Please wait while the LLM is generating attack surface.';
+                    showSwalLoader(loader_title, text);
+                    const result = await send_llm__attack_surface_api_request(endpoint_url, id, force_regenerate, false, selectedModel);
+                    Swal.close();
+                    
+                    if (result.status) {
+                        showAttackSurfaceModal(result, endpoint_url, id);
+                    } else {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Oops...',
+                            text: result.error,
+                        });
+                    }
                 } else {
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'Oops...',
-                        text: data.error,
-                    });
+                    // Vulnerability details flow: close modal and retry fetch
+                    $('#modal_dialog').modal('hide');
+                    await fetch_llm_vuln_details(endpoint_url, id, vuln_title);
                 }
             } catch (error) {
                 console.error(error);
@@ -3191,7 +3442,7 @@ async function showModelSelectionDialog(endpoint_url, id, force_regenerate = fal
             
             modelOptions += `
                 <div class="col-md-4 mt-2">
-                    <div class="card project-box h-100" style="cursor: pointer" 
+                    <div class="card project-box h-100 model-selection-card" 
                          onclick="document.getElementById('${modelName}').click()">
                         <div class="card-body p-2 pt-3 d-flex flex-column">
                             <div class="form-check">
@@ -3238,7 +3489,7 @@ async function showModelSelectionDialog(endpoint_url, id, force_regenerate = fal
                 </div>`;
         });
 
-        $('#modal_dialog .modal-title').html('Select LLM Model for Attack Surface Analysis');
+        $('#modal_dialog .modal-title').html('Select LLM Model');
         $('#modal_dialog .modal-text').empty();
         $('#modal_dialog .modal-text').append(`
             <div class="mb-3 row">
@@ -3246,9 +3497,7 @@ async function showModelSelectionDialog(endpoint_url, id, force_regenerate = fal
                 ${modelOptions}
             </div>
             <div class="mb-3 text-center">
-                <button class="btn btn-primary" type="button" onclick="window.generateAttackSurface()">
-                    Continue Analysis
-                </button>
+                <button class="btn btn-primary" type="button" onclick="window.confirmLLMModelSelection()">Continue</button>
             </div>
         `);
         
@@ -3314,18 +3563,21 @@ async function deleteAttackSurfaceAnalysis(endpoint_url, id) {
 }
 
 function showAttackSurfaceModal(data, endpoint_url, id) {
+    const header = 'Attack Surface Suggestion for ' + data.subdomain_name;
+    const html = data.description;
     $('#modal_dialog .modal-dialog').removeClass('modal-lg').addClass('modal-xl');
-    $('#modal_dialog .modal-title').html(`Attack Surface Suggestion for ${data.subdomain_name}`);
+    // Use text() to avoid HTML injection via subdomain name
+    $('#modal_dialog .modal-title').text(header);
     $('#modal_dialog .modal-text').empty();
     $('#modal_dialog .modal-text').append(
-        DOMPurify.sanitize(data.description) +
+        DOMPurify.sanitize(html) +
         `<div class="text-center mt-4">
             <div class="btn-group" role="group">
-                <button class="btn btn-primary" onclick="regenerateAttackSurface('${endpoint_url}', ${id})">
+                <button class="btn btn-primary" id="btn-as-regenerate">
                     <i class="fe-refresh-cw me-1"></i>
                     Generate New Analysis
                 </button>
-                <button class="btn btn-danger" onclick="deleteAttackSurfaceAnalysis('${endpoint_url}', ${id})">
+                <button class="btn btn-danger" id="btn-as-delete">
                     <i class="fe-trash-2 me-1"></i>
                     Delete Current Analysis
                 </button>
@@ -3333,6 +3585,60 @@ function showAttackSurfaceModal(data, endpoint_url, id) {
         </div>`
     );
     $('#modal_dialog').modal('show');
+    $('#btn-as-regenerate').off('click').on('click', async () => {
+        const $btn = $('#btn-as-regenerate');
+        const $otherBtn = $('#btn-as-delete');
+        const $modal = $('#modal_dialog');
+        let $spinner = $modal.find('.modal-spinner');
+        if ($spinner.length === 0) {
+            $spinner = $('<div class="modal-spinner text-center my-3"><span class="spinner-border" role="status" aria-hidden="true"></span> Regenerating...</div>');
+            $modal.find('.modal-footer').prepend($spinner);
+        }
+        $spinner.show();
+        $btn.prop('disabled', true);
+        $otherBtn.prop('disabled', true);
+        try {
+            await regenerateAttackSurface(endpoint_url, id);
+        } catch (error) {
+            console.error(error);
+            Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: 'Failed to regenerate attack surface analysis. Please try again.'
+            });
+        } finally {
+            $spinner.hide();
+            $btn.prop('disabled', false);
+            $otherBtn.prop('disabled', false);
+        }
+    });
+    $('#btn-as-delete').off('click').on('click', async () => {
+        const $btn = $('#btn-as-delete');
+        const $otherBtn = $('#btn-as-regenerate');
+        const $modal = $('#modal_dialog');
+        let $spinner = $modal.find('.modal-spinner');
+        if ($spinner.length === 0) {
+            $spinner = $('<div class="modal-spinner text-center my-3"><span class="spinner-border" role="status" aria-hidden="true"></span> Deleting...</div>');
+            $modal.find('.modal-footer').prepend($spinner);
+        }
+        $spinner.show();
+        $btn.prop('disabled', true);
+        $otherBtn.prop('disabled', true);
+        try {
+            await deleteAttackSurfaceAnalysis(endpoint_url, id);
+        } catch (error) {
+            console.error(error);
+            Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: 'Failed to delete attack surface analysis. Please try again.'
+            });
+        } finally {
+            $spinner.hide();
+            $btn.prop('disabled', false);
+            $otherBtn.prop('disabled', false);
+        }
+    });
 }
 
 function convertToCamelCase(inputString) {

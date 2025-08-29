@@ -1,3 +1,4 @@
+import contextlib
 import logging
 import re
 import os.path
@@ -12,7 +13,7 @@ import requests
 import validators
 from django.urls import reverse
 from django.core.cache import cache
-from dashboard.models import OllamaSettings, Project, SearchHistory
+from dashboard.models import OllamaSettings, Project, SearchHistory, OpenAiAPIKey
 from django.db.models import CharField, Count, F, Q, Value
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -65,7 +66,7 @@ from reNgine.tasks import (
     send_hackerone_report
 )
 from reNgine.llm.llm import LLMAttackSuggestionGenerator
-from reNgine.llm.utils import convert_markdown_to_html
+from reNgine.llm.utils import convert_markdown_to_html, is_empty_attack_surface, get_default_llm_model
 from reNgine.utilities.path import is_safe_path, remove_lead_and_trail_slash
 from scanEngine.models import EngineType, InstalledExternalTool
 from startScan.models import (
@@ -85,6 +86,7 @@ from startScan.models import (
     SubScan,
     Technology,
     Vulnerability,
+    LLMVulnerabilityReport,
 )
 from targetApp.models import Domain, Organization
 
@@ -411,8 +413,8 @@ class LLMAttackSuggestion(APIView):
                 'error': f'Subdomain not found with id {subdomain_id}'
             })
 
-        # Return cached result only if not forcing regeneration
-        if subdomain.attack_surface and not force_regenerate:
+        # Return cached result only if not forcing regeneration and not empty
+        if subdomain.attack_surface and not force_regenerate and not is_empty_attack_surface(subdomain.attack_surface):
             sanitized_html = subdomain.formatted_attack_surface
             return Response({
                 'status': True,
@@ -458,12 +460,16 @@ class LLMAttackSuggestion(APIView):
         response['subdomain_name'] = subdomain.name
         
         if response.get('status'):
-            # Use the actual selected model name
-            markdown_content = f'[LLM:{selected_model}]\n{response.get("description")}'
-            subdomain.attack_surface = markdown_content
-            subdomain.save()
-            
-            response['description'] = convert_markdown_to_html(markdown_content)
+            raw_desc = response.get('description')
+            if isinstance(raw_desc, str) and raw_desc.strip():
+                # Use the actual selected model name
+                markdown_content = f'[LLM:{selected_model}]\n{raw_desc}'
+                subdomain.attack_surface = markdown_content
+                subdomain.save()
+                response['description'] = convert_markdown_to_html(markdown_content)
+            else:
+                # Do not save empty content
+                response['description'] = ''
         
         return Response(response)
 
@@ -504,9 +510,101 @@ class LLMVulnerabilityReportGenerator(APIView):
                 'status': False,
                 'error': 'Missing GET param Vulnerability `id`'
             })
-        task = llm_vulnerability_report.apply_async(args=(vulnerability_id,))
+        # Preflight checks for LLM configuration
+        # Get default model first - if this fails, log and proceed to task
+        try:
+            selected_model = get_default_llm_model()
+        except Exception as e:
+            # If fetching the default model fails, log and proceed to task but keep robustness
+            logger.error(f"Error fetching default LLM model: {e}")
+            selected_model = None
+
+        try:
+            is_gpt = False
+            if selected_model:
+                gpt_model_names = [model['name'] for model in DEFAULT_GPT_MODELS]
+                is_gpt = selected_model in gpt_model_names
+        except (KeyError, AttributeError) as e:
+            logger.error(f"Error determining if selected model is GPT: {e}")
+            is_gpt = False
+
+        openai_key_missing = is_gpt and not OpenAiAPIKey.objects.exists()
+
+        # Detect missing default Ollama selection if Ollama is preferred
+        ollama_default_missing = False
+        try:
+            ollama_settings = OllamaSettings.objects.first()
+            if ollama_settings and ollama_settings.use_ollama and not (ollama_settings.selected_model and ollama_settings.selected_model.strip()):
+                ollama_default_missing = True
+        except Exception:
+            ollama_default_missing = False
+
+        available_ollama_models = []
+        ollama_ok = False
+        try:
+            import requests
+            from reNgine.definitions import OLLAMA_INSTANCE
+            r = requests.get(f"{OLLAMA_INSTANCE}/api/tags", timeout=3)
+            if r.ok:
+                data = r.json()
+                available_ollama_models = [m.get('name') for m in data.get('models', []) if m.get('name')]
+                ollama_ok = len(available_ollama_models) > 0
+        except Exception:
+            ollama_ok = False
+
+        # If GPT selected without API key, or no default local model selected while Ollama usable
+        if openai_key_missing or ollama_default_missing:
+            return Response({
+                'status': False,
+                'error_code': 'LLM_CONFIG_REQUIRED',
+                'error': "LLM configuration is incomplete.",
+                'is_gpt_selected': is_gpt,
+                'openai_key_missing': openai_key_missing,
+                'ollama_available': ollama_ok,
+                'has_ollama_models': bool(available_ollama_models),
+                'ollama_default_missing': ollama_default_missing,
+            }, status=400)
+
+        force_regenerate = request.query_params.get('force_regenerate') == 'true'
+        task = llm_vulnerability_report.apply_async(args=(vulnerability_id, None, force_regenerate))
         response = task.wait()
         return Response(response)
+
+    def delete(self, request):
+        req = self.request
+        vulnerability_id = safe_int_cast(req.query_params.get('id'))
+        if not vulnerability_id:
+            return Response({
+                'status': False,
+                'error': 'Missing GET param Vulnerability `id`'
+            }, status=400)
+
+        try:
+            from urllib.parse import urlparse as _urlparse
+            vuln = Vulnerability.objects.get(id=vulnerability_id)
+            lookup_url = _urlparse(vuln.http_url)
+            title = vuln.name
+            path = lookup_url.path
+
+            deleted, _ = LLMVulnerabilityReport.objects.filter(
+                url_path=path, title=title
+            ).delete()
+
+            return Response({
+                'status': True,
+                'deleted': deleted
+            })
+        except Vulnerability.DoesNotExist:
+            return Response({
+                'status': False,
+                'error': f'Vulnerability not found with id {vulnerability_id}'
+            }, status=404)
+        except Exception as e:
+            logger.error(f"Error deleting LLM vulnerability report: {str(e)}")
+            return Response({
+                'status': False,
+                'error': 'An error occurred while deleting the analysis'
+            }, status=500)
 
 
 class CreateProjectApi(APIView):
@@ -1936,16 +2034,16 @@ class ListPorts(APIView):
         # Filter based on parameters
         if target_id:
             port_query = port_query.filter(
-                ports__ip_subscan_ids__target_domain__id=target_id
-            )
+                ip_address__ip_addresses__target_domain__id=target_id
+            ).distinct()
         elif scan_id:
             port_query = port_query.filter(
-                ports__ip_subscan_ids__scan_history__id=scan_id
-            )
+                ip_address__ip_addresses__scan_history__id=scan_id
+            ).distinct()
 
         if ip_address:
             port_query = port_query.filter(
-                ports__address=ip_address
+                ip_address__address=ip_address
             )
 
         # Grouping information
@@ -2293,14 +2391,26 @@ class EndPointChangesViewSet(viewsets.ModelViewSet):
                     .annotate(
                         change=Value('added', output_field=CharField())
                     )
+                    .prefetch_related(
+                        'subdomain',
+                        'target_domain',
+                        'scan_history',
+                        'techs'
+                    )
                 )
             elif changes == 'removed':
                 queryset = (
                     EndPoint.objects
-                    .filter(scan_history__id=last_scan)
+                    .filter(scan_history__id=last_scan.id)
                     .filter(http_url__in=removed_endpoints)
                     .annotate(
                         change=Value('removed', output_field=CharField())
+                    )
+                    .prefetch_related(
+                        'subdomain',
+                        'target_domain',
+                        'scan_history',
+                        'techs'
                     )
                 )
             else:
@@ -2311,27 +2421,31 @@ class EndPointChangesViewSet(viewsets.ModelViewSet):
                     .annotate(
                         change=Value('added', output_field=CharField())
                     )
+                    .prefetch_related(
+                        'subdomain',
+                        'target_domain',
+                        'scan_history',
+                        'techs'
+                    )
                 )
                 removed_endpoints = (
                     EndPoint.objects
-                    .filter(scan_history__id=last_scan)
+                    .filter(scan_history__id=last_scan.id)
                     .filter(http_url__in=removed_endpoints)
                     .annotate(
                         change=Value('removed', output_field=CharField())
+                    )
+                    .prefetch_related(
+                        'subdomain',
+                        'target_domain',
+                        'scan_history',
+                        'techs'
                     )
                 )
                 queryset = added_endpoint.union(removed_endpoints)
         else:
             # If this is the first scan, return empty queryset as changes are only meaningful from 2nd scan
             queryset = EndPoint.objects.none()
-        
-        # Optimize queries with prefetch_related to avoid N+1 queries
-        queryset = queryset.prefetch_related(
-            'subdomain',
-            'target_domain',
-            'scan_history',
-            'techs'
-        )
         
         return queryset
 

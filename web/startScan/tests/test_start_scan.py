@@ -21,7 +21,6 @@ class TestStartScanViews(BaseTestCase):
     def setUp(self):
         """Set up test environment."""
         super().setUp()
-        self.data_generator.create_project_full()
 
     @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
     def test_start_scan_view(self):
@@ -141,7 +140,6 @@ class TestStartScanModels(BaseTestCase):
     def setUp(self):
         """Set up test environment."""
         super().setUp()
-        self.data_generator.create_project_full()
 
     def test_scan_history_model(self):
         """Test the ScanHistory model."""

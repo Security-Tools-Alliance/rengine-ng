@@ -36,7 +36,6 @@ class TestUniversalSearch(BaseTestCase):
     def setUp(self):
         """Set up test environment."""
         super().setUp()
-        self.data_generator.create_project_base()
         self.data_generator.create_endpoint()
         self.data_generator.create_vulnerability()
 

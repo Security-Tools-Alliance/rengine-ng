@@ -27,7 +27,6 @@ class TestScanReconNoteViews(BaseTestCase):
     def setUp(self):
         """Set up the test environment."""
         super().setUp()
-        self.data_generator.create_project_base()  # Create a base project
         self.todo_note = self.data_generator.create_todo_note()  # Create a test TodoNote
 
     def test_add_recon_note_success(self):
