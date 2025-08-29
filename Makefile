@@ -1,9 +1,21 @@
 include .env
 .DEFAULT_GOAL:=help
 
-# Export host UID & GID
+# Operating system detection (must be early to use in conditional exports)
+UNAME_S := $(shell uname -s)
+IS_MACOS := $(shell if [ "$(UNAME_S)" = "Darwin" ]; then echo "yes"; else echo "no"; fi)
+
+# Export host UID & GID (cross-platform handling)
+ifeq ($(IS_MACOS),yes)
+# On macOS, use safe defaults to avoid conflicts with system groups (GID 20 = staff)
+# Docker Desktop handles file permission mapping automatically
+export HOST_UID=1000
+export HOST_GID=1000
+else
+# On Linux, respect sudo context for proper permissions
 export HOST_UID=$(if $(SUDO_USER),$(shell id -u $(SUDO_USER)),$(shell id -u))
 export HOST_GID=$(if $(SUDO_USER),$(shell id -g $(SUDO_USER)),$(shell id -g))
+endif
 
 
 # Define RENGINE_VERSION
@@ -33,11 +45,19 @@ ifeq ($(DOCKER_COMPOSE),)
 $(error Docker Compose not found. Please install Docker Compose)
 endif
 
-# Check if user is in docker group or is root
-DOCKER_GROUP_CHECK := $(shell if [ -n "$$(getent group docker)" ]; then echo "yes"; else echo "no"; fi)
-
+# Check if user has Docker access (different on macOS vs Linux)
+ifeq ($(IS_MACOS),yes)
+# On macOS, Docker Desktop handles permissions differently
+DOCKER_ACCESS_CHECK := $(shell if docker version > /dev/null 2>&1; then echo "yes"; else echo "no"; fi)
+ifeq ($(DOCKER_ACCESS_CHECK),no)
+$(error Docker is not accessible. Please ensure Docker Desktop is running)
+endif
+else
+# On Linux, check if user is in docker group or is root
+DOCKER_GROUP_CHECK := $(shell if [ -n "$$(getent group docker 2>/dev/null)" ]; then echo "yes"; else echo "no"; fi)
 ifeq ($(DOCKER_GROUP_CHECK),no)
 $(error This command must be run with sudo or by a user in the docker group)
+endif
 endif
 
 $(info Using: $(DOCKER_COMPOSE))
