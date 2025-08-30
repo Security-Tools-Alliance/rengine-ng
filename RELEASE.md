@@ -13,6 +13,7 @@ In that case, we should closely review the PR and 'compare' it with what semanti
 
 ## Checklist before releasing a new version
 
+- [ ] Add a user-friendly changelog to [CHANGELOG.md](CHANGELOG.md)
 - [ ] Make sure the Milestone is completed and if not, check what needs to be done to complete it.
 - [ ] Make sure all merged PRs regarding the application follow the Conventional Commit Messages style. This makes sure that when generating a changelog, the changes look consistent, which in turn improves readability.
 - [ ] Make sure all merged PRs have the correct labels assigned, as the changelog is generated based on labels.
