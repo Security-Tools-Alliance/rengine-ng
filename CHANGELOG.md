@@ -4,6 +4,47 @@ All notable user-friendly changes to reNgine-ng will be documented in this file.
 
 For technical details about each release, see [the GitHub releases page](https://github.com/Security-Tools-Alliance/rengine-ng/releases).
 
+## [2.2.1] - 30-08-2025
+
+### 🐛 Bug Fixes & Patches
+
+#### Core Engine Improvements
+
+- Endpoint Detection: Fixed missing default value for first found endpoint during scans
+- Database Constraints: Extended field limits to prevent scan errors caused by database field limitations
+- Scan Engine Variants: Added new scan engine variants and enhanced configuration options
+- Race Condition Fix: Resolved DirectoryFile race condition in parallel fuzzing operations
+- Celery Tasks: Added isolated task context for thread safety and context management
+- API Optimization: Optimized queryset prefetching and used scan ID instead of object references
+
+#### User Interface Fixes
+
+- Screenshot Display: Fixed screenshot display issues in Discovered ports and Endpoints tables
+- Screenshot Loading: Fixed screenshot not loading on click and added lazy loading for better performance
+- Endpoint Table: Improved endpoint table column alignment and screenshot modal handling
+- Technology Detection: Updated get_technologies to properly accept subdomain endpoint parameters
+
+#### LLM & AI Features
+
+- Error Handling: Improved error detection and unified model selection in LLM integration
+- Report Generation: Fixed error on vulnerability report generation using LLM models
+
+#### Development & Testing
+
+- Test Framework: Refactored test data generation and removed JSON fixtures for better maintainability
+- Docker Build: Updated Docker image tagging logic in build workflow
+
+### 🔧 Technical Improvements
+
+- Code Quality: Enhanced code organization and refactoring for better maintainability
+- Security: Applied security patches including XSS prevention measures in frontend
+- Performance: Minor performance optimizations in scan engine processing
+- Build System: Streamlined build processes for faster deployment
+
+### 🔄 Migration Notes
+
+This is a patch release that builds upon v2.2.0. No special migration steps are required - simply update using the standard update process.
+
 ## [2.2.0] - 11-08-2025
 
 ### 🆕 Major New Features
