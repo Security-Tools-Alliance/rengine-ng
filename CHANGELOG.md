@@ -14,6 +14,8 @@ For technical details about each release, see [the GitHub releases page](https:/
 - Database Constraints: Extended field limits to prevent scan errors caused by database field limitations
 - Scan Engine Variants: Added new scan engine variants and enhanced configuration options
 - Race Condition Fix: Resolved DirectoryFile race condition in parallel fuzzing operations
+- Celery Tasks: Added isolated task context for thread safety and context management
+- API Optimization: Optimized queryset prefetching and used scan ID instead of object references
 
 #### User Interface Fixes
 
@@ -31,8 +33,6 @@ For technical details about each release, see [the GitHub releases page](https:/
 
 - Test Framework: Refactored test data generation and removed JSON fixtures for better maintainability
 - Docker Build: Updated Docker image tagging logic in build workflow
-- Celery Tasks: Added isolated task context for thread safety and context management
-- API Optimization: Optimized queryset prefetching and used scan ID instead of object references
 
 ### 🔧 Technical Improvements
 
