@@ -19,7 +19,6 @@ class TestListOrganizations(BaseTestCase):
     def setUp(self):
         """Set up test environment."""
         super().setUp()
-        self.data_generator.create_project_full()
 
     def test_list_empty_organizations(self):
         """Test listing organizations when the database is empty."""
@@ -47,7 +46,6 @@ class TestListTargetsInOrganization(BaseTestCase):
     def setUp(self):
         """Set up test environment."""
         super().setUp()
-        self.data_generator.create_project_full()
 
     def test_list_targets_in_organization(self):
         """Test listing targets for a specific organization."""
@@ -68,8 +66,12 @@ class TestListTargetsWithoutOrganization(BaseTestCase):
 
     def setUp(self):
         """Set up test environment."""
+        # Use minimal setup to avoid auto-creating organization
+        self.use_minimal_setup = True
         super().setUp()
-        self.data_generator.create_project_full()
+        # Create a domain manually without associating it to an organization
+        self.data_generator.create_project()
+        self.data_generator.create_domain()
 
     def test_list_targets_without_organization(self):
         """Test listing targets that are not associated with any organization."""
@@ -78,4 +80,5 @@ class TestListTargetsWithoutOrganization(BaseTestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("domains", response.data)
         self.assertGreaterEqual(len(response.data["domains"]), 1)
-        self.assertEqual(response.data["domains"][0]["name"], "vulnweb.com")
+        # Use the domain name that was actually created
+        self.assertEqual(response.data["domains"][0]["name"], self.data_generator.domain.name)

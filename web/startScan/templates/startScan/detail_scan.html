@@ -1757,7 +1757,7 @@ $(document).ready(function() {
 								<div class="dropdown-menu" style="">
 								<a class="dropdown-item" href="javascript:fetch_llm_vuln_details('{% url 'api:llm_vulnerability_report_generator' %}', ${row['id']}, '${row['name']}');">Fetch LLM Vulnerability Details</a>
 								<a class="dropdown-item" href="javascript:report_hackerone('{% url 'api:vulnerability_report' %}', ${row['id']}, '${row['severity']}');">Report to Hackerone</a>
-								<a class="text-danger dropdown-item" href="javascript:delete_vulnerability(${row['id']});">Delete Vulnerability</a>
+								<a class="text-danger dropdown-item btn-delete-vulnerability" href="#" id="${row['id']}" data-url="{% url 'api:delete_vulnerability' %}">Delete Vulnerability</a>
 								</div>
 								</div>`;
 							}
@@ -2067,7 +2067,7 @@ $(document).ready(function() {
 	get_recon_notes('{% url 'api:listTodoNotes' %}', target_id=null, scan_history_id={{scan_history_id}});
 
 	get_ips('{{ ip_addresses|safe }}', '{% url 'api:getIpDetails' %}', '{% url 'api:querySubdomains' %}', scan_id={{scan_history_id}}, domain_id=null);
-	get_technologies('{% url 'api:listTechnologies' %}', scan_id={{scan_history_id}}, domain_id=null);
+	get_technologies('{% url 'api:listTechnologies' %}', '{% url 'api:querySubdomains' %}', scan_id={{scan_history_id}}, domain_id=null);
 	get_ports('{{ ip_addresses|safe }}', '{% url 'api:listIPs' %}', '{% url 'api:querySubdomains' %}', scan_id={{scan_history_id}}, domain_id=null);
 
 	get_subdomain_changes('{% url 'api:subdomain-changes-list' %}', {{scan_history_id}});

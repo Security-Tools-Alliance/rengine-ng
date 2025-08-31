@@ -39,7 +39,7 @@ class ScanHistory(models.Model):
 	id = models.AutoField(primary_key=True)
 	start_scan_date = models.DateTimeField()
 	scan_status = models.IntegerField(choices=CELERY_TASK_STATUSES, default=-1)
-	results_dir = models.CharField(max_length=100, blank=True)
+	results_dir = models.CharField(max_length=255, blank=True)
 	domain = models.ForeignKey(Domain, on_delete=models.CASCADE)
 	scan_type = models.ForeignKey(EngineType, on_delete=models.CASCADE)
 	celery_ids = ArrayField(models.CharField(max_length=100), blank=True, default=list)
@@ -1076,7 +1076,7 @@ class Port(models.Model):
 	id = models.AutoField(primary_key=True)
 	number = models.IntegerField(default=0)
 	is_uncommon = models.BooleanField(default=False)
-	service_name = models.CharField(max_length=100, blank=True, null=True)
+	service_name = models.CharField(max_length=255, blank=True, null=True)
 	description = models.CharField(max_length=1000, blank=True, null=True)
 	ip_address = models.ForeignKey(
 		'IpAddress', 
@@ -1125,6 +1125,13 @@ class DirectoryFile(models.Model):
 	name = models.CharField(max_length=500, blank=True, null=True)
 	url = models.CharField(max_length=5000, blank=True, null=True)
 	content_type = models.CharField(max_length=100, blank=True, null=True)
+
+	class Meta:
+		# Indexes for performance without unique constraints
+		indexes = [
+			models.Index(fields=['name', 'url', 'http_status']),
+			models.Index(fields=['http_status']),
+		]
 
 	def __str__(self):
 		return str(self.name)
@@ -1197,3 +1204,4 @@ class S3Bucket(models.Model):
 	perm_all_users_full_control = models.IntegerField(default=0)
 	num_objects = models.IntegerField(default=0)
 	size = models.IntegerField(default=0)
+

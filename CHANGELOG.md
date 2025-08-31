@@ -4,6 +4,47 @@ All notable user-friendly changes to reNgine-ng will be documented in this file.
 
 For technical details about each release, see [the GitHub releases page](https://github.com/Security-Tools-Alliance/rengine-ng/releases).
 
+## [2.2.1] - 30-08-2025
+
+### 🐛 Bug Fixes & Patches
+
+#### Core Engine Improvements
+
+- Endpoint Detection: Fixed missing default value for first found endpoint during scans
+- Database Constraints: Extended field limits to prevent scan errors caused by database field limitations
+- Scan Engine Variants: Added new scan engine variants and enhanced configuration options
+- Race Condition Fix: Resolved DirectoryFile race condition in parallel fuzzing operations
+- Celery Tasks: Added isolated task context for thread safety and context management
+- API Optimization: Optimized queryset prefetching and used scan ID instead of object references
+
+#### User Interface Fixes
+
+- Screenshot Display: Fixed screenshot display issues in Discovered ports and Endpoints tables
+- Screenshot Loading: Fixed screenshot not loading on click and added lazy loading for better performance
+- Endpoint Table: Improved endpoint table column alignment and screenshot modal handling
+- Technology Detection: Updated get_technologies to properly accept subdomain endpoint parameters
+
+#### LLM & AI Features
+
+- Error Handling: Improved error detection and unified model selection in LLM integration
+- Report Generation: Fixed error on vulnerability report generation using LLM models
+
+#### Development & Testing
+
+- Test Framework: Refactored test data generation and removed JSON fixtures for better maintainability
+- Docker Build: Updated Docker image tagging logic in build workflow
+
+### 🔧 Technical Improvements
+
+- Code Quality: Enhanced code organization and refactoring for better maintainability
+- Security: Applied security patches including XSS prevention measures in frontend
+- Performance: Minor performance optimizations in scan engine processing
+- Build System: Streamlined build processes for faster deployment
+
+### 🔄 Migration Notes
+
+This is a patch release that builds upon v2.2.0. No special migration steps are required - simply update using the standard update process.
+
 ## [2.2.0] - 11-08-2025
 
 ### 🆕 Major New Features
@@ -83,79 +124,79 @@ For technical details about each release, see [the GitHub releases page](https:/
 
 ## [2.1.0] - 2024-11-06
 
-### Added (2.1.0)
+### Added
 
-• feat(release): update release/2.1.0 from upstream by @psyray in #86
-• feat(ui): mask API keys in settings view by @yarysp in #80
-• feat(install): arm64 support by @yarysp in #82
-• ops(install): use python venv (pipx/poetry) to fix/prevent conflicting packages by @psyray & @Talanor in #84
-• build(install): migrate to GitHub Container Registry, optimize Docker setup, and update install scripts by @psyray & @Talanor in #139
-• build(ci): build Docker image and upload to GitHub container registry by @AnonymousWP in #138
-• build(docker): add ARM support for Celery Dockerfile by @psyray in #161
-• build(docker): improve makefile, docker verbosity & provide unit tests by @psyray in #155
-• dev(django): install django extensions to have more commands by @psyray in #196
-• feat(ui): disable update button in tool arsenal by @psyray in #200
-• feat(todo): enhance todo functionality and error handling by @psyray in #198
-• project(ui): confine users to projects and standardize slug usage by @psyray in #154
-• feat(ui): bulk remove vulnerabilities by @0b3ud in #168
-• feat: reintroduce Lark notification fields in scanEngine by @psyray in #207
-• feat: enhance IP retrieval with caching by @psyray in #215
-• build(docker): refactor detection of OS and add support for RHEL distros by @AnonymousWP in #211
-• Release/2.1.0 by @AnonymousWP in #1
+- feat(release): update release/2.1.0 from upstream by @psyray in #86
+- feat(ui): mask API keys in settings view by @yarysp in #80
+- feat(install): arm64 support by @yarysp in #82
+- ops(install): use python venv (pipx/poetry) to fix/prevent conflicting packages by @psyray & @Talanor in #84
+- build(install): migrate to GitHub Container Registry, optimize Docker setup, and update install scripts by @psyray & @Talanor in #139
+- build(ci): build Docker image and upload to GitHub container registry by @AnonymousWP in #138
+- build(docker): add ARM support for Celery Dockerfile by @psyray in #161
+- build(docker): improve makefile, docker verbosity & provide unit tests by @psyray in #155
+- dev(django): install django extensions to have more commands by @psyray in #196
+- feat(ui): disable update button in tool arsenal by @psyray in #200
+- feat(todo): enhance todo functionality and error handling by @psyray in #198
+- project(ui): confine users to projects and standardize slug usage by @psyray in #154
+- feat(ui): bulk remove vulnerabilities by @0b3ud in #168
+- feat: reintroduce Lark notification fields in scanEngine by @psyray in #207
+- feat: enhance IP retrieval with caching by @psyray in #215
+- build(docker): refactor detection of OS and add support for RHEL distros by @AnonymousWP in #211
+- Release/2.1.0 by @AnonymousWP in #1
 
-### Fixed (2.1.0)
+### Fixed
 
-• fix(docs): change art logo and fix doc link by @psyray in #137
-• fix(cidr): add CIDR import by @pbehnke in #141
-• fix(ui): restore static files path & remove beat entrypoint useless code by @psyray in #145
-• fix(conflicts): fix merge conflicts for branch release/2.1.0 by @psyray in #150
-• fix(scan): subdomain import with suffix more than 4 chars by @yogeshojha in #147
-• build(ci): extract issue number from PR body by @AnonymousWP in #153
-• docs(readme): set badge to latest release automatically by @psyray in #158
-• docs(readme): remove space after url by @psyray in #159
-• fix(ui): permit to link tab URL and history back into it by @yogeshojha in #164
-• fix(celery): wafw00f install by @psyray in #166
-• fix(ui): load default yaml config on add scan engine form by @psyray in #171
-• fix(ui): tools settings page by @psyray in #169
-• fix(oneforall): wrong s3 bucket reported by @Talanor in #176
-• fix(ssl): add SAN extension to the cert by @michschl in #178
-• fix(ui): stored XSS by @yogeshojha in #180
-• fix(install): revert changes of prebuilt chain by @psyray in #183
-• fix(ui): fix 500 error on scan engine add by @psyray in #184
-• build(install): improve root detection and set ownership on files by @psyray in #186
-• fix(scan): fix clocked and scheduled scan not working by @yogeshojha in #182
-• fix(graph): de-duplicate dorks and vulnerabilities by @psyray in #188
-• build(docker): replace staticfiles volume to prevent empty directory by @psyray in #199
-• fix(custom_header): not correctly parsing parameters by @psyray in #172
-• fix: change install_type value in .env-dist and add missing imports by @psyray in #201
-• refactor: replace hardcoded API URLs with dynamic endpoint URLs by @psyray in #206
-• refactor: update modal handling and improve CMS detection by @psyray in #210
-• refactor: update delete functions to use URL endpoints by @psyray in #213
-• refactor: update URL handling by @psyray in #214
-• fix: apply github-advanced-security recommendations by @psyray in #220
+- fix(docs): change art logo and fix doc link by @psyray in #137
+- fix(cidr): add CIDR import by @pbehnke in #141
+- fix(ui): restore static files path & remove beat entrypoint useless code by @psyray in #145
+- fix(conflicts): fix merge conflicts for branch release/2.1.0 by @psyray in #150
+- fix(scan): subdomain import with suffix more than 4 chars by @yogeshojha in #147
+- build(ci): extract issue number from PR body by @AnonymousWP in #153
+- docs(readme): set badge to latest release automatically by @psyray in #158
+- docs(readme): remove space after url by @psyray in #159
+- fix(ui): permit to link tab URL and history back into it by @yogeshojha in #164
+- fix(celery): wafw00f install by @psyray in #166
+- fix(ui): load default yaml config on add scan engine form by @psyray in #171
+- fix(ui): tools settings page by @psyray in #169
+- fix(oneforall): wrong s3 bucket reported by @Talanor in #176
+- fix(ssl): add SAN extension to the cert by @michschl in #178
+- fix(ui): stored XSS by @yogeshojha in #180
+- fix(install): revert changes of prebuilt chain by @psyray in #183
+- fix(ui): fix 500 error on scan engine add by @psyray in #184
+- build(install): improve root detection and set ownership on files by @psyray in #186
+- fix(scan): fix clocked and scheduled scan not working by @yogeshojha in #182
+- fix(graph): de-duplicate dorks and vulnerabilities by @psyray in #188
+- build(docker): replace staticfiles volume to prevent empty directory by @psyray in #199
+- fix(custom_header): not correctly parsing parameters by @psyray in #172
+- fix: change install_type value in .env-dist and add missing imports by @psyray in #201
+- refactor: replace hardcoded API URLs with dynamic endpoint URLs by @psyray in #206
+- refactor: update modal handling and improve CMS detection by @psyray in #210
+- refactor: update delete functions to use URL endpoints by @psyray in #213
+- refactor: update URL handling by @psyray in #214
+- fix: apply github-advanced-security recommendations by @psyray in #220
 
-### Miscellaneous (2.1.0)
+### Miscellaneous
 
-• chore(deps): bump requests from 2.31.0 to 2.32.2 in /web by @dependabot in #105
-• chore(deps): bump django from 3.2.4 to 3.2.25 in /web by @dependabot in #104
-• build(ci): add CI for closing issues when PR is merged by @AnonymousWP in #144
-• build(ci): add write permissions by @AnonymousWP in #163
-• docs(readme): remove note by @AnonymousWP in #167
-• docs(readme): redirect install & update section to the wiki pages by @psyray in #185
-• build(ci): build docker images for each tag, release, push by @psyray in #151
-• build(images): restrict image creation, add correct tags and clean non tagged images by @psyray in #193
-• build(ci): improve CodeQL configuration by @AnonymousWP in #194
-• ci(unit-tests): provide unit tests for UI by @psyray in #189
-• refactor: improve robustness of nuclei result parsing by @psyray in #209
-• refactor: update wordlists and configuration defaults by @psyray in #221
+- chore(deps): bump requests from 2.31.0 to 2.32.2 in /web by @dependabot in #105
+- chore(deps): bump django from 3.2.4 to 3.2.25 in /web by @dependabot in #104
+- build(ci): add CI for closing issues when PR is merged by @AnonymousWP in #144
+- build(ci): add write permissions by @AnonymousWP in #163
+- docs(readme): remove note by @AnonymousWP in #167
+- docs(readme): redirect install & update section to the wiki pages by @psyray in #185
+- build(ci): build docker images for each tag, release, push by @psyray in #151
+- build(images): restrict image creation, add correct tags and clean non tagged images by @psyray in #193
+- build(ci): improve CodeQL configuration by @AnonymousWP in #194
+- ci(unit-tests): provide unit tests for UI by @psyray in #189
+- refactor: improve robustness of nuclei result parsing by @psyray in #209
+- refactor: update wordlists and configuration defaults by @psyray in #221
 
-### New Contributors (2.1.0)
+### New Contributors
 
-• @dependabot made their first contribution in #105
-• @0b3ud made their first contribution in #168
-• @pbehnke made their first contribution in #141
-• @Talanor made their first contribution in #176
-• @michschl made their first contribution in #178
+- @dependabot made their first contribution in #105
+- @0b3ud made their first contribution in #168
+- @pbehnke made their first contribution in #141
+- @Talanor made their first contribution in #176
+- @michschl made their first contribution in #178
 
 Full Changelog: <https://github.com/Security-Tools-Alliance/rengine-ng/compare/v2.0.7...v2.1.0>
 
