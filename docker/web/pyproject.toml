@@ -54,6 +54,27 @@ weasyprint = "53.3"
 whatportis = { git = "https://github.com/Security-Tools-Alliance/whatportis" }
 xmltodict = "0.13.0"
 
+[tool.poetry.group.dev.dependencies]
+ruff = "^0.12.11"
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "C", "N", "I"]
+ignore = ["E203", "W503"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+docstring-code-format = true
+docstring-code-line-length = 79
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
