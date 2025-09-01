@@ -104,10 +104,10 @@ If Docker and your IDE are on the same host, you can directly apply the project'
 
 ```bash
 # Format code according to the project's Ruff configuration
-docker exec -it rengine-web-1 bash -c 'ruff format --config /home/rengine/rengine/pyproject.toml $FilePath$'
+docker exec -it rengine-web-1 bash -c 'ruff format --config /home/rengine/pyproject.toml $FilePath$'
 
 # Check and automatically fix issues
-docker exec -it rengine-web-1 bash -c 'ruff check --fix --config /home/rengine/rengine/pyproject.toml $FilePath$'
+docker exec -it rengine-web-1 bash -c 'ruff check --fix --config /home/rengine/pyproject.toml $FilePath$'
 ```
 
 This ensures consistency between your development environment and the containerized project.
