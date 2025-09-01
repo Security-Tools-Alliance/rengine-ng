@@ -90,3 +90,43 @@ So in short:
 ### Commit messages
 
 As for commits, we prefer using [Conventional Commit Messages](https://gist.github.com/qoomon/5dfcdf8eec66a051ecd85625518cfd13). When working in any of the branches listed above (if there's an existing issue for it), close it using a [closing keyword](https://docs.github.com/en/issues/tracking-your-work-with-issues/linking-a-pull-request-to-an-issue#linking-a-pull-request-to-an-issue-using-a-keyword). For more information regarding Conventional Commit Messages, see <https://www.conventionalcommits.org/en/v1.0.0/> as well.
+
+## Coding Standards
+
+Always follow **PEP8** style for Python code.  
+Use **Ruff** and **pre-commit** to automate code checking and formatting before each commit.
+
+## Code Checking and Formatting
+
+### Using Docker
+
+If Docker and your IDE are on the same host, you can directly apply the project's configuration before committing.
+
+```bash
+# Format code according to the project's Ruff configuration
+docker exec -it rengine-web-1 bash -c 'ruff format --config /home/rengine/rengine/pyproject.toml $FilePath$'
+
+# Check and automatically fix issues
+docker exec -it rengine-web-1 bash -c 'ruff check --fix --config /home/rengine/rengine/pyproject.toml $FilePath$'
+```
+
+This ensures consistency between your development environment and the containerized project.
+
+### Using Global Environment
+
+If Docker is not available, or you prefer to work in a global Python environment, you can install Ruff and pre-commit using **pipx**:
+
+```bash
+pipx install ruff
+pipx install pre-commit
+```
+
+After installation, set up pre-commit to run automatically before each commit:
+
+```bash
+pre-commit install --config docker/web/pre-commit-config.yaml
+```
+
+With this setup, all Python files will be automatically checked and formatted according to the project rules before each commit.  
+
+This alternative method is convenient for contributors who do not run the full Docker stack locally.
