@@ -76,8 +76,7 @@ select = ["E", "F", "W", "C", "N", "I"]
 
 # Ignore specific rules that conflict with formatter style:
 # - E203: whitespace before ':' in slicing
-# - W503: line break before binary operator
-ignore = ["E203", "W503"]
+ignore = ["E203"]
 
 # Add "line-too-long" rule explicitly
 extend-select = ["E501"]
