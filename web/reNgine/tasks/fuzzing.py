@@ -28,6 +28,7 @@ from reNgine.definitions import (
     FFUF_DEFAULT_WORDLIST_PATH,
     WORDLIST
 )
+from reNgine.utilities.database import save_fuzzing_file
 from reNgine.settings import (
     DEFAULT_HTTP_TIMEOUT,
     DEFAULT_RATE_LIMIT,
@@ -46,15 +47,20 @@ logger = get_task_logger(__name__)
 
 
 @app.task(name='dir_file_fuzz', queue='io_queue', base=RengineTask, bind=True)
-def dir_file_fuzz(self, ctx={}, description=None):
+def dir_file_fuzz(self, ctx=None, description=None):
     """Perform directory scan, and currently uses `ffuf` as a default tool.
 
     Args:
+        ctx (dict, optional): Context dictionary with scan information.
         description (str, optional): Task description shown in UI.
 
     Returns:
         list: List of URLs discovered.
     """
+    
+    # Initialize ctx if None to avoid mutable default argument issues
+    if ctx is None:
+        ctx = {}
     
     def _execute_dir_file_fuzz(ctx, description):
         # Config
@@ -187,15 +193,20 @@ def dir_file_fuzz(self, ctx={}, description=None):
                 endpoint.content_length = length
                 endpoint.save()
 
-                # Save directory file output from FFUF output
-                dfile, created = DirectoryFile.objects.get_or_create(
-                    name=name,
-                    length=length,
-                    words=words,
-                    lines=lines,
-                    content_type=content_type,
-                    url=url,
-                    http_status=status)
+                # Save directory file output from FFUF with race condition handling
+                try:
+                    dfile, created = save_fuzzing_file(
+                        name=name,
+                        url=url,
+                        http_status=status,
+                        length=length,
+                        words=words,
+                        lines=lines,
+                        content_type=content_type
+                    )
+                except Exception as e:
+                    logger.error(f'Failed to save DirectoryFile for {url}: {e}')
+                    continue  # Skip this entry and continue processing
 
                 # Log newly created file or directory if debug activated
                 if created and CELERY_DEBUG:

@@ -1126,6 +1126,13 @@ class DirectoryFile(models.Model):
 	url = models.CharField(max_length=5000, blank=True, null=True)
 	content_type = models.CharField(max_length=100, blank=True, null=True)
 
+	class Meta:
+		# Indexes for performance without unique constraints
+		indexes = [
+			models.Index(fields=['name', 'url', 'http_status']),
+			models.Index(fields=['http_status']),
+		]
+
 	def __str__(self):
 		return str(self.name)
 
