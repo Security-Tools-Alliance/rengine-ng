@@ -72,11 +72,19 @@ target-version = "py310"
 # - C: cyclomatic complexity checks
 # - N: naming conventions (PEP8 naming rules)
 # - I: import sorting (isort-compatible)
-select = ["E", "F", "W", "C", "N", "I"]
+select = [
+    "E",
+    "F",
+    "W",
+#    "C",
+    "N",
+    "I",
+]
 
 # Ignore specific rules that conflict with formatter style:
 # - E203: whitespace before ':' in slicing
-ignore = ["E203"]
+# - N803: argument name should be lowercase (Django convention often uses uppercase)
+ignore = ["E203", "N803"]
 
 # Add "line-too-long" rule explicitly
 extend-select = ["E501"]

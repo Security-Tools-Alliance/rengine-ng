@@ -2,16 +2,11 @@
 This file contains the test cases for the API views.
 """
 
-from django.utils import timezone
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework import status
 from utils.test_base import BaseTestCase
 
-__all__ = [
-    'TestCreateProjectApi',
-    'TestAddReconNote',
-    'TestListTodoNotes',
-]
 
 class TestCreateProjectApi(BaseTestCase):
     """Tests for the Create Project API."""
@@ -37,6 +32,7 @@ class TestCreateProjectApi(BaseTestCase):
         response = self.client.get(api_url)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertFalse(response.data["status"])
+
 
 class TestAddReconNote(BaseTestCase):
     """Test case for the Add Recon Note API."""
@@ -67,6 +63,7 @@ class TestAddReconNote(BaseTestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertFalse(response.data["status"])
 
+
 class TestListTodoNotes(BaseTestCase):
     """Test case for listing todo notes."""
 
@@ -81,12 +78,8 @@ class TestListTodoNotes(BaseTestCase):
         response = self.client.get(url, {"project": self.data_generator.project.slug})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertGreaterEqual(len(response.data["notes"]), 1)
-        self.assertEqual(
-            response.data["notes"][0]["id"], self.data_generator.todo_note.id
-        )
-        self.assertEqual(
-            response.data["notes"][0]["title"], self.data_generator.todo_note.title
-        )
+        self.assertEqual(response.data["notes"][0]["id"], self.data_generator.todo_note.id)
+        self.assertEqual(response.data["notes"][0]["title"], self.data_generator.todo_note.title)
         self.assertEqual(
             response.data["notes"][0]["description"],
             self.data_generator.todo_note.description,
@@ -103,4 +96,3 @@ class TestListTodoNotes(BaseTestCase):
             response.data["notes"][0]["scan_history"],
             self.data_generator.todo_note.scan_history.id,
         )
-

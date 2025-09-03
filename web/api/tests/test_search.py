@@ -6,10 +6,6 @@ from django.urls import reverse
 from rest_framework import status
 from utils.test_base import BaseTestCase
 
-__all__ = [
-    'TestSearchHistoryView',
-    'TestUniversalSearch'
-]
 
 class TestSearchHistoryView(BaseTestCase):
     """Tests for the Search History API."""
@@ -29,6 +25,7 @@ class TestSearchHistoryView(BaseTestCase):
             response.data["results"][0]["query"],
             self.data_generator.search_history.query,
         )
+
 
 class TestUniversalSearch(BaseTestCase):
     """Test case for the Universal Search API."""
@@ -62,7 +59,7 @@ class TestUniversalSearch(BaseTestCase):
         self.assertFalse(response.data["status"])
         self.assertEqual(response.data["message"], "No query parameter provided!")
 
-    def test_universal_search_with_special_characters(self):  
+    def test_universal_search_with_special_characters(self):
         """Test the universal search functionality with special characters."""
         api_url = reverse("api:search")
         special_query = "admin'; DROP TABLE users;--"

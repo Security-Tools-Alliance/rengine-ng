@@ -4,14 +4,9 @@ This file contains the test cases for the API views.
 
 from django.urls import reverse
 from rest_framework import status
-from utils.test_base import BaseTestCase
 from targetApp.models import Organization
+from utils.test_base import BaseTestCase
 
-__all__ = [
-    'TestListOrganizations',
-    'TestListTargetsInOrganization',
-    'TestListTargetsWithoutOrganization'
-]
 
 class TestListOrganizations(BaseTestCase):
     """Test case for listing organizations."""
@@ -26,7 +21,7 @@ class TestListOrganizations(BaseTestCase):
         url = reverse("api:listOrganizations")
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(response.json()['organizations']), 0)
+        self.assertEqual(len(response.json()["organizations"]), 0)
 
     def test_list_organizations(self):
         """Test listing all organizations."""
@@ -40,6 +35,7 @@ class TestListOrganizations(BaseTestCase):
             self.data_generator.organization.name,
         )
 
+
 class TestListTargetsInOrganization(BaseTestCase):
     """Test case for listing targets in an organization."""
 
@@ -50,16 +46,13 @@ class TestListTargetsInOrganization(BaseTestCase):
     def test_list_targets_in_organization(self):
         """Test listing targets for a specific organization."""
         url = reverse("api:queryTargetsInOrganization")
-        response = self.client.get(
-            url, {"organization_id": self.data_generator.organization.id}
-        )
+        response = self.client.get(url, {"organization_id": self.data_generator.organization.id})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("organization", response.data)
         self.assertIn("domains", response.data)
         self.assertGreaterEqual(len(response.data["domains"]), 1)
-        self.assertEqual(
-            response.data["domains"][0]["name"], self.data_generator.domain.name
-        )
+        self.assertEqual(response.data["domains"][0]["name"], self.data_generator.domain.name)
+
 
 class TestListTargetsWithoutOrganization(BaseTestCase):
     """Test case for listing targets without an organization."""
