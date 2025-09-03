@@ -60,12 +60,19 @@ You can find detailed documentation in the repository [Wiki](https://github.com/
 
 ### Table of Contents
 
-* [Workflow](#workflow)
-* [Quick Installation](#quick-installation)
-* [Updating](#quick-installation)
-* [What's new in reNgine-ng 2.0](#changelog)
-* [Screenshots](#screenshots)
-* [Contributing](#contributing)
+- [reNgine-ng (Next Generation)](#rengine-ng-next-generation)
+  - [Why reNgine-ng?](#why-rengine-ng)
+  - [What is reNgine-ng?](#what-is-rengine-ng)
+    - [Documentation](#documentation)
+    - [Table of Contents](#table-of-contents)
+    - [Workflow](#workflow)
+    - [Quick Installation](#quick-installation)
+    - [Platform Support](#platform-support)
+    - [Updating](#updating)
+    - [Changelog](#changelog)
+    - [Screenshots](#screenshots)
+      - [Dashboard](#dashboard)
+    - [Contributing](#contributing)
 
 ![-----------------------------------------------------](https://raw.githubusercontent.com/andreasbm/readme/master/assets/lines/aqua.png)
 
@@ -78,6 +85,22 @@ You can find detailed documentation in the repository [Wiki](https://github.com/
 ### Quick Installation
 
 Detailed installation instructions can be found in the [install section of the wiki](https://github.com/Security-Tools-Alliance/rengine-ng/wiki/Installation#-quick-installation)
+
+### Platform Support
+
+reNgine-ng supports both **Linux** and **macOS** systems:
+
+* **Linux**: Full feature support including GPU acceleration for LLM features
+* **macOS**: Full feature support with automatic macOS-specific optimizations
+  * Compatible with Intel and Apple Silicon Macs
+  * Docker Desktop integration with proper permission handling
+  * GPU acceleration not available (containers can't access Apple Silicon GPUs)
+
+**macOS-specific notes:**
+
+* Ensure Docker Desktop is running before using `make` commands
+* GPU flags (`GPU=1`) are safely ignored on macOS
+* File permissions are automatically handled by Docker Desktop
 
 ### Updating
 
