@@ -4,17 +4,16 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('dashboard', '0006_project_insert_date'),
+        ("dashboard", "0006_project_insert_date"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='OpenAIKeys',
+            name="OpenAIKeys",
             fields=[
-                ('id', models.AutoField(primary_key=True, serialize=False)),
-                ('key', models.CharField(max_length=500)),
+                ("id", models.AutoField(primary_key=True, serialize=False)),
+                ("key", models.CharField(max_length=500)),
             ],
         ),
     ]

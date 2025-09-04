@@ -4,15 +4,14 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('dashboard', '0013_auto_20240421_0507'),
+        ("dashboard", "0013_auto_20240421_0507"),
     ]
 
     operations = [
         migrations.RenameField(
-            model_name='ollamasettings',
-            old_name='is_ollama',
-            new_name='use_ollama',
+            model_name="ollamasettings",
+            old_name="is_ollama",
+            new_name="use_ollama",
         ),
     ]
