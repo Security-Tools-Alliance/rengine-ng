@@ -4,25 +4,24 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('targetApp', '0018_domaininfo_name_servers'),
+        ("targetApp", "0018_domaininfo_name_servers"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='domaininfo',
-            name='created',
+            model_name="domaininfo",
+            name="created",
             field=models.DateTimeField(blank=True, null=True),
         ),
         migrations.AddField(
-            model_name='domaininfo',
-            name='expires',
+            model_name="domaininfo",
+            name="expires",
             field=models.DateTimeField(blank=True, null=True),
         ),
         migrations.AddField(
-            model_name='domaininfo',
-            name='updated',
+            model_name="domaininfo",
+            name="updated",
             field=models.DateTimeField(blank=True, null=True),
         ),
     ]

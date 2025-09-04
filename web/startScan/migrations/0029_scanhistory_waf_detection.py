@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('startScan', '0028_auto_20220710_1140'),
+        ("startScan", "0028_auto_20220710_1140"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='scanhistory',
-            name='waf_detection',
+            model_name="scanhistory",
+            name="waf_detection",
             field=models.BooleanField(default=False, null=True),
         ),
     ]

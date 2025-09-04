@@ -4,55 +4,54 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('startScan', '0050_auto_20230908_1006'),
+        ("startScan", "0050_auto_20230908_1006"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='s3bucket',
-            name='perm_all_users_full_control',
+            model_name="s3bucket",
+            name="perm_all_users_full_control",
             field=models.IntegerField(default=0),
         ),
         migrations.AlterField(
-            model_name='s3bucket',
-            name='perm_all_users_read',
+            model_name="s3bucket",
+            name="perm_all_users_read",
             field=models.IntegerField(default=0),
         ),
         migrations.AlterField(
-            model_name='s3bucket',
-            name='perm_all_users_read_acl',
+            model_name="s3bucket",
+            name="perm_all_users_read_acl",
             field=models.IntegerField(default=0),
         ),
         migrations.AlterField(
-            model_name='s3bucket',
-            name='perm_all_users_write',
+            model_name="s3bucket",
+            name="perm_all_users_write",
             field=models.IntegerField(default=0),
         ),
         migrations.AlterField(
-            model_name='s3bucket',
-            name='perm_auth_users_full_control',
+            model_name="s3bucket",
+            name="perm_auth_users_full_control",
             field=models.IntegerField(default=0),
         ),
         migrations.AlterField(
-            model_name='s3bucket',
-            name='perm_auth_users_read',
+            model_name="s3bucket",
+            name="perm_auth_users_read",
             field=models.IntegerField(default=0),
         ),
         migrations.AlterField(
-            model_name='s3bucket',
-            name='perm_auth_users_read_acl',
+            model_name="s3bucket",
+            name="perm_auth_users_read_acl",
             field=models.IntegerField(default=0),
         ),
         migrations.AlterField(
-            model_name='s3bucket',
-            name='perm_auth_users_write',
+            model_name="s3bucket",
+            name="perm_auth_users_write",
             field=models.IntegerField(default=0),
         ),
         migrations.AlterField(
-            model_name='s3bucket',
-            name='perm_auth_users_write_acl',
+            model_name="s3bucket",
+            name="perm_auth_users_write_acl",
             field=models.IntegerField(default=0),
         ),
     ]

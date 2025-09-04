@@ -6,11 +6,6 @@ from django.urls import reverse
 from rest_framework import status
 from utils.test_base import BaseTestCase
 
-__all__ = [
-    'TestEndPointViewSet',
-    'TestEndPointChangesViewSet',
-    'TestInterestingEndpointViewSet'
-]
 
 class TestEndPointViewSet(BaseTestCase):
     """Test case for the EndPoint ViewSet API."""
@@ -58,6 +53,7 @@ class TestEndPointViewSet(BaseTestCase):
             self.data_generator.endpoint.http_url,
         )
 
+
 class TestEndPointChangesViewSet(BaseTestCase):
     """Test case for endpoint changes viewset."""
 
@@ -71,9 +67,7 @@ class TestEndPointChangesViewSet(BaseTestCase):
     def test_endpoint_changes_viewset(self):
         """Test the EndPoint Changes ViewSet."""
         url = reverse("api:endpoint-changes-list")
-        response = self.client.get(
-            url, {"scan_id": self.data_generator.scan_history.id, "changes": "added"}
-        )
+        response = self.client.get(url, {"scan_id": self.data_generator.scan_history.id, "changes": "added"})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertGreaterEqual(len(response.data), 1)
         self.assertEqual(
@@ -81,6 +75,7 @@ class TestEndPointChangesViewSet(BaseTestCase):
             self.data_generator.endpoint.http_url,
         )
         self.assertEqual(response.data["results"][0]["change"], "added")
+
 
 class TestInterestingEndpointViewSet(BaseTestCase):
     """Test case for interesting endpoint viewset."""
@@ -93,13 +88,10 @@ class TestInterestingEndpointViewSet(BaseTestCase):
     def test_interesting_endpoint_viewset(self):
         """Test retrieving interesting endpoints for a scan."""
         url = reverse("api:interesting-endpoints-list")
-        response = self.client.get(
-            url, {"scan_id": self.data_generator.scan_history.id}
-        )
+        response = self.client.get(url, {"scan_id": self.data_generator.scan_history.id})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertGreaterEqual(len(response.data), 1)
         self.assertEqual(
             response.data["results"][0]["http_url"],
             self.data_generator.endpoint.http_url,
         )
-

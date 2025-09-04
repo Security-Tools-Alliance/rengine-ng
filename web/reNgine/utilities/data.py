@@ -1,15 +1,17 @@
 import contextlib
-import re
 import ipaddress
+import re
+
 import validators
 from celery.utils.log import get_task_logger
 
 logger = get_task_logger(__name__)
 
 
-#--------------#
+# --------------#
 # Data utils   #
-#--------------#
+# --------------#
+
 
 def return_iterable(string):
     """Check if value is a simple string, a string with commas, a list [], a tuple (), a set {} and return an iterable"""
@@ -46,11 +48,11 @@ def is_iterable(variable):
 def extract_columns(row, columns):
     """
     Extract specific columns from a row based on column indices.
-    
+
     Args:
         row (list): The CSV row as a list of values.
         columns (list): List of column indices to extract.
-    
+
     Returns:
         list: Extracted values from the specified columns.
     """
@@ -67,7 +69,7 @@ def get_data_from_post_request(request, field):
     Returns:
         list: The data from the specified field.
     """
-    if hasattr(request.data, 'getlist'):
+    if hasattr(request.data, "getlist"):
         return request.data.getlist(field)
     else:
         return request.data.get(field, [])
@@ -123,14 +125,14 @@ def get_ips_from_cidr_range(target):
 
     Returns:
         list of str: A list of IP addresses as strings if the CIDR range is valid; otherwise, an empty list is returned.
-        
+
     Raises:
         ValueError: If the target is not a valid CIDR range, an error is logged.
     """
     try:
         return [str(ip) for ip in ipaddress.IPv4Network(target)]
     except ValueError:
-        logger.error(f'{target} is not a valid CIDR range. Skipping.')
+        logger.error(f"{target} is not a valid CIDR range. Skipping.")
         return []
 
 
@@ -138,10 +140,10 @@ def parse_curl_output(response):
     http_status = 0
     if response:
         # TODO: Enrich from other cURL fields.
-        CURL_REGEX_HTTP_STATUS = 'HTTP\/(?:(?:\d\.?)+)\s(\d+)\s(?:\w+)'
+        CURL_REGEX_HTTP_STATUS = r"HTTP\/(?:(?:\d\.?)+)\s(\d+)\s(?:\w+)"
         regex = re.compile(CURL_REGEX_HTTP_STATUS, re.MULTILINE)
         with contextlib.suppress(KeyError, TypeError, IndexError):
             http_status = int(regex.findall(response)[0])
     return {
-        'http_status': http_status,
-    } 
+        "http_status": http_status,
+    }

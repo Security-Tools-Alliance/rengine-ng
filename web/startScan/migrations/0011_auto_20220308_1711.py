@@ -4,27 +4,26 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('startScan', '0010_endpoint_endpoint_subscan_ids'),
+        ("startScan", "0010_endpoint_endpoint_subscan_ids"),
     ]
 
     operations = [
         migrations.RemoveField(
-            model_name='subdomain',
-            name='directory_json',
+            model_name="subdomain",
+            name="directory_json",
         ),
         migrations.CreateModel(
-            name='Directory',
+            name="Directory",
             fields=[
-                ('id', models.AutoField(primary_key=True, serialize=False)),
-                ('json', models.JSONField(blank=True, null=True)),
-                ('dir_subscan_ids', models.ManyToManyField(related_name='dir_subscan_ids', to='startScan.SubScan')),
+                ("id", models.AutoField(primary_key=True, serialize=False)),
+                ("json", models.JSONField(blank=True, null=True)),
+                ("dir_subscan_ids", models.ManyToManyField(related_name="dir_subscan_ids", to="startScan.SubScan")),
             ],
         ),
         migrations.AddField(
-            model_name='subdomain',
-            name='directories',
-            field=models.ManyToManyField(blank=True, related_name='directories', to='startScan.Directory'),
+            model_name="subdomain",
+            name="directories",
+            field=models.ManyToManyField(blank=True, related_name="directories", to="startScan.Directory"),
         ),
     ]

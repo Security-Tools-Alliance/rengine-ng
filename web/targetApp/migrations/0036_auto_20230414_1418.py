@@ -4,25 +4,24 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('targetApp', '0035_auto_20230412_2034'),
+        ("targetApp", "0035_auto_20230412_2034"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='HistoricalIP',
+            name="HistoricalIP",
             fields=[
-                ('id', models.AutoField(primary_key=True, serialize=False)),
-                ('ip', models.CharField(max_length=150)),
-                ('location', models.CharField(max_length=500)),
-                ('owner', models.CharField(max_length=500)),
-                ('last_seen', models.CharField(max_length=500)),
+                ("id", models.AutoField(primary_key=True, serialize=False)),
+                ("ip", models.CharField(max_length=150)),
+                ("location", models.CharField(max_length=500)),
+                ("owner", models.CharField(max_length=500)),
+                ("last_seen", models.CharField(max_length=500)),
             ],
         ),
         migrations.AddField(
-            model_name='domaininfo',
-            name='historical_ips',
-            field=models.ManyToManyField(blank=True, related_name='similar_domains', to='targetApp.HistoricalIP'),
+            model_name="domaininfo",
+            name="historical_ips",
+            field=models.ManyToManyField(blank=True, related_name="similar_domains", to="targetApp.HistoricalIP"),
         ),
     ]

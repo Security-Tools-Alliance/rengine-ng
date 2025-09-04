@@ -3,16 +3,16 @@
 from django.db import migrations, models
 from django.utils import timezone
 
-class Migration(migrations.Migration):
 
+class Migration(migrations.Migration):
     dependencies = [
-        ('dashboard', '0005_alter_project_slug'),
+        ("dashboard", "0005_alter_project_slug"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='project',
-            name='insert_date',
+            model_name="project",
+            name="insert_date",
             field=models.DateTimeField(default=timezone.now),
             preserve_default=False,
         ),

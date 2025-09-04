@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('startScan', '0019_scanactivity_error_message'),
+        ("startScan", "0019_scanactivity_error_message"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='subscan',
-            name='error_message',
+            model_name="subscan",
+            name="error_message",
             field=models.CharField(blank=True, max_length=300, null=True),
         ),
     ]

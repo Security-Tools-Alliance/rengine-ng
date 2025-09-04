@@ -4,34 +4,33 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('startScan', '0049_alter_gptvulnerabilityreport_url_path'),
+        ("startScan", "0049_alter_gptvulnerabilityreport_url_path"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='S3Bucket',
+            name="S3Bucket",
             fields=[
-                ('id', models.AutoField(primary_key=True, serialize=False)),
-                ('name', models.CharField(blank=True, max_length=500, null=True)),
-                ('region', models.CharField(blank=True, max_length=500, null=True)),
-                ('provider', models.CharField(blank=True, max_length=100, null=True)),
-                ('owner_display_name', models.CharField(blank=True, max_length=250, null=True)),
-                ('perm_auth_users_read', models.IntegerField()),
-                ('perm_auth_users_write', models.IntegerField()),
-                ('perm_auth_users_read_acl', models.IntegerField()),
-                ('perm_auth_users_write_acl', models.IntegerField()),
-                ('perm_auth_users_full_control', models.IntegerField()),
-                ('perm_all_users_read', models.IntegerField()),
-                ('perm_all_users_write', models.IntegerField()),
-                ('perm_all_users_read_acl', models.IntegerField()),
-                ('perm_all_users_full_control', models.IntegerField()),
+                ("id", models.AutoField(primary_key=True, serialize=False)),
+                ("name", models.CharField(blank=True, max_length=500, null=True)),
+                ("region", models.CharField(blank=True, max_length=500, null=True)),
+                ("provider", models.CharField(blank=True, max_length=100, null=True)),
+                ("owner_display_name", models.CharField(blank=True, max_length=250, null=True)),
+                ("perm_auth_users_read", models.IntegerField()),
+                ("perm_auth_users_write", models.IntegerField()),
+                ("perm_auth_users_read_acl", models.IntegerField()),
+                ("perm_auth_users_write_acl", models.IntegerField()),
+                ("perm_auth_users_full_control", models.IntegerField()),
+                ("perm_all_users_read", models.IntegerField()),
+                ("perm_all_users_write", models.IntegerField()),
+                ("perm_all_users_read_acl", models.IntegerField()),
+                ("perm_all_users_full_control", models.IntegerField()),
             ],
         ),
         migrations.AddField(
-            model_name='scanhistory',
-            name='buckets',
-            field=models.ManyToManyField(blank=True, related_name='buckets', to='startScan.S3Bucket'),
+            model_name="scanhistory",
+            name="buckets",
+            field=models.ManyToManyField(blank=True, related_name="buckets", to="startScan.S3Bucket"),
         ),
     ]

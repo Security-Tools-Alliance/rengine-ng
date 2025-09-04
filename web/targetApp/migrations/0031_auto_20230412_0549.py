@@ -4,18 +4,17 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('targetApp', '0030_domaininfo_geolocation_iso'),
+        ("targetApp", "0030_domaininfo_geolocation_iso"),
     ]
 
     operations = [
         migrations.RenameModel(
-            old_name='DomainRegistrar',
-            new_name='Registrar',
+            old_name="DomainRegistrar",
+            new_name="Registrar",
         ),
         migrations.RenameModel(
-            old_name='DomainWhoisStatus',
-            new_name='WhoisStatus',
+            old_name="DomainWhoisStatus",
+            new_name="WhoisStatus",
         ),
     ]

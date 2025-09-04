@@ -1,0 +1,15 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.12.11
+    hooks:
+      - id: ruff-format
+        name: Ruff format
+        args: ["--config", "docker/web/pyproject.toml"]
+        types_or: [python, pyi]
+
+      - id: ruff
+        name: Ruff check & auto-fix
+        args: ["--fix", "--config", "docker/web/pyproject.toml"]
+        types_or: [python, pyi]
+
+

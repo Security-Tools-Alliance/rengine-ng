@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('targetApp', '0017_domaininfo_ip_address'),
+        ("targetApp", "0017_domaininfo_ip_address"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='domaininfo',
-            name='name_servers',
-            field=models.ManyToManyField(blank=True, to='targetApp.NameServers'),
+            model_name="domaininfo",
+            name="name_servers",
+            field=models.ManyToManyField(blank=True, to="targetApp.NameServers"),
         ),
     ]

@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('dashboard', '0004_rename_projects_project'),
+        ("dashboard", "0004_rename_projects_project"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='project',
-            name='slug',
+            model_name="project",
+            name="slug",
             field=models.SlugField(unique=True),
         ),
     ]

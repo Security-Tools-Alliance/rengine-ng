@@ -4,20 +4,19 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('startScan', '0033_subdomain_cdn_name'),
+        ("startScan", "0033_subdomain_cdn_name"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='endpoint',
-            name='http_url',
+            model_name="endpoint",
+            name="http_url",
             field=models.CharField(max_length=30000),
         ),
         migrations.AlterField(
-            model_name='endpoint',
-            name='page_title',
+            model_name="endpoint",
+            name="page_title",
             field=models.CharField(blank=True, max_length=30000, null=True),
         ),
     ]

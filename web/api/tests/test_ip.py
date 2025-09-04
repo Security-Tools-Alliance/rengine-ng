@@ -2,21 +2,13 @@
 This file contains the test cases for the API views.
 """
 
+import socket
 from unittest.mock import patch
+
 from django.urls import reverse
 from rest_framework import status
 from utils.test_base import BaseTestCase
-import socket
 
-__all__ = [
-    'TestIpAddressViewSet',
-    'TestIPToDomain',
-    'TestDomainIPHistory',
-    'TestListIPs',
-    'TestListPorts',
-    'TestWhois',
-    'TestReverseWhois'
-]
 
 class TestIpAddressViewSet(BaseTestCase):
     """Test case for IP address viewset."""
@@ -28,15 +20,14 @@ class TestIpAddressViewSet(BaseTestCase):
     def test_ip_address_viewset(self):
         """Test retrieving IP addresses for a scan."""
         url = reverse("api:ip-addresses-list")
-        response = self.client.get(
-            url, {"scan_id": self.data_generator.scan_history.id}
-        )
+        response = self.client.get(url, {"scan_id": self.data_generator.scan_history.id})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertGreaterEqual(len(response.data), 1)
         self.assertEqual(
             response.data["results"][0]["ip_addresses"][0]["address"],
             self.data_generator.ip_address.address,
         )
+
 
 class TestIPToDomain(BaseTestCase):
     """Test case for IP to domain resolution."""
@@ -60,9 +51,7 @@ class TestIPToDomain(BaseTestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data["status"])
-        self.assertEqual(
-            response.data["ip_address"][0]["domain"], self.data_generator.domain.name
-        )
+        self.assertEqual(response.data["ip_address"][0]["domain"], self.data_generator.domain.name)
 
     @patch("api.views.socket.gethostbyaddr")
     def test_ip_to_domain_failure(self, mock_gethostbyaddr):
@@ -85,6 +74,7 @@ class TestIPToDomain(BaseTestCase):
         self.assertIn("domains", response.data["ip_address"][0])
         self.assertEqual(response.data["ip_address"][0]["domains"], mock_domains)
 
+
 class TestDomainIPHistory(BaseTestCase):
     """Test case for domain IP history lookup."""
 
@@ -105,6 +95,7 @@ class TestDomainIPHistory(BaseTestCase):
         self.assertTrue(response.data["status"])
         self.assertEqual(response.data["data"], "IP History data")
 
+
 class TestListIPs(BaseTestCase):
     """Test case for listing IP addresses."""
 
@@ -119,9 +110,8 @@ class TestListIPs(BaseTestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("ips", response.data)
         self.assertGreaterEqual(len(response.data["ips"]), 1)
-        self.assertEqual(
-            response.data["ips"][0]["address"], self.data_generator.ip_address.address
-        )
+        self.assertEqual(response.data["ips"][0]["address"], self.data_generator.ip_address.address)
+
 
 class TestListPorts(BaseTestCase):
     """Test case for listing ports."""
@@ -149,6 +139,7 @@ class TestListPorts(BaseTestCase):
         self.assertEqual(response.data["ports"][0]["number"], 80)
         self.assertEqual(response.data["ports"][0]["service_name"], "http")
 
+
 class TestWhois(BaseTestCase):
     """Test case for WHOIS lookup."""
 
@@ -169,6 +160,7 @@ class TestWhois(BaseTestCase):
         self.assertTrue(response.data["status"])
         self.assertEqual(response.data["data"], "Whois data")
 
+
 class TestReverseWhois(BaseTestCase):
     """Test case for Reverse WHOIS lookup."""
 
@@ -184,9 +176,7 @@ class TestReverseWhois(BaseTestCase):
             "data": "Reverse Whois data",
         }
         url = reverse("api:reverse_whois")
-        response = self.client.get(
-            url, {"lookup_keyword": self.data_generator.domain.name}
-        )
+        response = self.client.get(url, {"lookup_keyword": self.data_generator.domain.name})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data["status"])
         self.assertEqual(response.data["data"], "Reverse Whois data")

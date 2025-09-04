@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('targetApp', '0031_auto_20230412_0549'),
+        ("targetApp", "0031_auto_20230412_0549"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='domaininfo',
-            name='whois_server',
+            model_name="domaininfo",
+            name="whois_server",
             field=models.CharField(blank=True, max_length=150, null=True),
         ),
     ]

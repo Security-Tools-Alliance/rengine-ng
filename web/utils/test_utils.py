@@ -1,16 +1,15 @@
 """
-This file contains the test cases 
+This file contains the test cases
 """
 
-import logging
 import json
-
-from django.utils import timezone
-from django.test import override_settings
-from django.template.loader import get_template
-from django.template import Template
+import logging
 
 from dashboard.models import Project, SearchHistory
+from django.template import Template
+from django.template.loader import get_template
+from django.test import override_settings
+from django.utils import timezone
 from recon_note.models import TodoNote
 from scanEngine.models import (
     EngineType,
@@ -21,27 +20,25 @@ from scanEngine.models import (
     VulnerabilityReportSetting,
     Wordlist,
 )
-
 from startScan.models import (
     Command,
+    CountryISO,
     DirectoryFile,
     DirectoryScan,
     Dork,
     Email,
-    EndPoint,
     Employee,
+    EndPoint,
     IpAddress,
+    MetaFinderDocument,
+    Port,
     ScanActivity,
     ScanHistory,
-    SubScan,
     Subdomain,
+    SubScan,
     Technology,
     Vulnerability,
-    Port,
-    CountryISO,
-    MetaFinderDocument,
 )
-
 from targetApp.models import (
     DNSRecord,
     Domain,
@@ -54,9 +51,9 @@ from targetApp.models import (
     RelatedDomain,
     WhoisStatus,
 )
-__all__ = [
-    'TestDataGenerator'
-]
+
+__all__ = ["TestDataGenerator"]
+
 
 class TestDataGenerator:
     """
@@ -64,13 +61,11 @@ class TestDataGenerator:
     Replaces Django fixtures with clean, maintainable object creation.
     """
 
-
     subscans = []
     vulnerabilities = []
 
     # Disable logging for tests
     logging.disable(logging.CRITICAL)
-
 
     def create_project_base(self):
         """Create a basic project setup with essential objects."""
@@ -93,12 +88,12 @@ class TestDataGenerator:
         self.create_scan_history()
         self.create_subdomain()
         self.create_endpoint()
-        
+
         # Create subscan before IP address so they can be linked properly
         self.create_subscan()
         self.create_ip_address()
         self.create_port()
-        
+
         # Add full features
         self.create_vulnerability()
         self.create_directory_scan()
@@ -131,47 +126,39 @@ class TestDataGenerator:
 
     def create_project(self):
         """Create and return a test project."""
-        self.project = Project.objects.create(
-            name="Test Project",
-            insert_date=timezone.now(),
-            slug="test-project"
-        )
+        self.project = Project.objects.create(name="Test Project", insert_date=timezone.now(), slug="test-project")
         return self.project
 
     def create_domain(self):
         """Create and return a test domain."""
-        self.domain = Domain.objects.create(
-            name="example.com",
-            project=self.project,
-            insert_date=timezone.now()
-        )
+        self.domain = Domain.objects.create(name="example.com", project=self.project, insert_date=timezone.now())
         return self.domain
 
     def create_scan_history(self):
         """Create and return a test scan history."""
         # Use the engine type created earlier instead of hardcoded ID
-        scan_type = getattr(self, 'engine_type', None)
+        scan_type = getattr(self, "engine_type", None)
         if not scan_type:
             # Fallback: create engine type if not exists
             scan_type = self.create_engine_type()
-            
+
         self.scan_history = ScanHistory.objects.create(
             domain=self.domain,
             start_scan_date=timezone.now(),
             scan_type=scan_type,
             scan_status=2,
             tasks=[
-                'fetch_url',
-                'subdomain_discovery',
-                'port_scan',
-                'vulnerability_scan',
-                'osint',
-                'dir_file_fuzz',
-                'screenshot',
-                'waf_detection',
-                'nuclei_scan',
-                'endpoint_scan'
-            ]
+                "fetch_url",
+                "subdomain_discovery",
+                "port_scan",
+                "vulnerability_scan",
+                "osint",
+                "dir_file_fuzz",
+                "screenshot",
+                "waf_detection",
+                "nuclei_scan",
+                "endpoint_scan",
+            ],
         )
         return self.scan_history
 
@@ -212,36 +199,23 @@ class TestDataGenerator:
 
     def create_directory_scan(self):
         """Create and return a test directory scan."""
-        self.directory_scan = DirectoryScan.objects.create(
-            command_line="Test Command",
-            scanned_date=timezone.now()
-        )
+        self.directory_scan = DirectoryScan.objects.create(command_line="Test Command", scanned_date=timezone.now())
         return self.directory_scan
 
     def create_directory_file(self, name="admin", url="https://example.com/admin", http_status=200, **kwargs):
         """Create and return a test directory file with comprehensive fuzzing data.
-        
+
         Args:
             name (str): File/directory name (default: "admin")
-            url (str): Full URL (default: "https://example.com/admin") 
+            url (str): Full URL (default: "https://example.com/admin")
             http_status (int): HTTP status code (default: 200)
             **kwargs: Additional fields (length, words, lines, content_type)
         """
         # Set default values for fuzzing-specific fields
-        defaults = {
-            'length': 1024,
-            'words': 50,
-            'lines': 25,
-            'content_type': 'text/html'
-        }
+        defaults = {"length": 1024, "words": 50, "lines": 25, "content_type": "text/html"}
         defaults.update(kwargs)
-        
-        self.directory_file = DirectoryFile.objects.create(
-            name=name,
-            url=url,
-            http_status=http_status,
-            **defaults
-        )
+
+        self.directory_file = DirectoryFile.objects.create(name=name, url=url, http_status=http_status, **defaults)
         return self.directory_file
 
     def create_subscan(self):
@@ -263,7 +237,7 @@ class TestDataGenerator:
             github_url="https://github.com/shmilylty/OneForAll",
             update_command="git pull",
             install_command="git clone https://github.com/shmilylty/OneForAll",
-            github_clone_path="/home/rengine/tools/.github/OneForAll"
+            github_clone_path="/home/rengine/tools/.github/OneForAll",
         )
         return self.installed_external_tool
 
@@ -322,10 +296,7 @@ class TestDataGenerator:
 
     def create_email(self):
         """Create and return a test email."""
-        self.email = Email.objects.create(
-            address="test@example.com",
-            password="password"
-        )
+        self.email = Email.objects.create(address="test@example.com", password="password")
         self.scan_history.emails.add(self.email)
         return self.email
 
@@ -385,9 +356,7 @@ class TestDataGenerator:
 
     def create_domain_registration(self):
         """Create and return a test domain registration."""
-        self.domain_registration = DomainRegistration.objects.create(
-            name="Test Domain Registration"
-        )
+        self.domain_registration = DomainRegistration.objects.create(name="Test Domain Registration")
         return self.domain_registration
 
     def create_registrar(self):
@@ -422,11 +391,11 @@ class TestDataGenerator:
     def create_port(self):
         """Create and return a test port."""
         self.port = Port.objects.create(
-            number=80, 
-            service_name="http", 
-            description="open", 
+            number=80,
+            service_name="http",
+            description="open",
             is_uncommon=True,
-            ip_address=self.ip_address if hasattr(self, 'ip_address') else None
+            ip_address=self.ip_address if hasattr(self, "ip_address") else None,
         )
         return self.port
 
@@ -448,21 +417,14 @@ class TestDataGenerator:
     def create_scan_activity(self):
         """Create and return a test scan activity."""
         self.scan_activity = ScanActivity.objects.create(
-            name="Test Activity",
-            title="Test Type",
-            time=timezone.now(),
-            scan_of=self.scan_history,
-            status=1
+            name="Test Activity", title="Test Type", time=timezone.now(), scan_of=self.scan_history, status=1
         )
         return self.scan_activity
 
     def create_command(self):
         """Create and return a test command."""
         self.command = Command.objects.create(
-            command="test command",
-            time=timezone.now(),
-            scan_history=self.scan_history,
-            activity=self.scan_activity
+            command="test command", time=timezone.now(), scan_history=self.scan_history, activity=self.scan_activity
         )
         return self.command
 
@@ -470,21 +432,21 @@ class TestDataGenerator:
         """
         Create a test wordlist.
         """
-        self.wordlist = Wordlist.objects.create(name='Test Wordlist', short_name='test', count=100)
+        self.wordlist = Wordlist.objects.create(name="Test Wordlist", short_name="test", count=100)
         return self.wordlist
 
     def create_proxy(self):
         """
         Create a test proxy.
         """
-        self.proxy = Proxy.objects.create(use_proxy=True, proxies='127.0.0.1')
+        self.proxy = Proxy.objects.create(use_proxy=True, proxies="127.0.0.1")
         return self.proxy
 
     def create_hackerone(self):
         """
         Create a test hackerone.
         """
-        self.hackerone = Hackerone.objects.create(username='test', api_key='testkey')
+        self.hackerone = Hackerone.objects.create(username="test", api_key="testkey")
         return self.hackerone
 
     def create_report_setting(self):
@@ -492,8 +454,7 @@ class TestDataGenerator:
         Create a test report setting.
         """
         self.report_setting = VulnerabilityReportSetting.objects.create(
-            primary_color='#000000',
-            secondary_color='#FFFFFF'
+            primary_color="#000000", secondary_color="#FFFFFF"
         )
         return self.report_setting
 
@@ -502,8 +463,8 @@ class TestDataGenerator:
         Create a test external tool.
         """
         self.external_tool = InstalledExternalTool.objects.create(
-            name='Test Tool',
-            github_url='https://github.com/test/tool')
+            name="Test Tool", github_url="https://github.com/test/tool"
+        )
         return self.external_tool
 
     def create_minimal_auth_setup(self):
@@ -512,11 +473,9 @@ class TestDataGenerator:
         Creates essential permissions and a test user programmatically.
         """
         from django.contrib.auth import get_user_model
-        from django.contrib.auth.models import Permission, Group
-        from django.contrib.contenttypes.models import ContentType
-        
+
         User = get_user_model()
-        
+
         # Create test user if not exists
         if not User.objects.filter(username="rengine").exists():
             self.test_user = User.objects.create_user(
@@ -525,11 +484,11 @@ class TestDataGenerator:
                 password="testpassword123",
                 is_superuser=True,
                 is_staff=True,
-                is_active=True
+                is_active=True,
             )
         else:
             self.test_user = User.objects.get(username="rengine")
-        
+
         return self.test_user
 
     def create_essential_scan_engine_setup(self):
@@ -538,7 +497,7 @@ class TestDataGenerator:
         Creates minimal EngineType objects needed for testing.
         """
         from scanEngine.models import EngineType, InstalledExternalTool
-        
+
         # Create default engine type if not exists
         if not EngineType.objects.filter(engine_name="Test Engine").exists():
             self.default_engine = EngineType.objects.create(
@@ -552,11 +511,11 @@ subdomain_discovery: {
 }
 http_crawl: {}
 """,
-                default_engine=True
+                default_engine=True,
             )
         else:
             self.default_engine = EngineType.objects.filter(engine_name="Test Engine").first()
-        
+
         # Create essential external tool
         if not InstalledExternalTool.objects.filter(name="subfinder").exists():
             self.subfinder_tool = InstalledExternalTool.objects.create(
@@ -568,11 +527,11 @@ http_crawl: {}
                 install_command="go install subfinder@latest",
                 is_default=True,
                 is_subdomain_gathering=True,
-                is_github_cloned=False
+                is_github_cloned=False,
             )
         else:
             self.subfinder_tool = InstalledExternalTool.objects.filter(name="subfinder").first()
-        
+
         return self.default_engine
 
     def create_minimal_celery_setup(self):
@@ -580,17 +539,14 @@ http_crawl: {}
         Create minimal Celery Beat setup instead of django_celery_beat.json fixture.
         """
         try:
-            from django_celery_beat.models import IntervalSchedule, PeriodicTask
-            
+            from django_celery_beat.models import IntervalSchedule
+
             # Create minimal interval schedule
-            if not IntervalSchedule.objects.filter(every=1, period='minutes').exists():
-                self.test_interval = IntervalSchedule.objects.create(
-                    every=1,
-                    period='minutes'
-                )
+            if not IntervalSchedule.objects.filter(every=1, period="minutes").exists():
+                self.test_interval = IntervalSchedule.objects.create(every=1, period="minutes")
             else:
-                self.test_interval = IntervalSchedule.objects.filter(every=1, period='minutes').first()
-            
+                self.test_interval = IntervalSchedule.objects.filter(every=1, period="minutes").first()
+
             return self.test_interval
         except ImportError:
             # Django celery beat not installed, skip
@@ -598,22 +554,23 @@ http_crawl: {}
 
     def link_ip_to_subscans(self):
         """Link IP addresses to subscans for proper API filtering."""
-        if hasattr(self, 'ip_address') and hasattr(self, 'subscans') and self.subscans:
+        if hasattr(self, "ip_address") and hasattr(self, "subscans") and self.subscans:
             # Get fresh subscans from database to avoid stale references
             from startScan.models import SubScan
+
             fresh_subscans = SubScan.objects.filter(pk__in=[s.pk for s in self.subscans if s.pk])
-            
+
             for subscan in fresh_subscans:
                 # Only link if not already linked
                 if not self.ip_address.ip_subscan_ids.filter(pk=subscan.pk).exists():
                     try:
                         self.ip_address.ip_subscan_ids.add(subscan)
                     except Exception:
-                        # Ignore linking errors in test environment 
+                        # Ignore linking errors in test environment
                         pass
 
-class TestValidation:
 
+class TestValidation:
     def is_json(self, value):
         try:
             json.loads(value)
@@ -621,10 +578,11 @@ class TestValidation:
         except ValueError:
             return False
 
+
 class MockTemplate:
     """
-    mock_template is a decorator designed to mock a specific Django template during unit tests. 
-    It temporarily overrides the template settings to return a mock template when the specified 
+    mock_template is a decorator designed to mock a specific Django template during unit tests.
+    It temporarily overrides the template settings to return a mock template when the specified
     template name is requested, allowing for controlled testing of views that rely on that template.
     Args:
         template_name (str): The name of the template to be mocked.
@@ -637,32 +595,40 @@ class MockTemplate:
         def test_my_view(self):
         ...
     """
+
     @staticmethod
     def mock_template(template_name):
         """
         Decorator to mock a specific Django template during unit tests.
         """
+
         def decorator(test_func):
             """
             Decorator function to wrap the test function and apply the mock template settings.
             """
+
             def wrapper(*args, **kwargs):
-                with override_settings(TEMPLATES=[{
-                    'BACKEND': 'django.template.backends.django.DjangoTemplates',
-                    'DIRS': [],
-                    'APP_DIRS': True,
-                    'OPTIONS': {
-                        'context_processors': [
-                                'django.template.context_processors.debug',
-                                'django.template.context_processors.request',
-                                'django.contrib.auth.context_processors.auth',
-                                'django.contrib.messages.context_processors.messages',
-                            ],
-                        },
-                    }]):
+                with override_settings(
+                    TEMPLATES=[
+                        {
+                            "BACKEND": "django.template.backends.django.DjangoTemplates",
+                            "DIRS": [],
+                            "APP_DIRS": True,
+                            "OPTIONS": {
+                                "context_processors": [
+                                    "django.template.context_processors.debug",
+                                    "django.template.context_processors.request",
+                                    "django.contrib.auth.context_processors.auth",
+                                    "django.contrib.messages.context_processors.messages",
+                                ],
+                            },
+                        }
+                    ]
+                ):
                     original_get_template = get_template
+
                     def mock_get_template(name):
-                        return Template('') if name == template_name else original_get_template(name)
+                        return Template("") if name == template_name else original_get_template(name)
 
                     get_template.patched = mock_get_template
                     try:

@@ -5,16 +5,15 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
-        ('dashboard', '0014_rename_is_ollama_ollamasettings_use_ollama'),
+        ("dashboard", "0014_rename_is_ollama_ollamasettings_use_ollama"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='project',
-            name='users',
-            field=models.ManyToManyField(related_name='projects', to=settings.AUTH_USER_MODEL),
+            model_name="project",
+            name="users",
+            field=models.ManyToManyField(related_name="projects", to=settings.AUTH_USER_MODEL),
         ),
     ]

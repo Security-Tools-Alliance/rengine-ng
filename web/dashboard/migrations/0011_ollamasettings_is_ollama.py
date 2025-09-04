@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('dashboard', '0010_ollamasettings'),
+        ("dashboard", "0010_ollamasettings"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='ollamasettings',
-            name='is_ollama',
+            model_name="ollamasettings",
+            name="is_ollama",
             field=models.BooleanField(default=False),
         ),
     ]

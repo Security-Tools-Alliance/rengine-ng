@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('startScan', '0059_auto_20241112_1737'),
+        ("startScan", "0059_auto_20241112_1737"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='ipaddress',
-            name='ports',
-            field=models.ManyToManyField(db_index=True, related_name='ports', to='startScan.Port'),
+            model_name="ipaddress",
+            name="ports",
+            field=models.ManyToManyField(db_index=True, related_name="ports", to="startScan.Port"),
         ),
     ]

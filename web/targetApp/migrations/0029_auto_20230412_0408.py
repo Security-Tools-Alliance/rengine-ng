@@ -4,18 +4,17 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('targetApp', '0028_auto_20230412_0402'),
+        ("targetApp", "0028_auto_20230412_0402"),
     ]
 
     operations = [
         migrations.RenameModel(
-            old_name='DNSRecords',
-            new_name='DNSRecord',
+            old_name="DNSRecords",
+            new_name="DNSRecord",
         ),
         migrations.RenameModel(
-            old_name='NameServers',
-            new_name='NameServer',
+            old_name="NameServers",
+            new_name="NameServer",
         ),
     ]

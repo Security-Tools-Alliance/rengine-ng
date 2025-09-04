@@ -4,9 +4,10 @@ from scanEngine.models import InterestingLookupModel
 logger = get_task_logger(__name__)
 
 
-#--------------------------------#
+# --------------------------------#
 # InterestingLookupModel queries #
-#--------------------------------#
+# --------------------------------#
+
 
 def get_lookup_keywords():
     """Get lookup keywords from InterestingLookupModel.
@@ -14,12 +15,9 @@ def get_lookup_keywords():
     Returns:
         list: Lookup keywords.
     """
-    lookup_obj = InterestingLookupModel.objects.order_by('-id').first()
+    lookup_obj = InterestingLookupModel.objects.order_by("-id").first()
     if not lookup_obj:
         return []
-    
-    lookup_keywords = [
-        key.strip()
-        for key in lookup_obj.keywords.split(',')
-    ]
-    return list(filter(None, lookup_keywords))  # remove empty strings from list 
+
+    lookup_keywords = [key.strip() for key in lookup_obj.keywords.split(",")]
+    return list(filter(None, lookup_keywords))  # remove empty strings from list

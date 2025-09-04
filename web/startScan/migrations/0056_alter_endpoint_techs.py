@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('startScan', '0055_remove_dork_description'),
+        ("startScan", "0055_remove_dork_description"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='endpoint',
-            name='techs',
-            field=models.ManyToManyField(blank=True, related_name='techs', to='startScan.Technology'),
+            model_name="endpoint",
+            name="techs",
+            field=models.ManyToManyField(blank=True, related_name="techs", to="startScan.Technology"),
         ),
     ]

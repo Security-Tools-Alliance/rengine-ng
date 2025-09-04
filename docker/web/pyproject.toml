@@ -54,6 +54,63 @@ weasyprint = "53.3"
 whatportis = { git = "https://github.com/Security-Tools-Alliance/whatportis" }
 xmltodict = "0.13.0"
 
+[tool.poetry.group.dev.dependencies]
+ruff = "^0.12.11"
+
+[tool.ruff]
+# Maximum line length (PEP8 default 79, here we extend to 120 for Django project readability).
+line-length = 120
+
+# Target Python version
+target-version = "py310"
+
+[tool.ruff.lint]
+# Select the rule sets to enforce:
+# - E: pycodestyle errors (PEP8)
+# - F: pyflakes (logic errors like unused variables/imports)
+# - W: pycodestyle warnings
+# - C: cyclomatic complexity checks
+# - N: naming conventions (PEP8 naming rules)
+# - I: import sorting (isort-compatible)
+select = [
+    "E",
+    "F",
+    "W",
+#    "C",
+    "N",
+    "I",
+]
+
+# Ignore specific rules that conflict with formatter style:
+# - E203: whitespace before ':' in slicing
+# - N803: argument name should be lowercase (Django convention often uses uppercase)
+# - E501: line too long (handled by formatter)
+# - N999: Invalid module name
+ignore = ["E203", "N803", "E501", "N999"]
+
+# Add "line-too-long" rule explicitly
+extend-select = ["E501"]
+
+[tool.ruff.lint.mccabe]
+# Maximum cyclomatic complexity allowed per function
+max-complexity = 10
+
+[tool.ruff.format]
+# Always use double quotes for strings (PEP8 consistent style)
+quote-style = "double"
+
+# Use spaces for indentation
+indent-style = "space"
+
+# Always enforce trailing commas when breaking lines
+skip-magic-trailing-comma = false
+
+# Format code inside docstrings
+docstring-code-format = true
+
+# Enforce stricter line length for code snippets in docstrings
+docstring-code-line-length = 79
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"

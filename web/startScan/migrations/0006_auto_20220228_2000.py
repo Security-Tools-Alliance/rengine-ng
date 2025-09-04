@@ -4,19 +4,18 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('startScan', '0005_ipaddress_subscan'),
+        ("startScan", "0005_ipaddress_subscan"),
     ]
 
     operations = [
         migrations.RemoveField(
-            model_name='ipaddress',
-            name='subscan',
+            model_name="ipaddress",
+            name="subscan",
         ),
         migrations.AddField(
-            model_name='ipaddress',
-            name='subscan_ids',
-            field=models.ManyToManyField(related_name='subscan_ids', to='startScan.SubScan'),
+            model_name="ipaddress",
+            name="subscan_ids",
+            field=models.ManyToManyField(related_name="subscan_ids", to="startScan.SubScan"),
         ),
     ]

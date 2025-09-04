@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('scanEngine', '0002_auto_20220526_1457'),
+        ("scanEngine", "0002_auto_20220526_1457"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='enginetype',
-            name='waf_detection',
+            model_name="enginetype",
+            name="waf_detection",
             field=models.BooleanField(default=False, null=True),
         ),
     ]

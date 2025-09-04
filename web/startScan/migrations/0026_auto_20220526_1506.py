@@ -4,25 +4,24 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('startScan', '0025_auto_20220526_1500'),
+        ("startScan", "0025_auto_20220526_1500"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='subdomain',
-            name='http_url',
+            model_name="subdomain",
+            name="http_url",
             field=models.CharField(blank=True, max_length=10000, null=True),
         ),
         migrations.AlterField(
-            model_name='vulnerability',
-            name='template_url',
+            model_name="vulnerability",
+            name="template_url",
             field=models.CharField(blank=True, max_length=1500, null=True),
         ),
         migrations.AlterField(
-            model_name='vulnerabilityreference',
-            name='url',
+            model_name="vulnerabilityreference",
+            name="url",
             field=models.CharField(max_length=5000),
         ),
     ]
