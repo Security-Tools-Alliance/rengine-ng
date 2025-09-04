@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('targetApp', '0015_auto_20220615_0524'),
+        ("targetApp", "0015_auto_20220615_0524"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='domaininfo',
-            name='registrar',
-            field=models.ManyToManyField(blank=True, to='targetApp.DomainRegistrar'),
+            model_name="domaininfo",
+            name="registrar",
+            field=models.ManyToManyField(blank=True, to="targetApp.DomainRegistrar"),
         ),
     ]

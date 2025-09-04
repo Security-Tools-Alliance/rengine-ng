@@ -4,27 +4,26 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('targetApp', '0007_auto_20220406_0344'),
+        ("targetApp", "0007_auto_20220406_0344"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='RelatedTLD',
+            name="RelatedTLD",
             fields=[
-                ('id', models.AutoField(primary_key=True, serialize=False)),
-                ('name', models.CharField(blank=True, max_length=250, null=True)),
+                ("id", models.AutoField(primary_key=True, serialize=False)),
+                ("name", models.CharField(blank=True, max_length=250, null=True)),
             ],
         ),
         migrations.AlterField(
-            model_name='registrantinfo',
-            name='associated_domains',
-            field=models.ManyToManyField(blank=True, to='targetApp.AssociatedDomain'),
+            model_name="registrantinfo",
+            name="associated_domains",
+            field=models.ManyToManyField(blank=True, to="targetApp.AssociatedDomain"),
         ),
         migrations.AddField(
-            model_name='registrantinfo',
-            name='related_tld',
-            field=models.ManyToManyField(blank=True, to='targetApp.RelatedTLD'),
+            model_name="registrantinfo",
+            name="related_tld",
+            field=models.ManyToManyField(blank=True, to="targetApp.RelatedTLD"),
         ),
     ]

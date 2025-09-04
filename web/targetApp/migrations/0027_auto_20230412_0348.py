@@ -4,40 +4,39 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('targetApp', '0026_auto_20230411_1817'),
+        ("targetApp", "0026_auto_20230411_1817"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='domainregistration',
-            name='id_str',
+            model_name="domainregistration",
+            name="id_str",
             field=models.CharField(blank=True, max_length=500, null=True),
         ),
         migrations.AlterField(
-            model_name='domainregistrar',
-            name='email',
+            model_name="domainregistrar",
+            name="email",
             field=models.CharField(blank=True, max_length=350, null=True),
         ),
         migrations.AlterField(
-            model_name='domainregistration',
-            name='fax',
+            model_name="domainregistration",
+            name="fax",
             field=models.CharField(blank=True, max_length=150, null=True),
         ),
         migrations.AlterField(
-            model_name='domainregistration',
-            name='name',
+            model_name="domainregistration",
+            name="name",
             field=models.CharField(blank=True, max_length=500, null=True),
         ),
         migrations.AlterField(
-            model_name='domainregistration',
-            name='organization',
+            model_name="domainregistration",
+            name="organization",
             field=models.CharField(blank=True, max_length=500, null=True),
         ),
         migrations.AlterField(
-            model_name='domainregistration',
-            name='phone',
+            model_name="domainregistration",
+            name="phone",
             field=models.CharField(blank=True, max_length=150, null=True),
         ),
     ]

@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('targetApp', '0010_auto_20220413_1728'),
+        ("targetApp", "0010_auto_20220413_1728"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='domaininfo',
-            name='date_expiration',
+            model_name="domaininfo",
+            name="date_expiration",
             field=models.CharField(blank=True, max_length=300, null=True),
         ),
     ]
