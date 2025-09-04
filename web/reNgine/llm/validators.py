@@ -1,10 +1,13 @@
-from typing import Optional, List
-from pydantic import BaseModel, Field, validator
 from enum import Enum
+from typing import List, Optional
+
+from pydantic import BaseModel, Field, validator
+
 
 class LLMProvider(str, Enum):
     OPENAI = "openai"
     OLLAMA = "ollama"
+
 
 class ModelCapabilities(BaseModel):
     min_tokens: int
@@ -13,13 +16,14 @@ class ModelCapabilities(BaseModel):
     best_for: List[str]
     provider: str
 
+
 class LLMInputData(BaseModel):
     description: str
     llm_model: Optional[str] = Field(default=None)
     provider: Optional[LLMProvider] = Field(default=None)
     capabilities: Optional[ModelCapabilities] = Field(default=None)
-    
-    @validator('description')
+
+    @validator("description")
     def validate_description(cls, v):
         if not v or len(v.strip()) < 10:
             raise ValueError("Description must be at least 10 characters long")
@@ -36,14 +40,22 @@ class LLMInputData(BaseModel):
                     "max_tokens": 2048,
                     "supports_functions": True,
                     "best_for": ["quick_analysis"],
-                    "provider": "openai"
-                }
+                    "provider": "openai",
+                },
             }
         }
 
+
 class LLMResponse:
-    def __init__(self, status: bool, description: str = None, impact: str = None, 
-                 remediation: str = None, references: list = None, error: str = None):
+    def __init__(
+        self,
+        status: bool,
+        description: str = None,
+        impact: str = None,
+        remediation: str = None,
+        references: list = None,
+        error: str = None,
+    ):
         self.status = status
         self.description = description
         self.impact = impact
@@ -58,10 +70,10 @@ class LLMResponse:
     def to_dict(self):
         """Convert to dictionary"""
         return {
-            'status': self.status,
-            'description': self.description,
-            'impact': self.impact,
-            'remediation': self.remediation,
-            'references': self.references,
-            'error': self.error
+            "status": self.status,
+            "description": self.description,
+            "impact": self.impact,
+            "remediation": self.remediation,
+            "references": self.references,
+            "error": self.error,
         }

@@ -1,13 +1,12 @@
-from celery.utils.log import ColorFormatter
 from celery._state import get_current_task
+from celery.utils.log import ColorFormatter
 
-
-#--------------#
+# --------------#
 # Logging utils #
-#--------------#
+# --------------#
+
 
 class RengineTaskFormatter(ColorFormatter):
-
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         try:
@@ -18,10 +17,9 @@ class RengineTaskFormatter(ColorFormatter):
     def format(self, record):
         task = self.get_current_task()
         if task and task.request:
-            task_name = '/'.join(task.name.replace('tasks.', '').split('.'))
-            record.__dict__.update(task_id=task.request.id,
-                                   task_name=task_name)
+            task_name = "/".join(task.name.replace("tasks.", "").split("."))
+            record.__dict__.update(task_id=task.request.id, task_name=task_name)
         else:
-            record.__dict__.setdefault('task_name', f'{record.module}.{record.funcName}')
-            record.__dict__.setdefault('task_id', '')
-        return super().format(record) 
+            record.__dict__.setdefault("task_name", f"{record.module}.{record.funcName}")
+            record.__dict__.setdefault("task_id", "")
+        return super().format(record)

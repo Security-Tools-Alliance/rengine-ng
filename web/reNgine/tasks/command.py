@@ -8,17 +8,26 @@ from celery.utils.log import get_task_logger
 from reNgine.celery import app
 from reNgine.utilities.command import (
     create_command_object,
-    prepare_command,
     execute_command,
+    prepare_command,
+    process_line,
     write_history,
-    process_line
 )
 
 logger = get_task_logger(__name__)
 
 
-@app.task(name='run_command', bind=False, queue='run_command_queue')
-def run_command(cmd, cwd=None, shell=False, history_file=None, scan_id=None, activity_id=None, remove_ansi_sequence=False, combine_output=False):
+@app.task(name="run_command", bind=False, queue="run_command_queue")
+def run_command(
+    cmd,
+    cwd=None,
+    shell=False,
+    history_file=None,
+    scan_id=None,
+    activity_id=None,
+    remove_ansi_sequence=False,
+    combine_output=False,
+):
     """
     Execute a command and return its output.
 
@@ -39,7 +48,7 @@ def run_command(cmd, cwd=None, shell=False, history_file=None, scan_id=None, act
     command_obj = create_command_object(cmd, scan_id, activity_id)
     command = prepare_command(cmd, shell)
     logger.debug(f"Prepared run command: {command}")
-    
+
     process = execute_command(command, shell, cwd)
     output, error_output = process.communicate()
     return_code = process.returncode
@@ -51,39 +60,43 @@ def run_command(cmd, cwd=None, shell=False, history_file=None, scan_id=None, act
             combined_output += output
         if error_output:
             combined_output += error_output
-        
+
         if combined_output:
-            combined_output = re.sub(r'\x1b\[[0-9;]*[mGKH]', '', combined_output) if remove_ansi_sequence else combined_output
-        
+            combined_output = (
+                re.sub(r"\x1b\[[0-9;]*[mGKH]", "", combined_output) if remove_ansi_sequence else combined_output
+            )
+
         final_output = combined_output
     else:
         # Default behavior: only use stdout
         if output:
-            final_output = re.sub(r'\x1b\[[0-9;]*[mGKH]', '', output) if remove_ansi_sequence else output
+            final_output = re.sub(r"\x1b\[[0-9;]*[mGKH]", "", output) if remove_ansi_sequence else output
         else:
             final_output = ""
-    
+
     if return_code != 0:
         error_msg = f"Command failed with exit code {return_code}"
         if error_output:
             error_msg += f"\nError output:\n{error_output}"
         logger.error(error_msg)
-        
+
     command_obj.output = final_output or None
     command_obj.error_output = error_output or None
     command_obj.return_code = return_code
     command_obj.save()
-    
+
     if history_file:
         write_history(history_file, cmd, return_code, final_output)
-    
+
     return return_code, final_output
 
 
-def stream_command(cmd, cwd=None, shell=False, history_file=None, encoding='utf-8', scan_id=None, activity_id=None, trunc_char=None):
+def stream_command(
+    cmd, cwd=None, shell=False, history_file=None, encoding="utf-8", scan_id=None, activity_id=None, trunc_char=None
+):
     """
     Execute a command and yield its output line by line in real-time.
-    
+
     This function uses select.select() to monitor file descriptors and processes
     output as soon as it becomes available, ensuring proper streaming behavior
     for tools like httpx and nuclei.
@@ -115,7 +128,7 @@ def stream_command(cmd, cwd=None, shell=False, history_file=None, encoding='utf-
         cwd=cwd,
         bufsize=1,  # Line buffered
         universal_newlines=True,
-        encoding=encoding
+        encoding=encoding,
     )
 
     # Initialize buffers and tracking variables
@@ -140,8 +153,8 @@ def stream_command(cmd, cwd=None, shell=False, history_file=None, encoding='utf-
                 full_error += remaining_stderr
 
             # Process any remaining complete lines
-            while '\n' in stdout_buffer:
-                line, stdout_buffer = stdout_buffer.split('\n', 1)
+            while "\n" in stdout_buffer:
+                line, stdout_buffer = stdout_buffer.split("\n", 1)
                 if line.strip():
                     try:
                         if item := process_line(line, trunc_char):
@@ -162,13 +175,11 @@ def stream_command(cmd, cwd=None, shell=False, history_file=None, encoding='utf-
                             full_output += data
 
                             # Process complete lines immediately
-                            while '\n' in stdout_buffer:
-                                line, stdout_buffer = stdout_buffer.split('\n', 1)
+                            while "\n" in stdout_buffer:
+                                line, stdout_buffer = stdout_buffer.split("\n", 1)
                                 if line.strip():
                                     try:
-                                        if item := process_line(
-                                            line, trunc_char
-                                        ):
+                                        if item := process_line(line, trunc_char):
                                             yield item
                                     except Exception as e:
                                         logger.error(f"Error processing output line: {e}")
@@ -203,8 +214,8 @@ def stream_command(cmd, cwd=None, shell=False, history_file=None, encoding='utf-
     command_obj.return_code = return_code
     command_obj.save()
 
-    logger.debug(f'Command returned exit code: {return_code}')
+    logger.debug(f"Command returned exit code: {return_code}")
 
     # Write history if requested
     if history_file:
-        write_history(history_file, cmd, return_code, full_output) 
+        write_history(history_file, cmd, return_code, full_output)
