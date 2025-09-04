@@ -84,7 +84,9 @@ select = [
 # Ignore specific rules that conflict with formatter style:
 # - E203: whitespace before ':' in slicing
 # - N803: argument name should be lowercase (Django convention often uses uppercase)
-ignore = ["E203", "N803"]
+# - E501: line too long (handled by formatter)
+# - N999: Invalid module name
+ignore = ["E203", "N803", "E501", "N999"]
 
 # Add "line-too-long" rule explicitly
 extend-select = ["E501"]
