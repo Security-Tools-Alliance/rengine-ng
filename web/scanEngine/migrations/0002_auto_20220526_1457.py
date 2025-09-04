@@ -4,30 +4,29 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('scanEngine', '0001_initial'),
+        ("scanEngine", "0001_initial"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='installedexternaltool',
-            name='description',
+            model_name="installedexternaltool",
+            name="description",
             field=models.CharField(max_length=2000),
         ),
         migrations.AlterField(
-            model_name='installedexternaltool',
-            name='github_clone_path',
+            model_name="installedexternaltool",
+            name="github_clone_path",
             field=models.CharField(blank=True, max_length=1500, null=True),
         ),
         migrations.AlterField(
-            model_name='installedexternaltool',
-            name='github_url',
+            model_name="installedexternaltool",
+            name="github_url",
             field=models.CharField(max_length=500),
         ),
         migrations.AlterField(
-            model_name='installedexternaltool',
-            name='license_url',
+            model_name="installedexternaltool",
+            name="license_url",
             field=models.CharField(blank=True, max_length=500, null=True),
         ),
     ]

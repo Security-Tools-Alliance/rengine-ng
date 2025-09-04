@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('scanEngine', '0004_auto_20220816_0946'),
+        ("scanEngine", "0004_auto_20220816_0946"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='notification',
-            name='send_scan_tracebacks',
+            model_name="notification",
+            name="send_scan_tracebacks",
             field=models.BooleanField(default=True),
         ),
     ]

@@ -1,2 +1,5 @@
-from utils.test_base import *
-from .test_scan_engine import *
+from utils.test_base import BaseTestCase
+
+from .test_scan_engine import TestScanEngineViews
+
+__all__ = ["BaseTestCase", "TestScanEngineViews"]

@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('scanEngine', '0005_notification_send_scan_tracebacks'),
+        ("scanEngine", "0005_notification_send_scan_tracebacks"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='installedexternaltool',
-            name='version_lookup_command',
+            model_name="installedexternaltool",
+            name="version_lookup_command",
             field=models.CharField(blank=True, max_length=200, null=True),
         ),
     ]

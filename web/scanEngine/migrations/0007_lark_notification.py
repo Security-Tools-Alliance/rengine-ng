@@ -4,20 +4,19 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('scanEngine', '0006_alter_installedexternaltool_version_lookup_command'),
+        ("scanEngine", "0006_alter_installedexternaltool_version_lookup_command"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='notification',
-            name='lark_hook_url',
+            model_name="notification",
+            name="lark_hook_url",
             field=models.CharField(blank=True, max_length=200, null=True),
         ),
         migrations.AddField(
-            model_name='notification',
-            name='send_to_lark',
+            model_name="notification",
+            name="send_to_lark",
             field=models.BooleanField(default=False),
         ),
     ]

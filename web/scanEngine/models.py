@@ -2,7 +2,7 @@ import yaml
 from django.db import models
 
 
-class hybrid_property:
+class HybridProperty:
     def __init__(self, func):
         self.func = func
         self.name = func.__name__
@@ -20,6 +20,7 @@ class hybrid_property:
         self.exp = exp
         return self
 
+
 class EngineType(models.Model):
     id = models.AutoField(primary_key=True)
     engine_name = models.CharField(max_length=200)
@@ -32,11 +33,12 @@ class EngineType(models.Model):
     def get_number_of_steps(self):
         return len(self.tasks) if self.tasks else 0
 
-    @hybrid_property
+    @HybridProperty
     def tasks(self):
         if not self.yaml_configuration or not yaml.safe_load(self.yaml_configuration):
             return []
         return list(yaml.safe_load(self.yaml_configuration).keys())
+
 
 class Wordlist(models.Model):
     id = models.AutoField(primary_key=True)
@@ -107,8 +109,8 @@ class Hackerone(models.Model):
 
 class VulnerabilityReportSetting(models.Model):
     id = models.AutoField(primary_key=True)
-    primary_color = models.CharField(max_length=10, null=True, blank=True, default='#FFB74D')
-    secondary_color = models.CharField(max_length=10, null=True, blank=True, default='#212121')
+    primary_color = models.CharField(max_length=10, null=True, blank=True, default="#FFB74D")
+    secondary_color = models.CharField(max_length=10, null=True, blank=True, default="#212121")
     company_name = models.CharField(max_length=100, null=True, blank=True)
     company_address = models.CharField(max_length=255, null=True, blank=True)
     company_email = models.CharField(max_length=100, null=True, blank=True)
@@ -130,7 +132,9 @@ class InstalledExternalTool(models.Model):
     version_lookup_command = models.CharField(max_length=200, null=True, blank=True)
     update_command = models.CharField(max_length=200, null=True, blank=True)
     install_command = models.CharField(max_length=200)
-    version_match_regex = models.CharField(max_length=100, default='[vV]*(\d+\.)?(\d+\.)?(\*|\d+)', null=True, blank=True)
+    version_match_regex = models.CharField(
+        max_length=100, default=r"[vV]*(\d+\.)?(\d+\.)?(\*|\d+)", null=True, blank=True
+    )
     is_default = models.BooleanField(default=False)
     is_subdomain_gathering = models.BooleanField(default=False)
     is_github_cloned = models.BooleanField(default=False)
@@ -139,4 +143,3 @@ class InstalledExternalTool(models.Model):
 
     def __str__(self):
         return self.name
-
