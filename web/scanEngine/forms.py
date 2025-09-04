@@ -3,14 +3,14 @@ from django_ace import AceWidget
 from reNgine.validators import validate_short_name
 
 from scanEngine.models import (
-    EngineType,
     Configuration,
+    EngineType,
+    Hackerone,
+    InstalledExternalTool,
     InterestingLookupModel,
     Notification,
     Proxy,
-    Hackerone,
     VulnerabilityReportSetting,
-    InstalledExternalTool,
 )
 
 

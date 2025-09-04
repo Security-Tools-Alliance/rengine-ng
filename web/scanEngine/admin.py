@@ -1,13 +1,13 @@
 from django.contrib import admin
 
 from scanEngine.models import (
-    EngineType,
-    Wordlist,
     Configuration,
+    EngineType,
+    InstalledExternalTool,
     InterestingLookupModel,
     Notification,
     VulnerabilityReportSetting,
-    InstalledExternalTool,
+    Wordlist,
 )
 
 # Register your models here.

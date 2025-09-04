@@ -2,11 +2,11 @@ from django.contrib import admin
 
 from .models import (
     Domain,
-    Organization,
-    RelatedDomain,
-    Registrar,
-    DomainRegistration,
     DomainInfo,
+    DomainRegistration,
+    Organization,
+    Registrar,
+    RelatedDomain,
 )
 
 admin.site.register(Domain)

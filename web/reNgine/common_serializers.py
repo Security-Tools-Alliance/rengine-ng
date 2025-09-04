@@ -1,12 +1,12 @@
 from rest_framework import serializers
 from targetApp.models import (
+    DNSRecord,
+    DomainRegistration,
     HistoricalIP,
-    RelatedDomain,
     NameServer,
     Registrar,
-    DomainRegistration,
+    RelatedDomain,
     WhoisStatus,
-    DNSRecord,
 )
 
 
