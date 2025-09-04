@@ -5,87 +5,96 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('startScan', '0001_initial'),
+        ("startScan", "0001_initial"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='VulnerabilityReference',
+            name="VulnerabilityReference",
             fields=[
-                ('id', models.AutoField(primary_key=True, serialize=False)),
-                ('url', models.CharField(max_length=500)),
+                ("id", models.AutoField(primary_key=True, serialize=False)),
+                ("url", models.CharField(max_length=500)),
             ],
         ),
         migrations.CreateModel(
-            name='VulnerabilityTags',
+            name="VulnerabilityTags",
             fields=[
-                ('id', models.AutoField(primary_key=True, serialize=False)),
-                ('name', models.CharField(max_length=100)),
+                ("id", models.AutoField(primary_key=True, serialize=False)),
+                ("name", models.CharField(max_length=100)),
             ],
         ),
         migrations.RemoveField(
-            model_name='vulnerability',
-            name='matcher_name',
+            model_name="vulnerability",
+            name="matcher_name",
         ),
         migrations.RemoveField(
-            model_name='vulnerability',
-            name='reference',
+            model_name="vulnerability",
+            name="reference",
         ),
         migrations.AddField(
-            model_name='vulnerability',
-            name='cve_ids',
-            field=django.contrib.postgres.fields.ArrayField(base_field=models.CharField(max_length=50), blank=True, null=True, size=None),
+            model_name="vulnerability",
+            name="cve_ids",
+            field=django.contrib.postgres.fields.ArrayField(
+                base_field=models.CharField(max_length=50), blank=True, null=True, size=None
+            ),
         ),
         migrations.AddField(
-            model_name='vulnerability',
-            name='cvss_metrics',
+            model_name="vulnerability",
+            name="cvss_metrics",
             field=models.CharField(max_length=150, null=True),
         ),
         migrations.AddField(
-            model_name='vulnerability',
-            name='cvss_score',
+            model_name="vulnerability",
+            name="cvss_score",
             field=models.FloatField(blank=True, default=None, null=True),
         ),
         migrations.AddField(
-            model_name='vulnerability',
-            name='cwe_ids',
-            field=django.contrib.postgres.fields.ArrayField(base_field=models.CharField(max_length=50), blank=True, null=True, size=None),
+            model_name="vulnerability",
+            name="cwe_ids",
+            field=django.contrib.postgres.fields.ArrayField(
+                base_field=models.CharField(max_length=50), blank=True, null=True, size=None
+            ),
         ),
         migrations.AddField(
-            model_name='vulnerability',
-            name='references',
-            field=django.contrib.postgres.fields.ArrayField(base_field=models.CharField(max_length=500), blank=True, null=True, size=None),
+            model_name="vulnerability",
+            name="references",
+            field=django.contrib.postgres.fields.ArrayField(
+                base_field=models.CharField(max_length=500), blank=True, null=True, size=None
+            ),
         ),
         migrations.AddField(
-            model_name='vulnerability',
-            name='template_url',
+            model_name="vulnerability",
+            name="template_url",
             field=models.CharField(blank=True, max_length=200, null=True),
         ),
         migrations.AddField(
-            model_name='vulnerability',
-            name='type',
+            model_name="vulnerability",
+            name="type",
             field=models.CharField(blank=True, max_length=50, null=True),
         ),
         migrations.AlterField(
-            model_name='vulnerability',
-            name='extracted_results',
-            field=django.contrib.postgres.fields.ArrayField(base_field=models.CharField(max_length=1000), blank=True, null=True, size=None),
+            model_name="vulnerability",
+            name="extracted_results",
+            field=django.contrib.postgres.fields.ArrayField(
+                base_field=models.CharField(max_length=1000), blank=True, null=True, size=None
+            ),
         ),
         migrations.AlterField(
-            model_name='vulnerability',
-            name='http_url',
+            model_name="vulnerability",
+            name="http_url",
             field=models.CharField(max_length=1000, null=True),
         ),
         migrations.AlterField(
-            model_name='vulnerability',
-            name='name',
+            model_name="vulnerability",
+            name="name",
             field=models.CharField(max_length=500),
         ),
         migrations.AlterField(
-            model_name='vulnerability',
-            name='tags',
-            field=django.contrib.postgres.fields.ArrayField(base_field=models.CharField(max_length=50), blank=True, null=True, size=None),
+            model_name="vulnerability",
+            name="tags",
+            field=django.contrib.postgres.fields.ArrayField(
+                base_field=models.CharField(max_length=50), blank=True, null=True, size=None
+            ),
         ),
     ]

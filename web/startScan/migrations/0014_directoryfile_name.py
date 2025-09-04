@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('startScan', '0013_auto_20220310_2234'),
+        ("startScan", "0013_auto_20220310_2234"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='directoryfile',
-            name='name',
+            model_name="directoryfile",
+            name="name",
             field=models.CharField(blank=True, max_length=500, null=True),
         ),
     ]

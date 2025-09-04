@@ -6,49 +6,44 @@ from django.db import migrations, models
 def transfer_screenshots_to_endpoints(apps, schema_editor):
     """Transfer screenshot data from subdomains to corresponding endpoints."""
     # Get models at the state they were during this migration
-    Subdomain = apps.get_model('startScan', 'Subdomain')
-    EndPoint = apps.get_model('startScan', 'EndPoint')
-    
+    Subdomain = apps.get_model("startScan", "Subdomain")
+    EndPoint = apps.get_model("startScan", "EndPoint")
+
     # Check if there are any subdomains with screenshots to transfer
-    subdomains_with_screenshots = Subdomain.objects.exclude(
-        screenshot_path__isnull=True
-    ).exclude(screenshot_path='')
-    
+    subdomains_with_screenshots = Subdomain.objects.exclude(screenshot_path__isnull=True).exclude(screenshot_path="")
+
     if not subdomains_with_screenshots.exists():
         print("No screenshots to transfer")
         return
-    
+
     transferred_count = 0
     for subdomain in subdomains_with_screenshots:
         # Find matching endpoints for this subdomain
-        endpoints = EndPoint.objects.filter(
-            subdomain=subdomain,
-            scan_history=subdomain.scan_history
-        )
-        
+        endpoints = EndPoint.objects.filter(subdomain=subdomain, scan_history=subdomain.scan_history)
+
         if endpoints.exists():
             # Priority order for endpoint selection:
             # 1. Default endpoints (is_default=True)
             # 2. Endpoints matching subdomain's http_url
             # 3. First available endpoint
-            
+
             target_endpoint = None
-            
+
             # Try default endpoints first
             default_endpoints = endpoints.filter(is_default=True)
             if default_endpoints.exists():
                 target_endpoint = default_endpoints.first()
-            
+
             # Try to match by URL
             elif subdomain.http_url:
                 matching_endpoints = endpoints.filter(http_url=subdomain.http_url)
                 if matching_endpoints.exists():
                     target_endpoint = matching_endpoints.first()
-            
+
             # Fallback to first endpoint
             if not target_endpoint:
                 target_endpoint = endpoints.first()
-            
+
             # Transfer the screenshot
             if target_endpoint:
                 target_endpoint.screenshot_path = subdomain.screenshot_path
@@ -57,14 +52,14 @@ def transfer_screenshots_to_endpoints(apps, schema_editor):
                 print(f"✓ Transferred screenshot: {subdomain.name} → {target_endpoint.http_url}")
         else:
             print(f"⚠ No endpoints found for subdomain {subdomain.name}, skipping screenshot")
-    
+
     print(f"Successfully transferred {transferred_count} screenshots from subdomains to endpoints")
 
 
 def reverse_transfer_screenshots(apps, schema_editor):
     """Reverse migration: clear endpoint screenshots."""
-    EndPoint = apps.get_model('startScan', 'EndPoint')
-    
+    EndPoint = apps.get_model("startScan", "EndPoint")
+
     # Clear all screenshots from endpoints
     endpoints_with_screenshots = EndPoint.objects.exclude(screenshot_path__isnull=True)
     count = endpoints_with_screenshots.count()
@@ -76,15 +71,14 @@ def reverse_transfer_screenshots(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('startScan', '0065_alter_scanhistory_scan_status'),
+        ("startScan", "0065_alter_scanhistory_scan_status"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='endpoint',
-            name='screenshot_path',
+            model_name="endpoint",
+            name="screenshot_path",
             field=models.CharField(blank=True, max_length=1000, null=True),
         ),
         migrations.RunPython(
@@ -92,7 +86,7 @@ class Migration(migrations.Migration):
             reverse_transfer_screenshots,
         ),
         migrations.RemoveField(
-            model_name='subdomain',
-            name='screenshot_path',
+            model_name="subdomain",
+            name="screenshot_path",
         ),
     ]

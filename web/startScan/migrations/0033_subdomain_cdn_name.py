@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('startScan', '0032_command'),
+        ("startScan", "0032_command"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='subdomain',
-            name='cdn_name',
+            model_name="subdomain",
+            name="cdn_name",
             field=models.CharField(blank=True, max_length=200, null=True),
         ),
     ]

@@ -4,60 +4,61 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('startScan', '0017_auto_20220412_1808'),
+        ("startScan", "0017_auto_20220412_1808"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='CveId',
+            name="CveId",
             fields=[
-                ('id', models.AutoField(primary_key=True, serialize=False)),
-                ('name', models.CharField(max_length=100)),
+                ("id", models.AutoField(primary_key=True, serialize=False)),
+                ("name", models.CharField(max_length=100)),
             ],
         ),
         migrations.CreateModel(
-            name='CweId',
+            name="CweId",
             fields=[
-                ('id', models.AutoField(primary_key=True, serialize=False)),
-                ('name', models.CharField(max_length=100)),
+                ("id", models.AutoField(primary_key=True, serialize=False)),
+                ("name", models.CharField(max_length=100)),
             ],
         ),
         migrations.RemoveField(
-            model_name='vulnerability',
-            name='cve_ids',
+            model_name="vulnerability",
+            name="cve_ids",
         ),
         migrations.RemoveField(
-            model_name='vulnerability',
-            name='cwe_ids',
+            model_name="vulnerability",
+            name="cwe_ids",
         ),
         migrations.RemoveField(
-            model_name='vulnerability',
-            name='references',
+            model_name="vulnerability",
+            name="references",
         ),
         migrations.AddField(
-            model_name='vulnerability',
-            name='references',
-            field=models.ManyToManyField(blank=True, related_name='vuln_reference', to='startScan.VulnerabilityReference'),
+            model_name="vulnerability",
+            name="references",
+            field=models.ManyToManyField(
+                blank=True, related_name="vuln_reference", to="startScan.VulnerabilityReference"
+            ),
         ),
         migrations.RemoveField(
-            model_name='vulnerability',
-            name='tags',
+            model_name="vulnerability",
+            name="tags",
         ),
         migrations.AddField(
-            model_name='vulnerability',
-            name='tags',
-            field=models.ManyToManyField(blank=True, related_name='vuln_tags', to='startScan.VulnerabilityTags'),
+            model_name="vulnerability",
+            name="tags",
+            field=models.ManyToManyField(blank=True, related_name="vuln_tags", to="startScan.VulnerabilityTags"),
         ),
         migrations.AddField(
-            model_name='vulnerability',
-            name='cve_ids',
-            field=models.ManyToManyField(blank=True, related_name='cve_ids', to='startScan.CveId'),
+            model_name="vulnerability",
+            name="cve_ids",
+            field=models.ManyToManyField(blank=True, related_name="cve_ids", to="startScan.CveId"),
         ),
         migrations.AddField(
-            model_name='vulnerability',
-            name='cwe_ids',
-            field=models.ManyToManyField(blank=True, related_name='cwe_ids', to='startScan.CweId'),
+            model_name="vulnerability",
+            name="cwe_ids",
+            field=models.ManyToManyField(blank=True, related_name="cwe_ids", to="startScan.CweId"),
         ),
     ]

@@ -4,19 +4,18 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('startScan', '0057_auto_20231201_2354'),
+        ("startScan", "0057_auto_20231201_2354"),
     ]
 
     operations = [
         migrations.RenameModel(
-            old_name='GPTVulnerabilityReport',
-            new_name='LLMVulnerabilityReport',
+            old_name="GPTVulnerabilityReport",
+            new_name="LLMVulnerabilityReport",
         ),
         migrations.RenameField(
-            model_name='vulnerability',
-            old_name='is_gpt_used',
-            new_name='is_llm_used',
+            model_name="vulnerability",
+            old_name="is_gpt_used",
+            new_name="is_llm_used",
         ),
     ]

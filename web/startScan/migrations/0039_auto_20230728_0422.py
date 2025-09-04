@@ -4,20 +4,19 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('startScan', '0038_auto_20230717_0427'),
+        ("startScan", "0038_auto_20230717_0427"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='vulnerability',
-            name='impact',
+            model_name="vulnerability",
+            name="impact",
             field=models.CharField(blank=True, max_length=20000, null=True),
         ),
         migrations.AddField(
-            model_name='vulnerability',
-            name='remediation',
+            model_name="vulnerability",
+            name="remediation",
             field=models.CharField(blank=True, max_length=20000, null=True),
         ),
     ]

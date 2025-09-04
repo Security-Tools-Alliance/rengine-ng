@@ -4,20 +4,19 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('startScan', '0027_auto_20220709_0610'),
+        ("startScan", "0027_auto_20220709_0610"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='countryiso',
-            name='iso',
+            model_name="countryiso",
+            name="iso",
             field=models.CharField(blank=True, max_length=10),
         ),
         migrations.AlterField(
-            model_name='countryiso',
-            name='name',
+            model_name="countryiso",
+            name="name",
             field=models.CharField(blank=True, max_length=100),
         ),
     ]

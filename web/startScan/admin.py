@@ -1,5 +1,30 @@
 from django.contrib import admin
-from startScan.models import *
+
+from startScan.models import (
+    ScanHistory,
+    SubScan,
+    Subdomain,
+    ScanActivity,
+    EndPoint,
+    Vulnerability,
+    CweId,
+    CveId,
+    VulnerabilityTags,
+    Port,
+    IpAddress,
+    DirectoryFile,
+    DirectoryScan,
+    Technology,
+    MetaFinderDocument,
+    Email,
+    Employee,
+    Dork,
+    Waf,
+    CountryISO,
+    Command,
+    LLMVulnerabilityReport,
+    S3Bucket,
+)
 
 admin.site.register(ScanHistory)
 admin.site.register(SubScan)
