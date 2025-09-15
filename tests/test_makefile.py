@@ -4,25 +4,26 @@ It verifies various make commands and their effects on the Docker environment.
 """
 
 import os
-import unittest
-import subprocess
-import time
 import signal
+import subprocess
 import sys
+import time
+import unittest
 from functools import wraps
+
 from docker import from_env as docker_from_env
 from docker.errors import NotFound
 
 # Add these constants for colors
-BLACK = '\033[30m'
-RED = '\033[31m'
-GREEN = '\033[32m'
-YELLOW = '\033[33m'
-BLUE = '\033[34m'
-MAGENTA = '\033[35m'
-CYAN = '\033[36m'
-WHITE = '\033[37m'
-ENDC = '\033[0m'
+BLACK = "\033[30m"
+RED = "\033[31m"
+GREEN = "\033[32m"
+YELLOW = "\033[33m"
+BLUE = "\033[34m"
+MAGENTA = "\033[35m"
+CYAN = "\033[36m"
+WHITE = "\033[37m"
+ENDC = "\033[0m"
 
 print("Starting test_makefile.py")
 print(f"Current working directory: {os.getcwd()}")
@@ -30,9 +31,7 @@ print(f"Current working directory: {os.getcwd()}")
 RENGINE_PATH = "/home/rengine/rengine"
 
 # Read version from version.txt
-with open(
-    f"{RENGINE_PATH}/web/reNgine/version.txt", "r", encoding="utf-8"
-) as version_file:
+with open(f"{RENGINE_PATH}/web/reNgine/version.txt", "r", encoding="utf-8") as version_file:
     RENGINE_VERSION = version_file.read().strip()
 
 
@@ -84,8 +83,8 @@ class TestMakefile(unittest.TestCase):
         Search for the directory containing the Makefile by traversing up the directory tree.
         """
         current_dir = os.path.abspath(os.getcwd())
-        while current_dir != '/':
-            if os.path.exists(os.path.join(current_dir, 'Makefile')):
+        while current_dir != "/":
+            if os.path.exists(os.path.join(current_dir, "Makefile")):
                 return current_dir
             current_dir = os.path.dirname(current_dir)
         return None
@@ -109,9 +108,7 @@ class TestMakefile(unittest.TestCase):
 
         print(f"{YELLOW}Executing command: {cmd}{ENDC}")
         if capture_output:
-            make_result = subprocess.run(
-                cmd, shell=True, capture_output=True, text=True, check=False
-            )
+            make_result = subprocess.run(cmd, shell=True, capture_output=True, text=True, check=False)
             if make_result.returncode != 0:
                 print(f"Command failed. Stderr: {make_result.stderr}")
             return make_result.stdout, make_result.stderr, make_result.returncode
@@ -154,6 +151,7 @@ class TestMakefile(unittest.TestCase):
                 return func(self, *args, **kwargs)
             finally:
                 self.clean_secrets()
+
         return wrapper
 
     def test_pull(self):
@@ -176,9 +174,7 @@ class TestMakefile(unittest.TestCase):
         This test verifies that all required Docker images are present and correctly tagged.
         """
         self.run_make_command("pull")
-        stdout, _, returncode = self.run_make_command(
-            "images", capture_output=True
-        )
+        stdout, _, returncode = self.run_make_command("images", capture_output=True)
         self.assertEqual(returncode, 0)
         for image in self.expected_images:
             repo, tag = image.split(":")
@@ -214,23 +210,13 @@ class TestMakefile(unittest.TestCase):
         self.run_make_command("certs")
 
         if "build" in command:
-            _, stderr, returncode = self.run_make_command(
-                command, capture_output=True, env_vars=env_vars
-            )
-            self.assertEqual(
-                returncode, 0, f"Build command failed with error: {stderr}"
-            )
-            _, stderr, returncode = self.run_make_command(
-                "up", capture_output=True, env_vars=env_vars
-            )
+            _, stderr, returncode = self.run_make_command(command, capture_output=True, env_vars=env_vars)
+            self.assertEqual(returncode, 0, f"Build command failed with error: {stderr}")
+            _, stderr, returncode = self.run_make_command("up", capture_output=True, env_vars=env_vars)
         else:
-            _, stderr, returncode = self.run_make_command(
-                command, capture_output=True, env_vars=env_vars
-            )
+            _, stderr, returncode = self.run_make_command(command, capture_output=True, env_vars=env_vars)
 
-        self.assertEqual(
-            returncode, 0, f"{command} command failed with error: {stderr}"
-        )
+        self.assertEqual(returncode, 0, f"{command} command failed with error: {stderr}")
         self.assert_containers_running()
 
     @with_cleanup
@@ -262,9 +248,7 @@ class TestMakefile(unittest.TestCase):
         self.run_make_command("up")
 
         restart_command = f"{command} {' '.join(services)}"
-        _, stderr, returncode = self.run_make_command(
-            restart_command.strip(), capture_output=True, env_vars=env_vars
-        )
+        _, stderr, returncode = self.run_make_command(restart_command.strip(), capture_output=True, env_vars=env_vars)
 
         self.assertEqual(returncode, 0, f"Restart command failed with error: {stderr}")
         self.assert_containers_running()
@@ -366,9 +350,7 @@ class TestMakefile(unittest.TestCase):
         self.run_make_command("up")
 
         # Now run the migrate command
-        stdout, _, returncode = self.run_make_command(
-            "migrate", capture_output=True
-        )
+        stdout, _, returncode = self.run_make_command("migrate", capture_output=True)
         self.assertEqual(returncode, 0)
         self.assertIn("Apply all migrations", stdout)
 
@@ -380,15 +362,9 @@ class TestMakefile(unittest.TestCase):
         """
         returncode = self.run_make_command("certs")
         self.assertEqual(returncode, 0)
-        self.assertTrue(
-            os.path.exists(f"{RENGINE_PATH}/docker/secrets/certs/rengine_chain.pem")
-        )
-        self.assertTrue(
-            os.path.exists(f"{RENGINE_PATH}/docker/secrets/certs/rengine_rsa.key")
-        )
-        self.assertTrue(
-            os.path.exists(f"{RENGINE_PATH}/docker/secrets/certs/rengine.pem")
-        )
+        self.assertTrue(os.path.exists(f"{RENGINE_PATH}/docker/secrets/certs/rengine_chain.pem"))
+        self.assertTrue(os.path.exists(f"{RENGINE_PATH}/docker/secrets/certs/rengine_rsa.key"))
+        self.assertTrue(os.path.exists(f"{RENGINE_PATH}/docker/secrets/certs/rengine.pem"))
 
     @with_cleanup
     def test_down(self):
@@ -452,10 +428,11 @@ class TestMakefile(unittest.TestCase):
         for volume in volumes:
             print(f"- {volume.name}")
 
+
 def suite(tests_to_run=None, exclude_build=False):
     """
     Create a test suite with specified or all tests.
-    
+
     Args:
     tests_to_run (list): List of test names to run. If None, all tests are run.
     exclude_build (bool): If True, excludes the build test from the suite.
@@ -500,10 +477,7 @@ def suite(tests_to_run=None, exclude_build=False):
             print(f"Warning: Test '{test}' not in the list of available tests. Skipping.")
 
     # Store test information for later display
-    test_info = {
-        'executed': executed_tests,
-        'skipped': skipped_tests
-    }
+    test_info = {"executed": executed_tests, "skipped": skipped_tests}
 
     return test_suite, test_info
 
@@ -523,11 +497,11 @@ if __name__ == "__main__":
     # Display test summary
     print(f"\n{GREEN}Test Execution Summary:{ENDC}")
     print(f"{YELLOW}Tests executed:{ENDC}")
-    for test in test_info['executed']:
+    for test in test_info["executed"]:
         print(f"- {test}")
-    if test_info['skipped']:
+    if test_info["skipped"]:
         print(f"\n{RED}Tests skipped:{ENDC}")
-        for test in test_info['skipped']:
+        for test in test_info["skipped"]:
             print(f"- {test}")
 
     sys.exit(not result.wasSuccessful())
