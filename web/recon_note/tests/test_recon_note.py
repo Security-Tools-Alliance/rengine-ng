@@ -17,10 +17,6 @@ from utils.test_base import BaseTestCase
 
 from recon_note.models import TodoNote
 
-__all__ = [
-    "TestScanReconNoteViews",
-]
-
 
 class TestScanReconNoteViews(BaseTestCase):
     """Test case for the Scan Recon Note views."""
