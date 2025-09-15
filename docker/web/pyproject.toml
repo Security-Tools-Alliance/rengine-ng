@@ -55,7 +55,7 @@ whatportis = { git = "https://github.com/Security-Tools-Alliance/whatportis" }
 xmltodict = "0.13.0"
 
 [tool.poetry.group.dev.dependencies]
-ruff = "^0.12.11"
+ruff = "0.12.11"
 
 [tool.ruff]
 # Maximum line length (PEP8 default 79, here we extend to 120 for Django project readability).

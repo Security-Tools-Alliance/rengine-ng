@@ -9,6 +9,9 @@ print_msg() {
 
 RENGINE_FOLDER="/home/$USERNAME/rengine"
 
+print_msg "Installing dev dependencies"
+poetry install --only dev --no-root
+
 print_msg "Generate Django migrations files"
 poetry run -C $RENGINE_FOLDER python3 manage.py makemigrations
 
