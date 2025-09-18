@@ -35,7 +35,6 @@ from startScan.models import (
     Email,
     Employee,
     EndPoint,
-    EngineType,
     IpAddress,
     Port,
     ScanHistory,

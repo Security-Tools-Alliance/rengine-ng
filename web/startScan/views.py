@@ -845,18 +845,18 @@ def create_report(request, slug, id):
         string="""
         /* General styles */
         body { font-family: Arial, sans-serif; }
-        
+
         /* Styles for markdown */
         h1, h2, h3, h4 { margin-top: 1em; }
         ul, ol { margin-left: 2em; }
-        pre, code { 
+        pre, code {
             background-color: #f5f5f5;
             padding: 0.2em 0.4em;
             border-radius: 3px;
         }
-        
+
         /* Styles for tables */
-        table { 
+        table {
             border-collapse: collapse;
             width: 100%;
             margin: 1em 0;

@@ -11,7 +11,7 @@ from reNgine.definitions import OLLAMA_INSTANCE
 ###############################################################################
 
 VULNERABILITY_CONTEXT = """
-You are an expert penetration tester specializing in web application security assessments. 
+You are an expert penetration tester specializing in web application security assessments.
 Your task is to analyze the following vulnerability information:
     - Vulnerability title
     - Vulnerable URL
@@ -58,7 +58,7 @@ I don't want to see any other information in the response.
 """
 
 ATTACK_SUGGESTION_LLM_SYSTEM_PROMPT = """
-You are an advanced penetration tester specializing in web application security. 
+You are an advanced penetration tester specializing in web application security.
 Based on the reconnaissance data provided:
     - Subdomain Name
     - Page Title
