@@ -142,8 +142,8 @@ def profile(request):
 
 @has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
 def admin_interface(request):
-    UserModel = get_user_model()
-    users = UserModel.objects.all().order_by("date_joined")
+    User = get_user_model()  # noqa: N806
+    users = User.objects.all().order_by("date_joined")
     return render(request, "dashboard/admin.html", {"users": users})
 
 
@@ -197,8 +197,8 @@ def admin_interface_update(request):
 
 def get_user_from_request(request):
     if user_id := request.GET.get("user"):
-        UserModel = get_user_model()
-        return UserModel.objects.filter(id=user_id).first()  # Use first() to avoid exceptions
+        User = get_user_model()  # noqa: N806
+        return User.objects.filter(id=user_id).first()  # Use first() to avoid exceptions
     return None
 
 
@@ -265,8 +265,8 @@ def handle_create_user(request):
         if not response.get("password"):
             return JsonResponse({"status": False, "error": "Empty passwords are not allowed"})
 
-        UserModel = get_user_model()
-        user = UserModel.objects.create_user(username=response.get("username"), password=response.get("password"))
+        User = get_user_model()  # noqa: N806
+        user = User.objects.create_user(username=response.get("username"), password=response.get("password"))
         assign_role(user, response.get("role"))
 
         # Add projects
@@ -341,8 +341,8 @@ def onboarding(request):
 
         try:
             if create_username and create_password and create_user_role:
-                UserModel = get_user_model()
-                user = UserModel.objects.create_user(username=create_username, password=create_password)
+                User = get_user_model() # noqa: N806
+                user = User.objects.create_user(username=create_username, password=create_password)
                 assign_role(user, create_user_role)
         except Exception as e:
             logger.error(f"Could not create User, Error: {e}")
@@ -394,7 +394,7 @@ def edit_project(request, slug):
         messages.error(request, "You don't have permission to edit this project.")
         return redirect("list_projects")
 
-    User = get_user_model()
+    User = get_user_model() # noqa: N806
     all_users = User.objects.all()
 
     if request.method == "POST":

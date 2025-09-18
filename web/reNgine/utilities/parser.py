@@ -237,8 +237,8 @@ def parse_nmap_vulners_output(script_output, url=""):
     """
     vulns = []
     # Check for CVE in script output
-    CVE_REGEX = re.compile(r".*(CVE-\d\d\d\d-\d+).*")
-    matches = CVE_REGEX.findall(script_output)
+    cve_regex = re.compile(r".*(CVE-\d\d\d\d-\d+).*")
+    matches = cve_regex.findall(script_output)
     matches = list(dict.fromkeys(matches))
     for cve_id in matches:  # get CVE info
         if vuln := cve_to_vuln(cve_id, vuln_type="nmap-vulners-nse"):

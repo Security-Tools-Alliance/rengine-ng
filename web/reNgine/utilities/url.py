@@ -238,12 +238,12 @@ def extract_httpx_url(line, follow_redirect):
     original_url = line.get("url")
 
     # Detect if there was a redirection based on status codes, location header, or URL change
-    REDIRECT_STATUS_CODES = [301, 302, 303, 307, 308]
+    redirect_status_codes = [301, 302, 303, 307, 308]
     has_redirect = (
-        status_code in REDIRECT_STATUS_CODES  # Direct redirect status
+        status_code in redirect_status_codes  # Direct redirect status
         or location is not None  # Location header present
         or (final_url is not None and final_url != original_url)  # Final URL different from original
-        or any(x in REDIRECT_STATUS_CODES for x in chain_status_codes)  # Redirect in chain
+        or any(x in redirect_status_codes for x in chain_status_codes)  # Redirect in chain
     )
 
     if follow_redirect:

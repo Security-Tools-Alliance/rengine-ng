@@ -167,7 +167,7 @@ def osint_discovery(config, host, scan_history_id, activity_id, results_dir, ctx
         logger.info("Lookup for employees")
         custom_ctx = deepcopy(ctx)
         custom_ctx["track"] = False
-        _task = theHarvester.si(
+        _task = the_harvester.si(
             config=config,
             host=host,
             scan_history_id=scan_history_id,
@@ -434,7 +434,7 @@ def dorking(config, host, scan_history_id, results_dir):
 
 
 @app.task(name="theHarvester", queue="run_command_queue", bind=False)
-def theHarvester(config, host, scan_history_id, activity_id, results_dir, ctx=None):
+def the_harvester(config, host, scan_history_id, activity_id, results_dir, ctx=None):
     """Run theHarvester to get save emails, hosts, employees found in domain.
 
     Args:
@@ -455,7 +455,7 @@ def theHarvester(config, host, scan_history_id, activity_id, results_dir, ctx=No
         ctx = {}
     scan_history = ScanHistory.objects.get(pk=scan_history_id)
     output_path_json = str(Path(results_dir) / "theHarvester.json")
-    theHarvester_dir = str(Path.home() / ".config" / "theHarvester")
+    the_harvester_dir = str(Path.home() / ".config" / "theHarvester")
     history_file = str(Path(results_dir) / "commands.txt")
     cmd = f"theHarvester -d {host} -f {output_path_json} -b anubis,baidu,bevigil,binaryedge,bing,bingapi,bufferoverun,brave,censys,certspotter,criminalip,crtsh,dnsdumpster,duckduckgo,fullhunt,hackertarget,hunter,hunterhow,intelx,netlas,onyphe,otx,pentesttools,projectdiscovery,rapiddns,rocketreach,securityTrails,sitedossier,subdomaincenter,subdomainfinderc99,threatminer,tomba,urlscan,virustotal,yahoo,zoomeye"
 
@@ -466,14 +466,14 @@ def theHarvester(config, host, scan_history_id, activity_id, results_dir, ctx=No
         if proxy.use_proxy:
             proxy_list = proxy.proxies.splitlines()
             yaml_data = {"http": proxy_list}
-            with open(Path(theHarvester_dir) / "proxies.yaml", "w") as file:
+            with open(Path(the_harvester_dir) / "proxies.yaml", "w") as file:
                 yaml.dump(yaml_data, file)
 
     # Run cmd
     run_command(
         cmd,
         shell=False,
-        cwd=theHarvester_dir,
+        cwd=the_harvester_dir,
         history_file=history_file,
         scan_id=scan_history_id,
         activity_id=activity_id,

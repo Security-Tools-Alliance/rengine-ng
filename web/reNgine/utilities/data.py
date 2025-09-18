@@ -140,8 +140,8 @@ def parse_curl_output(response):
     http_status = 0
     if response:
         # TODO: Enrich from other cURL fields.
-        CURL_REGEX_HTTP_STATUS = r"HTTP\/(?:(?:\d\.?)+)\s(\d+)\s(?:\w+)"
-        regex = re.compile(CURL_REGEX_HTTP_STATUS, re.MULTILINE)
+        curl_regex_http_status = r"HTTP\/(?:(?:\d\.?)+)\s(\d+)\s(?:\w+)"
+        regex = re.compile(curl_regex_http_status, re.MULTILINE)
         with contextlib.suppress(KeyError, TypeError, IndexError):
             http_status = int(regex.findall(response)[0])
     return {

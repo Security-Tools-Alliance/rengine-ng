@@ -17,7 +17,7 @@ from reNgine.tasks.osint import (
     h8mail,
     osint,
     osint_discovery,
-    theHarvester,
+    the_harvester,
 )
 from reNgine.tasks.port_scan import (
     nmap,
@@ -82,7 +82,7 @@ __all__ = [
     "send_scan_notif",
     "send_task_notif",
     "subdomain_discovery",
-    "theHarvester",
+    "the_harvester",
     "vulnerability_scan",
     "waf_detection",
 ]

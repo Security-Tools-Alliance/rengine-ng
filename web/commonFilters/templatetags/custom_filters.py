@@ -49,8 +49,8 @@ def next(some_list, current_index):
     """
     try:
         return some_list[int(current_index) + 1]  # access the next element
-    except:
-        return ""  # return empty string in case of exception
+    except (IndexError, ValueError):
+        return ""
 
 
 @register.filter
@@ -61,8 +61,8 @@ def previous(some_list, current_index):
     """
     try:
         return some_list[int(current_index) - 1]  # access the previous element
-    except:
-        return ""  # return empty string in case of exception
+    except (IndexError, ValueError):
+        return ""
 
 
 @register.filter(name="get_user_role")
