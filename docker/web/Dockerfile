@@ -1,4 +1,4 @@
-FROM --platform=$BUILDPLATFORM python:3.10-alpine
+FROM --platform=$BUILDPLATFORM python:3.11-alpine
 
 # Labels and Credits
 LABEL \

@@ -56,6 +56,34 @@ DEFAULT_GET_LLM_REPORT = env.bool("DEFAULT_GET_LLM_REPORT", default=True)
 ALLOWED_HOSTS = ["*"]
 SECRET_KEY = first_run(SECRET_FILE, BASE_DIR)
 
+# CSRF Configuration for Django 5.2 compatibility
+# Fix for "Origin checking failed" errors after Django upgrade
+CSRF_TRUSTED_ORIGINS = [
+    f"http://{DOMAIN_NAME}",
+    f"https://{DOMAIN_NAME}",
+    "http://localhost:8000",
+    "https://localhost:8000",
+    "http://127.0.0.1:8000",
+    "https://127.0.0.1:8000",
+]
+
+# Temporary CSRF bypass for debugging (REMOVE IN PRODUCTION!)
+# CSRF_FAILURE_VIEW = 'django.views.csrf.csrf_failure'  # Custom CSRF failure view
+# Uncomment the line below to disable CSRF completely (NOT RECOMMENDED)
+# CSRF_COOKIE_NAME = None
+
+# Additional CSRF settings for better security
+CSRF_COOKIE_SECURE = not DEBUG  # Use secure cookies in production
+CSRF_COOKIE_HTTPONLY = False  # Allow JavaScript access to CSRF cookie (needed for AJAX)
+CSRF_COOKIE_SAMESITE = 'Lax'  # CSRF protection while allowing some cross-site requests
+CSRF_USE_SESSIONS = False  # Keep using cookies for CSRF tokens (default)
+CSRF_COOKIE_AGE = 31449600  # 1 year in seconds
+
+# Session security settings
+SESSION_COOKIE_SECURE = not DEBUG  # Use secure cookies in production
+SESSION_COOKIE_HTTPONLY = True  # Prevent JavaScript access to session cookie
+SESSION_COOKIE_SAMESITE = 'Lax'  # Session protection while allowing some cross-site requests
+
 # Databases
 DATABASES = {
     "default": {
@@ -163,7 +191,6 @@ AUTH_PASSWORD_VALIDATORS = [
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "UTC"
 USE_I18N = True
-USE_L10N = True
 USE_TZ = True
 
 MEDIA_URL = "/media/"

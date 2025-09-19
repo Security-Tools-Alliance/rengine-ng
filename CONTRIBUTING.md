@@ -30,7 +30,7 @@ You can have this valuable information by following these steps:
 Example with the tool arsenal version check API bug.
 
 ```bash
-web_1          |   File "/usr/local/lib/python3.10/dist-packages/celery/app/task.py", line 411, in __call__
+web_1          |   File "/usr/local/lib/python3/dist-packages/celery/app/task.py", line 411, in __call__
 web_1          |     return self.run(*args, **kwargs)
 web_1          | TypeError: run_command() got an unexpected keyword argument 'echo'
 ```

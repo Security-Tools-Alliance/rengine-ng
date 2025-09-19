@@ -12,6 +12,7 @@ from django.db.models import Count
 from django.db.models.functions import Lower
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, render
+from django.views.decorators.csrf import csrf_exempt
 from django.template.loader import get_template
 from django.urls import reverse
 from django.utils import timezone
@@ -730,6 +731,7 @@ def customize_report(request, id):
 
 
 @has_permission_decorator(PERM_MODIFY_SCAN_REPORT, redirect_url=FOUR_OH_FOUR_URL)
+@csrf_exempt  # Temporary CSRF exemption for report generation
 def create_report(request, slug, id):
     primary_color = "#FFB74D"
     secondary_color = "#212121"

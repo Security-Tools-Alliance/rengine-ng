@@ -1,4 +1,4 @@
-from django.conf.urls import include, url
+from django.urls import include, path
 from django.urls import path
 from rest_framework import routers
 
@@ -95,7 +95,7 @@ router.register(r"listActivityLogs", ListActivityLogsViewSet, basename="activity
 router.register(r"listScanLogs", ListScanLogsViewSet, basename="scan-logs")
 
 urlpatterns = [
-    url("^", include(router.urls)),
+    path("", include(router.urls)),
     path("add/target/", AddTarget.as_view(), name="addTarget"),
     path("add/recon_note/", AddReconNote.as_view(), name="addReconNote"),
     path("queryTechnologies/", ListTechnology.as_view(), name="listTechnologies"),

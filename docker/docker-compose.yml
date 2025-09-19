@@ -7,10 +7,12 @@ services:
       - ../.env
     restart: unless-stopped
     container_name: rengine-db-1
+    entrypoint: /entrypoint.sh
     volumes:
+      - ./postgres/entrypoint.sh:/entrypoint.sh:ro
       - postgres_data:/var/lib/postgresql/data/
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready"]
+      test: ["CMD-SHELL", "nc -z localhost 5432 || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5

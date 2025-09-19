@@ -67,31 +67,11 @@ RUN ARCH=$(dpkg --print-architecture) && \
         exit 1; \
     fi
 
-# Download and install go
-RUN ARCH=$(dpkg --print-architecture) && \
-    #GO_VERSION=$(curl -s https://go.dev/VERSION?m=text) && \
-    GO_VERSION=1.23.11 && \
-    if [ "${ARCH}" = "arm64" ]; then \
-      wget https://go.dev/dl/go${GO_VERSION}.linux-arm64.tar.gz && \
-      tar -xvf go${GO_VERSION}.linux-arm64.tar.gz -C /usr/local/ && \
-      rm go${GO_VERSION}.linux-arm64.tar.gz; \
-    elif [ "${ARCH}" = "amd64" ]; then \
-      wget https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz && \
-      tar -xvf go${GO_VERSION}.linux-amd64.tar.gz -C /usr/local/ && \
-      rm go${GO_VERSION}.linux-amd64.tar.gz; \
-    else \
-      echo "Unknown architecture: $ARCH" ; \
-      exit 1; \
-    fi
-
-# Install python 3.10
-RUN cd /root && wget https://www.python.org/ftp/python/3.10.18/Python-3.10.18.tgz && \
-    tar -xvf Python-3.10.18.tgz && \
-    rm Python-3.10.18.tgz && \
-    cd Python-3.10.18 && \
-    ./configure --enable-optimizations && \
-    make -j4 && \
-    make altinstall
+# Install go
+RUN echo "deb http://deb.debian.org/debian bookworm-backports main contrib non-free" >> /etc/apt/sources.list.d/debian-12-backports.list && \
+    apt update
+RUN apt install -y -t bookworm-backports golang-1.23 && \
+    ln -s /usr/lib/go-1.23/bin/go /usr/bin/go
 
 USER $USERNAME
 WORKDIR /home/$USERNAME
@@ -100,7 +80,7 @@ ENV TOOLPATH="/home/${USERNAME}/tools"
 ENV BINPATH="/home/${USERNAME}/.local/bin"
 ENV WORDLISTPATH="/home/${USERNAME}/wordlists"
 ENV PIPX_BIN_DIR="${TOOLPATH}/pipx"
-ENV GOROOT="/usr/local/go"
+ENV GOROOT="/usr/lib/go-1.23"
 ENV GOPATH="${TOOLPATH}/go"
 ENV PATH="${PATH}:${GOROOT}/bin:${GOPATH}/bin:${PIPX_BIN_DIR}"
 
@@ -136,14 +116,21 @@ RUN ARCH=$(dpkg --print-architecture) \
         exit 1; \
     fi
 
+USER root
+# Install python 3 and development tools
+RUN apt install -y python3.11 python3.11-dev python3.11-venv pipx build-essential gcc g++ make
+
+USER $USERNAME
+
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV PATH="${PATH}:${BINPATH}"
 
 # Install python tools
-RUN python3.10 -m pip install pipx && pipx ensurepath && printf "poetry\n\
-    watchdog\n\
+RUN pipx ensurepath && \
+    pipx install poetry --verbose && \
+    printf "watchdog\n\
     https://github.com/aboul3la/Sublist3r/archive/refs/tags/1.1.zip\n\
     https://github.com/laramies/theHarvester/archive/refs/tags/4.6.0.zip\n\
     git+https://github.com/ncrocfer/whatportis@59a1718bf7c531f2a5a4e213cad0c047ce9c1c94\n\
@@ -172,11 +159,11 @@ RUN ln -s /usr/local/bin/geckodriver $BINPATH/geckodriver && \
 COPY --chown=$USERNAME:$USERNAME ./*.toml /home/$USERNAME
 
 # Install aliases for tools needing a pyproject.toml
-RUN cd $TOOLPATH/.github/OneForAll && mv /home/$USERNAME/oneforall-pyproject.toml pyproject.toml && poetry env use python3.10 && poetry install --no-cache && echo "#!/bin/bash\n\npoetry -C $TOOLPATH/.github/OneForAll/ run python $TOOLPATH/.github/OneForAll/oneforall.py \"\$@\"" > $BINPATH/oneforall && chmod +x $BINPATH/oneforall && \
-    cd $TOOLPATH/.github/ctfr && mv /home/$USERNAME/ctfr-pyproject.toml pyproject.toml && poetry env use python3.10 && poetry install --no-cache && echo "#!/bin/bash\n\npoetry -C $TOOLPATH/.github/ctfr/ run python $TOOLPATH/.github/ctfr/ctfr.py \"\$@\"" > $BINPATH/ctfr && chmod +x $BINPATH/ctfr && \
-    cd $TOOLPATH/.github/EyeWitness/Python && mv /home/$USERNAME/eyewitness-pyproject.toml pyproject.toml && poetry env use python3.10 && poetry install --no-cache && echo "#!/bin/bash\n\npoetry -C $TOOLPATH/.github/EyeWitness/Python run python $TOOLPATH/.github/EyeWitness/Python/EyeWitness.py \"\$@\"" > $BINPATH/EyeWitness && chmod +x $BINPATH/EyeWitness && \
-    cd $TOOLPATH/.github/CMSeeK && mv /home/$USERNAME/cmseek-pyproject.toml pyproject.toml && poetry env use python3.10 && poetry install --no-cache && echo "#!/bin/bash\n\npoetry -C $TOOLPATH/.github/CMSeeK/ run python $TOOLPATH/.github/CMSeeK/cmseek.py \"\$@\"" > $BINPATH/cmseek && chmod +x $BINPATH/cmseek && \
-    cd $TOOLPATH/.github/Infoga && mv /home/$USERNAME/infoga-pyproject.toml pyproject.toml && poetry env use python3.10 && poetry install --no-cache && echo "#!/bin/bash\n\npoetry -C $TOOLPATH/.github/Infoga/ run python $TOOLPATH/.github/Infoga/infoga.py \"\$@\"" > $BINPATH/infoga && chmod +x $BINPATH/infoga && \
+RUN cd $TOOLPATH/.github/OneForAll && mv /home/$USERNAME/oneforall-pyproject.toml pyproject.toml && poetry env use python3 && poetry install --no-cache && echo "#!/bin/bash\n\npoetry -C $TOOLPATH/.github/OneForAll/ run python $TOOLPATH/.github/OneForAll/oneforall.py \"\$@\"" > $BINPATH/oneforall && chmod +x $BINPATH/oneforall && \
+    cd $TOOLPATH/.github/ctfr && mv /home/$USERNAME/ctfr-pyproject.toml pyproject.toml && poetry env use python3 && poetry install --no-cache && echo "#!/bin/bash\n\npoetry -C $TOOLPATH/.github/ctfr/ run python $TOOLPATH/.github/ctfr/ctfr.py \"\$@\"" > $BINPATH/ctfr && chmod +x $BINPATH/ctfr && \
+    cd $TOOLPATH/.github/EyeWitness/Python && mv /home/$USERNAME/eyewitness-pyproject.toml pyproject.toml && poetry env use python3 && poetry install --no-cache && echo "#!/bin/bash\n\npoetry -C $TOOLPATH/.github/EyeWitness/Python run python $TOOLPATH/.github/EyeWitness/Python/EyeWitness.py \"\$@\"" > $BINPATH/EyeWitness && chmod +x $BINPATH/EyeWitness && \
+    cd $TOOLPATH/.github/CMSeeK && mv /home/$USERNAME/cmseek-pyproject.toml pyproject.toml && poetry env use python3 && poetry install --no-cache && echo "#!/bin/bash\n\npoetry -C $TOOLPATH/.github/CMSeeK/ run python $TOOLPATH/.github/CMSeeK/cmseek.py \"\$@\"" > $BINPATH/cmseek && chmod +x $BINPATH/cmseek && \
+    cd $TOOLPATH/.github/Infoga && mv /home/$USERNAME/infoga-pyproject.toml pyproject.toml && poetry env use python3 && poetry install --no-cache && echo "#!/bin/bash\n\npoetry -C $TOOLPATH/.github/Infoga/ run python $TOOLPATH/.github/Infoga/infoga.py \"\$@\"" > $BINPATH/infoga && chmod +x $BINPATH/infoga && \
     cd /home/$USERNAME && poetry install
 
 # Create tools config files
