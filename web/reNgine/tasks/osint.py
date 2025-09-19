@@ -448,7 +448,17 @@ def the_harvester(config, host, scan_history_id, activity_id, results_dir, ctx=N
     output_path_json = str(Path(results_dir) / "theHarvester.json")
     the_harvester_dir = str(Path.home() / ".config" / "theHarvester")
     history_file = str(Path(results_dir) / "commands.txt")
-    cmd = f"theHarvester -d {host} -f {output_path_json} -b anubis,baidu,bevigil,binaryedge,bing,bingapi,bufferoverun,brave,censys,certspotter,criminalip,crtsh,dnsdumpster,duckduckgo,fullhunt,hackertarget,hunter,hunterhow,intelx,netlas,onyphe,otx,pentesttools,projectdiscovery,rapiddns,rocketreach,securityTrails,sitedossier,subdomaincenter,subdomainfinderc99,threatminer,tomba,urlscan,virustotal,yahoo,zoomeye"
+    
+    # Create empty JSON file if it doesn't exist, handling race conditions atomically
+    if not os.path.exists(output_path_json):
+        try:
+            with open(output_path_json, 'x') as f:
+                json.dump({"emails": [], "hosts": [], "ips": [], "employees": []}, f)
+        except FileExistsError:
+            # File was created by another process in the meantime, safe to ignore
+            pass
+    
+    cmd = f"theHarvester -d {host} -f {output_path_json} -b baidu,bevigil,bing,bingapi,bufferoverun,brave,censys,certspotter,criminalip,crtsh,dnsdumpster,duckduckgo,fullhunt,hackertarget,hunter,hunterhow,intelx,netlas,onyphe,otx,pentesttools,projectdiscovery,rapiddns,rocketreach,securityTrails,sitedossier,subdomaincenter,subdomainfinderc99,threatminer,tomba,urlscan,virustotal,yahoo,zoomeye"
 
     # Update proxies.yaml
     proxy_query = Proxy.objects.all()

@@ -1,4 +1,4 @@
-FROM debian:12
+FROM debian:13
 
 # Labels and Credits
 LABEL \
@@ -27,6 +27,9 @@ RUN apt update -y && apt install -y      \
     wget                \
     libpcap-dev         \
     libpq-dev           \
+    libxml2-dev         \
+    libxslt1-dev        \
+    file                \
     vim                 \
     xvfb                \
     git                 \
@@ -68,10 +71,7 @@ RUN ARCH=$(dpkg --print-architecture) && \
     fi
 
 # Install go
-RUN echo "deb http://deb.debian.org/debian bookworm-backports main contrib non-free" >> /etc/apt/sources.list.d/debian-12-backports.list && \
-    apt update
-RUN apt install -y -t bookworm-backports golang-1.23 && \
-    ln -s /usr/lib/go-1.23/bin/go /usr/bin/go
+RUN apt install -y golang
 
 USER $USERNAME
 WORKDIR /home/$USERNAME
@@ -80,7 +80,6 @@ ENV TOOLPATH="/home/${USERNAME}/tools"
 ENV BINPATH="/home/${USERNAME}/.local/bin"
 ENV WORDLISTPATH="/home/${USERNAME}/wordlists"
 ENV PIPX_BIN_DIR="${TOOLPATH}/pipx"
-ENV GOROOT="/usr/lib/go-1.23"
 ENV GOPATH="${TOOLPATH}/go"
 ENV PATH="${PATH}:${GOROOT}/bin:${GOPATH}/bin:${PIPX_BIN_DIR}"
 
@@ -118,7 +117,7 @@ RUN ARCH=$(dpkg --print-architecture) \
 
 USER root
 # Install python 3 and development tools
-RUN apt install -y python3.11 python3.11-dev python3.11-venv pipx build-essential gcc g++ make
+RUN apt install -y python3 python3-dev python3-venv pipx build-essential gcc g++ make
 
 USER $USERNAME
 
@@ -132,8 +131,7 @@ RUN pipx ensurepath && \
     pipx install poetry --verbose && \
     printf "watchdog\n\
     https://github.com/aboul3la/Sublist3r/archive/refs/tags/1.1.zip\n\
-    https://github.com/laramies/theHarvester/archive/refs/tags/4.6.0.zip\n\
-    git+https://github.com/ncrocfer/whatportis@59a1718bf7c531f2a5a4e213cad0c047ce9c1c94\n\
+    https://github.com/laramies/theHarvester/archive/refs/tags/4.8.2.zip\n\
     git+https://github.com/EnableSecurity/wafw00f@2b948682064825bc319b0b80d8992d9f661a3cbb\n\
     h8mail\n" | xargs -L1 pipx install || true
 
