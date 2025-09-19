@@ -148,15 +148,21 @@ def get_and_save_dork_results(
     history_file = str(Path(results_dir) / "commands.txt")
 
     try:
-        run_command(
+        return_code, output = run_command(
             gofuzz_command,
             shell=False,
             history_file=history_file,
             scan_id=scan_history.id,
         )
 
+        # Check if GooFuzz failed but don't raise exception
+        if return_code != 0:
+            logger.warning(f"GooFuzz command failed with exit code {return_code} for {lookup_target}")
+            return {"results": results, "error": f"GooFuzz failed with exit code {return_code}"}
+
         if not os.path.isfile(output_file):
-            return
+            logger.warning(f"GooFuzz output file not found: {output_file}")
+            return {"results": results, "error": f"GooFuzz output file not found: {output_file}"}
 
         with open(output_file) as f:
             for line in f:
@@ -169,7 +175,17 @@ def get_and_save_dork_results(
         # remove output file
         os.remove(output_file)
 
+    except (OSError, PermissionError) as e:
+        # File system errors are critical and should be escalated
+        logger.error(f"Critical file system error in get_and_save_dork_results for {lookup_target}: {e}")
+        return {"results": results, "error": f"File system error: {str(e)}"}
+    except ImportError as e:
+        # Import errors are critical and should be escalated
+        logger.error(f"Critical import error in get_and_save_dork_results for {lookup_target}: {e}")
+        return {"results": results, "error": f"Import error: {str(e)}"}
     except Exception as e:
-        logger.exception(e)
+        # Other exceptions (like network timeouts, parsing errors) are non-critical
+        logger.warning(f"Non-critical error in get_and_save_dork_results for {lookup_target}: {e}")
+        return {"results": results, "error": str(e)}
 
-    return results
+    return {"results": results, "error": None}
