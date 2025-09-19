@@ -731,7 +731,6 @@ def customize_report(request, id):
 
 
 @has_permission_decorator(PERM_MODIFY_SCAN_REPORT, redirect_url=FOUR_OH_FOUR_URL)
-@csrf_exempt  # Temporary CSRF exemption for report generation
 def create_report(request, slug, id):
     primary_color = "#FFB74D"
     secondary_color = "#212121"
