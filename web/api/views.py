@@ -2983,7 +2983,7 @@ class VulnerabilityViewSet(viewsets.ModelViewSet):
             lookup_title = search_param[0].lower().strip()
             lookup_content = search_param[1].lower().strip()
             if "severity" in lookup_title:
-                severity_value = NUCLEI_SEVERITY_MAP.get(lookup_title, -1)
+                severity_value = NUCLEI_SEVERITY_MAP.get(lookup_content, -1)
                 qs = self.queryset.exclude(severity=severity_value)
             elif "name" in lookup_title:
                 qs = self.queryset.exclude(name__icontains=lookup_content)
