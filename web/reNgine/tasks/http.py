@@ -316,7 +316,6 @@ def http_crawl(
         logger.error(f"Failed to clean up input file {input_path}")
 
     return results
-    return results
 
 
 @app.task(name="pre_crawl", queue="cpu_queue", base=RengineTask, bind=True)
