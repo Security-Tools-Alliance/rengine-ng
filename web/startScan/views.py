@@ -12,7 +12,6 @@ from django.db.models import Count
 from django.db.models.functions import Lower
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, render
-from django.views.decorators.csrf import csrf_exempt
 from django.template.loader import get_template
 from django.urls import reverse
 from django.utils import timezone
