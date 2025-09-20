@@ -116,7 +116,7 @@ class AdminInterfaceUpdateTests(BaseTestCase):
         assign_role(self.target_user, "penetration_tester")
 
     def test_user_creation_permissions(self):
-        User = get_user_model() # noqa: N806
+        User = get_user_model()  # noqa: N806
 
         # Test with superuser
         unique_username = f"newuser_{uuid.uuid4().hex[:8]}"

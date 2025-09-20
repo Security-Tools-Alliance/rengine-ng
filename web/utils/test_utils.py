@@ -474,7 +474,7 @@ class TestDataGenerator:
         """
         from django.contrib.auth import get_user_model
 
-        User = get_user_model() # noqa: N806
+        User = get_user_model()  # noqa: N806
 
         # Create test user if not exists
         if not User.objects.filter(username="rengine").exists():

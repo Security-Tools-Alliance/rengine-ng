@@ -24,7 +24,7 @@ class LLMInputData(BaseModel):
     capabilities: Optional[ModelCapabilities] = Field(default=None)
 
     @validator("description")
-    def validate_description(cls, v): # noqa: N805
+    def validate_description(cls, v):  # noqa: N805
         if not v or len(v.strip()) < 10:
             raise ValueError("Description must be at least 10 characters long")
         return v.strip()

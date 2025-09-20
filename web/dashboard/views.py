@@ -341,7 +341,7 @@ def onboarding(request):
 
         try:
             if create_username and create_password and create_user_role:
-                User = get_user_model() # noqa: N806
+                User = get_user_model()  # noqa: N806
                 user = User.objects.create_user(username=create_username, password=create_password)
                 assign_role(user, create_user_role)
         except Exception as e:
@@ -394,7 +394,7 @@ def edit_project(request, slug):
         messages.error(request, "You don't have permission to edit this project.")
         return redirect("list_projects")
 
-    User = get_user_model() # noqa: N806
+    User = get_user_model()  # noqa: N806
     all_users = User.objects.all()
 
     if request.method == "POST":

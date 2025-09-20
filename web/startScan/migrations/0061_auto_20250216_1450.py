@@ -9,9 +9,9 @@ from django.db import migrations, models
 def migrate_ports_to_ip(apps, schema_editor):
     """Migrate M2M relationship to ForeignKey, duplicating ports if needed."""
     Port = apps.get_model("startScan", "Port")
-    IPAddress = apps.get_model("startScan", "IPAddress") # noqa: N806
+    IPAddress = apps.get_model("startScan", "IPAddress")  # noqa: N806
     # Explicit retrieval of the intermediate model
-    IPPortM2M = apps.get_model("startScan", "ipaddress_ports") # noqa: N806
+    IPPortM2M = apps.get_model("startScan", "ipaddress_ports")  # noqa: N806
     logger = logging.getLogger(__name__)
 
     logger.info(f"Starting port migration for {IPAddress.objects.count()} IP addresses")
