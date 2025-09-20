@@ -350,7 +350,7 @@ class LLMAttackSuggestion(APIView):
             return Response({"status": True, "subdomain_name": subdomain.name, "description": None})
 
         # Generate new analysis
-        ip_addrs = subdomain.ip_addresses.all()
+        ip_addrs = subdomain.ip_addresses.prefetch_related('ports').all()
         open_ports = ", ".join(f"{port.number}/{port.service_name}" for ip in ip_addrs for port in ip.ports.all())
         tech_used = ", ".join(tech.name for tech in subdomain.technologies.all())
 
