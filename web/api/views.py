@@ -938,14 +938,10 @@ class AddTarget(APIView):
 
         # Create org object in DB
         if organization_name:
-            organization_obj = None
-            organization_query = Organization.objects.filter(name=organization_name)
-            if organization_query.exists():
-                organization_obj = organization_query[0]
-            else:
-                organization_obj = Organization.objects.create(
-                    name=organization_name, project=project, insert_date=timezone.now()
-                )
+            organization_obj, created = Organization.objects.get_or_create(
+                name=organization_name,
+                defaults={'project': project, 'insert_date': timezone.now()}
+            )
             organization_obj.domains.add(domain)
 
         return Response(
@@ -1680,11 +1676,14 @@ class ListTargetsInOrganization(APIView):
     def get(self, request, format=None):
         req = self.request
         organization_id = safe_int_cast(req.query_params.get("organization_id"))
-        organization = Organization.objects.filter(id=organization_id)
-        targets = Domain.objects.filter(domains__in=organization)
-        organization_serializer = OrganizationSerializer(organization, many=True)
-        targets_serializer = OrganizationTargetsSerializer(targets, many=True)
-        return Response({"organization": organization_serializer.data, "domains": targets_serializer.data})
+        try:
+            organization = Organization.objects.get(id=organization_id)
+            targets = Domain.objects.filter(domains=organization)
+            organization_serializer = OrganizationSerializer(organization)
+            targets_serializer = OrganizationTargetsSerializer(targets, many=True)
+            return Response({"organization": organization_serializer.data, "domains": targets_serializer.data})
+        except Organization.DoesNotExist:
+            return Response({"error": "Organization not found"}, status=404)
 
 
 class ListTargetsWithoutOrganization(APIView):
