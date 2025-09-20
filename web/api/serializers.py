@@ -73,7 +73,7 @@ class DomainSerializer(serializers.ModelSerializer):
             "organization",
             "most_recent_scan",
             "insert_date_humanized",
-            "start_scan_date_humanized"
+            "start_scan_date_humanized",
         ]
         depth = 2
 
@@ -155,7 +155,7 @@ class ReconNoteSerializer(serializers.ModelSerializer):
             "project",
             "domain_name",
             "subdomain_name",
-            "scan_started_time"
+            "scan_started_time",
         ]
 
     def get_domain_name(self, note):
@@ -201,7 +201,7 @@ class SubScanSerializer(serializers.ModelSerializer):
             "subdomain_name",
             "time_taken",
             "elapsed_time",
-            "completed_ago"
+            "completed_ago",
         ]
 
     def get_subdomain_name(self, subscan):
@@ -754,7 +754,7 @@ class SubdomainChangesSerializer(serializers.ModelSerializer):
             "directories",
             "waf",
             "change",
-            "is_interesting"
+            "is_interesting",
         ]
 
     def get_change(self, Subdomain):
@@ -784,7 +784,7 @@ class EndPointChangesSerializer(serializers.ModelSerializer):
             "techs",
             "screenshot_path",
             "matched_gf_patterns",
-            "change"
+            "change",
         ]
 
     def get_change(self, EndPoint):
@@ -831,7 +831,7 @@ class MetafinderDocumentSerializer(serializers.ModelSerializer):
             "creation_date",
             "modified_date",
             "author",
-            "os"
+            "os",
         ]
         depth = 1
 
@@ -885,7 +885,7 @@ class IpSerializer(serializers.ModelSerializer):
             "is_cdn",
             "ip_addresses",
             "subdomain_count",
-            "subdomain_names"
+            "subdomain_names",
         ]
 
     def get_base_subdomain_query(self, obj):
@@ -920,7 +920,7 @@ class DirectoryScanSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = DirectoryScan
-        fields = ["id","scanned_date","command_line","directory_files","formatted_date_for_id"]
+        fields = ["id", "scanned_date", "command_line", "directory_files", "formatted_date_for_id"]
 
     def get_scanned_date(self, DirectoryScan):
         return DirectoryScan.scanned_date.strftime("%b %d, %Y %H:%M")
@@ -993,7 +993,7 @@ class SubdomainSerializer(serializers.ModelSerializer):
             "critical_count",
             "todos_count",
             "directories_count",
-            "subscan_count"
+            "subscan_count",
         ]
 
     def get_is_interesting(self, subdomain):
@@ -1061,7 +1061,7 @@ class EndpointSerializer(serializers.ModelSerializer):
             "subdomain_id",
             "scan_history_id",
             "target_domain_id",
-            "subdomain_name"
+            "subdomain_name",
         ]
 
     def get_subdomain_id(self, obj):
@@ -1145,7 +1145,7 @@ class VulnerabilitySerializer(serializers.ModelSerializer):
             "matcher_name",
             "curl_command",
             "request",
-            "response"
+            "response",
         ]
         depth = 1
 
