@@ -104,6 +104,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "api.middleware.APIKeyAuthenticationMiddleware",
     "login_required.middleware.LoginRequiredMiddleware",
     "dashboard.middleware.SlugMiddleware",
     "dashboard.middleware.ProjectAccessMiddleware",

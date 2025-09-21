@@ -1,0 +1,49 @@
+from django.utils import timezone
+from rest_framework_api_key.models import APIKey
+from dashboard.models import UserAPIKey
+
+
+class APIKeyAuthenticationMiddleware:
+    """
+    Middleware to handle API Key authentication for external access (e.g., Burp Suite).
+
+    This middleware intercepts API requests and simulates an authenticated user
+    when a valid API key is provided, allowing bypass of LoginRequiredMiddleware.
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        # Only process API requests
+        if request.path.startswith('/api/'):
+            api_key = self.get_api_key_from_request(request)
+            if api_key:
+                try:
+                    # Verify API key exists and is active
+                    user_api_key = UserAPIKey.objects.get(id=api_key.id, is_active=True)
+                    # Simulate authenticated user for LoginRequiredMiddleware
+                    request.user = user_api_key.user
+                    request._api_key_authenticated = True
+                    # Update last used timestamp
+                    user_api_key.last_used = timezone.now()
+                    user_api_key.save(update_fields=['last_used'])
+                except UserAPIKey.DoesNotExist:
+                    # Invalid or inactive API key, let normal auth flow continue
+                    pass
+
+        return self.get_response(request)
+
+    def get_api_key_from_request(self, request):
+        """
+        Extract API key from Authorization header.
+        Expected format: Authorization: Api-Key <key>
+        """
+        auth_header = request.META.get('HTTP_AUTHORIZATION', '')
+        if auth_header.startswith('Api-Key '):
+            key = auth_header[8:]  # Remove 'Api-Key ' prefix
+            try:
+                return APIKey.objects.get_from_key(key)
+            except APIKey.DoesNotExist:
+                return None
+        return None
