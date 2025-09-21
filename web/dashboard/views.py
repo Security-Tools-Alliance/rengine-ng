@@ -445,6 +445,12 @@ def api_key_management(request):
     """
     user_api_keys = UserAPIKey.objects.filter(user=request.user).order_by("-created_at")
     context = {"api_keys": user_api_keys, "page_title": "API Keys Management"}
+
+    # Check if there's a newly created API key to show
+    new_api_key = request.session.pop('new_api_key', None)
+    if new_api_key:
+        context['new_api_key'] = new_api_key
+
     return render(request, "dashboard/api_keys.html", context)
 
 
@@ -463,12 +469,12 @@ def create_api_key(request):
                 messages.error(request, f'API Key with name "{name}" already exists. Please choose a different name.')
             else:
                 api_key, key = UserAPIKey.objects.create_key(name=name, user=request.user)
-                messages.success(
-                    request,
-                    f'API Key "{name}" created successfully! '
-                    f"Key: <code>{key}</code><br>"
-                    f"<strong>Important:</strong> This key will only be shown once. Please save it securely.",
-                )
+                # Store the new key info in session to display in modal
+                request.session['new_api_key'] = {
+                    'name': name,
+                    'key': key
+                }
+                messages.success(request, f'API Key "{name}" created successfully!')
         else:
             messages.error(request, "API Key name is required.")
 

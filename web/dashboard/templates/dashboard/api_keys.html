@@ -141,6 +141,56 @@ API Keys Management
   </div>
 </div>
 
+<!-- New API Key Success Modal -->
+{% if new_api_key %}
+<div class="modal fade" id="newApiKeyModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">
+          <i class="mdi mdi-check-circle text-success"></i> API Key Created Successfully
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-warning">
+          <i class="mdi mdi-alert-outline me-1"></i>
+          <strong>Important:</strong> This is the only time you will see this API key. Please copy it now and store it securely.
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label fw-bold">API Key Name:</label>
+          <p class="mb-2">{{ new_api_key.name }}</p>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label fw-bold">API Key:</label>
+          <div class="input-group">
+            <input type="text" class="form-control font-monospace" id="newApiKeyValue"
+                   value="{{ new_api_key.key }}" readonly>
+            <button class="btn btn-outline-primary" type="button" onclick="copyApiKey()">
+              <i class="mdi mdi-content-copy"></i> Copy
+            </button>
+          </div>
+        </div>
+
+        <div class="mt-3">
+          <h6>Usage Example:</h6>
+          <code class="d-block p-2 bg-light rounded small">
+            Authorization: Api-Key {{ new_api_key.key }}
+          </code>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary" data-bs-dismiss="modal">
+          <i class="mdi mdi-check"></i> I've Saved the Key
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 <!-- Delete Confirmation Modal -->
 <div class="modal fade" id="deleteConfirmModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-sm">
@@ -176,5 +226,39 @@ function confirmDelete(keyName, deleteUrl) {
   document.getElementById('deleteForm').action = deleteUrl;
   new bootstrap.Modal(document.getElementById('deleteConfirmModal')).show();
 }
+
+function copyApiKey() {
+  const keyField = document.getElementById('newApiKeyValue');
+  keyField.select();
+  keyField.setSelectionRange(0, 99999); // For mobile devices
+
+  try {
+    navigator.clipboard.writeText(keyField.value).then(function() {
+      // Update button text temporarily
+      const copyBtn = event.target.closest('button');
+      const originalHTML = copyBtn.innerHTML;
+      copyBtn.innerHTML = '<i class="mdi mdi-check"></i> Copied!';
+      copyBtn.classList.remove('btn-outline-primary');
+      copyBtn.classList.add('btn-success');
+
+      setTimeout(function() {
+        copyBtn.innerHTML = originalHTML;
+        copyBtn.classList.remove('btn-success');
+        copyBtn.classList.add('btn-outline-primary');
+      }, 2000);
+    });
+  } catch (err) {
+    // Fallback for older browsers
+    document.execCommand('copy');
+    alert('API Key copied to clipboard!');
+  }
+}
+
+{% if new_api_key %}
+// Show the new API key modal automatically
+document.addEventListener('DOMContentLoaded', function() {
+  new bootstrap.Modal(document.getElementById('newApiKeyModal')).show();
+});
+{% endif %}
 </script>
 {% endblock page_level_script %}
