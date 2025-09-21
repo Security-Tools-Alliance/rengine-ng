@@ -127,6 +127,10 @@
             <i class="fe-user"></i>
             <span>My Account</span>
           </a>
+          <a href="{% url 'api_keys' %}" class="dropdown-item notify-item">
+            <i class="mdi mdi-key-variant"></i>
+            <span>API Keys</span>
+          </a>
           {% if user|can:'modify_system_configurations' %}
           <a href="{% url 'admin_interface' %}" class="dropdown-item notify-item">
             <i class="fe-settings"></i>

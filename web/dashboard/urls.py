@@ -15,6 +15,11 @@ urlpatterns = [
     path("project/delete/<int:id>", views.delete_project, name="delete_project"),
     path("project/edit/<slug:slug>", views.edit_project, name="edit_project"),
     path("project/set_current/<slug:slug>", views.set_current_project, name="set_current_project"),
+    # API Keys management
+    path("api-keys/", views.api_key_management, name="api_keys"),
+    path("api-keys/create/", views.create_api_key, name="create_api_key"),
+    path("api-keys/delete/<int:key_id>/", views.delete_api_key, name="delete_api_key"),
+    path("api-keys/toggle/<int:key_id>/", views.toggle_api_key, name="toggle_api_key"),
 ]
 
 if UI_DEBUG:
