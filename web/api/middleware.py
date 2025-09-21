@@ -25,6 +25,8 @@ class APIKeyAuthenticationMiddleware:
                     # Simulate authenticated user for LoginRequiredMiddleware
                     request.user = user_api_key.user
                     request._api_key_authenticated = True
+                    # Store the API key for permission checking
+                    request._api_key = api_key
                     # Update last used timestamp
                     user_api_key.last_used = timezone.now()
                     user_api_key.save(update_fields=["last_used"])
