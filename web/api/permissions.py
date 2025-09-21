@@ -1,4 +1,4 @@
-from rest_framework.permissions import BasePermission, IsAuthenticated
+from rest_framework.permissions import BasePermission
 from rest_framework_api_key.permissions import HasAPIKey
 
 
@@ -13,7 +13,7 @@ class HasAPIKeyOrIsAuthenticated(BasePermission):
 
     def has_permission(self, request, view):
         # Check if middleware set API key authentication
-        if hasattr(request, '_api_key_authenticated') and request._api_key_authenticated:
+        if hasattr(request, "_api_key_authenticated") and request._api_key_authenticated:
             return True
 
         # Check if user is authenticated via session

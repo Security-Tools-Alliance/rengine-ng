@@ -447,9 +447,9 @@ def api_key_management(request):
     context = {"api_keys": user_api_keys, "page_title": "API Keys Management"}
 
     # Check if there's a newly created API key to show
-    new_api_key = request.session.pop('new_api_key', None)
+    new_api_key = request.session.pop("new_api_key", None)
     if new_api_key:
-        context['new_api_key'] = new_api_key
+        context["new_api_key"] = new_api_key
 
     return render(request, "dashboard/api_keys.html", context)
 
@@ -470,10 +470,7 @@ def create_api_key(request):
             else:
                 api_key, key = UserAPIKey.objects.create_key(name=name, user=request.user)
                 # Store the new key info in session to display in modal
-                request.session['new_api_key'] = {
-                    'name': name,
-                    'key': key
-                }
+                request.session["new_api_key"] = {"name": name, "key": key}
                 messages.success(request, f'API Key "{name}" created successfully!')
         else:
             messages.error(request, "API Key name is required.")
