@@ -450,13 +450,12 @@ def the_harvester(config, host, scan_history_id, activity_id, results_dir, ctx=N
     history_file = str(Path(results_dir) / "commands.txt")
     
     # Create empty JSON file if it doesn't exist, handling race conditions atomically
-    if not os.path.exists(output_path_json):
-        try:
-            with open(output_path_json, 'x') as f:
-                json.dump({"emails": [], "hosts": [], "ips": [], "employees": []}, f)
-        except FileExistsError:
-            # File was created by another process in the meantime, safe to ignore
-            pass
+    try:
+        with open(output_path_json, 'x') as f:
+            json.dump({"emails": [], "hosts": [], "ips": [], "employees": []}, f)
+    except FileExistsError:
+        # File was created by another process in the meantime, safe to ignore
+        pass
     
     cmd = f"theHarvester -d {host} -f {output_path_json} -b baidu,bevigil,bing,bingapi,bufferoverun,brave,censys,certspotter,criminalip,crtsh,dnsdumpster,duckduckgo,fullhunt,hackertarget,hunter,hunterhow,intelx,netlas,onyphe,otx,pentesttools,projectdiscovery,rapiddns,rocketreach,securityTrails,sitedossier,subdomaincenter,subdomainfinderc99,threatminer,tomba,urlscan,virustotal,yahoo,zoomeye"
 

@@ -67,11 +67,6 @@ CSRF_TRUSTED_ORIGINS = [
     "https://127.0.0.1:8000",
 ]
 
-# Temporary CSRF bypass for debugging (REMOVE IN PRODUCTION!)
-# CSRF_FAILURE_VIEW = 'django.views.csrf.csrf_failure'  # Custom CSRF failure view
-# Uncomment the line below to disable CSRF completely (NOT RECOMMENDED)
-# CSRF_COOKIE_NAME = None
-
 # Additional CSRF settings for better security
 CSRF_COOKIE_SECURE = not DEBUG  # Use secure cookies in production
 CSRF_COOKIE_HTTPONLY = False  # Allow JavaScript access to CSRF cookie (needed for AJAX)
