@@ -52,6 +52,8 @@ from rest_framework.decorators import api_view
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.parsers import JSONParser
 from rest_framework.permissions import IsAuthenticated
+
+from api.permissions import HasAPIKeyOrIsAuthenticated
 from rest_framework.response import Response
 from rest_framework.status import HTTP_400_BAD_REQUEST
 from rest_framework.views import APIView
@@ -535,6 +537,7 @@ class QueryInterestingSubdomains(APIView):
 class ListTargetsDatatableViewSet(viewsets.ModelViewSet):
     queryset = Domain.objects.all()
     serializer_class = DomainSerializer
+    permission_classes = [HasAPIKeyOrIsAuthenticated]
 
     def get_queryset(self):
         if slug := self.request.GET.get("slug", None):

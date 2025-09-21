@@ -1,6 +1,10 @@
+import logging
+
 from dashboard.models import UserAPIKey
 from django.utils import timezone
 from rest_framework_api_key.models import APIKey
+
+logger = logging.getLogger(__name__)
 
 
 class APIKeyAuthenticationMiddleware:
@@ -17,22 +21,16 @@ class APIKeyAuthenticationMiddleware:
     def __call__(self, request):
         # Only process API requests
         if request.path.startswith("/api/"):
-            api_key = self.get_api_key_from_request(request)
-            if api_key:
-                try:
-                    # Verify API key exists and is active
-                    user_api_key = UserAPIKey.objects.get(id=api_key.id, is_active=True)
-                    # Simulate authenticated user for LoginRequiredMiddleware
-                    request.user = user_api_key.user
-                    request._api_key_authenticated = True
-                    # Store the API key for permission checking
-                    request._api_key = api_key
-                    # Update last used timestamp
-                    user_api_key.last_used = timezone.now()
-                    user_api_key.save(update_fields=["last_used"])
-                except UserAPIKey.DoesNotExist:
-                    # Invalid or inactive API key, let normal auth flow continue
-                    pass
+            user_api_key = self.get_api_key_from_request(request)
+            if user_api_key and user_api_key.is_active:
+                # Simulate authenticated user for LoginRequiredMiddleware
+                request.user = user_api_key.user
+                request._api_key_authenticated = True
+                # Store the API key for permission checking
+                request._api_key = user_api_key
+                # Update last used timestamp
+                user_api_key.last_used = timezone.now()
+                user_api_key.save(update_fields=["last_used"])
 
         return self.get_response(request)
 
@@ -42,10 +40,12 @@ class APIKeyAuthenticationMiddleware:
         Expected format: Authorization: Api-Key <key>
         """
         auth_header = request.META.get("HTTP_AUTHORIZATION", "")
+
         if auth_header.startswith("Api-Key "):
             key = auth_header[8:]  # Remove 'Api-Key ' prefix
             try:
-                return APIKey.objects.get_from_key(key)
-            except APIKey.DoesNotExist:
+                # Try to find UserAPIKey directly using get_from_key
+                return UserAPIKey.objects.get_from_key(key)
+            except (APIKey.DoesNotExist, UserAPIKey.DoesNotExist):
                 return None
         return None
