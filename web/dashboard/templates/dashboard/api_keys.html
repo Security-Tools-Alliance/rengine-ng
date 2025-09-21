@@ -71,13 +71,12 @@ API Keys Management
                     <button type="submit" class="btn btn-sm btn-outline-{% if key.is_active %}warning{% else %}success{% endif %}"
                             title="{% if key.is_active %}Deactivate{% else %}Activate{% endif %} API Key">
                       <i class="mdi mdi-{% if key.is_active %}pause{% else %}play{% endif %}"></i>
-                      {% if key.is_active %}Deactivate{% else %}Activate{% endif %}
                     </button>
                   </form>
                   <button type="button" class="btn btn-sm btn-outline-danger ms-1"
                           onclick="confirmDelete('{{ key.name }}', '{% url 'delete_api_key' key.get_url_id %}')"
                           title="Delete API Key">
-                    <i class="mdi mdi-delete"></i> Delete
+                    <i class="mdi mdi-delete"></i>
                   </button>
                 </td>
               </tr>
