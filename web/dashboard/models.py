@@ -61,6 +61,10 @@ class UserAPIKey(AbstractAPIKey):
     last_used = models.DateTimeField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
 
+    def get_url_id(self):
+        """Return a URL-safe integer ID for this API key."""
+        return hash(self.id) % 2147483647  # Convert hash to positive 32-bit int
+
     class Meta:
         verbose_name = "User API Key"
         verbose_name_plural = "User API Keys"
