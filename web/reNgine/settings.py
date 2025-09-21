@@ -82,7 +82,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "django.contrib.humanize",
     "rest_framework",
-    'rest_framework_api_key',
+    "rest_framework_api_key",
     "rest_framework_datatables",
     "dashboard.apps.DashboardConfig",
     "targetApp.apps.TargetappConfig",
@@ -131,9 +131,9 @@ TEMPLATES = [
 ]
 ROOT_URLCONF = "reNgine.urls"
 REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework.authentication.SessionAuthentication',
-        'rest_framework_api_key.auth.APIKeyAuthentication',
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework.authentication.SessionAuthentication",
+        "rest_framework_api_key.auth.APIKeyAuthentication",
     ],
     "DEFAULT_RENDERER_CLASSES": (
         "rest_framework.renderers.JSONRenderer",

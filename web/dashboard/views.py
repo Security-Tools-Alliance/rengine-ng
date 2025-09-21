@@ -443,12 +443,9 @@ def api_key_management(request):
     Shows list of user's API keys with creation date, last used, and status.
     Allows creation, activation/deactivation, and deletion of API keys.
     """
-    user_api_keys = UserAPIKey.objects.filter(user=request.user).order_by('-created_at')
-    context = {
-        'api_keys': user_api_keys,
-        'page_title': 'API Keys Management'
-    }
-    return render(request, 'dashboard/api_keys.html', context)
+    user_api_keys = UserAPIKey.objects.filter(user=request.user).order_by("-created_at")
+    context = {"api_keys": user_api_keys, "page_title": "API Keys Management"}
+    return render(request, "dashboard/api_keys.html", context)
 
 
 def create_api_key(request):
@@ -458,27 +455,24 @@ def create_api_key(request):
     Validates the API key name and creates a new UserAPIKey instance.
     Returns the generated key only once for security.
     """
-    if request.method == 'POST':
-        name = request.POST.get('name', '').strip()
+    if request.method == "POST":
+        name = request.POST.get("name", "").strip()
         if name:
             # Check if user already has an API key with this name
             if UserAPIKey.objects.filter(user=request.user, name=name).exists():
                 messages.error(request, f'API Key with name "{name}" already exists. Please choose a different name.')
             else:
-                api_key, key = UserAPIKey.objects.create_key(
-                    name=name,
-                    user=request.user
-                )
+                api_key, key = UserAPIKey.objects.create_key(name=name, user=request.user)
                 messages.success(
                     request,
                     f'API Key "{name}" created successfully! '
-                    f'Key: <code>{key}</code><br>'
-                    f'<strong>Important:</strong> This key will only be shown once. Please save it securely.'
+                    f"Key: <code>{key}</code><br>"
+                    f"<strong>Important:</strong> This key will only be shown once. Please save it securely.",
                 )
         else:
-            messages.error(request, 'API Key name is required.')
+            messages.error(request, "API Key name is required.")
 
-    return redirect('api_keys')
+    return redirect("api_keys")
 
 
 def delete_api_key(request, key_id):
@@ -488,16 +482,16 @@ def delete_api_key(request, key_id):
     Args:
         key_id (int): ID of the API key to delete
     """
-    if request.method == 'POST':
+    if request.method == "POST":
         try:
             api_key = UserAPIKey.objects.get(id=key_id, user=request.user)
             key_name = api_key.name
             api_key.delete()
             messages.success(request, f'API Key "{key_name}" deleted successfully.')
         except UserAPIKey.DoesNotExist:
-            messages.error(request, 'API Key not found or you do not have permission to delete it.')
+            messages.error(request, "API Key not found or you do not have permission to delete it.")
 
-    return redirect('api_keys')
+    return redirect("api_keys")
 
 
 def toggle_api_key(request, key_id):
@@ -507,15 +501,15 @@ def toggle_api_key(request, key_id):
     Args:
         key_id (int): ID of the API key to toggle
     """
-    if request.method == 'POST':
+    if request.method == "POST":
         try:
             api_key = UserAPIKey.objects.get(id=key_id, user=request.user)
             api_key.is_active = not api_key.is_active
-            api_key.save(update_fields=['is_active'])
+            api_key.save(update_fields=["is_active"])
 
-            status_text = 'activated' if api_key.is_active else 'deactivated'
+            status_text = "activated" if api_key.is_active else "deactivated"
             messages.success(request, f'API Key "{api_key.name}" {status_text} successfully.')
         except UserAPIKey.DoesNotExist:
-            messages.error(request, 'API Key not found or you do not have permission to modify it.')
+            messages.error(request, "API Key not found or you do not have permission to modify it.")
 
-    return redirect('api_keys')
+    return redirect("api_keys")

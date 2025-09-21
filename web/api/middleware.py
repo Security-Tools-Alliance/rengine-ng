@@ -1,6 +1,6 @@
+from dashboard.models import UserAPIKey
 from django.utils import timezone
 from rest_framework_api_key.models import APIKey
-from dashboard.models import UserAPIKey
 
 
 class APIKeyAuthenticationMiddleware:
@@ -16,7 +16,7 @@ class APIKeyAuthenticationMiddleware:
 
     def __call__(self, request):
         # Only process API requests
-        if request.path.startswith('/api/'):
+        if request.path.startswith("/api/"):
             api_key = self.get_api_key_from_request(request)
             if api_key:
                 try:
@@ -27,7 +27,7 @@ class APIKeyAuthenticationMiddleware:
                     request._api_key_authenticated = True
                     # Update last used timestamp
                     user_api_key.last_used = timezone.now()
-                    user_api_key.save(update_fields=['last_used'])
+                    user_api_key.save(update_fields=["last_used"])
                 except UserAPIKey.DoesNotExist:
                     # Invalid or inactive API key, let normal auth flow continue
                     pass
@@ -39,8 +39,8 @@ class APIKeyAuthenticationMiddleware:
         Extract API key from Authorization header.
         Expected format: Authorization: Api-Key <key>
         """
-        auth_header = request.META.get('HTTP_AUTHORIZATION', '')
-        if auth_header.startswith('Api-Key '):
+        auth_header = request.META.get("HTTP_AUTHORIZATION", "")
+        if auth_header.startswith("Api-Key "):
             key = auth_header[8:]  # Remove 'Api-Key ' prefix
             try:
                 return APIKey.objects.get_from_key(key)
