@@ -252,12 +252,14 @@ function copyApiKey() {
     alert('API Key copied to clipboard!');
   }
 }
+</script>
 
 {% if new_api_key %}
+<script>
 // Show the new API key modal automatically
 document.addEventListener('DOMContentLoaded', function() {
   new bootstrap.Modal(document.getElementById('newApiKeyModal')).show();
 });
-{% endif %}
 </script>
+{% endif %}
 {% endblock page_level_script %}
