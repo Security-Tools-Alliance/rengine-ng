@@ -7,7 +7,7 @@ PGDATA=${PGDATA:-/var/lib/postgresql/data}
 PGDATAOLD=/tmp/postgresql-data-old
 PGDATANEW=/tmp/postgresql-data-new
 PGBINOLD=${PGBINOLD:-/usr/local/pgsql-12/bin}
-PGBINNEW=${PGBINNEW:-/usr/local/bin}
+PGBINNEW=${PGBINNEW:-/usr/bin}
 
 # Get the database user from environment (default to postgres if not set)
 DB_USER=${POSTGRES_USER:-rengine}
@@ -112,17 +112,6 @@ else
     echo "No PostgreSQL 12 data found or already migrated. Starting normally..."
 fi
 
-# Configure pg_hba.conf to allow Docker network connections
-echo "Configuring pg_hba.conf for Docker network access..."
-if ! grep -q "192.168.0.0/16" "$PGDATA/pg_hba.conf"; then
-    echo "host    all             all             192.168.0.0/16          trust" >> "$PGDATA/pg_hba.conf"
-fi
-if ! grep -q "172.16.0.0/12" "$PGDATA/pg_hba.conf"; then
-    echo "host    all             all             172.16.0.0/12           trust" >> "$PGDATA/pg_hba.conf"
-fi
-if ! grep -q "10.0.0.0/8" "$PGDATA/pg_hba.conf"; then
-    echo "host    all             all             10.0.0.0/8              trust" >> "$PGDATA/pg_hba.conf"
-fi
 
 # Start PostgreSQL normally after migration or if no migration needed
 echo "Starting PostgreSQL..."
