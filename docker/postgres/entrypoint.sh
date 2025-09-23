@@ -12,6 +12,23 @@ PGBINNEW=${PGBINNEW:-/usr/lib/postgresql/17/bin}
 # Get the database user from environment (default to postgres if not set)
 DB_USER=${POSTGRES_USER:-rengine}
 
+# Function to configure pg_hba.conf for Docker network access
+configure_pg_hba() {
+    echo "Configuring pg_hba.conf for Docker network access..."
+    if ! grep -q "192.168.0.0/16" "$PGDATA/pg_hba.conf"; then
+        echo "host    all             all             192.168.0.0/16          trust" >> "$PGDATA/pg_hba.conf"
+    fi
+    if ! grep -q "192.168.160.0/24" "$PGDATA/pg_hba.conf"; then
+        echo "host    all             all             192.168.160.0/24        trust" >> "$PGDATA/pg_hba.conf"
+    fi
+    if ! grep -q "172.16.0.0/12" "$PGDATA/pg_hba.conf"; then
+        echo "host    all             all             172.16.0.0/12           trust" >> "$PGDATA/pg_hba.conf"
+    fi
+    if ! grep -q "10.0.0.0/8" "$PGDATA/pg_hba.conf"; then
+        echo "host    all             all             10.0.0.0/8              trust" >> "$PGDATA/pg_hba.conf"
+    fi
+}
+
 echo "PGDATA: $PGDATA"
 echo "PGDATAOLD: $PGDATAOLD"
 echo "PGDATANEW: $PGDATANEW"
@@ -59,7 +76,16 @@ perform_migration() {
     su - postgres -c "$PGBINNEW/initdb -D $PGDATANEW -U $DB_USER"
     
     # Stop any running PostgreSQL processes
+    echo "Stopping any running PostgreSQL processes..."
     pkill postgres || true
+    sleep 3
+    
+    # Also try to stop PostgreSQL 17 specifically
+    if [ -f "/usr/lib/postgresql/17/bin/pg_ctl" ]; then
+        /usr/lib/postgresql/17/bin/pg_ctl stop -D "$PGDATA" -m fast || true
+    fi
+    
+    # Wait a bit more to ensure all processes are stopped
     sleep 2
     
     # Create socket directory
@@ -101,6 +127,9 @@ perform_migration() {
         # Cleanup temporary directories
         rm -rf "$PGDATAOLD" "$PGDATANEW"
         
+        # Configure pg_hba.conf for Docker network access after migration
+        configure_pg_hba
+        
         echo "Migration completed and data updated in $PGDATA"
     fi
 }
@@ -112,6 +141,35 @@ else
     echo "No PostgreSQL 12 data found or already migrated. Starting normally..."
 fi
 
+# Create a custom docker-entrypoint.sh that configures pg_hba.conf after initdb
+cat > /usr/local/bin/custom-entrypoint.sh << 'EOF'
+#!/bin/bash
+set -e
+
+# Call the original docker-entrypoint.sh
+exec /usr/local/bin/docker-entrypoint.sh "$@"
+EOF
+
+# Add post-init hook to configure pg_hba.conf
+cat > /docker-entrypoint-initdb.d/configure-docker-access.sh << 'EOF'
+#!/bin/bash
+echo "Configuring pg_hba.conf for Docker network access..."
+if ! grep -q "192.168.0.0/16" "$PGDATA/pg_hba.conf"; then
+    echo "host    all             all             192.168.0.0/16          trust" >> "$PGDATA/pg_hba.conf"
+fi
+if ! grep -q "192.168.160.0/24" "$PGDATA/pg_hba.conf"; then
+    echo "host    all             all             192.168.160.0/24        trust" >> "$PGDATA/pg_hba.conf"
+fi
+if ! grep -q "172.16.0.0/12" "$PGDATA/pg_hba.conf"; then
+    echo "host    all             all             172.16.0.0/12           trust" >> "$PGDATA/pg_hba.conf"
+fi
+if ! grep -q "10.0.0.0/8" "$PGDATA/pg_hba.conf"; then
+    echo "host    all             all             10.0.0.0/8              trust" >> "$PGDATA/pg_hba.conf"
+fi
+echo "Docker network access configured successfully"
+EOF
+
+chmod +x /docker-entrypoint-initdb.d/configure-docker-access.sh
 
 # Start PostgreSQL normally after migration or if no migration needed
 echo "Starting PostgreSQL..."
