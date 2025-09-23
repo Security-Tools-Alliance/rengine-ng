@@ -630,7 +630,10 @@ main() {
   log "\r\nThank you for installing reNgine-ng, happy recon!" $COLOR_GREEN
 
   # Get domain name from .env file
-  domain_name=$(grep "^DOMAIN_NAME=" .env 2>/dev/null | cut -d'=' -f2 || echo "rengine-ng.example.com")
+  domain_name=$(grep "^DOMAIN_NAME=" .env 2>/dev/null | cut -d'=' -f2)
+  if [ -z "$domain_name" ]; then
+    domain_name="rengine-ng.example.com"
+  fi
   
   log "\r\nreNgine-ng is available at: https://$domain_name/" $COLOR_GREEN
   log "\r\n⚠️  IMPORTANT CSRF Configuration Warning:" $COLOR_YELLOW

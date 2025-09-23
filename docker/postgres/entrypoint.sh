@@ -12,34 +12,6 @@ PGBINNEW=${PGBINNEW:-/usr/lib/postgresql/17/bin}
 # Get the database user from environment (default to postgres if not set)
 DB_USER=${POSTGRES_USER:-rengine}
 
-# Function to configure pg_hba.conf for Docker network access
-configure_pg_hba() {
-    echo "Configuring pg_hba.conf for Docker network access..."
-    
-    # Get the Docker network subnet dynamically
-    local docker_network=$(ip route | grep -E '^172\.|^192\.168\.|^10\.' | head -1 | awk '{print $1}')
-    
-    if [ -n "$docker_network" ]; then
-        echo "Detected Docker network: $docker_network"
-        # Use trust authentication for the specific Docker network (port not exposed in production)
-        if ! grep -q "$docker_network" "$PGDATA/pg_hba.conf"; then
-            echo "host    all             all             $docker_network          trust" >> "$PGDATA/pg_hba.conf"
-        fi
-    else
-        # Fallback: allow connections from Docker's default bridge network
-        echo "Using fallback Docker network configuration..."
-        if ! grep -q "172.17.0.0/16" "$PGDATA/pg_hba.conf"; then
-            echo "host    all             all             172.17.0.0/16          trust" >> "$PGDATA/pg_hba.conf"
-        fi
-    fi
-    
-    # Allow local connections with trust authentication
-    if ! grep -q "host.*all.*all.*127.0.0.1/32.*trust" "$PGDATA/pg_hba.conf"; then
-        echo "host    all             all             127.0.0.1/32            trust" >> "$PGDATA/pg_hba.conf"
-    fi
-    
-    echo "Docker network access configured with trust authentication"
-}
 
 echo "PGDATA: $PGDATA"
 echo "PGDATAOLD: $PGDATAOLD"
@@ -91,6 +63,21 @@ perform_migration() {
     echo "Stopping any running PostgreSQL processes..."
     pkill postgres || true
 
+    # Configurable wait for postgres processes to stop
+    POSTGRES_STOP_TIMEOUT="${POSTGRES_STOP_TIMEOUT:-15}"   # seconds
+    POSTGRES_STOP_INTERVAL="${POSTGRES_STOP_INTERVAL:-1}"  # seconds
+
+    ELAPSED=0
+    while pgrep postgres >/dev/null; do
+        if [ "$ELAPSED" -ge "$POSTGRES_STOP_TIMEOUT" ]; then
+            echo "Timeout waiting for PostgreSQL processes to stop."
+            echo "Error: PostgreSQL did not stop within $POSTGRES_STOP_TIMEOUT seconds. Exiting."
+            exit 1
+        fi
+        sleep "$POSTGRES_STOP_INTERVAL"
+        ELAPSED=$((ELAPSED + POSTGRES_STOP_INTERVAL))
+    done
+
     # Also try to stop PostgreSQL 17 specifically
     if [ -f "/usr/lib/postgresql/17/bin/pg_ctl" ]; then
         /usr/lib/postgresql/17/bin/pg_ctl stop -D "$PGDATA" -m fast || true
@@ -103,7 +90,8 @@ perform_migration() {
     while pgrep postgres >/dev/null; do
         if [ "$ELAPSED" -ge "$TIMEOUT" ]; then
             echo "Timeout waiting for PostgreSQL processes to stop."
-            break
+            echo "Error: PostgreSQL did not stop within $TIMEOUT seconds. Exiting."
+            exit 1
         fi
         sleep "$INTERVAL"
         ELAPSED=$((ELAPSED + INTERVAL))
@@ -113,8 +101,6 @@ perform_migration() {
     mkdir -p /var/run/postgresql
     chown postgres:postgres /var/run/postgresql
     chmod 2775 /var/run/postgresql
-    
-    # The PostgreSQL 17 cluster is now initialized with rengine as the superuser
     
     echo "Running pg_upgrade with user $DB_USER..."
     su - postgres -c "cd /tmp && PGUSER=$DB_USER $PGBINNEW/pg_upgrade \
@@ -148,8 +134,6 @@ perform_migration() {
         # Cleanup temporary directories
         rm -rf "$PGDATAOLD" "$PGDATANEW"
         
-        # Configure pg_hba.conf for Docker network access after migration
-        configure_pg_hba
         
         echo "Migration completed and data updated in $PGDATA"
     fi
@@ -162,53 +146,53 @@ else
     echo "No PostgreSQL 12 data found or already migrated. Starting normally..."
 fi
 
-# Create a custom docker-entrypoint.sh that configures pg_hba.conf after initdb
-cat > /usr/local/bin/custom-entrypoint.sh << 'EOF'
+
+# Create a script that configures pg_hba.conf after PostgreSQL starts
+cat > /usr/local/bin/configure-pg-hba.sh << 'EOF'
 #!/bin/bash
 set -e
 
-# Configure pg_hba.conf for Docker network access
-if [ -f /docker-entrypoint-initdb.d/configure-docker-access.sh ]; then
-    bash /docker-entrypoint-initdb.d/configure-docker-access.sh
-fi
+# Wait for PostgreSQL to be ready
+echo "Waiting for PostgreSQL to be ready..."
+until pg_isready -h localhost -p 5432 -U rengine; do
+    echo "PostgreSQL is not ready yet, waiting..."
+    sleep 2
+done
 
-# Call the original docker-entrypoint.sh
-exec /usr/local/bin/docker-entrypoint.sh "$@"
-EOF
+echo "PostgreSQL is ready, configuring pg_hba.conf..."
 
-chmod +x /usr/local/bin/custom-entrypoint.sh
+# Configure pg_hba.conf
+PGDATA=${PGDATA:-/var/lib/postgresql/data}
 
-# Add post-init hook to configure pg_hba.conf
-cat > /docker-entrypoint-initdb.d/configure-docker-access.sh << 'EOF'
-#!/bin/bash
-echo "Configuring pg_hba.conf for Docker network access..."
-
-# Get the Docker network subnet dynamically
-docker_network=$(ip route | grep -E '^172\.|^192\.168\.|^10\.' | head -1 | awk '{print $1}')
-
-if [ -n "$docker_network" ]; then
-    echo "Detected Docker network: $docker_network"
-    # Use trust authentication for the specific Docker network (port not exposed in production)
-    if ! grep -q "$docker_network" "$PGDATA/pg_hba.conf"; then
-        echo "host    all             all             $docker_network          trust" >> "$PGDATA/pg_hba.conf"
-    fi
+if [ -f "$PGDATA/pg_hba.conf" ]; then
+    echo "Configuring pg_hba.conf for Docker network access..."
+    
+    # Add Docker network rules if they don't exist
+    docker_networks=("192.168.0.0/16" "172.16.0.0/12" "10.0.0.0/8")
+    
+    for network in "${docker_networks[@]}"; do
+        if ! grep -q "$network" "$PGDATA/pg_hba.conf"; then
+            echo "host    all             all             $network          trust" >> "$PGDATA/pg_hba.conf"
+            echo "✓ Added rule: $network"
+        else
+            echo "✓ Rule already exists: $network"
+        fi
+    done
+    
+    echo "pg_hba.conf configuration completed"
+    
+    # Reload PostgreSQL configuration
+    echo "Reloading PostgreSQL configuration..."
+    psql -h localhost -p 5432 -U rengine -c "SELECT pg_reload_conf();" || echo "Warning: Could not reload configuration"
 else
-    # Fallback: allow connections from Docker's default bridge network
-    echo "Using fallback Docker network configuration..."
-    if ! grep -q "172.17.0.0/16" "$PGDATA/pg_hba.conf"; then
-        echo "host    all             all             172.17.0.0/16          trust" >> "$PGDATA/pg_hba.conf"
-    fi
+    echo "Warning: pg_hba.conf not found at $PGDATA/pg_hba.conf"
 fi
-
-# Allow local connections with trust authentication
-if ! grep -q "host.*all.*all.*127.0.0.1/32.*trust" "$PGDATA/pg_hba.conf"; then
-    echo "host    all             all             127.0.0.1/32            trust" >> "$PGDATA/pg_hba.conf"
-fi
-
-echo "Docker network access configured with trust authentication"
 EOF
 
-chmod +x /docker-entrypoint-initdb.d/configure-docker-access.sh
+chmod +x /usr/local/bin/configure-pg-hba.sh
+
+# Start the configuration script in the background
+/usr/local/bin/configure-pg-hba.sh &
 
 # Start PostgreSQL normally after migration or if no migration needed
 echo "Starting PostgreSQL..."
