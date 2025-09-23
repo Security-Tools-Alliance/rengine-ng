@@ -167,7 +167,7 @@ API Keys Management
           <div class="input-group">
             <input type="text" class="form-control font-monospace" id="newApiKeyValue"
                    value="{{ new_api_key.key }}" readonly>
-            <button class="btn btn-outline-primary" type="button" onclick="copyApiKey()">
+            <button class="btn btn-outline-primary" type="button" onclick="copyApiKey(this)">
               <i class="mdi mdi-content-copy"></i> Copy
             </button>
           </div>
@@ -226,7 +226,7 @@ function confirmDelete(keyName, deleteUrl) {
   new bootstrap.Modal(document.getElementById('deleteConfirmModal')).show();
 }
 
-function copyApiKey() {
+function copyApiKey(button) {
   const keyField = document.getElementById('newApiKeyValue');
   keyField.select();
   keyField.setSelectionRange(0, 99999); // For mobile devices
@@ -234,7 +234,7 @@ function copyApiKey() {
   try {
     navigator.clipboard.writeText(keyField.value).then(function() {
       // Update button text temporarily
-      const copyBtn = event.target.closest('button');
+      const copyBtn = button;
       const originalHTML = copyBtn.innerHTML;
       copyBtn.innerHTML = '<i class="mdi mdi-check"></i> Copied!';
       copyBtn.classList.remove('btn-outline-primary');
