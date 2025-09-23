@@ -478,16 +478,16 @@ def create_api_key(request):
     return redirect("api_keys")
 
 
-def delete_api_key(request, pk):
+def delete_api_key(request, key_id):
     """
     Delete an API key belonging to the current user.
 
     Args:
-        pk (int): Primary key of the API key to delete
+        key_id (str): Primary key of the API key to delete
     """
     if request.method == "POST":
         try:
-            api_key = get_object_or_404(UserAPIKey, pk=pk, user=request.user)
+            api_key = get_object_or_404(UserAPIKey, pk=key_id, user=request.user)
             key_name = api_key.name
             api_key.delete()
             messages.success(request, f'API Key "{key_name}" deleted successfully.')
@@ -497,16 +497,16 @@ def delete_api_key(request, pk):
     return redirect("api_keys")
 
 
-def toggle_api_key(request, pk):
+def toggle_api_key(request, key_id):
     """
     Toggle the active status of an API key.
 
     Args:
-        pk (int): Primary key of the API key to toggle
+        key_id (str): Primary key of the API key to toggle
     """
     if request.method == "POST":
         try:
-            api_key = get_object_or_404(UserAPIKey, pk=pk, user=request.user)
+            api_key = get_object_or_404(UserAPIKey, pk=key_id, user=request.user)
             api_key.is_active = not api_key.is_active
             api_key.save(update_fields=["is_active"])
 

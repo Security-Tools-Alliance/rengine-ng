@@ -114,7 +114,7 @@ services:
       test: ["CMD", "curl", "-f", "-k", "http://localhost:8000"]
       interval: 10s
       timeout: 10s
-      retries: 10
+      retries: 20
     depends_on:
       db:
         condition: service_healthy
