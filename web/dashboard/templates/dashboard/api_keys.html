@@ -66,7 +66,7 @@ API Keys Management
                   {% endif %}
                 </td>
                 <td class="table-action">
-                  <form method="post" action="{% url 'toggle_api_key' key.get_url_id %}" class="d-inline">
+                  <form method="post" action="{% url 'toggle_api_key' key.pk %}" class="d-inline">
                     {% csrf_token %}
                     <button type="submit" class="btn btn-sm btn-outline-{% if key.is_active %}warning{% else %}success{% endif %}"
                             title="{% if key.is_active %}Deactivate{% else %}Activate{% endif %} API Key">
@@ -74,7 +74,7 @@ API Keys Management
                     </button>
                   </form>
                   <button type="button" class="btn btn-sm btn-outline-danger ms-1"
-                          onclick="confirmDelete('{{ key.name }}', '{% url 'delete_api_key' key.get_url_id %}')"
+                          onclick="confirmDelete('{{ key.name }}', '{% url 'delete_api_key' key.pk %}')"
                           title="Delete API Key">
                     <i class="mdi mdi-delete"></i>
                   </button>

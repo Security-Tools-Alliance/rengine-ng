@@ -478,58 +478,40 @@ def create_api_key(request):
     return redirect("api_keys")
 
 
-def delete_api_key(request, key_id):
+def delete_api_key(request, pk):
     """
     Delete an API key belonging to the current user.
 
     Args:
-        key_id (int): Hashed ID of the API key to delete
+        pk (int): Primary key of the API key to delete
     """
     if request.method == "POST":
         try:
-            # Find the API key by matching the hash
-            api_key = None
-            for key in UserAPIKey.objects.filter(user=request.user):
-                if key.get_url_id() == key_id:
-                    api_key = key
-                    break
-
-            if api_key:
-                key_name = api_key.name
-                api_key.delete()
-                messages.success(request, f'API Key "{key_name}" deleted successfully.')
-            else:
-                messages.error(request, "API Key not found or you do not have permission to delete it.")
+            api_key = get_object_or_404(UserAPIKey, pk=pk, user=request.user)
+            key_name = api_key.name
+            api_key.delete()
+            messages.success(request, f'API Key "{key_name}" deleted successfully.')
         except Exception:
             messages.error(request, "API Key not found or you do not have permission to delete it.")
 
     return redirect("api_keys")
 
 
-def toggle_api_key(request, key_id):
+def toggle_api_key(request, pk):
     """
     Toggle the active status of an API key.
 
     Args:
-        key_id (int): Hashed ID of the API key to toggle
+        pk (int): Primary key of the API key to toggle
     """
     if request.method == "POST":
         try:
-            # Find the API key by matching the hash
-            api_key = None
-            for key in UserAPIKey.objects.filter(user=request.user):
-                if key.get_url_id() == key_id:
-                    api_key = key
-                    break
+            api_key = get_object_or_404(UserAPIKey, pk=pk, user=request.user)
+            api_key.is_active = not api_key.is_active
+            api_key.save(update_fields=["is_active"])
 
-            if api_key:
-                api_key.is_active = not api_key.is_active
-                api_key.save(update_fields=["is_active"])
-
-                status_text = "activated" if api_key.is_active else "deactivated"
-                messages.success(request, f'API Key "{api_key.name}" {status_text} successfully.')
-            else:
-                messages.error(request, "API Key not found or you do not have permission to modify it.")
+            status_text = "activated" if api_key.is_active else "deactivated"
+            messages.success(request, f'API Key "{api_key.name}" {status_text} successfully.')
         except Exception:
             messages.error(request, "API Key not found or you do not have permission to modify it.")
 
