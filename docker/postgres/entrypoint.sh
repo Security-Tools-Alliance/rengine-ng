@@ -7,7 +7,7 @@ PGDATA=${PGDATA:-/var/lib/postgresql/data}
 PGDATAOLD=/tmp/postgresql-data-old
 PGDATANEW=/tmp/postgresql-data-new
 PGBINOLD=${PGBINOLD:-/usr/local/pgsql-12/bin}
-PGBINNEW=${PGBINNEW:-/usr/bin}
+PGBINNEW=${PGBINNEW:-/usr/lib/postgresql/17/bin}
 
 # Get the database user from environment (default to postgres if not set)
 DB_USER=${POSTGRES_USER:-rengine}
