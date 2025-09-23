@@ -28,9 +28,11 @@ class APIKeyAuthenticationMiddleware:
                 request._api_key_authenticated = True
                 # Store the API key for permission checking
                 request._api_key = user_api_key
-                # Update last used timestamp
-                user_api_key.last_used = timezone.now()
-                user_api_key.save(update_fields=["last_used"])
+                # Update last used timestamp (throttled to reduce DB writes)
+                now = timezone.now()
+                if not user_api_key.last_used or (now - user_api_key.last_used).total_seconds() > 300:  # 5 minutes
+                    user_api_key.last_used = now
+                    user_api_key.save(update_fields=["last_used"])
 
         return self.get_response(request)
 
