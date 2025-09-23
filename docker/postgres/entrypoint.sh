@@ -15,18 +15,30 @@ DB_USER=${POSTGRES_USER:-rengine}
 # Function to configure pg_hba.conf for Docker network access
 configure_pg_hba() {
     echo "Configuring pg_hba.conf for Docker network access..."
-    if ! grep -q "192.168.0.0/16" "$PGDATA/pg_hba.conf"; then
-        echo "host    all             all             192.168.0.0/16          trust" >> "$PGDATA/pg_hba.conf"
+    
+    # Get the Docker network subnet dynamically
+    local docker_network=$(ip route | grep -E '^172\.|^192\.168\.|^10\.' | head -1 | awk '{print $1}')
+    
+    if [ -n "$docker_network" ]; then
+        echo "Detected Docker network: $docker_network"
+        # Use trust authentication for the specific Docker network (port not exposed in production)
+        if ! grep -q "$docker_network" "$PGDATA/pg_hba.conf"; then
+            echo "host    all             all             $docker_network          trust" >> "$PGDATA/pg_hba.conf"
+        fi
+    else
+        # Fallback: allow connections from Docker's default bridge network
+        echo "Using fallback Docker network configuration..."
+        if ! grep -q "172.17.0.0/16" "$PGDATA/pg_hba.conf"; then
+            echo "host    all             all             172.17.0.0/16          trust" >> "$PGDATA/pg_hba.conf"
+        fi
     fi
-    if ! grep -q "192.168.160.0/24" "$PGDATA/pg_hba.conf"; then
-        echo "host    all             all             192.168.160.0/24        trust" >> "$PGDATA/pg_hba.conf"
+    
+    # Allow local connections with trust authentication
+    if ! grep -q "host.*all.*all.*127.0.0.1/32.*trust" "$PGDATA/pg_hba.conf"; then
+        echo "host    all             all             127.0.0.1/32            trust" >> "$PGDATA/pg_hba.conf"
     fi
-    if ! grep -q "172.16.0.0/12" "$PGDATA/pg_hba.conf"; then
-        echo "host    all             all             172.16.0.0/12           trust" >> "$PGDATA/pg_hba.conf"
-    fi
-    if ! grep -q "10.0.0.0/8" "$PGDATA/pg_hba.conf"; then
-        echo "host    all             all             10.0.0.0/8              trust" >> "$PGDATA/pg_hba.conf"
-    fi
+    
+    echo "Docker network access configured with trust authentication"
 }
 
 echo "PGDATA: $PGDATA"
@@ -78,15 +90,24 @@ perform_migration() {
     # Stop any running PostgreSQL processes
     echo "Stopping any running PostgreSQL processes..."
     pkill postgres || true
-    sleep 3
-    
+
     # Also try to stop PostgreSQL 17 specifically
     if [ -f "/usr/lib/postgresql/17/bin/pg_ctl" ]; then
         /usr/lib/postgresql/17/bin/pg_ctl stop -D "$PGDATA" -m fast || true
     fi
-    
-    # Wait a bit more to ensure all processes are stopped
-    sleep 2
+
+    # Wait for all PostgreSQL processes to stop, with a timeout
+    TIMEOUT=15
+    INTERVAL=1
+    ELAPSED=0
+    while pgrep postgres >/dev/null; do
+        if [ "$ELAPSED" -ge "$TIMEOUT" ]; then
+            echo "Timeout waiting for PostgreSQL processes to stop."
+            break
+        fi
+        sleep "$INTERVAL"
+        ELAPSED=$((ELAPSED + INTERVAL))
+    done
     
     # Create socket directory
     mkdir -p /var/run/postgresql
@@ -146,27 +167,45 @@ cat > /usr/local/bin/custom-entrypoint.sh << 'EOF'
 #!/bin/bash
 set -e
 
+# Configure pg_hba.conf for Docker network access
+if [ -f /docker-entrypoint-initdb.d/configure-docker-access.sh ]; then
+    bash /docker-entrypoint-initdb.d/configure-docker-access.sh
+fi
+
 # Call the original docker-entrypoint.sh
 exec /usr/local/bin/docker-entrypoint.sh "$@"
 EOF
+
+chmod +x /usr/local/bin/custom-entrypoint.sh
 
 # Add post-init hook to configure pg_hba.conf
 cat > /docker-entrypoint-initdb.d/configure-docker-access.sh << 'EOF'
 #!/bin/bash
 echo "Configuring pg_hba.conf for Docker network access..."
-if ! grep -q "192.168.0.0/16" "$PGDATA/pg_hba.conf"; then
-    echo "host    all             all             192.168.0.0/16          trust" >> "$PGDATA/pg_hba.conf"
+
+# Get the Docker network subnet dynamically
+docker_network=$(ip route | grep -E '^172\.|^192\.168\.|^10\.' | head -1 | awk '{print $1}')
+
+if [ -n "$docker_network" ]; then
+    echo "Detected Docker network: $docker_network"
+    # Use trust authentication for the specific Docker network (port not exposed in production)
+    if ! grep -q "$docker_network" "$PGDATA/pg_hba.conf"; then
+        echo "host    all             all             $docker_network          trust" >> "$PGDATA/pg_hba.conf"
+    fi
+else
+    # Fallback: allow connections from Docker's default bridge network
+    echo "Using fallback Docker network configuration..."
+    if ! grep -q "172.17.0.0/16" "$PGDATA/pg_hba.conf"; then
+        echo "host    all             all             172.17.0.0/16          trust" >> "$PGDATA/pg_hba.conf"
+    fi
 fi
-if ! grep -q "192.168.160.0/24" "$PGDATA/pg_hba.conf"; then
-    echo "host    all             all             192.168.160.0/24        trust" >> "$PGDATA/pg_hba.conf"
+
+# Allow local connections with trust authentication
+if ! grep -q "host.*all.*all.*127.0.0.1/32.*trust" "$PGDATA/pg_hba.conf"; then
+    echo "host    all             all             127.0.0.1/32            trust" >> "$PGDATA/pg_hba.conf"
 fi
-if ! grep -q "172.16.0.0/12" "$PGDATA/pg_hba.conf"; then
-    echo "host    all             all             172.16.0.0/12           trust" >> "$PGDATA/pg_hba.conf"
-fi
-if ! grep -q "10.0.0.0/8" "$PGDATA/pg_hba.conf"; then
-    echo "host    all             all             10.0.0.0/8              trust" >> "$PGDATA/pg_hba.conf"
-fi
-echo "Docker network access configured successfully"
+
+echo "Docker network access configured with trust authentication"
 EOF
 
 chmod +x /docker-entrypoint-initdb.d/configure-docker-access.sh

@@ -2,8 +2,8 @@
 FROM postgres:12-bookworm as pg12
 FROM postgres:17-bookworm
 
-# Install ICU and LDAP libraries for Bookworm
-RUN apt update && apt install -y libicu72 libldap-2.5-0 libldap-common libldap-dev procps
+# Install ICU and LDAP libraries for Bookworm, plus iproute2 for network detection
+RUN apt update && apt install -y libicu72 libldap-2.5-0 libldap-common libldap-dev procps iproute2
 
 # Copy PostgreSQL 12 binaries from the pg12 stage
 COPY --from=pg12 /usr/lib/postgresql/12/bin/pg_* /usr/local/pgsql-12/bin/
