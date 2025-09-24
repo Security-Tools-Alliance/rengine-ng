@@ -1,4 +1,5 @@
 import json
+import os
 from datetime import datetime
 
 from celery.utils.log import get_task_logger
@@ -142,9 +143,10 @@ def http_crawl(
     # Get random proxy
     proxy = get_random_proxy()
 
-    # Run command
-    cmd = "httpx"
-    cmd += " -cl -ct -rt -location -td -websocket -cname -asn -cdn -probe -random-agent -nfs"
+    cmd = (
+        "/home/rengine/tools/go/bin/httpx"
+        + " -cl -ct -rt -location -td -websocket -cname -asn -cdn -probe -random-agent -nfs"
+    )
     cmd += f" -t {threads}" if threads > 0 else ""
     cmd += f" --http-proxy {proxy}" if proxy else ""
     cmd += f" {custom_header}" if custom_header else ""
@@ -154,6 +156,16 @@ def http_crawl(
     cmd += " -silent"
     if follow_redirect:
         cmd += " -fr"
+
+    # Check if input file exists and is not empty when using -l option
+    if len(urls) != 1:
+        if not os.path.exists(input_path):
+            logger.error(f"httpx input file not found: {input_path}")
+            return []
+        elif os.path.getsize(input_path) == 0:
+            logger.warning(f"httpx input file is empty: {input_path}")
+            return []
+
     results = []
     endpoint_ids = []
     for line in stream_command(cmd, history_file=history_file, scan_id=self.scan_id, activity_id=self.activity_id):
@@ -304,7 +316,6 @@ def http_crawl(
         logger.error(f"Failed to clean up input file {input_path}")
 
     return results
-
 
 @app.task(name="pre_crawl", queue="cpu_queue", base=RengineTask, bind=True)
 def pre_crawl(self, ctx={}, description=None):

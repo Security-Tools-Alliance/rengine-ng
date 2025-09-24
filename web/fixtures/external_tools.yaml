@@ -198,7 +198,7 @@
       names, subdomains, IPs and URLs using multiple public data sources.
     github_url: https://github.com/laramies/theHarvester
     license_url: https://github.com/laramies/theHarvester/blob/master/README/LICENSES
-    version_lookup_command: cat /home/rengine/.local/share/pipx/venvs/theharvester/lib/python3.10/site-packages/theHarvester/lib/version.py
+    version_lookup_command: cat $(find /home/rengine/.local/share/pipx/venvs/theharvester/lib/ -path "*/site-packages/theHarvester/lib/version.py" | head -n1)
     update_command: git pull
     install_command: git clone https://github.com/laramies/theHarvester
     version_match_regex: \b\d+\.\d+\.\d+\b

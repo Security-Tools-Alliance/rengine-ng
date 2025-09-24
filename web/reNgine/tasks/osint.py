@@ -234,46 +234,62 @@ def dorking(config, host, scan_history_id, results_dir):
     dorks = config.get(OSINT_DORK, [])
     custom_dorks = config.get(OSINT_CUSTOM_DORK, [])
     results = []
+    def safe_dork_execution(dork_func, dork_name, dork_config=None):
+        """Execute dork function safely with error handling."""
+        try:
+            return dork_func()
+        except Exception as e:
+            logger.warning(f"{dork_name} failed: {e}")
+            return []
+
+    def execute_dork_with_error_handling(**kwargs):
+        """Execute get_and_save_dork_results and return only results."""
+        result = get_and_save_dork_results(**kwargs)
+        return result.get("results", [])
+
     # custom dorking has higher priority
-    try:
-        for custom_dork in custom_dorks:
+    for custom_dork in custom_dorks:
+        def execute_custom_dork():
             lookup_target = custom_dork.get("lookup_site")
             # replace with original host if _target_
             lookup_target = host if lookup_target == "_target_" else lookup_target
             if "lookup_extensions" in custom_dork:
-                results = get_and_save_dork_results(
+                result = get_and_save_dork_results(
                     lookup_target=lookup_target,
                     results_dir=results_dir,
                     type="custom_dork",
                     lookup_extensions=custom_dork.get("lookup_extensions"),
                     scan_history=scan_history,
                 )
+                return result.get("results", [])
             elif "lookup_keywords" in custom_dork:
-                results = get_and_save_dork_results(
+                result = get_and_save_dork_results(
                     lookup_target=lookup_target,
                     results_dir=results_dir,
                     type="custom_dork",
                     lookup_keywords=custom_dork.get("lookup_keywords"),
                     scan_history=scan_history,
                 )
-    except Exception as e:
-        logger.exception(e)
+                return result.get("results", [])
+            return []
+        
+        results.extend(safe_dork_execution(execute_custom_dork, f"Custom dork {custom_dork}"))
 
     # default dorking
-    try:
-        for dork in dorks:
-            logger.info(f"Getting dork information for {dork}")
+    for dork in dorks:
+        logger.info(f"Getting dork information for {dork}")
+        
+        def execute_dork():
             if dork == "stackoverflow":
-                results = get_and_save_dork_results(
+                return execute_dork_with_error_handling(
                     lookup_target="stackoverflow.com",
                     results_dir=results_dir,
                     type=dork,
                     lookup_keywords=host,
                     scan_history=scan_history,
                 )
-
             elif dork == "login_pages":
-                results = get_and_save_dork_results(
+                return execute_dork_with_error_handling(
                     lookup_target=host,
                     results_dir=results_dir,
                     type=dork,
@@ -281,9 +297,8 @@ def dorking(config, host, scan_history_id, results_dir):
                     page_count=5,
                     scan_history=scan_history,
                 )
-
             elif dork == "admin_panels":
-                results = get_and_save_dork_results(
+                return execute_dork_with_error_handling(
                     lookup_target=host,
                     results_dir=results_dir,
                     type=dork,
@@ -291,9 +306,8 @@ def dorking(config, host, scan_history_id, results_dir):
                     page_count=5,
                     scan_history=scan_history,
                 )
-
             elif dork == "dashboard_pages":
-                results = get_and_save_dork_results(
+                return execute_dork_with_error_handling(
                     lookup_target=host,
                     results_dir=results_dir,
                     type=dork,
@@ -301,57 +315,47 @@ def dorking(config, host, scan_history_id, results_dir):
                     page_count=5,
                     scan_history=scan_history,
                 )
-
             elif dork == "social_media":
                 social_websites = ["tiktok.com", "facebook.com", "twitter.com", "youtube.com", "reddit.com"]
+                dork_results = []
                 for site in social_websites:
-                    results = get_and_save_dork_results(
+                    dork_results.extend(execute_dork_with_error_handling(
                         lookup_target=site,
                         results_dir=results_dir,
                         type=dork,
                         lookup_keywords=host,
                         scan_history=scan_history,
-                    )
-
+                    ))
+                return dork_results
             elif dork == "project_management":
                 project_websites = ["trello.com", "atlassian.net"]
+                dork_results = []
                 for site in project_websites:
-                    results = get_and_save_dork_results(
+                    dork_results.extend(execute_dork_with_error_handling(
                         lookup_target=site,
                         results_dir=results_dir,
                         type=dork,
                         lookup_keywords=host,
                         scan_history=scan_history,
-                    )
-
+                    ))
+                return dork_results
             elif dork == "code_sharing":
                 project_websites = ["github.com", "gitlab.com", "bitbucket.org"]
+                dork_results = []
                 for site in project_websites:
-                    results = get_and_save_dork_results(
+                    dork_results.extend(execute_dork_with_error_handling(
                         lookup_target=site,
                         results_dir=results_dir,
                         type=dork,
                         lookup_keywords=host,
                         scan_history=scan_history,
-                    )
-
+                    ))
+                return dork_results
             elif dork == "config_files":
                 config_file_exts = [
-                    "env",
-                    "xml",
-                    "conf",
-                    "toml",
-                    "yml",
-                    "yaml",
-                    "cnf",
-                    "inf",
-                    "rdp",
-                    "ora",
-                    "txt",
-                    "cfg",
-                    "ini",
+                    "env", "xml", "conf", "toml", "yml", "yaml", "cnf", "inf", "rdp", "ora", "txt", "cfg", "ini"
                 ]
-                results = get_and_save_dork_results(
+                return execute_dork_with_error_handling(
                     lookup_target=host,
                     results_dir=results_dir,
                     type=dork,
@@ -359,43 +363,36 @@ def dorking(config, host, scan_history_id, results_dir):
                     page_count=4,
                     scan_history=scan_history,
                 )
-
             elif dork == "jenkins":
-                lookup_keyword = "Jenkins"
-                results = get_and_save_dork_results(
+                return execute_dork_with_error_handling(
                     lookup_target=host,
                     results_dir=results_dir,
                     type=dork,
-                    lookup_keywords=lookup_keyword,
+                    lookup_keywords="Jenkins",
                     page_count=1,
                     scan_history=scan_history,
                 )
-
             elif dork == "wordpress_files":
-                lookup_keywords = ["/wp-content/", "/wp-includes/"]
-                results = get_and_save_dork_results(
+                return execute_dork_with_error_handling(
                     lookup_target=host,
                     results_dir=results_dir,
                     type=dork,
-                    lookup_keywords=",".join(lookup_keywords),
+                    lookup_keywords="/wp-content/,/wp-includes/",
                     page_count=5,
                     scan_history=scan_history,
                 )
-
             elif dork == "php_error":
-                lookup_keywords = ["PHP Parse error", "PHP Warning", "PHP Error"]
-                results = get_and_save_dork_results(
+                return execute_dork_with_error_handling(
                     lookup_target=host,
                     results_dir=results_dir,
                     type=dork,
-                    lookup_keywords=",".join(lookup_keywords),
+                    lookup_keywords="PHP Parse error,PHP Warning,PHP Error",
                     page_count=5,
                     scan_history=scan_history,
                 )
-
             elif dork == "exposed_documents":
                 docs_file_ext = ["doc", "docx", "odt", "pdf", "rtf", "sxw", "psw", "ppt", "pptx", "pps", "csv"]
-                results = get_and_save_dork_results(
+                return execute_dork_with_error_handling(
                     lookup_target=host,
                     results_dir=results_dir,
                     type=dork,
@@ -403,33 +400,27 @@ def dorking(config, host, scan_history_id, results_dir):
                     page_count=7,
                     scan_history=scan_history,
                 )
-
             elif dork == "db_files":
-                file_ext = ["sql", "db", "dbf", "mdb"]
-                results = get_and_save_dork_results(
+                return execute_dork_with_error_handling(
                     lookup_target=host,
                     results_dir=results_dir,
                     type=dork,
-                    lookup_extensions=",".join(file_ext),
+                    lookup_extensions="sql,db,dbf,mdb",
                     page_count=1,
                     scan_history=scan_history,
                 )
-
             elif dork == "git_exposed":
-                file_ext = [
-                    "git",
-                ]
-                results = get_and_save_dork_results(
+                return execute_dork_with_error_handling(
                     lookup_target=host,
                     results_dir=results_dir,
                     type=dork,
-                    lookup_extensions=",".join(file_ext),
+                    lookup_extensions="git",
                     page_count=1,
                     scan_history=scan_history,
                 )
-
-    except Exception as e:
-        logger.exception(e)
+            return []
+        
+        results.extend(safe_dork_execution(execute_dork, f"Dork {dork}"))
     return results
 
 
@@ -457,7 +448,16 @@ def the_harvester(config, host, scan_history_id, activity_id, results_dir, ctx=N
     output_path_json = str(Path(results_dir) / "theHarvester.json")
     the_harvester_dir = str(Path.home() / ".config" / "theHarvester")
     history_file = str(Path(results_dir) / "commands.txt")
-    cmd = f"theHarvester -d {host} -f {output_path_json} -b anubis,baidu,bevigil,binaryedge,bing,bingapi,bufferoverun,brave,censys,certspotter,criminalip,crtsh,dnsdumpster,duckduckgo,fullhunt,hackertarget,hunter,hunterhow,intelx,netlas,onyphe,otx,pentesttools,projectdiscovery,rapiddns,rocketreach,securityTrails,sitedossier,subdomaincenter,subdomainfinderc99,threatminer,tomba,urlscan,virustotal,yahoo,zoomeye"
+    
+    # Create empty JSON file if it doesn't exist, handling race conditions atomically
+    try:
+        with open(output_path_json, 'x') as f:
+            json.dump({"emails": [], "hosts": [], "ips": [], "employees": []}, f)
+    except FileExistsError:
+        # File was created by another process in the meantime, safe to ignore
+        pass
+    
+    cmd = f"theHarvester -d {host} -f {output_path_json} -b baidu,bevigil,bing,bingapi,bufferoverun,brave,censys,certspotter,criminalip,crtsh,dnsdumpster,duckduckgo,fullhunt,hackertarget,hunter,hunterhow,intelx,netlas,onyphe,otx,pentesttools,projectdiscovery,rapiddns,rocketreach,securityTrails,sitedossier,subdomaincenter,subdomainfinderc99,threatminer,tomba,urlscan,virustotal,yahoo,zoomeye"
 
     # Update proxies.yaml
     proxy_query = Proxy.objects.all()

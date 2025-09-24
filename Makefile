@@ -74,7 +74,7 @@ define gpu_config
 	$(eval export DOCKER_RUNTIME)
 endef
 
-.PHONY: certs up dev_up build_up build pull superuser_create superuser_delete superuser_changepassword migrate down stop restart remove_images test logs images prune help
+.PHONY: certs up dev_up build_up build build-service pull superuser_create superuser_delete superuser_changepassword migrate down stop restart remove_images test logs images prune help
 
 pull:			## Pull pre-built Docker images from repository.
 	${DOCKER_COMPOSE_FILE_CMD} pull
@@ -86,6 +86,39 @@ build:			## Build all Docker images locally. Use GPU=1 to enable GPU support.
 	@make remove_images
 	$(call gpu_config)
 	${DOCKER_COMPOSE_FILE_CMD} -f ${COMPOSE_FILE_BUILD} ${COMPOSE_GPU_FILE} build --build-arg HOST_UID=$(HOST_UID) --build-arg HOST_GID=$(HOST_GID) ${SERVICES}
+
+build-service:		## Build a specific Docker service without removing images. Usage: make build-service SERVICE=<service_name> [GPU=1] [REBUILD=1]
+	@if [ -z "$(SERVICE)" ]; then \
+		echo "Error: SERVICE parameter is required. Usage: make build-service SERVICE=<service_name>"; \
+		echo "Available services: ${SERVICES}"; \
+		exit 1; \
+	fi
+	@if ! echo "${SERVICES}" | grep -wq "$(SERVICE)"; then \
+		echo "Error: Service '$(SERVICE)' is not valid. Available services: ${SERVICES}"; \
+		exit 1; \
+	fi
+	@if [ "$(REBUILD)" = "1" ]; then \
+		echo "REBUILD=1 detected, removing $(SERVICE) image before build..."; \
+		# Map service names to image names \
+		case "$(SERVICE)" in \
+			"db") IMAGE_NAME="postgres" ;; \
+			"celery-beat") IMAGE_NAME="celery" ;; \
+			*) IMAGE_NAME="$(SERVICE)" ;; \
+		esac; \
+		image_id=$$(docker images --filter=reference="ghcr.io/security-tools-alliance/rengine-ng:rengine-$$IMAGE_NAME-v$(RENGINE_VERSION)" --format "{{.ID}}" | head -1); \
+		if [ -n "$$image_id" ]; then \
+			echo "Removing image: ghcr.io/security-tools-alliance/rengine-ng:rengine-$$IMAGE_NAME-v$(RENGINE_VERSION) ($$image_id)"; \
+			docker rmi -f "$$image_id" || true; \
+		else \
+			echo "No existing image found for ghcr.io/security-tools-alliance/rengine-ng:rengine-$$IMAGE_NAME-v$(RENGINE_VERSION)"; \
+		fi \
+	fi
+	$(call gpu_config)
+	@if [ "$(REBUILD)" = "1" ]; then \
+		${DOCKER_COMPOSE_FILE_CMD} -f ${COMPOSE_FILE_BUILD} ${COMPOSE_GPU_FILE} build --no-cache --build-arg HOST_UID=$(HOST_UID) --build-arg HOST_GID=$(HOST_GID) $(SERVICE); \
+	else \
+		${DOCKER_COMPOSE_FILE_CMD} -f ${COMPOSE_FILE_BUILD} ${COMPOSE_GPU_FILE} build --build-arg HOST_UID=$(HOST_UID) --build-arg HOST_GID=$(HOST_GID) $(SERVICE); \
+	fi
 
 build_up:		## Build and start all services.
 	@make down
@@ -219,6 +252,10 @@ help:			## Show this help.
 	@echo "  make dev_up GPU=1                      				Start development environment with GPU support"
 	@echo "  make build GPU=1                       				Build all images with GPU support"
 	@echo "  make build_up GPU=1                    				Build and start all services with GPU support"
+	@echo "  make build-service SERVICE=web         				Build only the web service without removing images"
+	@echo "  make build-service SERVICE=celery GPU=1				Build only the celery service with GPU support"
+	@echo "  make build-service SERVICE=web REBUILD=1				Build web service after removing its image"
+	@echo "  make build-service SERVICE=redis REBUILD=1 GPU=1		Build redis service after removing image with GPU support"
 
 %:
 	@:

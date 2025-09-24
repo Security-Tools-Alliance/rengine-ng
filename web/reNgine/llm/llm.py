@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional
 
 import openai
-from langchain_community.llms import Ollama
+from langchain_ollama import OllamaLLM as Ollama
 from reNgine.llm.config import LLM_CONFIG
 from reNgine.llm.utils import get_default_llm_model
 from reNgine.llm.validators import LLMProvider, LLMResponse
