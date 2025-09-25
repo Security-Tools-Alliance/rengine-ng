@@ -321,6 +321,17 @@ def add_target(request, slug):
                 seen_hostnames = set()
                 seen_ips = set()
                 
+                # Counters for detailed feedback
+                stats = {
+                    'domains_created': 0,
+                    'domains_existing': 0,
+                    'subdomains_created': 0,
+                    'subdomains_existing': 0,
+                    'ips_created': 0,
+                    'ips_existing': 0,
+                    'total_processed': 0
+                }
+                
                 for host_data_json in resolved_hosts_data:
                     try:
                         host_info = json.loads(host_data_json.replace('&quot;', '"'))
@@ -370,8 +381,11 @@ def add_target(request, slug):
                             }
                         )
                         if created:
-                            added_target_count += 1
+                            stats['domains_created'] += 1
                             logger.info("Added new domain target %s", domain.name)
+                        else:
+                            stats['domains_existing'] += 1
+                            logger.info("Domain target %s already exists", domain.name)
                         domain_targets[domain_name] = domain
                 
                 # 2. Process selected hostnames - add them as subdomains to their respective domain targets
@@ -395,6 +409,13 @@ def add_target(request, slug):
                                 }
                             )
                             
+                            if created:
+                                stats['subdomains_created'] += 1
+                                logger.info("Added hostname subdomain %s for target %s", hostname, target_domain.name)
+                            else:
+                                stats['subdomains_existing'] += 1
+                                logger.info("Subdomain %s already exists for target %s", hostname, target_domain.name)
+                            
                             # Create/update IP address record
                             if validators.ipv4(ip) or validators.ipv6(ip):
                                 ip_data = get_ip_info(ip)
@@ -413,12 +434,12 @@ def add_target(request, slug):
                                 subdomain.ip_addresses.add(ip_obj)
                                 
                                 if ip_created:
+                                    stats['ips_created'] += 1
                                     logger.info("Added new IP %s", ip_obj.address)
+                                else:
+                                    stats['ips_existing'] += 1
                             
                             subdomain.save()
-                            if created:
-                                subdomain_count += 1
-                                logger.info("Added hostname subdomain %s for target %s", hostname, target_domain.name)
                 
                 # 3. Process selected IPs - create a target with the IP range and add IPs as subdomains
                 if selected_ips:
@@ -437,8 +458,11 @@ def add_target(request, slug):
                             }
                         )
                         if created:
-                            added_target_count += 1
+                            stats['domains_created'] += 1
                             logger.info("Added new IP range target %s", ip_range_domain.name)
+                        else:
+                            stats['domains_existing'] += 1
+                            logger.info("IP range target %s already exists", ip_range_domain.name)
                         
                         # Add selected IPs as subdomains
                         for host_info in selected_ips:
@@ -474,15 +498,28 @@ def add_target(request, slug):
                                 if ip_created:
                                     logger.info("Added new IP %s", ip_obj.address)
                             
-                            subdomain.save()
                             if created:
-                                subdomain_count += 1
+                                stats['subdomains_created'] += 1
                                 logger.info("Added IP subdomain %s for target %s", ip, ip_range_domain.name)
+                            else:
+                                stats['subdomains_existing'] += 1
+                                logger.info("IP subdomain %s already exists for target %s", ip, ip_range_domain.name)
+                                
+                            subdomain.save()
                                 
                     except (AddressValueError, ValueError) as e:
                         logger.warning(f"Error creating IP range target: {e}")
                 
-                logger.info(f"Added {added_target_count} targets and {subdomain_count} subdomains")
+                # Calculate totals for comprehensive feedback
+                stats['total_processed'] = (
+                    stats['domains_created'] + stats['domains_existing'] + 
+                    stats['subdomains_created'] + stats['subdomains_existing']
+                )
+                
+                # Update added_target_count to include existing items
+                added_target_count = stats['total_processed']
+                
+                logger.info(f"Processing complete: {stats}")
 
         except (Http404, ValueError) as e:
             logger.exception(e)
@@ -504,18 +541,43 @@ def add_target(request, slug):
             
             return http.HttpResponseRedirect(reverse("add_target", kwargs={"slug": slug}))
 
-        # Targets added successfully
-        msg = f"{added_target_count} targets added successfully"
+        # Create detailed success message
+        if ip_target and 'stats' in locals():
+            # Detailed feedback for IP target additions
+            msg_parts = []
+            if stats['domains_created'] > 0:
+                msg_parts.append(f"{stats['domains_created']} new domain(s)")
+            if stats['domains_existing'] > 0:
+                msg_parts.append(f"{stats['domains_existing']} existing domain(s)")
+            if stats['subdomains_created'] > 0:
+                msg_parts.append(f"{stats['subdomains_created']} new subdomain(s)")
+            if stats['subdomains_existing'] > 0:
+                msg_parts.append(f"{stats['subdomains_existing']} existing subdomain(s)")
+            
+            if msg_parts:
+                msg = f"Processing complete: {', '.join(msg_parts)} processed successfully"
+            else:
+                msg = "No targets were processed"
+        else:
+            # Standard message for other target types
+            msg = f"{added_target_count} targets added successfully"
+        
         messages.add_message(request, messages.SUCCESS, msg)
         
         # Handle AJAX requests with JSON response
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-            return JsonResponse({
+            response_data = {
                 'status': 'success',
                 'message': msg,
                 'added_count': added_target_count,
                 'redirect_url': reverse("list_target", kwargs={"slug": slug})
-            })
+            }
+            
+            # Add detailed stats for IP targets
+            if ip_target and 'stats' in locals():
+                response_data['stats'] = stats
+                
+            return JsonResponse(response_data)
         
         # Regular form submission redirect
         return http.HttpResponseRedirect(reverse("list_target", kwargs={"slug": slug}))

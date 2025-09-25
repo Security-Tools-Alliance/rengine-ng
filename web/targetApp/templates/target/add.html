@@ -849,12 +849,7 @@ Add or Import Targets
         formData.append('resolved_hosts', $(this).val());
       });
       
-      // Debug: Log what we're sending
-      console.log('Form data being sent:');
-      for (let [key, value] of formData.entries()) {
-        console.log(key, value);
-      }
-      
+
       // Disable submit button and show loading state
       var submitBtn = $('#add-ip-target');
       var originalText = submitBtn.html();
@@ -871,7 +866,22 @@ Add or Import Targets
           'X-Requested-With': 'XMLHttpRequest'
         },
         success: function(response) {
-          // Redirect to targets list or show success message
+          // Show detailed success message if available
+          if (response.stats) {
+            var statsMsg = 'Success! ';
+            var details = [];
+            if (response.stats.domains_created > 0) details.push(`${response.stats.domains_created} new domain(s)`);
+            if (response.stats.domains_existing > 0) details.push(`${response.stats.domains_existing} existing domain(s)`);
+            if (response.stats.subdomains_created > 0) details.push(`${response.stats.subdomains_created} new subdomain(s)`);
+            if (response.stats.subdomains_existing > 0) details.push(`${response.stats.subdomains_existing} existing subdomain(s)`);
+            
+            if (details.length > 0) {
+              statsMsg += details.join(', ') + ' processed successfully.';
+              alert(statsMsg);
+            }
+          }
+          
+          // Redirect to targets list
           if (response.redirect_url) {
             window.location.href = response.redirect_url;
           } else {
