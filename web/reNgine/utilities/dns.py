@@ -32,3 +32,21 @@ def resolve_subdomain_ips(subdomain_name):
         logger.warning(f"Unexpected error resolving {subdomain_name}: {e}")
 
     return ips
+
+
+def get_reverse_dns(ip_address):
+    """Perform reverse DNS lookup to get the hostname for an IP address.
+
+    Args:
+        ip_address (str): IP address to perform reverse lookup on
+
+    Returns:
+        str or None: Hostname if successful, None if lookup fails
+    """
+    try:
+        reverse_pointer = socket.gethostbyaddr(ip_address)[0]
+        logger.debug(f"Reverse DNS lookup for {ip_address}: {reverse_pointer}")
+        return reverse_pointer
+    except (socket.herror, socket.gaierror, socket.timeout) as e:
+        logger.debug(f"Reverse DNS lookup failed for {ip_address}: {str(e)}")
+        return None

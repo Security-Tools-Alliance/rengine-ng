@@ -1474,6 +1474,7 @@ class IPToDomain(APIView):
         from channels.layers import get_channel_layer
         from asgiref.sync import async_to_sync
         import uuid
+        global DNS_AVAILABLE
         
         req = self.request
         ip_address = req.query_params.get("ip_address")

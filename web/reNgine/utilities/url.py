@@ -110,34 +110,54 @@ def is_valid_domain_or_subdomain(domain):
 
 
 def get_domain_from_subdomain(subdomain):
-    """Get domain from subdomain.
+    """Get domain from subdomain with improved handling of edge cases.
+    
+    This function handles complex TLDs like .co.uk, .com.au, and internationalized 
+    domains correctly using tldextract library.
 
     Args:
         subdomain (str): Subdomain name.
 
     Returns:
-        str: Domain name.
+        str: Domain name, or None if extraction fails.
     """
-
+    if not subdomain or not isinstance(subdomain, str):
+        return None
+        
+    # Clean the input - remove whitespace and convert to lowercase
+    subdomain = subdomain.strip().lower()
+    
     if not is_valid_domain_or_subdomain(subdomain):
         return None
 
-    # Use tldextract to parse the subdomain
-    extracted = tldextract.extract(subdomain)
-
-    # if tldextract recognized the tld then its the final result
-    if extracted.suffix:
-        domain = f"{extracted.domain}.{extracted.suffix}"
-    else:
-        # Fallback method for unknown TLDs, like .clouds or .local etc
-        parts = subdomain.split(".")
-        if len(parts) >= 2:
-            domain = ".".join(parts[-2:])
-        else:
-            return None
-
-    # Validate the domain before returning
-    return domain if is_valid_domain_or_subdomain(subdomain) else None
+    # Use tldextract to parse the subdomain - handles complex TLDs and IDNs
+    try:
+        extracted = tldextract.extract(subdomain)
+        
+        # Check if we have both domain and suffix (TLD)
+        if extracted.domain and extracted.suffix:
+            domain = f"{extracted.domain}.{extracted.suffix}"
+            
+            # Additional validation to ensure the extracted domain is valid
+            if is_valid_domain_or_subdomain(domain):
+                return domain
+        
+        # Fallback method for edge cases where tldextract might not recognize the TLD
+        # This handles local domains, private TLDs, or unusual cases
+        if not extracted.suffix and subdomain.count('.') >= 1:
+            parts = subdomain.split('.')
+            if len(parts) >= 2:
+                # Take the last two parts as potential domain.tld
+                potential_domain = '.'.join(parts[-2:])
+                if is_valid_domain_or_subdomain(potential_domain):
+                    return potential_domain
+                    
+        # If all else fails, return None
+        return None
+        
+    except Exception as e:
+        logger.warning(f"Error extracting domain from subdomain '{subdomain}': {str(e)}")
+        return None
 
 
 def sanitize_url(http_url):

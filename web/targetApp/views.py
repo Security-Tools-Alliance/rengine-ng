@@ -25,6 +25,7 @@ from reNgine.tasks import (
     run_command,
 )
 from reNgine.utilities.data import get_ip_info, get_ips_from_cidr_range
+from reNgine.utilities.dns import get_reverse_dns
 from reNgine.utilities.url import sanitize_url
 from rolepermissions.decorators import has_permission_decorator
 from scanEngine.models import EngineType
@@ -209,7 +210,9 @@ def add_target(request, slug):
                     for ip_address in ips:
                         ip_data = get_ip_info(ip_address)
                         ip, created = IpAddress.objects.get_or_create(address=ip_address)
-                        ip.reverse_pointer = ip_data.reverse_pointer
+                        
+                        # Perform reverse DNS lookup for accurate reverse pointer
+                        ip.reverse_pointer = get_reverse_dns(ip_address)
                         ip.is_private = ip_data.is_private
                         ip.version = ip_data.version
                         ip.save()
@@ -293,41 +296,195 @@ def add_target(request, slug):
                                     )
                                 organization.domains.add(domain_obj)
             elif ip_target:
-                # add ip's from "resolve and add ip address" tab
-                resolved_ips = [ip.rstrip() for ip in request.POST.getlist("resolved_ip_domains") if ip]
-                for ip in resolved_ips:
-                    is_domain = bool(validators.domain(ip))
-                    is_ip = bool(validators.ipv4(ip)) or bool(validators.ipv6(ip))
-                    if not is_ip and not is_domain:
-                        messages.add_message(
-                            request, messages.ERROR, f"IP {ip} is not a valid IP address / domain. Skipping."
-                        )
-                        logger.warning("Invalid IP address/domain provided. Skipping.")
+                # add targets from "resolve and add ip address" tab with improved methodology
+                import json
+                from startScan.models import Subdomain
+                from ipaddress import IPv4Network, AddressValueError
+                from reNgine.utilities.url import get_domain_from_subdomain
+                
+                # Get selected items from the form
+                discovered_domains = request.POST.getlist("discovered_domains")
+                resolved_hosts_data = request.POST.getlist("resolved_hosts")
+                
+                description = request.POST.get("targetDescription", "")
+                h1_team_handle = request.POST.get("targetH1TeamHandle")
+                original_ip_range = request.POST.get("ip_address", "")
+                
+                logger.info(f"Processing IP scan results for {original_ip_range}")
+                logger.info(f"Selected domains: {discovered_domains}")
+                logger.info(f"Selected hosts count: {len(resolved_hosts_data)}")
+                
+                # Parse selected hosts to categorize them and deduplicate
+                selected_domains = set()
+                selected_hostnames = []
+                selected_ips = []
+                seen_hostnames = set()
+                seen_ips = set()
+                
+                for host_data_json in resolved_hosts_data:
+                    try:
+                        host_info = json.loads(host_data_json.replace('&quot;', '"'))
+                        ip = host_info.get('ip')
+                        hostname = host_info.get('domain')
+                        is_alive = host_info.get('is_alive', False)
+                        resolved_by = host_info.get('resolved_by')
+                        
+                        if hostname != ip:  # It's a hostname
+                            # Deduplicate hostnames
+                            if hostname not in seen_hostnames:
+                                seen_hostnames.add(hostname)
+                                selected_hostnames.append(host_info)
+                                
+                                # Extract domain from hostname for domain creation using tldextract
+                                # This handles complex TLDs like .co.uk, .com.au correctly
+                                domain_name = get_domain_from_subdomain(hostname)
+                                if domain_name:
+                                    selected_domains.add(domain_name)
+                        else:  # It's an IP only
+                            # Deduplicate IPs
+                            if ip not in seen_ips:
+                                seen_ips.add(ip)
+                                selected_ips.append(host_info)
+                    except (json.JSONDecodeError, KeyError) as e:
+                        logger.warning(f"Error processing host data: {e}")
                         continue
-                    description = request.POST.get("targetDescription", "")
-                    h1_team_handle = request.POST.get("targetH1TeamHandle")
-                    if not Domain.objects.filter(name=ip).exists():
+                
+                # Add discovered domains from checkboxes to the set
+                for domain in discovered_domains:
+                    if validators.domain(domain):
+                        selected_domains.add(domain)
+                
+                subdomain_count = 0
+                
+                # 1. If user selected domains, add each domain as a target
+                domain_targets = {}
+                for domain_name in selected_domains:
+                    if validators.domain(domain_name):
                         domain, created = Domain.objects.get_or_create(
-                            name=ip,
-                            description=description,
-                            h1_team_handle=h1_team_handle,
+                            name=domain_name,
                             project=project,
-                            ip_address_cidr=ip if is_ip else None,
+                            defaults={
+                                'description': f"{description} (Discovered from {original_ip_range})",
+                                'h1_team_handle': h1_team_handle,
+                                'insert_date': timezone.now(),
+                            }
                         )
-                        domain.insert_date = timezone.now()
-                        domain.save()
-                        added_target_count += 1
                         if created:
-                            logger.info("Added new domain %s", domain.name)
-                        if is_ip:
-                            ip_data = get_ip_info(ip)
-                            ip, created = IpAddress.objects.get_or_create(address=ip)
-                            ip.reverse_pointer = ip_data.reverse_pointer
-                            ip.is_private = ip_data.is_private
-                            ip.version = ip_data.version
-                            ip.save()
+                            added_target_count += 1
+                            logger.info("Added new domain target %s", domain.name)
+                        domain_targets[domain_name] = domain
+                
+                # 2. Process selected hostnames - add them as subdomains to their respective domain targets
+                for host_info in selected_hostnames:
+                    ip = host_info.get('ip')
+                    hostname = host_info.get('domain')
+                    is_alive = host_info.get('is_alive', False)
+                    
+                    # Find the domain target for this hostname using consistent extraction
+                    domain_name = get_domain_from_subdomain(hostname)
+                    if domain_name:
+                        target_domain = domain_targets.get(domain_name)
+                        
+                        if target_domain:
+                            # Create subdomain entry
+                            subdomain, created = Subdomain.objects.get_or_create(
+                                name=hostname,
+                                target_domain=target_domain,
+                                defaults={
+                                    'discovered_date': timezone.now(),
+                                    'is_important': is_alive,
+                                }
+                            )
+                            
+                            # Create/update IP address record
+                            if validators.ipv4(ip) or validators.ipv6(ip):
+                                ip_data = get_ip_info(ip)
+                                
+                                # Perform reverse DNS lookup for accurate reverse pointer
+                                reverse_pointer = get_reverse_dns(ip)
+                                
+                                ip_obj, ip_created = IpAddress.objects.get_or_create(
+                                    address=ip,
+                                    defaults={
+                                        'reverse_pointer': reverse_pointer,
+                                        'is_private': ip_data.is_private,
+                                        'version': ip_data.version,
+                                    }
+                                )
+                                subdomain.ip_addresses.add(ip_obj)
+                                
+                                if ip_created:
+                                    logger.info("Added new IP %s", ip_obj.address)
+                            
+                            subdomain.save()
                             if created:
-                                logger.info("Added new IP %s", ip)
+                                subdomain_count += 1
+                                logger.info("Added hostname subdomain %s for target %s", hostname, target_domain.name)
+                
+                # 3. Process selected IPs - create a target with the IP range and add IPs as subdomains
+                if selected_ips:
+                    try:
+                        # Create target with IP range naming convention and store original IP range
+                        # Use a clear naming convention that distinguishes IP ranges from domain names
+                        range_target_name = f"iprange-{original_ip_range.replace('/', '_').replace(':', '-')}"
+                        ip_range_domain, created = Domain.objects.get_or_create(
+                            name=range_target_name,
+                            project=project,
+                            defaults={
+                                'description': f"{description} (IP Range {original_ip_range})",
+                                'h1_team_handle': h1_team_handle,
+                                'insert_date': timezone.now(),
+                                'ip_address_cidr': original_ip_range,
+                            }
+                        )
+                        if created:
+                            added_target_count += 1
+                            logger.info("Added new IP range target %s", ip_range_domain.name)
+                        
+                        # Add selected IPs as subdomains
+                        for host_info in selected_ips:
+                            ip = host_info.get('ip')
+                            is_alive = host_info.get('is_alive', False)
+                            
+                            # Create subdomain entry for the IP
+                            subdomain, created = Subdomain.objects.get_or_create(
+                                name=ip,
+                                target_domain=ip_range_domain,
+                                defaults={
+                                    'discovered_date': timezone.now(),
+                                    'is_important': is_alive,
+                                }
+                            )
+                            
+                            # Create/update IP address record
+                            if validators.ipv4(ip) or validators.ipv6(ip):
+                                ip_data = get_ip_info(ip)
+                                
+                                # Perform reverse DNS lookup for accurate reverse pointer
+                                reverse_pointer = get_reverse_dns(ip)
+                                
+                                ip_obj, ip_created = IpAddress.objects.get_or_create(
+                                    address=ip,
+                                    defaults={
+                                        'reverse_pointer': reverse_pointer,
+                                        'is_private': ip_data.is_private,
+                                        'version': ip_data.version,
+                                    }
+                                )
+                                subdomain.ip_addresses.add(ip_obj)
+                                
+                                if ip_created:
+                                    logger.info("Added new IP %s", ip_obj.address)
+                            
+                            subdomain.save()
+                            if created:
+                                subdomain_count += 1
+                                logger.info("Added IP subdomain %s for target %s", ip, ip_range_domain.name)
+                                
+                    except (AddressValueError, ValueError) as e:
+                        logger.warning(f"Error creating IP range target: {e}")
+                
+                logger.info(f"Added {added_target_count} targets and {subdomain_count} subdomains")
 
         except (Http404, ValueError) as e:
             logger.exception(e)

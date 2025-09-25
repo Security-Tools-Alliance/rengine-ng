@@ -796,7 +796,27 @@ Add or Import Targets
       var add_button = document.getElementById("add-ip-target");
       if (total_count > 0) {
         add_button.disabled = false;
-        $('#add_ip_target_btn').html(`Add ${domain_count} Domains + ${host_count} Hosts`);
+        
+        // Build label showing only non-zero counts for better clarity
+        var label_parts = [];
+        if (domain_count > 0) {
+          label_parts.push(`${domain_count} Domain${domain_count > 1 ? 's' : ''}`);
+        }
+        if (host_count > 0) {
+          label_parts.push(`${host_count} Host${host_count > 1 ? 's' : ''}`);
+        }
+        
+        // Handle edge case where both counts are zero but total_count > 0
+        var button_text;
+        if (label_parts.length === 0) {
+          button_text = 'Add Target';
+        } else if (label_parts.length > 1) {
+          button_text = `Add ${label_parts.join(' + ')}`;
+        } else {
+          button_text = `Add ${label_parts[0]}`;
+        }
+        
+        $('#add_ip_target_btn').html(button_text);
         // Store the original IP address/range in hidden field
         $('#ip_address_hidden').val($('#ip_address').val());
       } else {
