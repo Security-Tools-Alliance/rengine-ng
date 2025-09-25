@@ -371,7 +371,7 @@ if UI_DEBUG:
     MIDDLEWARE.append("debug_toolbar.middleware.DebugToolbarMiddleware")
 
 # Channels configuration
-ASGI_APPLICATION = "reNgine.routing.application"
+ASGI_APPLICATION = "reNgine.asgi.application"
 
 CHANNEL_LAYERS = {
     "default": {

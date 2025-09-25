@@ -35,6 +35,7 @@ RUN apt update -y && apt install -y      \
     git                 \
     unzip               \
     curl                \
+    dnsutils            \
     gettext             \
     nmap                \
     net-tools           \

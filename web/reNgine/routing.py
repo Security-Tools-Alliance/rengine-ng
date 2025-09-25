@@ -1,10 +1,11 @@
-from api.consumers import OllamaDownloadConsumer
+from api.consumers import OllamaDownloadConsumer, IPScanProgressConsumer
 from channels.auth import AuthMiddlewareStack
 from channels.routing import ProtocolTypeRouter, URLRouter
 from django.urls import re_path
 
 websocket_urlpatterns = [
     re_path(r"^ws/ollama/download/(?P<model_name>[\w\-\.]+)/$", OllamaDownloadConsumer.as_asgi()),
+    re_path(r"^ws/ip-scan/(?P<scan_id>[\w\-\.]+)/$", IPScanProgressConsumer.as_asgi()),
 ]
 
 application = ProtocolTypeRouter(

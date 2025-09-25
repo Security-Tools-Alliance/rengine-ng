@@ -22,8 +22,8 @@ poetry run -C $RENGINE_FOLDER python3 manage.py migrate
 print_msg "Collect static files"
 poetry run -C $RENGINE_FOLDER python3 manage.py collectstatic --noinput
 
-# Run development server
-print_msg "Launching Django development Web server"
-poetry run -C $RENGINE_FOLDER python3 manage.py runserver 0.0.0.0:8000
+# Run development server with ASGI support
+print_msg "Launching Django development Web server with ASGI support"
+poetry run -C $RENGINE_FOLDER daphne -b 0.0.0.0 -p 8000 --verbosity 2 reNgine.asgi:application
 
 exec "$@"

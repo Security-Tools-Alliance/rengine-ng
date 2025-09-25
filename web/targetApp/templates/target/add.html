@@ -103,20 +103,121 @@ Add or Import Targets
             <div class="row">
               <div class="col-12">
                 <div class="alert alert-primary border-0 mb-4" role="alert">
-                  Please enter your Target IP address, reNgine-ng will look for the <b>A</b> records and resolve them to the domains.
+                  Please enter your Target IP address, reNgine-ng will look for the <b>PTR</b> records and resolve them to the domains.
+                  <br><br>
+                  <strong>Current DNS Server:</strong> <span id="current_dns_info">Loading...</span>
                 </div>
                 <label for="ip_address" class="text-dark">IP Address or CIDR</br><span class="text-muted">Example: 192.168.1.1 or 192.168.1.1/24, both are supported</span></label>
                 <input type="text" name="ip_address" class="form-control form-control-lg" id="ip_address" placeholder="X.X.X.X">
+                
+                <div class="mt-3">
+                  <label for="custom_dns" class="text-dark">Custom DNS Servers (Optional)</br><span class="text-muted">Comma-separated list: 192.168.1.1, 8.8.8.8</span></label>
+                  <input type="text" name="custom_dns" class="form-control" id="custom_dns" placeholder="192.168.1.1, 8.8.8.8">
+                  <div class="form-check mt-2" id="use_system_dns_container" style="display: none;">
+                    <input type="checkbox" class="form-check-input" id="use_system_dns">
+                    <label class="form-check-label" for="use_system_dns">
+                      Also use system DNS servers as fallback
+                      <br><small class="text-muted">If checked, system DNS will be used if custom DNS fails</small>
+                    </label>
+                  </div>
+                </div>
+                
                 <button class="btn btn-primary mt-2 float-end" disabled type="button" name="resolve_ip_button" id="resolve_ip_button"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-repeat"><polyline points="17 1 21 5 17 9"></polyline><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><polyline points="7 23 3 19 7 15"></polyline><path d="M21 13v2a4 4 0 0 1-4 4H3"></path></svg> Resolve IP Address</button>
-              </div>
-              <div class="col-12">
-                <div id='all_domains_checkbox' class='mt-2 n-chk'>
-                  <div class="form-check">
-                    <input type="checkbox" class="form-check-input" id="select_all_ip_domains">
-                    <label class="form-check-label" for="select_all_ip_domains">Select All Domains</label>
+                
+                <!-- Progress section -->
+                <div id="scan_progress_section" class="mt-4" style="display: none;">
+                  <div class="card">
+                    <div class="card-body">
+                      <h5 class="card-title"><i class="fas fa-search"></i> Scanning Progress</h5>
+                      
+                      <!-- Warning for large ranges -->
+                      <div id="large_range_warning" class="alert alert-warning" style="display: none;">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <strong>Large IP Range Detected</strong><br>
+                        This scan may take several minutes to complete. The process will continue in the background.
+                        You can safely navigate away from this page and return later.
+                      </div>
+                      
+                      <div id="progress_info" class="mb-3">
+                        <div class="d-flex justify-content-between">
+                          <span id="progress_text">Initializing...</span>
+                          <span id="progress_percentage">0%</span>
+                        </div>
+                        <div class="progress mt-2">
+                          <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                               role="progressbar" id="progress_bar" style="width: 0%" 
+                               aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                        </div>
+                      </div>
+                      <div id="scan_details" class="small text-muted"></div>
+                      
+                      <!-- Cancel button for long scans -->
+                      <div id="scan_controls" class="mt-3" style="display: none;">
+                        <button type="button" class="btn btn-outline-danger btn-sm" id="cancel_scan_btn">
+                          <i class="fas fa-stop"></i> Cancel Scan
+                        </button>
+                        <small class="text-muted ms-2">You can cancel the scan at any time</small>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
+              <div class="col-12">
+                <div id='selection_checkboxes' class='mt-2 n-chk' style="display: none;">
+                  <div class="row">
+                    <div class="col-md-3">
+                      <div class="form-check">
+                        <input type="checkbox" class="form-check-input" id="select_all_domains">
+                        <label class="form-check-label" for="select_all_domains">Select All Domains</label>
+                      </div>
+                    </div>
+                    <div class="col-md-3">
+                      <div class="form-check">
+                        <input type="checkbox" class="form-check-input" id="select_all_hostnames">
+                        <label class="form-check-label" for="select_all_hostnames">Select All Hostnames</label>
+                      </div>
+                    </div>
+                    <div class="col-md-3">
+                      <div class="form-check">
+                        <input type="checkbox" class="form-check-input" id="select_all_ips">
+                        <label class="form-check-label" for="select_all_ips">Select All IPs</label>
+                      </div>
+                    </div>
+                    <div class="col-md-3">
+                  <div class="form-check">
+                        <input type="checkbox" class="form-check-input" id="select_all_alive">
+                        <label class="form-check-label" for="select_all_alive">Select All Alive Hosts</label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Logs window (outside progress section to remain visible after scan) -->
+              <div class="col-12 mt-3">
+                <div id="scan_logs_section" class="mt-3" style="display: none;">
+                  <div class="card">
+                    <div class="card-header py-2" style="cursor: pointer;" id="logs_header" data-bs-toggle="collapse" data-bs-target="#logs_content" aria-expanded="true">
+                      <div class="d-flex justify-content-between align-items-center">
+                        <h6 class="mb-0">
+                          <i class="fas fa-list-alt"></i> Scan Logs 
+                          <i class="fas fa-chevron-down ms-2" id="logs_chevron"></i>
+                        </h6>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="clear_logs_btn" onclick="event.stopPropagation();">
+                          <i class="fas fa-trash"></i> Clear
+                        </button>
+                      </div>
+                    </div>
+                    <div class="collapse show" id="logs_content">
+                      <div class="card-body p-2">
+                        <div id="scan_logs" class="border rounded p-2 bg-light" style="height: 200px; overflow-y: auto; font-family: monospace; font-size: 12px;">
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
               <div class="col-12 mt-3">
                 <div id="resolved_domains_div">
                 </div>
@@ -131,6 +232,8 @@ Add or Import Targets
                   This is used to send vulnerability reports to the HackerOne Program automatically. Team handle can be found from the program URL, <a href="https://hackerone.com/team_handle">https://hackerone.com/team_handle</a>
                 </label>
                 <input type="text" class="form-control form-control-lg" id="targetH1TeamHandle" placeholder="team_handle" name="targetH1TeamHandle">
+                <!-- Hidden field to store the original IP address/range -->
+                <input type="hidden" id="ip_address_hidden" name="ip_address" value="">
                 <button class="btn btn-primary submit-fn mt-2 float-end" disabled type="submit" name="add-ip-target" id="add-ip-target" value="submit"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-plus"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg> <span id="add_ip_target_btn">Add Target</span></button>
               </div>
             </form>
@@ -236,89 +339,496 @@ Add or Import Targets
       }
     });
 
-    // hide all checkbox by default
-    $("#all_domains_checkbox").hide();
+    // Load current DNS info on page load
+    loadCurrentDNSInfo();
+    
+    // hide selection checkboxes by default
+    $("#selection_checkboxes").hide();
+    
+    // Show/hide system DNS checkbox when custom DNS is entered
+    $('#custom_dns').on('input', function() {
+      var customDns = $(this).val().trim();
+      if (customDns) {
+        $('#use_system_dns_container').show();
+      } else {
+        $('#use_system_dns_container').hide();
+        $('#use_system_dns').prop('checked', false);
+      }
+    });
+    
     $("#resolve_ip_button").click(function(){
-      // get ip address
+      // get ip address and custom DNS
       var ip_addr = $("#ip_address").val();
+      var custom_dns = $("#custom_dns").val();
+      var use_system_fallback = $('#use_system_dns').is(':checked');
+      
+      // Clear previous results
       $('#resolved_domains_div').empty();
-      swal.fire({
-        title: `Fetching domains`,
-        text: `Please wait while we fetch domains associated with IP address or CIDR ${ip_address.value}`,
-        padding: '2em',
-        onOpen: function() {
-          swal.showLoading()
-          return fetch(`/api/tools/ip_to_domain/?format=json&ip_address=${ip_address.value}`, {
+      $("#selection_checkboxes").hide();
+      
+      // Reset progress bar to 0
+      $('#progress_bar').css('width', '0%').attr('aria-valuenow', 0);
+      $('#progress_percentage').text('0%');
+      $('#progress_bar').removeClass('bg-danger bg-warning').addClass('progress-bar-striped progress-bar-animated');
+      
+      // Show progress section and logs
+      $("#scan_progress_section").show();
+      $("#scan_logs_section").show();
+      
+      // Clear previous logs
+      clearLogs();
+      addLogEntry(`Starting IP scan for ${ip_addr}`, 'info');
+      
+      // Log DNS configuration
+      if (custom_dns) {
+        addLogEntry(`Custom DNS configured: ${custom_dns}`, 'info');
+        if (use_system_fallback) {
+          addLogEntry('System DNS fallback enabled', 'warning');
+        } else {
+          addLogEntry('System DNS fallback disabled - using custom DNS exclusively', 'success');
+        }
+      } else {
+        addLogEntry('Using system DNS servers', 'info');
+      }
+      
+      // Estimate scan duration based on IP range
+      var estimatedDuration = "a few seconds";
+      var ipCount = 1;
+      
+      try {
+        if (ip_addr.includes('/')) {
+          var cidr = parseInt(ip_addr.split('/')[1]);
+          ipCount = Math.pow(2, 32 - cidr);
+          if (ipCount > 1000) {
+            estimatedDuration = "several minutes (large range)";
+          } else if (ipCount > 100) {
+            estimatedDuration = "1-2 minutes";
+          } else if (ipCount > 10) {
+            estimatedDuration = "30-60 seconds";
+          }
+        }
+      } catch (e) {
+        // Single IP or invalid format
+      }
+      
+      updateProgress(0, "Starting IP resolution...", `Scanning ${ip_addr} - Estimated duration: ${estimatedDuration}`);
+      
+      // Show warning and cancel button for large ranges
+      if (ipCount > 1000) {
+        $("#large_range_warning").show();
+        $("#scan_controls").show();
+      } else if (ipCount > 100) {
+        $("#scan_controls").show();
+      } else {
+        $("#large_range_warning").hide();
+        $("#scan_controls").hide();
+      }
+      
+      // Generate unique scan ID
+      var scanId = 'scan-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+      
+      // WebSocket enabled after container restart
+      var useWebSocket = true;
+      var socket = null;
+      var progressInterval = null;
+      var scanCancelled = false;
+      var fetchController = new AbortController();
+      
+      if (useWebSocket) {
+        // Setup WebSocket connection
+        var wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        var cleanScanId = scanId.replace(/[^a-zA-Z0-9\-\.]/g, '-');
+        var wsUrl = `${wsProtocol}//${window.location.host}/ws/ip-scan/${cleanScanId}/`;
+        socket = new WebSocket(wsUrl);
+        
+        socket.onopen = function(event) {
+          console.log('WebSocket connection established');
+        };
+        
+        socket.onmessage = function(event) {
+          var data = JSON.parse(event.data);
+          if (data.percentage !== undefined) {
+            updateProgress(data.percentage, data.message, data.details);
+            
+            // Add log entry if provided
+            if (data.log_message) {
+              addLogEntry(data.log_message, data.log_type || 'info');
+            } else if (data.details) {
+              addLogEntry(data.details, 'debug');
+            }
+          }
+        };
+        
+        socket.onerror = function(error) {
+          console.log('WebSocket error:', error);
+        };
+        
+        socket.onclose = function(event) {
+          console.log('WebSocket connection closed');
+        };
+      } else {
+        // Simulated progress for testing
+        var progressInterval = setInterval(function() {
+          var currentProgress = parseInt($('#progress_bar').attr('aria-valuenow'));
+          if (currentProgress < 80) {
+            updateProgress(currentProgress + 15, "Resolving DNS records...", `Processing ${ip_address.value}...`);
+          }
+        }, 800);
+      }
+      
+      var url = `/api/tools/ip_to_domain/?format=json&ip_address=${ip_address.value}&scan_id=${scanId}`;
+      if (custom_dns.trim()) {
+        url += `&dns_servers=${encodeURIComponent(custom_dns)}`;
+        var useSystemDns = $('#use_system_dns').is(':checked');
+        url += `&use_system_fallback=${useSystemDns}`;
+      }
+      
+      // Cancel button handler
+      $("#cancel_scan_btn").click(function() {
+        scanCancelled = true;
+        fetchController.abort();
+        if (progressInterval) clearInterval(progressInterval);
+        if (socket) socket.close();
+        
+        updateProgress(0, "Scan cancelled", "The scan has been cancelled by user");
+        $('#progress_bar').removeClass('progress-bar-striped progress-bar-animated').addClass('bg-warning');
+        
+        setTimeout(function() {
+          $("#scan_progress_section").hide();
+          // Keep logs visible but collapsed after scan cancellation
+          $('#logs_content').collapse('hide');
+        }, 2000);
+      });
+      
+      addLogEntry(`Sending request to: ${url}`, 'info');
+      fetch(url, {
             method: 'GET',
             credentials: "same-origin",
+        signal: fetchController.signal,
             headers: {
               "X-CSRFToken": getCookie("csrftoken")
             }
           })
           .then(function(response) {
             return response.json();
-          }).then(function(json_data) {
-            if (json_data['status']) {
-              // #resolved_domains_div
-              $("#all_domains_checkbox").show();
-              if(Array.isArray(json_data['ip_address'])) {
-                $('#resolved_domains_div').append(`<b class='text-info'>${json_data['ip_address'].length} domains associated with IP Address ${json_data['orig']}</b></br>`);
-                $('#resolved_domains_div').append(`<b>Please select the domains to import.</b>`);
-                $('#resolved_domains_div').append(`<div id='domains_checkbox' class='mt-2 row'></div>`);
-                json_data['ip_address'].forEach((ip_info, index, array) => {
-                  for (var domain in ip_info['domains']) {
-                    $('#domains_checkbox').append(`
-                    <div class="col-xl-2 col-md-4 col-sm-6 col-12">
-                      <div class="form-check">
-                        <input type="checkbox" class="form-check-input resolved_ip_domains" name="resolved_ip_domains" id="${ip_info['domains'][domain]}" value="${ip_info['domains'][domain]}">
-                        <label class="form-check-label" for="${ip_info['domains'][domain]}">${ip_info['domains'][domain]}</label>
-                      </div>
-                    </div>`
-                    );
-                  }
-                })
-              }
-              swal.close();
-              // resolved_ip_domains if any is checked, then only enable add button
-              $(".resolved_ip_domains").change(function(){
-                var add_multiple_targets_btn = document.getElementById("add-ip-target");
-                var checked_count = $('.resolved_ip_domains:checked').length;
-                if (checked_count > 0) {
-                  add_multiple_targets_btn.disabled = false;
-                  $('#add_ip_target_btn').html(`Add ${checked_count} Targets`);
-                }
-                else{
-                  add_multiple_targets_btn.disabled = true;
-                }
-              });
-            }
-            else{
-              $("#all_domains_checkbox").hide();
-              swal.close();
-              swal({
-                title: `Sorry, no domains associated with IP Address ${ip_address.value}!`,
-                type: 'error',
-                padding: '2em'
-              })
-            }
-          })
-          .catch(function() {
-            swal.insertQueueStep({
-              type: 'error',
-              title: 'Oops! Unable to fetch domains for this IP!'
-            })
-          })
+      })
+      .then(function(json_data) {
+        addLogEntry('Scan completed successfully', 'success');
+        addLogEntry(`Found ${json_data.total_hosts} hosts (${json_data.alive_count} alive, ${json_data.hostname_count} with hostnames)`, 'success');
+        if (json_data.used_dns_servers) {
+          addLogEntry(`DNS servers used: ${json_data.used_dns_servers.join(', ')}`, 'info');
         }
+        
+        // Clear progress interval and close WebSocket connection
+        if (progressInterval) clearInterval(progressInterval);
+        if (socket) socket.close();
+        
+        updateProgress(100, "Scan completed!", "Processing results...");
+        
+        setTimeout(function() {
+          $("#scan_progress_section").hide();
+          // Keep logs visible but collapsed after scan completion
+          $('#logs_content').collapse('hide');
+          
+            if (json_data['status']) {
+            $("#selection_checkboxes").show();
+            displayResolvedResults(json_data);
+            setupSelectionHandlers();
+          } else {
+            $("#selection_checkboxes").hide();
+            $('#resolved_domains_div').append(`
+              <div class="alert alert-warning">
+                <strong>No results found!</strong> Sorry, no domains associated with IP Address ${ip_address.value}.
+                      </div>
+            `);
+          }
+        }, 1000);
+      })
+      .catch(function(error) {
+        // Clear progress interval and close WebSocket connection
+        if (progressInterval) clearInterval(progressInterval);
+        if (socket) socket.close();
+        
+        if (error.name === 'AbortError' || scanCancelled) {
+          addLogEntry('Scan cancelled by user', 'warning');
+          // Scan was cancelled, don't show error
+          return;
+        }
+        
+        addLogEntry(`Error occurred: ${error.message}`, 'error');
+        updateProgress(100, "Error occurred!", "Failed to fetch domains for this IP.");
+        $('#progress_bar').removeClass('progress-bar-striped progress-bar-animated').addClass('bg-danger');
+        
+        setTimeout(function() {
+          $("#scan_progress_section").hide();
+          // Keep logs visible but collapsed after scan error
+          $('#logs_content').collapse('hide');
+          $('#resolved_domains_div').append(`
+            <div class="alert alert-danger">
+              <strong>Error!</strong> Unable to fetch domains for this IP. Please try again.
+            </div>
+          `);
+        }, 2000);
+      });
+    });
+    
+    function updateProgress(percentage, text, details) {
+      var roundedPercentage = Math.round(percentage);
+      $('#progress_bar').css('width', roundedPercentage + '%').attr('aria-valuenow', roundedPercentage);
+      $('#progress_percentage').text(roundedPercentage + '%');
+      $('#progress_text').text(text);
+      $('#scan_details').text(details);
+    }
+    
+    function addLogEntry(message, type = 'info') {
+      var timestamp = new Date().toLocaleTimeString();
+      var logClass = '';
+      var icon = '';
+      
+      switch(type) {
+        case 'success':
+          logClass = 'text-success';
+          icon = '✓';
+          break;
+        case 'error':
+          logClass = 'text-danger';
+          icon = '✗';
+          break;
+        case 'warning':
+          logClass = 'text-warning';
+          icon = '⚠';
+          break;
+        case 'debug':
+          logClass = 'text-muted';
+          icon = '🔍';
+          break;
+        default:
+          logClass = 'text-info';
+          icon = 'ℹ';
+      }
+      
+      var logEntry = `<div class="${logClass}">[${timestamp}] ${icon} ${message}</div>`;
+      $('#scan_logs').append(logEntry);
+      
+      // Auto-scroll to bottom
+      var logsContainer = document.getElementById('scan_logs');
+      logsContainer.scrollTop = logsContainer.scrollHeight;
+    }
+    
+    function clearLogs() {
+      $('#scan_logs').empty();
+    }
+    
+    // Clear logs button handler
+    $(document).on('click', '#clear_logs_btn', function() {
+      clearLogs();
+    });
+    
+    // Handle logs collapse/expand
+    $('#logs_content').on('show.bs.collapse', function() {
+      $('#logs_chevron').removeClass('fa-chevron-right').addClass('fa-chevron-down');
+    });
+    
+    $('#logs_content').on('hide.bs.collapse', function() {
+      $('#logs_chevron').removeClass('fa-chevron-down').addClass('fa-chevron-right');
+    });
+    
+    function loadCurrentDNSInfo() {
+      fetch('/api/tools/ip_to_domain/?format=json&ip_address=8.8.8.8', {
+        method: 'GET',
+        credentials: "same-origin",
+        headers: {
+          "X-CSRFToken": getCookie("csrftoken")
+        }
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.current_dns_servers && data.current_dns_servers.length > 0) {
+          $('#current_dns_info').html(data.current_dns_servers.join(', '));
+        } else {
+          $('#current_dns_info').html('Unable to detect');
+        }
+      })
+      .catch(() => {
+        $('#current_dns_info').html('Unable to detect');
+      });
+    }
+    
+    function displayResolvedResults(json_data) {
+      var total_count = json_data['ip_address'].length;
+      var alive_count = json_data['ip_address'].filter(item => item.is_alive).length;
+      var hostname_count = json_data['ip_address'].filter(item => item.domain !== item.ip).length;
+      var ip_only_count = total_count - hostname_count;
+      
+      $('#resolved_domains_div').append(`
+        <div class="alert alert-info">
+          <strong>Scan Results:</strong> ${total_count} hosts found (${alive_count} alive, ${hostname_count} with hostnames, ${ip_only_count} IPs only)
+          <br><strong>Used DNS Servers:</strong> ${json_data['used_dns_servers'].join(', ')}
+        </div>
+      `);
+      
+      // Display discovered domains first
+      if (json_data['discovered_domains'] && json_data['discovered_domains'].length > 0) {
+        var sortedDomains = json_data['discovered_domains'].sort();
+        $('#resolved_domains_div').append(`
+          <h3 class="text-primary mt-4 mb-3"><i class="fas fa-globe"></i> Domains</h3>
+          <div id="discovered_domains" class="row mb-4"></div>
+        `);
+        
+        sortedDomains.forEach(domain => {
+          $('#discovered_domains').append(`
+            <div class="col-xl-2 col-md-3 col-sm-4 col-6 mb-2">
+              <div class="form-check">
+                <input type="checkbox" class="form-check-input discovered_domains" name="discovered_domains" id="domain_${domain}" value="${domain}">
+                <label class="form-check-label" for="domain_${domain}">
+                  <strong>${domain}</strong>
+                </label>
+              </div>
+            </div>
+          `);
+        });
+      }
+      
+      // Separate hostnames and IPs
+      var hostnames = json_data['ip_address'].filter(item => item.domain !== item.ip);
+      var ips_only = json_data['ip_address'].filter(item => item.domain === item.ip);
+      
+      // Sort function: alive first, then alphabetical
+      function sortHosts(hosts) {
+        return hosts.sort((a, b) => {
+          // First sort by alive status (alive first)
+          if (a.is_alive !== b.is_alive) {
+            return b.is_alive - a.is_alive;
+          }
+          // Then sort alphabetically
+          return a.domain.localeCompare(b.domain);
+        });
+      }
+      
+      // Display hostnames
+      if (hostnames.length > 0) {
+        var sortedHostnames = sortHosts(hostnames);
+        $('#resolved_domains_div').append(`
+          <h3 class="text-success mt-4 mb-3"><i class="fas fa-server"></i> Hostnames (${hostnames.length})</h3>
+          <div id="resolved_hostnames" class="row mb-4"></div>
+        `);
+        
+        sortedHostnames.forEach((host_info, index) => {
+          var aliveStatus = host_info.is_alive ? 'text-success' : 'text-danger';
+          var aliveIcon = host_info.is_alive ? '🟢' : '🔴';
+          var resolvedBy = host_info.resolved_by ? ` (via ${host_info.resolved_by})` : '';
+          
+          $('#resolved_hostnames').append(`
+            <div class="col-xl-3 col-md-4 col-sm-6 col-12 mb-2">
+              <div class="form-check">
+                <input type="checkbox" class="form-check-input resolved_hosts hostname-item ${host_info.is_alive ? 'alive-item' : 'dead-item'}" 
+                       name="resolved_hosts" id="hostname_${index}" value="${JSON.stringify(host_info).replace(/"/g, '&quot;')}">
+                <label class="form-check-label ${aliveStatus}" for="hostname_${index}">
+                  ${aliveIcon} <strong>${host_info.domain}</strong><br>
+                  <small class="text-muted">${host_info.ip}${resolvedBy}</small>
+                </label>
+              </div>
+            </div>
+          `);
+        });
+      }
+      
+      // Display IPs only
+      if (ips_only.length > 0) {
+        var sortedIPs = sortHosts(ips_only);
+        $('#resolved_domains_div').append(`
+          <h3 class="text-secondary mt-4 mb-3"><i class="fas fa-network-wired"></i> IP Addresses (${ips_only.length})</h3>
+          <div id="resolved_ips" class="row mb-4"></div>
+        `);
+        
+        sortedIPs.forEach((host_info, index) => {
+          var aliveStatus = host_info.is_alive ? 'text-success' : 'text-danger';
+          var aliveIcon = host_info.is_alive ? '🟢' : '🔴';
+          
+          $('#resolved_ips').append(`
+            <div class="col-xl-2 col-md-3 col-sm-4 col-6 mb-2">
+              <div class="form-check">
+                <input type="checkbox" class="form-check-input resolved_hosts ip-item ${host_info.is_alive ? 'alive-item' : 'dead-item'}" 
+                       name="resolved_hosts" id="ip_${index}" value="${JSON.stringify(host_info).replace(/"/g, '&quot;')}">
+                <label class="form-check-label ${aliveStatus}" for="ip_${index}">
+                  ${aliveIcon} ${host_info.ip}
+                </label>
+              </div>
+            </div>
+          `);
+        });
+      }
+    }
+    
+    function setupSelectionHandlers() {
+      // Selection checkbox handlers
+      $("#select_all_domains").change(function() {
+        $(".discovered_domains").prop('checked', this.checked);
+        updateAddButton();
+      });
+      
+      $("#select_all_hostnames").change(function() {
+        $(".hostname-item").prop('checked', this.checked);
+        updateAddButton();
+      });
+      
+      $("#select_all_ips").change(function() {
+        $(".ip-item").prop('checked', this.checked);
+        updateAddButton();
+      });
+      
+      $("#select_all_alive").change(function() {
+        $(".alive-item").prop('checked', this.checked);
+        updateAddButton();
+      });
+      
+      // Individual item change handlers
+      $(document).on('change', '.discovered_domains, .resolved_hosts', function() {
+        updateAddButton();
+      });
+    }
+    
+    function updateAddButton() {
+      var domain_count = $('.discovered_domains:checked').length;
+      var host_count = $('.resolved_hosts:checked').length;
+      var total_count = domain_count + host_count;
+      
+      var add_button = document.getElementById("add-ip-target");
+      if (total_count > 0) {
+        add_button.disabled = false;
+        $('#add_ip_target_btn').html(`Add ${domain_count} Domains + ${host_count} Hosts`);
+        // Store the original IP address/range in hidden field
+        $('#ip_address_hidden').val($('#ip_address').val());
+      } else {
+        add_button.disabled = true;
+        $('#add_ip_target_btn').html('Add Target');
+      }
+    }
+    
+    // Before form submission, create hidden inputs for selected items
+    $('#add-ip-target').closest('form').on('submit', function(e) {
+      // Remove any existing hidden inputs to avoid duplicates
+      $(this).find('input[name="discovered_domains"], input[name="resolved_hosts"]').remove();
+      
+      // Add hidden inputs for selected discovered domains
+      $('.discovered_domains:checked').each(function() {
+        $('<input>').attr({
+          type: 'hidden',
+          name: 'discovered_domains',
+          value: $(this).val()
+        }).appendTo('#add-ip-target').closest('form');
+      });
+      
+      // Add hidden inputs for selected resolved hosts
+      $('.resolved_hosts:checked').each(function() {
+        $('<input>').attr({
+          type: 'hidden',
+          name: 'resolved_hosts',
+          value: $(this).val()
+        }).appendTo('#add-ip-target').closest('form');
       });
     });
 
-    // if select all checkbox is checked, select all domains
-    $("#select_all_ip_domains").click(function () {
-      $(".resolved_ip_domains").prop('checked', $(this).prop('checked'));
-      document.getElementById("add-ip-target").disabled = false;
-      var checked_count = $('.resolved_ip_domains:checked').length;
-      $('#add_ip_target_btn').html(`Add ${checked_count} Targets`);
-    });
 
     $('#domainName').on('change keyup',function(){
       if ($('#domainName').val().length) {

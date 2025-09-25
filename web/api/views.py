@@ -1,8 +1,10 @@
 import json
 import logging
 import os.path
+import platform
 import re
 import socket
+import subprocess
 import threading
 from collections import defaultdict
 from datetime import datetime
@@ -11,6 +13,12 @@ from pathlib import Path
 
 import requests
 import validators
+try:
+    import dns.resolver
+    import dns.reversename
+    DNS_AVAILABLE = True
+except ImportError:
+    DNS_AVAILABLE = False
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from dashboard.models import OllamaSettings, OpenAiAPIKey, Project, SearchHistory
@@ -1463,35 +1471,266 @@ class CMSDetector(APIView):
 
 class IPToDomain(APIView):
     def get(self, request):
+        from channels.layers import get_channel_layer
+        from asgiref.sync import async_to_sync
+        import uuid
+        
         req = self.request
         ip_address = req.query_params.get("ip_address")
+        custom_dns = req.query_params.get("dns_servers", "").strip()
+        use_system_fallback = req.query_params.get("use_system_fallback", "false").lower() == "true"
+        scan_id = req.query_params.get("scan_id", str(uuid.uuid4()))
         response = {}
+        
+        # Initialize websocket channel
+        channel_layer = get_channel_layer()
+        room_group_name = f"ip-scan-{scan_id}"
+        
+        def send_progress(percentage, message, details="", log_message=None, log_type='info'):
+            if channel_layer:
+                try:
+                    async_to_sync(channel_layer.group_send)(
+                        room_group_name,
+                        {
+                            "type": "scan_progress",
+                            "message": {
+                                "percentage": percentage,
+                                "message": message,
+                                "details": details,
+                                "scan_id": scan_id,
+                                "log_message": log_message,
+                                "log_type": log_type
+                            }
+                        }
+                    )
+                except Exception as e:
+                    logger.debug(f"WebSocket send failed: {e}")
+        
         if not ip_address:
-            return Response({"status": False, "message": "IP Address Required"})
+            return Response({"status": False, "message": "IP Address Required", "scan_id": scan_id})
+        
         try:
             logger.info(f"Resolving IP address {ip_address} ...")
+            send_progress(5, "Initializing scan...", f"Preparing to scan {ip_address}")
+            
+            # Get current DNS servers
+            current_dns_servers = self._get_current_dns_servers()
+            send_progress(10, "DNS servers detected", f"Using: {', '.join(current_dns_servers)}")
+            
+            # Parse custom DNS servers
+            dns_servers = []
+            if custom_dns:
+                dns_servers = [dns.strip() for dns in custom_dns.split(',') if dns.strip()]
+                send_progress(15, "Custom DNS configured", f"Using custom DNS: {', '.join(dns_servers)}", 
+                             f"Custom DNS servers configured: {', '.join(dns_servers)}", 'success')
+
+                # Add system DNS as fallback only if explicitly requested
+                if use_system_fallback:
+                    dns_servers.extend(current_dns_servers)
+                    send_progress(18, "System DNS added as fallback", f"Total DNS servers: {len(dns_servers)}",
+                                 f"System DNS servers added as fallback: {', '.join(current_dns_servers)}", 'warning')
+                else:
+                    send_progress(18, "System DNS fallback disabled", "Using custom DNS exclusively",
+                                 "System DNS fallback disabled - using custom DNS exclusively", 'info')
+            else:
+                # Use system DNS if no custom DNS provided
+                dns_servers = current_dns_servers
+                send_progress(15, "Using system DNS", f"System DNS: {', '.join(current_dns_servers)}",
+                             f"Using system DNS servers: {', '.join(current_dns_servers)}", 'info')
+            
             resolved_ips = []
-            for ip in IPv4Network(ip_address, False):
-                domains = []
-                ips = []
-                try:
-                    (domain, domains, ips) = socket.gethostbyaddr(str(ip))
-                except socket.herror:
-                    logger.info(f"No PTR record for {ip_address}")
-                    domain = str(ip)
-                if domain not in domains:
-                    domains.append(domain)
-                resolved_ips.append({"ip": str(ip), "domain": domain, "domains": domains, "ips": ips})
+            discovered_domains = set()
+            ip_list = list(IPv4Network(ip_address, False))
+            total_ips = len(ip_list)
+            
+            # Inform about scan duration for large ranges
+            if total_ips > 1000:
+                send_progress(20, f"Starting resolution of {total_ips} IP addresses", f"Large range detected - This may take several minutes")
+            elif total_ips > 100:
+                send_progress(20, f"Starting resolution of {total_ips} IP addresses", f"Medium range - Expected duration: 1-2 minutes")
+            else:
+                send_progress(20, f"Starting resolution of {total_ips} IP addresses", f"Processing range {ip_address}")
+            
+            for index, ip in enumerate(ip_list):
+                ip_str = str(ip)
+                progress_percentage = 20 + (index / total_ips) * 60  # 20-80% for IP processing
+                
+                # Send progress updates less frequently for large ranges to avoid spam
+                if total_ips > 1000 and index % 50 == 0:  # Every 50 IPs for large ranges
+                    send_progress(progress_percentage, f"Scanning in progress...", f"Processed {index}/{total_ips} IPs ({(index/total_ips*100):.1f}%)")
+                elif total_ips > 100 and index % 10 == 0:  # Every 10 IPs for medium ranges
+                    send_progress(progress_percentage, f"Resolving IPs...", f"Processing {index + 1}/{total_ips}")
+                elif total_ips <= 100:  # Every IP for small ranges
+                    send_progress(progress_percentage, f"Resolving {ip_str}...", f"Processing {index + 1}/{total_ips}")
+                
+                domain_info = {
+                    "ip": ip_str,
+                    "domain": ip_str,
+                    "domains": [],
+                    "ips": [],
+                    "resolved_by": None,
+                    "is_alive": self._check_host_alive(ip_str)
+                }
+                
+                # Try to resolve using each DNS server
+                resolved = False
+                if DNS_AVAILABLE:
+                    for dns_server in dns_servers:
+                        try:
+                            # Configure resolver
+                            resolver = dns.resolver.Resolver()
+                            resolver.nameservers = [dns_server]
+                            resolver.timeout = 2
+                            resolver.lifetime = 5
+                            
+                            # Reverse DNS lookup
+                            reverse_name = dns.reversename.from_address(ip_str)
+                            answers = resolver.resolve(reverse_name, 'PTR')
+                            
+                            for answer in answers:
+                                hostname = str(answer).rstrip('.')
+                                if hostname != ip_str:
+                                    domain_info["domain"] = hostname
+                                    domain_info["domains"].append(hostname)
+                                    domain_info["resolved_by"] = dns_server
+                                    resolved = True
+                                    
+                                    # Log successful resolution for debugging
+                                    if total_ips <= 50:  # Only log for small ranges to avoid spam
+                                        send_progress(progress_percentage, f"Resolving {ip_str}...", f"Processing {index + 1}/{total_ips}",
+                                                     f"✓ {ip_str} → {hostname} (via {dns_server})", 'success')
+                                    
+                                    # Extract domain from hostname
+                                    domain_parts = hostname.split('.')
+                                    if len(domain_parts) >= 2:
+                                        # Get TLD (last two parts for most domains)
+                                        tld = '.'.join(domain_parts[-2:])
+                                        discovered_domains.add(tld)
+                                    break
+                            
+                            if resolved:
+                                break
+                                
+                        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.Timeout, Exception) as e:
+                            logger.debug(f"DNS resolution failed for {ip_str} using {dns_server}: {e}")
+                            # Log DNS failures for debugging (only for small ranges)
+                            if total_ips <= 20:
+                                send_progress(progress_percentage, f"Resolving {ip_str}...", f"Processing {index + 1}/{total_ips}",
+                                             f"✗ {ip_str} failed via {dns_server}: {str(e)[:50]}...", 'debug')
+                            continue
+                
+                # Fallback to system socket resolution only if no custom DNS or if system fallback is enabled
+                if not resolved and (not custom_dns or use_system_fallback):
+                    try:
+                        (domain, domains, ips) = socket.gethostbyaddr(ip_str)
+                        if domain != ip_str:
+                            domain_info["domain"] = domain
+                            domain_info["domains"] = domains or [domain]
+                            domain_info["resolved_by"] = "system"
+                            
+                            # Log successful system resolution
+                            if total_ips <= 50:
+                                send_progress(progress_percentage, f"Resolving {ip_str}...", f"Processing {index + 1}/{total_ips}",
+                                             f"✓ {ip_str} → {domain} (via system DNS)", 'warning')
+
+                            # Extract domain from hostname
+                            domain_parts = domain.split('.')
+                            if len(domain_parts) >= 2:
+                                tld = '.'.join(domain_parts[-2:])
+                                discovered_domains.add(tld)
+                    except socket.herror:
+                        logger.debug(f"No PTR record for {ip_str}")
+                        # Log system DNS failure for debugging (only for small ranges)
+                        if total_ips <= 20:
+                            send_progress(progress_percentage, f"Resolving {ip_str}...", f"Processing {index + 1}/{total_ips}",
+                                         f"✗ {ip_str} no PTR record (system DNS)", 'debug')
+                
+                resolved_ips.append(domain_info)
+            
+            send_progress(85, "Processing results...", "Sorting and organizing discovered hosts")
+            
+            # Sort results: resolved hostnames first, then IPs
+            resolved_ips.sort(key=lambda x: (x["domain"] == x["ip"], x["ip"]))
+            
+            alive_count = sum(1 for ip in resolved_ips if ip["is_alive"])
+            hostname_count = sum(1 for ip in resolved_ips if ip["domain"] != ip["ip"])
+            
+            send_progress(95, "Finalizing results...", f"Found {len(resolved_ips)} hosts ({alive_count} alive, {hostname_count} with hostnames)")
+            
             response = {
                 "status": True,
                 "orig": ip_address,
                 "ip_address": resolved_ips,
+                "discovered_domains": list(discovered_domains),
+                "current_dns_servers": current_dns_servers,
+                "used_dns_servers": dns_servers,
+                "scan_id": scan_id
             }
+            
+            # Final progress update
+            send_progress(100, "Scan completed!", "Ready for target selection")
+            
         except Exception as e:
             logger.exception(e)
             response = {"status": False, "ip_address": ip_address, "message": f"Exception {e}"}
         finally:
             return Response(response)
+    
+    def _get_current_dns_servers(self):
+        """Get current system DNS servers"""
+        dns_servers = []
+        try:
+            import platform
+            system = platform.system().lower()
+            
+            if system == "linux":
+                try:
+                    with open('/etc/resolv.conf', 'r') as f:
+                        for line in f:
+                            if line.strip().startswith('nameserver'):
+                                dns_server = line.strip().split()[1]
+                                dns_servers.append(dns_server)
+                except:
+                    pass
+            elif system == "windows":
+                try:
+                    import subprocess
+                    result = subprocess.run(['nslookup'], capture_output=True, text=True, input='\n')
+                    for line in result.stdout.split('\n'):
+                        if 'Server:' in line:
+                            dns_server = line.split(':')[1].strip()
+                            if dns_server and dns_server != 'localhost':
+                                dns_servers.append(dns_server)
+                            break
+                except:
+                    pass
+            
+            # Fallback to common DNS servers if none found
+            if not dns_servers:
+                dns_servers = ['8.8.8.8', '1.1.1.1']
+                
+        except Exception as e:
+            logger.debug(f"Error getting DNS servers: {e}")
+            dns_servers = ['8.8.8.8', '1.1.1.1']
+        
+        return dns_servers
+    
+    def _check_host_alive(self, ip):
+        """Quick ping check to see if host is alive"""
+        try:
+            import subprocess
+            import platform
+            
+            system = platform.system().lower()
+            if system == "windows":
+                cmd = ['ping', '-n', '1', '-w', '1000', ip]
+            else:
+                cmd = ['ping', '-c', '1', '-W', '1', ip]
+            
+            result = subprocess.run(cmd, capture_output=True, timeout=2)
+            return result.returncode == 0
+        except:
+            return False
 
 
 class VulnerabilityReport(APIView):
