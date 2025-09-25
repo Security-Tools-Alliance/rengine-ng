@@ -825,27 +825,67 @@ Add or Import Targets
       }
     }
     
-    // Before form submission, create hidden inputs for selected items
+    // Handle form submission with AJAX for reliable data transmission
     $('#add-ip-target').closest('form').on('submit', function(e) {
-      // Remove any existing hidden inputs to avoid duplicates
-      $(this).find('input[name="discovered_domains"], input[name="resolved_hosts"]').remove();
+      e.preventDefault(); // Prevent default form submission
       
-      // Add hidden inputs for selected discovered domains
+      var form = $(this);
+      var formData = new FormData();
+      
+      // Add all standard form fields
+      formData.append('csrfmiddlewaretoken', $('[name=csrfmiddlewaretoken]').val());
+      formData.append('ip_address', $('#ip_address_hidden').val() || $('#ip_address').val());
+      formData.append('targetDescription', $('[name=targetDescription]').val());
+      formData.append('targetH1TeamHandle', $('[name=targetH1TeamHandle]').val());
+      formData.append('add-ip-target', 'submit');
+      
+      // Add selected discovered domains
       $('.discovered_domains:checked').each(function() {
-        $('<input>').attr({
-          type: 'hidden',
-          name: 'discovered_domains',
-          value: $(this).val()
-        }).appendTo('#add-ip-target').closest('form');
+        formData.append('discovered_domains', $(this).val());
       });
       
-      // Add hidden inputs for selected resolved hosts
+      // Add selected resolved hosts
       $('.resolved_hosts:checked').each(function() {
-        $('<input>').attr({
-          type: 'hidden',
-          name: 'resolved_hosts',
-          value: $(this).val()
-        }).appendTo('#add-ip-target').closest('form');
+        formData.append('resolved_hosts', $(this).val());
+      });
+      
+      // Debug: Log what we're sending
+      console.log('Form data being sent:');
+      for (let [key, value] of formData.entries()) {
+        console.log(key, value);
+      }
+      
+      // Disable submit button and show loading state
+      var submitBtn = $('#add-ip-target');
+      var originalText = submitBtn.html();
+      submitBtn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Adding Targets...');
+      
+      // Submit via AJAX
+      $.ajax({
+        url: window.location.href,
+        type: 'POST',
+        data: formData,
+        processData: false,
+        contentType: false,
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest'
+        },
+        success: function(response) {
+          // Redirect to targets list or show success message
+          if (response.redirect_url) {
+            window.location.href = response.redirect_url;
+          } else {
+            // Assume success and redirect to targets list
+            window.location.href = "{% url 'list_target' current_project.slug %}";
+          }
+        },
+        error: function(xhr, status, error) {
+          console.error('Error submitting form:', error);
+          alert('Error adding targets. Please try again.');
+          
+          // Re-enable submit button
+          submitBtn.prop('disabled', false).html(originalText);
+        }
       });
     });
 

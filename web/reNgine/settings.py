@@ -44,7 +44,8 @@ CELERY_REMOTE_DEBUG_PORT = int(os.environ.get("CELERY_REMOTE_DEBUG_PORT", 5679))
 # Common env vars
 DEBUG = env.bool("UI_DEBUG", default=False)
 DOMAIN_NAME = env("DOMAIN_NAME", default="localhost:8000")
-TEMPLATE_DEBUG = env.bool("TEMPLATE_DEBUG", default=False)
+TEMPLATE_DEBUG = env.bool("TEMPLATE_DEBUG", default=UI_DEBUG)
+DISABLE_TEMPLATE_CACHE = env.bool("DISABLE_TEMPLATE_CACHE", default=UI_DEBUG)
 SECRET_FILE = os.path.join(RENGINE_HOME, "secret")
 DEFAULT_RATE_LIMIT = env.int("DEFAULT_RATE_LIMIT", default=150)  # requests / second
 DEFAULT_HTTP_TIMEOUT = env.int("DEFAULT_HTTP_TIMEOUT", default=5)  # seconds
@@ -138,7 +139,7 @@ TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
         "DIRS": [(os.path.join(BASE_DIR, "templates"))],
-        "APP_DIRS": True,
+        "APP_DIRS": False,  # Must be False when loaders is defined
         "OPTIONS": {
             "context_processors": [
                 "django.template.context_processors.debug",
@@ -148,6 +149,16 @@ TEMPLATES = [
                 "reNgine.context_processors.version",
                 "reNgine.context_processors.misc",
                 "dashboard.context_processors.project_context",
+            ],
+            # Disable template caching in development
+            "loaders": [
+                "django.template.loaders.filesystem.Loader",
+                "django.template.loaders.app_directories.Loader",
+            ] if DISABLE_TEMPLATE_CACHE else [
+                ("django.template.loaders.cached.Loader", [
+                    "django.template.loaders.filesystem.Loader",
+                    "django.template.loaders.app_directories.Loader",
+                ])
             ],
         },
     }
@@ -245,6 +256,28 @@ ROLEPERMISSIONS_REDIRECT_TO_LOGIN = True
 Cache settings
 """
 RENGINE_TASK_IGNORE_CACHE_KWARGS = ["ctx"]
+
+# Django Cache Configuration
+# In development, disable caching to ensure templates and views reload properly
+if DEBUG:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.dummy.DummyCache',
+        }
+    }
+else:
+    # Production cache using Redis
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+            'LOCATION': CELERY_BROKER_URL,
+            'OPTIONS': {
+                'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+            },
+            'KEY_PREFIX': 'rengine_cache',
+            'TIMEOUT': 300,  # 5 minutes default timeout
+        }
+    }
 
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"

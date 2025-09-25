@@ -12,7 +12,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db.models import Count
-from django.http import Http404
+from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.utils import timezone
@@ -83,7 +83,7 @@ def add_target(request, slug):
     project = Project.objects.get(slug=slug)
     form = AddTargetForm(request.POST or None)
     if request.method == "POST":
-        logger.info(request.POST)
+        logger.info("POST data received: %s", dict(request.POST))
         added_target_count = 0
         multiple_targets = request.POST.get("add-multiple-targets")
         ip_target = request.POST.get("add-ip-target")
@@ -299,7 +299,7 @@ def add_target(request, slug):
                 # add targets from "resolve and add ip address" tab with improved methodology
                 import json
                 from startScan.models import Subdomain
-                from ipaddress import IPv4Network, AddressValueError
+                from ipaddress import AddressValueError
                 from reNgine.utilities.url import get_domain_from_subdomain
                 
                 # Get selected items from the form
@@ -392,7 +392,6 @@ def add_target(request, slug):
                                 target_domain=target_domain,
                                 defaults={
                                     'discovered_date': timezone.now(),
-                                    'is_important': is_alive,
                                 }
                             )
                             
@@ -452,7 +451,6 @@ def add_target(request, slug):
                                 target_domain=ip_range_domain,
                                 defaults={
                                     'discovered_date': timezone.now(),
-                                    'is_important': is_alive,
                                 }
                             )
                             
@@ -491,18 +489,35 @@ def add_target(request, slug):
             messages.add_message(request, messages.ERROR, f"Exception while adding domain: {e}")
             return http.HttpResponseRedirect(reverse("add_target", kwargs={"slug": slug}))
 
-        # No targets added, redirect to add target page
+        # No targets added, handle error case
         if added_target_count == 0:
-            messages.add_message(
-                request,
-                messages.ERROR,
-                "Oops! Could not import any targets, either targets already exists or is not a valid target.",
-            )
+            error_msg = "Oops! Could not import any targets, either targets already exists or is not a valid target."
+            messages.add_message(request, messages.ERROR, error_msg)
+            
+            # Handle AJAX requests with JSON error response
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({
+                    'status': 'error',
+                    'message': error_msg,
+                    'added_count': 0
+                }, status=400)
+            
             return http.HttpResponseRedirect(reverse("add_target", kwargs={"slug": slug}))
 
-        # Targets added successfully, redirect to targets list
+        # Targets added successfully
         msg = f"{added_target_count} targets added successfully"
         messages.add_message(request, messages.SUCCESS, msg)
+        
+        # Handle AJAX requests with JSON response
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({
+                'status': 'success',
+                'message': msg,
+                'added_count': added_target_count,
+                'redirect_url': reverse("list_target", kwargs={"slug": slug})
+            })
+        
+        # Regular form submission redirect
         return http.HttpResponseRedirect(reverse("list_target", kwargs={"slug": slug}))
 
     # GET request
