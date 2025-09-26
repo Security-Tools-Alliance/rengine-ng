@@ -866,9 +866,9 @@ Add or Import Targets
           'X-Requested-With': 'XMLHttpRequest'
         },
         success: function(response) {
-          // Show detailed success message if available
+          // Show detailed success message using Snackbar (non-blocking)
           if (response.stats) {
-            var statsMsg = 'Success! ';
+            var statsMsg = '✅ Success! ';
             var details = [];
             if (response.stats.domains_created > 0) details.push(`${response.stats.domains_created} new domain(s)`);
             if (response.stats.domains_existing > 0) details.push(`${response.stats.domains_existing} existing domain(s)`);
@@ -877,21 +877,54 @@ Add or Import Targets
             
             if (details.length > 0) {
               statsMsg += details.join(', ') + ' processed successfully.';
-              alert(statsMsg);
+              
+              // Use Snackbar for non-blocking notification
+              Snackbar.show({
+                text: statsMsg,
+                pos: 'top-right',
+                actionTextColor: '#42A5F5',
+                backgroundColor: '#28a745',
+                duration: 5000  // Show for 5 seconds due to detailed message
+              });
             }
+          } else if (response.message) {
+            // Show standard success message
+            Snackbar.show({
+              text: '✅ ' + response.message,
+              pos: 'top-right',
+              actionTextColor: '#42A5F5',
+              backgroundColor: '#28a745',
+              duration: 3000
+            });
           }
           
-          // Redirect to targets list
-          if (response.redirect_url) {
-            window.location.href = response.redirect_url;
-          } else {
-            // Assume success and redirect to targets list
-            window.location.href = "{% url 'list_target' current_project.slug %}";
-          }
+          // Small delay before redirect to allow user to see the notification
+          setTimeout(function() {
+            if (response.redirect_url) {
+              window.location.href = response.redirect_url;
+            } else {
+              // Assume success and redirect to targets list
+              window.location.href = "{% url 'list_target' current_project.slug %}";
+            }
+          }, 1500); // 1.5 second delay
         },
         error: function(xhr, status, error) {
           console.error('Error submitting form:', error);
-          alert('Error adding targets. Please try again.');
+          
+          // Parse error message from server if available
+          var errorMsg = '❌ Error adding targets. Please try again.';
+          if (xhr.responseJSON && xhr.responseJSON.message) {
+            errorMsg = '❌ ' + xhr.responseJSON.message;
+          }
+          
+          // Use Snackbar for error notification
+          Snackbar.show({
+            text: errorMsg,
+            pos: 'top-right',
+            actionTextColor: '#fff',
+            backgroundColor: '#e7515a',
+            duration: 4000
+          });
           
           // Re-enable submit button
           submitBtn.prop('disabled', false).html(originalText);
