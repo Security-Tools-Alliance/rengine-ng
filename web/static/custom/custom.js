@@ -61,7 +61,38 @@ function getParsedURL(url) {
 	return parser.pathname + parser.search;
 };
 
+/**
+ * Get CSRF token from meta tag (recommended approach when CSRF_COOKIE_HTTPONLY = True)
+ * Falls back to cookie method for backward compatibility
+ */
+function getCSRFToken() {
+	// First try to get from meta tag (recommended with CSRF_COOKIE_HTTPONLY = True)
+	const metaTag = document.querySelector('meta[name="csrf-token"]');
+	if (metaTag) {
+		return metaTag.getAttribute('content');
+	}
+	
+	// Fallback to cookie method for backward compatibility
+	return getCookieFromDocument('csrftoken');
+}
+
+/**
+ * Legacy cookie function - kept for backward compatibility
+ * Note: Won't work when CSRF_COOKIE_HTTPONLY = True
+ */
 function getCookie(name) {
+	// For CSRF token, use the new method
+	if (name === 'csrftoken') {
+		return getCSRFToken();
+	}
+	
+	return getCookieFromDocument(name);
+}
+
+/**
+ * Internal function to get cookie from document.cookie
+ */
+function getCookieFromDocument(name) {
 	var cookieValue = null;
 	if (document.cookie && document.cookie !== '') {
 		var cookies = document.cookie.split(';');
@@ -75,6 +106,144 @@ function getCookie(name) {
 		}
 	}
 	return cookieValue;
+}
+
+/**
+ * Global CSRF Token Configuration for AJAX Requests
+ * This ensures all AJAX requests automatically include the CSRF token
+ */
+function setupCSRFToken() {
+	var csrftoken = getCSRFToken();
+	
+	// Setup for jQuery AJAX requests
+	if (typeof $ !== 'undefined' && $.ajaxSetup) {
+		$.ajaxSetup({
+			beforeSend: function(xhr, settings) {
+				// Check if request needs CSRF protection
+				if (!csrfSafeMethod(settings.type) && !this.crossDomain) {
+					xhr.setRequestHeader("X-CSRFToken", csrftoken);
+				}
+			}
+		});
+	}
+	
+	// Setup for native fetch requests - monkey patch fetch
+	if (typeof window !== 'undefined' && window.fetch) {
+		const originalFetch = window.fetch;
+		window.fetch = function(url, options = {}) {
+			// Ensure we have headers object
+			options.headers = options.headers || {};
+			
+			// Add CSRF token for non-safe methods
+			const method = (options.method || 'GET').toUpperCase();
+			if (!csrfSafeMethod(method) && !isExternalUrl(url)) {
+				// Only add CSRF token if not already present
+				if (!options.headers['X-CSRFToken'] && !options.headers['X-Csrftoken']) {
+					options.headers['X-CSRFToken'] = csrftoken;
+				}
+			}
+			
+			// Ensure credentials are included for same-origin requests
+			if (!options.credentials && !isExternalUrl(url)) {
+				options.credentials = 'same-origin';
+			}
+			
+			return originalFetch.call(this, url, options);
+		};
+	}
+}
+
+/**
+ * Check if HTTP method is safe (doesn't require CSRF protection)
+ */
+function csrfSafeMethod(method) {
+	// These HTTP methods do not require CSRF protection
+	return (/^(GET|HEAD|OPTIONS|TRACE)$/.test(method));
+}
+
+/**
+ * Check if URL is external (different origin)
+ */
+function isExternalUrl(url) {
+	if (typeof url !== 'string') return false;
+	
+	// Relative URLs are not external
+	if (url.startsWith('/') || url.startsWith('./') || url.startsWith('../')) {
+		return false;
+	}
+	
+	// Check if it's an absolute URL with different origin
+	try {
+		const urlObj = new URL(url, window.location.origin);
+		return urlObj.origin !== window.location.origin;
+	} catch (e) {
+		// If URL parsing fails, assume it's not external
+		return false;
+	}
+}
+
+// Initialize CSRF protection when DOM is ready
+$(document).ready(function() {
+	setupCSRFToken();
+});
+
+/**
+ * Simplified fetch wrapper that automatically handles CSRF tokens and common options
+ * @param {string} url - The URL to fetch
+ * @param {Object} options - Fetch options (method, body, headers, etc.)
+ * @returns {Promise} - Fetch promise
+ */
+function secureFetch(url, options = {}) {
+	// Set default options
+	const defaultOptions = {
+		credentials: 'same-origin',
+		headers: {
+			'Content-Type': 'application/json'
+		}
+	};
+	
+	// Merge options with defaults
+	const mergedOptions = {
+		...defaultOptions,
+		...options,
+		headers: {
+			...defaultOptions.headers,
+			...options.headers
+		}
+	};
+	
+	// The global fetch wrapper will automatically add CSRF token
+	return fetch(url, mergedOptions);
+}
+
+/**
+ * Debug function to check if CSRF token is available and valid
+ * @returns {Object} - Object containing CSRF token status and value
+ */
+function debugCSRFToken() {
+	const token = getCSRFToken();
+	const isValid = token && token.length > 0;
+	const metaTag = document.querySelector('meta[name="csrf-token"]');
+	const cookieToken = getCookieFromDocument('csrftoken');
+	
+	console.log('CSRF Token Debug:', {
+		available: !!token,
+		length: token ? token.length : 0,
+		value: token ? token.substring(0, 8) + '...' : 'N/A',
+		isValid: isValid,
+		source: metaTag ? 'meta-tag' : (cookieToken ? 'cookie' : 'none'),
+		metaTagExists: !!metaTag,
+		cookieAccessible: !!cookieToken,
+		httpOnlyMode: !!metaTag && !cookieToken
+	});
+	
+	return {
+		available: !!token,
+		length: token ? token.length : 0,
+		isValid: isValid,
+		token: token,
+		source: metaTag ? 'meta-tag' : (cookieToken ? 'cookie' : 'none')
+	};
 }
 // Source: https://portswigger.net/web-security/cross-site-scripting/preventing#encode-data-on-output
 function htmlEncode(str) {
