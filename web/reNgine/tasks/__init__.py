@@ -1,6 +1,6 @@
 from reNgine.tasks.command import run_command
 from reNgine.tasks.detect import run_cmseek, run_wafw00f, waf_detection
-from reNgine.tasks.dns import query_ip_history, query_reverse_whois, query_whois
+from reNgine.tasks.dns import ip_range_discovery, ping_hosts_task, query_ip_history, query_reverse_whois, query_whois
 from reNgine.tasks.fuzzing import dir_file_fuzz
 from reNgine.tasks.geo import geo_localize
 from reNgine.tasks.http import http_crawl, intermediate_crawl, post_crawl, pre_crawl
@@ -55,12 +55,14 @@ __all__ = [
     "initiate_scan",
     "initiate_subscan",
     "intermediate_crawl",
+    "ip_range_discovery",
     "llm_vulnerability_report",
     "nmap",
     "nuclei_individual_severity_module",
     "nuclei_scan",
     "osint",
     "osint_discovery",
+    "ping_hosts_task",
     "port_scan",
     "post_crawl",
     "pre_crawl",
@@ -69,6 +71,7 @@ __all__ = [
     "query_whois",
     "remove_duplicate_endpoints",
     "report",
+    "resolve_ip_chunk_task",
     "run_cmseek",
     "run_command",
     "run_gf_list",

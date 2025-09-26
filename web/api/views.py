@@ -1471,211 +1471,80 @@ class CMSDetector(APIView):
 
 class IPToDomain(APIView):
     def get(self, request):
-        from channels.layers import get_channel_layer
-        from asgiref.sync import async_to_sync
         import uuid
-        global DNS_AVAILABLE
+        from reNgine.tasks.dns import ip_range_discovery
         
         req = self.request
         ip_address = req.query_params.get("ip_address")
         custom_dns = req.query_params.get("dns_servers", "").strip()
         use_system_fallback = req.query_params.get("use_system_fallback", "false").lower() == "true"
         scan_id = req.query_params.get("scan_id", str(uuid.uuid4()))
-        response = {}
-        
-        # Initialize websocket channel
-        channel_layer = get_channel_layer()
-        room_group_name = f"ip-scan-{scan_id}"
-        
-        def send_progress(percentage, message, details="", log_message=None, log_type='info'):
-            if channel_layer:
-                try:
-                    async_to_sync(channel_layer.group_send)(
-                        room_group_name,
-                        {
-                            "type": "scan_progress",
-                            "message": {
-                                "percentage": percentage,
-                                "message": message,
-                                "details": details,
-                                "scan_id": scan_id,
-                                "log_message": log_message,
-                                "log_type": log_type
-                            }
-                        }
-                    )
-                except Exception as e:
-                    logger.debug(f"WebSocket send failed: {e}")
         
         if not ip_address:
             return Response({"status": False, "message": "IP Address Required", "scan_id": scan_id})
         
         try:
-            logger.info(f"Resolving IP address {ip_address} ...")
-            send_progress(5, "Initializing scan...", f"Preparing to scan {ip_address}")
+            logger.info(f"Starting IP range discovery for {ip_address} with scan_id {scan_id}")
             
-            # Get current DNS servers
-            current_dns_servers = self._get_current_dns_servers()
-            send_progress(10, "DNS servers detected", f"Using: {', '.join(current_dns_servers)}")
+            # Determine chunk size based on range size
+            from ipaddress import IPv4Network, AddressValueError
+            try:
+                # Try to parse as network (CIDR)
+                ip_list = list(IPv4Network(ip_address, False))
+            except AddressValueError:
+                # Single IP address, convert to /32 network
+                ip_list = list(IPv4Network(f"{ip_address}/32", False))
             
-            # Parse custom DNS servers
-            dns_servers = []
-            if custom_dns:
-                dns_servers = [dns.strip() for dns in custom_dns.split(',') if dns.strip()]
-                send_progress(15, "Custom DNS configured", f"Using custom DNS: {', '.join(dns_servers)}", 
-                             f"Custom DNS servers configured: {', '.join(dns_servers)}", 'success')
-
-                # Add system DNS as fallback only if explicitly requested
-                if use_system_fallback:
-                    dns_servers.extend(current_dns_servers)
-                    send_progress(18, "System DNS added as fallback", f"Total DNS servers: {len(dns_servers)}",
-                                 f"System DNS servers added as fallback: {', '.join(current_dns_servers)}", 'warning')
-                else:
-                    send_progress(18, "System DNS fallback disabled", "Using custom DNS exclusively",
-                                 "System DNS fallback disabled - using custom DNS exclusively", 'info')
-            else:
-                # Use system DNS if no custom DNS provided
-                dns_servers = current_dns_servers
-                send_progress(15, "Using system DNS", f"System DNS: {', '.join(current_dns_servers)}",
-                             f"Using system DNS servers: {', '.join(current_dns_servers)}", 'info')
-            
-            resolved_ips = []
-            discovered_domains = set()
-            ip_list = list(IPv4Network(ip_address, False))
             total_ips = len(ip_list)
             
-            # Inform about scan duration for large ranges
-            if total_ips > 1000:
-                send_progress(20, f"Starting resolution of {total_ips} IP addresses", f"Large range detected - This may take several minutes")
-            elif total_ips > 100:
-                send_progress(20, f"Starting resolution of {total_ips} IP addresses", f"Medium range - Expected duration: 1-2 minutes")
-            else:
-                send_progress(20, f"Starting resolution of {total_ips} IP addresses", f"Processing range {ip_address}")
+            # Adapt chunk size according to range size (DRY principle)
+            chunk_size = self._calculate_optimal_chunk_size(total_ips)
             
-            for index, ip in enumerate(ip_list):
-                ip_str = str(ip)
-                progress_percentage = 20 + (index / total_ips) * 60  # 20-80% for IP processing
+            # Launch Celery task
+            task = ip_range_discovery.delay(
+                ip_address=ip_address,
+                scan_id=scan_id,
+                custom_dns=custom_dns,
+                use_system_fallback=use_system_fallback,
+                chunk_size=chunk_size
+            )
+            
+            # Wait for task result
+            try:
+                response = task.get(timeout=300)  # 5 minutes timeout
                 
-                # Send progress updates less frequently for large ranges to avoid spam
-                if total_ips > 1000 and index % 50 == 0:  # Every 50 IPs for large ranges
-                    send_progress(progress_percentage, f"Scanning in progress...", f"Processed {index}/{total_ips} IPs ({(index/total_ips*100):.1f}%)")
-                elif total_ips > 100 and index % 10 == 0:  # Every 10 IPs for medium ranges
-                    send_progress(progress_percentage, f"Resolving IPs...", f"Processing {index + 1}/{total_ips}")
-                elif total_ips <= 100:  # Every IP for small ranges
-                    send_progress(progress_percentage, f"Resolving {ip_str}...", f"Processing {index + 1}/{total_ips}")
+                # Add fields compatible with existing interface
+                if response.get("status"):
+                    response["current_dns_servers"] = self._get_current_dns_servers()
+                    
+                return Response(response)
                 
-                domain_info = {
-                    "ip": ip_str,
-                    "domain": ip_str,
-                    "domains": [],
-                    "ips": [],
-                    "resolved_by": None,
-                    "is_alive": self._check_host_alive(ip_str)
-                }
-                
-                # Try to resolve using each DNS server
-                resolved = False
-                if DNS_AVAILABLE:
-                    for dns_server in dns_servers:
-                        try:
-                            # Configure resolver
-                            resolver = dns.resolver.Resolver()
-                            resolver.nameservers = [dns_server]
-                            resolver.timeout = 2
-                            resolver.lifetime = 5
-                            
-                            # Reverse DNS lookup
-                            reverse_name = dns.reversename.from_address(ip_str)
-                            answers = resolver.resolve(reverse_name, 'PTR')
-                            
-                            for answer in answers:
-                                hostname = str(answer).rstrip('.')
-                                if hostname != ip_str:
-                                    domain_info["domain"] = hostname
-                                    domain_info["domains"].append(hostname)
-                                    domain_info["resolved_by"] = dns_server
-                                    resolved = True
-                                    
-                                    # Log successful resolution for debugging
-                                    if total_ips <= 50:  # Only log for small ranges to avoid spam
-                                        send_progress(progress_percentage, f"Resolving {ip_str}...", f"Processing {index + 1}/{total_ips}",
-                                                     f"✓ {ip_str} → {hostname} (via {dns_server})", 'success')
-                                    
-                                    # Extract domain from hostname
-                                    domain_parts = hostname.split('.')
-                                    if len(domain_parts) >= 2:
-                                        # Get TLD (last two parts for most domains)
-                                        tld = '.'.join(domain_parts[-2:])
-                                        discovered_domains.add(tld)
-                                    break
-                            
-                            if resolved:
-                                break
-                                
-                        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.Timeout, Exception) as e:
-                            logger.debug(f"DNS resolution failed for {ip_str} using {dns_server}: {e}")
-                            # Log DNS failures for debugging (only for small ranges)
-                            if total_ips <= 20:
-                                send_progress(progress_percentage, f"Resolving {ip_str}...", f"Processing {index + 1}/{total_ips}",
-                                             f"✗ {ip_str} failed via {dns_server}: {str(e)[:50]}...", 'debug')
-                            continue
-                
-                # Fallback to system socket resolution only if no custom DNS or if system fallback is enabled
-                if not resolved and (not custom_dns or use_system_fallback):
-                    try:
-                        (domain, domains, ips) = socket.gethostbyaddr(ip_str)
-                        if domain != ip_str:
-                            domain_info["domain"] = domain
-                            domain_info["domains"] = domains or [domain]
-                            domain_info["resolved_by"] = "system"
-                            
-                            # Log successful system resolution
-                            if total_ips <= 50:
-                                send_progress(progress_percentage, f"Resolving {ip_str}...", f"Processing {index + 1}/{total_ips}",
-                                             f"✓ {ip_str} → {domain} (via system DNS)", 'warning')
-
-                            # Extract domain from hostname
-                            domain_parts = domain.split('.')
-                            if len(domain_parts) >= 2:
-                                tld = '.'.join(domain_parts[-2:])
-                                discovered_domains.add(tld)
-                    except socket.herror:
-                        logger.debug(f"No PTR record for {ip_str}")
-                        # Log system DNS failure for debugging (only for small ranges)
-                        if total_ips <= 20:
-                            send_progress(progress_percentage, f"Resolving {ip_str}...", f"Processing {index + 1}/{total_ips}",
-                                         f"✗ {ip_str} no PTR record (system DNS)", 'debug')
-                
-                resolved_ips.append(domain_info)
-            
-            send_progress(85, "Processing results...", "Sorting and organizing discovered hosts")
-            
-            # Sort results: resolved hostnames first, then IPs
-            resolved_ips.sort(key=lambda x: (x["domain"] == x["ip"], x["ip"]))
-            
-            alive_count = sum(1 for ip in resolved_ips if ip["is_alive"])
-            hostname_count = sum(1 for ip in resolved_ips if ip["domain"] != ip["ip"])
-            
-            send_progress(95, "Finalizing results...", f"Found {len(resolved_ips)} hosts ({alive_count} alive, {hostname_count} with hostnames)")
-            
-            response = {
-                "status": True,
-                "orig": ip_address,
-                "ip_address": resolved_ips,
-                "discovered_domains": list(discovered_domains),
-                "current_dns_servers": current_dns_servers,
-                "used_dns_servers": dns_servers,
+            except Exception as e:
+                logger.error(f"Task execution failed: {e}")
+                return Response({
+                    "status": False, 
+                    "ip_address": ip_address, 
+                    "message": f"Task execution failed: {e}",
                 "scan_id": scan_id
-            }
-            
-            # Final progress update
-            send_progress(100, "Scan completed!", "Ready for target selection")
+                })
             
         except Exception as e:
-            logger.exception(e)
-            response = {"status": False, "ip_address": ip_address, "message": f"Exception {e}"}
-        finally:
-            return Response(response)
+            logger.exception(f"Error in IPToDomain: {e}")
+            return Response({
+                "status": False, 
+                "ip_address": ip_address, 
+                "message": f"Exception: {e}",
+                "scan_id": scan_id
+            })
+    
+    def _calculate_optimal_chunk_size(self, total_ips):
+        """Calculate optimal chunk size based on IP range size (KISS principle)"""
+        if total_ips > 1000:
+            return 100  # Large chunks for large ranges
+        elif total_ips > 100:
+            return 50   # Medium chunks
+        else:
+            return 25   # Small chunks for small ranges
     
     def _get_current_dns_servers(self):
         """Get current system DNS servers"""
@@ -3500,3 +3369,106 @@ class FetchScreenshots(APIView):
             }
 
         return Response(screenshots_data)
+
+
+class PingHosts(APIView):
+    def post(self, request):
+        """
+        Launch ping task for discovered hosts
+        """
+        import uuid
+        from reNgine.tasks.dns import ping_hosts_task
+        
+        req = self.request
+        ip_list = req.data.get("ip_list", [])
+        scan_id = req.data.get("scan_id", str(uuid.uuid4()))
+        
+        if not ip_list:
+            return Response({
+                "status": False,
+                "message": "No IP addresses provided"
+            }, status=400)
+        
+        try:
+            logger.info(f"Starting ping task for {len(ip_list)} hosts with scan_id {scan_id}")
+            
+            # Launch ping task
+            task = ping_hosts_task.delay(ip_list, scan_id)
+            
+            return Response({
+                "status": True,
+                "message": "Ping task launched successfully",
+                "task_id": task.id,
+                "scan_id": scan_id,
+                "total_hosts": len(ip_list)
+            })
+            
+        except Exception as e:
+            logger.error(f"Failed to launch ping task: {e}")
+            return Response({
+                "status": False,
+                "message": f"Failed to launch ping task: {e}"
+            }, status=500)
+    
+    def get(self, request):
+        """
+        Get ping task results
+        """
+        from celery.result import AsyncResult
+        
+        task_id = request.query_params.get("task_id")
+        if not task_id:
+            return Response({
+                "status": False,
+                "message": "Task ID required"
+            }, status=400)
+        
+        try:
+            # Get task result
+            task_result = AsyncResult(task_id)
+            
+            if task_result.ready():
+                if task_result.successful():
+                    result = task_result.result
+                    return Response({
+                        "status": True,
+                        "task_status": "completed",
+                        "result": result
+                    })
+                else:
+                    return Response({
+                        "status": False,
+                        "task_status": "failed",
+                        "error": str(task_result.result)
+                    })
+            else:
+                return Response({
+                    "status": True,
+                    "task_status": "pending",
+                    "message": "Task is still running"
+                })
+                
+        except Exception as e:
+            logger.error(f"Failed to get task result: {e}")
+            return Response({
+                "status": False,
+                "message": f"Failed to get task result: {e}"
+            }, status=500)
+
+
+class GetCSRFToken(APIView):
+    def get(self, request):
+        """
+        Get CSRF token for API requests when CSRF_USE_SESSIONS=True
+        According to Django documentation: https://docs.djangoproject.com/en/5.2/howto/csrf/
+        """
+        from django.middleware.csrf import get_token
+        
+        # This will create the token and store it in the session
+        csrf_token = get_token(request)
+        
+        return Response({
+            "status": True,
+            "csrf_token": csrf_token,
+            "usage": "Include this token in X-CSRFToken header for POST requests"
+        })

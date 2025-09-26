@@ -2,6 +2,7 @@ import logging
 
 from dashboard.models import UserAPIKey
 from django.utils import timezone
+from django.views.decorators.csrf import csrf_exempt
 from rest_framework_api_key.models import APIKey
 
 logger = logging.getLogger(__name__)
@@ -12,7 +13,8 @@ class APIKeyAuthenticationMiddleware:
     Middleware to handle API Key authentication for external access (e.g., Burp Suite).
 
     This middleware intercepts API requests and simulates an authenticated user
-    when a valid API key is provided, allowing bypass of LoginRequiredMiddleware.
+    when a valid API key is provided, allowing bypass of LoginRequiredMiddleware
+    and CSRF verification (since API keys provide sufficient authentication security).
     """
 
     def __init__(self, get_response):
@@ -28,6 +30,8 @@ class APIKeyAuthenticationMiddleware:
                 request._api_key_authenticated = True
                 # Store the API key for permission checking
                 request._api_key = user_api_key
+                # Exempt from CSRF verification for API key authenticated requests
+                request._dont_enforce_csrf_checks = True
                 # Update last used timestamp (throttled to reduce DB writes)
                 now = timezone.now()
                 if not user_api_key.last_used or (now - user_api_key.last_used).total_seconds() > 300:  # 5 minutes

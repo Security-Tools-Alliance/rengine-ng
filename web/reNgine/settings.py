@@ -72,7 +72,7 @@ CSRF_TRUSTED_ORIGINS = [
 CSRF_COOKIE_SECURE = not DEBUG  # Use secure cookies in production
 CSRF_COOKIE_HTTPONLY = True  # Prevent JavaScript access to CSRF cookie for better security
 CSRF_COOKIE_SAMESITE = 'Lax'  # CSRF protection while allowing some cross-site requests
-CSRF_USE_SESSIONS = False  # Keep using cookies for CSRF tokens (default)
+CSRF_USE_SESSIONS = True  # Use sessions for CSRF tokens when HTTPONLY is True (more secure)
 CSRF_COOKIE_AGE = 31449600  # 1 year in seconds
 
 # Session security settings

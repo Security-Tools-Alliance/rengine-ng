@@ -1,10 +1,18 @@
 import json
 import subprocess
+import socket
+from ipaddress import IPv4Network
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import uuid
 
 import tldextract
 from celery.utils.log import get_task_logger
 from django.utils import timezone
 from dotted_dict import DottedDict
+from celery import group
+from celery.result import allow_join_result
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
 from targetApp.models import (
     DNSRecord,
     Domain,
@@ -33,6 +41,7 @@ from reNgine.utilities.external import (
     get_netlas_key,
     reverse_whois,
 )
+from reNgine.settings import DEFAULT_THREADS
 
 logger = get_task_logger(__name__)
 
@@ -500,3 +509,252 @@ def query_ip_history(domain):
     """
 
     return get_domain_historical_ip_address(domain)
+
+
+# Removed test task
+
+
+@app.task(name="ip_range_discovery", bind=False, queue="io_queue")
+def ip_range_discovery(ip_address, scan_id, custom_dns=None, use_system_fallback=False, chunk_size=50):
+    """
+    Parallel host discovery on IP range using Celery
+    
+    Args:
+        ip_address (str): IP range (e.g., 192.168.1.0/24)
+        scan_id (str): Unique scan ID for WebSocket
+        custom_dns (str): Custom DNS servers (comma-separated)
+        use_system_fallback (bool): Use system DNS as fallback
+        chunk_size (int): Chunk size for parallelization
+    
+    Returns:
+        dict: Discovery results
+    """
+    try:
+        logger.info(f"Starting IP range discovery for {ip_address} with scan_id {scan_id}")
+        
+        # Initialize WebSocket
+        channel_layer = get_channel_layer()
+        room_group_name = f"ip-scan-{scan_id}"
+        
+        def send_progress(percentage, message, details="", log_message=None, log_type='info'):
+            if channel_layer:
+                try:
+                    async_to_sync(channel_layer.group_send)(
+                        room_group_name,
+                        {
+                            "type": "scan_progress",
+                            "message": {
+                                "percentage": percentage,
+                                "message": message,
+                                "details": details,
+                                "scan_id": scan_id,
+                                "log_message": log_message,
+                                "log_type": log_type
+                            }
+                        }
+                    )
+                except Exception as e:
+                    logger.debug(f"WebSocket send failed: {e}")
+        
+        # DNS configuration
+        from reNgine.utilities.dns import get_current_dns_servers
+        current_dns_servers = get_current_dns_servers()
+        dns_servers = []
+        
+        if custom_dns:
+            dns_servers = [dns.strip() for dns in custom_dns.split(',') if dns.strip()]
+            send_progress(10, "Custom DNS configured", f"Using: {', '.join(dns_servers)}",
+                         f"Custom DNS servers: {', '.join(dns_servers)}", 'success')
+            
+            if use_system_fallback:
+                dns_servers.extend(current_dns_servers)
+                send_progress(15, "System DNS added as fallback", f"Total: {len(dns_servers)} servers",
+                             f"System DNS added: {', '.join(current_dns_servers)}", 'warning')
+        else:
+            dns_servers = current_dns_servers
+            send_progress(10, "Using system DNS", f"Servers: {', '.join(dns_servers)}",
+                         f"System DNS servers: {', '.join(dns_servers)}", 'info')
+        
+        # Parse IP range
+        from ipaddress import AddressValueError
+        try:
+            # Try to parse as network (CIDR)
+            ip_list = list(IPv4Network(ip_address, False))
+        except AddressValueError:
+            # Single IP address, convert to /32 network
+            ip_list = list(IPv4Network(f"{ip_address}/32", False))
+        
+        total_ips = len(ip_list)
+        
+        send_progress(20, f"Processing {total_ips} IP addresses", 
+                     f"Chunking into groups of {chunk_size} for parallel processing")
+        
+        # Process IPs directly without sub-tasks to avoid deadlocks
+        from reNgine.utilities.dns import resolve_ip_chunk
+        
+        send_progress(20, f"Processing {len(ip_list)} IPs", 
+                     f"Using direct parallel processing with {chunk_size} chunk size")
+        
+        # Process in chunks directly
+        resolved_ips = []
+        discovered_domains = set()
+        
+        chunks = [ip_list[i:i + chunk_size] for i in range(0, len(ip_list), chunk_size)]
+        
+        for i, chunk in enumerate(chunks):
+            send_progress(20 + (i * 60 // len(chunks)), f"Processing chunk {i+1}/{len(chunks)}", 
+                         f"Resolving {len(chunk)} IPs")
+            
+            # Process chunk directly
+            chunk_results = resolve_ip_chunk(
+                ip_chunk=[str(ip) for ip in chunk],
+                dns_servers=dns_servers,
+                use_system_fallback=use_system_fallback
+            )
+            
+            # Add results
+            for result in chunk_results:
+                if result and result.get('domain') != result.get('ip'):
+                    discovered_domains.add(result['domain'])
+                resolved_ips.append(result)
+        
+        send_progress(80, "DNS discovery completed", "Ready for ping checks")
+        
+        # Sort results
+        resolved_ips.sort(key=lambda x: (x["domain"] == x["ip"], x["ip"]))
+        
+        send_progress(90, "Consolidating results", "Sorting and formatting results")
+        
+        # Final statistics
+        hostname_count = sum(ip["domain"] != ip["ip"] for ip in resolved_ips)
+        
+        send_progress(95, "Finalizing results", 
+                     f"Found {len(resolved_ips)} hosts ({hostname_count} with hostnames)")
+        
+        response = {
+            "status": True,
+            "orig": ip_address,
+            "ip_address": resolved_ips,
+            "discovered_domains": list(discovered_domains),
+            "current_dns_servers": current_dns_servers,
+            "used_dns_servers": dns_servers,
+            "scan_id": scan_id,
+            "total_hosts": len(resolved_ips),
+            "hostname_count": hostname_count,
+            "ping_required": True  # Indicate that ping task is needed
+        }
+        
+        send_progress(100, "Scan completed!", "Ready for target selection")
+        
+        logger.info(f"IP range discovery completed for {ip_address}: {len(resolved_ips)} hosts found")
+        return response
+        
+    except Exception as e:
+        logger.exception(f"Error in IP range discovery: {e}")
+        if channel_layer:
+            try:
+                async_to_sync(channel_layer.group_send)(
+                    room_group_name,
+                    {
+                        "type": "scan_progress",
+                        "message": {
+                            "percentage": 100,
+                            "message": "Error occurred",
+                            "details": f"Failed: {str(e)}",
+                            "scan_id": scan_id,
+                            "log_message": f"Error: {str(e)}",
+                            "log_type": 'error'
+                        }
+                    }
+                )
+            except:
+                pass
+        
+        return {
+            "status": False,
+            "ip_address": ip_address,
+            "message": f"Exception: {e}",
+            "scan_id": scan_id
+        }
+
+
+@app.task(name="ping_hosts_task", bind=False, queue="io_queue")
+def ping_hosts_task(ip_list, scan_id=None):
+    """
+    Celery task to ping multiple hosts in parallel
+    
+    Args:
+        ip_list (list): List of IP addresses to ping
+        scan_id (str): Scan ID for WebSocket updates
+    
+    Returns:
+        dict: Ping results with is_alive status
+    """
+    from reNgine.utilities.dns import check_host_alive
+    from asgiref.sync import async_to_sync
+    from channels.layers import get_channel_layer
+    
+    logger.info(f"Starting ping check for {len(ip_list)} hosts")
+    
+    # WebSocket for progress updates
+    channel_layer = get_channel_layer()
+    room_group_name = f"ip-scan-{scan_id}" if scan_id else None
+    
+    def send_progress(message, log_type='info'):
+        if channel_layer and room_group_name:
+            try:
+                async_to_sync(channel_layer.group_send)(
+                    room_group_name,
+                    {
+                        "type": "scan_progress",
+                        "message": {
+                            "log_message": message,
+                            "log_type": log_type,
+                            "scan_id": scan_id
+                        }
+                    }
+                )
+            except:
+                pass
+    
+    results = {}
+    alive_count = 0
+    
+    # Process pings in parallel using ThreadPoolExecutor
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    
+    with ThreadPoolExecutor(max_workers=DEFAULT_THREADS) as executor:
+        # Submit all ping tasks
+        future_to_ip = {
+            executor.submit(check_host_alive, ip): ip 
+            for ip in ip_list
+        }
+        
+        # Collect results as they complete
+        for i, future in enumerate(as_completed(future_to_ip)):
+            ip = future_to_ip[future]
+            try:
+                is_alive = future.result(timeout=10)
+                results[ip] = is_alive
+                if is_alive:
+                    alive_count += 1
+                
+                # Send progress update every 10 pings
+                if (i + 1) % 10 == 0:
+                    send_progress(f"Pinged {i + 1}/{len(ip_list)} hosts ({alive_count} alive)", 'info')
+                    
+            except Exception as e:
+                logger.debug(f"Ping failed for {ip}: {e}")
+                results[ip] = False
+    
+    send_progress(f"Ping completed: {alive_count}/{len(ip_list)} hosts alive", 'success')
+    
+    return {
+        "status": True,
+        "ping_results": results,
+        "alive_count": alive_count,
+        "total_count": len(ip_list)
+    }
+
+
+# Removed resolve_ip_chunk_task to avoid deadlocks and simplify processing

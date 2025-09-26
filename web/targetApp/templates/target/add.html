@@ -122,7 +122,20 @@ Add or Import Targets
                   </div>
                 </div>
                 
-                <button class="btn btn-primary mt-2 float-end" disabled type="button" name="resolve_ip_button" id="resolve_ip_button"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-repeat"><polyline points="17 1 21 5 17 9"></polyline><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><polyline points="7 23 3 19 7 15"></polyline><path d="M21 13v2a4 4 0 0 1-4 4H3"></path></svg> Resolve IP Address</button>
+                <div class="d-flex gap-2 mt-2 float-end">
+                  <button class="btn btn-primary" disabled type="button" name="resolve_ip_button" id="resolve_ip_button">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-repeat">
+                      <polyline points="17 1 21 5 17 9"></polyline><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><polyline points="7 23 3 19 7 15"></polyline><path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
+                    </svg> 
+                    DNS Discovery
+                  </button>
+                  <button class="btn btn-success" disabled type="button" name="ping_hosts_button" id="ping_hosts_button" style="display: none;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-activity">
+                      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                    </svg> 
+                    Check Alive Hosts
+                  </button>
+                </div>
                 
                 <!-- Progress section -->
                 <div id="scan_progress_section" class="mt-4" style="display: none;">
@@ -313,6 +326,11 @@ Add or Import Targets
 <script src="{% static 'custom/custom.js' %}"></script>
 <script type="text/javascript">
   $(document).ready(function(){
+    // Global variables for two-step workflow
+    var discoveredHosts = [];
+    var currentScanId = null;
+    var currentPingTaskId = null;
+    
     var add_multiple_targets_btn = document.getElementById("add-multiple-targets");
     add_multiple_targets_btn.disabled = true;
     $('#addTargets').on('change keyup',function(){
@@ -513,10 +531,19 @@ Add or Import Targets
             return response.json();
       })
       .then(function(json_data) {
-        addLogEntry('Scan completed successfully', 'success');
-        addLogEntry(`Found ${json_data.total_hosts} hosts (${json_data.alive_count} alive, ${json_data.hostname_count} with hostnames)`, 'success');
+        addLogEntry('DNS discovery completed successfully', 'success');
+        addLogEntry(`Found ${json_data.total_hosts} hosts (${json_data.hostname_count} with hostnames)`, 'success');
         if (json_data.used_dns_servers) {
           addLogEntry(`DNS servers used: ${json_data.used_dns_servers.join(', ')}`, 'info');
+        }
+        
+        // Store discovered hosts and enable ping button if ping is required
+        discoveredHosts = json_data.ip_address || [];
+        currentScanId = scanId;
+        
+        if (json_data.ping_required && discoveredHosts.length > 0) {
+          addLogEntry('Ping check required to determine host status', 'warning');
+          $('#ping_hosts_button').show().prop('disabled', false);
         }
         
         // Clear progress interval and close WebSocket connection
@@ -571,6 +598,173 @@ Add or Import Targets
         }, 2000);
       });
     });
+    
+    // Ping hosts functionality
+    $("#ping_hosts_button").click(function(){
+      if (!discoveredHosts.length) {
+        addLogEntry('No hosts available for ping check', 'error');
+        return;
+      }
+      
+      // Extract IP addresses from discovered hosts
+      var ipList = discoveredHosts.map(host => host.ip);
+      
+      addLogEntry(`Starting ping check for ${ipList.length} hosts`, 'info');
+      
+      // Show progress section
+      $("#scan_progress_section").show();
+      updateProgress(0, "Starting ping check...", `Checking ${ipList.length} hosts`);
+      
+      // Get CSRF token for session-based requests
+      var csrfToken = getCookie("csrftoken");
+      
+      // Launch ping task
+      fetch('/api/tools/ping_hosts/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrfToken
+        },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          ip_list: ipList,
+          scan_id: currentScanId
+        })
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.status) {
+          currentPingTaskId = data.task_id;
+          addLogEntry(`Ping task launched successfully (Task ID: ${data.task_id})`, 'success');
+          
+          // Start polling for results
+          pollPingResults();
+        } else {
+          addLogEntry(`Failed to launch ping task: ${data.message}`, 'error');
+          updateProgress(100, "Error occurred!", data.message);
+          $('#progress_bar').removeClass('progress-bar-striped progress-bar-animated').addClass('bg-danger');
+        }
+      })
+      .catch(error => {
+        addLogEntry(`Error launching ping task: ${error.message}`, 'error');
+        updateProgress(100, "Error occurred!", error.message);
+        $('#progress_bar').removeClass('progress-bar-striped progress-bar-animated').addClass('bg-danger');
+      });
+    });
+    
+    function pollPingResults() {
+      if (!currentPingTaskId) return;
+      
+      fetch(`/api/tools/ping_hosts/?task_id=${currentPingTaskId}`, {
+        headers: {
+          'X-CSRFToken': getCookie("csrftoken")
+        },
+        credentials: 'same-origin'
+      })
+      .then(response => {
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        return response.json();
+      })
+      .then(data => {
+        // Validate response structure
+        if (!data || typeof data !== 'object') {
+          throw new Error('Invalid response format received');
+        }
+        
+        if (data.status) {
+          if (data.task_status === 'completed') {
+            // Task completed successfully
+            var result = data.result;
+            
+            // Validate result structure
+            if (!result || typeof result !== 'object') {
+              addLogEntry('Error: Invalid result structure received from ping task', 'error');
+              return;
+            }
+            
+            if (!result.ping_results) {
+              addLogEntry('Error: No ping results in response', 'error');
+              return;
+            }
+            
+            var aliveCount = result.alive_count || 0;
+            var totalCount = result.total_count || 0;
+            addLogEntry(`Ping completed: ${aliveCount}/${totalCount} hosts alive`, 'success');
+            
+            // Update discovered hosts with ping results
+            updateHostsWithPingResults(result.ping_results);
+            
+            updateProgress(100, "Ping check completed!", `${result.alive_count}/${result.total_count} hosts alive`);
+            
+            setTimeout(function() {
+              $("#scan_progress_section").hide();
+              $('#logs_content').collapse('hide');
+              
+              // Refresh the display with updated alive status
+              $('#resolved_domains_div').empty();
+              var updatedData = {
+                status: true,
+                ip_address: discoveredHosts,
+                total_hosts: discoveredHosts.length,
+                hostname_count: discoveredHosts.filter(h => h.domain !== h.ip).length,
+                discovered_domains: [...new Set(discoveredHosts.filter(h => h.domain !== h.ip).map(h => h.domain.split('.').slice(-2).join('.')))],
+                used_dns_servers: ['Updated with ping results']
+              };
+              displayResolvedResults(updatedData);
+              setupSelectionHandlers();
+            }, 1000);
+            
+          } else if (data.task_status === 'failed') {
+            addLogEntry(`Ping task failed: ${data.error}`, 'error');
+            updateProgress(100, "Ping check failed!", data.error);
+            $('#progress_bar').removeClass('progress-bar-striped progress-bar-animated').addClass('bg-danger');
+          } else {
+            // Task still running
+            updateProgress(50, "Ping check in progress...", "Checking host connectivity");
+            setTimeout(pollPingResults, 2000); // Poll again in 2 seconds
+          }
+        } else {
+          addLogEntry(`Error checking ping status: ${data.message}`, 'error');
+        }
+      })
+      .catch(error => {
+        addLogEntry(`Error polling ping results: ${error.message}`, 'error');
+        setTimeout(pollPingResults, 3000); // Retry in 3 seconds
+      });
+    }
+    
+    function updateHostsWithPingResults(pingResults) {
+      // Validate pingResults parameter
+      if (!pingResults || typeof pingResults !== 'object') {
+        addLogEntry('Warning: Invalid ping results received', 'warning');
+        return;
+      }
+      
+      var updatedCount = 0;
+      discoveredHosts.forEach(host => {
+        if (!host || !host.ip) {
+          addLogEntry(`Warning: Invalid host object found: ${JSON.stringify(host)}`, 'warning');
+          return;
+        }
+        
+        if (pingResults.hasOwnProperty(host.ip)) {
+          var previousStatus = host.is_alive;
+          host.is_alive = Boolean(pingResults[host.ip]);
+          updatedCount++;
+          
+          // Log status changes for debugging
+          if (previousStatus !== host.is_alive) {
+            addLogEntry(`Host ${host.ip} status changed: ${previousStatus} → ${host.is_alive}`, 'debug');
+          }
+        } else {
+          addLogEntry(`Warning: No ping result found for host ${host.ip}`, 'warning');
+        }
+      });
+      
+      addLogEntry(`Updated ${updatedCount}/${discoveredHosts.length} hosts with ping results`, 'info');
+    }
     
     function updateProgress(percentage, text, details) {
       var roundedPercentage = Math.round(percentage);
@@ -664,12 +858,16 @@ Add or Import Targets
         <div class="alert alert-info">
           <strong>Scan Results:</strong> ${total_count} hosts found (${alive_count} alive, ${hostname_count} with hostnames, ${ip_only_count} IPs only)
           <br><strong>Used DNS Servers:</strong> ${json_data['used_dns_servers'].join(', ')}
+          ${alive_count === 0 && json_data.ping_required ? '<br><span class="text-warning"><i class="fas fa-exclamation-triangle"></i> Host status will be updated after ping check</span>' : ''}
         </div>
       `);
       
+      // Extract domains from hostnames (same logic as after ping)
+      var extractedDomains = [...new Set(json_data['ip_address'].filter(h => h.domain !== h.ip).map(h => h.domain.split('.').slice(-2).join('.')))];
+      
       // Display discovered domains first
-      if (json_data['discovered_domains'] && json_data['discovered_domains'].length > 0) {
-        var sortedDomains = json_data['discovered_domains'].sort();
+      if (extractedDomains && extractedDomains.length > 0) {
+        var sortedDomains = extractedDomains.sort();
         $('#resolved_domains_div').append(`
           <h3 class="text-primary mt-4 mb-3"><i class="fas fa-globe"></i> Domains</h3>
           <div id="discovered_domains" class="row mb-4"></div>
