@@ -307,11 +307,13 @@ def add_target(request, slug):
                 discovered_domains = request.POST.getlist("discovered_domains")
                 resolved_hosts_data = request.POST.getlist("resolved_hosts")
                 
+                target_name = request.POST.get("targetName", "").strip()
                 description = request.POST.get("targetDescription", "")
                 h1_team_handle = request.POST.get("targetH1TeamHandle")
                 original_ip_range = request.POST.get("ip_address", "")
                 
                 logger.info(f"Processing IP scan results for {original_ip_range}")
+                logger.info(f"Target name: {target_name}")
                 logger.info(f"Selected domains: {discovered_domains}")
                 logger.info(f"Selected hosts count: {len(resolved_hosts_data)}")
                 
@@ -325,77 +327,44 @@ def add_target(request, slug):
                 # Initialize stats tracker for detailed feedback
                 stats = StatsTracker()
                 
-                for host_data_json in resolved_hosts_data:
-                    try:
-                        host_info = json.loads(host_data_json.replace('&quot;', '"'))
-                        ip = host_info.get('ip')
-                        hostname = host_info.get('domain')
-                        is_alive = host_info.get('is_alive', False)
-                        resolved_by = host_info.get('resolved_by')
-                        
-                        if hostname != ip:  # It's a hostname
-                            # Deduplicate hostnames
-                            if hostname not in seen_hostnames:
-                                seen_hostnames.add(hostname)
-                                selected_hostnames.append(host_info)
-                                
-                                # Extract domain from hostname for domain creation using tldextract
-                                # This handles complex TLDs like .co.uk, .com.au correctly
-                                domain_name = get_domain_from_subdomain(hostname)
-                                if domain_name:
-                                    selected_domains.add(domain_name)
-                        else:  # It's an IP only
-                            # Deduplicate IPs
-                            if ip not in seen_ips:
-                                seen_ips.add(ip)
-                                selected_ips.append(host_info)
-                    except (json.JSONDecodeError, KeyError) as e:
-                        logger.warning(f"Error processing host data: {e}")
-                        continue
-                
-                # Add discovered domains from checkboxes to the set
-                for domain in discovered_domains:
-                    if validators.domain(domain):
-                        selected_domains.add(domain)
-                
-                subdomain_count = 0
-                
-                # 1. If user selected domains, add each domain as a target
-                domain_targets = {}
-                for domain_name in selected_domains:
-                    if validators.domain(domain_name):
-                        domain, created = Domain.objects.get_or_create(
-                            name=domain_name,
-                            project=project,
-                            defaults={
-                                'description': f"{description} (Discovered from {original_ip_range})",
-                                'h1_team_handle': h1_team_handle,
-                                'insert_date': timezone.now(),
-                            }
-                        )
-                        stats.domain(created)
-                        if created:
-                            logger.info("Added new domain target %s", domain.name)
-                        else:
-                            logger.info("Domain target %s already exists", domain.name)
-                        domain_targets[domain_name] = domain
-                
-                # 2. Process selected hostnames - add them as subdomains to their respective domain targets
-                for host_info in selected_hostnames:
-                    ip = host_info.get('ip')
-                    hostname = host_info.get('domain')
-                    is_alive = host_info.get('is_alive', False)
+                # If target name is provided, create a single target and group everything under it
+                if target_name:
+                    logger.info(f"Creating single target '{target_name}' to group all selected items")
                     
-                    # Find the domain target for this hostname using consistent extraction
-                    domain_name = get_domain_from_subdomain(hostname)
-                    if domain_name:
-                        target_domain = domain_targets.get(domain_name)
-                        
-                        if target_domain:
+                    # Create the main target with the provided name
+                    main_target, created = Domain.objects.get_or_create(
+                        name=target_name,
+                        project=project,
+                        defaults={
+                            'description': description or f"Grouped target from {original_ip_range}",
+                            'h1_team_handle': h1_team_handle,
+                            'insert_date': timezone.now(),
+                        }
+                    )
+                    stats.domain(created)
+                    if created:
+                        logger.info("Created new grouped target %s", main_target.name)
+                    else:
+                        logger.info("Using existing target %s", main_target.name)
+                    
+                    # Process all selected items as subdomains of the main target
+                    for host_data_json in resolved_hosts_data:
+                        try:
+                            host_info = json.loads(host_data_json.replace('&quot;', '"'))
+                            ip = host_info.get('ip')
+                            hostname = host_info.get('domain')
+                            is_alive = host_info.get('is_alive', False)
+                            
+                            # Deduplication: Skip if we've already processed this hostname
+                            if hostname in seen_hostnames:
+                                logger.debug("Skipping duplicate hostname: %s", hostname)
+                                continue
+                            seen_hostnames.add(hostname)
+                            
                             # Create subdomain entry
                             subdomain, created = Subdomain.objects.get_or_create(
                                 name=hostname,
-                                target_domain=target_domain,
+                                target_domain=main_target,
                                 defaults={
                                     'discovered_date': timezone.now(),
                                 }
@@ -403,9 +372,9 @@ def add_target(request, slug):
                             
                             stats.subdomain(created)
                             if created:
-                                logger.info("Added hostname subdomain %s for target %s", hostname, target_domain.name)
+                                logger.info("Added subdomain %s to grouped target %s", hostname, main_target.name)
                             else:
-                                logger.info("Subdomain %s already exists for target %s", hostname, target_domain.name)
+                                logger.info("Subdomain %s already exists for target %s", hostname, main_target.name)
                             
                             # Create/update IP address record
                             if validators.ipv4(ip) or validators.ipv6(ip):
@@ -429,78 +398,209 @@ def add_target(request, slug):
                                     logger.info("Added new IP %s", ip_obj.address)
                             
                             subdomain.save()
-
-                # 3. Process selected IPs - create a target with the IP range and add IPs as subdomains
-                if selected_ips:
-                    try:
-                        # Create target with IP range naming convention and store original IP range
-                        # Use a clear naming convention that distinguishes IP ranges from domain names
-                        range_target_name = f"iprange-{original_ip_range.replace('/', '_').replace(':', '-')}"
-                        ip_range_domain, created = Domain.objects.get_or_create(
-                            name=range_target_name,
-                            project=project,
-                            defaults={
-                                'description': f"{description} (IP Range {original_ip_range})",
-                                'h1_team_handle': h1_team_handle,
-                                'insert_date': timezone.now(),
-                                'ip_address_cidr': original_ip_range,
-                            }
-                        )
-                        stats.domain(created)
-                        if created:
-                            logger.info("Added new IP range target %s", ip_range_domain.name)
-                        else:
-                            logger.info("IP range target %s already exists", ip_range_domain.name)
-                        
-                        # Add selected IPs as subdomains
-                        for host_info in selected_ips:
-                            ip = host_info.get('ip')
-                            is_alive = host_info.get('is_alive', False)
                             
-                            # Create subdomain entry for the IP
+                        except (json.JSONDecodeError, KeyError) as e:
+                            logger.warning(f"Error processing host data: {e}")
+                            continue
+                    
+                    # Also add discovered domains as subdomains
+                    for domain in discovered_domains:
+                        if validators.domain(domain):
                             subdomain, created = Subdomain.objects.get_or_create(
-                                name=ip,
-                                target_domain=ip_range_domain,
+                                name=domain,
+                                target_domain=main_target,
                                 defaults={
                                     'discovered_date': timezone.now(),
                                 }
                             )
-                            
-                            # Create/update IP address record
-                            if validators.ipv4(ip) or validators.ipv6(ip):
-                                ip_data = get_ip_info(ip)
-                                
-                                # Perform reverse DNS lookup for accurate reverse pointer
-                                reverse_pointer = get_reverse_dns(ip)
-                                
-                                ip_obj, ip_created = IpAddress.objects.get_or_create(
-                                    address=ip,
-                                    defaults={
-                                        'reverse_pointer': reverse_pointer,
-                                        'is_private': ip_data.is_private,
-                                        'version': ip_data.version,
-                                    }
-                                )
-                                subdomain.ip_addresses.add(ip_obj)
-                                
-                                if ip_created:
-                                    logger.info("Added new IP %s", ip_obj.address)
-                            
                             stats.subdomain(created)
                             if created:
-                                logger.info("Added IP subdomain %s for target %s", ip, ip_range_domain.name)
+                                logger.info("Added discovered domain %s as subdomain to grouped target %s", domain, main_target.name)
                             else:
-                                logger.info("IP subdomain %s already exists for target %s", ip, ip_range_domain.name)
+                                logger.info("Discovered domain %s already exists as subdomain for target %s", domain, main_target.name)
+                    
+                    # Update total_processed_count
+                    total_processed_count = stats.get_total_processed()
+                    logger.info(f"Grouped target processing complete: {stats.as_dict()}")
+                    
+                else:
+                    # Original logic for individual targets (when no target name is provided)
+                    for host_data_json in resolved_hosts_data:
+                        try:
+                            host_info = json.loads(host_data_json.replace('&quot;', '"'))
+                            ip = host_info.get('ip')
+                            hostname = host_info.get('domain')
+                            is_alive = host_info.get('is_alive', False)
+                            resolved_by = host_info.get('resolved_by')
+                            
+                            if hostname != ip:  # It's a hostname
+                                # Deduplicate hostnames
+                                if hostname not in seen_hostnames:
+                                    seen_hostnames.add(hostname)
+                                    selected_hostnames.append(host_info)
+                                    
+                                    # Extract domain from hostname for domain creation using tldextract
+                                    # This handles complex TLDs like .co.uk, .com.au correctly
+                                    domain_name = get_domain_from_subdomain(hostname)
+                                    if domain_name:
+                                        selected_domains.add(domain_name)
+                            else:  # It's an IP only
+                                # Deduplicate IPs
+                                if ip not in seen_ips:
+                                    seen_ips.add(ip)
+                                    selected_ips.append(host_info)
+                        except (json.JSONDecodeError, KeyError) as e:
+                            logger.warning(f"Error processing host data: {e}")
+                            continue
+                    
+                    # Add discovered domains from checkboxes to the set
+                    for domain in discovered_domains:
+                        if validators.domain(domain):
+                            selected_domains.add(domain)
+                    
+                    subdomain_count = 0
+                    
+                    # 1. If user selected domains, add each domain as a target
+                    domain_targets = {}
+                    for domain_name in selected_domains:
+                        if validators.domain(domain_name):
+                            domain, created = Domain.objects.get_or_create(
+                                name=domain_name,
+                                project=project,
+                                defaults={
+                                    'description': f"{description} (Discovered from {original_ip_range})",
+                                    'h1_team_handle': h1_team_handle,
+                                    'insert_date': timezone.now(),
+                                }
+                            )
+                            stats.domain(created)
+                            if created:
+                                logger.info("Added new domain target %s", domain.name)
+                            else:
+                                logger.info("Domain target %s already exists", domain.name)
+                            domain_targets[domain_name] = domain
+                    
+                    # 2. Process selected hostnames - add them as subdomains to their respective domain targets
+                    for host_info in selected_hostnames:
+                        ip = host_info.get('ip')
+                        hostname = host_info.get('domain')
+                        is_alive = host_info.get('is_alive', False)
+                        
+                        # Find the domain target for this hostname using consistent extraction
+                        domain_name = get_domain_from_subdomain(hostname)
+                        if domain_name:
+                            target_domain = domain_targets.get(domain_name)
+                            
+                            if target_domain:
+                                # Create subdomain entry
+                                subdomain, created = Subdomain.objects.get_or_create(
+                                    name=hostname,
+                                    target_domain=target_domain,
+                                    defaults={
+                                        'discovered_date': timezone.now(),
+                                    }
+                                )
+                                
+                                stats.subdomain(created)
+                                if created:
+                                    logger.info("Added hostname subdomain %s for target %s", hostname, target_domain.name)
+                                else:
+                                    logger.info("Subdomain %s already exists for target %s", hostname, target_domain.name)
+                                
+                                # Create/update IP address record
+                                if validators.ipv4(ip) or validators.ipv6(ip):
+                                    ip_data = get_ip_info(ip)
+                                    
+                                    # Perform reverse DNS lookup for accurate reverse pointer
+                                    reverse_pointer = get_reverse_dns(ip)
+                                    
+                                    ip_obj, ip_created = IpAddress.objects.get_or_create(
+                                        address=ip,
+                                        defaults={
+                                            'reverse_pointer': reverse_pointer,
+                                            'is_private': ip_data.is_private,
+                                            'version': ip_data.version,
+                                        }
+                                    )
+                                    subdomain.ip_addresses.add(ip_obj)
+                                    
+                                    stats.ip(ip_created)
+                                    if ip_created:
+                                        logger.info("Added new IP %s", ip_obj.address)
+                                
+                                subdomain.save()
 
-                            subdomain.save()
+                    # 3. Process selected IPs - create a target with the IP range and add IPs as subdomains
+                    if selected_ips:
+                        try:
+                            # Create target with IP range naming convention and store original IP range
+                            # Use a clear naming convention that distinguishes IP ranges from domain names
+                            range_target_name = f"iprange-{original_ip_range.replace('/', '_').replace(':', '-')}"
+                            ip_range_domain, created = Domain.objects.get_or_create(
+                                name=range_target_name,
+                                project=project,
+                                defaults={
+                                    'description': f"{description} (IP Range {original_ip_range})",
+                                    'h1_team_handle': h1_team_handle,
+                                    'insert_date': timezone.now(),
+                                    'ip_address_cidr': original_ip_range,
+                                }
+                            )
+                            stats.domain(created)
+                            if created:
+                                logger.info("Added new IP range target %s", ip_range_domain.name)
+                            else:
+                                logger.info("IP range target %s already exists", ip_range_domain.name)
+                            
+                            # Add selected IPs as subdomains
+                            for host_info in selected_ips:
+                                ip = host_info.get('ip')
+                                is_alive = host_info.get('is_alive', False)
+                                
+                                # Create subdomain entry for the IP
+                                subdomain, created = Subdomain.objects.get_or_create(
+                                    name=ip,
+                                    target_domain=ip_range_domain,
+                                    defaults={
+                                        'discovered_date': timezone.now(),
+                                    }
+                                )
+                                
+                                # Create/update IP address record
+                                if validators.ipv4(ip) or validators.ipv6(ip):
+                                    ip_data = get_ip_info(ip)
+                                    
+                                    # Perform reverse DNS lookup for accurate reverse pointer
+                                    reverse_pointer = get_reverse_dns(ip)
+                                    
+                                    ip_obj, ip_created = IpAddress.objects.get_or_create(
+                                        address=ip,
+                                        defaults={
+                                            'reverse_pointer': reverse_pointer,
+                                            'is_private': ip_data.is_private,
+                                            'version': ip_data.version,
+                                        }
+                                    )
+                                    subdomain.ip_addresses.add(ip_obj)
+                                    
+                                    if ip_created:
+                                        logger.info("Added new IP %s", ip_obj.address)
+                                
+                                stats.subdomain(created)
+                                if created:
+                                    logger.info("Added IP subdomain %s for target %s", ip, ip_range_domain.name)
+                                else:
+                                    logger.info("IP subdomain %s already exists for target %s", ip, ip_range_domain.name)
 
-                    except (AddressValueError, ValueError) as e:
-                        logger.warning(f"Error creating IP range target: {e}")
-                
-                # Update total_processed_count to include both created and existing items
-                total_processed_count = stats.get_total_processed()
-                
-                logger.info(f"Processing complete: {stats.as_dict()}")
+                                subdomain.save()
+
+                        except (AddressValueError, ValueError) as e:
+                            logger.warning(f"Error creating IP range target: {e}")
+                    
+                    # Update total_processed_count to include both created and existing items
+                    total_processed_count = stats.get_total_processed()
+                    
+                    logger.info(f"Processing complete: {stats.as_dict()}")
 
         except (Http404, ValueError) as e:
             logger.exception(e)

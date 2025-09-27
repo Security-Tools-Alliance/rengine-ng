@@ -1,3 +1,4 @@
+import contextlib
 import socket
 import subprocess
 import platform
@@ -69,18 +70,16 @@ def get_current_dns_servers():
     dns_servers = []
     try:
         system = platform.system().lower()
-        
+
         if system == "linux":
-            try:
+            with contextlib.suppress(Exception):
                 with open('/etc/resolv.conf', 'r') as f:
                     for line in f:
                         if line.strip().startswith('nameserver'):
                             dns_server = line.strip().split()[1]
                             dns_servers.append(dns_server)
-            except:
-                pass
         elif system == "windows":
-            try:
+            with contextlib.suppress(Exception):
                 result = subprocess.run(['nslookup'], capture_output=True, text=True, input='\n')
                 for line in result.stdout.split('\n'):
                     if 'Server:' in line:
@@ -88,17 +87,14 @@ def get_current_dns_servers():
                         if dns_server and dns_server != 'localhost':
                             dns_servers.append(dns_server)
                         break
-            except:
-                pass
-        
         # Fallback to common DNS servers if none found
         if not dns_servers:
             dns_servers = ['8.8.8.8', '1.1.1.1']
-            
+
     except Exception as e:
         logger.debug(f"Error getting DNS servers: {e}")
         dns_servers = ['8.8.8.8', '1.1.1.1']
-    
+
     return dns_servers
 
 
@@ -206,7 +202,7 @@ def resolve_ip_with_dns(ip_str, dns_servers, use_system_fallback=False):
 
 
 def _create_failed_resolution_result(ip):
-    """Create result for failed IP resolution (DRY principle)"""
+    """Create result for failed IP resolution"""
     return {
         "ip": str(ip),
         "domain": str(ip),
@@ -245,7 +241,7 @@ def resolve_ip_chunk(ip_chunk, dns_servers, use_system_fallback=False):
             except Exception as e:
                 ip = future_to_ip[future]
                 logger.debug(f"Error resolving {ip}: {e}")
-                # Add IP even if resolution fails (DRY)
+                # Add IP even if resolution fails
                 results.append(_create_failed_resolution_result(ip))
     
     return results

@@ -18,6 +18,8 @@ poetry run -C $RENGINE_FOLDER python3 manage.py makemigrations
 print_msg "Migrate database"
 poetry run -C $RENGINE_FOLDER python3 manage.py migrate
 
+print_msg "Collect static files"
+poetry run -C $RENGINE_FOLDER python3 manage.py collectstatic --noinput
 
 print_msg "Starting web server with auto-restart enabled"
 

@@ -123,12 +123,15 @@ Add or Import Targets
                 </div>
                 
                 <div class="d-flex gap-2 mt-2 float-end">
-                  <button class="btn btn-primary" disabled type="button" name="resolve_ip_button" id="resolve_ip_button">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-repeat">
-                      <polyline points="17 1 21 5 17 9"></polyline><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><polyline points="7 23 3 19 7 15"></polyline><path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
-                    </svg> 
-                    DNS Discovery
-                  </button>
+                  <span id="resolve_ip_wrapper" data-bs-toggle="tooltip" data-bs-placement="top" 
+                        title="Please enter a valid IP address or CIDR range (e.g., 192.168.1.1 or 192.168.1.0/24)">
+                    <button class="btn btn-primary" disabled type="button" name="resolve_ip_button" id="resolve_ip_button">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-repeat">
+                        <polyline points="17 1 21 5 17 9"></polyline><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><polyline points="7 23 3 19 7 15"></polyline><path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
+                      </svg> 
+                      DNS Discovery
+                    </button>
+                  </span>
                   <button class="btn btn-success" disabled type="button" name="ping_hosts_button" id="ping_hosts_button" style="display: none;">
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-activity">
                       <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
@@ -175,48 +178,18 @@ Add or Import Targets
                   </div>
                 </div>
               </div>
-              <div class="col-12">
-                <div id='selection_checkboxes' class='mt-2 n-chk' style="display: none;">
-                  <div class="row">
-                    <div class="col-md-3">
-                      <div class="form-check">
-                        <input type="checkbox" class="form-check-input" id="select_all_domains">
-                        <label class="form-check-label" for="select_all_domains">Select All Domains</label>
-                      </div>
-                    </div>
-                    <div class="col-md-3">
-                      <div class="form-check">
-                        <input type="checkbox" class="form-check-input" id="select_all_hostnames">
-                        <label class="form-check-label" for="select_all_hostnames">Select All Hostnames</label>
-                      </div>
-                    </div>
-                    <div class="col-md-3">
-                      <div class="form-check">
-                        <input type="checkbox" class="form-check-input" id="select_all_ips">
-                        <label class="form-check-label" for="select_all_ips">Select All IPs</label>
-                      </div>
-                    </div>
-                    <div class="col-md-3">
-                  <div class="form-check">
-                        <input type="checkbox" class="form-check-input" id="select_all_alive">
-                        <label class="form-check-label" for="select_all_alive">Select All Alive Hosts</label>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
               
               <!-- Logs window (outside progress section to remain visible after scan) -->
               <div class="col-12 mt-3">
                 <div id="scan_logs_section" class="mt-3" style="display: none;">
                   <div class="card">
-                    <div class="card-header py-2" style="cursor: pointer;" id="logs_header" data-bs-toggle="collapse" data-bs-target="#logs_content" aria-expanded="true">
+                    <div class="card-header py-2">
                       <div class="d-flex justify-content-between align-items-center">
-                        <h6 class="mb-0">
+                        <h6 class="mb-0" style="cursor: pointer;" id="logs_header" data-bs-toggle="collapse" data-bs-target="#logs_content" aria-expanded="true">
                           <i class="fas fa-list-alt"></i> Scan Logs 
                           <i class="fas fa-chevron-down ms-2" id="logs_chevron"></i>
                         </h6>
-                        <button type="button" class="btn btn-outline-secondary btn-sm" id="clear_logs_btn" onclick="event.stopPropagation();">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="clear_logs_btn">
                           <i class="fas fa-trash"></i> Clear
                         </button>
                       </div>
@@ -234,6 +207,11 @@ Add or Import Targets
               <div class="col-12 mt-3">
                 <div id="resolved_domains_div">
                 </div>
+              </div>
+              <div class="col-12 mt-3">
+                <label for="targetName" class="form-label">Target Name (Optional)</label>
+                <input type="text" class="form-control form-control-lg" id="targetName" placeholder="My Target" name="targetName">
+                <small class="text-muted">If provided, all hostnames and IPs will be grouped under this single target name</small>
               </div>
               <div class="col-12 mt-3">
                 <label for="targetDescription" class="form-label">Target Description (Optional)</label>
@@ -330,6 +308,8 @@ Add or Import Targets
     var discoveredHosts = [];
     var currentScanId = null;
     var currentPingTaskId = null;
+    var socket = null; // Global WebSocket variable
+    var lastWebSocketProgress = 0; // Track last WebSocket progress update
     
     var add_multiple_targets_btn = document.getElementById("add-multiple-targets");
     add_multiple_targets_btn.disabled = true;
@@ -346,22 +326,47 @@ Add or Import Targets
       }
     });
 
-    $('#ip_address').on('change keyup',function(){
+    $('#ip_address').on('input change keyup paste', function(){
       var resolve_ip_button = document.getElementById("resolve_ip_button");
-      var ip_addr = $("#ip_address").val();
-      if (/^([0-9]{1,3}\.){3}[0-9]{1,3}(\/([0-9]|[1-2][0-9]|3[0-2]))?$/.test(ip_addr)) {
+      var ip_addr = $("#ip_address").val().trim();
+      
+      // Enhanced IP/CIDR validation regex
+      var ipRegex = /^([0-9]{1,3}\.){3}[0-9]{1,3}(\/([0-9]|[1-2][0-9]|3[0-2]))?$/;
+      
+      if (ip_addr && ipRegex.test(ip_addr)) {
         resolve_ip_button.disabled = false;
-      }
-      else {
+        // Remove tooltip when button is enabled
+        $('#resolve_ip_wrapper').tooltip('dispose');
+      } else {
         resolve_ip_button.disabled = true;
+        // Update tooltip message based on current input
+        var tooltipMessage = "Please enter a valid IP address or CIDR range";
+        if (ip_addr) {
+          tooltipMessage = "Invalid IP format. Expected: 192.168.1.1 or 192.168.1.0/24";
+        }
+        
+        // Dispose existing tooltip first
+        $('#resolve_ip_wrapper').tooltip('dispose');
+        
+        // Update the title attribute on wrapper
+        $('#resolve_ip_wrapper').attr('title', tooltipMessage);
+        
+        // Reinitialize tooltip with new content on wrapper
+        $('#resolve_ip_wrapper').tooltip({
+          placement: 'top',
+          trigger: 'hover'
+        });
       }
     });
 
     // Load current DNS info on page load
     loadCurrentDNSInfo();
     
-    // hide selection checkboxes by default
-    $("#selection_checkboxes").hide();
+    // Initialize tooltip for DNS Discovery button wrapper
+    $('#resolve_ip_wrapper').tooltip({
+      placement: 'top',
+      trigger: 'hover'
+    });
     
     // Show/hide system DNS checkbox when custom DNS is entered
     $('#custom_dns').on('input', function() {
@@ -447,7 +452,6 @@ Add or Import Targets
       
       // WebSocket enabled after container restart
       var useWebSocket = true;
-      var socket = null;
       var progressInterval = null;
       var scanCancelled = false;
       var fetchController = new AbortController();
@@ -465,14 +469,27 @@ Add or Import Targets
         
         socket.onmessage = function(event) {
           var data = JSON.parse(event.data);
+          
+          // Handle progress updates with percentage
           if (data.percentage !== undefined) {
-            updateProgress(data.percentage, data.message, data.details);
+            updateProgress(data.percentage, data.message, data.details, true);
             
             // Add log entry if provided
             if (data.log_message) {
               addLogEntry(data.log_message, data.log_type || 'info');
             } else if (data.details) {
               addLogEntry(data.details, 'debug');
+            }
+          }
+          // Handle log-only messages (for ping progress)
+          else if (data.log_message) {
+            addLogEntry(data.log_message, data.log_type || 'info');
+            
+            // Try to extract percentage from log message for ping progress
+            var percentMatch = data.log_message.match(/(\d+)%/);
+            if (percentMatch) {
+              var extractedPercent = parseInt(percentMatch[1]);
+              updateProgress(extractedPercent, "Ping check in progress...", data.log_message, true);
             }
           }
         };
@@ -558,11 +575,9 @@ Add or Import Targets
           $('#logs_content').collapse('hide');
           
             if (json_data['status']) {
-            $("#selection_checkboxes").show();
             displayResolvedResults(json_data);
             setupSelectionHandlers();
           } else {
-            $("#selection_checkboxes").hide();
             $('#resolved_domains_div').append(`
               <div class="alert alert-warning">
                 <strong>No results found!</strong> Sorry, no domains associated with IP Address ${ip_address.value}.
@@ -611,9 +626,71 @@ Add or Import Targets
       
       addLogEntry(`Starting ping check for ${ipList.length} hosts`, 'info');
       
+      // Reset WebSocket progress tracking
+      lastWebSocketProgress = 0;
+      
       // Show progress section
       $("#scan_progress_section").show();
       updateProgress(0, "Starting ping check...", `Checking ${ipList.length} hosts`);
+      
+      // Reopen WebSocket for ping progress updates
+      if (currentScanId) {
+        var wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        var cleanScanId = currentScanId.replace(/[^a-zA-Z0-9\-\.]/g, '-');
+        var wsUrl = `${wsProtocol}//${window.location.host}/ws/ip-scan/${cleanScanId}/`;
+        
+        if (socket) {
+          socket.close();
+        }
+        
+        socket = new WebSocket(wsUrl);
+        
+        socket.onopen = function(event) {
+          console.log('WebSocket reconnected for ping progress');
+        };
+        
+        socket.onmessage = function(event) {
+          var data = JSON.parse(event.data);
+          
+          // Handle progress updates with percentage
+          if (data.percentage !== undefined) {
+            updateProgress(data.percentage, data.message, data.details, true);
+            
+            // Add log entry if provided
+            if (data.log_message) {
+              addLogEntry(data.log_message, data.log_type || 'info');
+            } else if (data.details) {
+              addLogEntry(data.details, 'debug');
+            }
+          }
+          // Handle log-only messages (for ping progress)
+          else if (data.log_message) {
+            addLogEntry(data.log_message, data.log_type || 'info');
+            
+            // Try to extract percentage from log message for ping progress
+            var percentMatch = data.log_message.match(/(\d+)%/);
+            if (percentMatch) {
+              var extractedPercent = parseInt(percentMatch[1]);
+              updateProgress(extractedPercent, "Ping check in progress...", data.log_message, true);
+            }
+            
+            // Check if ping task is completed with results
+            if (data.log_message.includes('Ping completed:') && data.ping_results) {
+              handlePingCompletionWithResults(data);
+            } else if (data.log_message.includes('Ping completed:')) {
+              handlePingCompletion();
+            }
+          }
+        };
+        
+        socket.onerror = function(error) {
+          console.log('WebSocket error during ping:', error);
+        };
+        
+        socket.onclose = function(event) {
+          console.log('WebSocket closed after ping');
+        };
+      }
       
       // Get CSRF token for session-based requests
       var csrfToken = getCookie("csrftoken");
@@ -636,9 +713,9 @@ Add or Import Targets
         if (data.status) {
           currentPingTaskId = data.task_id;
           addLogEntry(`Ping task launched successfully (Task ID: ${data.task_id})`, 'success');
+          addLogEntry('Waiting for ping results via WebSocket...', 'info');
           
-          // Start polling for results
-          pollPingResults();
+          // No need to poll - WebSocket will handle progress and completion
         } else {
           addLogEntry(`Failed to launch ping task: ${data.message}`, 'error');
           updateProgress(100, "Error occurred!", data.message);
@@ -652,8 +729,45 @@ Add or Import Targets
       });
     });
     
-    function pollPingResults() {
+    function handlePingCompletionWithResults(data) {
+      // Handle ping completion with results received via WebSocket
+      addLogEntry('Processing ping results from WebSocket...', 'info');
+      
+      // Validate result structure
+      if (!data.ping_results || typeof data.ping_results !== 'object') {
+        addLogEntry('Error: Invalid ping results structure received', 'error');
+        return;
+      }
+      
+      // Update discovered hosts with ping results
+      updateHostsWithPingResults(data.ping_results);
+      
+      updateProgress(100, "Ping check completed!", `${data.alive_count}/${data.total_count} hosts alive`);
+      
+      setTimeout(function() {
+        $("#scan_progress_section").hide();
+        $('#logs_content').collapse('hide');
+        
+        // Refresh the display with updated alive status
+        $('#resolved_domains_div').empty();
+        var updatedData = {
+          status: true,
+          ip_address: discoveredHosts,
+          total_hosts: discoveredHosts.length,
+          hostname_count: discoveredHosts.filter(h => h.domain !== h.ip).length,
+          discovered_domains: [...new Set(discoveredHosts.filter(h => h.domain !== h.ip).map(h => h.domain.split('.').slice(-2).join('.')))],
+          used_dns_servers: ['Updated with ping results']
+        };
+        displayResolvedResults(updatedData);
+        setupSelectionHandlers();
+      }, 1000);
+    }
+    
+    function handlePingCompletion() {
+      // Fetch final results from the API
       if (!currentPingTaskId) return;
+      
+      addLogEntry('Fetching final ping results...', 'info');
       
       fetch(`/api/tools/ping_hosts/?task_id=${currentPingTaskId}`, {
         headers: {
@@ -673,65 +787,49 @@ Add or Import Targets
           throw new Error('Invalid response format received');
         }
         
-        if (data.status) {
-          if (data.task_status === 'completed') {
-            // Task completed successfully
-            var result = data.result;
-            
-            // Validate result structure
-            if (!result || typeof result !== 'object') {
-              addLogEntry('Error: Invalid result structure received from ping task', 'error');
-              return;
-            }
-            
-            if (!result.ping_results) {
-              addLogEntry('Error: No ping results in response', 'error');
-              return;
-            }
-            
-            var aliveCount = result.alive_count || 0;
-            var totalCount = result.total_count || 0;
-            addLogEntry(`Ping completed: ${aliveCount}/${totalCount} hosts alive`, 'success');
-            
-            // Update discovered hosts with ping results
-            updateHostsWithPingResults(result.ping_results);
-            
-            updateProgress(100, "Ping check completed!", `${result.alive_count}/${result.total_count} hosts alive`);
-            
-            setTimeout(function() {
-              $("#scan_progress_section").hide();
-              $('#logs_content').collapse('hide');
-              
-              // Refresh the display with updated alive status
-              $('#resolved_domains_div').empty();
-              var updatedData = {
-                status: true,
-                ip_address: discoveredHosts,
-                total_hosts: discoveredHosts.length,
-                hostname_count: discoveredHosts.filter(h => h.domain !== h.ip).length,
-                discovered_domains: [...new Set(discoveredHosts.filter(h => h.domain !== h.ip).map(h => h.domain.split('.').slice(-2).join('.')))],
-                used_dns_servers: ['Updated with ping results']
-              };
-              displayResolvedResults(updatedData);
-              setupSelectionHandlers();
-            }, 1000);
-            
-          } else if (data.task_status === 'failed') {
-            addLogEntry(`Ping task failed: ${data.error}`, 'error');
-            updateProgress(100, "Ping check failed!", data.error);
-            $('#progress_bar').removeClass('progress-bar-striped progress-bar-animated').addClass('bg-danger');
-          } else {
-            // Task still running
-            updateProgress(50, "Ping check in progress...", "Checking host connectivity");
-            setTimeout(pollPingResults, 2000); // Poll again in 2 seconds
+        if (data.status && data.task_status === 'completed') {
+          var result = data.result;
+          
+          // Validate result structure
+          if (!result || typeof result !== 'object') {
+            addLogEntry('Error: Invalid result structure received from ping task', 'error');
+            return;
           }
+          
+          if (!result.ping_results) {
+            addLogEntry('Error: No ping results in response', 'error');
+            return;
+          }
+          
+          // Update discovered hosts with ping results
+          updateHostsWithPingResults(result.ping_results);
+          
+          updateProgress(100, "Ping check completed!", `${result.alive_count}/${result.total_count} hosts alive`);
+          
+          setTimeout(function() {
+            $("#scan_progress_section").hide();
+            $('#logs_content').collapse('hide');
+            
+            // Refresh the display with updated alive status
+            $('#resolved_domains_div').empty();
+            var updatedData = {
+              status: true,
+              ip_address: discoveredHosts,
+              total_hosts: discoveredHosts.length,
+              hostname_count: discoveredHosts.filter(h => h.domain !== h.ip).length,
+              discovered_domains: [...new Set(discoveredHosts.filter(h => h.domain !== h.ip).map(h => h.domain.split('.').slice(-2).join('.')))],
+              used_dns_servers: ['Updated with ping results']
+            };
+            displayResolvedResults(updatedData);
+            setupSelectionHandlers();
+          }, 1000);
+          
         } else {
-          addLogEntry(`Error checking ping status: ${data.message}`, 'error');
+          addLogEntry(`Error: Task not completed properly`, 'error');
         }
       })
       .catch(error => {
-        addLogEntry(`Error polling ping results: ${error.message}`, 'error');
-        setTimeout(pollPingResults, 3000); // Retry in 3 seconds
+        addLogEntry(`Error fetching final ping results: ${error.message}`, 'error');
       });
     }
     
@@ -766,12 +864,17 @@ Add or Import Targets
       addLogEntry(`Updated ${updatedCount}/${discoveredHosts.length} hosts with ping results`, 'info');
     }
     
-    function updateProgress(percentage, text, details) {
+    function updateProgress(percentage, text, details, fromWebSocket = false) {
       var roundedPercentage = Math.round(percentage);
       $('#progress_bar').css('width', roundedPercentage + '%').attr('aria-valuenow', roundedPercentage);
       $('#progress_percentage').text(roundedPercentage + '%');
       $('#progress_text').text(text);
       $('#scan_details').text(details);
+      
+      // Track WebSocket progress updates
+      if (fromWebSocket) {
+        lastWebSocketProgress = roundedPercentage;
+      }
     }
     
     function addLogEntry(message, type = 'info') {
@@ -814,8 +917,11 @@ Add or Import Targets
     }
     
     // Clear logs button handler
-    $(document).on('click', '#clear_logs_btn', function() {
+    $(document).on('click', '#clear_logs_btn', function(e) {
+      e.stopPropagation();
+      e.preventDefault();
       clearLogs();
+      return false;
     });
     
     // Handle logs collapse/expand
@@ -859,6 +965,38 @@ Add or Import Targets
           <strong>Scan Results:</strong> ${total_count} hosts found (${alive_count} alive, ${hostname_count} with hostnames, ${ip_only_count} IPs only)
           <br><strong>Used DNS Servers:</strong> ${json_data['used_dns_servers'].join(', ')}
           ${alive_count === 0 && json_data.ping_required ? '<br><span class="text-warning"><i class="fas fa-exclamation-triangle"></i> Host status will be updated after ping check</span>' : ''}
+        </div>
+      `);
+      
+      // Add selection checkboxes right after scan results
+      $('#resolved_domains_div').append(`
+        <div id='selection_checkboxes' class='mt-3 mb-3'>
+          <div class="row">
+            <div class="col-md-3">
+              <div class="form-check">
+                <input type="checkbox" class="form-check-input" id="select_all_domains">
+                <label class="form-check-label" for="select_all_domains">Select All Domains</label>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="form-check">
+                <input type="checkbox" class="form-check-input" id="select_all_hostnames">
+                <label class="form-check-label" for="select_all_hostnames">Select All Hostnames</label>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="form-check">
+                <input type="checkbox" class="form-check-input" id="select_all_ips">
+                <label class="form-check-label" for="select_all_ips">Select All IPs</label>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="form-check">
+                <input type="checkbox" class="form-check-input" id="select_all_alive">
+                <label class="form-check-label" for="select_all_alive">Select All Alive Hosts</label>
+              </div>
+            </div>
+          </div>
         </div>
       `);
       
@@ -984,6 +1122,11 @@ Add or Import Targets
       $(document).on('change', '.discovered_domains, .resolved_hosts', function() {
         updateAddButton();
       });
+      
+      // Target name change handler
+      $('#targetName').on('input', function() {
+        updateAddButton();
+      });
     }
     
     function updateAddButton() {
@@ -994,6 +1137,9 @@ Add or Import Targets
       var add_button = document.getElementById("add-ip-target");
       if (total_count > 0) {
         add_button.disabled = false;
+        
+        // Check if target name is provided
+        var target_name = $('#targetName').val().trim();
         
         // Build label showing only non-zero counts for better clarity
         var label_parts = [];
@@ -1012,6 +1158,11 @@ Add or Import Targets
           button_text = `Add ${label_parts.join(' + ')}`;
         } else {
           button_text = `Add ${label_parts[0]}`;
+        }
+        
+        // If target name is provided, modify button text to show target name
+        if (target_name) {
+          button_text = `Add to ${target_name}`;
         }
         
         $('#add_ip_target_btn').html(button_text);
@@ -1033,6 +1184,7 @@ Add or Import Targets
       // Add all standard form fields
       formData.append('csrfmiddlewaretoken', $('[name=csrfmiddlewaretoken]').val());
       formData.append('ip_address', $('#ip_address_hidden').val() || $('#ip_address').val());
+      formData.append('targetName', $('[name=targetName]').val());
       formData.append('targetDescription', $('[name=targetDescription]').val());
       formData.append('targetH1TeamHandle', $('[name=targetH1TeamHandle]').val());
       formData.append('add-ip-target', 'submit');

@@ -1,24 +1,15 @@
 import json
 import logging
 import os.path
-import platform
 import re
-import socket
-import subprocess
 import threading
 from collections import defaultdict
 from datetime import datetime
-from ipaddress import IPv4Network
+from ipaddress import IPv4Network, AddressValueError
 from pathlib import Path
 
 import requests
 import validators
-try:
-    import dns.resolver
-    import dns.reversename
-    DNS_AVAILABLE = True
-except ImportError:
-    DNS_AVAILABLE = False
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from dashboard.models import OllamaSettings, OpenAiAPIKey, Project, SearchHistory
@@ -301,7 +292,7 @@ class AvailableOllamaModels(APIView):
                         base_name = model["name"]
                         model["installed_versions"] = [
                             name.replace(f"{base_name}:", "")
-                            for name in installed_models.keys()
+                            for name in installed_models
                             if name.startswith(base_name)
                         ]
                         model["installed"] = len(model["installed_versions"]) > 0
@@ -1487,7 +1478,6 @@ class IPToDomain(APIView):
             logger.info(f"Starting IP range discovery for {ip_address} with scan_id {scan_id}")
             
             # Determine chunk size based on range size
-            from ipaddress import IPv4Network, AddressValueError
             try:
                 # Try to parse as network (CIDR)
                 ip_list = list(IPv4Network(ip_address, False))
@@ -1497,7 +1487,7 @@ class IPToDomain(APIView):
             
             total_ips = len(ip_list)
             
-            # Adapt chunk size according to range size (DRY principle)
+            # Adapt chunk size according to range size
             chunk_size = self._calculate_optimal_chunk_size(total_ips)
             
             # Launch Celery task
@@ -1538,13 +1528,13 @@ class IPToDomain(APIView):
             })
     
     def _calculate_optimal_chunk_size(self, total_ips):
-        """Calculate optimal chunk size based on IP range size (KISS principle)"""
+        """Calculate optimal chunk size based on IP range size"""
         if total_ips > 1000:
-            return 100  # Large chunks for large ranges
+            return 500   # Very large chunks for large ranges
         elif total_ips > 100:
-            return 50   # Medium chunks
+            return 200   # Large chunks for medium ranges
         else:
-            return 25   # Small chunks for small ranges
+            return total_ips  # Process entire range at once for small ranges
     
     def _get_current_dns_servers(self):
         """Get current system DNS servers"""
