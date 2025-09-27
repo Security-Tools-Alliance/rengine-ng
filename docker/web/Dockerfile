@@ -27,7 +27,7 @@ ENV PATH=/home/$USERNAME/.local/bin:${PATH}
 COPY --chown=$USERNAME:$USERNAME ./pyproject.toml /home/$USERNAME/pyproject.toml
 WORKDIR /home/$USERNAME
 RUN echo 'PATH="$HOME/.local/bin:${PATH}"' >> $HOME/.bashrc && \
-    pip install pipx && pipx install poetry && poetry install --without dev
+    pip install pipx && pipx install poetry && pipx install watchdog && poetry install --without dev
 
 EXPOSE 8000
 USER $USERNAME
