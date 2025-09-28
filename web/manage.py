@@ -10,6 +10,7 @@ from reNgine.settings import UI_REMOTE_DEBUG
 # Note: For daphne (ASGI), debugger is initialized in asgi.py
 if UI_REMOTE_DEBUG and len(sys.argv) > 1 and sys.argv[1] == "runserver":
     from debugger_setup import setup_debugger
+
     setup_debugger()
 
 

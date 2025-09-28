@@ -317,6 +317,7 @@ def http_crawl(
 
     return results
 
+
 @app.task(name="pre_crawl", queue="cpu_queue", base=RengineTask, bind=True)
 def pre_crawl(self, ctx={}, description=None):
     """

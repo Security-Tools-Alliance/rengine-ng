@@ -234,6 +234,7 @@ def dorking(config, host, scan_history_id, results_dir):
     dorks = config.get(OSINT_DORK, [])
     custom_dorks = config.get(OSINT_CUSTOM_DORK, [])
     results = []
+
     def safe_dork_execution(dork_func, dork_name, dork_config=None):
         """Execute dork function safely with error handling."""
         try:
@@ -249,6 +250,7 @@ def dorking(config, host, scan_history_id, results_dir):
 
     # custom dorking has higher priority
     for custom_dork in custom_dorks:
+
         def execute_custom_dork():
             lookup_target = custom_dork.get("lookup_site")
             # replace with original host if _target_
@@ -272,13 +274,13 @@ def dorking(config, host, scan_history_id, results_dir):
                 )
                 return result.get("results", [])
             return []
-        
+
         results.extend(safe_dork_execution(execute_custom_dork, f"Custom dork {custom_dork}"))
 
     # default dorking
     for dork in dorks:
         logger.info(f"Getting dork information for {dork}")
-        
+
         def execute_dork():
             if dork == "stackoverflow":
                 return execute_dork_with_error_handling(
@@ -319,41 +321,59 @@ def dorking(config, host, scan_history_id, results_dir):
                 social_websites = ["tiktok.com", "facebook.com", "twitter.com", "youtube.com", "reddit.com"]
                 dork_results = []
                 for site in social_websites:
-                    dork_results.extend(execute_dork_with_error_handling(
-                        lookup_target=site,
-                        results_dir=results_dir,
-                        type=dork,
-                        lookup_keywords=host,
-                        scan_history=scan_history,
-                    ))
+                    dork_results.extend(
+                        execute_dork_with_error_handling(
+                            lookup_target=site,
+                            results_dir=results_dir,
+                            type=dork,
+                            lookup_keywords=host,
+                            scan_history=scan_history,
+                        )
+                    )
                 return dork_results
             elif dork == "project_management":
                 project_websites = ["trello.com", "atlassian.net"]
                 dork_results = []
                 for site in project_websites:
-                    dork_results.extend(execute_dork_with_error_handling(
-                        lookup_target=site,
-                        results_dir=results_dir,
-                        type=dork,
-                        lookup_keywords=host,
-                        scan_history=scan_history,
-                    ))
+                    dork_results.extend(
+                        execute_dork_with_error_handling(
+                            lookup_target=site,
+                            results_dir=results_dir,
+                            type=dork,
+                            lookup_keywords=host,
+                            scan_history=scan_history,
+                        )
+                    )
                 return dork_results
             elif dork == "code_sharing":
                 project_websites = ["github.com", "gitlab.com", "bitbucket.org"]
                 dork_results = []
                 for site in project_websites:
-                    dork_results.extend(execute_dork_with_error_handling(
-                        lookup_target=site,
-                        results_dir=results_dir,
-                        type=dork,
-                        lookup_keywords=host,
-                        scan_history=scan_history,
-                    ))
+                    dork_results.extend(
+                        execute_dork_with_error_handling(
+                            lookup_target=site,
+                            results_dir=results_dir,
+                            type=dork,
+                            lookup_keywords=host,
+                            scan_history=scan_history,
+                        )
+                    )
                 return dork_results
             elif dork == "config_files":
                 config_file_exts = [
-                    "env", "xml", "conf", "toml", "yml", "yaml", "cnf", "inf", "rdp", "ora", "txt", "cfg", "ini"
+                    "env",
+                    "xml",
+                    "conf",
+                    "toml",
+                    "yml",
+                    "yaml",
+                    "cnf",
+                    "inf",
+                    "rdp",
+                    "ora",
+                    "txt",
+                    "cfg",
+                    "ini",
                 ]
                 return execute_dork_with_error_handling(
                     lookup_target=host,
@@ -419,7 +439,7 @@ def dorking(config, host, scan_history_id, results_dir):
                     scan_history=scan_history,
                 )
             return []
-        
+
         results.extend(safe_dork_execution(execute_dork, f"Dork {dork}"))
     return results
 
@@ -448,15 +468,15 @@ def the_harvester(config, host, scan_history_id, activity_id, results_dir, ctx=N
     output_path_json = str(Path(results_dir) / "theHarvester.json")
     the_harvester_dir = str(Path.home() / ".config" / "theHarvester")
     history_file = str(Path(results_dir) / "commands.txt")
-    
+
     # Create empty JSON file if it doesn't exist, handling race conditions atomically
     try:
-        with open(output_path_json, 'x') as f:
+        with open(output_path_json, "x") as f:
             json.dump({"emails": [], "hosts": [], "ips": [], "employees": []}, f)
     except FileExistsError:
         # File was created by another process in the meantime, safe to ignore
         pass
-    
+
     cmd = f"theHarvester -d {host} -f {output_path_json} -b baidu,bevigil,bing,bingapi,bufferoverun,brave,censys,certspotter,criminalip,crtsh,dnsdumpster,duckduckgo,fullhunt,hackertarget,hunter,hunterhow,intelx,netlas,onyphe,otx,pentesttools,projectdiscovery,rapiddns,rocketreach,securityTrails,sitedossier,subdomaincenter,subdomainfinderc99,threatminer,tomba,urlscan,virustotal,yahoo,zoomeye"
 
     # Update proxies.yaml

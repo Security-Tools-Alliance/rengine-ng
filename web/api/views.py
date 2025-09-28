@@ -291,9 +291,7 @@ class AvailableOllamaModels(APIView):
                     for model in recommended_models:
                         base_name = model["name"]
                         model["installed_versions"] = [
-                            name.replace(f"{base_name}:", "")
-                            for name in installed_models
-                            if name.startswith(base_name)
+                            name.replace(f"{base_name}:", "") for name in installed_models if name.startswith(base_name)
                         ]
                         model["installed"] = len(model["installed_versions"]) > 0
 
@@ -1464,19 +1462,19 @@ class IPToDomain(APIView):
     def get(self, request):
         import uuid
         from reNgine.tasks.dns import ip_range_discovery
-        
+
         req = self.request
         ip_address = req.query_params.get("ip_address")
         custom_dns = req.query_params.get("dns_servers", "").strip()
         use_system_fallback = req.query_params.get("use_system_fallback", "false").lower() == "true"
         scan_id = req.query_params.get("scan_id", str(uuid.uuid4()))
-        
+
         if not ip_address:
             return Response({"status": False, "message": "IP Address Required", "scan_id": scan_id})
-        
+
         try:
             logger.info(f"Starting IP range discovery for {ip_address} with scan_id {scan_id}")
-            
+
             # Determine chunk size based on range size
             try:
                 # Try to parse as network (CIDR)
@@ -1484,112 +1482,113 @@ class IPToDomain(APIView):
             except AddressValueError:
                 # Single IP address, convert to /32 network
                 ip_list = list(IPv4Network(f"{ip_address}/32", False))
-            
+
             total_ips = len(ip_list)
-            
+
             # Adapt chunk size according to range size
             chunk_size = self._calculate_optimal_chunk_size(total_ips)
-            
+
             # Launch Celery task
             task = ip_range_discovery.delay(
                 ip_address=ip_address,
                 scan_id=scan_id,
                 custom_dns=custom_dns,
                 use_system_fallback=use_system_fallback,
-                chunk_size=chunk_size
+                chunk_size=chunk_size,
             )
-            
+
             # Wait for task result
             try:
                 response = task.get(timeout=300)  # 5 minutes timeout
-                
+
                 # Add fields compatible with existing interface
                 if response.get("status"):
                     response["current_dns_servers"] = self._get_current_dns_servers()
-                    
+
                 return Response(response)
-                
+
             except Exception as e:
                 logger.error(f"Task execution failed: {e}")
-                return Response({
-                    "status": False, 
-                    "ip_address": ip_address, 
-                    "message": f"Task execution failed: {e}",
-                "scan_id": scan_id
-                })
-            
+                return Response(
+                    {
+                        "status": False,
+                        "ip_address": ip_address,
+                        "message": f"Task execution failed: {e}",
+                        "scan_id": scan_id,
+                    }
+                )
+
         except Exception as e:
             logger.exception(f"Error in IPToDomain: {e}")
-            return Response({
-                "status": False, 
-                "ip_address": ip_address, 
-                "message": f"Exception: {e}",
-                "scan_id": scan_id
-            })
-    
+            return Response(
+                {"status": False, "ip_address": ip_address, "message": f"Exception: {e}", "scan_id": scan_id}
+            )
+
     def _calculate_optimal_chunk_size(self, total_ips):
         """Calculate optimal chunk size based on IP range size"""
         if total_ips > 1000:
-            return 500   # Very large chunks for large ranges
+            return 500  # Very large chunks for large ranges
         elif total_ips > 100:
-            return 200   # Large chunks for medium ranges
+            return 200  # Large chunks for medium ranges
         else:
             return total_ips  # Process entire range at once for small ranges
-    
+
     def _get_current_dns_servers(self):
         """Get current system DNS servers"""
         dns_servers = []
         try:
             import platform
+
             system = platform.system().lower()
-            
+
             if system == "linux":
                 try:
-                    with open('/etc/resolv.conf', 'r') as f:
+                    with open("/etc/resolv.conf", "r") as f:
                         for line in f:
-                            if line.strip().startswith('nameserver'):
+                            if line.strip().startswith("nameserver"):
                                 dns_server = line.strip().split()[1]
                                 dns_servers.append(dns_server)
-                except:
+                except (FileNotFoundError, PermissionError, IndexError):
                     pass
             elif system == "windows":
                 try:
                     import subprocess
-                    result = subprocess.run(['nslookup'], capture_output=True, text=True, input='\n')
-                    for line in result.stdout.split('\n'):
-                        if 'Server:' in line:
-                            dns_server = line.split(':')[1].strip()
-                            if dns_server and dns_server != 'localhost':
+
+                    result = subprocess.run(["nslookup"], capture_output=True, text=True, input="\n")
+                    for line in result.stdout.split("\n"):
+                        if "Server:" in line:
+                            dns_server = line.split(":")[1].strip()
+                            if dns_server and dns_server != "localhost":
                                 dns_servers.append(dns_server)
                             break
-                except:
+                except (subprocess.SubprocessError, IndexError, FileNotFoundError):
                     pass
-            
+
             # Fallback to common DNS servers if none found
             if not dns_servers:
-                dns_servers = ['8.8.8.8', '1.1.1.1']
-                
+                dns_servers = ["8.8.8.8", "1.1.1.1"]
+
         except Exception as e:
             logger.debug(f"Error getting DNS servers: {e}")
-            dns_servers = ['8.8.8.8', '1.1.1.1']
-        
+            dns_servers = ["8.8.8.8", "1.1.1.1"]
+
         return dns_servers
-    
+
     def _check_host_alive(self, ip):
         """Quick ping check to see if host is alive"""
         try:
             import subprocess
             import platform
-            
+
             system = platform.system().lower()
             if system == "windows":
-                cmd = ['ping', '-n', '1', '-w', '1000', ip]
+                cmd = ["ping", "-n", "1", "-w", "1000", ip]
             else:
-                cmd = ['ping', '-c', '1', '-W', '1', ip]
-            
+                cmd = ["ping", "-c", "1", "-W", "1", ip]
+
             result = subprocess.run(cmd, capture_output=True, timeout=2)
             return result.returncode == 0
-        except:
+        except (subprocess.SubprocessError, FileNotFoundError, TimeoutError):
             return False
 
 
@@ -3368,82 +3367,60 @@ class PingHosts(APIView):
         """
         import uuid
         from reNgine.tasks.dns import ping_hosts_task
-        
+
         req = self.request
         ip_list = req.data.get("ip_list", [])
         scan_id = req.data.get("scan_id", str(uuid.uuid4()))
-        
+
         if not ip_list:
-            return Response({
-                "status": False,
-                "message": "No IP addresses provided"
-            }, status=400)
-        
+            return Response({"status": False, "message": "No IP addresses provided"}, status=400)
+
         try:
             logger.info(f"Starting ping task for {len(ip_list)} hosts with scan_id {scan_id}")
-            
+
             # Launch ping task
             task = ping_hosts_task.delay(ip_list, scan_id)
-            
-            return Response({
-                "status": True,
-                "message": "Ping task launched successfully",
-                "task_id": task.id,
-                "scan_id": scan_id,
-                "total_hosts": len(ip_list)
-            })
-            
+
+            return Response(
+                {
+                    "status": True,
+                    "message": "Ping task launched successfully",
+                    "task_id": task.id,
+                    "scan_id": scan_id,
+                    "total_hosts": len(ip_list),
+                }
+            )
+
         except Exception as e:
             logger.error(f"Failed to launch ping task: {e}")
-            return Response({
-                "status": False,
-                "message": f"Failed to launch ping task: {e}"
-            }, status=500)
-    
+            return Response({"status": False, "message": f"Failed to launch ping task: {e}"}, status=500)
+
     def get(self, request):
         """
         Get ping task results
         """
         from celery.result import AsyncResult
-        
+
         task_id = request.query_params.get("task_id")
         if not task_id:
-            return Response({
-                "status": False,
-                "message": "Task ID required"
-            }, status=400)
-        
+            return Response({"status": False, "message": "Task ID required"}, status=400)
+
         try:
             # Get task result
             task_result = AsyncResult(task_id)
-            
+
             if task_result.ready():
                 if task_result.successful():
                     result = task_result.result
-                    return Response({
-                        "status": True,
-                        "task_status": "completed",
-                        "result": result
-                    })
+                    return Response({"status": True, "task_status": "completed", "result": result})
                 else:
-                    return Response({
-                        "status": False,
-                        "task_status": "failed",
-                        "error": str(task_result.result)
-                    })
+                    return Response({"status": False, "task_status": "failed", "error": str(task_result.result)})
             else:
-                return Response({
-                    "status": True,
-                    "task_status": "pending",
-                    "message": "Task is still running"
-                })
-                
+                return Response({"status": True, "task_status": "pending", "message": "Task is still running"})
+
         except Exception as e:
             logger.error(f"Failed to get task result: {e}")
-            return Response({
-                "status": False,
-                "message": f"Failed to get task result: {e}"
-            }, status=500)
+            return Response({"status": False, "message": f"Failed to get task result: {e}"}, status=500)
 
 
 class GetCSRFToken(APIView):
@@ -3453,12 +3430,14 @@ class GetCSRFToken(APIView):
         According to Django documentation: https://docs.djangoproject.com/en/5.2/howto/csrf/
         """
         from django.middleware.csrf import get_token
-        
+
         # This will create the token and store it in the session
         csrf_token = get_token(request)
-        
-        return Response({
-            "status": True,
-            "csrf_token": csrf_token,
-            "usage": "Include this token in X-CSRFToken header for POST requests"
-        })
+
+        return Response(
+            {
+                "status": True,
+                "csrf_token": csrf_token,
+                "usage": "Include this token in X-CSRFToken header for POST requests",
+            }
+        )

@@ -71,14 +71,14 @@ CSRF_TRUSTED_ORIGINS = [
 # Additional CSRF settings for better security
 CSRF_COOKIE_SECURE = not DEBUG  # Use secure cookies in production
 CSRF_COOKIE_HTTPONLY = True  # Prevent JavaScript access to CSRF cookie for better security
-CSRF_COOKIE_SAMESITE = 'Lax'  # CSRF protection while allowing some cross-site requests
+CSRF_COOKIE_SAMESITE = "Lax"  # CSRF protection while allowing some cross-site requests
 CSRF_USE_SESSIONS = True  # Use sessions for CSRF tokens when HTTPONLY is True (more secure)
 CSRF_COOKIE_AGE = 31449600  # 1 year in seconds
 
 # Session security settings
 SESSION_COOKIE_SECURE = not DEBUG  # Use secure cookies in production
 SESSION_COOKIE_HTTPONLY = True  # Prevent JavaScript access to session cookie
-SESSION_COOKIE_SAMESITE = 'Lax'  # Session protection while allowing some cross-site requests
+SESSION_COOKIE_SAMESITE = "Lax"  # Session protection while allowing some cross-site requests
 
 # Databases
 DATABASES = {
@@ -154,11 +154,16 @@ TEMPLATES = [
             "loaders": [
                 "django.template.loaders.filesystem.Loader",
                 "django.template.loaders.app_directories.Loader",
-            ] if DISABLE_TEMPLATE_CACHE else [
-                ("django.template.loaders.cached.Loader", [
-                    "django.template.loaders.filesystem.Loader",
-                    "django.template.loaders.app_directories.Loader",
-                ])
+            ]
+            if DISABLE_TEMPLATE_CACHE
+            else [
+                (
+                    "django.template.loaders.cached.Loader",
+                    [
+                        "django.template.loaders.filesystem.Loader",
+                        "django.template.loaders.app_directories.Loader",
+                    ],
+                )
             ],
         },
     }
@@ -261,21 +266,21 @@ RENGINE_TASK_IGNORE_CACHE_KWARGS = ["ctx"]
 # In development, disable caching to ensure templates and views reload properly
 if DEBUG:
     CACHES = {
-        'default': {
-            'BACKEND': 'django.core.cache.backends.dummy.DummyCache',
+        "default": {
+            "BACKEND": "django.core.cache.backends.dummy.DummyCache",
         }
     }
 else:
     # Production cache using Redis
     CACHES = {
-        'default': {
-            'BACKEND': 'django.core.cache.backends.redis.RedisCache',
-            'LOCATION': CELERY_BROKER_URL,
-            'OPTIONS': {
-                'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+        "default": {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": CELERY_BROKER_URL,
+            "OPTIONS": {
+                "CLIENT_CLASS": "django_redis.client.DefaultClient",
             },
-            'KEY_PREFIX': 'rengine_cache',
-            'TIMEOUT': 300,  # 5 minutes default timeout
+            "KEY_PREFIX": "rengine_cache",
+            "TIMEOUT": 300,  # 5 minutes default timeout
         }
     }
 
