@@ -2772,6 +2772,53 @@ class EndPointViewSet(viewsets.ModelViewSet):
                     print(e)
         return qs
 
+    def paginate_queryset(self, queryset, view=None):
+        if "no_page" in self.request.query_params:
+            return None
+        return self.paginator.paginate_queryset(queryset.order_by("id"), self.request, view=self)
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+
+        # Support pagination manuelle avec start/length (DataTables) ou page/page_size (REST)
+        start = request.query_params.get('start')
+        length = request.query_params.get('length')
+        page = request.query_params.get('page')
+        page_size = request.query_params.get('page_size')
+
+        if start is not None and length is not None:
+            # Pagination DataTables
+            start = int(start)
+            length = int(length)
+            total_count = queryset.count()
+            paginated_queryset = queryset[start:start + length]
+            serializer = self.get_serializer(paginated_queryset, many=True)
+            return Response({
+                'count': total_count,
+                'results': serializer.data
+            })
+        elif page is not None and page_size is not None:
+            # Pagination REST
+            page = int(page)
+            page_size = int(page_size)
+            start = (page - 1) * page_size
+            total_count = queryset.count()
+            paginated_queryset = queryset[start:start + page_size]
+            serializer = self.get_serializer(paginated_queryset, many=True)
+            return Response({
+                'count': total_count,
+                'results': serializer.data
+            })
+
+        # Fallback vers pagination normale
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+
 
 class DirectoryViewSet(viewsets.ModelViewSet):
     queryset = DirectoryFile.objects.none()
