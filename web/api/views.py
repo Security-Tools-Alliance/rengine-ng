@@ -1895,16 +1895,172 @@ class ListSubdomains(APIView):
         if "only_important" in req.query_params:
             subdomain_query = subdomain_query.filter(is_important=True)
 
+        # Advanced search functionality (similar to EndPointViewSet)
+        search_value = req.GET.get("search[value]", None)
+        if search_value:
+            subdomain_query = self.apply_advanced_search(subdomain_query, search_value)
+
         # Optimize queries with select_related and prefetch_related to avoid N+1 queries
         subdomain_query = subdomain_query.select_related("scan_history", "target_domain").prefetch_related(
             "ip_addresses", "ip_addresses__ports", "technologies", "waf", "directories"
         )
 
+        # Handle pagination (similar to EndPointViewSet)
+        start = req.query_params.get('start')
+        length = req.query_params.get('length')
+        page = req.query_params.get('page')
+        page_size = req.query_params.get('page_size')
+
+        if start is not None and length is not None:
+            # Pagination DataTables
+            start = int(start)
+            length = int(length)
+            total_count = subdomain_query.count()
+            paginated_queryset = subdomain_query[start:start + length]
+
+            if "no_lookup_interesting" in req.query_params:
+                serializer = OnlySubdomainNameSerializer(paginated_queryset, many=True)
+            else:
+                serializer = SubdomainSerializer(paginated_queryset, many=True)
+
+            return Response({
+                'count': total_count,
+                'results': serializer.data
+            })
+        elif page is not None and page_size is not None:
+            # Pagination REST
+            page = int(page)
+            page_size = int(page_size)
+            start = (page - 1) * page_size
+            total_count = subdomain_query.count()
+            paginated_queryset = subdomain_query[start:start + page_size]
+
+            if "no_lookup_interesting" in req.query_params:
+                serializer = OnlySubdomainNameSerializer(paginated_queryset, many=True)
+            else:
+                serializer = SubdomainSerializer(paginated_queryset, many=True)
+
+            return Response({
+                'count': total_count,
+                'results': serializer.data
+            })
+
+        # Default response (no pagination) - maintain backward compatibility
         if "no_lookup_interesting" in req.query_params:
             serializer = OnlySubdomainNameSerializer(subdomain_query, many=True)
         else:
             serializer = SubdomainSerializer(subdomain_query, many=True)
         return Response({"subdomains": serializer.data})
+
+    def apply_advanced_search(self, queryset, search_value):
+        """Apply advanced search filters similar to EndPointViewSet"""
+        if (
+            "=" in search_value
+            or "&" in search_value
+            or "|" in search_value
+            or ">" in search_value
+            or "<" in search_value
+            or "!" in search_value
+        ):
+            if "&" in search_value:
+                complex_query = search_value.split("&")
+                for query in complex_query:
+                    if query.strip():
+                        queryset = queryset & self.special_lookup(queryset, query.strip())
+            elif "|" in search_value:
+                from django.db.models import Q
+                new_queryset = queryset.none()
+                complex_query = search_value.split("|")
+                for query in complex_query:
+                    if query.strip():
+                        new_queryset = self.special_lookup(queryset, query.strip()) | new_queryset
+                queryset = new_queryset
+            else:
+                queryset = self.special_lookup(queryset, search_value)
+        else:
+            queryset = self.general_lookup(queryset, search_value)
+        return queryset
+
+    def general_lookup(self, queryset, search_value):
+        """General search across subdomain fields"""
+        from django.db.models import Q
+        return queryset.filter(
+            Q(name__icontains=search_value)
+            | Q(cname__icontains=search_value)
+            | Q(http_status__icontains=search_value)
+            | Q(page_title__icontains=search_value)
+            | Q(http_url__icontains=search_value)
+            | Q(technologies__name__icontains=search_value)
+            | Q(webserver__icontains=search_value)
+            | Q(ip_addresses__address__icontains=search_value)
+        )
+
+    def special_lookup(self, queryset, search_value):
+        """Special search with operators (=, >, <, !)"""
+        if "=" in search_value:
+            search_param = search_value.split("=")
+            lookup_title = search_param[0].lower().strip()
+            lookup_content = search_param[1].lower().strip()
+
+            if "http_status" in lookup_title:
+                try:
+                    int_http_status = int(lookup_content)
+                    return queryset.filter(http_status=int_http_status)
+                except Exception:
+                    pass
+            elif "name" in lookup_title:
+                return queryset.filter(name__icontains=lookup_content)
+            elif "page_title" in lookup_title:
+                return queryset.filter(page_title__icontains=lookup_content)
+            elif "technology" in lookup_title:
+                return queryset.filter(technologies__name__icontains=lookup_content)
+            elif "webserver" in lookup_title:
+                return queryset.filter(webserver__icontains=lookup_content)
+            elif "is_important" in lookup_title:
+                if "true" in lookup_content.lower():
+                    return queryset.filter(is_important=True)
+                else:
+                    return queryset.filter(is_important=False)
+
+        elif ">" in search_value:
+            search_param = search_value.split(">")
+            lookup_title = search_param[0].lower().strip()
+            lookup_content = search_param[1].lower().strip()
+
+            if "http_status" in lookup_title:
+                try:
+                    int_val = int(lookup_content)
+                    return queryset.filter(http_status__gt=int_val)
+                except Exception:
+                    pass
+
+        elif "<" in search_value:
+            search_param = search_value.split("<")
+            lookup_title = search_param[0].lower().strip()
+            lookup_content = search_param[1].lower().strip()
+
+            if "http_status" in lookup_title:
+                try:
+                    int_val = int(lookup_content)
+                    return queryset.filter(http_status__lt=int_val)
+                except Exception:
+                    pass
+
+        elif "!" in search_value:
+            search_param = search_value.split("!")
+            lookup_title = search_param[0].lower().strip()
+            lookup_content = search_param[1].lower().strip()
+
+            if "http_status" in lookup_title:
+                try:
+                    int_http_status = int(lookup_content)
+                    return queryset.exclude(http_status=int_http_status)
+                except Exception:
+                    pass
+            elif "name" in lookup_title:
+                return queryset.exclude(name__icontains=lookup_content)
+
+        return queryset
 
     def post(self, req):
         req = self.request
