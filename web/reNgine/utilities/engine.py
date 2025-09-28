@@ -4,7 +4,6 @@ import uuid
 
 import yaml
 from celery.utils.log import get_task_logger
-from scanEngine.models import EngineType
 
 from reNgine.definitions import (
     COMMON_WEB_PORTS,
@@ -15,6 +14,7 @@ from reNgine.definitions import (
     HTTP_PRE_CRAWL_UNCOMMON_PORTS,
     HTTP_THREADS,
 )
+from scanEngine.models import EngineType
 
 logger = get_task_logger(__name__)
 

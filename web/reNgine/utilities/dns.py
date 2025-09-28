@@ -1,7 +1,7 @@
 import contextlib
+import platform
 import socket
 import subprocess
-import platform
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import validators
@@ -214,7 +214,7 @@ def _create_failed_resolution_result(ip):
     }
 
 
-def resolve_ip_chunk(ip_chunk, dns_servers, use_system_fallback=False):
+def resolve_ip_chunk(ip_chunk, dns_servers, use_system_fallback=False, dns_resolution_timeout=10):
     """
     Resolve a chunk of IPs in parallel (Interface Segregation)
 
@@ -222,6 +222,7 @@ def resolve_ip_chunk(ip_chunk, dns_servers, use_system_fallback=False):
         ip_chunk (list): List of IPs to resolve
         dns_servers (list): DNS servers to use
         use_system_fallback (bool): Use system DNS as fallback
+        dns_resolution_timeout (int, optional): Timeout in seconds for DNS resolution. Defaults to 10.
 
     Returns:
         list: List of resolved IP information
@@ -236,8 +237,13 @@ def resolve_ip_chunk(ip_chunk, dns_servers, use_system_fallback=False):
 
         for future in as_completed(future_to_ip):
             try:
-                result = future.result(timeout=10)
+                result = future.result(timeout=dns_resolution_timeout)
                 results.append(result)
+            except TimeoutError as e:
+                ip = future_to_ip[future]
+                logger.debug(f"DNS resolution timeout for {ip} after {dns_resolution_timeout}s: {e}")
+                # Add IP even if resolution times out
+                results.append(_create_failed_resolution_result(ip))
             except Exception as e:
                 ip = future_to_ip[future]
                 logger.debug(f"Error resolving {ip}: {e}")

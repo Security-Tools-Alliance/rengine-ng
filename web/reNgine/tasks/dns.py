@@ -1,14 +1,32 @@
 import json
 import subprocess
-from ipaddress import IPv4Network
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from ipaddress import IPv4Network
 
 import tldextract
+from asgiref.sync import async_to_sync
 from celery.utils.log import get_task_logger
+from channels.layers import get_channel_layer
 from django.utils import timezone
 from dotted_dict import DottedDict
-from asgiref.sync import async_to_sync
-from channels.layers import get_channel_layer
+
+from reNgine.celery import app
+from reNgine.common_serializers import (
+    DomainDNSRecordSerializer,
+    DomainWhoisStatusSerializer,
+    HistoricalIPSerializer,
+    NameServersSerializer,
+    RelatedDomainSerializer,
+)
+from reNgine.definitions import EMAIL_REGEX
+from reNgine.settings import DEFAULT_THREADS
+from reNgine.tasks.command import run_command
+from reNgine.utilities.external import (
+    get_associated_domains,
+    get_domain_historical_ip_address,
+    get_netlas_key,
+    reverse_whois,
+)
 from targetApp.models import (
     DNSRecord,
     Domain,
@@ -20,24 +38,6 @@ from targetApp.models import (
     RelatedDomain,
     WhoisStatus,
 )
-
-from reNgine.celery import app
-from reNgine.common_serializers import (
-    DomainDNSRecordSerializer,
-    DomainWhoisStatusSerializer,
-    HistoricalIPSerializer,
-    NameServersSerializer,
-    RelatedDomainSerializer,
-)
-from reNgine.definitions import EMAIL_REGEX
-from reNgine.tasks.command import run_command
-from reNgine.utilities.external import (
-    get_associated_domains,
-    get_domain_historical_ip_address,
-    get_netlas_key,
-    reverse_whois,
-)
-from reNgine.settings import DEFAULT_THREADS
 
 logger = get_task_logger(__name__)
 
@@ -149,7 +149,6 @@ def query_whois(ip_domain, force_reload_whois=False):
             related_domains = reverse_whois(ip_domain.split(".")[0])
         except Exception as e:
             logger.error(f"Associated domain not found for {ip_domain}\nError: {str(e)}")
-            similar_domains = []
         # find related tlds using TLSx
         try:
             related_tlds = []
@@ -623,7 +622,11 @@ def ip_range_discovery(ip_address, scan_id, custom_dns=None, use_system_fallback
 
         for i, chunk in enumerate(chunks):
             # Calculate progress based on actual IPs processed: 20% (setup) + 60% (processing) + 20% (finalization)
-            chunk_progress = 20 + (processed_ips * 60 // total_ips)
+            # Handle edge case where total_ips might be zero
+            if total_ips > 0:
+                chunk_progress = min(int(20 + (processed_ips * 60 / total_ips)), 80)
+            else:
+                chunk_progress = 20
             send_progress(
                 chunk_progress,
                 f"Processing chunk {i + 1}/{total_chunks}",
@@ -644,7 +647,12 @@ def ip_range_discovery(ip_address, scan_id, custom_dns=None, use_system_fallback
             processed_ips += len(chunk)
 
             # Send intermediate progress update based on actual IPs processed
-            intermediate_progress = 20 + (processed_ips * 60 // total_ips)
+            # Ensure we don't exceed 80% during processing phase
+            # Handle edge case where total_ips might be zero
+            if total_ips > 0:
+                intermediate_progress = min(int(20 + (processed_ips * 60 / total_ips)), 80)
+            else:
+                intermediate_progress = 20
             send_progress(
                 intermediate_progress,
                 f"Completed chunk {i + 1}/{total_chunks}",
@@ -717,9 +725,10 @@ def ping_hosts_task(ip_list, scan_id=None):
     Returns:
         dict: Ping results with is_alive status
     """
-    from reNgine.utilities.dns import check_host_alive
     from asgiref.sync import async_to_sync
     from channels.layers import get_channel_layer
+
+    from reNgine.utilities.dns import check_host_alive
 
     logger.info(f"Starting ping check for {len(ip_list)} hosts")
 

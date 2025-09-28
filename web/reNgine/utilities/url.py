@@ -143,14 +143,12 @@ def get_domain_from_subdomain(subdomain):
                 return domain
 
         # Fallback method for edge cases where tldextract might not recognize the TLD
-        # This handles local domains, private TLDs, or unusual cases
-        if not extracted.suffix and subdomain.count(".") >= 1:
-            parts = subdomain.split(".")
-            if len(parts) >= 2:
-                # Take the last two parts as potential domain.tld
-                potential_domain = ".".join(parts[-2:])
-                if is_valid_domain_or_subdomain(potential_domain):
-                    return potential_domain
+        # Use tldextract's fallback with PSL private domains enabled
+        fallback_extracted = tldextract.extract(domain, include_psl_private_domains=True)
+        if fallback_extracted.domain and fallback_extracted.suffix:
+            potential_domain = f"{fallback_extracted.domain}.{fallback_extracted.suffix}"
+            if is_valid_domain_or_subdomain(potential_domain):
+                return potential_domain
 
         # If all else fails, return None
         return None
