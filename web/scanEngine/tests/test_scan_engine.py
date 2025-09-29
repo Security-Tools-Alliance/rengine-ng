@@ -6,9 +6,9 @@ It tests functionalities related to scan engines, wordlists, settings, and tools
 """
 
 from django.urls import reverse
-from utils.test_base import BaseTestCase
 
 from scanEngine.models import EngineType, InstalledExternalTool, Wordlist
+from utils.test_base import BaseTestCase
 
 
 class TestScanEngineViews(BaseTestCase):

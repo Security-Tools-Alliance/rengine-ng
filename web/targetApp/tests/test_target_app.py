@@ -30,10 +30,10 @@ import os
 
 from django.contrib.messages import get_messages
 from django.urls import reverse
-from utils.test_base import BaseTestCase
 
 from startScan.models import Subdomain
 from targetApp.models import Domain, Organization
+from utils.test_base import BaseTestCase
 
 
 class TestTargetAppViews(BaseTestCase):
@@ -79,11 +79,11 @@ class TestTargetAppViews(BaseTestCase):
         Tests the add target view to ensure a new target is created successfully.
         """
         Domain.objects.all().delete()
-        
+
         # Create test host data in the new format
         host_data_1 = json.dumps({"ip": "192.168.1.1", "domain": "example.local", "is_alive": True})
         host_data_2 = json.dumps({"ip": "192.168.1.2", "domain": "other-example.local", "is_alive": False})
-        
+
         response = self.client.post(
             reverse("add_target", kwargs={"slug": self.data_generator.project.slug}),
             {
@@ -98,10 +98,10 @@ class TestTargetAppViews(BaseTestCase):
             },
         )
         self.assertEqual(response.status_code, 302)
-        
+
         # Check that the main target was created
         self.assertTrue(Domain.objects.filter(name="test-target").exists())
-        
+
         # Check that subdomains were created under the main target
         main_target = Domain.objects.get(name="test-target")
         self.assertTrue(Subdomain.objects.filter(name="example.local", target_domain=main_target).exists())
@@ -113,7 +113,7 @@ class TestTargetAppViews(BaseTestCase):
         """
         # Create test host data with invalid IP
         host_data = json.dumps({"ip": "999.999.999.999", "domain": "999.999.999.999", "is_alive": False})
-        
+
         response = self.client.post(
             reverse("add_target", kwargs={"slug": self.data_generator.project.slug}),
             {
@@ -135,7 +135,7 @@ class TestTargetAppViews(BaseTestCase):
             "Processing complete: 1 new domain(s), 1 new subdomain(s) processed successfully",
             [str(message) for message in messages_list],
         )
-        
+
         # Verify that the target was actually created
         self.assertTrue(Domain.objects.filter(name="test-target").exists())
 
@@ -171,7 +171,7 @@ class TestTargetAppViews(BaseTestCase):
         Test uploading an empty file to ensure the system handles it correctly.
         """
         # Create an empty file for the test
-        with open("empty_file.txt", "w", encoding="utf-8") as f:
+        with open("empty_file.txt", "w", encoding="utf-8"):
             pass  # Create an empty file
 
         with open("empty_file.txt", "rb") as file:
