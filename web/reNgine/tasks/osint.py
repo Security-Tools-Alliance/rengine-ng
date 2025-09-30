@@ -20,7 +20,7 @@ from reNgine.definitions import (
     OSINT_DORK,
 )
 from reNgine.tasks.command import run_command
-from reNgine.utilities.database import save_email, save_employee, save_metadata_info
+from reNgine.utilities.database import save_email, save_employee
 from reNgine.utilities.external import get_and_save_dork_results
 from scanEngine.models import Proxy
 from startScan.models import ScanHistory, Subdomain
@@ -126,26 +126,26 @@ def osint_discovery(config, host, scan_history_id, activity_id, results_dir, ctx
     documents_limit = config.get(OSINT_DOCUMENTS_LIMIT, 50)
 
     # Get and save meta info
-    if "metainfo" in osint_lookup:
-        logger.info("Saving Metainfo")
-        if osint_intensity == "normal":
-            meta_dict = DottedDict(
-                {"osint_target": host, "domain": host, "scan_id": scan_history_id, "documents_limit": documents_limit}
-            )
-            # meta_info = [save_metadata_info(meta_dict)]
-            # TODO: disabled for now
-            # elif osint_intensity == 'deep':
-            # 	subdomains = Subdomain.objects
-            # 	if self.scan:
-            # 		subdomains = subdomains.filter(scan_history=self.scan)
-            # 	for subdomain in subdomains:
-            # 		meta_dict = DottedDict({
-            # 			'osint_target': subdomain.name,
-            # 			'domain': self.domain,
-            # 			'scan_id': self.scan_id,
-            # 			'documents_limit': documents_limit
-            # 		})
-            # 		meta_info.append(save_metadata_info(meta_dict))
+    # if "metainfo" in osint_lookup:
+    #     logger.info("Saving Metainfo")
+    #     if osint_intensity == "normal":
+    #         meta_dict = DottedDict(
+    #             {"osint_target": host, "domain": host, "scan_id": scan_history_id, "documents_limit": documents_limit}
+    #         )
+    #        meta_info = [save_metadata_info(meta_dict)]
+    #        TODO: disabled for now
+    #        elif osint_intensity == 'deep':
+    #        	subdomains = Subdomain.objects
+    #        	if self.scan:
+    #        		subdomains = subdomains.filter(scan_history=self.scan)
+    #        	for subdomain in subdomains:
+    #        		meta_dict = DottedDict({
+    #        			'osint_target': subdomain.name,
+    #        			'domain': self.domain,
+    #        			'scan_id': self.scan_id,
+    #        			'documents_limit': documents_limit
+    #        		})
+    #        		meta_info.append(save_metadata_info(meta_dict))
 
     grouped_tasks = []
 
@@ -577,7 +577,7 @@ def h8mail(config, host, scan_history_id, activity_id, results_dir, ctx=None):
     if ctx is None:
         ctx = {}
     logger.warning("Getting leaked credentials")
-    scan_history = ScanHistory.objects.get(pk=scan_history_id)
+    # scan_history = ScanHistory.objects.get(pk=scan_history_id)
     input_path = str(Path(results_dir) / "emails.txt")
     output_file = str(Path(results_dir) / "h8mail.json")
 

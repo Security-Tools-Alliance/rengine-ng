@@ -296,9 +296,7 @@ def fetch_url(self, urls=[], ctx={}, description=None):
     if should_remove_duplicate_endpoints and all_urls:
         logger.info("Removing duplicate endpoints after URL discovery")
         remove_duplicate_endpoints(
-            scan_history_id=self.scan_id,
-            domain_id=self.domain_id,
-            duplicate_removal_fields=duplicate_removal_fields
+            scan_history_id=self.scan_id, domain_id=self.domain_id, duplicate_removal_fields=duplicate_removal_fields
         )
 
     return all_urls
