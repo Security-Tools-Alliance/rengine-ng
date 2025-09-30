@@ -189,7 +189,7 @@ def add_target(request, slug):
                             domain.save()
                             total_processed_count += 1
                             if created:
-                                logger.info("Added new domain %s", domain.name)
+                                logger.info("Added new target %s", domain.name)
 
                             if organization_name:
                                 organization = None
@@ -484,7 +484,7 @@ def add_target(request, slug):
                             )
                             stats.domain(created)
                             if created:
-                                logger.info("Added new domain target %s", domain.name)
+                                logger.info("Added new target target %s", domain.name)
                             else:
                                 logger.info("Domain target %s already exists", domain.name)
                             domain_targets[domain_name] = domain
@@ -639,9 +639,9 @@ def add_target(request, slug):
             stats_dict = stats.as_dict()
             msg_parts = []
             if stats_dict["domains_created"] > 0:
-                msg_parts.append(f"{stats_dict['domains_created']} new domain(s)")
+                msg_parts.append(f"{stats_dict['domains_created']} new target(s)")
             if stats_dict["domains_existing"] > 0:
-                msg_parts.append(f"{stats_dict['domains_existing']} existing domain(s)")
+                msg_parts.append(f"{stats_dict['domains_existing']} existing target(s)")
             if stats_dict["subdomains_created"] > 0:
                 msg_parts.append(f"{stats_dict['subdomains_created']} new subdomain(s)")
             if stats_dict["subdomains_existing"] > 0:

@@ -132,7 +132,7 @@ class TestTargetAppViews(BaseTestCase):
         messages_list = list(get_messages(response.wsgi_request))
         # The new system processes the IP and creates targets successfully
         self.assertIn(
-            "Processing complete: 1 new domain(s), 1 new subdomain(s) processed successfully",
+            "Processing complete: 1 new target(s), 1 new subdomain(s) processed successfully",
             [str(message) for message in messages_list],
         )
 

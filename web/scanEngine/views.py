@@ -126,7 +126,7 @@ def update_engine(request, id):
             cleaned_data = {key: clean_quotes(value) for key, value in form.cleaned_data.items()}
             for key, value in cleaned_data.items():
                 setattr(form.instance, key, value)
-            form.instance.save()
+            form.save()  # Use form.save() instead of form.instance.save()
             messages.add_message(request, messages.INFO, "Engine edited successfully")
             return http.HttpResponseRedirect(reverse("scan_engine_index"))
     context = {"scan_engine_nav_active": "active", "form": form}

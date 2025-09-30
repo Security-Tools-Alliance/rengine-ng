@@ -46,6 +46,14 @@ class AddEngineForm(forms.ModelForm):
         )
     )
 
+    def save(self, commit=True):
+        """Override save to mark scan_type as explicitly set"""
+        instance = super().save(commit=False)
+        instance._scan_type_explicitly_set = True
+        if commit:
+            instance.save()
+        return instance
+
 
 class UpdateEngineForm(forms.ModelForm):
     class Meta:
@@ -78,6 +86,14 @@ class UpdateEngineForm(forms.ModelForm):
             attrs={"id": "editor"},
         )
     )
+
+    def save(self, commit=True):
+        """Override save to mark scan_type as explicitly set"""
+        instance = super().save(commit=False)
+        instance._scan_type_explicitly_set = True
+        if commit:
+            instance.save()
+        return instance
 
 
 class AddWordlistForm(forms.Form):
