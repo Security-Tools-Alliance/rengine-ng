@@ -5,12 +5,11 @@ This file contains the test cases
 import json
 import logging
 
+from dashboard.models import Project, SearchHistory
 from django.template import Template
 from django.template.loader import get_template
 from django.test import override_settings
 from django.utils import timezone
-
-from dashboard.models import Project, SearchHistory
 from recon_note.models import TodoNote
 from scanEngine.models import (
     EngineType,
