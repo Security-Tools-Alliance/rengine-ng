@@ -3,6 +3,7 @@ import json
 import os
 import re
 import shutil
+from contextlib import suppress
 from pathlib import Path
 
 import requests
@@ -54,6 +55,7 @@ from scanEngine.models import (
 
 
 def index(request):
+    # Get engines based on scan type
     engine_type = EngineType.objects.order_by("engine_name").all()
     context = {
         "engine_ul_show": "show",
@@ -79,7 +81,7 @@ def add_engine(request):
     form = AddEngineForm()
 
     # load default yaml config
-    with open(RENGINE_HOME + "/config/default_yaml_config.yaml", "r", encoding="utf-8") as yaml_file:
+    with open(f"{RENGINE_HOME}/config/default_yaml_config.yaml", "r", encoding="utf-8") as yaml_file:
         default_config = yaml_file.read()
 
     if request.method == "POST":
@@ -116,7 +118,7 @@ def delete_engine(request, id):
 def update_engine(request, id):
     engine = get_object_or_404(EngineType, id=id)
     form = UpdateEngineForm(
-        initial={"yaml_configuration": engine.yaml_configuration, "engine_name": engine.engine_name}
+        initial={"yaml_configuration": engine.yaml_configuration, "engine_name": engine.engine_name, "scan_type": engine.get_scan_type_from_yaml()}
     )
     if request.method == "POST":
         form = UpdateEngineForm(request.POST, instance=engine)
@@ -140,29 +142,27 @@ def wordlist_list(request):
 
 @has_permission_decorator(PERM_MODIFY_WORDLISTS, redirect_url=FOUR_OH_FOUR_URL)
 def add_wordlist(request):
-    context = {"scan_engine_nav_active": "active", "wordlist_li": "active"}
     form = AddWordlistForm(request.POST or None, request.FILES or None)
-    if request.method == "POST":
-        if form.is_valid() and "upload_file" in request.FILES:
-            txt_file = request.FILES["upload_file"]
-            if txt_file.content_type == "text/plain":
-                wordlist_content = txt_file.read().decode("UTF-8", "ignore")
-                wordlist_file = open(
-                    Path(RENGINE_WORDLISTS) / f"{form.cleaned_data['short_name']}.txt",
-                    "w",
-                    encoding="utf-8",
-                )
-                wordlist_file.write(wordlist_content)
-                Wordlist.objects.create(
-                    name=form.cleaned_data["name"],
-                    short_name=form.cleaned_data["short_name"],
-                    count=wordlist_content.count("\n"),
-                )
-                messages.add_message(
-                    request, messages.INFO, "Wordlist " + form.cleaned_data["name"] + " added successfully"
-                )
-                return http.HttpResponseRedirect(reverse("wordlist_list"))
-    context["form"] = form
+    if request.method == "POST" and form.is_valid() and "upload_file" in request.FILES:
+        txt_file = request.FILES["upload_file"]
+        if txt_file.content_type == "text/plain":
+            wordlist_content = txt_file.read().decode("UTF-8", "ignore")
+            wordlist_file = open(
+                Path(RENGINE_WORDLISTS) / f"{form.cleaned_data['short_name']}.txt",
+                "w",
+                encoding="utf-8",
+            )
+            wordlist_file.write(wordlist_content)
+            Wordlist.objects.create(
+                name=form.cleaned_data["name"],
+                short_name=form.cleaned_data["short_name"],
+                count=wordlist_content.count("\n"),
+            )
+            messages.add_message(
+                request, messages.INFO, "Wordlist " + form.cleaned_data["name"] + " added successfully"
+            )
+            return http.HttpResponseRedirect(reverse("wordlist_list"))
+    context = {"scan_engine_nav_active": "active", "wordlist_li": "active", "form": form}
     return render(request, "scanEngine/wordlist/add.html", context)
 
 
@@ -426,12 +426,9 @@ def api_vault_delete(request):
         handler = {"key_openai": OpenAiAPIKey, "key_netlas": NetlasAPIKey}
         response["deleted"] = []
         for key in json.loads(request.body.decode("utf-8"))["keys"]:
-            try:
+            with suppress(KeyError):
                 handler[key].objects.first().delete()
                 response["deleted"].append(key)
-            except KeyError:
-                # Ignore the KeyError if the key does not exist
-                pass
         response["status"] = "OK"
     else:
         response["message"] = "Method not allowed"

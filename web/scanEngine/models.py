@@ -9,9 +9,7 @@ class HybridProperty:
         self.exp = None
 
     def __get__(self, instance, owner):
-        if instance is None:
-            return self
-        return self.func(instance)
+        return self if instance is None else self.func(instance)
 
     def __set__(self, instance, value):
         pass
@@ -22,16 +20,47 @@ class HybridProperty:
 
 
 class EngineType(models.Model):
+    SCAN_TYPE_CHOICES = [
+        ('bug_bounty', 'Bug Bounty'),
+        ('internal_network', 'Internal Network'),
+    ]
+    
     id = models.AutoField(primary_key=True)
     engine_name = models.CharField(max_length=200)
     yaml_configuration = models.TextField()
     default_engine = models.BooleanField(null=True, default=False)
+    scan_type = models.CharField(
+        max_length=20,
+        choices=SCAN_TYPE_CHOICES,
+        default='bug_bounty',
+        help_text='Type of scan this engine is designed for'
+    )
 
     def __str__(self):
         return self.engine_name
 
     def get_number_of_steps(self):
         return len(self.tasks) if self.tasks else 0
+
+    def get_scan_type_from_yaml(self):
+        """Extract scan_type from YAML configuration"""
+        try:
+            if not self.yaml_configuration:
+                return 'bug_bounty'
+            
+            config = yaml.safe_load(self.yaml_configuration)
+            if isinstance(config, dict) and 'scan_type' in config:
+                return config['scan_type']
+            
+            return 'bug_bounty'  # Default fallback
+        except Exception:
+            return 'bug_bounty'  # Safe fallback
+
+    def save(self, *args, **kwargs):
+        """Override save to automatically update scan_type from YAML"""
+        # Extract scan_type from YAML configuration
+        self.scan_type = self.get_scan_type_from_yaml()
+        super().save(*args, **kwargs)
 
     @HybridProperty
     def tasks(self):
