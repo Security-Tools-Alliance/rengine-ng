@@ -293,8 +293,6 @@ function updateScanEngines() {
 $(function(){
   // Handle scan type card clicks
   $('.scan-type-card').click(function() {
-    var scanType = $(this).data('scan-type');
-    
     // Remove selected state from all cards
     $('.scan-type-card').removeAttr('data-selected');
     $('.scan-type-card input[type="radio"]').prop('checked', false);
