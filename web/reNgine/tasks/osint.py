@@ -6,17 +6,14 @@ from pathlib import Path
 import yaml
 from celery import group
 from celery.utils.log import get_task_logger
-from dotted_dict import DottedDict
 
 from reNgine.celery import app
 from reNgine.celery_custom_task import RengineTask
 from reNgine.definitions import (
-    INTENSITY,
     OSINT,
     OSINT_CUSTOM_DORK,
     OSINT_DEFAULT_CONFIG,
     OSINT_DISCOVER,
-    OSINT_DOCUMENTS_LIMIT,
     OSINT_DORK,
 )
 from reNgine.tasks.command import run_command
@@ -122,8 +119,8 @@ def osint_discovery(config, host, scan_history_id, activity_id, results_dir, ctx
         ctx = {}
     # scan_history = ScanHistory.objects.get(pk=scan_history_id)
     osint_lookup = config.get(OSINT_DISCOVER, [])
-    osint_intensity = config.get(INTENSITY, "normal")
-    documents_limit = config.get(OSINT_DOCUMENTS_LIMIT, 50)
+    # osint_intensity = config.get(INTENSITY, "normal")
+    # documents_limit = config.get(OSINT_DOCUMENTS_LIMIT, 50)
 
     # Get and save meta info
     # if "metainfo" in osint_lookup:
