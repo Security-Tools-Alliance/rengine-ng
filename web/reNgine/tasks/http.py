@@ -30,6 +30,7 @@ from reNgine.utilities.database import (
     save_ip_address,
     save_subdomain,
     save_subdomain_metadata,
+    with_batch_geolocalization,
 )
 from reNgine.utilities.dns import resolve_subdomain_ips
 from reNgine.utilities.endpoint import get_http_urls, smart_http_crawl_if_needed
@@ -43,6 +44,7 @@ logger = get_task_logger(__name__)
 
 
 @app.task(name="http_crawl", queue="io_queue", base=RengineTask, bind=True)
+@with_batch_geolocalization
 def http_crawl(
     self,
     urls=None,  # Changed from urls=[]
@@ -318,6 +320,7 @@ def http_crawl(
 
 
 @app.task(name="pre_crawl", queue="cpu_queue", base=RengineTask, bind=True)
+@with_batch_geolocalization
 def pre_crawl(self, ctx={}, description=None):
     """
     Pre-crawl existing subdomains to ensure endpoints are alive
@@ -463,6 +466,7 @@ def pre_crawl(self, ctx={}, description=None):
 
 
 @app.task(name="intermediate_crawl", queue="cpu_queue", base=RengineTask, bind=True)
+@with_batch_geolocalization
 def intermediate_crawl(self, ctx={}, description=None):
     """
     Intermediate crawl phase - crawl newly discovered endpoints after fetch_url
@@ -508,6 +512,7 @@ def intermediate_crawl(self, ctx={}, description=None):
 
 
 @app.task(name="post_crawl", queue="cpu_queue", base=RengineTask, bind=True)
+@with_batch_geolocalization
 def post_crawl(self, ctx={}, description=None):
     """
     Post-crawl phase - final verification and cleanup of endpoints

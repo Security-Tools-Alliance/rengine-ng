@@ -36,7 +36,7 @@ from reNgine.settings import (
 from reNgine.tasks.command import run_command, stream_command
 from reNgine.utilities.command import get_nmap_cmd
 from reNgine.utilities.data import return_iterable
-from reNgine.utilities.database import save_endpoint, save_ip_address, save_vulnerability
+from reNgine.utilities.database import save_endpoint, save_ip_address, save_vulnerability, with_batch_geolocalization
 from reNgine.utilities.notification import get_task_title
 from reNgine.utilities.parser import parse_nmap_results, process_nmap_service_results
 from reNgine.utilities.proxy import get_random_proxy
@@ -46,6 +46,7 @@ logger = get_task_logger(__name__)
 
 
 @app.task(name="port_scan", queue="io_queue", base=RengineTask, bind=True)
+@with_batch_geolocalization
 def port_scan(self, hosts=None, ctx=None, description=None):
     """Run port scan and detect web services.
 

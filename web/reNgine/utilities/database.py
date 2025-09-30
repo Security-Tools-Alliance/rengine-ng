@@ -319,11 +319,21 @@ def _update_subdomain_with_endpoint_data(endpoint, subdomain, extra_datas):
 
 
 def save_ip_address(ip_address, subdomain=None, subscan=None, **kwargs):
-    from reNgine.tasks.geo import geo_localize
-
+    """Save IP address to database and collect for batch geolocalization.
+    
+    Args:
+        ip_address (str): IP address to save
+        subdomain (Subdomain, optional): Associated subdomain
+        subscan (SubScan, optional): Associated subscan
+        **kwargs: Additional IP attributes
+        
+    Returns:
+        tuple: (IpAddress object, created boolean)
+    """
     if not (validators.ipv4(ip_address) or validators.ipv6(ip_address)):
         logger.info(f"IP {ip_address} is not a valid IP. Skipping.")
         return None, False
+        
     ip, created = IpAddress.objects.get_or_create(address=ip_address)
     if created:
         logger.warning(f"Found new IP {ip_address}")
@@ -342,11 +352,119 @@ def save_ip_address(ip_address, subdomain=None, subscan=None, **kwargs):
     if subscan:
         ip.ip_subscan_ids.add(subscan)
 
-    # Geo-localize IP asynchronously
+    # Collect IP for batch geolocalization instead of immediate processing
     if created:
-        geo_localize.delay(ip_address, ip.id)
+        _collect_ip_for_geolocalization(ip_address)
 
     return ip, created
+
+
+def _collect_ip_for_geolocalization(ip_address):
+    """Collect IP address for batch geolocalization.
+    
+    This function adds the IP to a thread-local collection that will be
+    processed in batch at the end of the current task.
+    
+    Args:
+        ip_address (str): IP address to collect
+    """
+    import threading
+    from reNgine.utilities.data import get_ip_info
+    
+    # Check if this is a private/internal IP address
+    ip_info = get_ip_info(ip_address)
+    if ip_info and ip_info.is_private:
+        logger.debug(f"Skipping geolocalization for private IP: {ip_address}")
+        return
+    
+    # Get or create thread-local storage
+    if not hasattr(threading.current_thread(), 'geo_ip_collection'):
+        threading.current_thread().geo_ip_collection = set()
+    
+    # Add IP to collection (set automatically handles duplicates)
+    threading.current_thread().geo_ip_collection.add(ip_address)
+    logger.debug(f"Collected IP {ip_address} for batch geolocalization")
+
+
+def trigger_batch_geolocalization():
+    """Trigger batch geolocalization for collected IP addresses.
+    
+    This function should be called at the end of tasks that collect IPs
+    to process them in a single batch operation.
+    
+    Returns:
+        str: Task ID of the batch geolocalization task, or None if no IPs collected
+    """
+    import threading
+    from reNgine.tasks.geo import geo_localize_batch
+    
+    # Get collected IPs from thread-local storage
+    if not hasattr(threading.current_thread(), 'geo_ip_collection'):
+        logger.debug("No IPs collected for geolocalization")
+        return None
+        
+    collected_ips = list(threading.current_thread().geo_ip_collection)
+    
+    if not collected_ips:
+        logger.debug("No IPs collected for geolocalization")
+        return None
+    
+    # Clear the collection
+    threading.current_thread().geo_ip_collection.clear()
+    
+    # Trigger batch geolocalization
+    logger.info(f"Triggering batch geolocalization for {len(collected_ips)} IP addresses")
+    task = geo_localize_batch.delay(collected_ips)
+    
+    return task.id
+
+
+def with_batch_geolocalization(func):
+    """Decorator to automatically trigger batch geolocalization at the end of tasks.
+    
+    This decorator wraps task functions to automatically collect and process
+    IP addresses for geolocalization in batch mode, eliminating code duplication.
+    
+    The decorator automatically detects internal network scans and skips
+    geolocalization for private IP addresses.
+    
+    Args:
+        func: The task function to wrap
+        
+    Returns:
+        The wrapped function that handles batch geolocalization
+    """
+    def wrapper(*args, **kwargs):
+        try:
+            # Execute the original function
+            result = func(*args, **kwargs)
+            
+            # Trigger batch geolocalization for collected IPs
+            # (private IPs are automatically filtered out)
+            geo_task_id = trigger_batch_geolocalization()
+            if geo_task_id:
+                logger.info(f"Triggered batch geolocalization task: {geo_task_id}")
+            else:
+                logger.debug("No public IPs collected for geolocalization")
+            
+            return result
+            
+        except Exception as e:
+            # Still trigger geolocalization even if the main task fails
+            # This ensures we don't lose collected IPs
+            try:
+                geo_task_id = trigger_batch_geolocalization()
+                if geo_task_id:
+                    logger.info(f"Triggered batch geolocalization task after error: {geo_task_id}")
+                else:
+                    logger.debug("No public IPs collected for geolocalization after error")
+            except Exception as geo_error:
+                logger.error(f"Failed to trigger batch geolocalization after error: {geo_error}")
+            
+            # Re-raise the original exception
+            raise e
+    
+    return wrapper
 
 
 def save_vulnerability(**vuln_data):
