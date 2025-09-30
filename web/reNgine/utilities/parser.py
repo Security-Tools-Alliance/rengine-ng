@@ -272,7 +272,7 @@ def cve_to_vuln(cve_id, vuln_type=""):
     exploit_ids = cve_info.get("refmap", {}).get("exploit-db", [])
     osvdb_ids = cve_info.get("refmap", {}).get("osvdb", [])
     references = cve_info.get("references", [])
-    cve_info.get("capec", [])
+    capec_objects = cve_info.get("capec", [])
 
     if ovals := cve_info.get("oval", []):
         vuln_name = ovals[0]["title"]
@@ -295,6 +295,8 @@ def cve_to_vuln(cve_id, vuln_type=""):
         msg += f"\n\tOSVDB: {id}"
     for exploit_id in exploit_ids:
         msg += f"\n\tEXPLOITDB: {exploit_id}"
+    for capec_id in capec_objects:
+        msg += f"\n\tCAPEC: {capec_id}"
     logger.warning(msg)
     return {
         "name": vuln_name,
