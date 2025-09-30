@@ -102,6 +102,34 @@ def add_engine(request):
 
 
 @has_permission_decorator(PERM_MODIFY_SCAN_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
+def duplicate_engine(request, id):
+    """Duplicate an existing scan engine with unique name generation"""
+    original_engine = get_object_or_404(EngineType, id=id)
+    
+    # Generate unique name by checking existing engines
+    base_name = original_engine.engine_name
+    new_name = f"{base_name} (Copy)"
+    counter = 1
+    
+    # Check if name already exists and increment counter if needed
+    while EngineType.objects.filter(engine_name=new_name).exists():
+        counter += 1
+        new_name = f"{base_name} (Copy {counter})"
+    
+    # Create a copy of the engine with unique name
+    duplicated_engine = EngineType(
+        engine_name=new_name,
+        yaml_configuration=original_engine.yaml_configuration,
+        default_engine=False,  # Duplicated engines are always custom
+        scan_type=original_engine.scan_type
+    )
+    duplicated_engine.save()
+    
+    messages.add_message(request, messages.SUCCESS, f"Engine '{original_engine.engine_name}' successfully duplicated as '{new_name}'!")
+    return http.HttpResponseRedirect(reverse("scan_engine_index"))
+
+
+@has_permission_decorator(PERM_MODIFY_SCAN_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
 def delete_engine(request, id):
     obj = get_object_or_404(EngineType, id=id)
     if request.method == "POST":

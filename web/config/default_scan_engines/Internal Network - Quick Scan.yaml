@@ -15,7 +15,7 @@ port_scan: {
   'timeout': 5,
   'intensity': 'normal',
   'rate_limit': 200,
-  'ports': ["top-100"],
+  'ports': ['top-100'],
   'scan_techniques': ['-sS', '-sV'],
   'service_detection': true,
   'os_detection': false,

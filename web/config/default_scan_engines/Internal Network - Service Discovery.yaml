@@ -15,7 +15,7 @@ port_scan: {
   'timeout': 15,
   'intensity': 'normal',
   'rate_limit': 75,
-  'ports': ["top-1000"],
+  'ports': ['top-1000'],
   'scan_techniques': ['-sS', '-sV', '-O', '-A'],  # Comprehensive scan
   'service_detection': true,
   'os_detection': true,

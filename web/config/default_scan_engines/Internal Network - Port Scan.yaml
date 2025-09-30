@@ -15,7 +15,7 @@ port_scan: {
   'timeout': 10,
   'intensity': 'normal',
   'rate_limit': 100,
-  'ports': ["full"],  # Full port range for internal networks
+  'ports': ['full'],  # Full port range for internal networks
   'scan_techniques': ['-sS', '-sV', '-O'],  # SYN scan, version detection, OS detection
   'service_detection': true,
   'os_detection': true,
