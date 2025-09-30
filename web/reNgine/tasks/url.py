@@ -7,7 +7,6 @@ from celery import chain, chord
 from celery.result import allow_join_result
 from celery.utils.log import get_task_logger
 from django.db.models import Count
-from startScan.models import EndPoint, Subdomain
 
 from reNgine.celery import app
 from reNgine.celery_custom_task import RengineTask
@@ -35,6 +34,7 @@ from reNgine.utilities.database import save_endpoint, save_subdomain
 from reNgine.utilities.endpoint import get_http_urls
 from reNgine.utilities.proxy import get_random_proxy
 from reNgine.utilities.url import get_subdomain_from_url, sanitize_url
+from startScan.models import EndPoint, Subdomain
 
 logger = get_task_logger(__name__)
 
@@ -291,6 +291,15 @@ def fetch_url(self, urls=[], ctx={}, description=None):
             # TODO Add tool that found the URL to the db (need to update db model)
             # endpoint.found_by_tools = ','.join(tool_mapping.get(url, []))  # Save tools in the endpoint
             endpoint.save()
+
+    # Remove duplicate endpoints if configured
+    if should_remove_duplicate_endpoints and all_urls:
+        logger.info("Removing duplicate endpoints after URL discovery")
+        remove_duplicate_endpoints(
+            scan_history_id=self.scan_id,
+            domain_id=self.domain_id,
+            duplicate_removal_fields=duplicate_removal_fields
+        )
 
     return all_urls
 

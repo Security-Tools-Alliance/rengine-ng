@@ -7,12 +7,14 @@ from contextlib import suppress
 from pathlib import Path
 
 import requests
-from api.views import LLMModelsManager
-from dashboard.models import NetlasAPIKey, OpenAiAPIKey
 from django import http
 from django.contrib import messages
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
+from rolepermissions.decorators import has_permission_decorator
+
+from api.views import LLMModelsManager
+from dashboard.models import NetlasAPIKey, OpenAiAPIKey
 from reNgine.definitions import (
     FOUR_OH_FOUR_URL,
     PERM_MODIFY_INTERESTING_LOOKUP,
@@ -29,8 +31,6 @@ from reNgine.utilities.notification import (
     send_slack_message,
     send_telegram_message,
 )
-from rolepermissions.decorators import has_permission_decorator
-
 from scanEngine.forms import (
     AddEngineForm,
     AddWordlistForm,
@@ -105,27 +105,29 @@ def add_engine(request):
 def duplicate_engine(request, id):
     """Duplicate an existing scan engine with unique name generation"""
     original_engine = get_object_or_404(EngineType, id=id)
-    
+
     # Generate unique name by checking existing engines
     base_name = original_engine.engine_name
     new_name = f"{base_name} (Copy)"
     counter = 1
-    
+
     # Check if name already exists and increment counter if needed
     while EngineType.objects.filter(engine_name=new_name).exists():
         counter += 1
         new_name = f"{base_name} (Copy {counter})"
-    
+
     # Create a copy of the engine with unique name
     duplicated_engine = EngineType(
         engine_name=new_name,
         yaml_configuration=original_engine.yaml_configuration,
         default_engine=False,  # Duplicated engines are always custom
-        scan_type=original_engine.scan_type
+        scan_type=original_engine.scan_type,
     )
     duplicated_engine.save()
-    
-    messages.add_message(request, messages.SUCCESS, f"Engine '{original_engine.engine_name}' successfully duplicated as '{new_name}'!")
+
+    messages.add_message(
+        request, messages.SUCCESS, f"Engine '{original_engine.engine_name}' successfully duplicated as '{new_name}'!"
+    )
     return http.HttpResponseRedirect(reverse("scan_engine_index"))
 
 
@@ -146,7 +148,11 @@ def delete_engine(request, id):
 def update_engine(request, id):
     engine = get_object_or_404(EngineType, id=id)
     form = UpdateEngineForm(
-        initial={"yaml_configuration": engine.yaml_configuration, "engine_name": engine.engine_name, "scan_type": engine.get_scan_type_from_yaml()}
+        initial={
+            "yaml_configuration": engine.yaml_configuration,
+            "engine_name": engine.engine_name,
+            "scan_type": engine.get_scan_type_from_yaml(),
+        }
     )
     if request.method == "POST":
         form = UpdateEngineForm(request.POST, instance=engine)

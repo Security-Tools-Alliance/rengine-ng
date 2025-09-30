@@ -272,7 +272,7 @@ def cve_to_vuln(cve_id, vuln_type=""):
     exploit_ids = cve_info.get("refmap", {}).get("exploit-db", [])
     osvdb_ids = cve_info.get("refmap", {}).get("osvdb", [])
     references = cve_info.get("references", [])
-    capec_objects = cve_info.get("capec", [])
+    cve_info.get("capec", [])
 
     if ovals := cve_info.get("oval", []):
         vuln_name = ovals[0]["title"]
@@ -310,9 +310,8 @@ def cve_to_vuln(cve_id, vuln_type=""):
 
 def process_nmap_service_results(xml_file):
     """Update port information with nmap service detection results"""
-    from startScan.models import IpAddress
-
     from reNgine.utilities.port import create_or_update_port_with_service
+    from startScan.models import IpAddress
 
     services = parse_nmap_results(xml_file, parse_type="services")
 

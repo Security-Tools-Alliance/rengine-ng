@@ -4,15 +4,19 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('scanEngine', '0008_extend_field_limit'),
+        ("scanEngine", "0008_extend_field_limit"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='enginetype',
-            name='scan_type',
-            field=models.CharField(choices=[('bug_bounty', 'Bug Bounty'), ('internal_network', 'Internal Network')], default='bug_bounty', help_text='Type of scan this engine is designed for', max_length=20),
+            model_name="enginetype",
+            name="scan_type",
+            field=models.CharField(
+                choices=[("bug_bounty", "Bug Bounty"), ("internal_network", "Internal Network")],
+                default="bug_bounty",
+                help_text="Type of scan this engine is designed for",
+                max_length=20,
+            ),
         ),
     ]

@@ -1,9 +1,10 @@
-import os
 import hashlib
-import yaml
+import os
 
+import yaml
 from django.conf import settings
 from django.core.management.base import BaseCommand
+
 from scanEngine.models import EngineType
 
 
@@ -26,11 +27,11 @@ class Command(BaseCommand):
         """Check if an engine has been modified by comparing YAML content"""
         if not engine.default_engine:
             return True  # Custom engines are considered modified
-        
+
         # Calculate hash of current YAML content
-        current_hash = hashlib.md5(engine.yaml_configuration.encode('utf-8')).hexdigest()
-        new_hash = hashlib.md5(yaml_content.encode('utf-8')).hexdigest()
-        
+        current_hash = hashlib.md5(engine.yaml_configuration.encode("utf-8")).hexdigest()
+        new_hash = hashlib.md5(yaml_content.encode("utf-8")).hexdigest()
+
         return current_hash != new_hash
 
     def handle(self, *args, **options):
@@ -44,7 +45,7 @@ class Command(BaseCommand):
 
         # Check if we should respect user modifications
         check_modified = options.get("check_modified", False)
-        
+
         if not options["force"] and not check_modified:
             self.stdout.write(
                 self.style.WARNING(
@@ -70,24 +71,22 @@ class Command(BaseCommand):
                     yaml_content = f.read()
 
                 # Determine scan type from engine's YAML configuration
-                scan_type = 'bug_bounty'  # Default fallback
+                scan_type = "bug_bounty"  # Default fallback
                 try:
                     engine_config = yaml.safe_load(yaml_content)
-                    if isinstance(engine_config, dict) and 'scan_type' in engine_config:
-                        scan_type = engine_config['scan_type']
+                    if isinstance(engine_config, dict) and "scan_type" in engine_config:
+                        scan_type = engine_config["scan_type"]
                 except Exception as e:
                     self.stdout.write(self.style.WARNING(f"Could not parse scan_type from {engine_name}: {e}"))
-                
+
                 # Check if engine exists
                 try:
                     existing_engine = EngineType.objects.get(engine_name=engine_name)
-                    
+
                     # Check if we should respect modifications
                     if check_modified and self.is_engine_modified(existing_engine, yaml_content):
                         skipped_count += 1
-                        self.stdout.write(
-                            self.style.WARNING(f"⚠ Skipped {engine_name} (modified by user)")
-                        )
+                        self.stdout.write(self.style.WARNING(f"⚠ Skipped {engine_name} (modified by user)"))
                     else:
                         # Update the engine
                         existing_engine.yaml_configuration = yaml_content
@@ -95,22 +94,18 @@ class Command(BaseCommand):
                         existing_engine.default_engine = True
                         existing_engine.save()
                         updated_count += 1
-                        self.stdout.write(
-                            self.style.SUCCESS(f"↻ Updated engine: {engine_name}")
-                        )
-                        
+                        self.stdout.write(self.style.SUCCESS(f"↻ Updated engine: {engine_name}"))
+
                 except EngineType.DoesNotExist:
                     # Create new engine
                     EngineType.objects.create(
                         engine_name=engine_name,
                         yaml_configuration=yaml_content,
                         default_engine=True,
-                        scan_type=scan_type
+                        scan_type=scan_type,
                     )
                     created_count += 1
-                    self.stdout.write(
-                        self.style.SUCCESS(f"✓ Created engine: {engine_name}")
-                    )
+                    self.stdout.write(self.style.SUCCESS(f"✓ Created engine: {engine_name}"))
 
             except Exception as e:
                 self.stdout.write(self.style.ERROR(f"✗ Failed to process {yaml_file}: {str(e)}"))

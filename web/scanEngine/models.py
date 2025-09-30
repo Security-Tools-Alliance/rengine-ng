@@ -21,10 +21,10 @@ class HybridProperty:
 
 class EngineType(models.Model):
     SCAN_TYPE_CHOICES = [
-        ('bug_bounty', 'Bug Bounty'),
-        ('internal_network', 'Internal Network'),
+        ("bug_bounty", "Bug Bounty"),
+        ("internal_network", "Internal Network"),
     ]
-    
+
     id = models.AutoField(primary_key=True)
     engine_name = models.CharField(max_length=200)
     yaml_configuration = models.TextField()
@@ -32,8 +32,8 @@ class EngineType(models.Model):
     scan_type = models.CharField(
         max_length=20,
         choices=SCAN_TYPE_CHOICES,
-        default='bug_bounty',
-        help_text='Type of scan this engine is designed for'
+        default="bug_bounty",
+        help_text="Type of scan this engine is designed for",
     )
 
     def __str__(self):
@@ -46,21 +46,21 @@ class EngineType(models.Model):
         """Extract scan_type from YAML configuration"""
         try:
             if not self.yaml_configuration:
-                return 'bug_bounty'
-            
+                return "bug_bounty"
+
             config = yaml.safe_load(self.yaml_configuration)
-            if isinstance(config, dict) and 'scan_type' in config:
-                return config['scan_type']
-            
-            return 'bug_bounty'  # Default fallback
+            if isinstance(config, dict) and "scan_type" in config:
+                return config["scan_type"]
+
+            return "bug_bounty"  # Default fallback
         except Exception:
-            return 'bug_bounty'  # Safe fallback
+            return "bug_bounty"  # Safe fallback
 
     def save(self, *args, **kwargs):
         """Override save to automatically update scan_type from YAML if not explicitly set"""
         # Only update scan_type from YAML if it's not explicitly set in the form
         # This allows form submissions to override YAML scan_type
-        if not hasattr(self, '_scan_type_explicitly_set') or not self._scan_type_explicitly_set:
+        if not hasattr(self, "_scan_type_explicitly_set") or not self._scan_type_explicitly_set:
             # Extract scan_type from YAML configuration
             self.scan_type = self.get_scan_type_from_yaml()
         super().save(*args, **kwargs)
@@ -69,16 +69,27 @@ class EngineType(models.Model):
     def _get_config_parameter_names(cls):
         """Get the set of configuration parameter names"""
         return {
-            'scan_type', 'custom_header', 'user_agent', 'timeout', 'threads', 
-            'rate_limit', 'intensity', 'retries', 'proxy', 'proxy_auth',
-            'dns_servers', 'wordlist', 'exclude_ports', 'include_ports'
+            "scan_type",
+            "custom_header",
+            "user_agent",
+            "timeout",
+            "threads",
+            "rate_limit",
+            "intensity",
+            "retries",
+            "proxy",
+            "proxy_auth",
+            "dns_servers",
+            "wordlist",
+            "exclude_ports",
+            "include_ports",
         }
 
     def _parse_yaml_config(self):
         """Parse YAML configuration safely"""
         if not self.yaml_configuration:
             return {}
-        
+
         try:
             config = yaml.safe_load(self.yaml_configuration)
             return config if isinstance(config, dict) else {}
@@ -105,6 +116,7 @@ class EngineType(models.Model):
     def get_config_parameters_json(self):
         """Get configuration parameters as JSON string for frontend"""
         import json
+
         return json.dumps(self.get_config_parameters())
 
     def get_config_parameters_display(self):
@@ -112,13 +124,13 @@ class EngineType(models.Model):
         config_params = self.get_config_parameters()
         if not config_params:
             return ""
-        
+
         display_items = []
         for key, value in config_params.items():
-            formatted_key = key.replace('_', ' ').title()
+            formatted_key = key.replace("_", " ").title()
             formatted_value = self._format_config_value(value)
             display_items.append(f"<strong>{formatted_key}:</strong> {formatted_value}")
-        
+
         return "<br/>".join(display_items)
 
     def _format_config_value(self, value):

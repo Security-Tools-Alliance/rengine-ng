@@ -3,6 +3,7 @@ import os
 
 from celery.utils.log import get_task_logger
 from dotenv import load_dotenv
+
 from reNgine.settings import CELERY_DEBUG
 from reNgine.tasks import (
     fetch_url,

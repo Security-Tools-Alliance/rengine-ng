@@ -3,7 +3,6 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 import markdown
-from api.serializers import IpSerializer
 from celery import group
 from celery.utils.log import get_task_logger
 from django.contrib import messages
@@ -17,6 +16,10 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import mark_safe
 from django_celery_beat.models import ClockedSchedule, IntervalSchedule, PeriodicTask
+from rolepermissions.decorators import has_permission_decorator
+from weasyprint import CSS, HTML
+
+from api.serializers import IpSerializer
 from reNgine.celery import app
 from reNgine.definitions import (
     ABORTED_TASK,
@@ -35,11 +38,7 @@ from reNgine.tasks import initiate_scan, run_command
 from reNgine.utilities.data import safe_int_cast
 from reNgine.utilities.database import create_scan_activity, create_scan_object
 from reNgine.utilities.subdomain import get_interesting_subdomains
-from rolepermissions.decorators import has_permission_decorator
 from scanEngine.models import EngineType, VulnerabilityReportSetting
-from targetApp.models import Domain, Organization
-from weasyprint import CSS, HTML
-
 from startScan.models import (
     CountryISO,
     CveId,
@@ -55,6 +54,7 @@ from startScan.models import (
     Vulnerability,
     VulnerabilityTags,
 )
+from targetApp.models import Domain, Organization
 
 logger = get_task_logger(__name__)
 
@@ -245,7 +245,7 @@ def start_scan_ui(request, slug, domain_id):
         # Get scan type and engine
         scan_type = request.POST.get("scan_type", "bug_bounty")
         engine_id = safe_int_cast(request.POST["scan_mode"])
-        
+
         # Get scan existing elements option
         scan_existing_elements = request.POST.get("scan_existing_elements") == "true"
 
@@ -276,13 +276,15 @@ def start_scan_ui(request, slug, domain_id):
     # GET request
     # Get engines based on scan type (default to bug_bounty for backward compatibility)
     scan_type = request.GET.get("scan_type", "bug_bounty")
-    
+
     # Get engines based on scan type
-    engine = EngineType.objects.filter(scan_type=scan_type).annotate(lower_name=Lower("engine_name")).order_by("lower_name")
-    
+    engine = (
+        EngineType.objects.filter(scan_type=scan_type).annotate(lower_name=Lower("engine_name")).order_by("lower_name")
+    )
+
     # Get custom engine count in a single query
     custom_engine_count = EngineType.objects.filter(default_engine=False).count()
-    
+
     # Check if domain has IP addresses or subdomains (indicating internal network scan)
     has_ip_content = False
     if domain.ip_address_cidr:
@@ -290,29 +292,32 @@ def start_scan_ui(request, slug, domain_id):
     else:
         # Check if domain has subdomains with IP addresses
         from startScan.models import Subdomain
+
         subdomains_with_ips = Subdomain.objects.filter(target_domain=domain, ip_addresses__isnull=False).exists()
         has_ip_content = subdomains_with_ips
-    
+
     # Handle AJAX requests
-    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+    if request.headers.get("X-Requested-With") == "XMLHttpRequest":
         # Handle request for existing elements count
-        if request.GET.get('get_elements_count'):
-            from startScan.models import Subdomain, IpAddress
+        if request.GET.get("get_elements_count"):
+            from startScan.models import IpAddress, Subdomain
+
             hostname_count = Subdomain.objects.filter(target_domain=domain).count()
             ip_count = IpAddress.objects.filter(ip_addresses__target_domain=domain).count()
-            return JsonResponse({
-                'hostname_count': hostname_count,
-                'ip_count': ip_count
-            })
-        
+            return JsonResponse({"hostname_count": hostname_count, "ip_count": ip_count})
+
         # Handle request for engine loading
         from django.template.loader import render_to_string
-        engine_html = render_to_string('startScan/_items/scanEngine_select.html', {
-            'engines': engine,
-            'custom_engine_count': custom_engine_count,
-        })
-        return JsonResponse({'engine_html': engine_html})
-    
+
+        engine_html = render_to_string(
+            "startScan/_items/scanEngine_select.html",
+            {
+                "engines": engine,
+                "custom_engine_count": custom_engine_count,
+            },
+        )
+        return JsonResponse({"engine_html": engine_html})
+
     context = {
         "scan_history_active": "active",
         "domain": domain,
@@ -334,7 +339,7 @@ def start_multiple_scan(request, slug):
             engine_id = safe_int_cast(request.POST["scan_mode"])
             scan_type = request.POST.get("scan_type", "bug_bounty")
             list_of_domains = request.POST["list_of_domain_id"]
-            
+
             # Get scan existing elements option
             scan_existing_elements = request.POST.get("scan_existing_elements") == "true"
 
@@ -385,10 +390,10 @@ def start_multiple_scan(request, slug):
 
     # GET request
     scan_type = request.GET.get("scan_type", "bug_bounty")
-    
+
     # Get engines based on scan type
     engines = EngineType.objects.filter(scan_type=scan_type)
-    
+
     # Get custom engine count in a single query
     custom_engine_count = engines.filter(default_engine=False).count()
     context = {
@@ -638,7 +643,7 @@ def start_organization_scan(request, id, slug):
     if request.method == "POST":
         engine_id = safe_int_cast(request.POST["scan_mode"])
         scan_type = request.POST.get("scan_type", "bug_bounty")
-        
+
         # Get scan existing elements option
         scan_existing_elements = request.POST.get("scan_existing_elements") == "true"
 
@@ -673,25 +678,31 @@ def start_organization_scan(request, id, slug):
 
     # GET request
     scan_type = request.GET.get("scan_type", "bug_bounty")
-    
+
     # Get engines based on scan type
-    engine = EngineType.objects.filter(scan_type=scan_type).annotate(lower_name=Lower("engine_name")).order_by("lower_name")
-    
+    engine = (
+        EngineType.objects.filter(scan_type=scan_type).annotate(lower_name=Lower("engine_name")).order_by("lower_name")
+    )
+
     # Get custom engine count in a single query
     custom_engine_count = EngineType.objects.filter(default_engine=False).count()
-    
+
     # Optimize domain list query
     domain_list = organization.get_domains().select_related()
-    
+
     # Handle AJAX requests for dynamic engine loading
-    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+    if request.headers.get("X-Requested-With") == "XMLHttpRequest":
         from django.template.loader import render_to_string
-        engine_html = render_to_string('startScan/_items/scanEngine_select.html', {
-            'engines': engine,
-            'custom_engine_count': custom_engine_count,
-        })
-        return JsonResponse({'engine_html': engine_html})
-    
+
+        engine_html = render_to_string(
+            "startScan/_items/scanEngine_select.html",
+            {
+                "engines": engine,
+                "custom_engine_count": custom_engine_count,
+            },
+        )
+        return JsonResponse({"engine_html": engine_html})
+
     context = {
         "organization_data_active": "true",
         "list_organization_li": "active",

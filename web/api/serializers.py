@@ -1,18 +1,19 @@
 from collections import defaultdict
 
 import yaml
+from django.contrib.humanize.templatetags.humanize import naturalday, naturaltime
+from django.db.models import F, JSONField, Value
+from rest_framework import serializers
+
 from dashboard.models import (
     Project,
     SearchHistory,
 )
-from django.contrib.humanize.templatetags.humanize import naturalday, naturaltime
-from django.db.models import F, JSONField, Value
 from recon_note.models import (
     TodoNote,
 )
 from reNgine.definitions import ENGINE_NAMES
 from reNgine.utilities.subdomain import get_interesting_subdomains
-from rest_framework import serializers
 from scanEngine.models import (
     EngineType,
 )
@@ -297,14 +298,14 @@ class ScanHistorySerializer(serializers.ModelSerializer):
 
     def get_scan_type_display(self, scan_history):
         """Get scan type display name with safety check"""
-        if hasattr(scan_history.scan_type, 'get_scan_type_display'):
+        if hasattr(scan_history.scan_type, "get_scan_type_display"):
             return scan_history.scan_type.get_scan_type_display()
-        elif hasattr(scan_history.scan_type, 'scan_type'):
+        elif hasattr(scan_history.scan_type, "scan_type"):
             # If scan_type is a string, return it directly
             return scan_history.scan_type.scan_type
         else:
             # Fallback to default
-            return 'bug_bounty'
+            return "bug_bounty"
 
 
 class ScanActivitySerializer(serializers.ModelSerializer):
@@ -377,6 +378,7 @@ class ScanActivitySerializer(serializers.ModelSerializer):
     def get_elapsed_time(self, scan_activity):
         """Get elapsed time since task started"""
         from django.utils import timezone
+
         from reNgine.utilities.time import get_time_taken
 
         return get_time_taken(timezone.now(), scan_activity.time)

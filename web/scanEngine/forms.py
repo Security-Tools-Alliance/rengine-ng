@@ -1,7 +1,7 @@
 from django import forms
 from django_ace import AceWidget
-from reNgine.validators import validate_short_name
 
+from reNgine.validators import validate_short_name
 from scanEngine.models import (
     Configuration,
     EngineType,
@@ -28,10 +28,8 @@ class AddEngineForm(forms.ModelForm):
     scan_type = forms.ChoiceField(
         choices=EngineType.SCAN_TYPE_CHOICES,
         required=True,
-        widget=forms.Select(
-            attrs={"class": "form-control form-control-lg", "id": "scan_type"}
-        ),
-        help_text="Select the type of scan this engine is designed for"
+        widget=forms.Select(attrs={"class": "form-control form-control-lg", "id": "scan_type"}),
+        help_text="Select the type of scan this engine is designed for",
     )
     yaml_configuration = forms.CharField(
         widget=AceWidget(
@@ -69,10 +67,8 @@ class UpdateEngineForm(forms.ModelForm):
     scan_type = forms.ChoiceField(
         choices=EngineType.SCAN_TYPE_CHOICES,
         required=True,
-        widget=forms.Select(
-            attrs={"class": "form-control form-control-lg", "id": "scan_type"}
-        ),
-        help_text="Select the type of scan this engine is designed for"
+        widget=forms.Select(attrs={"class": "form-control form-control-lg", "id": "scan_type"}),
+        help_text="Select the type of scan this engine is designed for",
     )
     yaml_configuration = forms.CharField(
         widget=AceWidget(

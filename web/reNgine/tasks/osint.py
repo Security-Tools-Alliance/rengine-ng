@@ -7,8 +7,6 @@ import yaml
 from celery import group
 from celery.utils.log import get_task_logger
 from dotted_dict import DottedDict
-from scanEngine.models import Proxy
-from startScan.models import ScanHistory, Subdomain
 
 from reNgine.celery import app
 from reNgine.celery_custom_task import RengineTask
@@ -24,6 +22,8 @@ from reNgine.definitions import (
 from reNgine.tasks.command import run_command
 from reNgine.utilities.database import save_email, save_employee, save_metadata_info
 from reNgine.utilities.external import get_and_save_dork_results
+from scanEngine.models import Proxy
+from startScan.models import ScanHistory, Subdomain
 
 logger = get_task_logger(__name__)
 
@@ -120,12 +120,10 @@ def osint_discovery(config, host, scan_history_id, activity_id, results_dir, ctx
     """
     if ctx is None:
         ctx = {}
-    scan_history = ScanHistory.objects.get(pk=scan_history_id)
+    # scan_history = ScanHistory.objects.get(pk=scan_history_id)
     osint_lookup = config.get(OSINT_DISCOVER, [])
     osint_intensity = config.get(INTENSITY, "normal")
     documents_limit = config.get(OSINT_DOCUMENTS_LIMIT, 50)
-    emails = []
-    creds = []
 
     # Get and save meta info
     if "metainfo" in osint_lookup:
@@ -134,7 +132,7 @@ def osint_discovery(config, host, scan_history_id, activity_id, results_dir, ctx
             meta_dict = DottedDict(
                 {"osint_target": host, "domain": host, "scan_id": scan_history_id, "documents_limit": documents_limit}
             )
-            meta_info = [save_metadata_info(meta_dict)]
+            # meta_info = [save_metadata_info(meta_dict)]
             # TODO: disabled for now
             # elif osint_intensity == 'deep':
             # 	subdomains = Subdomain.objects
@@ -531,7 +529,6 @@ def the_harvester(config, host, scan_history_id, activity_id, results_dir, ctx=N
         # 	self.notify(fields={'Twitter people': f'• {employee.name}'})
 
     hosts = data.get("hosts", [])
-    urls = []
     for host in hosts:
         split = tuple(host.split(":"))
         http_url = split[0]
@@ -594,12 +591,12 @@ def h8mail(config, host, scan_history_id, activity_id, results_dir, ctx=None):
         creds = data.get("targets", [])
 
     # TODO: go through h8mail output and save emails to DB
-    for cred in creds:
-        logger.warning(cred)
-        email_address = cred["target"]
-        pwn_num = cred["pwn_num"]
-        pwn_data = cred.get("data", [])
-        email, created = save_email(email_address, scan_history=scan_history)
-        # if email:
-        # 	self.notify(fields={'Emails': f'• `{email.address}`'})
+    # for cred in creds:
+    #     logger.warning(cred)
+    #     email_address = cred["target"]
+    #     pwn_num = cred["pwn_num"]
+    #     pwn_data = cred.get("data", [])
+    #     email, created = save_email(email_address, scan_history=scan_history)
+    #     if email:
+    #    	self.notify(fields={'Emails': f'• `{email.address}`'})
     return creds

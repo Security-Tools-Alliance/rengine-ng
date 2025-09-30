@@ -2,8 +2,9 @@ import contextlib
 import json
 import logging
 
-from dashboard.models import OllamaSettings
 from markdown import markdown
+
+from dashboard.models import OllamaSettings
 from reNgine.llm.config import LLM_CONFIG
 
 logger = logging.getLogger(__name__)
