@@ -12,6 +12,11 @@ def bad_request(request, exception=None):
     """
     Custom 400 error handler
     """
+    if exception is not None:
+        logger.warning(f"Bad request from {request.META.get('REMOTE_ADDR', 'Unknown')}: {exception}")
+    else:
+        logger.warning(f"Bad request from {request.META.get('REMOTE_ADDR', 'Unknown')}")
+    
     context = RequestContext(request)
 
     # Applying manually the context processors
@@ -23,8 +28,12 @@ def bad_request(request, exception=None):
     return render(request, "common/bad_request.html", context.flatten(), status=400)
 
 
-def permission_denied(request):
-    logger.warning(f"Permission denied for user {request.user}")
+def permission_denied(request, exception=None):
+    if exception is not None:
+        logger.warning(f"Permission denied for user {request.user}: {exception}")
+    else:
+        logger.warning(f"Permission denied for user {request.user}")
+    
     context = RequestContext(request)
 
     # Applying manually the context processors
@@ -36,7 +45,12 @@ def permission_denied(request):
     return render(request, "common/permission_denied.html", context.flatten(), status=403)
 
 
-def page_not_found(request):
+def page_not_found(request, exception=None):
+    if exception is not None:
+        logger.warning(f"Page not found: {request.path} - {exception}")
+    else:
+        logger.warning(f"Page not found: {request.path}")
+    
     context = RequestContext(request)
 
     # Applying manually the context processors
