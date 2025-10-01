@@ -16,6 +16,7 @@ from reNgine.utilities.database import (
     trigger_batch_geolocalization,
     with_batch_geolocalization,
     _collect_ip_for_geolocalization,
+    _thread_local,
 )
 from reNgine.tasks.geo import geo_localize_batch
 from utils.test_utils import TestDataGenerator
@@ -48,14 +49,14 @@ class TestGeolocalizationPerformance(TestCase):
     def tearDown(self):
         """Clean up test data."""
         # Clear thread-local storage
-        if hasattr(threading.current_thread(), 'geo_ip_collection'):
-            delattr(threading.current_thread(), 'geo_ip_collection')
+        if hasattr(_thread_local, 'geo_ip_collection'):
+            delattr(_thread_local, 'geo_ip_collection')
 
-    @patch('reNgine.tasks.geo.run_command')
-    def test_batch_vs_individual_performance(self, mock_run_command):
+    @patch('reNgine.tasks.geo.geoiplookup')
+    def test_batch_vs_individual_performance(self, mock_geoiplookup):
         """Test performance difference between batch and individual geolocalization."""
         # Mock geolocalization response
-        mock_run_command.return_value = (0, "GeoIP Country Edition: US, United States")
+        mock_geoiplookup.return_value = (True, "US", "United States", None)
         
         # Test data
         test_ips = [
@@ -94,8 +95,8 @@ class TestGeolocalizationPerformance(TestCase):
         ]
         
         # Clear collection
-        if hasattr(threading.current_thread(), 'geo_ip_collection'):
-            delattr(threading.current_thread(), 'geo_ip_collection')
+        if hasattr(_thread_local, 'geo_ip_collection'):
+            delattr(_thread_local, 'geo_ip_collection')
         
         # Measure time to collect IPs
         start_time = time.time()
@@ -104,8 +105,8 @@ class TestGeolocalizationPerformance(TestCase):
         collection_time = time.time() - start_time
         
         # Check that only public IPs were collected
-        if hasattr(threading.current_thread(), 'geo_ip_collection'):
-            collected_ips = list(threading.current_thread().geo_ip_collection)
+        if hasattr(_thread_local, 'geo_ip_collection'):
+            collected_ips = list(_thread_local.geo_ip_collection)
         else:
             collected_ips = []
         public_ips = ["8.8.8.8", "1.1.1.1", "208.67.222.222"]
@@ -132,8 +133,8 @@ class TestGeolocalizationPerformance(TestCase):
         mock_delay.return_value = mock_task
         
         # Clear collection
-        if hasattr(threading.current_thread(), 'geo_ip_collection'):
-            delattr(threading.current_thread(), 'geo_ip_collection')
+        if hasattr(_thread_local, 'geo_ip_collection'):
+            delattr(_thread_local, 'geo_ip_collection')
         
         # Test function without decorator
         def simple_function():
@@ -167,16 +168,16 @@ class TestGeolocalizationPerformance(TestCase):
         def worker_thread(thread_id, ips):
             """Worker thread that collects IPs without database operations."""
             # Clear collection for this thread
-            if hasattr(threading.current_thread(), 'geo_ip_collection'):
-                delattr(threading.current_thread(), 'geo_ip_collection')
+            if hasattr(_thread_local, 'geo_ip_collection'):
+                delattr(_thread_local, 'geo_ip_collection')
             
             # Simulate IP collection without database operations
             for ip in ips:
                 _collect_ip_for_geolocalization(ip)
             
             # Return collected IPs
-            if hasattr(threading.current_thread(), 'geo_ip_collection'):
-                return list(threading.current_thread().geo_ip_collection)
+            if hasattr(_thread_local, 'geo_ip_collection'):
+                return list(_thread_local.geo_ip_collection)
             return []
         
         # Test data for multiple threads
@@ -187,8 +188,8 @@ class TestGeolocalizationPerformance(TestCase):
         ]
         
         # Clear main thread collection
-        if hasattr(threading.current_thread(), 'geo_ip_collection'):
-            delattr(threading.current_thread(), 'geo_ip_collection')
+        if hasattr(_thread_local, 'geo_ip_collection'):
+            delattr(_thread_local, 'geo_ip_collection')
         
         # Measure time to run multiple threads
         start_time = time.time()

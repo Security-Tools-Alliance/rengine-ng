@@ -177,7 +177,6 @@ def http_crawl(
 
         # Check if the http request has an error
         if "error" in line:
-            logger.error(line)
             continue
 
         line_str = json.dumps(line, indent=2)
@@ -300,7 +299,7 @@ def http_crawl(
     # Check if httpx returned any lines
     if not results:
         logger.warning(f"httpx returned no lines for command: {cmd}")
-        logger.warning(f"URLs processed: {urls}")
+        logger.debug(f"URLs processed: {urls}")
         if len(urls) > 1:
             logger.error(f"Input file path: {input_path}")
 

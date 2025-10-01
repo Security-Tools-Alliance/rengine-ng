@@ -4,6 +4,7 @@ from startScan.models import CountryISO, IpAddress
 
 from reNgine.celery import app
 from reNgine.tasks.command import run_command
+from reNgine.utilities.data import geoiplookup
 
 logger = get_task_logger(__name__)
 
@@ -22,11 +23,14 @@ def geo_localize(host, ip_id=None):
     if validators.ipv6(host):
         logger.info(f'Ipv6 "{host}" is not supported by geoiplookup. Skipping.')
         return None
-    cmd = f"geoiplookup {host}"
-    _, out = run_command(cmd)
-    if "IP Address not found" not in out and "can't resolve hostname" not in out:
-        country_iso = out.split(":")[1].strip().split(",")[0]
-        country_name = out.split(":")[1].strip().split(",")[1].strip()
+    
+    # Use geoiplookup function with robust parsing
+    success, country_iso, country_name, error = geoiplookup(host)
+    if not success:
+        logger.warning(f"Failed to geolocalize {host}: {error}")
+        return None
+        
+    if country_iso and country_name:
         geo_object, _ = CountryISO.objects.get_or_create(iso=country_iso, name=country_name)
         geo_json = {"iso": country_iso, "name": country_name}
         if ip_id:
@@ -87,13 +91,14 @@ def geo_localize_batch(ip_addresses):
                 skipped_count += 1
                 continue
             
-            # Perform geolocalization
-            cmd = f"geoiplookup {ip_address}"
-            _, out = run_command(cmd)
+            # Perform geolocalization using function with robust parsing
+            success, country_iso, country_name, error = geoiplookup(ip_address)
+            if not success:
+                logger.warning(f"Failed to geolocalize {ip_address}: {error}")
+                failed_count += 1
+                continue
             
-            if "IP Address not found" not in out and "can't resolve hostname" not in out:
-                country_iso = out.split(":")[1].strip().split(",")[0]
-                country_name = out.split(":")[1].strip().split(",")[1].strip()
+            if country_iso and country_name:
                 geo_object, _ = CountryISO.objects.get_or_create(iso=country_iso, name=country_name)
                 
                 # Update IP object

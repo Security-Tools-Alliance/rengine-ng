@@ -1,4 +1,5 @@
 import hashlib
+import threading
 import time
 from urllib.parse import urlparse
 
@@ -32,6 +33,9 @@ from reNgine.utilities.url import get_domain_from_subdomain, is_valid_url, sanit
 
 logger = get_task_logger(__name__)
 
+# Thread-local storage for IP collection
+_thread_local = threading.local()
+
 
 # -------------------------------#
 # Database Save Functions      #
@@ -56,7 +60,7 @@ def save_endpoint(http_url, ctx=None, is_default=False, http_status=0, **endpoin
     scheme = urlparse(http_url).scheme
 
     if not scheme:
-        logger.error(f"{http_url} is missing scheme (http or https). Creating default endpoint with http scheme.")
+        logger.warning(f"{http_url} is missing scheme (http or https). Creating default endpoint with http scheme.")
         http_url = f"http://{http_url.strip()}"
         is_default = True
 
@@ -294,7 +298,7 @@ def save_subdomain_metadata(subdomain, endpoint, extra_datas=None):
         subdomain.http_url = http_url
         subdomain.save()
     else:
-        logger.error(f"No HTTP URL found for {subdomain.name}. Skipping.")
+        logger.warning(f"No HTTP URL found for {subdomain.name}. Skipping.")
 
 
 def _update_subdomain_with_endpoint_data(endpoint, subdomain, extra_datas):
@@ -368,7 +372,6 @@ def _collect_ip_for_geolocalization(ip_address):
     Args:
         ip_address (str): IP address to collect
     """
-    import threading
     from reNgine.utilities.data import get_ip_info
     
     # Check if this is a private/internal IP address
@@ -378,11 +381,11 @@ def _collect_ip_for_geolocalization(ip_address):
         return
     
     # Get or create thread-local storage
-    if not hasattr(threading.current_thread(), 'geo_ip_collection'):
-        threading.current_thread().geo_ip_collection = set()
+    if not hasattr(_thread_local, 'geo_ip_collection'):
+        _thread_local.geo_ip_collection = set()
     
     # Add IP to collection (set automatically handles duplicates)
-    threading.current_thread().geo_ip_collection.add(ip_address)
+    _thread_local.geo_ip_collection.add(ip_address)
     logger.debug(f"Collected IP {ip_address} for batch geolocalization")
 
 
@@ -395,22 +398,21 @@ def trigger_batch_geolocalization():
     Returns:
         str: Task ID of the batch geolocalization task, or None if no IPs collected
     """
-    import threading
     from reNgine.tasks.geo import geo_localize_batch
     
     # Get collected IPs from thread-local storage
-    if not hasattr(threading.current_thread(), 'geo_ip_collection'):
+    if not hasattr(_thread_local, 'geo_ip_collection'):
         logger.debug("No IPs collected for geolocalization")
         return None
         
-    collected_ips = list(threading.current_thread().geo_ip_collection)
+    collected_ips = list(_thread_local.geo_ip_collection)
     
     if not collected_ips:
         logger.debug("No IPs collected for geolocalization")
         return None
     
     # Clear the collection
-    threading.current_thread().geo_ip_collection.clear()
+    _thread_local.geo_ip_collection.clear()
     
     # Trigger batch geolocalization
     logger.info(f"Triggering batch geolocalization for {len(collected_ips)} IP addresses")
@@ -434,6 +436,9 @@ def with_batch_geolocalization(func):
     Returns:
         The wrapped function that handles batch geolocalization
     """
+    from functools import wraps
+
+    @wraps(func)
     def wrapper(*args, **kwargs):
         try:
             # Execute the original function
