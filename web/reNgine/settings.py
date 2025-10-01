@@ -35,6 +35,7 @@ with open(Path(RENGINE_HOME) / "reNgine" / "version.txt", "r", encoding="utf-8")
 
 # Debug env vars
 UI_DEBUG = bool(int(os.environ.get("UI_DEBUG", "0")))
+UI_ERROR_LOGGING = bool(int(os.environ.get("UI_ERROR_LOGGING", "0")))
 UI_REMOTE_DEBUG = bool(int(os.environ.get("UI_REMOTE_DEBUG", "0")))
 UI_REMOTE_DEBUG_PORT = int(os.environ.get("UI_REMOTE_DEBUG_PORT", 5678))
 CELERY_DEBUG = bool(int(os.environ.get("CELERY_DEBUG", "0")))
@@ -134,6 +135,7 @@ MIDDLEWARE = [
     "dashboard.middleware.ProjectAccessMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "reNgine.middleware.CustomErrorMiddleware",
 ]
 TEMPLATES = [
     {
@@ -327,6 +329,11 @@ LOGGING = {
             "maxBytes": 1024 * 1024 * 100,  # 100 mb
             "backupCount": 5,
         },
+        "error_console": {
+            "class": "logging.StreamHandler",
+            "formatter": "brief",
+            "stream": "ext://sys.stderr",
+        },
     },
     "formatters": {
         "default": {"format": "%(message)s"},
@@ -340,8 +347,8 @@ LOGGING = {
     },
     "loggers": {
         "django": {
-            "handlers": ["file"],
-            "level": "ERROR" if UI_DEBUG else "CRITICAL",
+            "handlers": ["file", "error_console"] if UI_ERROR_LOGGING else ["file"],
+            "level": "ERROR" if (UI_DEBUG or UI_ERROR_LOGGING) else "CRITICAL",
             "propagate": True,
         },
         "celery.app.trace": {
