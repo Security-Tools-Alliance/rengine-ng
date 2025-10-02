@@ -12,7 +12,6 @@ import requests
 import validators
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
-from dashboard.models import OllamaSettings, OpenAiAPIKey, Project, SearchHistory
 from django.core.cache import cache
 from django.db.models import CharField, Count, F, Q, Value
 from django.shortcuts import get_object_or_404
@@ -20,6 +19,16 @@ from django.template.defaultfilters import slugify
 from django.urls import reverse
 from django.utils import timezone
 from packaging import version
+from rest_framework import viewsets
+from rest_framework.decorators import api_view
+from rest_framework.exceptions import PermissionDenied
+from rest_framework.parsers import JSONParser
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.status import HTTP_400_BAD_REQUEST
+from rest_framework.views import APIView
+
+from dashboard.models import OllamaSettings, OpenAiAPIKey, Project, SearchHistory
 from recon_note.models import TodoNote
 from reNgine.celery import app
 from reNgine.definitions import ABORTED_TASK, FAILED_TASK, NUCLEI_SEVERITY_MAP, RUNNING_TASK, SUCCESS_TASK
@@ -41,20 +50,12 @@ from reNgine.tasks import (
 )
 from reNgine.utilities.data import get_data_from_post_request, safe_int_cast
 from reNgine.utilities.database import create_scan_activity
-from reNgine.utilities.dns import get_current_dns_servers, check_host_alive
+from reNgine.utilities.dns import check_host_alive, get_current_dns_servers
 from reNgine.utilities.endpoint import get_interesting_endpoints
 from reNgine.utilities.external import get_open_ai_key
 from reNgine.utilities.lookup import get_lookup_keywords
 from reNgine.utilities.path import is_safe_path, remove_lead_and_trail_slash
 from reNgine.utilities.subdomain import get_interesting_subdomains
-from rest_framework import viewsets
-from rest_framework.decorators import api_view
-from rest_framework.exceptions import PermissionDenied
-from rest_framework.parsers import JSONParser
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
-from rest_framework.status import HTTP_400_BAD_REQUEST
-from rest_framework.views import APIView
 from scanEngine.models import EngineType, InstalledExternalTool
 from startScan.models import (
     Command,
@@ -441,6 +442,7 @@ class LLMVulnerabilityReportGenerator(APIView):
         ollama_ok = False
         try:
             import requests
+
             from reNgine.definitions import OLLAMA_INSTANCE
 
             r = requests.get(f"{OLLAMA_INSTANCE}/api/tags", timeout=3)

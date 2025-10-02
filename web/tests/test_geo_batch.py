@@ -10,21 +10,20 @@ This module tests the batch geolocalization system including:
 
 import threading
 import unittest
-from unittest.mock import Mock, patch, MagicMock
-from django.test import TestCase
-from django.contrib.auth.models import User
-from django.utils import timezone
+from unittest.mock import Mock, patch
 
+from django.contrib.auth.models import User
+from django.test import TestCase
+
+from reNgine.tasks.geo import geo_localize_batch
 from reNgine.utilities.database import (
-    save_ip_address,
     _collect_ip_for_geolocalization,
+    _thread_local,
+    save_ip_address,
     trigger_batch_geolocalization,
     with_batch_geolocalization,
-    _thread_local,
 )
-from reNgine.tasks.geo import geo_localize_batch
-from startScan.models import IpAddress, CountryISO, Subdomain, Domain, ScanHistory
-from scanEngine.models import EngineType
+from startScan.models import CountryISO, IpAddress
 from utils.test_utils import TestDataGenerator
 
 

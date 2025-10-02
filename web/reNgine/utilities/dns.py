@@ -70,8 +70,6 @@ def get_current_dns_servers():
     """Get current system DNS servers"""
     dns_servers = []
     try:
-        system = platform.system().lower()
-
         with contextlib.suppress(Exception):
             with open("/etc/resolv.conf", "r") as f:
                 for line in f:

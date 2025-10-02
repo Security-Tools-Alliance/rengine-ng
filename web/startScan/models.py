@@ -8,6 +8,7 @@ from django.db import models
 from django.db.models import Count, Q
 from django.db.models.functions import TruncDay
 from django.utils import timezone
+
 from reNgine.definitions import CELERY_TASK_STATUSES, ENGINE_DISPLAY_NAMES, NUCLEI_REVERSE_SEVERITY_MAP
 from reNgine.llm.utils import convert_markdown_to_html
 from reNgine.utilities.time import get_time_taken
@@ -364,7 +365,6 @@ class Subdomain(models.Model):
     @classmethod
     def get_counts(cls, queryset):
         """Get various subdomain counts in a single query"""
-        from django.db.models import Q, Case, When, IntegerField, Count
 
         # Use database-side filtering for better performance
         # Count subdomains that match IP address patterns

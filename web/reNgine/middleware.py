@@ -1,8 +1,8 @@
 import logging
 import traceback
+
 from django.http import HttpResponseServerError
 from django.template.loader import render_to_string
-from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
@@ -130,7 +130,7 @@ class CustomErrorMiddleware:
                 <div class="container">
                     <h1 class="error-header">500 - Internal Server Error</h1>
                     <p class="error-message">
-                        We're sorry, but something went wrong on our end. 
+                        We're sorry, but something went wrong on our end.
                         Our team has been notified and is working to fix the issue.
                     </p>
                     <div class="actions">

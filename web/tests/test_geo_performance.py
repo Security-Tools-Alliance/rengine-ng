@@ -4,21 +4,20 @@ Performance tests for batch geolocalization functionality.
 This module tests the performance improvements of the batch geolocalization system.
 """
 
-import time
 import threading
+import time
 import unittest
 from unittest.mock import Mock, patch
-from django.test import TestCase
-from django.utils import timezone
 
+from django.test import TestCase
+
+from reNgine.tasks.geo import geo_localize_batch
 from reNgine.utilities.database import (
-    save_ip_address,
-    trigger_batch_geolocalization,
-    with_batch_geolocalization,
     _collect_ip_for_geolocalization,
     _thread_local,
+    save_ip_address,
+    with_batch_geolocalization,
 )
-from reNgine.tasks.geo import geo_localize_batch
 from utils.test_utils import TestDataGenerator
 
 

@@ -4,10 +4,10 @@ from urllib.parse import urlparse
 
 from celery.utils.log import get_task_logger
 from django.db.models import Q
-from startScan.models import EndPoint, ScanHistory, Subdomain
-from targetApp.models import Domain
 
 from reNgine.settings import RENGINE_HOME
+from startScan.models import EndPoint, ScanHistory, Subdomain
+from targetApp.models import Domain
 
 from .lookup import get_lookup_keywords
 

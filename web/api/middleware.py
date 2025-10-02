@@ -1,8 +1,9 @@
 import logging
 
-from dashboard.models import UserAPIKey
 from django.utils import timezone
 from rest_framework_api_key.models import APIKey
+
+from dashboard.models import UserAPIKey
 
 logger = logging.getLogger(__name__)
 
