@@ -8,10 +8,10 @@ import requests
 from celery.utils.log import get_task_logger
 from discord_webhook import DiscordEmbed, DiscordWebhook
 from django.utils import timezone
-from scanEngine.models import Notification
 
 from reNgine.definitions import DISCORD_SEVERITY_COLORS
 from reNgine.settings import CELERY_BROKER_URL, DOMAIN_NAME
+from scanEngine.models import Notification
 
 logger = get_task_logger(__name__)
 DISCORD_WEBHOOKS_CACHE = redis.Redis.from_url(CELERY_BROKER_URL)

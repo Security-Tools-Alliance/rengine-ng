@@ -6,8 +6,6 @@ from pathlib import Path
 import yaml
 from celery import group
 from celery.utils.log import get_task_logger
-from scanEngine.models import Proxy
-from startScan.models import ScanHistory, Subdomain
 
 from reNgine.celery import app
 from reNgine.celery_custom_task import RengineTask
@@ -21,6 +19,8 @@ from reNgine.definitions import (
 from reNgine.tasks.command import run_command
 from reNgine.utilities.database import save_email, save_employee
 from reNgine.utilities.external import get_and_save_dork_results
+from scanEngine.models import Proxy
+from startScan.models import ScanHistory, Subdomain
 
 logger = get_task_logger(__name__)
 

@@ -8,6 +8,7 @@ os.environ["RENGINE_SECRET_KEY"] = "secret"
 os.environ["CELERY_ALWAYS_EAGER"] = "True"
 
 from celery.utils.log import get_task_logger
+
 from reNgine.settings import CELERY_DEBUG
 from reNgine.utilities.parser import parse_nmap_results
 

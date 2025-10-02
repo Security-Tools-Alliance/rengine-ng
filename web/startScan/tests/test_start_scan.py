@@ -8,10 +8,10 @@ from unittest.mock import patch
 from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
-from utils.test_base import BaseTestCase
-from utils.test_utils import MockTemplate
 
 from startScan.models import EndPoint, ScanActivity, ScanHistory, Subdomain, Vulnerability
+from utils.test_base import BaseTestCase
+from utils.test_utils import MockTemplate
 
 
 class TestStartScanViews(BaseTestCase):
