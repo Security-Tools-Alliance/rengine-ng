@@ -43,7 +43,7 @@ urlpatterns = (
 )
 
 # Custom error handlers - must be defined at module level in root URLconf
-handler400 = 'reNgine.common_views.bad_request'
-handler403 = 'reNgine.common_views.permission_denied'
-handler404 = 'reNgine.common_views.page_not_found'
-handler500 = 'reNgine.common_views.server_error'
+handler400 = "reNgine.common_views.bad_request"
+handler403 = "reNgine.common_views.permission_denied"
+handler404 = "reNgine.common_views.page_not_found"
+handler500 = "reNgine.common_views.server_error"

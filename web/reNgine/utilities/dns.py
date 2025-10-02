@@ -72,22 +72,13 @@ def get_current_dns_servers():
     try:
         system = platform.system().lower()
 
-        if system == "linux":
-            with contextlib.suppress(Exception):
-                with open("/etc/resolv.conf", "r") as f:
-                    for line in f:
-                        if line.strip().startswith("nameserver"):
-                            dns_server = line.strip().split()[1]
-                            dns_servers.append(dns_server)
-        elif system == "windows":
-            with contextlib.suppress(Exception):
-                result = subprocess.run(["nslookup"], capture_output=True, text=True, input="\n")
-                for line in result.stdout.split("\n"):
-                    if "Server:" in line:
-                        dns_server = line.split(":")[1].strip()
-                        if dns_server and dns_server != "localhost":
-                            dns_servers.append(dns_server)
-                        break
+        with contextlib.suppress(Exception):
+            with open("/etc/resolv.conf", "r") as f:
+                for line in f:
+                    if line.strip().startswith("nameserver"):
+                        dns_server = line.strip().split()[1]
+                        dns_servers.append(dns_server)
+
         # Fallback to common DNS servers if none found
         if not dns_servers:
             dns_servers = ["8.8.8.8", "1.1.1.1"]
@@ -102,11 +93,7 @@ def get_current_dns_servers():
 def check_host_alive(ip):
     """Quick ping check to see if host is alive"""
     try:
-        system = platform.system().lower()
-        if system == "windows":
-            cmd = ["ping", "-n", "1", "-w", "2000", ip]
-        else:
-            cmd = ["ping", "-c", "1", "-W", "2", ip]
+        cmd = ["ping", "-c", "1", "-W", "2", ip]
 
         result = subprocess.run(cmd, capture_output=True, timeout=5)
         is_alive = result.returncode == 0

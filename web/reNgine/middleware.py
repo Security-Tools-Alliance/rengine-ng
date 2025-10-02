@@ -11,7 +11,7 @@ class CustomErrorMiddleware:
     """
     Custom middleware to handle 500 errors and display custom error page
     """
-    
+
     def __init__(self, get_response):
         self.get_response = get_response
 
@@ -23,55 +23,57 @@ class CustomErrorMiddleware:
         Process exceptions and return custom 500 error page
         """
         from reNgine.settings import UI_ERROR_LOGGING
-        
+
         # Log detailed error information if UI_ERROR_LOGGING is enabled
         if UI_ERROR_LOGGING:
             try:
                 # Safely extract error information
-                error_type = type(exception).__name__ if exception else 'UnknownError'
-                error_message = str(exception) if exception else 'Unknown error occurred'
-                
+                error_type = type(exception).__name__ if exception else "UnknownError"
+                error_message = str(exception) if exception else "Unknown error occurred"
+
                 # Safely get traceback
                 try:
-                    error_traceback = ''.join(traceback.format_exception(type(exception), exception, exception.__traceback__))
+                    error_traceback = "".join(
+                        traceback.format_exception(type(exception), exception, exception.__traceback__)
+                    )
                 except (AttributeError, TypeError):
-                    error_traceback = 'Traceback not available'
-                
+                    error_traceback = "Traceback not available"
+
                 # Safely get request information
                 try:
-                    user_info = str(request.user) if hasattr(request, 'user') and request.user else 'Anonymous'
+                    user_info = str(request.user) if hasattr(request, "user") and request.user else "Anonymous"
                 except (AttributeError, TypeError):
-                    user_info = 'Anonymous'
-                
+                    user_info = "Anonymous"
+
                 try:
-                    ip_address = request.META.get('REMOTE_ADDR', 'Unknown')
+                    ip_address = request.META.get("REMOTE_ADDR", "Unknown")
                 except (AttributeError, TypeError):
-                    ip_address = 'Unknown'
-                
+                    ip_address = "Unknown"
+
                 try:
-                    request_path = request.path if hasattr(request, 'path') else 'Unknown'
-                    request_method = request.method if hasattr(request, 'method') else 'Unknown'
+                    request_path = request.path if hasattr(request, "path") else "Unknown"
+                    request_method = request.method if hasattr(request, "method") else "Unknown"
                 except (AttributeError, TypeError):
-                    request_path = 'Unknown'
-                    request_method = 'Unknown'
-                
+                    request_path = "Unknown"
+                    request_method = "Unknown"
+
                 error_details = {
-                    'type': error_type,
-                    'message': error_message,
-                    'traceback': error_traceback,
-                    'path': request_path,
-                    'method': request_method,
-                    'user': user_info,
-                    'ip': ip_address,
+                    "type": error_type,
+                    "message": error_message,
+                    "traceback": error_traceback,
+                    "path": request_path,
+                    "method": request_method,
+                    "user": user_info,
+                    "ip": ip_address,
                 }
-                
+
                 # Log detailed error information
                 logger.error(f"500 Error Details: {error_details}")
-                
+
                 # Also print to console for immediate visibility
-                print(f"\n{'='*80}")
+                print(f"\n{'=' * 80}")
                 print("500 INTERNAL SERVER ERROR")
-                print(f"{'='*80}")
+                print(f"{'=' * 80}")
                 print(f"Path: {error_details['path']}")
                 print(f"Method: {error_details['method']}")
                 print(f"User: {error_details['user']}")
@@ -79,32 +81,32 @@ class CustomErrorMiddleware:
                 print(f"Error Type: {error_details['type']}")
                 print(f"Error Message: {error_details['message']}")
                 print("Traceback:")
-                print(error_details['traceback'])
-                print(f"{'='*80}\n")
-                
+                print(error_details["traceback"])
+                print(f"{'=' * 80}\n")
+
             except Exception as logging_error:
                 # If logging fails, at least log the basic error
                 logger.error(f"Failed to log detailed error information: {logging_error}")
                 logger.error(f"Original exception: {exception}")
-        
+
         # Try to render custom error page
         try:
             # Create a minimal context for the error page
             context = {
-                'request': request,
-                'exception': exception,
-                'error_type': type(exception).__name__ if exception else 'UnknownError',
-                'error_message': str(exception) if exception else 'Unknown error occurred',
+                "request": request,
+                "exception": exception,
+                "error_type": type(exception).__name__ if exception else "UnknownError",
+                "error_message": str(exception) if exception else "Unknown error occurred",
             }
-            
+
             # Try to render the custom error template
-            html_content = render_to_string('common/server_error.html', context)
+            html_content = render_to_string("common/server_error.html", context)
             return HttpResponseServerError(html_content)
-            
+
         except Exception as template_error:
             # If custom template fails, fall back to simple error page
             logger.error(f"Failed to render custom error template: {template_error}")
-            
+
             # Return a simple HTML error page
             simple_html = """
             <!DOCTYPE html>

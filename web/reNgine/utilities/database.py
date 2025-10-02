@@ -1,6 +1,7 @@
 import hashlib
 import threading
 import time
+from redis.exceptions import LockError, RedisError
 from urllib.parse import urlparse
 
 import validators
@@ -29,7 +30,7 @@ from targetApp.models import Domain
 from reNgine.settings import RENGINE_RESULTS, RENGINE_TASK_IGNORE_CACHE_KWARGS
 from reNgine.utilities.data import is_iterable, replace_nulls
 from reNgine.utilities.distributed_lock import DistributedLock, get_redis_connection
-from reNgine.utilities.url import get_domain_from_subdomain, is_valid_url, sanitize_url
+from reNgine.utilities.url import get_domain_from_subdomain, is_valid_url, sanitize_url, is_target_allowed_for_domain
 
 logger = get_task_logger(__name__)
 
@@ -76,16 +77,7 @@ def save_endpoint(http_url, ctx=None, is_default=False, http_status=0, **endpoin
     if not all([scan, domain]):
         logger.error("Missing scan or domain information")
         return None, False
-
-    # Check if we're scanning an IP
-    is_ip_scan = validators.ipv4(domain.name) or validators.ipv6(domain.name)
-
-    # For regular domain scans, validate URL belongs to domain
-    # Exception: Allow IP addresses discovered via DNS resolution
-    parsed_url = urlparse(http_url)
-    is_ip_url = validators.ipv4(parsed_url.hostname) or validators.ipv6(parsed_url.hostname)
-
-    if not is_ip_scan and not is_ip_url and domain.name not in http_url:
+    if not is_target_allowed_for_domain(http_url, domain.name, ctx, target_type="url"):
         logger.error(f"{http_url} is not a URL of domain {domain.name}. Skipping.")
         return None, False
 
@@ -184,25 +176,14 @@ def save_subdomain(subdomain_name, ctx=None):
         logger.error("No domain found in scan history. Skipping.")
         return None, False
 
-    is_ip_scan = validators.ipv4(domain.name) or validators.ipv6(domain.name)
-
-    # For regular domain scans, validate subdomain belongs to domain
-    # Exception: Allow IP addresses discovered via DNS resolution to be saved as special subdomains
-    is_discovered_ip = validators.ipv4(subdomain_name) or validators.ipv6(subdomain_name)
-
-    if not is_ip_scan and not is_discovered_ip and ctx.get("domain_id") and domain.name not in subdomain_name:
+    if not is_target_allowed_for_domain(subdomain_name, domain.name, ctx, target_type="subdomain"):
         logger.error(f"{subdomain_name} is not a subdomain of domain {domain.name}. Skipping.")
         return None, False
 
     # Use Redis distributed locking to prevent race conditions during concurrent scans
     lock_key = f"subdomain_creation:{subdomain_name}:{scan_id}:{domain.id if domain else 'no_domain'}"
 
-    # Get Redis connection from pool (more efficient than creating new connections)
-    redis_conn = get_redis_connection()
-
-    if redis_conn:
-        from redis.exceptions import LockError, RedisError
-
+    if redis_conn := get_redis_connection():
         try:
             with redis_conn.lock(lock_key, timeout=30, blocking_timeout=5):
                 # Use get_or_create within the lock for additional safety against edge cases
@@ -324,20 +305,20 @@ def _update_subdomain_with_endpoint_data(endpoint, subdomain, extra_datas):
 
 def save_ip_address(ip_address, subdomain=None, subscan=None, **kwargs):
     """Save IP address to database and collect for batch geolocalization.
-    
+
     Args:
         ip_address (str): IP address to save
         subdomain (Subdomain, optional): Associated subdomain
         subscan (SubScan, optional): Associated subscan
         **kwargs: Additional IP attributes
-        
+
     Returns:
         tuple: (IpAddress object, created boolean)
     """
     if not (validators.ipv4(ip_address) or validators.ipv6(ip_address)):
         logger.info(f"IP {ip_address} is not a valid IP. Skipping.")
         return None, False
-        
+
     ip, created = IpAddress.objects.get_or_create(address=ip_address)
     if created:
         logger.warning(f"Found new IP {ip_address}")
@@ -365,25 +346,25 @@ def save_ip_address(ip_address, subdomain=None, subscan=None, **kwargs):
 
 def _collect_ip_for_geolocalization(ip_address):
     """Collect IP address for batch geolocalization.
-    
+
     This function adds the IP to a thread-local collection that will be
     processed in batch at the end of the current task.
-    
+
     Args:
         ip_address (str): IP address to collect
     """
     from reNgine.utilities.data import get_ip_info
-    
+
     # Check if this is a private/internal IP address
     ip_info = get_ip_info(ip_address)
     if ip_info and ip_info.is_private:
         logger.debug(f"Skipping geolocalization for private IP: {ip_address}")
         return
-    
+
     # Get or create thread-local storage
-    if not hasattr(_thread_local, 'geo_ip_collection'):
+    if not hasattr(_thread_local, "geo_ip_collection"):
         _thread_local.geo_ip_collection = set()
-    
+
     # Add IP to collection (set automatically handles duplicates)
     _thread_local.geo_ip_collection.add(ip_address)
     logger.debug(f"Collected IP {ip_address} for batch geolocalization")
@@ -391,48 +372,48 @@ def _collect_ip_for_geolocalization(ip_address):
 
 def trigger_batch_geolocalization():
     """Trigger batch geolocalization for collected IP addresses.
-    
+
     This function should be called at the end of tasks that collect IPs
     to process them in a single batch operation.
-    
+
     Returns:
         str: Task ID of the batch geolocalization task, or None if no IPs collected
     """
     from reNgine.tasks.geo import geo_localize_batch
-    
+
     # Get collected IPs from thread-local storage
-    if not hasattr(_thread_local, 'geo_ip_collection'):
+    if not hasattr(_thread_local, "geo_ip_collection"):
         logger.debug("No IPs collected for geolocalization")
         return None
-        
+
     collected_ips = list(_thread_local.geo_ip_collection)
-    
+
     if not collected_ips:
         logger.debug("No IPs collected for geolocalization")
         return None
-    
+
     # Clear the collection
     _thread_local.geo_ip_collection.clear()
-    
+
     # Trigger batch geolocalization
     logger.info(f"Triggering batch geolocalization for {len(collected_ips)} IP addresses")
     task = geo_localize_batch.delay(collected_ips)
-    
+
     return task.id
 
 
 def with_batch_geolocalization(func):
     """Decorator to automatically trigger batch geolocalization at the end of tasks.
-    
+
     This decorator wraps task functions to automatically collect and process
     IP addresses for geolocalization in batch mode, eliminating code duplication.
-    
+
     The decorator automatically detects internal network scans and skips
     geolocalization for private IP addresses.
-    
+
     Args:
         func: The task function to wrap
-        
+
     Returns:
         The wrapped function that handles batch geolocalization
     """
@@ -443,7 +424,7 @@ def with_batch_geolocalization(func):
         try:
             # Execute the original function
             result = func(*args, **kwargs)
-            
+
             # Trigger batch geolocalization for collected IPs
             # (private IPs are automatically filtered out)
             geo_task_id = trigger_batch_geolocalization()
@@ -451,9 +432,9 @@ def with_batch_geolocalization(func):
                 logger.info(f"Triggered batch geolocalization task: {geo_task_id}")
             else:
                 logger.debug("No public IPs collected for geolocalization")
-            
+
             return result
-            
+
         except Exception as e:
             # Still trigger geolocalization even if the main task fails
             # This ensures we don't lose collected IPs
@@ -465,10 +446,10 @@ def with_batch_geolocalization(func):
                     logger.debug("No public IPs collected for geolocalization after error")
             except Exception as geo_error:
                 logger.error(f"Failed to trigger batch geolocalization after error: {geo_error}")
-            
+
             # Re-raise the original exception
             raise e
-    
+
     return wrapper
 
 

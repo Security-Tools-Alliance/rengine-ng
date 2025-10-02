@@ -16,7 +16,7 @@ def bad_request(request, exception=None):
         logger.warning(f"Bad request from {request.META.get('REMOTE_ADDR', 'Unknown')}: {exception}")
     else:
         logger.warning(f"Bad request from {request.META.get('REMOTE_ADDR', 'Unknown')}")
-    
+
     context = RequestContext(request)
 
     # Applying manually the context processors
@@ -33,7 +33,7 @@ def permission_denied(request, exception=None):
         logger.warning(f"Permission denied for user {request.user}: {exception}")
     else:
         logger.warning(f"Permission denied for user {request.user}")
-    
+
     context = RequestContext(request)
 
     # Applying manually the context processors
@@ -50,7 +50,7 @@ def page_not_found(request, exception=None):
         logger.warning(f"Page not found: {request.path} - {exception}")
     else:
         logger.warning(f"Page not found: {request.path}")
-    
+
     context = RequestContext(request)
 
     # Applying manually the context processors
@@ -69,11 +69,11 @@ def server_error(request):
     """
     # Return standard 500 error page
     context = RequestContext(request)
-    
+
     # Applying manually the context processors
     for processor in settings.TEMPLATES[0]["OPTIONS"]["context_processors"]:
         if isinstance(processor, str):
             processor = import_string(processor)
         context.update(processor(request))
-    
+
     return render(request, "common/server_error.html", context.flatten(), status=500)

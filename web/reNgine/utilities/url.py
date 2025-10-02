@@ -239,6 +239,82 @@ def is_valid_url(url):
         return False
 
 
+def is_target_allowed_for_domain(target, domain_name, ctx=None, target_type="subdomain"):
+    """
+    Check if a target (subdomain or URL) is allowed for a given domain based on scan context and target type.
+
+    This function centralizes the validation logic for determining whether a target
+    should be allowed for a specific domain, taking into account:
+    - Regular domain scans (strict validation)
+    - IP address scans (allow IP targets)
+    - Custom text targets (allow any valid target)
+
+    Args:
+        target (str): The target to validate (subdomain name or URL)
+        domain_name (str): The domain name being scanned
+        ctx (dict, optional): Scan context containing domain_id and other info
+        target_type (str): Type of target - "subdomain" or "url"
+
+    Returns:
+        bool: True if target is allowed, False otherwise
+    """
+    from reNgine.utilities.misc import determine_target_type
+
+    # Extract hostname from URL if needed
+    if target_type == "url":
+        parsed_url = urlparse(target)
+        hostname = parsed_url.hostname
+    else:
+        hostname = target
+
+    if validators.ipv4(hostname) or validators.ipv6(hostname):
+        return True
+
+    # Determine target type for custom text targets
+    scan_target_type = determine_target_type(domain_name)
+    is_custom_text_target = scan_target_type == "custom_text"
+
+    # For custom text targets, allow any valid target (no strict domain validation)
+    if is_custom_text_target:
+        return True
+
+    # If no domain_id in context, allow the target (backward compatibility)
+    if not ctx or not ctx.get("domain_id"):
+        return True
+
+    # Strict validation: target must be a subdomain of the domain
+    return _is_valid_subdomain(target, domain_name)
+
+
+def _is_valid_subdomain(target, domain_name):
+    """
+    Check if target is a valid subdomain of the given domain.
+
+    This function performs precise domain validation to avoid false positives
+    like 'example.com' matching 'notexample.com'.
+
+    Args:
+        target (str): The target to validate (subdomain or hostname)
+        domain_name (str): The domain name to validate against
+
+    Returns:
+        bool: True if target is a valid subdomain, False otherwise
+    """
+    # Handle exact match
+    if target == domain_name:
+        return True
+
+    # Check if target ends with '.' + domain_name (proper subdomain)
+    if target.endswith(f".{domain_name}"):
+        # Extract the subdomain part
+        subdomain_part = target[: -len(f".{domain_name}")]
+        # Ensure subdomain part is not empty and doesn't contain dots
+        if subdomain_part and "." not in subdomain_part:
+            return True
+
+    return False
+
+
 def extract_httpx_url(line, follow_redirect):
     """Extract final URL from httpx results.
 

@@ -239,21 +239,8 @@ def initiate_scan(
                     subdomain_obj, _ = save_subdomain(existing_subdomain.name, ctx=ctx)
 
                     if subdomain_obj:
-                        # Create endpoints based on the type of existing element
-                        existing_element_type = determine_target_type(existing_subdomain.name)
-                        if existing_element_type in ["domain", "subdomain", "ip_address"]:
-                            create_default_endpoint_for_subdomain(subdomain_obj, ctx)
-                            logger.info(
-                                f"Added existing hostname to scan: {existing_subdomain.name} (type: {existing_element_type})"
-                            )
-                        elif existing_element_type == "custom_text":
-                            logger.info(
-                                f"Added existing custom text to scan: {existing_subdomain.name} (type: {existing_element_type}) - No default endpoints"
-                            )
-                        else:
-                            logger.info(
-                                f"Added existing hostname to scan: {existing_subdomain.name} (type: {existing_element_type}) - No default endpoints"
-                            )
+                        create_default_endpoint_for_subdomain(subdomain_obj, ctx)
+                        logger.info(f"Added existing hostname to scan: {existing_subdomain.name}")
                     else:
                         logger.warning(f"Failed to create subdomain for existing hostname: {existing_subdomain.name}")
 

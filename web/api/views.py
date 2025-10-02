@@ -41,6 +41,7 @@ from reNgine.tasks import (
 )
 from reNgine.utilities.data import get_data_from_post_request, safe_int_cast
 from reNgine.utilities.database import create_scan_activity
+from reNgine.utilities.dns import get_current_dns_servers, check_host_alive
 from reNgine.utilities.endpoint import get_interesting_endpoints
 from reNgine.utilities.external import get_open_ai_key
 from reNgine.utilities.lookup import get_lookup_keywords
@@ -1535,62 +1536,12 @@ class IPToDomain(APIView):
             return total_ips  # Process entire range at once for small ranges
 
     def _get_current_dns_servers(self):
-        """Get current system DNS servers"""
-        dns_servers = []
-        try:
-            import platform
-
-            system = platform.system().lower()
-
-            if system == "linux":
-                try:
-                    with open("/etc/resolv.conf", "r") as f:
-                        for line in f:
-                            if line.strip().startswith("nameserver"):
-                                dns_server = line.strip().split()[1]
-                                dns_servers.append(dns_server)
-                except (FileNotFoundError, PermissionError, IndexError):
-                    pass
-            elif system == "windows":
-                try:
-                    import subprocess
-
-                    result = subprocess.run(["nslookup"], capture_output=True, text=True, input="\n")
-                    for line in result.stdout.split("\n"):
-                        if "Server:" in line:
-                            dns_server = line.split(":")[1].strip()
-                            if dns_server and dns_server != "localhost":
-                                dns_servers.append(dns_server)
-                            break
-                except (subprocess.SubprocessError, IndexError, FileNotFoundError):
-                    pass
-
-            # Fallback to common DNS servers if none found
-            if not dns_servers:
-                dns_servers = ["8.8.8.8", "1.1.1.1"]
-
-        except Exception as e:
-            logger.debug(f"Error getting DNS servers: {e}")
-            dns_servers = ["8.8.8.8", "1.1.1.1"]
-
-        return dns_servers
+        """Get current system DNS servers using centralized function"""
+        return get_current_dns_servers()
 
     def _check_host_alive(self, ip):
-        """Quick ping check to see if host is alive"""
-        try:
-            import platform
-            import subprocess
-
-            system = platform.system().lower()
-            if system == "windows":
-                cmd = ["ping", "-n", "1", "-w", "1000", ip]
-            else:
-                cmd = ["ping", "-c", "1", "-W", "1", ip]
-
-            result = subprocess.run(cmd, capture_output=True, timeout=2)
-            return result.returncode == 0
-        except (subprocess.SubprocessError, FileNotFoundError, TimeoutError):
-            return False
+        """Quick ping check to see if host is alive using centralized function"""
+        return check_host_alive(ip)
 
 
 class VulnerabilityReport(APIView):

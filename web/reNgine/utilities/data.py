@@ -153,10 +153,10 @@ def parse_curl_output(response):
 def geoiplookup(ip_address):
     """
     Execute geoiplookup command with proper input validation and robust output parsing.
-    
+
     Args:
         ip_address (str): IP address to geolocalize
-        
+
     Returns:
         tuple: (success: bool, country_iso: str, country_name: str, error: str)
     """
@@ -164,7 +164,7 @@ def geoiplookup(ip_address):
     if not (validators.ipv4(ip_address) or validators.ipv6(ip_address)):
         logger.warning(f"Invalid IP address format: {ip_address}")
         return False, None, None, "Invalid IP address format"
-    
+
     try:
         # Use subprocess with argument list to prevent shell injection
         result = subprocess.run(
@@ -172,26 +172,26 @@ def geoiplookup(ip_address):
             capture_output=True,
             text=True,
             timeout=30,  # 30 second timeout
-            check=False
+            check=False,
         )
-        
+
         if result.returncode != 0:
             logger.warning(f"geoiplookup failed for {ip_address}: {result.stderr}")
             return False, None, None, result.stderr or "geoiplookup failed"
-        
+
         # Parse output with robust regex instead of fragile string splitting
         output = result.stdout.strip()
-        
+
         # Check for error conditions
         if "IP Address not found" in output or "can't resolve hostname" in output:
             logger.debug(f"IP address not found in geoiplookup database: {ip_address}")
             return False, None, None, "IP address not found"
-        
+
         # Use regex to parse geoiplookup output more safely
         # Expected format: "GeoIP Country Edition: US, United States"
         geo_pattern = r"GeoIP\s+Country\s+Edition:\s*([A-Z]{2}),\s*(.+)"
         match = re.search(geo_pattern, output)
-        
+
         if match:
             country_iso = match.group(1).strip()
             country_name = match.group(2).strip()
@@ -200,7 +200,7 @@ def geoiplookup(ip_address):
         else:
             logger.warning(f"Unexpected geoiplookup output format for {ip_address}: {output}")
             return False, None, None, f"Unexpected output format: {output}"
-            
+
     except subprocess.TimeoutExpired:
         logger.error(f"geoiplookup timeout for {ip_address}")
         return False, None, None, "geoiplookup timeout"
