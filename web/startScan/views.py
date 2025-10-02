@@ -300,11 +300,18 @@ def start_scan_ui(request, slug, domain_id):
     if request.headers.get("X-Requested-With") == "XMLHttpRequest":
         # Handle request for existing elements count
         if request.GET.get("get_elements_count"):
-            from startScan.models import IpAddress, Subdomain
+            from startScan.models import Subdomain
 
-            hostname_count = Subdomain.objects.filter(target_domain=domain).count()
-            ip_count = IpAddress.objects.filter(ip_addresses__target_domain=domain).count()
-            return JsonResponse({"hostname_count": hostname_count, "ip_count": ip_count})
+            # Get all subdomains for this domain
+            subdomains = Subdomain.objects.filter(target_domain=domain)
+            
+            # Use the extended get_counts method
+            counts = Subdomain.get_counts(subdomains)
+            
+            return JsonResponse({
+                "hostname_count": counts["hostnames"], 
+                "ip_count": counts["ip_addresses"]
+            })
 
         # Handle request for engine loading
         from django.template.loader import render_to_string

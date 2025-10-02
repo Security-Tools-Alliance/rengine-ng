@@ -364,10 +364,24 @@ class Subdomain(models.Model):
     @classmethod
     def get_counts(cls, queryset):
         """Get various subdomain counts in a single query"""
+        from django.db.models import Q, Case, When, IntegerField, Count
+        
+        # Use database-side filtering for better performance
+        # Count subdomains that match IP address patterns
+        ip_count = queryset.extra(
+            where=["name ~ '^(\\d{1,3}\\.){3}\\d{1,3}$' OR name ~ '^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$'"]
+        ).count()
+        
+        # Total count minus IP count gives hostname count
+        total_count = queryset.count()
+        hostname_count = total_count - ip_count
+        
         return {
-            "total": queryset.count(),
+            "total": total_count,
             "with_ip": queryset.filter(ip_addresses__isnull=False).count(),
             "alive": queryset.exclude(http_status__exact=0).count(),
+            "hostnames": hostname_count,
+            "ip_addresses": ip_count,
         }
 
     @classmethod
