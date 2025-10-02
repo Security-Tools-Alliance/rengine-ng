@@ -4,11 +4,10 @@ This file contains the test cases for the API views.
 
 from unittest.mock import MagicMock, patch
 
-from django.urls import reverse
-from rest_framework import status
-
 from dashboard.models import OllamaSettings
+from django.urls import reverse
 from reNgine.llm import config
+from rest_framework import status
 from startScan.models import SubScan
 from utils.test_base import BaseTestCase
 

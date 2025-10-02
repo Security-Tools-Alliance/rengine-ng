@@ -5,16 +5,11 @@ from urllib.parse import urlparse
 
 import validators
 from celery.utils.log import get_task_logger
+from dashboard.models import User
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.utils import timezone
 from redis.exceptions import LockError, RedisError
-
-from dashboard.models import User
-from reNgine.settings import RENGINE_RESULTS, RENGINE_TASK_IGNORE_CACHE_KWARGS
-from reNgine.utilities.data import is_iterable, replace_nulls
-from reNgine.utilities.distributed_lock import DistributedLock, get_redis_connection
-from reNgine.utilities.url import get_domain_from_subdomain, is_target_allowed_for_domain, is_valid_url, sanitize_url
 from startScan.models import (
     CveId,
     CweId,
@@ -31,6 +26,11 @@ from startScan.models import (
     VulnerabilityTags,
 )
 from targetApp.models import Domain
+
+from reNgine.settings import RENGINE_RESULTS, RENGINE_TASK_IGNORE_CACHE_KWARGS
+from reNgine.utilities.data import is_iterable, replace_nulls
+from reNgine.utilities.distributed_lock import DistributedLock, get_redis_connection
+from reNgine.utilities.url import get_domain_from_subdomain, is_target_allowed_for_domain, is_valid_url, sanitize_url
 
 logger = get_task_logger(__name__)
 
@@ -542,8 +542,9 @@ def create_scan_object(host_id, engine_id, initiated_by_id=None):
         engine_id: int: id of EngineType model
         initiated_by_id: int : id of User model (Optional)
     """
-    from reNgine.definitions import INITIATED_TASK
     from scanEngine.models import EngineType
+
+    from reNgine.definitions import INITIATED_TASK
 
     # get current time
     current_scan_time = timezone.now()

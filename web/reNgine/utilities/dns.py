@@ -1,5 +1,4 @@
 import contextlib
-import platform
 import socket
 import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed

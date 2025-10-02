@@ -12,7 +12,6 @@ from django.urls import reverse
 from django.utils import timezone
 from rolepermissions.checkers import has_role
 from rolepermissions.roles import assign_role
-
 from utils.test_base import BaseTestCase
 
 
