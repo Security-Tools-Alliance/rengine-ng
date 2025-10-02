@@ -10,7 +10,6 @@ import unittest
 from unittest.mock import Mock, patch
 
 from django.test import TestCase
-
 from reNgine.tasks.geo import geo_localize_batch
 from reNgine.utilities.database import (
     _collect_ip_for_geolocalization,

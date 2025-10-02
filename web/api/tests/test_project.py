@@ -5,7 +5,6 @@ This file contains the test cases for the API views.
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
-
 from utils.test_base import BaseTestCase
 
 
