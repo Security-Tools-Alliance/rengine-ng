@@ -1,9 +1,7 @@
-import json
 from datetime import datetime, timedelta
+import json
 from pathlib import Path
 
-import markdown
-from api.serializers import IpSerializer
 from celery import group
 from celery.utils.log import get_task_logger
 from django.contrib import messages
@@ -17,6 +15,11 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import mark_safe
 from django_celery_beat.models import ClockedSchedule, IntervalSchedule, PeriodicTask
+import markdown
+from rolepermissions.decorators import has_permission_decorator
+from weasyprint import CSS, HTML
+
+from api.serializers import IpSerializer
 from reNgine.celery import app
 from reNgine.definitions import (
     ABORTED_TASK,
@@ -35,11 +38,7 @@ from reNgine.tasks import initiate_scan, run_command
 from reNgine.utilities.data import safe_int_cast
 from reNgine.utilities.database import create_scan_activity, create_scan_object
 from reNgine.utilities.subdomain import get_interesting_subdomains
-from rolepermissions.decorators import has_permission_decorator
 from scanEngine.models import EngineType, VulnerabilityReportSetting
-from targetApp.models import Domain, Organization
-from weasyprint import CSS, HTML
-
 from startScan.models import (
     CountryISO,
     CveId,
@@ -55,6 +54,8 @@ from startScan.models import (
     Vulnerability,
     VulnerabilityTags,
 )
+from targetApp.models import Domain, Organization
+
 
 logger = get_task_logger(__name__)
 

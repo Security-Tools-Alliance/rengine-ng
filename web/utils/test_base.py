@@ -1,8 +1,10 @@
 import logging
 
-from dashboard.views import on_user_logged_in
 from django.test import Client, TestCase
+
+from dashboard.views import on_user_logged_in
 from utils.test_utils import TestDataGenerator, TestValidation
+
 
 __all__ = [
     "BaseTestCase",

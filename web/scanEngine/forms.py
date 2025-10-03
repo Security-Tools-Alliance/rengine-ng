@@ -1,7 +1,7 @@
 from django import forms
 from django_ace import AceWidget
-from reNgine.validators import validate_short_name
 
+from reNgine.validators import validate_short_name
 from scanEngine.models import (
     Configuration,
     EngineType,

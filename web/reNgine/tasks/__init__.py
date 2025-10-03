@@ -42,6 +42,7 @@ from reNgine.tasks.vulnerability import (
     vulnerability_scan,
 )
 
+
 # Export all tasks
 __all__ = [
     "crlfuzz_scan",

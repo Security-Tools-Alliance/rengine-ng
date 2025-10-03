@@ -88,6 +88,7 @@ from .test_vulnerability import (
     TestVulnerabilityViewSet,
 )
 
+
 __all__ = [
     # Base
     "BaseTestCase",

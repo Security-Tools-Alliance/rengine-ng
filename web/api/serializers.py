@@ -1,18 +1,19 @@
 from collections import defaultdict
 
+from django.contrib.humanize.templatetags.humanize import naturalday, naturaltime
+from django.db.models import F, JSONField, Value
+from rest_framework import serializers
 import yaml
+
 from dashboard.models import (
     Project,
     SearchHistory,
 )
-from django.contrib.humanize.templatetags.humanize import naturalday, naturaltime
-from django.db.models import F, JSONField, Value
 from recon_note.models import (
     TodoNote,
 )
 from reNgine.definitions import ENGINE_NAMES
 from reNgine.utilities.subdomain import get_interesting_subdomains
-from rest_framework import serializers
 from scanEngine.models import (
     EngineType,
 )
@@ -364,6 +365,7 @@ class ScanActivitySerializer(serializers.ModelSerializer):
     def get_elapsed_time(self, scan_activity):
         """Get elapsed time since task started"""
         from django.utils import timezone
+
         from reNgine.utilities.time import get_time_taken
 
         return get_time_taken(timezone.now(), scan_activity.time)

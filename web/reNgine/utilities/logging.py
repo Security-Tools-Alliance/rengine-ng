@@ -1,6 +1,7 @@
 from celery._state import get_current_task
 from celery.utils.log import ColorFormatter
 
+
 # --------------#
 # Logging utils #
 # --------------#

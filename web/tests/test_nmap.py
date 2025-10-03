@@ -1,15 +1,18 @@
 import logging
 import os
 import pathlib
-import unittest
 from pathlib import Path
+import unittest
+
 
 os.environ["RENGINE_SECRET_KEY"] = "secret"
 os.environ["CELERY_ALWAYS_EAGER"] = "True"
 
 from celery.utils.log import get_task_logger
+
 from reNgine.settings import CELERY_DEBUG
 from reNgine.utilities.parser import parse_nmap_results
+
 
 logger = get_task_logger(__name__)
 DOMAIN_NAME = os.environ["DOMAIN_NAME"]

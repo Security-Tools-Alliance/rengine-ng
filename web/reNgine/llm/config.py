@@ -2,6 +2,7 @@ from typing import Any, Dict
 
 from reNgine.definitions import OLLAMA_INSTANCE
 
+
 ###############################################################################
 # OLLAMA DEFINITIONS
 ###############################################################################

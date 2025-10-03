@@ -7,6 +7,7 @@ import environ
 from reNgine.init import first_run
 from reNgine.utilities.logging import RengineTaskFormatter
 
+
 env = environ.FileAwareEnv()
 
 mimetypes.add_type("text/javascript", ".js", True)
@@ -70,14 +71,14 @@ CSRF_TRUSTED_ORIGINS = [
 # Additional CSRF settings for better security
 CSRF_COOKIE_SECURE = not DEBUG  # Use secure cookies in production
 CSRF_COOKIE_HTTPONLY = True  # Prevent JavaScript access to CSRF cookie for better security
-CSRF_COOKIE_SAMESITE = 'Lax'  # CSRF protection while allowing some cross-site requests
+CSRF_COOKIE_SAMESITE = "Lax"  # CSRF protection while allowing some cross-site requests
 CSRF_USE_SESSIONS = False  # Keep using cookies for CSRF tokens (default)
 CSRF_COOKIE_AGE = 31449600  # 1 year in seconds
 
 # Session security settings
 SESSION_COOKIE_SECURE = not DEBUG  # Use secure cookies in production
 SESSION_COOKIE_HTTPONLY = True  # Prevent JavaScript access to session cookie
-SESSION_COOKIE_SAMESITE = 'Lax'  # Session protection while allowing some cross-site requests
+SESSION_COOKIE_SAMESITE = "Lax"  # Session protection while allowing some cross-site requests
 
 # Databases
 DATABASES = {

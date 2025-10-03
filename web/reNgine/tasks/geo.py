@@ -1,9 +1,10 @@
-import validators
 from celery.utils.log import get_task_logger
-from startScan.models import CountryISO, IpAddress
+import validators
 
 from reNgine.celery import app
 from reNgine.tasks.command import run_command
+from startScan.models import CountryISO, IpAddress
+
 
 logger = get_task_logger(__name__)
 

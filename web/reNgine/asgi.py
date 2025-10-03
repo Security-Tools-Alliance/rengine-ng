@@ -6,6 +6,7 @@ from django.core.asgi import get_asgi_application
 
 from .routing import websocket_urlpatterns
 
+
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "reNgine.settings")
 
 application = ProtocolTypeRouter(

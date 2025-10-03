@@ -29,9 +29,9 @@ import os
 
 from django.contrib.messages import get_messages
 from django.urls import reverse
-from utils.test_base import BaseTestCase
 
 from targetApp.models import Domain, Organization
+from utils.test_base import BaseTestCase
 
 
 class TestTargetAppViews(BaseTestCase):

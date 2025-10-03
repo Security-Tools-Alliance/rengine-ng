@@ -2,7 +2,6 @@ from typing import Optional, Tuple
 from urllib.parse import urlparse
 
 from celery.utils.log import get_task_logger
-from startScan.models import LLMVulnerabilityReport, Vulnerability
 
 from reNgine.celery import app
 from reNgine.llm.llm import LLMVulnerabilityReportGenerator
@@ -12,6 +11,8 @@ from reNgine.llm.utils import (
     is_empty_llm_report,
     is_empty_text,
 )
+from startScan.models import LLMVulnerabilityReport, Vulnerability
+
 
 logger = get_task_logger(__name__)
 

@@ -10,6 +10,7 @@ from scanEngine.models import (
     Wordlist,
 )
 
+
 # Register your models here.
 admin.site.register(EngineType)
 admin.site.register(Wordlist)

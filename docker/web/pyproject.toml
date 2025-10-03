@@ -97,6 +97,34 @@ extend-select = ["E501"]
 # Maximum cyclomatic complexity allowed per function
 max-complexity = 10
 
+[tool.ruff.lint.isort]
+# Define which modules are part of the project (first-party)
+known-first-party = [
+    "api",
+    "commonFilters",
+    "dashboard",
+    "recon_note",
+    "reNgine",
+    "scanEngine",
+    "startScan",
+    "targetApp",
+    "utils",
+]
+
+# Import sorting style: separate imports by sections with blank lines
+section-order = [
+    "future",
+    "standard-library",
+    "third-party",
+    "first-party",
+    "local-folder",
+]
+
+# Blank line between standard/third-party and first-party imports
+lines-after-imports = 2
+split-on-trailing-comma = true
+force-sort-within-sections = true
+
 [tool.ruff.format]
 # Always use double quotes for strings (PEP8 consistent style)
 quote-style = "double"
