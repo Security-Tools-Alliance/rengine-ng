@@ -1,10 +1,12 @@
 import os
 from pathlib import Path
 
-import requests
 from bs4 import BeautifulSoup
 from celery.utils.log import get_task_logger
+import requests
+
 from dashboard.models import NetlasAPIKey, OpenAiAPIKey
+
 
 logger = get_task_logger(__name__)
 
@@ -130,10 +132,9 @@ def get_and_save_dork_results(
         page_count (int): pages in google to extract information
         scan_history (startScan.ScanHistory): Scan History Object
     """
-    from startScan.models import Dork
-
     from reNgine.definitions import GOFUZZ_EXEC_PATH
     from reNgine.tasks.command import run_command
+    from startScan.models import Dork
 
     results = []
     gofuzz_command = f"{GOFUZZ_EXEC_PATH} -t {lookup_target} -d {delay} -p {page_count}"

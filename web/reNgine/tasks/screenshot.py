@@ -3,8 +3,6 @@ import os
 from pathlib import Path
 
 from celery.utils.log import get_task_logger
-from scanEngine.models import Notification
-from startScan.models import EndPoint
 
 from reNgine.celery import app
 from reNgine.celery_custom_task import RengineTask
@@ -26,6 +24,9 @@ from reNgine.utilities.data import extract_columns
 from reNgine.utilities.endpoint import ensure_endpoints_crawled_and_execute, get_http_urls
 from reNgine.utilities.file import remove_file_or_pattern
 from reNgine.utilities.notification import get_output_file_name
+from scanEngine.models import Notification
+from startScan.models import EndPoint
+
 
 logger = get_task_logger(__name__)
 

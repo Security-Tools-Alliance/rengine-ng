@@ -1,12 +1,11 @@
 import json
 import os
+from pathlib import Path
 import re
 import shutil
-from pathlib import Path
 from urllib.parse import urlparse
 
 from celery.utils.log import get_task_logger
-from startScan.models import Subdomain, Waf
 
 from reNgine.celery import app
 from reNgine.celery_custom_task import RengineTask
@@ -14,6 +13,8 @@ from reNgine.settings import RENGINE_TOOL_PATH
 from reNgine.tasks.command import run_command
 from reNgine.utilities.endpoint import ensure_endpoints_crawled_and_execute, get_http_urls
 from reNgine.utilities.url import get_subdomain_from_url
+from startScan.models import Subdomain, Waf
+
 
 logger = get_task_logger(__name__)
 

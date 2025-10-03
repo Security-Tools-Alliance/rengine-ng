@@ -1,13 +1,8 @@
+from datetime import datetime
 import json
 import os
-from datetime import datetime
 
 from celery.utils.log import get_task_logger
-from startScan.models import (
-    EndPoint,
-    Subdomain,
-    Technology,
-)
 
 from reNgine.celery import app
 from reNgine.celery_custom_task import RengineTask
@@ -38,6 +33,12 @@ from reNgine.utilities.file import remove_file_or_pattern
 from reNgine.utilities.port import get_or_create_port
 from reNgine.utilities.proxy import get_random_proxy
 from reNgine.utilities.url import add_port_urls_to_crawl, extract_httpx_url, get_subdomain_from_url
+from startScan.models import (
+    EndPoint,
+    Subdomain,
+    Technology,
+)
+
 
 logger = get_task_logger(__name__)
 
@@ -316,6 +317,7 @@ def http_crawl(
         logger.error(f"Failed to clean up input file {input_path}")
 
     return results
+
 
 @app.task(name="pre_crawl", queue="cpu_queue", base=RengineTask, bind=True)
 def pre_crawl(self, ctx={}, description=None):

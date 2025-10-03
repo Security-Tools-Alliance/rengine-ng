@@ -1,14 +1,11 @@
 import json
 import uuid
 
-import validators
-import yaml
 from celery import chain
 from celery.utils.log import get_task_logger
 from django.utils import timezone
-from scanEngine.models import EngineType
-from startScan.models import ScanHistory, Subdomain, SubScan
-from targetApp.models import Domain
+import validators
+import yaml
 
 from reNgine.celery import app
 from reNgine.definitions import (
@@ -32,6 +29,10 @@ from reNgine.utilities.database import (
     save_subdomain,
 )
 from reNgine.utilities.path import SafePath
+from scanEngine.models import EngineType
+from startScan.models import ScanHistory, Subdomain, SubScan
+from targetApp.models import Domain
+
 
 logger = get_task_logger(__name__)
 

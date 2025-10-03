@@ -1,11 +1,12 @@
 from datetime import datetime
 
-from dashboard.models import Project
 from django.apps import apps
 from django.db import models
 from django.db.models import Count
 from django.db.models.functions import TruncDay
 from django.utils import timezone
+
+from dashboard.models import Project
 
 
 class HistoricalIP(models.Model):

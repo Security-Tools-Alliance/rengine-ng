@@ -1,9 +1,11 @@
 from celery.utils.log import get_task_logger
 from django.db.models import Q
+
 from startScan.models import ScanHistory, Subdomain
 from targetApp.models import Domain
 
 from .lookup import get_lookup_keywords
+
 
 logger = get_task_logger(__name__)
 

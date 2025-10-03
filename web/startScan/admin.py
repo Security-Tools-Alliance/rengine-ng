@@ -26,6 +26,7 @@ from startScan.models import (
     Waf,
 )
 
+
 admin.site.register(ScanHistory)
 admin.site.register(SubScan)
 admin.site.register(Subdomain)

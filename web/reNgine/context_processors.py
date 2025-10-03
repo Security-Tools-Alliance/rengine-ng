@@ -1,9 +1,10 @@
 import logging
 
-import requests
 from django.core.cache import cache
+import requests
 
 from . import settings
+
 
 logger = logging.getLogger(__name__)
 

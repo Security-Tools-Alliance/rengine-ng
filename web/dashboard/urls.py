@@ -1,7 +1,9 @@
 from django.urls import include, path
+
 from reNgine.settings import UI_DEBUG
 
 from . import views
+
 
 urlpatterns = [
     path("", views.onboarding, name="onboarding"),

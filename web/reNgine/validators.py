@@ -1,8 +1,8 @@
 import re
 
-import validators
 from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
+import validators
 
 
 def validate_domain(value):

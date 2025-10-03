@@ -1,8 +1,10 @@
 import logging
 
-from dashboard.models import UserAPIKey
 from django.utils import timezone
 from rest_framework_api_key.models import APIKey
+
+from dashboard.models import UserAPIKey
+
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +24,12 @@ class APIKeyAuthenticationMiddleware:
         # Only process API requests
         if request.path.startswith("/api/"):
             user_api_key = self.get_api_key_from_request(request)
-            if user_api_key and user_api_key.is_active and not user_api_key.revoked and (not user_api_key.expiry_date or user_api_key.expiry_date > timezone.now()):
+            if (
+                user_api_key
+                and user_api_key.is_active
+                and not user_api_key.revoked
+                and (not user_api_key.expiry_date or user_api_key.expiry_date > timezone.now())
+            ):
                 # Simulate authenticated user for LoginRequiredMiddleware
                 request.user = user_api_key.user
                 request._api_key_authenticated = True

@@ -3,8 +3,8 @@ This file contains the test cases for the dashboard views.
 """
 
 import json
-import uuid
 from unittest.mock import MagicMock, patch
+import uuid
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import User
@@ -12,6 +12,7 @@ from django.urls import reverse
 from django.utils import timezone
 from rolepermissions.checkers import has_role
 from rolepermissions.roles import assign_role
+
 from utils.test_base import BaseTestCase
 
 

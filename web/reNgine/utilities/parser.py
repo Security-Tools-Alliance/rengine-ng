@@ -2,11 +2,12 @@ import json
 import re
 import xml.etree.ElementTree as ET
 
-import xmltodict
 from celery.utils.log import get_task_logger
+import xmltodict
 
 from reNgine.definitions import NMAP, NUCLEI_SEVERITY_MAP
 from reNgine.utilities.url import sanitize_url
+
 
 logger = get_task_logger(__name__)
 
@@ -310,9 +311,8 @@ def cve_to_vuln(cve_id, vuln_type=""):
 
 def process_nmap_service_results(xml_file):
     """Update port information with nmap service detection results"""
-    from startScan.models import IpAddress
-
     from reNgine.utilities.port import create_or_update_port_with_service
+    from startScan.models import IpAddress
 
     services = parse_nmap_results(xml_file, parse_type="services")
 

@@ -2,6 +2,7 @@ from django.urls import path
 
 from . import views
 
+
 urlpatterns = [
     path("", views.index, name="targetIndex"),
     path("<slug:slug>/add", views.add_target, name="add_target"),

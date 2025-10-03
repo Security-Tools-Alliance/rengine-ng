@@ -1,17 +1,19 @@
 import glob
 import json
 import os
+from pathlib import Path
 import re
 import shutil
-from pathlib import Path
 
-import requests
-from api.views import LLMModelsManager
-from dashboard.models import NetlasAPIKey, OpenAiAPIKey
 from django import http
 from django.contrib import messages
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
+import requests
+from rolepermissions.decorators import has_permission_decorator
+
+from api.views import LLMModelsManager
+from dashboard.models import NetlasAPIKey, OpenAiAPIKey
 from reNgine.definitions import (
     FOUR_OH_FOUR_URL,
     PERM_MODIFY_INTERESTING_LOOKUP,
@@ -28,8 +30,6 @@ from reNgine.utilities.notification import (
     send_slack_message,
     send_telegram_message,
 )
-from rolepermissions.decorators import has_permission_decorator
-
 from scanEngine.forms import (
     AddEngineForm,
     AddWordlistForm,

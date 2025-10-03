@@ -1,11 +1,9 @@
 from pathlib import Path
 
-import validators
-from api.serializers import SubdomainSerializer
 from celery.utils.log import get_task_logger
-from scanEngine.models import InstalledExternalTool, Notification
-from startScan.models import Subdomain
+import validators
 
+from api.serializers import SubdomainSerializer
 from reNgine.celery import app
 from reNgine.celery_custom_task import RengineTask
 from reNgine.definitions import (
@@ -31,6 +29,9 @@ from reNgine.utilities.database import save_endpoint, save_subdomain, save_subdo
 from reNgine.utilities.external import get_netlas_key
 from reNgine.utilities.proxy import get_random_proxy
 from reNgine.utilities.subdomain import get_interesting_subdomains, get_new_added_subdomain, get_removed_subdomain
+from scanEngine.models import InstalledExternalTool, Notification
+from startScan.models import Subdomain
+
 
 logger = get_task_logger(__name__)
 

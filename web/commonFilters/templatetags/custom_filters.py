@@ -4,8 +4,10 @@ import logging
 import re
 from urllib.parse import urlparse
 
-from dashboard.utils import get_user_groups
 from django import template
+
+from dashboard.utils import get_user_groups
+
 
 logger = logging.getLogger(__name__)
 register = template.Library()

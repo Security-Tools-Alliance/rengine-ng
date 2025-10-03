@@ -6,6 +6,7 @@ from django.dispatch import receiver
 
 from .models import IpAddress, Subdomain
 
+
 logger = logging.getLogger(__name__)
 
 

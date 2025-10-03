@@ -1,13 +1,12 @@
 import os
-import re
 from pathlib import Path
+import re
 from urllib.parse import urlparse
 
 from celery import chain, chord
 from celery.result import allow_join_result
 from celery.utils.log import get_task_logger
 from django.db.models import Count
-from startScan.models import EndPoint, Subdomain
 
 from reNgine.celery import app
 from reNgine.celery_custom_task import RengineTask
@@ -35,6 +34,8 @@ from reNgine.utilities.database import save_endpoint, save_subdomain
 from reNgine.utilities.endpoint import get_http_urls
 from reNgine.utilities.proxy import get_random_proxy
 from reNgine.utilities.url import get_subdomain_from_url, sanitize_url
+from startScan.models import EndPoint, Subdomain
+
 
 logger = get_task_logger(__name__)
 

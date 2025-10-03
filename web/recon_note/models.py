@@ -1,5 +1,6 @@
-from dashboard.models import Project
 from django.db import models
+
+from dashboard.models import Project
 from startScan.models import ScanHistory, Subdomain
 
 
