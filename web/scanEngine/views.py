@@ -1,11 +1,10 @@
+from contextlib import suppress
 import glob
 import json
 import os
 from pathlib import Path
 import re
 import shutil
-from contextlib import suppress
-from pathlib import Path
 
 from django import http
 from django.contrib import messages

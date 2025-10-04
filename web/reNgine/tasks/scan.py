@@ -1,13 +1,10 @@
 import json
 import uuid
 
-import yaml
 from celery import chain
 from celery.utils.log import get_task_logger
 from django.utils import timezone
-from scanEngine.models import EngineType
-from startScan.models import IpAddress, ScanHistory, Subdomain, SubScan
-from targetApp.models import Domain
+import yaml
 
 from reNgine.celery import app
 from reNgine.definitions import (
@@ -33,7 +30,7 @@ from reNgine.utilities.database import (
 from reNgine.utilities.misc import determine_target_type
 from reNgine.utilities.path import SafePath
 from scanEngine.models import EngineType
-from startScan.models import ScanHistory, Subdomain, SubScan
+from startScan.models import IpAddress, ScanHistory, Subdomain, SubScan
 from targetApp.models import Domain
 
 

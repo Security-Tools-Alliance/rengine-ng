@@ -1,13 +1,13 @@
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import contextlib
 import socket
 import subprocess
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from celery.utils.log import get_task_logger
 import validators
 
-
 from reNgine.settings import DEFAULT_THREADS
+
 
 try:
     import dns.resolver

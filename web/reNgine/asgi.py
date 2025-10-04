@@ -14,6 +14,7 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "reNgine.settings")
 # Initialize Django settings first
 import django
 
+
 django.setup()
 
 # Remote debug setup for ASGI (daphne) development server

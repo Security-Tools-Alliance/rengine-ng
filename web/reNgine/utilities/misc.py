@@ -1,13 +1,12 @@
-import os
-import traceback
 from contextlib import suppress
+import os
 from pathlib import Path
 import traceback
 
+from celery.utils.log import get_task_logger
 import tldextract
 import validators
 import yaml
-from celery.utils.log import get_task_logger
 
 from reNgine.settings import CELERY_REMOTE_DEBUG, CELERY_REMOTE_DEBUG_PORT
 

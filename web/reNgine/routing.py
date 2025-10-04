@@ -1,9 +1,8 @@
-from api.consumers import IPScanProgressConsumer, OllamaDownloadConsumer
 from channels.auth import AuthMiddlewareStack
 from channels.routing import ProtocolTypeRouter, URLRouter
 from django.urls import re_path
 
-from api.consumers import OllamaDownloadConsumer
+from api.consumers import IPScanProgressConsumer, OllamaDownloadConsumer
 
 
 websocket_urlpatterns = [

@@ -14,7 +14,7 @@ from dashboard.models import User
 from reNgine.settings import RENGINE_RESULTS, RENGINE_TASK_IGNORE_CACHE_KWARGS
 from reNgine.utilities.data import is_iterable, replace_nulls
 from reNgine.utilities.distributed_lock import DistributedLock, get_redis_connection
-from reNgine.utilities.url import get_domain_from_subdomain, is_valid_url, sanitize_url
+from reNgine.utilities.url import get_domain_from_subdomain, is_target_allowed_for_domain, is_valid_url, sanitize_url
 from startScan.models import (
     CveId,
     CweId,
@@ -32,10 +32,6 @@ from startScan.models import (
 )
 from targetApp.models import Domain
 
-from reNgine.settings import RENGINE_RESULTS, RENGINE_TASK_IGNORE_CACHE_KWARGS
-from reNgine.utilities.data import is_iterable, replace_nulls
-from reNgine.utilities.distributed_lock import DistributedLock, get_redis_connection
-from reNgine.utilities.url import get_domain_from_subdomain, is_target_allowed_for_domain, is_valid_url, sanitize_url
 
 logger = get_task_logger(__name__)
 

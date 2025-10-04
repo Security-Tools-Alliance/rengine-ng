@@ -30,9 +30,8 @@ import os
 
 from django.contrib.messages import get_messages
 from django.urls import reverse
-from startScan.models import Subdomain
-from utils.test_base import BaseTestCase
 
+from startScan.models import Subdomain
 from targetApp.models import Domain, Organization
 from utils.test_base import BaseTestCase
 

@@ -57,6 +57,7 @@ from targetApp.models import (
 )
 from targetApp.utilities import StatsTracker
 
+
 logger = logging.getLogger(__name__)
 
 
@@ -298,8 +299,8 @@ def add_target(request, slug):
                                 organization.domains.add(domain_obj)
             elif ip_target:
                 # add targets from "resolve and add ip address" tab with improved methodology
-                import json
                 from ipaddress import AddressValueError
+                import json
 
                 from reNgine.utilities.url import get_domain_from_subdomain
                 from startScan.models import Subdomain

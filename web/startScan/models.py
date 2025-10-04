@@ -394,12 +394,10 @@ class Subdomain(models.Model):
             alive=Count("id", filter=~Q(http_status=0)),
         )
 
-        subdomain_ids = queryset.values_list('id', flat=True)
-        
+        subdomain_ids = queryset.values_list("id", flat=True)
+
         # Get vulnerability counts directly from database in a single query
-        vuln_counts_raw = Vulnerability.objects.filter(
-            subdomain_id__in=subdomain_ids
-        ).aggregate(
+        vuln_counts_raw = Vulnerability.objects.filter(subdomain_id__in=subdomain_ids).aggregate(
             vuln_info=Count("id", filter=Q(severity=0)),
             vuln_low=Count("id", filter=Q(severity=1)),
             vuln_medium=Count("id", filter=Q(severity=2)),
@@ -755,18 +753,11 @@ class Vulnerability(models.Model):
     def get_project_data(cls, project):
         """Get vulnerability data for a specific project"""
         queryset = cls.objects.filter(scan_history__domain__project=project).order_by("-discovered_date")[:50]
-        
-        feed = queryset.select_related(
-            'subdomain',
-            'endpoint',
-            'target_domain',
-            'scan_history'
-        ).prefetch_related(
-            'cve_ids',
-            'cwe_ids',
-            'tags'
+
+        feed = queryset.select_related("subdomain", "endpoint", "target_domain", "scan_history").prefetch_related(
+            "cve_ids", "cwe_ids", "tags"
         )
-        
+
         return {
             "feed": feed,
             "most_common_cve": CveId.get_most_common(queryset),
@@ -869,16 +860,13 @@ class Technology(models.Model):
     @classmethod
     def get_project_data(cls, project):
         """Get technology data for a specific project"""
-        subdomain_ids = Subdomain.objects.filter(
-            scan_history__domain__project=project
-        ).values_list('id', flat=True)
-        
+        subdomain_ids = Subdomain.objects.filter(scan_history__domain__project=project).values_list("id", flat=True)
+
         return {
-            "most_used": cls.objects.filter(
-                technologies__in=subdomain_ids
-            ).values("name").annotate(
-                count=Count("name")
-            ).order_by("-count")[:10]
+            "most_used": cls.objects.filter(technologies__in=subdomain_ids)
+            .values("name")
+            .annotate(count=Count("name"))
+            .order_by("-count")[:10]
         }
 
     @classmethod
@@ -903,12 +891,10 @@ class CountryISO(models.Model):
     @classmethod
     def get_project_data(cls, project):
         """Get country data for a specific project - OPTIMIZED"""
-        subdomains = Subdomain.objects.filter(scan_history__domain__project=project).values_list('id', flat=True)
-        
-        ip_addresses = IpAddress.objects.filter(
-            ip_addresses__in=subdomains
-        ).distinct()
-        
+        subdomains = Subdomain.objects.filter(scan_history__domain__project=project).values_list("id", flat=True)
+
+        ip_addresses = IpAddress.objects.filter(ip_addresses__in=subdomains).distinct()
+
         return {"asset_countries": cls.get_asset_countries(ip_addresses)}
 
     @classmethod
@@ -934,16 +920,11 @@ class IpAddress(models.Model):
     @classmethod
     def get_project_data(cls, project):
         """Get IP address data for a specific project"""
-        subdomains = Subdomain.objects.filter(scan_history__domain__project=project).values_list('id', flat=True)
-        
-        base_query = cls.objects.filter(
-            ip_addresses__in=subdomains
-        ).distinct()
-        
-        return {
-            "total_count": base_query.count(),
-            "most_used": cls.get_most_used(base_query)
-        }
+        subdomains = Subdomain.objects.filter(scan_history__domain__project=project).values_list("id", flat=True)
+
+        base_query = cls.objects.filter(ip_addresses__in=subdomains).distinct()
+
+        return {"total_count": base_query.count(), "most_used": cls.get_most_used(base_query)}
 
     @classmethod
     def get_most_used(cls, queryset, subdomains=None, limit=7):
@@ -970,12 +951,10 @@ class Port(models.Model):
     @classmethod
     def get_project_data(cls, project):
         """Get port data for a specific project"""
-        subdomains = Subdomain.objects.filter(scan_history__domain__project=project).values_list('id', flat=True)
-        
-        ip_addresses = IpAddress.objects.filter(
-            ip_addresses__in=subdomains
-        ).distinct()
-        
+        subdomains = Subdomain.objects.filter(scan_history__domain__project=project).values_list("id", flat=True)
+
+        ip_addresses = IpAddress.objects.filter(ip_addresses__in=subdomains).distinct()
+
         return {"most_used": cls.get_most_used(ip_addresses)}
 
     @classmethod

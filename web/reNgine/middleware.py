@@ -4,7 +4,8 @@ import traceback
 from django.http import HttpResponseServerError
 from django.template.loader import render_to_string
 
-from reNgine.settings import UI_ERROR_LOGGING, DEBUG
+from reNgine.settings import DEBUG, UI_ERROR_LOGGING
+
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +29,7 @@ class CustomErrorMiddleware:
         # In debug mode, let Django handle the exception with its debug page
         if DEBUG:
             return None
-        
+
         # Log detailed error information if UI_ERROR_LOGGING is enabled
         if UI_ERROR_LOGGING:
             try:

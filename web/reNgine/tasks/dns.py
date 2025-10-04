@@ -1,9 +1,8 @@
-import json
-import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from ipaddress import IPv4Network
+import json
+import subprocess
 
-import tldextract
 from asgiref.sync import async_to_sync
 from celery.utils.log import get_task_logger
 from channels.layers import get_channel_layer

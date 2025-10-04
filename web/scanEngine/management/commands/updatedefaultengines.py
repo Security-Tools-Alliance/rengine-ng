@@ -1,9 +1,9 @@
 import hashlib
 import os
 
-import yaml
 from django.conf import settings
 from django.core.management.base import BaseCommand
+import yaml
 
 from scanEngine.models import EngineType
 
