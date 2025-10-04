@@ -8,6 +8,7 @@ from reNgine.settings import UI_REMOTE_DEBUG
 
 from .routing import websocket_urlpatterns
 
+
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "reNgine.settings")
 
 # Initialize Django settings first

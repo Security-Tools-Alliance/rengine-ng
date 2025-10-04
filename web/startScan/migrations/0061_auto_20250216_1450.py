@@ -2,8 +2,8 @@
 
 import logging
 
-import django.db.models.deletion
 from django.db import migrations, models
+import django.db.models.deletion
 
 
 def migrate_ports_to_ip(apps, schema_editor):

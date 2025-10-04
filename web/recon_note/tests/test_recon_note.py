@@ -13,9 +13,9 @@ Methods:
 
 from django.urls import reverse
 from rest_framework import status
-from utils.test_base import BaseTestCase
 
 from recon_note.models import TodoNote
+from utils.test_base import BaseTestCase
 
 
 class TestScanReconNoteViews(BaseTestCase):

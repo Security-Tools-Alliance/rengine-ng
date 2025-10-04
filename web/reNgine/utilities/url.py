@@ -1,10 +1,11 @@
 from urllib.parse import urlparse
 
-import tldextract
-import validators
 from celery.utils.log import get_task_logger
 from django.core.exceptions import ValidationError
 from django.core.validators import URLValidator
+import tldextract
+import validators
+
 
 logger = get_task_logger(__name__)
 

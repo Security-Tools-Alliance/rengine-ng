@@ -79,6 +79,7 @@ from .views import (
     Whois,
 )
 
+
 app_name = "api"
 router = routers.DefaultRouter()
 router.register(r"listDatatableSubdomain", SubdomainDatatableViewSet, basename="subdomain-datatable")

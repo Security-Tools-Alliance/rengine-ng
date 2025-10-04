@@ -1,7 +1,8 @@
 from celery.utils.log import get_task_logger
-from startScan.models import Port
 
 from reNgine.definitions import UNCOMMON_WEB_PORTS
+from startScan.models import Port
+
 
 logger = get_task_logger(__name__)
 

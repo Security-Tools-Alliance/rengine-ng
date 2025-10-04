@@ -1,5 +1,7 @@
 from celery.utils.log import get_task_logger
+
 from scanEngine.models import InterestingLookupModel
+
 
 logger = get_task_logger(__name__)
 

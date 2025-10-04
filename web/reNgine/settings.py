@@ -7,6 +7,7 @@ import environ
 from reNgine.init import first_run
 from reNgine.utilities.logging import RengineTaskFormatter
 
+
 env = environ.FileAwareEnv()
 
 mimetypes.add_type("text/javascript", ".js", True)

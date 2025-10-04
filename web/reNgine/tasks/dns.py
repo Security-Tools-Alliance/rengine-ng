@@ -9,17 +9,7 @@ from celery.utils.log import get_task_logger
 from channels.layers import get_channel_layer
 from django.utils import timezone
 from dotted_dict import DottedDict
-from targetApp.models import (
-    DNSRecord,
-    Domain,
-    DomainInfo,
-    DomainRegistration,
-    HistoricalIP,
-    NameServer,
-    Registrar,
-    RelatedDomain,
-    WhoisStatus,
-)
+import tldextract
 
 from reNgine.celery import app
 from reNgine.common_serializers import (
@@ -38,6 +28,18 @@ from reNgine.utilities.external import (
     get_netlas_key,
     reverse_whois,
 )
+from targetApp.models import (
+    DNSRecord,
+    Domain,
+    DomainInfo,
+    DomainRegistration,
+    HistoricalIP,
+    NameServer,
+    Registrar,
+    RelatedDomain,
+    WhoisStatus,
+)
+
 
 logger = get_task_logger(__name__)
 

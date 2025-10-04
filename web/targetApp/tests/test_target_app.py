@@ -34,6 +34,7 @@ from startScan.models import Subdomain
 from utils.test_base import BaseTestCase
 
 from targetApp.models import Domain, Organization
+from utils.test_base import BaseTestCase
 
 
 class TestTargetAppViews(BaseTestCase):

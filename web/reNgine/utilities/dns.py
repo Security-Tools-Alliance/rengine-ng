@@ -3,8 +3,9 @@ import socket
 import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-import validators
 from celery.utils.log import get_task_logger
+import validators
+
 
 from reNgine.settings import DEFAULT_THREADS
 

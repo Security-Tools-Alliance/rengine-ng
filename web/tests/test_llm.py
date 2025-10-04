@@ -2,10 +2,11 @@ from unittest.mock import patch
 
 from django.test import TestCase
 from django.urls import reverse
+from rest_framework import status
+
 from reNgine.llm.config import MODEL_REQUIREMENTS
 from reNgine.llm.llm import LLMAttackSuggestionGenerator, LLMVulnerabilityReportGenerator
 from reNgine.llm.validators import LLMProvider
-from rest_framework import status
 from utils.test_base import BaseTestCase
 
 

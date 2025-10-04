@@ -6,7 +6,9 @@ import subprocess
 
 from celery.utils.log import get_task_logger
 from django.utils import timezone
+
 from startScan.models import Command
+
 
 logger = get_task_logger(__name__)
 

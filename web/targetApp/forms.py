@@ -1,6 +1,7 @@
-from dashboard.models import Project
 from django import forms
 from django.contrib.auth.models import User
+
+from dashboard.models import Project
 from reNgine.validators import validate_domain
 
 from .models import Domain, Organization

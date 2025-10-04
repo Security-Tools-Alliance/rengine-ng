@@ -1,6 +1,5 @@
 from celery.utils.log import get_task_logger
 from django.utils import timezone
-from startScan.models import ScanActivity, ScanHistory, SubScan
 
 from reNgine.celery import app
 from reNgine.definitions import (
@@ -8,6 +7,8 @@ from reNgine.definitions import (
     SUCCESS_TASK,
 )
 from reNgine.tasks.notification import send_scan_notif
+from startScan.models import ScanActivity, ScanHistory, SubScan
+
 
 logger = get_task_logger(__name__)
 

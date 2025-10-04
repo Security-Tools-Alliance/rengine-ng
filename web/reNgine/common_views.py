@@ -5,6 +5,7 @@ from django.shortcuts import render
 from django.template import RequestContext
 from django.utils.module_loading import import_string
 
+
 logger = logging.getLogger(__name__)
 
 

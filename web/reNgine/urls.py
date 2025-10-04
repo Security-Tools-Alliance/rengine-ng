@@ -9,6 +9,7 @@ from rest_framework import permissions
 
 from .common_views import page_not_found, permission_denied, server_error
 
+
 schema_view = get_schema_view(
     openapi.Info(
         title="reNgine-ng API",

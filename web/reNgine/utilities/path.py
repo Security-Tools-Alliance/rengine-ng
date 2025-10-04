@@ -1,9 +1,10 @@
 import os
-import re
 from pathlib import Path
+import re
 from typing import List, Union
 
 from celery.utils.log import get_task_logger
+
 
 logger = get_task_logger(__name__)
 

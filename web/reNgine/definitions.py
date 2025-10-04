@@ -1,10 +1,11 @@
 #!/usr/bin/python
 import logging
 import os
-import re
 from pathlib import Path
+import re
 
 from .settings import RENGINE_WORDLISTS
+
 
 ###############################################################################
 # TOOLS DEFINITIONS

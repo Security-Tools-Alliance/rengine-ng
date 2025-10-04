@@ -1,10 +1,8 @@
 import os
 
-import requests
 from celery.utils.log import get_task_logger
 from discord_webhook import DiscordWebhook
-from scanEngine.models import EngineType, Hackerone, Notification
-from startScan.models import ScanActivity, ScanHistory, SubScan, Vulnerability
+import requests
 
 from reNgine.celery import app
 from reNgine.definitions import NUCLEI_SEVERITY_MAP, STATUS_TO_SEVERITIES
@@ -19,6 +17,9 @@ from reNgine.utilities.notification import (
     send_slack_message,
     send_telegram_message,
 )
+from scanEngine.models import EngineType, Hackerone, Notification
+from startScan.models import ScanActivity, ScanHistory, SubScan, Vulnerability
+
 
 logger = get_task_logger(__name__)
 

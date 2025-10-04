@@ -1,5 +1,5 @@
-import yaml
 from django.db import models
+import yaml
 
 
 class HybridProperty:

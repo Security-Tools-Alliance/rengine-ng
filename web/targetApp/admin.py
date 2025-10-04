@@ -9,6 +9,7 @@ from .models import (
     RelatedDomain,
 )
 
+
 admin.site.register(Domain)
 admin.site.register(Organization)
 admin.site.register(RelatedDomain)

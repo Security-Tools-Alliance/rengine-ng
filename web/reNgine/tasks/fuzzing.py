@@ -4,7 +4,6 @@ from urllib.parse import urlparse
 
 from celery.utils.log import get_task_logger
 from django.utils import timezone
-from startScan.models import DirectoryScan, Subdomain
 
 from reNgine.celery import app
 from reNgine.celery_custom_task import RengineTask
@@ -41,6 +40,8 @@ from reNgine.utilities.database import save_endpoint, save_fuzzing_file
 from reNgine.utilities.endpoint import ensure_endpoints_crawled_and_execute, get_http_urls
 from reNgine.utilities.proxy import get_random_proxy
 from reNgine.utilities.url import extract_path_from_url, get_subdomain_from_url
+from startScan.models import DirectoryScan, Subdomain
+
 
 logger = get_task_logger(__name__)
 

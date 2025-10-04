@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 from django.urls import reverse
 from rest_framework import status
+
 from utils.test_base import BaseTestCase
 
 

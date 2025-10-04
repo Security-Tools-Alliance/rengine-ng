@@ -1,12 +1,10 @@
-import json
 from copy import deepcopy
+import json
 from pathlib import Path
 
 from celery import group
 from celery.result import allow_join_result
 from celery.utils.log import get_task_logger
-from scanEngine.models import Notification
-from startScan.models import EndPoint, Port, Subdomain
 
 from reNgine.celery import app
 from reNgine.celery_custom_task import RengineTask
@@ -41,6 +39,9 @@ from reNgine.utilities.notification import get_task_title
 from reNgine.utilities.parser import parse_nmap_results, process_nmap_service_results
 from reNgine.utilities.proxy import get_random_proxy
 from reNgine.utilities.subdomain import get_subdomains
+from scanEngine.models import Notification
+from startScan.models import EndPoint, Port, Subdomain
+
 
 logger = get_task_logger(__name__)
 
