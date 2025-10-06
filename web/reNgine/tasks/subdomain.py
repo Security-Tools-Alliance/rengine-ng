@@ -25,7 +25,7 @@ from reNgine.settings import (
     RENGINE_TOOL_GITHUB_PATH,
 )
 from reNgine.tasks.command import run_command
-from reNgine.utilities.database import save_endpoint, save_subdomain, save_subdomain_metadata
+from reNgine.utilities.database import save_endpoint, save_subdomain, save_subdomain_metadata, validate_and_save_subdomain
 from reNgine.utilities.external import get_netlas_key
 from reNgine.utilities.proxy import get_random_proxy
 from reNgine.utilities.subdomain import get_interesting_subdomains, get_new_added_subdomain, get_removed_subdomain
@@ -224,9 +224,8 @@ def subdomain_discovery(self, host=None, ctx=None, description=None):
             continue
 
         # Add subdomain
-        subdomain, _ = save_subdomain(subdomain_name, ctx=ctx)
-        if not isinstance(subdomain, Subdomain):
-            logger.error(f"Invalid subdomain encountered: {subdomain}")
+        subdomain, _ = validate_and_save_subdomain(subdomain_name, ctx=ctx)
+        if subdomain is None:
             continue
         subdomain_count += 1
         subdomains.append(subdomain)

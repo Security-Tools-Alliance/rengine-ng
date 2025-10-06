@@ -140,11 +140,13 @@ def port_scan(self, hosts=None, ctx=None, description=None):
 
         # If no subdomain exists for this host/IP, create one
         if not subdomain:
-            from reNgine.utilities.database import save_subdomain
+            from reNgine.utilities.database import validate_and_save_subdomain
 
-            subdomain, created = save_subdomain(host, ctx=ctx)
-            if created:
+            subdomain, created = validate_and_save_subdomain(host, ctx=ctx)
+            if subdomain and created:
                 logger.info(f"Created subdomain entry for host/IP: {host}")
+            else:
+                logger.warning(f"Failed to create subdomain entry for host/IP: {host}")
 
         # Add IP DB
         ip, _ = save_ip_address(ip_address, subdomain, subscan=self.subscan)

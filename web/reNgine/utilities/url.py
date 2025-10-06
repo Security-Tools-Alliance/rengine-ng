@@ -291,8 +291,16 @@ def _is_valid_subdomain(target, domain_name):
     """
     Check if target is a valid subdomain of the given domain.
 
-    This function performs precise domain validation to avoid false positives
-    like 'example.com' matching 'notexample.com'.
+    This function uses tldextract (via get_domain_from_subdomain) to properly extract 
+    the root domain from the target and compares it with the expected domain_name. 
+    This simple approach (KISS principle) handles all edge cases correctly, including 
+    multi-level subdomains and complex TLDs.
+
+    Examples:
+        - 'sub.example.com' for 'example.com' -> True
+        - 'a.b.c.example.com' for 'example.com' -> True
+        - 'example.com.evil.com' for 'example.com' -> False
+        - 'notexample.com' for 'example.com' -> False
 
     Args:
         target (str): The target to validate (subdomain or hostname)
@@ -305,15 +313,12 @@ def _is_valid_subdomain(target, domain_name):
     if target == domain_name:
         return True
 
-    # Check if target ends with '.' + domain_name (proper subdomain)
-    if target.endswith(f".{domain_name}"):
-        # Extract the subdomain part
-        subdomain_part = target[: -len(f".{domain_name}")]
-        # Ensure subdomain part is not empty and doesn't contain dots
-        if subdomain_part and "." not in subdomain_part:
-            return True
-
-    return False
+    # Use get_domain_from_subdomain to extract the root domain from target
+    # This leverages tldextract which handles all TLD complexities
+    extracted_domain = get_domain_from_subdomain(target)
+    
+    # The target is valid if its extracted domain matches the expected domain
+    return extracted_domain == domain_name
 
 
 def extract_httpx_url(line, follow_redirect):

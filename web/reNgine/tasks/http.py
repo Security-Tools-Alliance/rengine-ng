@@ -25,6 +25,7 @@ from reNgine.utilities.database import (
     save_ip_address,
     save_subdomain,
     save_subdomain_metadata,
+    validate_and_save_subdomain,
     with_batch_geolocalization,
 )
 from reNgine.utilities.dns import resolve_subdomain_ips
@@ -209,9 +210,8 @@ def http_crawl(
 
         # Create/get Subdomain object in DB
         subdomain_name = get_subdomain_from_url(http_url)
-        subdomain, _ = save_subdomain(subdomain_name, ctx=ctx)
-        if not isinstance(subdomain, Subdomain):
-            logger.error(f"Invalid subdomain encountered: {subdomain}")
+        subdomain, _ = validate_and_save_subdomain(subdomain_name, ctx=ctx)
+        if subdomain is None:
             continue
 
         # Save default HTTP URL to endpoint object in DB
@@ -390,9 +390,11 @@ def pre_crawl(self, ctx={}, description=None):
         # Create endpoints and test ports for each discovered IP
         for ip_address in all_discovered_ips:
             # Create a subdomain entry for the IP itself (for endpoint association)
-            ip_subdomain, ip_subdomain_created = save_subdomain(ip_address, ctx=ctx)
-            if ip_subdomain_created:
+            ip_subdomain, ip_subdomain_created = validate_and_save_subdomain(ip_address, ctx=ctx)
+            if ip_subdomain and ip_subdomain_created:
                 logger.info(f"Created subdomain entry for IP: {ip_address}")
+            else:
+                logger.warning(f"Failed to create subdomain entry for IP: {ip_address}")
 
             # Create basic HTTP endpoint
             url = f"http://{ip_address}"

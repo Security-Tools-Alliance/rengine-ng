@@ -455,7 +455,7 @@ def the_harvester(config, host, scan_history_id, activity_id, results_dir, ctx=N
     Returns:
         dict: Dict of emails, employees, hosts and ips found during crawling.
     """
-    from reNgine.utilities.database import save_endpoint, save_subdomain
+    from reNgine.utilities.database import save_endpoint, save_subdomain, validate_and_save_subdomain
     from reNgine.utilities.url import get_subdomain_from_url
 
     if ctx is None:
@@ -531,9 +531,8 @@ def the_harvester(config, host, scan_history_id, activity_id, results_dir, ctx=N
         split = tuple(host.split(":"))
         http_url = split[0]
         subdomain_name = get_subdomain_from_url(http_url)
-        subdomain, _ = save_subdomain(subdomain_name, ctx=ctx)
-        if not isinstance(subdomain, Subdomain):
-            logger.error(f"Invalid subdomain encountered: {subdomain}")
+        subdomain, _ = validate_and_save_subdomain(subdomain_name, ctx=ctx)
+        if subdomain is None:
             continue
         endpoint, _ = save_endpoint(http_url, ctx=ctx, subdomain=subdomain)
         # if endpoint:

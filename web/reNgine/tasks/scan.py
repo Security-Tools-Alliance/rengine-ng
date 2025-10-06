@@ -26,6 +26,7 @@ from reNgine.utilities.database import (
     create_scan_object,
     save_imported_subdomains,
     save_subdomain,
+    validate_and_save_subdomain,
 )
 from reNgine.utilities.misc import determine_target_type
 from reNgine.utilities.path import SafePath
@@ -184,16 +185,16 @@ def initiate_scan(
         # Create subdomain and endpoints based on target type
         if target_type in ["domain", "subdomain"]:
             # For domains/subdomains, create subdomain and default HTTP/HTTPS endpoints
-            subdomain, _ = save_subdomain(subdomain_name, ctx=ctx)
-            if subdomain:
+            subdomain, _ = validate_and_save_subdomain(subdomain_name, ctx=ctx)
+            if subdomain is not None:
                 create_default_endpoint_for_subdomain(subdomain, ctx)
                 logger.info(f"Created default endpoints for domain/subdomain: {subdomain_name}")
             else:
                 logger.warning(f"Failed to create subdomain for domain/subdomain: {subdomain_name}")
         elif target_type == "ip_address":
             # For IP addresses, create subdomain and default endpoints
-            subdomain, _ = save_subdomain(subdomain_name, ctx=ctx)
-            if subdomain:
+            subdomain, _ = validate_and_save_subdomain(subdomain_name, ctx=ctx)
+            if subdomain is not None:
                 create_default_endpoint_for_subdomain(subdomain, ctx)
                 logger.info(f"Created default endpoints for IP address: {subdomain_name}")
             else:
@@ -206,8 +207,8 @@ def initiate_scan(
             logger.info(f"Custom text target detected: {subdomain_name} - No subdomain created (custom text)")
         else:
             # Fallback - try to create subdomain and endpoints
-            subdomain, _ = save_subdomain(subdomain_name, ctx=ctx)
-            if subdomain:
+            subdomain, _ = validate_and_save_subdomain(subdomain_name, ctx=ctx)
+            if subdomain is not None:
                 create_default_endpoint_for_subdomain(subdomain, ctx)
                 logger.info(f"Created default endpoints for unknown target type: {subdomain_name}")
             else:
@@ -237,9 +238,9 @@ def initiate_scan(
                         continue
 
                     processed_subdomains.add(existing_subdomain.name)
-                    subdomain_obj, _ = save_subdomain(existing_subdomain.name, ctx=ctx)
+                    subdomain_obj, _ = validate_and_save_subdomain(existing_subdomain.name, ctx=ctx)
 
-                    if subdomain_obj:
+                    if subdomain_obj is not None:
                         create_default_endpoint_for_subdomain(subdomain_obj, ctx)
                         logger.info(f"Added existing hostname to scan: {existing_subdomain.name}")
                     else:
@@ -254,9 +255,9 @@ def initiate_scan(
                         continue
 
                     processed_subdomains.add(existing_ip.address)
-                    subdomain_obj, _ = save_subdomain(existing_ip.address, ctx=ctx)
+                    subdomain_obj, _ = validate_and_save_subdomain(existing_ip.address, ctx=ctx)
 
-                    if subdomain_obj:
+                    if subdomain_obj is not None:
                         # Create endpoints for IP addresses
                         create_default_endpoint_for_subdomain(subdomain_obj, ctx)
                         logger.info(f"Added existing IP to scan: {existing_ip.address}")
