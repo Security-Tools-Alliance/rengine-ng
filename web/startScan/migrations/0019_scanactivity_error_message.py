@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('startScan', '0018_auto_20220414_1814'),
+        ("startScan", "0018_auto_20220414_1814"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='scanactivity',
-            name='error_message',
+            model_name="scanactivity",
+            name="error_message",
             field=models.CharField(blank=True, max_length=300, null=True),
         ),
     ]

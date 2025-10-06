@@ -646,8 +646,17 @@ main() {
   log "reNgine-ng is successfully installed and started!" $COLOR_GREEN
   log "\r\nThank you for installing reNgine-ng, happy recon!" $COLOR_GREEN
 
-  log "\r\nIn case you're running this locally, reNgine-ng should be available at one of the following IPs:\n$formatted_ips" $COLOR_GREEN
-  log "In case you're running this on a server, reNgine-ng should be available at: https://$external_ip/" $COLOR_GREEN
+  # Get domain name from .env file
+  domain_name=$(grep "^DOMAIN_NAME=" .env 2>/dev/null | cut -d'=' -f2)
+  if [ -z "$domain_name" ]; then
+    domain_name="rengine-ng.example.com"
+  fi
+  
+  log "\r\nreNgine-ng is available at: https://$domain_name/" $COLOR_GREEN
+  log "\r\n⚠️  IMPORTANT CSRF Configuration Warning:" $COLOR_YELLOW
+  log "Due to Django's CSRF protection, you MUST access reNgine-ng using the configured hostname." $COLOR_YELLOW
+  log "If you haven't configured your DNS or /etc/hosts file to point '$domain_name' to this server," $COLOR_YELLOW
+  log "you will encounter CSRF errors. Please update your configuration accordingly." $COLOR_YELLOW
 }
 
 # Run the main installation process

@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('startScan', '0051_auto_20230908_1049'),
+        ("startScan", "0051_auto_20230908_1049"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='s3bucket',
-            name='perm_all_users_write_acl',
+            model_name="s3bucket",
+            name="perm_all_users_write_acl",
             field=models.IntegerField(default=0),
         ),
     ]

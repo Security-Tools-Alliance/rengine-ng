@@ -127,6 +127,10 @@
             <i class="fe-user"></i>
             <span>My Account</span>
           </a>
+          <a href="{% url 'api_keys' %}" class="dropdown-item notify-item">
+            <i class="mdi mdi-key-variant"></i>
+            <span>API Keys</span>
+          </a>
           {% if user|can:'modify_system_configurations' %}
           <a href="{% url 'admin_interface' %}" class="dropdown-item notify-item">
             <i class="fe-settings"></i>
@@ -139,10 +143,13 @@
           </a>
           {% endif %}
           <div class="dropdown-divider"></div>
-          <a href="{% url 'logout' %}" class="dropdown-item notify-item">
-            <i class="fe-log-out"></i>
-            <span>Logout</span>
-          </a>
+          <form method="post" action="{% url 'logout' %}" style="display: inline;">
+            {% csrf_token %}
+            <button type="submit" class="dropdown-item notify-item" style="border: none; background: none; width: 100%; text-align: left;">
+              <i class="fe-log-out"></i>
+              <span>Logout</span>
+            </button>
+          </form>
         </div>
       </li>
       <li class="dropdown">

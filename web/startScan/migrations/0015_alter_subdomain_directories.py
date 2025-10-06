@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('startScan', '0014_directoryfile_name'),
+        ("startScan", "0014_directoryfile_name"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='subdomain',
-            name='directories',
-            field=models.ManyToManyField(blank=True, related_name='directories', to='startScan.DirectoryScan'),
+            model_name="subdomain",
+            name="directories",
+            field=models.ManyToManyField(blank=True, related_name="directories", to="startScan.DirectoryScan"),
         ),
     ]

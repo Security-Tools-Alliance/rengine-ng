@@ -7,13 +7,15 @@ services:
       - ../.env
     restart: unless-stopped
     container_name: rengine-db-1
+    entrypoint: /entrypoint.sh
     volumes:
+      - ./postgres/entrypoint.sh:/entrypoint.sh:ro
       - postgres_data:/var/lib/postgresql/data/
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready"]
+      test: ["CMD-SHELL", "pg_isready -U rengine -d rengine"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 20
     networks:
       - rengine_network
 
@@ -114,7 +116,7 @@ services:
       test: ["CMD", "curl", "-f", "-k", "http://localhost:8000"]
       interval: 10s
       timeout: 10s
-      retries: 10
+      retries: 20
     depends_on:
       db:
         condition: service_healthy

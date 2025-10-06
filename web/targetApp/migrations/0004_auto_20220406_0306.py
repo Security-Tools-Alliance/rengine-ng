@@ -4,45 +4,44 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('targetApp', '0003_auto_20220406_0243'),
+        ("targetApp", "0003_auto_20220406_0243"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='associateddomain',
-            name='assocation_by',
+            model_name="associateddomain",
+            name="assocation_by",
             field=models.CharField(blank=True, max_length=10, null=True),
         ),
         migrations.AlterField(
-            model_name='associateddomain',
-            name='id',
+            model_name="associateddomain",
+            name="id",
             field=models.AutoField(primary_key=True, serialize=False),
         ),
         migrations.AlterField(
-            model_name='domaininfo',
-            name='id',
+            model_name="domaininfo",
+            name="id",
             field=models.AutoField(primary_key=True, serialize=False),
         ),
         migrations.AlterField(
-            model_name='nameserverhistory',
-            name='id',
+            model_name="nameserverhistory",
+            name="id",
             field=models.AutoField(primary_key=True, serialize=False),
         ),
         migrations.AlterField(
-            model_name='nsrecord',
-            name='id',
+            model_name="nsrecord",
+            name="id",
             field=models.AutoField(primary_key=True, serialize=False),
         ),
         migrations.AlterField(
-            model_name='registrantinfo',
-            name='id',
+            model_name="registrantinfo",
+            name="id",
             field=models.AutoField(primary_key=True, serialize=False),
         ),
         migrations.AlterField(
-            model_name='whoisdetail',
-            name='id',
+            model_name="whoisdetail",
+            name="id",
             field=models.AutoField(primary_key=True, serialize=False),
         ),
     ]

@@ -4,15 +4,14 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('dashboard', '0001_initial'),
+        ("dashboard", "0001_initial"),
     ]
 
     operations = [
         migrations.RenameField(
-            model_name='searchhistory',
-            old_name='name',
-            new_name='query',
+            model_name="searchhistory",
+            old_name="name",
+            new_name="query",
         ),
     ]

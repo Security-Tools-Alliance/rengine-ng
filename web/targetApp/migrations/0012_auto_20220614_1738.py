@@ -4,206 +4,205 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('targetApp', '0011_domaininfo_date_expiration'),
+        ("targetApp", "0011_domaininfo_date_expiration"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='DomainAddress',
+            name="DomainAddress",
             fields=[
-                ('id', models.AutoField(primary_key=True, serialize=False)),
-                ('name', models.CharField(max_length=500)),
+                ("id", models.AutoField(primary_key=True, serialize=False)),
+                ("name", models.CharField(max_length=500)),
             ],
         ),
         migrations.CreateModel(
-            name='DomainCity',
+            name="DomainCity",
             fields=[
-                ('id', models.AutoField(primary_key=True, serialize=False)),
-                ('name', models.CharField(max_length=100)),
+                ("id", models.AutoField(primary_key=True, serialize=False)),
+                ("name", models.CharField(max_length=100)),
             ],
         ),
         migrations.CreateModel(
-            name='DomainCountry',
+            name="DomainCountry",
             fields=[
-                ('id', models.AutoField(primary_key=True, serialize=False)),
-                ('name', models.CharField(max_length=20)),
+                ("id", models.AutoField(primary_key=True, serialize=False)),
+                ("name", models.CharField(max_length=20)),
             ],
         ),
         migrations.CreateModel(
-            name='DomainEmail',
+            name="DomainEmail",
             fields=[
-                ('id', models.AutoField(primary_key=True, serialize=False)),
-                ('name', models.CharField(max_length=500)),
+                ("id", models.AutoField(primary_key=True, serialize=False)),
+                ("name", models.CharField(max_length=500)),
             ],
         ),
         migrations.CreateModel(
-            name='DomainFax',
+            name="DomainFax",
             fields=[
-                ('id', models.AutoField(primary_key=True, serialize=False)),
-                ('name', models.CharField(max_length=100)),
+                ("id", models.AutoField(primary_key=True, serialize=False)),
+                ("name", models.CharField(max_length=100)),
             ],
         ),
         migrations.CreateModel(
-            name='DomainPhone',
+            name="DomainPhone",
             fields=[
-                ('id', models.AutoField(primary_key=True, serialize=False)),
-                ('name', models.CharField(max_length=100)),
+                ("id", models.AutoField(primary_key=True, serialize=False)),
+                ("name", models.CharField(max_length=100)),
             ],
         ),
         migrations.CreateModel(
-            name='DomainRegisterName',
+            name="DomainRegisterName",
             fields=[
-                ('id', models.AutoField(primary_key=True, serialize=False)),
-                ('name', models.CharField(max_length=500)),
+                ("id", models.AutoField(primary_key=True, serialize=False)),
+                ("name", models.CharField(max_length=500)),
             ],
         ),
         migrations.CreateModel(
-            name='DomainRegisterOrganization',
+            name="DomainRegisterOrganization",
             fields=[
-                ('id', models.AutoField(primary_key=True, serialize=False)),
-                ('name', models.CharField(max_length=500)),
+                ("id", models.AutoField(primary_key=True, serialize=False)),
+                ("name", models.CharField(max_length=500)),
             ],
         ),
         migrations.CreateModel(
-            name='DomainState',
+            name="DomainState",
             fields=[
-                ('id', models.AutoField(primary_key=True, serialize=False)),
-                ('name', models.CharField(max_length=50)),
+                ("id", models.AutoField(primary_key=True, serialize=False)),
+                ("name", models.CharField(max_length=50)),
             ],
         ),
         migrations.CreateModel(
-            name='DomainZipCode',
+            name="DomainZipCode",
             fields=[
-                ('id', models.AutoField(primary_key=True, serialize=False)),
-                ('name', models.CharField(max_length=20)),
+                ("id", models.AutoField(primary_key=True, serialize=False)),
+                ("name", models.CharField(max_length=20)),
             ],
         ),
         migrations.CreateModel(
-            name='NameServers',
+            name="NameServers",
             fields=[
-                ('id', models.AutoField(primary_key=True, serialize=False)),
-                ('name', models.CharField(blank=True, max_length=500, null=True)),
+                ("id", models.AutoField(primary_key=True, serialize=False)),
+                ("name", models.CharField(blank=True, max_length=500, null=True)),
             ],
         ),
         migrations.RemoveField(
-            model_name='whoisdetail',
-            name='registrant',
+            model_name="whoisdetail",
+            name="registrant",
         ),
         migrations.RemoveField(
-            model_name='domaininfo',
-            name='date_created',
+            model_name="domaininfo",
+            name="date_created",
         ),
         migrations.RemoveField(
-            model_name='domaininfo',
-            name='date_expiration',
+            model_name="domaininfo",
+            name="date_expiration",
         ),
         migrations.RemoveField(
-            model_name='domaininfo',
-            name='domain_age',
+            model_name="domaininfo",
+            name="domain_age",
         ),
         migrations.RemoveField(
-            model_name='domaininfo',
-            name='email_association_href',
+            model_name="domaininfo",
+            name="email_association_href",
         ),
         migrations.RemoveField(
-            model_name='domaininfo',
-            name='geolocation',
+            model_name="domaininfo",
+            name="geolocation",
         ),
         migrations.RemoveField(
-            model_name='domaininfo',
-            name='geolocation_iso',
+            model_name="domaininfo",
+            name="geolocation_iso",
         ),
         migrations.RemoveField(
-            model_name='domaininfo',
-            name='ip_address',
+            model_name="domaininfo",
+            name="ip_address",
         ),
         migrations.RemoveField(
-            model_name='domaininfo',
-            name='is_private',
+            model_name="domaininfo",
+            name="is_private",
         ),
         migrations.RemoveField(
-            model_name='domaininfo',
-            name='nameserver_history',
+            model_name="domaininfo",
+            name="nameserver_history",
         ),
         migrations.RemoveField(
-            model_name='domaininfo',
-            name='nameserver_record',
+            model_name="domaininfo",
+            name="nameserver_record",
         ),
         migrations.RemoveField(
-            model_name='domaininfo',
-            name='organization_association_href',
+            model_name="domaininfo",
+            name="organization_association_href",
         ),
         migrations.RemoveField(
-            model_name='domaininfo',
-            name='whois',
+            model_name="domaininfo",
+            name="whois",
         ),
         migrations.AddField(
-            model_name='domaininfo',
-            name='raw_text',
+            model_name="domaininfo",
+            name="raw_text",
             field=models.CharField(blank=True, max_length=10000, null=True),
         ),
         migrations.DeleteModel(
-            name='NameServerHistory',
+            name="NameServerHistory",
         ),
         migrations.DeleteModel(
-            name='NSRecord',
+            name="NSRecord",
         ),
         migrations.DeleteModel(
-            name='RegistrantInfo',
+            name="RegistrantInfo",
         ),
         migrations.DeleteModel(
-            name='WhoisDetail',
+            name="WhoisDetail",
         ),
         migrations.AddField(
-            model_name='domaininfo',
-            name='registrant_address',
-            field=models.ManyToManyField(blank=True, to='targetApp.DomainAddress'),
+            model_name="domaininfo",
+            name="registrant_address",
+            field=models.ManyToManyField(blank=True, to="targetApp.DomainAddress"),
         ),
         migrations.AddField(
-            model_name='domaininfo',
-            name='registrant_city',
-            field=models.ManyToManyField(blank=True, to='targetApp.DomainCity'),
+            model_name="domaininfo",
+            name="registrant_city",
+            field=models.ManyToManyField(blank=True, to="targetApp.DomainCity"),
         ),
         migrations.AddField(
-            model_name='domaininfo',
-            name='registrant_country',
-            field=models.ManyToManyField(blank=True, to='targetApp.DomainCountry'),
+            model_name="domaininfo",
+            name="registrant_country",
+            field=models.ManyToManyField(blank=True, to="targetApp.DomainCountry"),
         ),
         migrations.AddField(
-            model_name='domaininfo',
-            name='registrant_email',
-            field=models.ManyToManyField(blank=True, to='targetApp.DomainEmail'),
+            model_name="domaininfo",
+            name="registrant_email",
+            field=models.ManyToManyField(blank=True, to="targetApp.DomainEmail"),
         ),
         migrations.AddField(
-            model_name='domaininfo',
-            name='registrant_fax',
-            field=models.ManyToManyField(blank=True, to='targetApp.DomainFax'),
+            model_name="domaininfo",
+            name="registrant_fax",
+            field=models.ManyToManyField(blank=True, to="targetApp.DomainFax"),
         ),
         migrations.AddField(
-            model_name='domaininfo',
-            name='registrant_name',
-            field=models.ManyToManyField(blank=True, to='targetApp.DomainRegisterName'),
+            model_name="domaininfo",
+            name="registrant_name",
+            field=models.ManyToManyField(blank=True, to="targetApp.DomainRegisterName"),
         ),
         migrations.AddField(
-            model_name='domaininfo',
-            name='registrant_organization',
-            field=models.ManyToManyField(blank=True, to='targetApp.DomainRegisterOrganization'),
+            model_name="domaininfo",
+            name="registrant_organization",
+            field=models.ManyToManyField(blank=True, to="targetApp.DomainRegisterOrganization"),
         ),
         migrations.AddField(
-            model_name='domaininfo',
-            name='registrant_phone',
-            field=models.ManyToManyField(blank=True, to='targetApp.DomainPhone'),
+            model_name="domaininfo",
+            name="registrant_phone",
+            field=models.ManyToManyField(blank=True, to="targetApp.DomainPhone"),
         ),
         migrations.AddField(
-            model_name='domaininfo',
-            name='registrant_state',
-            field=models.ManyToManyField(blank=True, to='targetApp.DomainState'),
+            model_name="domaininfo",
+            name="registrant_state",
+            field=models.ManyToManyField(blank=True, to="targetApp.DomainState"),
         ),
         migrations.AddField(
-            model_name='domaininfo',
-            name='registrant_zip_code',
-            field=models.ManyToManyField(blank=True, to='targetApp.DomainZipCode'),
+            model_name="domaininfo",
+            name="registrant_zip_code",
+            field=models.ManyToManyField(blank=True, to="targetApp.DomainZipCode"),
         ),
     ]
