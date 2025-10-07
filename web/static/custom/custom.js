@@ -3911,3 +3911,110 @@ function selectLLMModel() {
         }
     });
 }
+
+// Initialize mobile menu when DOM is loaded
+document.addEventListener('DOMContentLoaded', function() {
+    initMobileMenu();
+    initCompactSearch();
+});
+
+// Mobile menu functionality
+function initMobileMenu() {
+    const mobileNavMenu = document.getElementById('mobileNavMenu');
+    const mobileHamburger = document.getElementById('mobileHamburger');
+    
+    // Handle mobile submenu toggles
+    const submenuHeaders = document.querySelectorAll('.mobile-submenu-header:not(.mobile-projects-submenu .mobile-submenu-header)');
+    
+    submenuHeaders.forEach(header => {
+        header.addEventListener('click', function() {
+            const submenu = this.nextElementSibling;
+            if (submenu && submenu.classList.contains('mobile-submenu')) {
+                // Toggle active class on header
+                this.classList.toggle('active');
+                
+                // Toggle show class on submenu
+                submenu.classList.toggle('show');
+            }
+        });
+    });
+    
+    // Close mobile menu when clicking outside
+    document.addEventListener('click', function(e) {
+        if (mobileNavMenu && mobileNavMenu.classList.contains('show')) {
+            // Check if click is outside the mobile menu and hamburger button
+            if (!mobileNavMenu.contains(e.target) && !mobileHamburger.contains(e.target)) {
+                // Close the mobile menu
+                const bsCollapse = new bootstrap.Collapse(mobileNavMenu, {
+                    toggle: false
+                });
+                bsCollapse.hide();
+            }
+        }
+    });
+}
+
+// Compact search functionality
+function initCompactSearch() {
+    const searchBtn = document.querySelector('.navbar-custom .app-search .btn');
+    const searchForm = document.querySelector('.navbar-custom .app-search');
+    const searchInput = document.querySelector('.navbar-custom .app-search .form-control');
+    
+    if (searchBtn && searchForm && searchInput) {
+        // Toggle search field on mobile using Bootstrap classes
+        searchBtn.addEventListener('click', function(e) {
+            if (window.innerWidth <= 767.98) {
+                if (searchForm.classList.contains('search-active')) {
+                    // If search is active, submit the form
+                    // Don't prevent default, let the form submit
+                } else {
+                    // If search is not active, open the search
+                    e.preventDefault();
+                    searchForm.classList.add('search-active');
+                    searchInput.classList.remove('d-none');
+                    searchInput.classList.add('d-block');
+                    searchInput.focus();
+                }
+            }
+        });
+        
+        // Handle Enter key in search input
+        searchInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && window.innerWidth <= 767.98 && searchForm.classList.contains('search-active')) {
+                // Let the form submit naturally, don't prevent default
+            }
+        });
+        
+        // Handle form submission on mobile
+        searchForm.addEventListener('submit', function(e) {
+            if (window.innerWidth <= 767.98 && searchForm.classList.contains('search-active')) {
+                // Close the search after submission
+                setTimeout(function() {
+                    searchForm.classList.remove('search-active');
+                    searchInput.classList.remove('d-block');
+                    searchInput.classList.add('d-none');
+                }, 100);
+            }
+        });
+        
+        // Close search when clicking outside
+        document.addEventListener('click', function(e) {
+            if (window.innerWidth <= 767.98 && 
+                !searchForm.contains(e.target) && 
+                searchForm.classList.contains('search-active')) {
+                searchForm.classList.remove('search-active');
+                searchInput.classList.remove('d-block');
+                searchInput.classList.add('d-none');
+            }
+        });
+        
+        // Close search on escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && searchForm.classList.contains('search-active')) {
+                searchForm.classList.remove('search-active');
+                searchInput.classList.remove('d-block');
+                searchInput.classList.add('d-none');
+            }
+        });
+    }
+}
