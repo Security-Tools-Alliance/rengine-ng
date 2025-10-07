@@ -291,9 +291,9 @@ def _is_valid_subdomain(target, domain_name):
     """
     Check if target is a valid subdomain of the given domain.
 
-    This function uses tldextract (via get_domain_from_subdomain) to properly extract 
-    the root domain from the target and compares it with the expected domain_name. 
-    This simple approach (KISS principle) handles all edge cases correctly, including 
+    This function uses tldextract (via get_domain_from_subdomain) to properly extract
+    the root domain from the target and compares it with the expected domain_name.
+    This simple approach (KISS principle) handles all edge cases correctly, including
     multi-level subdomains and complex TLDs.
 
     Examples:
@@ -316,7 +316,7 @@ def _is_valid_subdomain(target, domain_name):
     # Use get_domain_from_subdomain to extract the root domain from target
     # This leverages tldextract which handles all TLD complexities
     extracted_domain = get_domain_from_subdomain(target)
-    
+
     # The target is valid if its extracted domain matches the expected domain
     return extracted_domain == domain_name
 

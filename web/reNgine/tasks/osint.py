@@ -20,7 +20,7 @@ from reNgine.tasks.command import run_command
 from reNgine.utilities.database import save_email, save_employee
 from reNgine.utilities.external import get_and_save_dork_results
 from scanEngine.models import Proxy
-from startScan.models import ScanHistory, Subdomain
+from startScan.models import ScanHistory
 
 
 logger = get_task_logger(__name__)
@@ -455,7 +455,7 @@ def the_harvester(config, host, scan_history_id, activity_id, results_dir, ctx=N
     Returns:
         dict: Dict of emails, employees, hosts and ips found during crawling.
     """
-    from reNgine.utilities.database import save_endpoint, save_subdomain, validate_and_save_subdomain
+    from reNgine.utilities.database import save_endpoint, validate_and_save_subdomain
     from reNgine.utilities.url import get_subdomain_from_url
 
     if ctx is None:

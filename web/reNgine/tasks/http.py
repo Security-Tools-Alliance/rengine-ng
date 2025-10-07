@@ -23,7 +23,6 @@ from reNgine.utilities.data import is_iterable
 from reNgine.utilities.database import (
     save_endpoint,
     save_ip_address,
-    save_subdomain,
     save_subdomain_metadata,
     validate_and_save_subdomain,
     with_batch_geolocalization,

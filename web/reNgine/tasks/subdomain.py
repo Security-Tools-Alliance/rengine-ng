@@ -25,12 +25,15 @@ from reNgine.settings import (
     RENGINE_TOOL_GITHUB_PATH,
 )
 from reNgine.tasks.command import run_command
-from reNgine.utilities.database import save_endpoint, save_subdomain, save_subdomain_metadata, validate_and_save_subdomain
+from reNgine.utilities.database import (
+    save_endpoint,
+    save_subdomain_metadata,
+    validate_and_save_subdomain,
+)
 from reNgine.utilities.external import get_netlas_key
 from reNgine.utilities.proxy import get_random_proxy
 from reNgine.utilities.subdomain import get_interesting_subdomains, get_new_added_subdomain, get_removed_subdomain
 from scanEngine.models import InstalledExternalTool, Notification
-from startScan.models import Subdomain
 
 
 logger = get_task_logger(__name__)

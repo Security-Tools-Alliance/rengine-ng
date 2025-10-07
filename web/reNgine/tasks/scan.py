@@ -25,7 +25,6 @@ from reNgine.utilities.database import (
     create_default_endpoint_for_subdomain,
     create_scan_object,
     save_imported_subdomains,
-    save_subdomain,
     validate_and_save_subdomain,
 )
 from reNgine.utilities.misc import determine_target_type
