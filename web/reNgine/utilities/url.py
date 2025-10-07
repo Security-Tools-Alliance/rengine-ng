@@ -143,9 +143,22 @@ def get_domain_from_subdomain(subdomain):
             if is_valid_domain_or_subdomain(domain):
                 return domain
 
+        # Special handling for .local domains and other private TLDs
+        # tldextract doesn't recognize .local as a valid TLD, so we need custom logic
+        if extracted.domain and not extracted.suffix and extracted.subdomain:
+            # This is likely a private TLD like .local
+            # Extract the last two parts: subdomain.domain
+            parts = subdomain.split('.')
+            if len(parts) >= 2:
+                # Take the last two parts as domain.tld
+                potential_domain = '.'.join(parts[-2:])
+                if is_valid_domain_or_subdomain(potential_domain):
+                    logger.debug(f"Extracted private TLD domain: {potential_domain} from {subdomain}")
+                    return potential_domain
+
         # Fallback method for edge cases where tldextract might not recognize the TLD
         # Use tldextract's fallback with PSL private domains enabled
-        fallback_extracted = tldextract.extract(domain, include_psl_private_domains=True)
+        fallback_extracted = tldextract.extract(subdomain, include_psl_private_domains=True)
         if fallback_extracted.domain and fallback_extracted.suffix:
             potential_domain = f"{fallback_extracted.domain}.{fallback_extracted.suffix}"
             if is_valid_domain_or_subdomain(potential_domain):

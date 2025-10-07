@@ -350,12 +350,16 @@ def add_target(request, slug):
                         logger.info("Using existing target %s", main_target.name)
 
                     # Process all selected items as subdomains of the main target
-                    for host_data_json in resolved_hosts_data:
+                    logger.info(f"Processing {len(resolved_hosts_data)} selected hosts for target {main_target.name}")
+                    for i, host_data_json in enumerate(resolved_hosts_data):
                         try:
+                            logger.debug(f"Processing host {i+1}/{len(resolved_hosts_data)}: {host_data_json}")
                             host_info = json.loads(host_data_json.replace("&quot;", '"'))
                             ip = host_info.get("ip")
                             hostname = host_info.get("domain")
                             is_alive = host_info.get("is_alive", False)
+
+                            logger.debug(f"Parsed host info - IP: {ip}, Hostname: {hostname}, Alive: {is_alive}")
 
                             # Deduplication: Skip if we've already processed this hostname
                             if hostname in seen_hostnames:
@@ -402,7 +406,7 @@ def add_target(request, slug):
                             subdomain.save()
 
                         except (json.JSONDecodeError, KeyError) as e:
-                            logger.warning(f"Error processing host data: {e}")
+                            logger.warning(f"Error processing host data '{host_data_json}': {e}")
                             continue
 
                     # Also add discovered domains as subdomains
@@ -625,7 +629,13 @@ def add_target(request, slug):
 
         # No targets processed, handle error case
         if total_processed_count == 0:
-            error_msg = "Oops! Could not import any targets, either targets already exists or is not a valid target."
+            # Provide more detailed error message based on the operation type
+            if ip_target:
+                error_msg = "No targets were processed. This could be due to: 1) All selected hosts already exist, 2) Invalid host data format, or 3) Domain extraction errors. Check the logs for details."
+            else:
+                error_msg = "Oops! Could not import any targets, either targets already exists or is not a valid target."
+            
+            logger.warning(f"No targets processed (total_processed_count=0) for request: {dict(request.POST)}")
             messages.add_message(request, messages.ERROR, error_msg)
 
             # Handle AJAX requests with JSON error response

@@ -486,6 +486,17 @@ Scan Engines
       }
     });
 
+    // Reinitialize tooltips after each table redraw (pagination, filtering, etc.)
+    scan_engine_table.on('draw.dt', function() {
+      // Dispose old tooltips to avoid memory leaks
+      $('[data-toggle="tooltip"]').tooltip('dispose');
+      // Reinitialize tooltips for new DOM elements
+      $('[data-toggle="tooltip"]').tooltip({
+        html: true,
+        container: 'body'
+      });
+    });
+
             // Scan Type Filter Functionality
             function applyFilter(filter) {
               // Update button states - remove active class from all buttons
