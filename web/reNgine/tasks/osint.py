@@ -3,7 +3,7 @@ import json
 import os
 from pathlib import Path
 
-from celery import group
+from celery import chain, group
 from celery.utils.log import get_task_logger
 import yaml
 
@@ -145,25 +145,17 @@ def osint_discovery(config, host, scan_history_id, activity_id, results_dir, ctx
     #        		})
     #        		meta_info.append(save_metadata_info(meta_dict))
 
-    grouped_tasks = []
-
-    if "emails" in osint_lookup:
-        logger.info("Lookup for emails")
-        _task = h8mail.si(
-            config=config,
-            host=host,
-            scan_history_id=scan_history_id,
-            activity_id=activity_id,
-            results_dir=results_dir,
-            ctx=ctx,
-        )
-        grouped_tasks.append(_task)
+    # Collect tasks - note that theHarvester must run before h8mail
+    # to create the emails.txt file that h8mail needs
+    sequential_tasks = []
+    harvester_task = None
+    h8mail_task = None
 
     if "employees" in osint_lookup:
         logger.info("Lookup for employees")
         custom_ctx = deepcopy(ctx)
         custom_ctx["track"] = False
-        _task = the_harvester.si(
+        harvester_task = the_harvester.si(
             config=config,
             host=host,
             scan_history_id=scan_history_id,
@@ -171,13 +163,27 @@ def osint_discovery(config, host, scan_history_id, activity_id, results_dir, ctx
             results_dir=results_dir,
             ctx=custom_ctx,
         )
-        grouped_tasks.append(_task)
+        sequential_tasks.append(harvester_task)
+
+    if "emails" in osint_lookup:
+        logger.info("Lookup for emails")
+        h8mail_task = h8mail.si(
+            config=config,
+            host=host,
+            scan_history_id=scan_history_id,
+            activity_id=activity_id,
+            results_dir=results_dir,
+            ctx=ctx,
+        )
+        sequential_tasks.append(h8mail_task)
 
     # Launch OSINT discovery tasks and wait for completion to ensure proper workflow ordering
-    if grouped_tasks:
-        celery_group = group(grouped_tasks)
-        job = celery_group.apply_async()
-        logger.info(f"Started {len(grouped_tasks)} OSINT discovery tasks")
+    if sequential_tasks:
+        # Use chain to execute tasks sequentially (theHarvester first, then h8mail)
+        # This ensures emails.txt is created before h8mail tries to read it
+        task_chain = chain(sequential_tasks)
+        job = task_chain.apply_async()
+        logger.info(f"Started {len(sequential_tasks)} OSINT discovery tasks sequentially")
 
         # Wait for all OSINT discovery tasks to complete using allow_join_result to avoid deadlocks
         from celery.result import allow_join_result
@@ -501,18 +507,38 @@ def the_harvester(config, host, scan_history_id, activity_id, results_dir, ctx=N
         return {}
 
     # Load theHarvester results
-    with open(output_path_json, "r") as f:
-        data = json.load(f)
+    try:
+        with open(output_path_json, "r") as f:
+            data = json.load(f)
+    except (json.JSONDecodeError, IOError) as e:
+        logger.error(f"Failed to read or parse theHarvester output file: {e}")
+        raise
 
     # Re-indent theHarvester JSON
-    with open(output_path_json, "w") as f:
-        json.dump(data, f, indent=4)
+    try:
+        with open(output_path_json, "w") as f:
+            json.dump(data, f, indent=4)
+    except IOError as e:
+        logger.error(f"Failed to re-indent theHarvester output file: {e}")
+        # Continue anyway as we have the data loaded
 
     emails = data.get("emails", [])
+
+    # Save emails to database
     for email_address in emails:
         email, _ = save_email(email_address, scan_history=scan_history)
         # if email:
         # 	self.notify(fields={'Emails': f'• `{email.address}`'})
+
+    # Create emails.txt file for h8mail to use
+    emails_txt_path = str(Path(results_dir) / "emails.txt")
+    try:
+        with open(emails_txt_path, "w") as emails_file:
+            for email_address in emails:
+                emails_file.write(f"{email_address}\n")
+        logger.info(f"Created emails.txt with {len(emails)} email(s) at {emails_txt_path}")
+    except IOError as e:
+        logger.error(f"Failed to create emails.txt file: {e}")
 
     linkedin_people = data.get("linkedin_people", [])
     for people in linkedin_people:
@@ -578,14 +604,33 @@ def h8mail(config, host, scan_history_id, activity_id, results_dir, ctx=None):
     input_path = str(Path(results_dir) / "emails.txt")
     output_file = str(Path(results_dir) / "h8mail.json")
 
+    # Check if emails.txt file exists
+    if not os.path.isfile(input_path):
+        logger.error(f"Emails file not found at {input_path}. Aborting h8mail scan.")
+        raise FileNotFoundError(f"Emails file not found at {input_path}")
+
+    # Check if emails.txt is empty
+    if os.path.getsize(input_path) == 0:
+        logger.error(f"Emails file is empty at {input_path}. Aborting h8mail scan.")
+        raise ValueError(f"Emails file is empty at {input_path}")
+
     cmd = f"h8mail -t {input_path} --json {output_file}"
     history_file = str(Path(results_dir) / "commands.txt")
 
     run_command(cmd, history_file=history_file, scan_id=scan_history_id, activity_id=activity_id)
 
-    with open(output_file) as f:
-        data = json.load(f)
-        creds = data.get("targets", [])
+    # Check if output file exists before trying to open it
+    if not os.path.isfile(output_file):
+        logger.error(f"h8mail output file not found at {output_file}. The command may have failed.")
+        raise FileNotFoundError(f"h8mail output file not found at {output_file}. The command may have failed.")
+
+    try:
+        with open(output_file) as f:
+            data = json.load(f)
+            creds = data.get("targets", [])
+    except (json.JSONDecodeError, IOError) as e:
+        logger.error(f"Failed to read or parse h8mail output file: {e}")
+        return []
 
     # TODO: go through h8mail output and save emails to DB
     # for cred in creds:

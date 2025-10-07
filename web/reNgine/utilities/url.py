@@ -265,9 +265,13 @@ def is_target_allowed_for_domain(target, domain_name, ctx=None, target_type="sub
     if target_type == "url":
         parsed_url = urlparse(target)
         hostname = parsed_url.hostname
+        if not hostname:
+            # Invalid URL without hostname
+            return False
     else:
         hostname = target
 
+    # IP addresses are always allowed
     if validators.ipv4(hostname) or validators.ipv6(hostname):
         return True
 
@@ -283,8 +287,8 @@ def is_target_allowed_for_domain(target, domain_name, ctx=None, target_type="sub
     if not ctx or not ctx.get("domain_id"):
         return True
 
-    # Strict validation: target must be a subdomain of the domain
-    return _is_valid_subdomain(target, domain_name)
+    # Strict validation: hostname must be a subdomain of the domain
+    return _is_valid_subdomain(hostname, domain_name)
 
 
 def _is_valid_subdomain(target, domain_name):

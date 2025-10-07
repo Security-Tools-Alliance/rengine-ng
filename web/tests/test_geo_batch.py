@@ -303,11 +303,11 @@ class TestBatchGeolocalization(TestCase):
         self.assertEqual(result["skipped"], 1)  # ip1 already geolocalized
         self.assertEqual(result["total"], 2)
 
-    @patch("reNgine.tasks.geo.run_command")
-    def test_geo_localize_batch_geolocalization_failure(self, mock_run_command):
+    @patch("reNgine.tasks.geo.geoiplookup")
+    def test_geo_localize_batch_geolocalization_failure(self, mock_geoiplookup):
         """Test handling of geolocalization failures."""
         # Mock failed geolocalization response
-        mock_run_command.return_value = (1, "IP Address not found")
+        mock_geoiplookup.return_value = (False, None, None, "IP Address not found")
 
         # Create test IP
         IpAddress.objects.get_or_create(address="8.8.8.8")
@@ -316,6 +316,78 @@ class TestBatchGeolocalization(TestCase):
         result = geo_localize_batch(["8.8.8.8"])
 
         # Check results
+        self.assertEqual(result["success"], 0)
+        self.assertEqual(result["failed"], 1)
+        self.assertEqual(result["skipped"], 0)
+        self.assertEqual(result["total"], 1)
+
+    @patch("reNgine.tasks.geo.geoiplookup")
+    def test_geo_localize_batch_exception_handling(self, mock_geoiplookup):
+        """Test handling of exceptions raised by geoiplookup."""
+        # Mock geoiplookup to raise an exception
+        mock_geoiplookup.side_effect = Exception("GeoIP service unavailable")
+
+        # Create test IP
+        IpAddress.objects.get_or_create(address="8.8.4.4")
+
+        # Run batch geolocalization - should handle exception gracefully
+        result = geo_localize_batch(["8.8.4.4"])
+
+        # Check that the exception was handled and counted as failure
+        self.assertEqual(result["success"], 0)
+        self.assertEqual(result["failed"], 1)
+        self.assertEqual(result["skipped"], 0)
+        self.assertEqual(result["total"], 1)
+
+    @patch("reNgine.tasks.geo.geoiplookup")
+    def test_geo_localize_batch_empty_response(self, mock_geoiplookup):
+        """Test handling of empty response from geoiplookup."""
+        # Mock geoiplookup to return empty strings
+        mock_geoiplookup.return_value = (False, "", "", "")
+
+        # Create test IP
+        IpAddress.objects.get_or_create(address="1.1.1.1")
+
+        # Run batch geolocalization
+        result = geo_localize_batch(["1.1.1.1"])
+
+        # Check that empty response is handled as failure
+        self.assertEqual(result["success"], 0)
+        self.assertEqual(result["failed"], 1)
+        self.assertEqual(result["skipped"], 0)
+        self.assertEqual(result["total"], 1)
+
+    @patch("reNgine.tasks.geo.geoiplookup")
+    def test_geo_localize_batch_partial_data(self, mock_geoiplookup):
+        """Test handling of partial data from geoiplookup."""
+        # Mock geoiplookup to return success but with None country name
+        mock_geoiplookup.return_value = (True, "US", None, None)
+
+        # Create test IP
+        IpAddress.objects.get_or_create(address="9.9.9.9")
+
+        # Run batch geolocalization
+        result = geo_localize_batch(["9.9.9.9"])
+
+        # Check that partial data is handled as failure
+        self.assertEqual(result["success"], 0)
+        self.assertEqual(result["failed"], 1)
+        self.assertEqual(result["skipped"], 0)
+        self.assertEqual(result["total"], 1)
+
+    @patch("reNgine.tasks.geo.geoiplookup")
+    def test_geo_localize_batch_none_country_iso(self, mock_geoiplookup):
+        """Test handling of None country ISO from geoiplookup."""
+        # Mock geoiplookup to return success but with None country ISO
+        mock_geoiplookup.return_value = (True, None, "United States", None)
+
+        # Create test IP
+        IpAddress.objects.get_or_create(address="7.7.7.7")
+
+        # Run batch geolocalization
+        result = geo_localize_batch(["7.7.7.7"])
+
+        # Check that missing country ISO is handled as failure
         self.assertEqual(result["success"], 0)
         self.assertEqual(result["failed"], 1)
         self.assertEqual(result["skipped"], 0)
@@ -470,12 +542,12 @@ class TestIntegration(TestCase):
         if hasattr(_thread_local, "geo_ip_collection"):
             delattr(_thread_local, "geo_ip_collection")
 
-    @patch("reNgine.tasks.geo.run_command")
+    @patch("reNgine.tasks.geo.geoiplookup")
     @patch("reNgine.tasks.geo.geo_localize_batch.delay")
-    def test_complete_workflow(self, mock_delay, mock_run_command):
+    def test_complete_workflow(self, mock_delay, mock_geoiplookup):
         """Test the complete workflow from IP collection to batch geolocalization."""
         # Mock successful geolocalization
-        mock_run_command.return_value = (0, "GeoIP Country Edition: US, United States")
+        mock_geoiplookup.return_value = (True, "US", "United States", None)
         mock_task = Mock()
         mock_task.id = "test-task-id"
         mock_delay.return_value = mock_task
