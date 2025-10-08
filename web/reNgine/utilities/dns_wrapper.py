@@ -29,6 +29,8 @@ Note:
     alternatives like httpx with -screenshot flag.
 """
 
+import re
+
 from celery.utils.log import get_task_logger
 
 
@@ -170,7 +172,31 @@ def build_command_with_dns(tool_name, base_args, domain=None, dns_servers=None):
         dns_list = dns_servers if isinstance(dns_servers, list) else [dns_servers]
     elif domain and hasattr(domain, "get_dns_servers"):
         # Get from domain object
-        dns_list = domain.get_dns_servers()
+        dns_list = domain.get_dns_servers() or []
+
+    # Filter out None, empty strings, and ensure all values are strings
+    dns_list = [str(dns) for dns in dns_list if dns is not None and str(dns).strip()]
+
+    # Check if DNS arguments already exist in base_args
+    tool_config = DNS_ARGS_MAP.get(tool_name, (None, None))
+    arg_format, flag = tool_config
+
+    has_existing_dns = False
+    if arg_format and flag:
+        # Convert base_args to list if it's not already
+        base_args_list = list(base_args or [])
+
+        # Use regex to check for existing DNS flags
+        if arg_format == "flag_first":
+            # Match @server or @<anything>
+            dns_flag_pattern = re.compile(rf"^{re.escape(flag)}\S*")
+        else:
+            # Match flags like -r, --dns-servers, --dns-servers=8.8.8.8, etc.
+            dns_flag_pattern = re.compile(rf"^(?:{re.escape(flag)})(?:[ =].+)?$")
+        has_existing_dns = any(dns_flag_pattern.match(arg) for arg in base_args_list)
+    if has_existing_dns:
+        logger.debug(f"DNS arguments already present in command for {tool_name}, skipping injection")
+        return [tool_name] + list(base_args or [])
 
     # Build command
     command = [tool_name]
@@ -184,7 +210,7 @@ def build_command_with_dns(tool_name, base_args, domain=None, dns_servers=None):
             logger.debug(f"Tool {tool_name} does not support custom DNS, will use system DNS")
 
     # Add base arguments
-    command.extend(base_args)
+    command.extend(base_args or [])
 
     return command
 

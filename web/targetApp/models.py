@@ -153,8 +153,7 @@ class Domain(models.Model):
 
     def get_recent_scan_id(self):
         scan_history = apps.get_model("startScan.ScanHistory")
-        obj = scan_history.objects.filter(domain__id=self.id).order_by("-id")
-        if obj:
+        if obj := scan_history.objects.filter(domain__id=self.id).order_by("-id"):
             return obj[0].id
 
     def get_dns_servers(self):

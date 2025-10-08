@@ -413,6 +413,185 @@ class TestTargetAppViews(BaseTestCase):
         self.assertTrue(Organization.objects.filter(id=self.data_generator.organization.id).exists())
 
 
+class TestValidateDNSServers(BaseTestCase):
+    """
+    Test class for the validate_dns_servers function.
+    """
+
+    def setUp(self):
+        """Initial setup for the tests."""
+        super().setUp()
+        from targetApp.views import validate_dns_servers
+
+        self.validate_dns_servers = validate_dns_servers
+
+    def test_validate_valid_ipv4_servers(self):
+        """Test validation with valid IPv4 addresses."""
+        is_valid, error_msg, cleaned = self.validate_dns_servers("8.8.8.8,1.1.1.1")
+        self.assertTrue(is_valid)
+        self.assertIsNone(error_msg)
+        self.assertEqual(cleaned, "8.8.8.8,1.1.1.1")
+
+    def test_validate_valid_ipv4_with_port(self):
+        """Test validation with valid IPv4 addresses including port."""
+        is_valid, error_msg, cleaned = self.validate_dns_servers("8.8.8.8:53,1.1.1.1:5353")
+        self.assertTrue(is_valid)
+        self.assertIsNone(error_msg)
+        self.assertEqual(cleaned, "8.8.8.8:53,1.1.1.1:5353")
+
+    def test_validate_valid_ipv6_servers(self):
+        """Test validation with valid IPv6 addresses."""
+        is_valid, error_msg, cleaned = self.validate_dns_servers("2001:4860:4860::8888,2001:4860:4860::8844")
+        self.assertTrue(is_valid)
+        self.assertIsNone(error_msg)
+        self.assertEqual(cleaned, "2001:4860:4860::8888,2001:4860:4860::8844")
+
+    def test_validate_valid_hostnames(self):
+        """Test validation with valid hostnames."""
+        is_valid, error_msg, cleaned = self.validate_dns_servers("dns.google.com,one.one.one.one")
+        self.assertTrue(is_valid)
+        self.assertIsNone(error_msg)
+        self.assertEqual(cleaned, "dns.google.com,one.one.one.one")
+
+    def test_validate_empty_string(self):
+        """Test validation with empty string."""
+        is_valid, error_msg, cleaned = self.validate_dns_servers("")
+        self.assertTrue(is_valid)
+        self.assertIsNone(error_msg)
+        self.assertEqual(cleaned, "")
+
+    def test_validate_whitespace_only(self):
+        """Test validation with whitespace only."""
+        is_valid, error_msg, cleaned = self.validate_dns_servers("   ")
+        self.assertTrue(is_valid)
+        self.assertIsNone(error_msg)
+        self.assertEqual(cleaned, "")
+
+    def test_validate_with_extra_whitespace(self):
+        """Test validation with extra whitespace around servers."""
+        is_valid, error_msg, cleaned = self.validate_dns_servers("  8.8.8.8  ,  1.1.1.1  ")
+        self.assertTrue(is_valid)
+        self.assertIsNone(error_msg)
+        self.assertEqual(cleaned, "8.8.8.8,1.1.1.1")
+
+    def test_validate_with_extra_commas(self):
+        """Test validation with extra commas."""
+        is_valid, error_msg, cleaned = self.validate_dns_servers("8.8.8.8,,1.1.1.1,,,9.9.9.9")
+        self.assertTrue(is_valid)
+        self.assertIsNone(error_msg)
+        self.assertEqual(cleaned, "8.8.8.8,1.1.1.1,9.9.9.9")
+
+    def test_validate_invalid_ip(self):
+        """Test validation with invalid IP address."""
+        is_valid, error_msg, cleaned = self.validate_dns_servers("999.999.999.999")
+        self.assertFalse(is_valid)
+        self.assertIn("Invalid DNS server address", error_msg)
+        self.assertIsNone(cleaned)
+
+    def test_validate_invalid_hostname(self):
+        """Test validation with invalid hostname."""
+        is_valid, error_msg, cleaned = self.validate_dns_servers("invalid!@#server")
+        self.assertFalse(is_valid)
+        self.assertIn("Invalid DNS server address", error_msg)
+        self.assertIsNone(cleaned)
+
+    def test_validate_mixed_valid_invalid(self):
+        """Test validation with mix of valid and invalid servers."""
+        is_valid, error_msg, cleaned = self.validate_dns_servers("8.8.8.8,invalid!@#,1.1.1.1")
+        self.assertFalse(is_valid)
+        self.assertIn("Invalid DNS server address", error_msg)
+        self.assertIsNone(cleaned)
+
+    def test_validate_invalid_port_range(self):
+        """Test validation with port outside valid range."""
+        is_valid, error_msg, cleaned = self.validate_dns_servers("8.8.8.8:70000")
+        self.assertFalse(is_valid)
+        self.assertIn("Invalid port number", error_msg)
+        self.assertIsNone(cleaned)
+
+    def test_validate_invalid_port_format(self):
+        """Test validation with non-numeric port."""
+        is_valid, error_msg, cleaned = self.validate_dns_servers("8.8.8.8:abc")
+        self.assertFalse(is_valid)
+        self.assertIn("Invalid port", error_msg)
+        self.assertIsNone(cleaned)
+
+    def test_validate_sql_injection_attempt(self):
+        """Test validation rejects SQL injection attempts."""
+        is_valid, error_msg, cleaned = self.validate_dns_servers("8.8.8.8; DROP TABLE domains;")
+        self.assertFalse(is_valid)
+        self.assertIn("Invalid DNS server address", error_msg)
+        self.assertIsNone(cleaned)
+
+    def test_validate_xss_attempt(self):
+        """Test validation rejects XSS attempts."""
+        is_valid, error_msg, cleaned = self.validate_dns_servers("<script>alert('xss')</script>")
+        self.assertFalse(is_valid)
+        self.assertIn("Invalid DNS server address", error_msg)
+        self.assertIsNone(cleaned)
+
+    def test_validate_command_injection_attempt(self):
+        """Test validation rejects command injection attempts."""
+        is_valid, error_msg, cleaned = self.validate_dns_servers("8.8.8.8 && rm -rf /")
+        self.assertFalse(is_valid)
+        self.assertIn("Invalid DNS server address", error_msg)
+        self.assertIsNone(cleaned)
+
+    def test_add_target_with_invalid_dns_servers(self):
+        """Test adding a target with invalid DNS servers."""
+        Domain.objects.all().delete()
+
+        host_data = json.dumps({"ip": "192.168.1.1", "domain": "example.local", "is_alive": True})
+
+        response = self.client.post(
+            reverse("add_target", kwargs={"slug": self.data_generator.project.slug}),
+            {
+                "ip_address": "192.168.1.0/24",
+                "targetName": "test-target",
+                "discovered_domains": ["example.local"],
+                "resolved_hosts": [host_data],
+                "used_dns_servers": "invalid!@#server,8.8.8.8",  # Invalid DNS servers
+                "add-ip-target": "submit",
+            },
+        )
+
+        # Should return 200 with error (not redirect)
+        self.assertEqual(response.status_code, 200)
+
+        # Check for error message
+        messages_list = list(get_messages(response.wsgi_request))
+        self.assertTrue(any("Invalid DNS servers configuration" in str(msg) for msg in messages_list))
+
+        # Target should not be created
+        self.assertFalse(Domain.objects.filter(name="test-target").exists())
+
+    def test_add_target_with_valid_dns_servers(self):
+        """Test adding a target with valid DNS servers."""
+        Domain.objects.all().delete()
+
+        host_data = json.dumps({"ip": "192.168.1.1", "domain": "example.local", "is_alive": True})
+
+        response = self.client.post(
+            reverse("add_target", kwargs={"slug": self.data_generator.project.slug}),
+            {
+                "ip_address": "192.168.1.0/24",
+                "targetName": "test-target-dns",
+                "discovered_domains": ["example.local"],
+                "resolved_hosts": [host_data],
+                "used_dns_servers": "8.8.8.8,1.1.1.1",  # Valid DNS servers
+                "add-ip-target": "submit",
+            },
+        )
+
+        # Should redirect on success
+        self.assertEqual(response.status_code, 302)
+
+        # Target should be created with DNS servers
+        self.assertTrue(Domain.objects.filter(name="test-target-dns").exists())
+        target = Domain.objects.get(name="test-target-dns")
+        self.assertEqual(target.custom_dns_servers, "8.8.8.8,1.1.1.1")
+
+
 # Target deduplication tests removed - require complex implementation
 # These tests would need to be implemented with proper form handling
 # and integration with the actual add_target view logic

@@ -108,24 +108,25 @@ class TestDNSUtilities(BaseTestCase):
 
         self.assertFalse(result)
 
+    @patch("reNgine.utilities.dns.subprocess.run")
     def test_check_host_alive(self, mock_subprocess):
-        """Test host alive check on Linux."""
+        """Test host alive check with specific command arguments."""
         from reNgine.utilities.dns import check_host_alive
 
-        # Mock Linux system
-        with patch("reNgine.utilities.dns.platform.system", return_value="Linux"):
-            mock_result = MagicMock()
-            mock_result.returncode = 0
-            mock_subprocess.return_value = mock_result
+        # Mock successful ping
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_subprocess.return_value = mock_result
 
-            result = check_host_alive("8.8.8.8")
+        result = check_host_alive("8.8.8.8")
 
-            self.assertTrue(result)
-            # Verify Linux ping command was used
-            call_args = mock_subprocess.call_args[0][0]
-            self.assertIn("ping", call_args)
-            self.assertIn("-c", call_args)
-            self.assertIn("-W", call_args)
+        self.assertTrue(result)
+        # Verify ping command was used with correct arguments
+        call_args = mock_subprocess.call_args[0][0]
+        self.assertIn("ping", call_args)
+        self.assertIn("-c", call_args)
+        self.assertIn("-W", call_args)
+        self.assertIn("8.8.8.8", call_args)
 
     def test_extract_root_domain(self):
         """Test root domain extraction from hostnames."""

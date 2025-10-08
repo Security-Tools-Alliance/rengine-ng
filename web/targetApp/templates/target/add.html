@@ -1189,7 +1189,9 @@ Add or Import Targets
       formData.append('targetName', $('[name=targetName]').val());
       formData.append('targetDescription', $('[name=targetDescription]').val());
       formData.append('targetH1TeamHandle', $('[name=targetH1TeamHandle]').val());
-      formData.append('used_dns_servers', usedDnsServers);
+      if (usedDnsServers && usedDnsServers.length > 0) {
+        formData.append('used_dns_servers', usedDnsServers);
+      }
       formData.append('add-ip-target', 'submit');
       
       // Add selected discovered domains

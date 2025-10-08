@@ -1,6 +1,7 @@
 import csv
 from datetime import timedelta
 import io
+import ipaddress
 import json
 import logging
 from urllib.parse import urlparse
@@ -59,6 +60,89 @@ from targetApp.utilities import StatsTracker
 
 
 logger = logging.getLogger(__name__)
+
+
+def validate_dns_servers(dns_servers_string):
+    """
+    Validate a comma-separated string of DNS servers.
+
+    Validates that each entry is either a valid IPv4 address, IPv6 address, or hostname.
+    Supports optional port specification (e.g., 8.8.8.8:53).
+
+    Args:
+        dns_servers_string (str): Comma-separated DNS servers string
+
+    Returns:
+        tuple: (is_valid, error_message, cleaned_servers)
+            - is_valid: Boolean indicating if validation passed
+            - error_message: Error message if validation failed, None otherwise
+            - cleaned_servers: Cleaned and validated DNS servers string
+
+    Examples:
+        >>> validate_dns_servers("8.8.8.8,1.1.1.1")
+        (True, None, "8.8.8.8,1.1.1.1")
+
+        >>> validate_dns_servers("8.8.8.8,invalid!@#,1.1.1.1")
+        (False, "Invalid DNS server: invalid!@#", None)
+    """
+    if not dns_servers_string:
+        return True, None, ""
+
+    # Split by comma and clean up whitespace
+    servers = [s.strip() for s in dns_servers_string.split(",") if s.strip()]
+
+    if not servers:
+        return True, None, ""
+
+    validated_servers = []
+
+    for server in servers:
+        # Split address and port if port is specified
+        if ":" in server and not server.count(":") > 1:  # IPv4 with port
+            address, port = server.rsplit(":", 1)
+            try:
+                port_num = int(port)
+                if port_num < 1 or port_num > 65535:
+                    return False, f"Invalid port number in DNS server: {server}", None
+            except ValueError:
+                return False, f"Invalid port in DNS server: {server}", None
+        elif server.count(":") > 1:  # Likely IPv6
+            # Handle IPv6 - could be with or without port
+            # For simplicity, we'll treat it as full address for now
+            address = server
+        else:
+            address = server
+
+        # Validate the address part
+        is_valid = False
+
+        # Try IPv4
+        try:
+            ipaddress.IPv4Address(address)
+            is_valid = True
+        except (ipaddress.AddressValueError, ValueError):
+            pass
+
+        # Try IPv6 if IPv4 failed
+        if not is_valid:
+            try:
+                ipaddress.IPv6Address(address)
+                is_valid = True
+            except (ipaddress.AddressValueError, ValueError):
+                pass
+
+        # Try hostname validation if IP validation failed
+        if not is_valid and (validators.domain(address) or validators.ipv4(address) or validators.ipv6(address)):
+            is_valid = True
+
+        if not is_valid:
+            return False, f"Invalid DNS server address: {server}", None
+
+        validated_servers.append(server)
+
+    # Return cleaned servers string
+    cleaned = ",".join(validated_servers)
+    return True, None, cleaned
 
 
 def index(request):
@@ -315,6 +399,16 @@ def add_target(request, slug):
                 original_ip_range = request.POST.get("ip_address", "")
                 used_dns_servers = request.POST.get("used_dns_servers", "").strip()
 
+                # Validate DNS servers input for security
+                if used_dns_servers:
+                    is_valid, error_msg, cleaned_dns = validate_dns_servers(used_dns_servers)
+                    if not is_valid:
+                        messages.add_message(request, messages.ERROR, f"Invalid DNS servers configuration: {error_msg}")
+                        logger.warning(f"Invalid DNS servers submitted: {used_dns_servers} - {error_msg}")
+                        context = {"current_project": project}
+                        return render(request, "target/add.html", context)
+                    used_dns_servers = cleaned_dns
+
                 logger.info(f"Processing IP scan results for {original_ip_range}")
                 logger.info(f"Target name: {target_name}")
                 logger.info(f"Selected domains: {discovered_domains}")
@@ -349,8 +443,13 @@ def add_target(request, slug):
 
                     # Update DNS servers if target already exists and DNS was provided
                     if not created and used_dns_servers:
-                        main_target.custom_dns_servers = used_dns_servers
-                        main_target.save()
+                        # Use select_for_update to prevent race conditions
+                        from django.db import transaction
+
+                        with transaction.atomic():
+                            main_target_locked = type(main_target).objects.select_for_update().get(pk=main_target.pk)
+                            main_target_locked.custom_dns_servers = used_dns_servers
+                            main_target_locked.save()
                         logger.info(f"Updated DNS servers for existing target {main_target.name}")
 
                     stats.domain(created)

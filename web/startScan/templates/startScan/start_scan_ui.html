@@ -341,15 +341,35 @@ function enableNext(){
 function updateButton(){
   $('a[role="menuitem"]').addClass('btn btn-primary waves-effect waves-light');
   var scanType = $("input[name='scan_type']:checked").val();
-  var scanEngine = $("input[type=radio][name=scan_mode]").val();
+  var scanEngine = $("input[type=radio][name=scan_mode]:checked").val();
   
-  // Check if both scan type and scan engine are selected
-  if(scanType && scanEngine){
+  // Get current step index
+  var currentStep = $('.wizard .current').index();
+  
+  // For step 0 (Choose Scan Type), only check scan type
+  if (currentStep === 0) {
+    if(scanType){
+      enableNext();
+      return true;
+    }else{
+      disableNext();
+      return false;
+    }
+  }
+  // For step 1 (Choose Scan Engine), check both scan type and scan engine
+  else if (currentStep === 1) {
+    if(scanType && scanEngine){
+      enableNext();
+      return true;
+    }else{
+      disableNext();
+      return false;
+    }
+  }
+  // For other steps, allow progression
+  else {
     enableNext();
     return true;
-  }else{
-    disableNext();
-    return false;
   }
 }
 
@@ -377,7 +397,10 @@ function updateScanEngines() {
       }
       
       // Re-bind events
-      $("input[type=radio][name=scan_mode]").change(initTimer).keyup(initTimer);
+      $("input[type=radio][name=scan_mode]").change(function() {
+        initTimer();
+        updateButton();
+      }).keyup(initTimer);
       // Update button state after loading engines
       updateButton();
     },
@@ -430,6 +453,10 @@ $(function(){
     cssClass: 'pill wizard',
     enableKeyNavigation: false,
     onStepChanging: updateButton,
+    onStepChanged: function(event, currentIndex, priorIndex) {
+      // Update button state when step changes
+      setTimeout(updateButton, 100);
+    },
     labels: {finish: "Start Scan"},
     onInit :function (event, current) {
       $(".actions ul li:nth-child(3) a").attr('onclick', `$(this).closest('form').submit()`);
@@ -461,7 +488,10 @@ $(function(){
     updateScanEngines();
   });
   
-  $("input[type=radio][name=scan_mode]").change(initTimer).keyup(initTimer);
+  $("input[type=radio][name=scan_mode]").change(function() {
+    initTimer();
+    updateButton();
+  }).keyup(initTimer);
   
   // Handle existing elements checkbox
   $('#scan_existing_elements').change(function() {
