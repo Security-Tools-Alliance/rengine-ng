@@ -238,6 +238,7 @@ class ScanHistorySerializer(serializers.ModelSerializer):
     elapsed_time = serializers.SerializerMethodField("get_elapsed_time")
     completed_ago = serializers.SerializerMethodField("get_completed_ago")
     organizations = serializers.SerializerMethodField("get_organizations")
+    scan_type_display = serializers.SerializerMethodField("get_scan_type_display")
 
     class Meta:
         model = ScanHistory
@@ -261,6 +262,7 @@ class ScanHistorySerializer(serializers.ModelSerializer):
             "error_message",
             "domain",
             "scan_type",
+            "scan_type_display",
         ]
         depth = 1
 
@@ -293,6 +295,17 @@ class ScanHistorySerializer(serializers.ModelSerializer):
 
     def get_organizations(self, scan_history):
         return [org.name for org in scan_history.domain.get_organization()]
+
+    def get_scan_type_display(self, scan_history):
+        """Get scan type display name with safety check"""
+        if hasattr(scan_history.scan_type, "get_scan_type_display"):
+            return scan_history.scan_type.get_scan_type_display()
+        elif hasattr(scan_history.scan_type, "scan_type"):
+            # If scan_type is a string, return it directly
+            return scan_history.scan_type.scan_type
+        else:
+            # Fallback to default
+            return "bug_bounty"
 
 
 class ScanActivitySerializer(serializers.ModelSerializer):
@@ -379,6 +392,7 @@ class OrganizationSerializer(serializers.ModelSerializer):
 
 class EngineSerializer(serializers.ModelSerializer):
     tasks = serializers.SerializerMethodField()
+    scan_type_display = serializers.SerializerMethodField()
 
     def get_tasks(self, obj):
         try:
@@ -389,9 +403,12 @@ class EngineSerializer(serializers.ModelSerializer):
             return []
         return sorted([task for task in yaml_config.keys() if task in ENGINE_NAMES])
 
+    def get_scan_type_display(self, obj):
+        return obj.get_scan_type_display()
+
     class Meta:
         model = EngineType
-        fields = ["id", "engine_name", "tasks"]
+        fields = ["id", "engine_name", "scan_type", "scan_type_display", "tasks"]
 
 
 class OrganizationTargetsSerializer(serializers.ModelSerializer):

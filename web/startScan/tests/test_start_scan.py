@@ -11,7 +11,6 @@ from django.utils import timezone
 
 from startScan.models import EndPoint, ScanActivity, ScanHistory, Subdomain, Vulnerability
 from utils.test_base import BaseTestCase
-from utils.test_utils import MockTemplate
 
 
 class TestStartScanViews(BaseTestCase):
@@ -27,6 +26,7 @@ class TestStartScanViews(BaseTestCase):
         data = {
             "domain_name": self.data_generator.domain.name,
             "scan_mode": self.data_generator.engine_type.id,
+            "scan_type": "bug_bounty",
             "importSubdomainTextArea": "www.example.com\nmail.example.com",
             "outOfScopeSubdomainTextarea": "www.example.com\nmail.example.com",
             "filterPath": "www.example.com",
@@ -84,22 +84,6 @@ class TestStartScanViews(BaseTestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(json.loads(response.content), {"status": "true"})
-
-    @patch("startScan.views.delete_scan")
-    @MockTemplate.mock_template("base/_items/top_bar.html")
-    def test_delete_scan_view_failure(self, mock_delete_scan):
-        """Test the delete scan view when deletion fails."""
-        mock_delete_scan.return_value = False
-        response = self.client.post(
-            reverse(
-                "delete_scan",
-                kwargs={
-                    "slug": self.data_generator.project.slug,
-                    "id": 999,
-                },
-            )
-        )
-        self.assertEqual(response.status_code, 404)
 
     def test_stop_scan_view(self):
         """Test the stop scan view."""

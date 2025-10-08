@@ -33,8 +33,10 @@ RUN apt update -y && apt install -y      \
     vim                 \
     xvfb                \
     git                 \
+    iputils-ping                 \
     unzip               \
     curl                \
+    dnsutils            \
     gettext             \
     nmap                \
     net-tools           \

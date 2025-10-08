@@ -105,6 +105,7 @@ services:
       - RENGINE_HOME=/home/rengine/rengine
       - CELERY_BROKER=redis://redis:6379/0
       - CELERY_BACKEND=redis://redis:6379/0
+      - UI_ERROR_LOGGING=0
     volumes:
       - ../web:/home/rengine/rengine:rw,z
       - ./web/entrypoint.sh:/entrypoint.sh:ro

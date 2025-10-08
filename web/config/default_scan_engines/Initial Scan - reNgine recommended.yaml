@@ -3,6 +3,7 @@
 # MEDIUM SPEED SCAN - USE SOME RESOURCES BUT LESS THAN ACTIVE SCAN - HIGHLY RECOMMENDED ON INITIAL SCAN
 
 # Global vars for all tools
+scan_type: 'bug_bounty'
 #
 # Custom header - FFUF, Nuclei, Dalfox, CRL Fuzz, HTTPx, Fetch URL (Hakrawler, Katana, Gospider)
 custom_header: {

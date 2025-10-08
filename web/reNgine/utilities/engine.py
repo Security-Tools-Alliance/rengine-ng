@@ -46,6 +46,15 @@ def sanitize_filename(name):
     return sanitized
 
 
+def sanitize_domain_name(name):
+    # Replace any character not allowed in domain names with a hyphen
+    # Allowed: a-z, A-Z, 0-9, hyphen, dot
+    sanitized = re.sub(r"[^a-zA-Z0-9.-]", "-", name)
+    # Remove leading/trailing hyphens or dots
+    sanitized = sanitized.strip("-.") or "ip-range"
+    return sanitized
+
+
 def dump_custom_scan_engines(results_dir):
     """Dump custom scan engines to YAML files.
 

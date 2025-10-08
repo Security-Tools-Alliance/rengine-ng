@@ -296,6 +296,8 @@ def cve_to_vuln(cve_id, vuln_type=""):
         msg += f"\n\tOSVDB: {id}"
     for exploit_id in exploit_ids:
         msg += f"\n\tEXPLOITDB: {exploit_id}"
+    for capec_id in capec_objects:
+        msg += f"\n\tCAPEC: {capec_id}"
     logger.warning(msg)
     return {
         "name": vuln_name,

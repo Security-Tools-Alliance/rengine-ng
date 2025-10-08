@@ -145,15 +145,41 @@ class Domain(models.Model):
     request_headers = models.JSONField(null=True, blank=True)
     domain_info = models.ForeignKey(DomainInfo, on_delete=models.CASCADE, null=True, blank=True)
     project = models.ForeignKey(Project, on_delete=models.CASCADE, null=True, blank=False)
+    # Custom DNS servers for internal scans (comma-separated list: "10.0.0.1,10.0.0.2")
+    custom_dns_servers = models.CharField(max_length=500, blank=True, null=True)
 
     def get_organization(self):
         return Organization.objects.filter(domains__id=self.id)
 
     def get_recent_scan_id(self):
         scan_history = apps.get_model("startScan.ScanHistory")
-        obj = scan_history.objects.filter(domain__id=self.id).order_by("-id")
-        if obj:
+        if obj := scan_history.objects.filter(domain__id=self.id).order_by("-id"):
             return obj[0].id
+
+    def get_dns_servers(self):
+        """
+        Get custom DNS servers as a list.
+
+        Returns:
+            list: List of DNS server IPs, or empty list if none configured
+        """
+        if self.custom_dns_servers:
+            return [dns.strip() for dns in self.custom_dns_servers.split(",") if dns.strip()]
+        return []
+
+    def set_dns_servers(self, dns_servers):
+        """
+        Set custom DNS servers from a list.
+
+        Args:
+            dns_servers (list or str): List of DNS server IPs or comma-separated string
+        """
+        if isinstance(dns_servers, list):
+            self.custom_dns_servers = ",".join(dns_servers)
+        elif isinstance(dns_servers, str):
+            self.custom_dns_servers = dns_servers
+        else:
+            self.custom_dns_servers = None
 
     def __str__(self):
         return str(self.name)

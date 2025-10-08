@@ -25,6 +25,12 @@ class AddEngineForm(forms.ModelForm):
             attrs={"class": "form-control form-control-lg", "id": "scan_engine_name", "placeholder": "Engine Name"}
         ),
     )
+    scan_type = forms.ChoiceField(
+        choices=EngineType.SCAN_TYPE_CHOICES,
+        required=True,
+        widget=forms.Select(attrs={"class": "form-control form-control-lg", "id": "scan_type"}),
+        help_text="Select the type of scan this engine is designed for",
+    )
     yaml_configuration = forms.CharField(
         widget=AceWidget(
             mode="yaml",
@@ -37,6 +43,14 @@ class AddEngineForm(forms.ModelForm):
             attrs={"id": "editor"},
         )
     )
+
+    def save(self, commit=True):
+        """Override save to mark scan_type as explicitly set"""
+        instance = super().save(commit=False)
+        instance._scan_type_explicitly_set = True
+        if commit:
+            instance.save()
+        return instance
 
 
 class UpdateEngineForm(forms.ModelForm):
@@ -50,6 +64,12 @@ class UpdateEngineForm(forms.ModelForm):
             attrs={"class": "form-control form-control-lg", "id": "scan_engine_name", "placeholder": "Custom Engine"}
         ),
     )
+    scan_type = forms.ChoiceField(
+        choices=EngineType.SCAN_TYPE_CHOICES,
+        required=True,
+        widget=forms.Select(attrs={"class": "form-control form-control-lg", "id": "scan_type"}),
+        help_text="Select the type of scan this engine is designed for",
+    )
     yaml_configuration = forms.CharField(
         widget=AceWidget(
             mode="yaml",
@@ -62,6 +82,14 @@ class UpdateEngineForm(forms.ModelForm):
             attrs={"id": "editor"},
         )
     )
+
+    def save(self, commit=True):
+        """Override save to mark scan_type as explicitly set"""
+        instance = super().save(commit=False)
+        instance._scan_type_explicitly_set = True
+        if commit:
+            instance.save()
+        return instance
 
 
 class AddWordlistForm(forms.Form):

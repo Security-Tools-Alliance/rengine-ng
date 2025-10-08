@@ -2,7 +2,7 @@
 This file contains the test cases for the API views.
 """
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from django.urls import reverse
 from rest_framework import status
@@ -293,3 +293,177 @@ class TestDeleteMultipleRows(BaseTestCase):
                 ]
             ).exists()
         )
+
+
+class TestIPToDomain(BaseTestCase):
+    """Tests for the IPToDomain API endpoint."""
+
+    @patch("reNgine.tasks.dns.ip_range_discovery.delay")
+    def test_ip_to_domain_single_ip(self, mock_task):
+        """Test IP to domain conversion for a single IP address."""
+        # Mock the Celery task
+        mock_task_result = MagicMock()
+        mock_task_result.id = "test-task-id"
+        mock_task_result.get.return_value = {
+            "status": True,
+            "ip_address": [{"ip": "8.8.8.8", "domain": "dns.google"}],
+            "discovered_domains": ["dns.google"],
+            "total_hosts": 1,
+            "ping_required": True,
+        }
+        mock_task.return_value = mock_task_result
+
+        api_url = reverse("api:ip_to_domain")
+        response = self.client.get(api_url, {"ip_address": "8.8.8.8"})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["status"])
+        self.assertEqual(response.data["total_hosts"], 1)
+        self.assertTrue(response.data["ping_required"])
+        mock_task.assert_called_once()
+
+    @patch("reNgine.tasks.dns.ip_range_discovery.delay")
+    def test_ip_to_domain_cidr_range(self, mock_task):
+        """Test IP to domain conversion for a CIDR range."""
+        # Mock the Celery task
+        mock_task_result = MagicMock()
+        mock_task_result.id = "test-task-id"
+        mock_task_result.get.return_value = {
+            "status": True,
+            "ip_address": [{"ip": "192.168.1.1", "domain": "test.local"}],
+            "discovered_domains": ["test.local"],
+            "total_hosts": 1,
+            "ping_required": True,
+        }
+        mock_task.return_value = mock_task_result
+
+        api_url = reverse("api:ip_to_domain")
+        response = self.client.get(api_url, {"ip_address": "192.168.1.0/30"})  # Only 4 IPs instead of 256
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["status"])
+        self.assertEqual(response.data["total_hosts"], 1)
+        self.assertTrue(response.data["ping_required"])
+        mock_task.assert_called_once()
+
+    def test_ip_to_domain_missing_ip(self):
+        """Test IP to domain conversion with missing IP parameter."""
+        api_url = reverse("api:ip_to_domain")
+        response = self.client.get(api_url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(response.data["status"])
+        self.assertEqual(response.data["message"], "IP Address Required")
+
+    def test_ip_to_domain_invalid_ip(self):
+        """Test IP to domain conversion with invalid IP format."""
+        api_url = reverse("api:ip_to_domain")
+        response = self.client.get(api_url, {"ip_address": "invalid-ip"})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(response.data["status"])
+        self.assertIn("Exception: Expected 4 octets", response.data["message"])
+
+    @patch("reNgine.tasks.dns.ip_range_discovery.delay")
+    def test_ip_to_domain_with_custom_dns(self, mock_task):
+        """Test IP to domain conversion with custom DNS servers."""
+        # Mock the Celery task
+        mock_task_result = MagicMock()
+        mock_task_result.id = "test-task-id"
+        mock_task_result.get.return_value = {
+            "status": True,
+            "ip_address": [{"ip": "8.8.8.8", "domain": "dns.google"}],
+            "discovered_domains": ["dns.google"],
+            "total_hosts": 1,
+            "ping_required": True,
+        }
+        mock_task.return_value = mock_task_result
+
+        api_url = reverse("api:ip_to_domain")
+        response = self.client.get(api_url, {"ip_address": "8.8.8.8", "custom_dns": "8.8.8.8,1.1.1.1"})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["status"])
+        mock_task.assert_called_once()
+
+
+class TestPingHosts(BaseTestCase):
+    """Tests for the PingHosts API endpoint."""
+
+    @patch("reNgine.tasks.dns.ping_hosts_task.delay")
+    def test_ping_hosts_post_success(self, mock_task):
+        """Test successful ping hosts task launch."""
+        # Mock the Celery task
+        mock_task_result = MagicMock()
+        mock_task_result.id = "test-ping-task-id"
+        mock_task.return_value = mock_task_result
+
+        api_url = reverse("api:ping_hosts")
+        data = {"ip_list": ["8.8.8.8", "1.1.1.1"], "scan_id": "test-scan-id"}
+        response = self.client.post(api_url, data, content_type="application/json")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["status"])
+        self.assertEqual(response.data["task_id"], "test-ping-task-id")
+        self.assertEqual(response.data["total_hosts"], 2)
+        mock_task.assert_called_once()
+
+    def test_ping_hosts_post_missing_ip_list(self):
+        """Test ping hosts with missing IP list."""
+        api_url = reverse("api:ping_hosts")
+        data = {"scan_id": "test-scan-id"}
+        response = self.client.post(api_url, data, content_type="application/json")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(response.data["status"])
+        self.assertEqual(response.data["message"], "No IP addresses provided")
+
+    @patch("celery.result.AsyncResult")
+    def test_ping_hosts_get_success(self, mock_async_result):
+        """Test successful ping hosts result retrieval."""
+        # Mock successful task result
+        mock_result = MagicMock()
+        mock_result.ready.return_value = True
+        mock_result.successful.return_value = True
+        mock_result.result = {
+            "status": True,
+            "ping_results": {"8.8.8.8": True, "1.1.1.1": False},
+            "alive_count": 1,
+            "total_count": 2,
+        }
+        mock_async_result.return_value = mock_result
+
+        api_url = reverse("api:ping_hosts")
+        response = self.client.get(api_url, {"task_id": "test-task-id"})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["status"])
+        self.assertEqual(response.data["task_status"], "completed")
+        self.assertIn("result", response.data)
+
+    @patch("celery.result.AsyncResult")
+    def test_ping_hosts_get_pending(self, mock_async_result):
+        """Test ping hosts result retrieval for pending task."""
+        # Mock pending task result
+        mock_result = MagicMock()
+        mock_result.ready.return_value = False
+        mock_async_result.return_value = mock_result
+
+        api_url = reverse("api:ping_hosts")
+        response = self.client.get(api_url, {"task_id": "test-task-id"})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["status"])
+        self.assertEqual(response.data["task_status"], "pending")
+
+    def test_ping_hosts_get_missing_task_id(self):
+        """Test ping hosts result retrieval with missing task ID."""
+        api_url = reverse("api:ping_hosts")
+        response = self.client.get(api_url)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(response.data["status"])
+        self.assertEqual(response.data["message"], "Task ID required")
+
+
+# CSRF token endpoint tests removed - endpoint not implemented in URLs

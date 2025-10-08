@@ -260,6 +260,11 @@ Scan Findings
 													<span class="float-start badge badge-soft-primary ms-1 me-1">Current Scan</span>
 													{% endif %}
 													{{scan.scan_type.engine_name}}
+													{% if scan.scan_type.scan_type == 'bug_bounty' %}
+													<span class="badge badge-soft-info ms-1">Bug Bounty</span>
+													{% elif scan.scan_type.scan_type == 'internal_network' %}
+													<span class="badge badge-soft-warning ms-1">Internal Network</span>
+													{% endif %}
 													{% if scan.scan_status == -1 %}
 													<span class="badge badge-soft-warning float-end">Pending</span>
 													{% elif scan.scan_status == 0 %}

@@ -1,12 +1,11 @@
 from collections import defaultdict
 from datetime import datetime
-from ipaddress import IPv4Network
+from ipaddress import AddressValueError, IPv4Network
 import json
 import logging
 import os.path
 from pathlib import Path
 import re
-import socket
 import threading
 
 from asgiref.sync import async_to_sync
@@ -51,6 +50,7 @@ from reNgine.tasks import (
 )
 from reNgine.utilities.data import get_data_from_post_request, safe_int_cast
 from reNgine.utilities.database import create_scan_activity
+from reNgine.utilities.dns import check_host_alive, get_current_dns_servers
 from reNgine.utilities.endpoint import get_interesting_endpoints
 from reNgine.utilities.external import get_open_ai_key
 from reNgine.utilities.lookup import get_lookup_keywords
@@ -490,9 +490,7 @@ class AvailableOllamaModels(APIView):
                     for model in recommended_models:
                         base_name = model["name"]
                         model["installed_versions"] = [
-                            name.replace(f"{base_name}:", "")
-                            for name in installed_models.keys()
-                            if name.startswith(base_name)
+                            name.replace(f"{base_name}:", "") for name in installed_models if name.startswith(base_name)
                         ]
                         model["installed"] = len(model["installed_versions"]) > 0
 
@@ -1276,7 +1274,7 @@ class StopScan(APIView):
                 create_scan_activity(subscan.scan_history.id, f"Subscan {subscan_id} aborted", SUCCESS_TASK)
                 response["status"] = True
             except Exception as e:
-                logging.error(e)
+                logger.error(e)
                 response = {"status": False, "message": str(e)}
         elif scan_id:
             try:
@@ -1289,7 +1287,7 @@ class StopScan(APIView):
                 create_scan_activity(scan.id, "Scan aborted", SUCCESS_TASK)
                 response["status"] = True
             except Exception as e:
-                logging.error(e)
+                logger.error(e)
                 response = {"status": False, "message": str(e)}
 
         logger.warning(f"Revoking tasks {task_ids}")
@@ -1662,35 +1660,87 @@ class CMSDetector(APIView):
 
 class IPToDomain(APIView):
     def get(self, request):
+        import uuid
+
+        from reNgine.tasks.dns import ip_range_discovery
+
         req = self.request
         ip_address = req.query_params.get("ip_address")
-        response = {}
+        custom_dns = req.query_params.get("dns_servers", "").strip()
+        use_system_fallback = req.query_params.get("use_system_fallback", "false").lower() == "true"
+        scan_id = req.query_params.get("scan_id", str(uuid.uuid4()))
+
         if not ip_address:
-            return Response({"status": False, "message": "IP Address Required"})
+            return Response({"status": False, "message": "IP Address Required", "scan_id": scan_id})
+
         try:
-            logger.info(f"Resolving IP address {ip_address} ...")
-            resolved_ips = []
-            for ip in IPv4Network(ip_address, False):
-                domains = []
-                ips = []
-                try:
-                    (domain, domains, ips) = socket.gethostbyaddr(str(ip))
-                except socket.herror:
-                    logger.info(f"No PTR record for {ip_address}")
-                    domain = str(ip)
-                if domain not in domains:
-                    domains.append(domain)
-                resolved_ips.append({"ip": str(ip), "domain": domain, "domains": domains, "ips": ips})
-            response = {
-                "status": True,
-                "orig": ip_address,
-                "ip_address": resolved_ips,
-            }
+            logger.info(f"Starting IP range discovery for {ip_address} with scan_id {scan_id}")
+
+            # Determine chunk size based on range size
+            try:
+                # Try to parse as network (CIDR)
+                ip_list = list(IPv4Network(ip_address, False))
+            except AddressValueError:
+                # Single IP address, convert to /32 network
+                ip_list = list(IPv4Network(f"{ip_address}/32", False))
+
+            total_ips = len(ip_list)
+
+            # Adapt chunk size according to range size
+            chunk_size = self._calculate_optimal_chunk_size(total_ips)
+
+            # Launch Celery task
+            task = ip_range_discovery.delay(
+                ip_address=ip_address,
+                scan_id=scan_id,
+                custom_dns=custom_dns,
+                use_system_fallback=use_system_fallback,
+                chunk_size=chunk_size,
+            )
+
+            # Wait for task result
+            try:
+                response = task.get(timeout=300)  # 5 minutes timeout
+
+                # Add fields compatible with existing interface
+                if response.get("status"):
+                    response["current_dns_servers"] = self._get_current_dns_servers()
+
+                return Response(response)
+
+            except Exception as e:
+                logger.error(f"Task execution failed: {e}")
+                return Response(
+                    {
+                        "status": False,
+                        "ip_address": ip_address,
+                        "message": f"Task execution failed: {e}",
+                        "scan_id": scan_id,
+                    }
+                )
+
         except Exception as e:
-            logger.exception(e)
-            response = {"status": False, "ip_address": ip_address, "message": f"Exception {e}"}
-        finally:
-            return Response(response)
+            logger.exception(f"Error in IPToDomain: {e}")
+            return Response(
+                {"status": False, "ip_address": ip_address, "message": f"Exception: {e}", "scan_id": scan_id}
+            )
+
+    def _calculate_optimal_chunk_size(self, total_ips):
+        """Calculate optimal chunk size based on IP range size"""
+        if total_ips > 1000:
+            return 500  # Very large chunks for large ranges
+        elif total_ips > 100:
+            return 200  # Large chunks for medium ranges
+        else:
+            return total_ips  # Process entire range at once for small ranges
+
+    def _get_current_dns_servers(self):
+        """Get current system DNS servers using centralized function"""
+        return get_current_dns_servers()
+
+    def _check_host_alive(self, ip):
+        """Quick ping check to see if host is alive using centralized function"""
+        return check_host_alive(ip)
 
 
 class VulnerabilityReport(APIView):
@@ -3305,3 +3355,87 @@ class FetchScreenshots(APIView):
             }
 
         return Response(screenshots_data)
+
+
+class PingHosts(APIView):
+    def post(self, request):
+        """
+        Launch ping task for discovered hosts
+        """
+        import uuid
+
+        from reNgine.tasks.dns import ping_hosts_task
+
+        req = self.request
+        ip_list = req.data.get("ip_list", [])
+        scan_id = req.data.get("scan_id", str(uuid.uuid4()))
+
+        if not ip_list:
+            return Response({"status": False, "message": "No IP addresses provided"}, status=400)
+
+        try:
+            logger.info(f"Starting ping task for {len(ip_list)} hosts with scan_id {scan_id}")
+
+            # Launch ping task
+            task = ping_hosts_task.delay(ip_list, scan_id)
+
+            return Response(
+                {
+                    "status": True,
+                    "message": "Ping task launched successfully",
+                    "task_id": task.id,
+                    "scan_id": scan_id,
+                    "total_hosts": len(ip_list),
+                }
+            )
+
+        except Exception as e:
+            logger.error(f"Failed to launch ping task: {e}")
+            return Response({"status": False, "message": f"Failed to launch ping task: {e}"}, status=500)
+
+    def get(self, request):
+        """
+        Get ping task results
+        """
+        from celery.result import AsyncResult
+
+        task_id = request.query_params.get("task_id")
+        if not task_id:
+            return Response({"status": False, "message": "Task ID required"}, status=400)
+
+        try:
+            # Get task result
+            task_result = AsyncResult(task_id)
+
+            if task_result.ready():
+                if task_result.successful():
+                    result = task_result.result
+                    return Response({"status": True, "task_status": "completed", "result": result})
+                else:
+                    return Response({"status": False, "task_status": "failed", "error": str(task_result.result)})
+            else:
+                return Response({"status": True, "task_status": "pending", "message": "Task is still running"})
+
+        except Exception as e:
+            logger.error(f"Failed to get task result: {e}")
+            return Response({"status": False, "message": f"Failed to get task result: {e}"}, status=500)
+
+
+class GetCSRFToken(APIView):
+    def get(self, request):
+        """
+        Get CSRF token for API requests when CSRF_USE_SESSIONS=True
+        According to Django documentation: https://docs.djangoproject.com/en/5.2/howto/csrf/
+        """
+        from django.middleware.csrf import get_token
+
+        # This will create the token and store it in the session
+        csrf_token = get_token(request)
+
+        return Response(
+            {
+                "status": True,
+                "csrf_token": csrf_token,
+                "usage": "Include this token in X-CSRFToken header for POST requests",
+            }
+        )

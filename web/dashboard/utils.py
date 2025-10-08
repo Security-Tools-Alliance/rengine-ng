@@ -10,9 +10,9 @@ from .models import Project
 def get_user_projects(user):
     # Return all projects for superuser and sys_admin
     if user.is_superuser or get_user_groups(user) == "sys_admin":
-        return Project.objects.all()
+        return Project.objects.all().order_by("name")
     # Return only projects where user is a member
-    return Project.objects.filter(users=user)
+    return Project.objects.filter(users=user).order_by("name")
 
 
 def user_has_project_access(view_func):

@@ -44,9 +44,11 @@ def index(request, slug):
         return HttpResponseRedirect(reverse("page_not_found"))
 
     # Get activity feed
-    scan_histories = ScanHistory.objects.filter(domain__project=project)
-    scan_activities = ScanActivity.objects.filter(scan_of__in=scan_histories)
-    activity_feed = scan_activities.order_by("-time")[:50]
+    activity_feed = (
+        ScanActivity.objects.filter(scan_of__domain__project=project)
+        .select_related("scan_of", "scan_of__domain")
+        .order_by("-time")[:50]
+    )
 
     last_week = timezone.now() - timedelta(days=7)
     date_range = [last_week + timedelta(days=i) for i in range(7)]

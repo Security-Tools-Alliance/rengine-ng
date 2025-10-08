@@ -36,10 +36,13 @@ class TestScanEngineViews(BaseTestCase):
         Tests the add engine view to ensure a new engine is created successfully.
         """
         response = self.client.post(
-            reverse("add_engine"), {"engine_name": "New Engine", "yaml_configuration": "new: config"}
+            reverse("add_engine"),
+            {"engine_name": "New Engine", "yaml_configuration": "new: config", "scan_type": "bug_bounty"},
         )
         self.assertEqual(response.status_code, 302)
-        self.assertTrue(EngineType.objects.filter(engine_name="New Engine").exists())
+        engine = EngineType.objects.filter(engine_name="New Engine").first()
+        self.assertTrue(engine is not None)
+        self.assertEqual(engine.scan_type, "bug_bounty")
 
     def test_delete_engine_view(self):
         """
@@ -55,11 +58,12 @@ class TestScanEngineViews(BaseTestCase):
         """
         response = self.client.post(
             reverse("update_engine", kwargs={"id": self.data_generator.engine_type.id}),
-            {"engine_name": "Updated Engine", "yaml_configuration": "updated: config"},
+            {"engine_name": "Updated Engine", "yaml_configuration": "updated: config", "scan_type": "internal_network"},
         )
         self.assertEqual(response.status_code, 302)
         self.data_generator.engine_type.refresh_from_db()
         self.assertEqual(self.data_generator.engine_type.engine_name, "Updated Engine")
+        self.assertEqual(self.data_generator.engine_type.scan_type, "internal_network")
 
     def test_wordlist_list_view(self):
         """
@@ -208,3 +212,199 @@ class TestScanEngineViews(BaseTestCase):
         self.assertEqual(response.status_code, 302)
         self.data_generator.external_tool.refresh_from_db()
         self.assertEqual(self.data_generator.external_tool.name, "Modified Tool")
+
+    def test_add_engine_invalid_scan_type(self):
+        """
+        Tests the add engine view with invalid scan_type values to ensure proper error handling.
+        """
+        # Test with invalid scan_type value
+        response = self.client.post(
+            reverse("add_engine"),
+            {
+                "engine_name": "Invalid Scan Type Engine",
+                "yaml_configuration": "new: config",
+                "scan_type": "invalid_scan_type",
+            },
+        )
+        # Should return 200 with form errors (validation failure)
+        self.assertEqual(response.status_code, 200)
+        # Engine should not be created due to validation error
+        engine = EngineType.objects.filter(engine_name="Invalid Scan Type Engine").first()
+        self.assertIsNone(engine)
+
+    def test_add_engine_missing_scan_type(self):
+        """
+        Tests the add engine view with missing scan_type to ensure proper fallback.
+        """
+        # Test with missing scan_type field
+        response = self.client.post(
+            reverse("add_engine"),
+            {
+                "engine_name": "Missing Scan Type Engine",
+                "yaml_configuration": "new: config",
+                # scan_type field is missing
+            },
+        )
+        # Should return 200 with form errors (validation failure)
+        self.assertEqual(response.status_code, 200)
+        # Engine should not be created due to validation error
+        engine = EngineType.objects.filter(engine_name="Missing Scan Type Engine").first()
+        self.assertIsNone(engine)
+
+    def test_add_engine_empty_scan_type(self):
+        """
+        Tests the add engine view with empty scan_type to ensure proper fallback.
+        """
+        # Test with empty scan_type value
+        response = self.client.post(
+            reverse("add_engine"),
+            {"engine_name": "Empty Scan Type Engine", "yaml_configuration": "new: config", "scan_type": ""},
+        )
+        # Should return 200 with form errors (validation failure)
+        self.assertEqual(response.status_code, 200)
+        # Engine should not be created due to validation error
+        engine = EngineType.objects.filter(engine_name="Empty Scan Type Engine").first()
+        self.assertIsNone(engine)
+
+    def test_add_engine_scan_type_from_yaml(self):
+        """
+        Tests the add engine view with scan_type defined in YAML configuration.
+        """
+        # Test with scan_type defined in YAML
+        yaml_config_with_scan_type = """
+# Global vars for all tools
+scan_type: 'internal_network'
+custom_header: {
+  'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:126.0) Gecko/20100101 Firefox/126.0',
+}
+
+# Port scanning configuration
+port_scan: {
+  'uses_tools': ['nmap'],
+  'threads': 50,
+}
+"""
+        response = self.client.post(
+            reverse("add_engine"),
+            {
+                "engine_name": "YAML Scan Type Engine",
+                "yaml_configuration": yaml_config_with_scan_type,
+                "scan_type": "bug_bounty",  # This should be overridden by YAML
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        engine = EngineType.objects.filter(engine_name="YAML Scan Type Engine").first()
+        self.assertTrue(engine is not None)
+        # Should use scan_type from YAML configuration
+        self.assertEqual(engine.scan_type, "internal_network")
+
+    def test_update_engine_invalid_scan_type(self):
+        """
+        Tests the update engine view with invalid scan_type values to ensure proper error handling.
+        """
+        # Test with invalid scan_type value
+        response = self.client.post(
+            reverse("update_engine", kwargs={"id": self.data_generator.engine_type.id}),
+            {
+                "engine_name": "Updated Engine Invalid",
+                "yaml_configuration": "updated: config",
+                "scan_type": "invalid_scan_type",
+            },
+        )
+        # Should return 200 with form errors (validation failure)
+        self.assertEqual(response.status_code, 200)
+        # Engine should not be updated due to validation error
+        self.data_generator.engine_type.refresh_from_db()
+        self.assertNotEqual(self.data_generator.engine_type.engine_name, "Updated Engine Invalid")
+
+    def test_update_engine_missing_scan_type(self):
+        """
+        Tests the update engine view with missing scan_type to ensure proper fallback.
+        """
+        # Test with missing scan_type field
+        response = self.client.post(
+            reverse("update_engine", kwargs={"id": self.data_generator.engine_type.id}),
+            {
+                "engine_name": "Updated Engine Missing",
+                "yaml_configuration": "updated: config",
+                # scan_type field is missing
+            },
+        )
+        # Should return 200 with form errors (validation failure)
+        self.assertEqual(response.status_code, 200)
+        # Engine should not be updated due to validation error
+        self.data_generator.engine_type.refresh_from_db()
+        self.assertNotEqual(self.data_generator.engine_type.engine_name, "Updated Engine Missing")
+
+    def test_engine_model_scan_type_validation(self):
+        """
+        Tests the EngineType model's scan_type validation and fallback mechanisms.
+        """
+        # Test creating engine with invalid scan_type
+        engine = EngineType.objects.create(
+            engine_name="Test Invalid Scan Type", yaml_configuration="test: config", scan_type="invalid_type"
+        )
+        # The model should handle this gracefully
+        self.assertIn(engine.scan_type, ["bug_bounty", "internal_network"])
+
+    def test_engine_model_yaml_scan_type_override(self):
+        """
+        Tests that scan_type from YAML configuration overrides the model field.
+        """
+        yaml_config = """
+# Global vars for all tools
+scan_type: 'internal_network'
+custom_header: {
+  'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:126.0) Gecko/20100101 Firefox/126.0',
+}
+"""
+        # Create engine with different scan_type in model field
+        engine = EngineType.objects.create(
+            engine_name="Test YAML Override",
+            yaml_configuration=yaml_config,
+            scan_type="bug_bounty",  # This should be overridden by YAML
+        )
+        # Should use scan_type from YAML
+        self.assertEqual(engine.scan_type, "internal_network")
+
+    def test_engine_model_get_scan_type_from_yaml(self):
+        """
+        Tests the get_scan_type_from_yaml method with various YAML configurations.
+        """
+        # Test with valid scan_type in YAML
+        yaml_config_valid = """
+scan_type: 'internal_network'
+custom_header: {}
+"""
+        engine = EngineType.objects.create(engine_name="Test Valid YAML", yaml_configuration=yaml_config_valid)
+        self.assertEqual(engine.get_scan_type_from_yaml(), "internal_network")
+
+        # Test with invalid scan_type in YAML
+        yaml_config_invalid = """
+scan_type: 'invalid_type'
+custom_header: {}
+"""
+        engine = EngineType.objects.create(engine_name="Test Invalid YAML", yaml_configuration=yaml_config_invalid)
+        # Should return the invalid value as-is (validation happens elsewhere)
+        self.assertEqual(engine.get_scan_type_from_yaml(), "invalid_type")
+
+        # Test with missing scan_type in YAML
+        yaml_config_missing = """
+custom_header: {}
+port_scan: {}
+"""
+        engine = EngineType.objects.create(engine_name="Test Missing YAML", yaml_configuration=yaml_config_missing)
+        # Should return default fallback
+        self.assertEqual(engine.get_scan_type_from_yaml(), "bug_bounty")
+
+        # Test with malformed YAML
+        engine = EngineType.objects.create(
+            engine_name="Test Malformed YAML", yaml_configuration="invalid: yaml: content: ["
+        )
+        # Should return default fallback
+        self.assertEqual(engine.get_scan_type_from_yaml(), "bug_bounty")
+
+        # Test with empty YAML
+        engine = EngineType.objects.create(engine_name="Test Empty YAML", yaml_configuration="")
+        # Should return default fallback
+        self.assertEqual(engine.get_scan_type_from_yaml(), "bug_bounty")

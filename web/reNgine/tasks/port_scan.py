@@ -31,10 +31,10 @@ from reNgine.settings import (
     DEFAULT_RATE_LIMIT,
     DEFAULT_THREADS,
 )
-from reNgine.tasks.command import run_command, stream_command
-from reNgine.utilities.command import get_nmap_cmd
+from reNgine.tasks.command import run_command
+from reNgine.utilities.command import get_nmap_cmd, stream_command
 from reNgine.utilities.data import return_iterable
-from reNgine.utilities.database import save_endpoint, save_ip_address, save_vulnerability
+from reNgine.utilities.database import save_endpoint, save_ip_address, save_vulnerability, with_batch_geolocalization
 from reNgine.utilities.notification import get_task_title
 from reNgine.utilities.parser import parse_nmap_results, process_nmap_service_results
 from reNgine.utilities.proxy import get_random_proxy
@@ -47,6 +47,7 @@ logger = get_task_logger(__name__)
 
 
 @app.task(name="port_scan", queue="io_queue", base=RengineTask, bind=True)
+@with_batch_geolocalization
 def port_scan(self, hosts=None, ctx=None, description=None):
     """Run port scan and detect web services.
 
@@ -139,11 +140,13 @@ def port_scan(self, hosts=None, ctx=None, description=None):
 
         # If no subdomain exists for this host/IP, create one
         if not subdomain:
-            from reNgine.utilities.database import save_subdomain
+            from reNgine.utilities.database import validate_and_save_subdomain
 
-            subdomain, created = save_subdomain(host, ctx=ctx)
-            if created:
+            subdomain, created = validate_and_save_subdomain(host, ctx=ctx)
+            if subdomain and created:
                 logger.info(f"Created subdomain entry for host/IP: {host}")
+            else:
+                logger.warning(f"Failed to create subdomain entry for host/IP: {host}")
 
         # Add IP DB
         ip, _ = save_ip_address(ip_address, subdomain, subscan=self.subscan)
@@ -262,7 +265,7 @@ def port_scan(self, hosts=None, ctx=None, description=None):
             "nmap_script_args": nmap_script_args,
             "ports_data": ports_data,
         }
-        run_nmap(ctx, **nmap_args)
+        run_nmap.apply_async(args=(ctx,), kwargs=nmap_args)
 
     return ports_data
 

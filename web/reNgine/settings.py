@@ -36,6 +36,7 @@ with open(Path(RENGINE_HOME) / "reNgine" / "version.txt", "r", encoding="utf-8")
 
 # Debug env vars
 UI_DEBUG = bool(int(os.environ.get("UI_DEBUG", "0")))
+UI_ERROR_LOGGING = bool(int(os.environ.get("UI_ERROR_LOGGING", "0")))
 UI_REMOTE_DEBUG = bool(int(os.environ.get("UI_REMOTE_DEBUG", "0")))
 UI_REMOTE_DEBUG_PORT = int(os.environ.get("UI_REMOTE_DEBUG_PORT", 5678))
 CELERY_DEBUG = bool(int(os.environ.get("CELERY_DEBUG", "0")))
@@ -45,7 +46,8 @@ CELERY_REMOTE_DEBUG_PORT = int(os.environ.get("CELERY_REMOTE_DEBUG_PORT", 5679))
 # Common env vars
 DEBUG = env.bool("UI_DEBUG", default=False)
 DOMAIN_NAME = env("DOMAIN_NAME", default="localhost:8000")
-TEMPLATE_DEBUG = env.bool("TEMPLATE_DEBUG", default=False)
+TEMPLATE_DEBUG = env.bool("TEMPLATE_DEBUG", default=UI_DEBUG)
+DISABLE_TEMPLATE_CACHE = env.bool("DISABLE_TEMPLATE_CACHE", default=UI_DEBUG)
 SECRET_FILE = os.path.join(RENGINE_HOME, "secret")
 DEFAULT_RATE_LIMIT = env.int("DEFAULT_RATE_LIMIT", default=150)  # requests / second
 DEFAULT_HTTP_TIMEOUT = env.int("DEFAULT_HTTP_TIMEOUT", default=5)  # seconds
@@ -72,7 +74,7 @@ CSRF_TRUSTED_ORIGINS = [
 CSRF_COOKIE_SECURE = not DEBUG  # Use secure cookies in production
 CSRF_COOKIE_HTTPONLY = True  # Prevent JavaScript access to CSRF cookie for better security
 CSRF_COOKIE_SAMESITE = "Lax"  # CSRF protection while allowing some cross-site requests
-CSRF_USE_SESSIONS = False  # Keep using cookies for CSRF tokens (default)
+CSRF_USE_SESSIONS = True  # Use sessions for CSRF tokens when HTTPONLY is True (more secure)
 CSRF_COOKIE_AGE = 31449600  # 1 year in seconds
 
 # Session security settings
@@ -126,20 +128,21 @@ MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
+    "api.middleware.APIKeyAuthenticationMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
-    "api.middleware.APIKeyAuthenticationMiddleware",
     "login_required.middleware.LoginRequiredMiddleware",
     "dashboard.middleware.SlugMiddleware",
     "dashboard.middleware.ProjectAccessMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "reNgine.middleware.CustomErrorMiddleware",
 ]
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
         "DIRS": [(os.path.join(BASE_DIR, "templates"))],
-        "APP_DIRS": True,
+        "APP_DIRS": False,  # Must be False when loaders is defined
         "OPTIONS": {
             "context_processors": [
                 "django.template.context_processors.debug",
@@ -149,6 +152,21 @@ TEMPLATES = [
                 "reNgine.context_processors.version",
                 "reNgine.context_processors.misc",
                 "dashboard.context_processors.project_context",
+            ],
+            # Disable template caching in development
+            "loaders": [
+                "django.template.loaders.filesystem.Loader",
+                "django.template.loaders.app_directories.Loader",
+            ]
+            if DISABLE_TEMPLATE_CACHE
+            else [
+                (
+                    "django.template.loaders.cached.Loader",
+                    [
+                        "django.template.loaders.filesystem.Loader",
+                        "django.template.loaders.app_directories.Loader",
+                    ],
+                )
             ],
         },
     }
@@ -247,6 +265,28 @@ Cache settings
 """
 RENGINE_TASK_IGNORE_CACHE_KWARGS = ["ctx"]
 
+# Django Cache Configuration
+# In development, disable caching to ensure templates and views reload properly
+if DEBUG:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.dummy.DummyCache",
+        }
+    }
+else:
+    # Production cache using Redis
+    CACHES = {
+        "default": {
+            "BACKEND": "django_redis.cache.RedisCache",
+            "LOCATION": CELERY_BROKER_URL,
+            "OPTIONS": {
+                "CLIENT_CLASS": "django_redis.client.DefaultClient",
+            },
+            "KEY_PREFIX": "rengine_cache",
+            "TIMEOUT": 300,  # 5 minutes default timeout
+        }
+    }
+
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
@@ -290,6 +330,11 @@ LOGGING = {
             "maxBytes": 1024 * 1024 * 100,  # 100 mb
             "backupCount": 5,
         },
+        "error_console": {
+            "class": "logging.StreamHandler",
+            "formatter": "brief",
+            "stream": "ext://sys.stderr",
+        },
     },
     "formatters": {
         "default": {"format": "%(message)s"},
@@ -303,8 +348,8 @@ LOGGING = {
     },
     "loggers": {
         "django": {
-            "handlers": ["file"],
-            "level": "ERROR" if UI_DEBUG else "CRITICAL",
+            "handlers": ["file", "error_console"] if UI_ERROR_LOGGING else ["file"],
+            "level": "ERROR" if (UI_DEBUG or UI_ERROR_LOGGING) else "CRITICAL",
             "propagate": True,
         },
         "celery.app.trace": {
@@ -372,7 +417,7 @@ if UI_DEBUG:
     MIDDLEWARE.append("debug_toolbar.middleware.DebugToolbarMiddleware")
 
 # Channels configuration
-ASGI_APPLICATION = "reNgine.routing.application"
+ASGI_APPLICATION = "reNgine.asgi.application"
 
 CHANNEL_LAYERS = {
     "default": {

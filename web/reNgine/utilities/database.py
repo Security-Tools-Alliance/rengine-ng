@@ -1,4 +1,5 @@
 import hashlib
+import threading
 import time
 from urllib.parse import urlparse
 
@@ -6,13 +7,14 @@ from celery.utils.log import get_task_logger
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.utils import timezone
+from redis.exceptions import LockError, RedisError
 import validators
 
 from dashboard.models import User
 from reNgine.settings import RENGINE_RESULTS, RENGINE_TASK_IGNORE_CACHE_KWARGS
 from reNgine.utilities.data import is_iterable, replace_nulls
 from reNgine.utilities.distributed_lock import DistributedLock, get_redis_connection
-from reNgine.utilities.url import get_domain_from_subdomain, is_valid_url, sanitize_url
+from reNgine.utilities.url import get_domain_from_subdomain, is_target_allowed_for_domain, is_valid_url, sanitize_url
 from startScan.models import (
     CveId,
     CweId,
@@ -32,6 +34,9 @@ from targetApp.models import Domain
 
 
 logger = get_task_logger(__name__)
+
+# Thread-local storage for IP collection
+_thread_local = threading.local()
 
 
 # -------------------------------#
@@ -57,7 +62,7 @@ def save_endpoint(http_url, ctx=None, is_default=False, http_status=0, **endpoin
     scheme = urlparse(http_url).scheme
 
     if not scheme:
-        logger.error(f"{http_url} is missing scheme (http or https). Creating default endpoint with http scheme.")
+        logger.warning(f"{http_url} is missing scheme (http or https). Creating default endpoint with http scheme.")
         http_url = f"http://{http_url.strip()}"
         is_default = True
 
@@ -73,16 +78,7 @@ def save_endpoint(http_url, ctx=None, is_default=False, http_status=0, **endpoin
     if not all([scan, domain]):
         logger.error("Missing scan or domain information")
         return None, False
-
-    # Check if we're scanning an IP
-    is_ip_scan = validators.ipv4(domain.name) or validators.ipv6(domain.name)
-
-    # For regular domain scans, validate URL belongs to domain
-    # Exception: Allow IP addresses discovered via DNS resolution
-    parsed_url = urlparse(http_url)
-    is_ip_url = validators.ipv4(parsed_url.hostname) or validators.ipv6(parsed_url.hostname)
-
-    if not is_ip_scan and not is_ip_url and domain.name not in http_url:
+    if not is_target_allowed_for_domain(http_url, domain.name, ctx, target_type="url"):
         logger.error(f"{http_url} is not a URL of domain {domain.name}. Skipping.")
         return None, False
 
@@ -145,6 +141,53 @@ def save_endpoint(http_url, ctx=None, is_default=False, http_status=0, **endpoin
     return endpoint, created
 
 
+def validate_and_save_subdomain(subdomain_name, ctx=None):
+    """
+    Centralized function to validate and save subdomain with consistent error handling.
+
+    This function provides a single point of entry for subdomain validation and saving,
+    ensuring consistent error messages and validation logic across all modules.
+
+    Design Decision: This function catches only expected exceptions (database errors,
+    validation errors, Redis errors) and returns (None, False) instead of propagating
+    them because it's used in mass processing loops (subdomain discovery, URL crawling,
+    etc.). Propagating exceptions would stop the entire scan if a single subdomain fails,
+    which is unacceptable for resilience. Unexpected exceptions (bugs) are allowed to
+    propagate to facilitate debugging.
+
+    Args:
+        subdomain_name (str): Subdomain name to validate and save.
+        ctx (dict): Context containing scan information and settings.
+
+    Returns:
+        tuple: (Subdomain object or None, created boolean)
+            - (Subdomain, True): Successfully created new subdomain
+            - (Subdomain, False): Subdomain already existed
+            - (None, False): Expected error occurred (logged)
+
+    Raises:
+        Unexpected exceptions (programming errors, critical system failures) are
+        propagated to help identify bugs during development and testing.
+    """
+    try:
+        subdomain, created = save_subdomain(subdomain_name, ctx=ctx)
+    except (IntegrityError, ValidationError) as e:
+        # Expected database/validation errors - log and continue
+        logger.warning(f"Database/validation error for subdomain '{subdomain_name}': {e.__class__.__name__}: {e}")
+        return None, False
+    except (LockError, RedisError) as e:
+        # Expected Redis errors - log and continue
+        logger.warning(f"Redis error for subdomain '{subdomain_name}': {e.__class__.__name__}: {e}")
+        return None, False
+    # Unexpected exceptions (bugs, critical failures) propagate for debugging
+
+    if not isinstance(subdomain, Subdomain):
+        logger.error(f"Invalid subdomain encountered: {subdomain}")
+        return None, False
+
+    return subdomain, created
+
+
 def save_subdomain(subdomain_name, ctx=None):
     """Get or create Subdomain object with race condition protection.
 
@@ -157,7 +200,6 @@ def save_subdomain(subdomain_name, ctx=None):
             boolean indicating if the object has been created in DB.
     """
     scan_id = ctx.get("scan_history_id")
-    subscan_id = ctx.get("subscan_id")
     out_of_scope_subdomains = ctx.get("out_of_scope_subdomains", [])
     subdomain_name = subdomain_name.lower()
 
@@ -182,25 +224,14 @@ def save_subdomain(subdomain_name, ctx=None):
         logger.error("No domain found in scan history. Skipping.")
         return None, False
 
-    is_ip_scan = validators.ipv4(domain.name) or validators.ipv6(domain.name)
-
-    # For regular domain scans, validate subdomain belongs to domain
-    # Exception: Allow IP addresses discovered via DNS resolution to be saved as special subdomains
-    is_discovered_ip = validators.ipv4(subdomain_name) or validators.ipv6(subdomain_name)
-
-    if not is_ip_scan and not is_discovered_ip and ctx.get("domain_id") and domain.name not in subdomain_name:
+    if not is_target_allowed_for_domain(subdomain_name, domain.name, ctx, target_type="subdomain"):
         logger.error(f"{subdomain_name} is not a subdomain of domain {domain.name}. Skipping.")
         return None, False
 
     # Use Redis distributed locking to prevent race conditions during concurrent scans
     lock_key = f"subdomain_creation:{subdomain_name}:{scan_id}:{domain.id if domain else 'no_domain'}"
 
-    # Get Redis connection from pool (more efficient than creating new connections)
-    redis_conn = get_redis_connection()
-
-    if redis_conn:
-        from redis.exceptions import LockError, RedisError
-
+    if redis_conn := get_redis_connection():
         try:
             with redis_conn.lock(lock_key, timeout=30, blocking_timeout=5):
                 # Use get_or_create within the lock for additional safety against edge cases
@@ -296,7 +327,7 @@ def save_subdomain_metadata(subdomain, endpoint, extra_datas=None):
         subdomain.http_url = http_url
         subdomain.save()
     else:
-        logger.error(f"No HTTP URL found for {subdomain.name}. Skipping.")
+        logger.warning(f"No HTTP URL found for {subdomain.name}. Skipping.")
 
 
 def _update_subdomain_with_endpoint_data(endpoint, subdomain, extra_datas):
@@ -321,11 +352,21 @@ def _update_subdomain_with_endpoint_data(endpoint, subdomain, extra_datas):
 
 
 def save_ip_address(ip_address, subdomain=None, subscan=None, **kwargs):
-    from reNgine.tasks.geo import geo_localize
+    """Save IP address to database and collect for batch geolocalization.
 
+    Args:
+        ip_address (str): IP address to save
+        subdomain (Subdomain, optional): Associated subdomain
+        subscan (SubScan, optional): Associated subscan
+        **kwargs: Additional IP attributes
+
+    Returns:
+        tuple: (IpAddress object, created boolean)
+    """
     if not (validators.ipv4(ip_address) or validators.ipv6(ip_address)):
         logger.info(f"IP {ip_address} is not a valid IP. Skipping.")
         return None, False
+
     ip, created = IpAddress.objects.get_or_create(address=ip_address)
     if created:
         logger.warning(f"Found new IP {ip_address}")
@@ -344,11 +385,120 @@ def save_ip_address(ip_address, subdomain=None, subscan=None, **kwargs):
     if subscan:
         ip.ip_subscan_ids.add(subscan)
 
-    # Geo-localize IP asynchronously
+    # Collect IP for batch geolocalization instead of immediate processing
     if created:
-        geo_localize.delay(ip_address, ip.id)
+        _collect_ip_for_geolocalization(ip_address)
 
     return ip, created
+
+
+def _collect_ip_for_geolocalization(ip_address):
+    """Collect IP address for batch geolocalization.
+
+    This function adds the IP to a thread-local collection that will be
+    processed in batch at the end of the current task.
+
+    Args:
+        ip_address (str): IP address to collect
+    """
+    from reNgine.utilities.data import get_ip_info
+
+    # Check if this is a private/internal IP address
+    ip_info = get_ip_info(ip_address)
+    if ip_info and ip_info.is_private:
+        logger.debug(f"Skipping geolocalization for private IP: {ip_address}")
+        return
+
+    # Get or create thread-local storage
+    if not hasattr(_thread_local, "geo_ip_collection"):
+        _thread_local.geo_ip_collection = set()
+
+    # Add IP to collection (set automatically handles duplicates)
+    _thread_local.geo_ip_collection.add(ip_address)
+    logger.debug(f"Collected IP {ip_address} for batch geolocalization")
+
+
+def trigger_batch_geolocalization():
+    """Trigger batch geolocalization for collected IP addresses.
+
+    This function should be called at the end of tasks that collect IPs
+    to process them in a single batch operation.
+
+    Returns:
+        str: Task ID of the batch geolocalization task, or None if no IPs collected
+    """
+    from reNgine.tasks.geo import geo_localize_batch
+
+    # Get collected IPs from thread-local storage
+    if not hasattr(_thread_local, "geo_ip_collection"):
+        logger.debug("No IPs collected for geolocalization")
+        return None
+
+    collected_ips = list(_thread_local.geo_ip_collection)
+
+    if not collected_ips:
+        logger.debug("No IPs collected for geolocalization")
+        return None
+
+    # Clear the collection
+    _thread_local.geo_ip_collection.clear()
+
+    # Trigger batch geolocalization
+    logger.info(f"Triggering batch geolocalization for {len(collected_ips)} IP addresses")
+    task = geo_localize_batch.delay(collected_ips)
+
+    return task.id
+
+
+def with_batch_geolocalization(func):
+    """Decorator to automatically trigger batch geolocalization at the end of tasks.
+
+    This decorator wraps task functions to automatically collect and process
+    IP addresses for geolocalization in batch mode, eliminating code duplication.
+
+    The decorator automatically detects internal network scans and skips
+    geolocalization for private IP addresses.
+
+    Args:
+        func: The task function to wrap
+
+    Returns:
+        The wrapped function that handles batch geolocalization
+    """
+    from functools import wraps
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        try:
+            # Execute the original function
+            result = func(*args, **kwargs)
+
+            # Trigger batch geolocalization for collected IPs
+            # (private IPs are automatically filtered out)
+            geo_task_id = trigger_batch_geolocalization()
+            if geo_task_id:
+                logger.info(f"Triggered batch geolocalization task: {geo_task_id}")
+            else:
+                logger.debug("No public IPs collected for geolocalization")
+
+            return result
+
+        except Exception as e:
+            # Still trigger geolocalization even if the main task fails
+            # This ensures we don't lose collected IPs
+            try:
+                geo_task_id = trigger_batch_geolocalization()
+                if geo_task_id:
+                    logger.info(f"Triggered batch geolocalization task after error: {geo_task_id}")
+                else:
+                    logger.debug("No public IPs collected for geolocalization after error")
+            except Exception as geo_error:
+                logger.error(f"Failed to trigger batch geolocalization after error: {geo_error}")
+
+            # Re-raise the original exception
+            raise e
+
+    return wrapper
 
 
 def save_vulnerability(**vuln_data):
@@ -476,10 +626,17 @@ def create_scan_activity(scan_history_id, message, status):
 def save_imported_subdomains(subdomains, ctx=None):
     """Take a list of subdomains imported and write them to from_imported.txt.
 
+    This function processes imported subdomains, saving them to the database and
+    recording successfully imported ones to a text file. The file is written using
+    atomic operations to prevent corruption.
+
     Args:
         subdomains (list): List of subdomain names.
         ctx (dict): Context dict with domain_id, results_dir, etc.
     """
+    import os
+    import tempfile
+
     if ctx is None:
         ctx = {}
     domain_id = ctx["domain_id"]
@@ -492,21 +649,60 @@ def save_imported_subdomains(subdomains, ctx=None):
         return
 
     logger.warning(f"Found {len(subdomains)} imported subdomains.")
-    with open(f"{results_dir}/from_imported.txt", "w+") as output_file:
-        url_filter = ctx.get("url_filter")
-        for subdomain in subdomains:
-            # Save valid imported subdomains
-            subdomain_name = subdomain.strip()
-            subdomain_obj, _ = save_subdomain(subdomain_name, ctx=ctx)
-            if not isinstance(subdomain_obj, Subdomain):
-                logger.error(f"Invalid subdomain encountered: {subdomain}")
-                continue
-            subdomain_obj.is_imported_subdomain = True
-            subdomain_obj.save()
-            output_file.write(f"{subdomain}\n")
 
-            # Create base endpoint (for scan)
-            create_default_endpoint_for_subdomain(subdomain_obj, ctx)
+    # Track statistics for reporting
+    success_count = 0
+    failed_count = 0
+    failed_subdomains = []
+    successfully_imported = []
+
+    # Process all subdomains first (DB operations)
+    for subdomain in subdomains:
+        subdomain_name = subdomain.strip()
+        subdomain_obj, _ = validate_and_save_subdomain(subdomain_name, ctx=ctx)
+        if subdomain_obj is None:
+            failed_count += 1
+            failed_subdomains.append(subdomain_name)
+            logger.warning(f"Failed to import subdomain: {subdomain_name}")
+            continue
+
+        subdomain_obj.is_imported_subdomain = True
+        subdomain_obj.save()
+        successfully_imported.append(subdomain_name)
+        success_count += 1
+
+        # Create base endpoint (for scan)
+        create_default_endpoint_for_subdomain(subdomain_obj, ctx)
+
+    # Write results to file atomically using temporary file + rename
+    # This ensures the file is never in a partially written state
+    final_path = f"{results_dir}/from_imported.txt"
+    try:
+        # Create temp file in same directory for atomic rename
+        fd, temp_path = tempfile.mkstemp(dir=results_dir, prefix=".from_imported_", suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w") as output_file:
+                for subdomain_name in successfully_imported:
+                    output_file.write(f"{subdomain_name}\n")
+            # Atomic rename - file appears complete or not at all
+            os.replace(temp_path, final_path)
+        except Exception:
+            # Clean up temp file if write/rename fails
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+            raise
+    except Exception as e:
+        logger.error(f"Failed to write imported subdomains file: {e}", exc_info=True)
+        # Don't propagate - DB operations already succeeded
+        # File can be regenerated from DB if needed
+
+    # Report import statistics
+    logger.info(f"Imported subdomains: {success_count} succeeded, {failed_count} failed")
+    if failed_subdomains:
+        logger.warning(
+            f"Failed imported subdomains: {', '.join(failed_subdomains[:10])}"
+            f"{' and ' + str(len(failed_subdomains) - 10) + ' more...' if len(failed_subdomains) > 10 else ''}"
+        )
 
 
 def create_default_endpoint_for_subdomain(subdomain_obj, ctx=None):

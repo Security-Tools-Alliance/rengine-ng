@@ -243,8 +243,12 @@ def start_scan_ui(request, slug, domain_id):
         else:
             filter_path = ""
 
-        # Get engine type
+        # Get scan type and engine
+        scan_type = request.POST.get("scan_type", "bug_bounty")
         engine_id = safe_int_cast(request.POST["scan_mode"])
+
+        # Get scan existing elements option
+        scan_existing_elements = request.POST.get("scan_existing_elements") == "true"
 
         # Create ScanHistory object
         scan_history_id = create_scan_object(host_id=domain_id, engine_id=engine_id, initiated_by_id=request.user.id)
@@ -261,6 +265,7 @@ def start_scan_ui(request, slug, domain_id):
             "out_of_scope_subdomains": subdomains_out,
             "url_filter": filter_path,
             "initiated_by_id": request.user.id,
+            "scan_existing_elements": scan_existing_elements,
         }
         initiate_scan.apply_async(kwargs=kwargs)
         scan.save()
@@ -270,13 +275,61 @@ def start_scan_ui(request, slug, domain_id):
         return HttpResponseRedirect(reverse("scan_history", kwargs={"slug": slug}))
 
     # GET request
-    engine = EngineType.objects.annotate(lower_name=Lower("engine_name")).order_by("lower_name")
+    # Get engines based on scan type (default to bug_bounty for backward compatibility)
+    scan_type = request.GET.get("scan_type", "bug_bounty")
+
+    # Get engines based on scan type
+    engine = (
+        EngineType.objects.filter(scan_type=scan_type).annotate(lower_name=Lower("engine_name")).order_by("lower_name")
+    )
+
+    # Get custom engine count in a single query
     custom_engine_count = EngineType.objects.filter(default_engine=False).count()
+
+    # Check if domain has IP addresses or subdomains (indicating internal network scan)
+    has_ip_content = False
+    if domain.ip_address_cidr:
+        has_ip_content = True
+    else:
+        # Check if domain has subdomains with IP addresses
+        from startScan.models import Subdomain
+
+        subdomains_with_ips = Subdomain.objects.filter(target_domain=domain, ip_addresses__isnull=False).exists()
+        has_ip_content = subdomains_with_ips
+
+    # Handle AJAX requests
+    if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        # Handle request for existing elements count
+        if request.GET.get("get_elements_count"):
+            from startScan.models import Subdomain
+
+            # Get all subdomains for this domain
+            subdomains = Subdomain.objects.filter(target_domain=domain)
+
+            # Use the extended get_counts method
+            counts = Subdomain.get_counts(subdomains)
+
+            return JsonResponse({"hostname_count": counts["hostnames"], "ip_count": counts["ip_addresses"]})
+
+        # Handle request for engine loading
+        from django.template.loader import render_to_string
+
+        engine_html = render_to_string(
+            "startScan/_items/scanEngine_select.html",
+            {
+                "engines": engine,
+                "custom_engine_count": custom_engine_count,
+            },
+        )
+        return JsonResponse({"engine_html": engine_html})
+
     context = {
         "scan_history_active": "active",
         "domain": domain,
         "engines": engine,
         "custom_engine_count": custom_engine_count,
+        "scan_type": scan_type,
+        "has_ip_content": has_ip_content,
     }
     return render(request, "startScan/start_scan_ui.html", context)
 
@@ -287,9 +340,13 @@ def start_multiple_scan(request, slug):
     if request.method == "POST":
         if request.POST.get("scan_mode", 0):
             # if scan mode is available, then start the scan
-            # get engine type
+            # get engine type and scan type
             engine_id = safe_int_cast(request.POST["scan_mode"])
+            scan_type = request.POST.get("scan_type", "bug_bounty")
             list_of_domains = request.POST["list_of_domain_id"]
+
+            # Get scan existing elements option
+            scan_existing_elements = request.POST.get("scan_existing_elements") == "true"
 
             grouped_scans = []
 
@@ -307,6 +364,7 @@ def start_multiple_scan(request, slug):
                     "scan_type": LIVE_SCAN,
                     "results_dir": RENGINE_RESULTS,
                     "initiated_by_id": request.user.id,
+                    "scan_existing_elements": scan_existing_elements,
                     # TODO: Add this to multiple scan view
                     # 'imported_subdomains': subdomains_in,
                     # 'out_of_scope_subdomains': subdomains_out
@@ -336,7 +394,12 @@ def start_multiple_scan(request, slug):
             domain_ids = ",".join(list_of_domain_id)
 
     # GET request
-    engines = EngineType.objects
+    scan_type = request.GET.get("scan_type", "bug_bounty")
+
+    # Get engines based on scan type
+    engines = EngineType.objects.filter(scan_type=scan_type)
+
+    # Get custom engine count in a single query
     custom_engine_count = engines.filter(default_engine=False).count()
     context = {
         "scan_history_active": "active",
@@ -344,6 +407,7 @@ def start_multiple_scan(request, slug):
         "domain_list": list_of_domain_name,
         "domain_ids": domain_ids,
         "custom_engine_count": custom_engine_count,
+        "scan_type": scan_type,
     }
     return render(request, "startScan/start_multiple_scan_ui.html", context)
 
@@ -583,6 +647,10 @@ def start_organization_scan(request, id, slug):
     organization = get_object_or_404(Organization, id=id)
     if request.method == "POST":
         engine_id = safe_int_cast(request.POST["scan_mode"])
+        scan_type = request.POST.get("scan_type", "bug_bounty")
+
+        # Get scan existing elements option
+        scan_existing_elements = request.POST.get("scan_existing_elements") == "true"
 
         # Start Celery task for each organization's domains
         for domain in organization.get_domains():
@@ -598,6 +666,7 @@ def start_organization_scan(request, id, slug):
                 "scan_type": LIVE_SCAN,
                 "results_dir": RENGINE_RESULTS,
                 "initiated_by_id": request.user.id,
+                "scan_existing_elements": scan_existing_elements,
                 # TODO: Add this to multiple scan view
                 # 'imported_subdomains': subdomains_in,
                 # 'out_of_scope_subdomains': subdomains_out
@@ -613,9 +682,32 @@ def start_organization_scan(request, id, slug):
         return HttpResponseRedirect(reverse("scan_history", kwargs={"slug": slug}))
 
     # GET request
-    engine = EngineType.objects.annotate(lower_name=Lower("engine_name")).order_by("lower_name")
+    scan_type = request.GET.get("scan_type", "bug_bounty")
+
+    # Get engines based on scan type
+    engine = (
+        EngineType.objects.filter(scan_type=scan_type).annotate(lower_name=Lower("engine_name")).order_by("lower_name")
+    )
+
+    # Get custom engine count in a single query
     custom_engine_count = EngineType.objects.filter(default_engine=False).count()
-    domain_list = organization.get_domains()
+
+    # Optimize domain list query
+    domain_list = organization.get_domains().select_related()
+
+    # Handle AJAX requests for dynamic engine loading
+    if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        from django.template.loader import render_to_string
+
+        engine_html = render_to_string(
+            "startScan/_items/scanEngine_select.html",
+            {
+                "engines": engine,
+                "custom_engine_count": custom_engine_count,
+            },
+        )
+        return JsonResponse({"engine_html": engine_html})
+
     context = {
         "organization_data_active": "true",
         "list_organization_li": "active",
@@ -623,6 +715,7 @@ def start_organization_scan(request, id, slug):
         "engines": engine,
         "domain_list": domain_list,
         "custom_engine_count": custom_engine_count,
+        "scan_type": scan_type,
     }
     return render(request, "organization/start_scan.html", context)
 

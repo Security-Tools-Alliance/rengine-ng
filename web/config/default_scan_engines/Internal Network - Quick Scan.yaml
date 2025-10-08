@@ -1,0 +1,59 @@
+# Internal Network Scan Engine - Quick Scan
+# Fast internal network reconnaissance focusing on common services and ports
+# Optimized for quick assessment of internal network infrastructure
+
+# Global vars for all tools
+scan_type: 'internal_network'
+custom_header: {
+  'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:126.0) Gecko/20100101 Firefox/126.0',
+}
+
+# Quick port scan focusing on common services
+port_scan: {
+  'timeout': 5,
+  # 'exclude_ports': [],
+  # 'exclude_subdomains': [],
+  'ports': ['top-100'],
+  'rate_limit': 150,
+  'threads': 30,
+  'passive': false,
+  # 'use_naabu_config': false,
+  # 'enable_nmap': true,
+  # 'nmap_cmd': '',
+  # 'nmap_script': '',
+  # 'nmap_script_args': ''
+}
+
+# HTTP crawling for common web ports
+http_crawl: {
+  'threads': 30,
+  'precrawl_ports': [80, 443, 8080, 8081, 8082, 8443, 3000, 5000, 9000],
+  'precrawl_uncommon_ports': false,
+  'precrawl_batch_size': 300
+}
+
+# Quick screenshots
+screenshot: {
+  'intensity': 'normal',
+  'timeout': 10,
+  'threads': 50
+}
+
+# Basic vulnerability scanning
+vulnerability_scan: {
+  'run_nuclei': true,
+  'run_dalfox': false,
+  'run_crlfuzz': false,
+  'run_s3scanner': false,
+  'concurrency': 50,
+  'intensity': 'normal',
+  'rate_limit': 100,
+  'retries': 1,
+  'timeout': 5,
+  'fetch_llm_report': false,
+  'nuclei': {
+    'use_nuclei_config': false,
+    'severities': ['high', 'critical'],
+    'tags': ['network', 'service']
+  }
+}

@@ -3,6 +3,11 @@
     <label for="domainName" class="form-label">Engine name</label>
     {{ form.engine_name }}
   </div>
+  <div class="col-12 mt-3">
+    <label for="scan_type" class="form-label">Scan Type</label>
+    {{ form.scan_type }}
+    <small class="form-text text-muted">{{ form.scan_type.help_text }}</small>
+  </div>
   <!-- <div class="col-xl-4 col-md-12 col-sm-12 col-12 mt-4">
     <h4 class="text-secondary">Engine</h4>
     <p>Select what your Scan Engine has to perform.</p>

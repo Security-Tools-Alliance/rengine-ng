@@ -7,8 +7,9 @@ import sys
 from reNgine.settings import UI_REMOTE_DEBUG
 
 
-# Remote debug setup for Web GUI
-if UI_REMOTE_DEBUG and sys.argv[1] == "runserver":
+# Remote debug setup for Web GUI (manage.py runserver only)
+# Note: For daphne (ASGI), debugger is initialized in asgi.py
+if UI_REMOTE_DEBUG and len(sys.argv) > 1 and sys.argv[1] == "runserver":
     from debugger_setup import setup_debugger
 
     setup_debugger()

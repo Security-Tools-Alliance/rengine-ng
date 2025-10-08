@@ -3,16 +3,17 @@ This module contains tests for the Makefile commands in the reNgine-ng project.
 It verifies various make commands and their effects on the Docker environment.
 """
 
+from functools import wraps
 import os
 import signal
 import subprocess
 import sys
 import time
 import unittest
-from functools import wraps
 
 from docker import from_env as docker_from_env
 from docker.errors import NotFound
+
 
 # Add these constants for colors
 BLACK = "\033[30m"

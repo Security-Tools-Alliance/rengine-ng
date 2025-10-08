@@ -4,7 +4,6 @@ import uuid
 from celery import chain
 from celery.utils.log import get_task_logger
 from django.utils import timezone
-import validators
 import yaml
 
 from reNgine.celery import app
@@ -26,11 +25,12 @@ from reNgine.utilities.database import (
     create_default_endpoint_for_subdomain,
     create_scan_object,
     save_imported_subdomains,
-    save_subdomain,
+    validate_and_save_subdomain,
 )
+from reNgine.utilities.misc import determine_target_type
 from reNgine.utilities.path import SafePath
 from scanEngine.models import EngineType
-from startScan.models import ScanHistory, Subdomain, SubScan
+from startScan.models import IpAddress, ScanHistory, Subdomain, SubScan
 from targetApp.models import Domain
 
 
@@ -48,6 +48,7 @@ def initiate_scan(
     out_of_scope_subdomains=[],
     initiated_by_id=None,
     url_filter="",
+    scan_existing_elements=False,
 ):
     """Initiate a new scan.
 
@@ -61,6 +62,7 @@ def initiate_scan(
         out_of_scope_subdomains (list): Out-of-scope subdomains.
         url_filter (str): URL path. Default: ''.
         initiated_by (int): User ID initiating the scan.
+        scan_existing_elements (bool): Whether to scan existing hostnames and IPs in the target. Default: False.
     """
     # Get all available tasks dynamically from the tasks module
     from reNgine.tasks import get_scan_tasks
@@ -84,7 +86,11 @@ def initiate_scan(
         domain.last_scan_date = timezone.now()
         domain.save()
 
-        if validators.ip_address.ipv4(domain.name) or validators.ip_address.ipv6(domain.name):
+        # Determine target type and adapt tasks accordingly
+        target_type = determine_target_type(domain.name)
+        logger.info(f"Target type detected: {target_type} for {domain.name}")
+
+        if target_type == "ip_address":
             # Filter out irrelevant tasks for an IP
             allowed_tasks = [
                 "port_scan",
@@ -96,8 +102,22 @@ def initiate_scan(
             ]
             engine.tasks = [task for task in engine.tasks if task in allowed_tasks]
             logger.info(f"IP scan detected - Limited available tasks to: {engine.tasks}")
+        elif target_type == "ip_range":
+            # For IP ranges, focus on network scanning tasks
+            allowed_tasks = [
+                "port_scan",
+                "vulnerability_scan",
+            ]
+            engine.tasks = [task for task in engine.tasks if task in allowed_tasks]
+            logger.info(f"IP range scan detected - Limited available tasks to: {engine.tasks}")
+        elif target_type == "custom_text":
+            # For custom text targets, use all available tasks
+            logger.info(f"Custom text target detected - Using all available tasks: {engine.tasks}")
+        else:  # domain or subdomain
+            # Standard domain/subdomain scanning
+            logger.info(f"Domain/Subdomain target detected - Using all available tasks: {engine.tasks}")
 
-        logger.warning(f"Initiating scan for domain {domain.name} on celery")
+        logger.warning(f"Initiating scan for {target_type} target '{domain.name}' on celery")
 
         # for live scan scan history id is passed as scan_history_id
         # and no need to create scan_history object
@@ -157,15 +177,95 @@ def initiate_scan(
         # Save imported subdomains in DB
         save_imported_subdomains(imported_subdomains, ctx=ctx)
 
-        # Create initial subdomain in DB: make a copy of domain as a subdomain so
-        # that other tasks using subdomains can use it.
+        # Create initial subdomain in DB based on target type
         subdomain_name = domain.name
-        subdomain, _ = save_subdomain(subdomain_name, ctx=ctx)
+        subdomain = None
 
-        # Create default endpoint for the TLD subdomain
-        create_default_endpoint_for_subdomain(subdomain, ctx)
+        # Create subdomain and endpoints based on target type
+        if target_type in ["domain", "subdomain"]:
+            # For domains/subdomains, create subdomain and default HTTP/HTTPS endpoints
+            subdomain, _ = validate_and_save_subdomain(subdomain_name, ctx=ctx)
+            if subdomain is not None:
+                create_default_endpoint_for_subdomain(subdomain, ctx)
+                logger.info(f"Created default endpoints for domain/subdomain: {subdomain_name}")
+            else:
+                logger.warning(f"Failed to create subdomain for domain/subdomain: {subdomain_name}")
+        elif target_type == "ip_address":
+            # For IP addresses, create subdomain and default endpoints
+            subdomain, _ = validate_and_save_subdomain(subdomain_name, ctx=ctx)
+            if subdomain is not None:
+                create_default_endpoint_for_subdomain(subdomain, ctx)
+                logger.info(f"Created default endpoints for IP address: {subdomain_name}")
+            else:
+                logger.warning(f"Failed to create subdomain for IP address: {subdomain_name}")
+        elif target_type == "ip_range":
+            # For IP ranges, we'll handle this differently - no subdomain creation
+            logger.info(f"IP range target detected: {subdomain_name} - No subdomain created")
+        elif target_type == "custom_text":
+            # For custom text, don't create subdomain as it's not a valid domain
+            logger.info(f"Custom text target detected: {subdomain_name} - No subdomain created (custom text)")
+        else:
+            # Fallback - try to create subdomain and endpoints
+            subdomain, _ = validate_and_save_subdomain(subdomain_name, ctx=ctx)
+            if subdomain is not None:
+                create_default_endpoint_for_subdomain(subdomain, ctx)
+                logger.info(f"Created default endpoints for unknown target type: {subdomain_name}")
+            else:
+                logger.warning(f"Failed to create subdomain for unknown target type: {subdomain_name}")
 
-        # Create initial host - no more initial web service detection
+        # Handle scanning of existing elements if requested
+        if scan_existing_elements:
+            logger.info(f"Scan existing elements enabled for {target_type} target: {domain.name}")
+
+            # Get existing hostnames and IPs for this domain
+            existing_subdomains = Subdomain.objects.filter(target_domain=domain)
+            existing_ips = IpAddress.objects.filter(ip_addresses__target_domain=domain)
+
+            logger.info(
+                f"Found {existing_subdomains.count()} existing hostnames and {existing_ips.count()} existing IPs"
+            )
+
+            # Track processed subdomains to avoid duplicates
+            processed_subdomains = set()
+
+            # Create subdomains for existing hostnames
+            for existing_subdomain in existing_subdomains:
+                if existing_subdomain.name != domain.name:  # Skip the main target
+                    # Check if we've already processed this subdomain
+                    if existing_subdomain.name in processed_subdomains:
+                        logger.info(f"Skipping duplicate subdomain: {existing_subdomain.name}")
+                        continue
+
+                    processed_subdomains.add(existing_subdomain.name)
+                    subdomain_obj, _ = validate_and_save_subdomain(existing_subdomain.name, ctx=ctx)
+
+                    if subdomain_obj is not None:
+                        create_default_endpoint_for_subdomain(subdomain_obj, ctx)
+                        logger.info(f"Added existing hostname to scan: {existing_subdomain.name}")
+                    else:
+                        logger.warning(f"Failed to create subdomain for existing hostname: {existing_subdomain.name}")
+
+            # Create subdomains for existing IPs
+            for existing_ip in existing_ips:
+                if existing_ip.address != domain.name:  # Skip if IP is the main target
+                    # Check if we've already processed this IP
+                    if existing_ip.address in processed_subdomains:
+                        logger.info(f"Skipping duplicate IP: {existing_ip.address}")
+                        continue
+
+                    processed_subdomains.add(existing_ip.address)
+                    subdomain_obj, _ = validate_and_save_subdomain(existing_ip.address, ctx=ctx)
+
+                    if subdomain_obj is not None:
+                        # Create endpoints for IP addresses
+                        create_default_endpoint_for_subdomain(subdomain_obj, ctx)
+                        logger.info(f"Added existing IP to scan: {existing_ip.address}")
+                    else:
+                        logger.warning(f"Failed to create subdomain for existing IP: {existing_ip.address}")
+        else:
+            logger.info(f"Scan existing elements disabled for {target_type} target: {domain.name}")
+
+        # Create initial host
         host = domain.name
         logger.info(f"Creating scan for {host} - web service detection will be handled by port_scan or pre_crawl")
 

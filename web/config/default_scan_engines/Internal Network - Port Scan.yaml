@@ -1,0 +1,69 @@
+# Internal Network Scan Engine - Port Scan
+# Designed for internal network reconnaissance focusing on port scanning and service detection
+# Optimized for internal network environments where subdomain discovery is not relevant
+
+# Global vars for all tools
+scan_type: 'internal_network'
+custom_header: {
+  'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:126.0) Gecko/20100101 Firefox/126.0',
+}
+
+# Port scanning configuration for internal networks
+port_scan: {
+  'timeout': 5,
+  # 'exclude_ports': [],
+  # 'exclude_subdomains': [],
+  'ports': ['top-1000'],
+  'rate_limit': 150,
+  'threads': 30,
+  'passive': false,
+  # 'use_naabu_config': false,
+  # 'enable_nmap': true,
+  # 'nmap_cmd': '',
+  # 'nmap_script': '',
+  # 'nmap_script_args': ''
+}
+
+# HTTP crawling for discovered services
+http_crawl: {
+  'threads': 20,
+  'precrawl_ports': [80, 443, 8080, 8081, 8082, 8443, 3000, 3001, 5000, 9000, 8000, 8888, 9090],
+  'precrawl_uncommon_ports': true,
+  'precrawl_batch_size': 200
+}
+
+# Screenshots for discovered web services
+screenshot: {
+  'intensity': 'normal',
+  'timeout': 15,
+  'threads': 30
+}
+
+# Vulnerability scanning for internal services
+vulnerability_scan: {
+  'run_nuclei': true,
+  'run_dalfox': false,
+  'run_crlfuzz': false,
+  'run_s3scanner': false,
+  'concurrency': 30,
+  'intensity': 'normal',
+  'rate_limit': 50,
+  'retries': 2,
+  'timeout': 10,
+  'fetch_llm_report': false,
+  'nuclei': {
+    'use_nuclei_config': false,
+    'severities': ['unknown', 'info', 'low', 'medium', 'high', 'critical'],
+    'tags': ['network', 'service', 'internal']
+  }
+}
+
+# URL fetching for discovered web services
+fetch_url: {
+  'uses_tools': ['gospider', 'hakrawler', 'katana'],
+  'remove_duplicate_endpoints': true,
+  'duplicate_fields': ['content_length', 'page_title'],
+  'gf_patterns': ['debug_logic', 'idor', 'interestingEXT', 'interestingparams', 'interestingsubs', 'lfi', 'rce', 'redirect', 'sqli', 'ssrf', 'ssti', 'xss'],
+  'ignore_file_extensions': ['png', 'jpg', 'jpeg', 'gif', 'mp4', 'mpeg', 'mp3'],
+  'threads': 20
+}

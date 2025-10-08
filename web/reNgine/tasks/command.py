@@ -1,7 +1,4 @@
 import re
-import select
-import subprocess
-import time
 
 from celery.utils.log import get_task_logger
 
@@ -10,7 +7,6 @@ from reNgine.utilities.command import (
     create_command_object,
     execute_command,
     prepare_command,
-    process_line,
     write_history,
 )
 
@@ -46,177 +42,113 @@ def run_command(
         tuple: A tuple containing the return code and output of the command.
     """
     logger.info(f"Starting execution of command: {cmd}")
-    command_obj = create_command_object(cmd, scan_id, activity_id)
-    command = prepare_command(cmd, shell)
-    logger.debug(f"Prepared run command: {command}")
 
-    process = execute_command(command, shell, cwd)
-    output, error_output = process.communicate()
-    return_code = process.returncode
+    from reNgine.utilities.command import execute_with_dns
 
-    # Combine stdout and stderr if requested
-    if combine_output:
-        combined_output = ""
-        if output:
-            combined_output += output
-        if error_output:
-            combined_output += error_output
-
-        if combined_output:
-            combined_output = (
-                re.sub(r"\x1b\[[0-9;]*[mGKH]", "", combined_output) if remove_ansi_sequence else combined_output
-            )
-
-        final_output = combined_output
-    else:
-        # Default behavior: only use stdout
-        if output:
-            final_output = re.sub(r"\x1b\[[0-9;]*[mGKH]", "", output) if remove_ansi_sequence else output
-        else:
-            final_output = ""
-
-    if return_code != 0:
-        error_msg = f"Command failed with exit code {return_code}"
-        if error_output:
-            error_msg += f"\nError output:\n{error_output}"
-        logger.error(error_msg)
-
-    command_obj.output = final_output or None
-    command_obj.error_output = error_output or None
-    command_obj.return_code = return_code
-    command_obj.save()
-
-    if history_file:
-        write_history(history_file, cmd, return_code, final_output)
-
-    return return_code, final_output
-
-
-def stream_command(
-    cmd, cwd=None, shell=False, history_file=None, encoding="utf-8", scan_id=None, activity_id=None, trunc_char=None
-):
-    """
-    Execute a command and yield its output line by line in real-time.
-
-    This function uses select.select() to monitor file descriptors and processes
-    output as soon as it becomes available, ensuring proper streaming behavior
-    for tools like httpx and nuclei.
-
-    Args:
-        cmd (str): The command to execute.
-        cwd (str, optional): The working directory for the command. Defaults to None.
-        shell (bool, optional): Whether to use shell execution. Defaults to False.
-        history_file (str, optional): File to write command history. Defaults to None.
-        encoding (str, optional): Encoding for the command output. Defaults to 'utf-8'.
-        scan_id (int, optional): ID of the associated scan. Defaults to None.
-        activity_id (int, optional): ID of the associated activity. Defaults to None.
-        trunc_char (str, optional): Character to truncate lines. Defaults to None.
-
-    Yields:
-        str or dict: Each line of the command output, processed and potentially parsed as JSON.
-    """
-    logger.info(f"Starting real-time execution of command: {cmd}")
-    command_obj = create_command_object(cmd, scan_id, activity_id)
-    command = prepare_command(cmd, shell)
-    logger.debug(f"Prepared stream command: {command}")
-
-    # Execute command with line buffering for better streaming
-    process = subprocess.Popen(
-        command,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        shell=shell,
-        cwd=cwd,
-        bufsize=1,  # Line buffered
-        universal_newlines=True,
-        encoding=encoding,
+    return execute_with_dns(
+        cmd,
+        scan_id,
+        _run_command_internal,
+        cwd,
+        shell,
+        history_file,
+        scan_id,
+        activity_id,
+        remove_ansi_sequence,
+        combine_output,
     )
 
-    # Initialize buffers and tracking variables
-    stdout_buffer = ""
-    stderr_buffer = ""
-    full_output = ""
-    full_error = ""
 
-    # Use select for real-time streaming on Linux
-    while True:
-        # Check if process has terminated
-        if process.poll() is not None:
-            # Read any remaining data
-            remaining_stdout = process.stdout.read()
-            remaining_stderr = process.stderr.read()
+def _run_command_internal(cmd, cwd, shell, history_file, scan_id, activity_id, remove_ansi_sequence, combine_output):
+    """
+    Internal implementation of run_command with comprehensive error handling.
 
-            if remaining_stdout:
-                stdout_buffer += remaining_stdout
-                full_output += remaining_stdout
-            if remaining_stderr:
-                stderr_buffer += remaining_stderr
-                full_error += remaining_stderr
+    Preserves full exception context and tracebacks for debugging while ensuring
+    the function always returns a valid tuple (return_code, final_output).
+    """
+    command_obj = None
+    return_code = -1
+    final_output = ""
+    error_output = ""
 
-            # Process any remaining complete lines
-            while "\n" in stdout_buffer:
-                line, stdout_buffer = stdout_buffer.split("\n", 1)
-                if line.strip():
-                    try:
-                        if item := process_line(line, trunc_char):
-                            yield item
-                    except Exception as e:
-                        logger.error(f"Error processing output line: {e}")
-            break
+    try:
+        command_obj = create_command_object(cmd, scan_id, activity_id)
+        command = prepare_command(cmd, shell)
+        logger.debug(f"Prepared run command: {command}")
 
-        # Use select to wait for data availability
         try:
-            ready, _, _ = select.select([process.stdout, process.stderr], [], [], 0.1)
-
-            for fd in ready:
-                try:
-                    if data := fd.read(1024):
-                        if fd == process.stdout:
-                            stdout_buffer += data
-                            full_output += data
-
-                            # Process complete lines immediately
-                            while "\n" in stdout_buffer:
-                                line, stdout_buffer = stdout_buffer.split("\n", 1)
-                                if line.strip():
-                                    try:
-                                        if item := process_line(line, trunc_char):
-                                            yield item
-                                    except Exception as e:
-                                        logger.error(f"Error processing output line: {e}")
-                        else:
-                            stderr_buffer += data
-                            full_error += data
-                except Exception as e:
-                    logger.debug(f"Error reading from file descriptor: {e}")
-                    continue
-
+            process = execute_command(command, shell, cwd)
+            output, error_output = process.communicate()
+            return_code = process.returncode
+        except OSError as e:
+            # Use logger.exception() to capture full traceback
+            logger.exception(f"OSError while executing command '{cmd}'")
+            return_code = -1
+            final_output = ""
+            error_output = str(e)
         except Exception as e:
-            logger.debug(f"Select error: {e}")
-            # Fallback to simple polling if select fails
-            time.sleep(0.1)
+            # Use logger.exception() to capture full traceback for unexpected errors
+            logger.exception(f"Unexpected error while executing command '{cmd}'")
+            return_code = -1
+            final_output = ""
+            error_output = str(e)
+        else:
+            # Process output only if command executed successfully (no exception)
+            # Combine stdout and stderr if requested
+            if combine_output:
+                combined_output = ""
+                if output:
+                    combined_output += output
+                if error_output:
+                    combined_output += error_output
 
-    # Wait for process completion
-    process.wait()
-    return_code = process.returncode
+                if combined_output:
+                    combined_output = (
+                        re.sub(r"\x1b\[[0-9;]*[mGKH]", "", combined_output) if remove_ansi_sequence else combined_output
+                    )
 
-    # Log completion status
-    if return_code != 0:
-        error_msg = f"Command failed with exit code {return_code}"
-        if full_error:
-            error_msg += f"\nError output:\n{full_error}"
-        logger.error(error_msg)
-    else:
-        logger.info(f"Command completed successfully with exit code {return_code}")
+                final_output = combined_output
+            else:
+                # Default behavior: only use stdout
+                if output:
+                    final_output = re.sub(r"\x1b\[[0-9;]*[mGKH]", "", output) if remove_ansi_sequence else output
+                else:
+                    final_output = ""
 
-    # Save command results
-    command_obj.output = full_output or None
-    command_obj.error_output = full_error or None
-    command_obj.return_code = return_code
-    command_obj.save()
+            if return_code != 0:
+                error_msg = f"Command failed with exit code {return_code}"
+                if error_output:
+                    error_msg += f"\nError output:\n{error_output}"
+                logger.error(error_msg)
 
-    logger.debug(f"Command returned exit code: {return_code}")
+        # Save command object if it was created
+        if command_obj:
+            try:
+                command_obj.output = final_output or None
+                command_obj.error_output = error_output or None
+                command_obj.return_code = return_code
+                command_obj.save()
+            except Exception:
+                # Use logger.exception() to capture full traceback
+                logger.exception(f"Failed to save command object for cmd: {cmd}")
 
-    # Write history if requested
-    if history_file:
-        write_history(history_file, cmd, return_code, full_output)
+        # Write history if requested
+        if history_file:
+            try:
+                write_history(history_file, cmd, return_code, final_output)
+            except Exception:
+                # Use logger.exception() to capture full traceback
+                logger.exception(f"Failed to write command history to {history_file}")
+
+    except Exception as e:
+        # Catch-all for any unexpected errors in the outer scope
+        # Use logger.exception() to preserve full traceback for debugging
+        logger.exception(
+            f"Critical error in _run_command_internal for command '{cmd}'. "
+            f"This indicates an unexpected issue outside normal execution flow."
+        )
+        return_code = -1
+        # Include exception type and message for better error context
+        final_output = f"Critical error: {type(e).__name__}: {str(e)}"
+
+    return return_code, final_output

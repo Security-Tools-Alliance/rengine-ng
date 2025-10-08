@@ -111,34 +111,65 @@ def is_valid_domain_or_subdomain(domain):
 
 
 def get_domain_from_subdomain(subdomain):
-    """Get domain from subdomain.
+    """Get domain from subdomain with improved handling of edge cases.
+
+    This function handles complex TLDs like .co.uk, .com.au, and internationalized
+    domains correctly using tldextract library.
 
     Args:
         subdomain (str): Subdomain name.
 
     Returns:
-        str: Domain name.
+        str: Domain name, or None if extraction fails.
     """
+    if not subdomain or not isinstance(subdomain, str):
+        return None
+
+    # Clean the input - remove whitespace and convert to lowercase
+    subdomain = subdomain.strip().lower()
 
     if not is_valid_domain_or_subdomain(subdomain):
         return None
 
-    # Use tldextract to parse the subdomain
-    extracted = tldextract.extract(subdomain)
+    # Use tldextract to parse the subdomain - handles complex TLDs and IDNs
+    try:
+        extracted = tldextract.extract(subdomain)
 
-    # if tldextract recognized the tld then its the final result
-    if extracted.suffix:
-        domain = f"{extracted.domain}.{extracted.suffix}"
-    else:
-        # Fallback method for unknown TLDs, like .clouds or .local etc
-        parts = subdomain.split(".")
-        if len(parts) >= 2:
-            domain = ".".join(parts[-2:])
-        else:
-            return None
+        # Check if we have both domain and suffix (TLD)
+        if extracted.domain and extracted.suffix:
+            domain = f"{extracted.domain}.{extracted.suffix}"
 
-    # Validate the domain before returning
-    return domain if is_valid_domain_or_subdomain(subdomain) else None
+            # Additional validation to ensure the extracted domain is valid
+            if is_valid_domain_or_subdomain(domain):
+                return domain
+
+        # Special handling for .local domains and other private TLDs
+        # tldextract doesn't recognize .local as a valid TLD, so we need custom logic
+        if extracted.domain and not extracted.suffix and extracted.subdomain:
+            # This is likely a private TLD like .local
+            # Extract the last two parts: subdomain.domain
+            parts = subdomain.split(".")
+            if len(parts) >= 2:
+                # Take the last two parts as domain.tld
+                potential_domain = ".".join(parts[-2:])
+                if is_valid_domain_or_subdomain(potential_domain):
+                    logger.debug(f"Extracted private TLD domain: {potential_domain} from {subdomain}")
+                    return potential_domain
+
+        # Fallback method for edge cases where tldextract might not recognize the TLD
+        # Use tldextract's fallback with PSL private domains enabled
+        fallback_extracted = tldextract.extract(subdomain, include_psl_private_domains=True)
+        if fallback_extracted.domain and fallback_extracted.suffix:
+            potential_domain = f"{fallback_extracted.domain}.{fallback_extracted.suffix}"
+            if is_valid_domain_or_subdomain(potential_domain):
+                return potential_domain
+
+        # If all else fails, return None
+        return None
+
+    except Exception as e:
+        logger.warning(f"Error extracting domain from subdomain '{subdomain}': {str(e)}")
+        return None
 
 
 def sanitize_url(http_url):
@@ -220,6 +251,91 @@ def is_valid_url(url):
     except (ValueError, ValidationError) as e:
         logger.debug(f"Validation error: {str(e)}")
         return False
+
+
+def is_target_allowed_for_domain(target, domain_name, ctx=None, target_type="subdomain"):
+    """
+    Check if a target (subdomain or URL) is allowed for a given domain based on scan context and target type.
+
+    This function centralizes the validation logic for determining whether a target
+    should be allowed for a specific domain, taking into account:
+    - Regular domain scans (strict validation)
+    - IP address scans (allow IP targets)
+    - Custom text targets (allow any valid target)
+
+    Args:
+        target (str): The target to validate (subdomain name or URL)
+        domain_name (str): The domain name being scanned
+        ctx (dict, optional): Scan context containing domain_id and other info
+        target_type (str): Type of target - "subdomain" or "url"
+
+    Returns:
+        bool: True if target is allowed, False otherwise
+    """
+    from reNgine.utilities.misc import determine_target_type
+
+    # Extract hostname from URL if needed
+    if target_type == "url":
+        parsed_url = urlparse(target)
+        hostname = parsed_url.hostname
+        if not hostname:
+            # Invalid URL without hostname
+            return False
+    else:
+        hostname = target
+
+    # IP addresses are always allowed
+    if validators.ipv4(hostname) or validators.ipv6(hostname):
+        return True
+
+    # Determine target type for custom text targets
+    scan_target_type = determine_target_type(domain_name)
+    is_custom_text_target = scan_target_type == "custom_text"
+
+    # For custom text targets, allow any valid target (no strict domain validation)
+    if is_custom_text_target:
+        return True
+
+    # If no domain_id in context, allow the target (backward compatibility)
+    if not ctx or not ctx.get("domain_id"):
+        return True
+
+    # Strict validation: hostname must be a subdomain of the domain
+    return _is_valid_subdomain(hostname, domain_name)
+
+
+def _is_valid_subdomain(target, domain_name):
+    """
+    Check if target is a valid subdomain of the given domain.
+
+    This function uses tldextract (via get_domain_from_subdomain) to properly extract
+    the root domain from the target and compares it with the expected domain_name.
+    This simple approach (KISS principle) handles all edge cases correctly, including
+    multi-level subdomains and complex TLDs.
+
+    Examples:
+        - 'sub.example.com' for 'example.com' -> True
+        - 'a.b.c.example.com' for 'example.com' -> True
+        - 'example.com.evil.com' for 'example.com' -> False
+        - 'notexample.com' for 'example.com' -> False
+
+    Args:
+        target (str): The target to validate (subdomain or hostname)
+        domain_name (str): The domain name to validate against
+
+    Returns:
+        bool: True if target is a valid subdomain, False otherwise
+    """
+    # Handle exact match
+    if target == domain_name:
+        return True
+
+    # Use get_domain_from_subdomain to extract the root domain from target
+    # This leverages tldextract which handles all TLD complexities
+    extracted_domain = get_domain_from_subdomain(target)
+
+    # The target is valid if its extracted domain matches the expected domain
+    return extracted_domain == domain_name
 
 
 def extract_httpx_url(line, follow_redirect):

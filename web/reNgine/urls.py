@@ -7,7 +7,7 @@ from drf_yasg import openapi
 from drf_yasg.views import get_schema_view
 from rest_framework import permissions
 
-from .common_views import page_not_found, permission_denied
+from .common_views import page_not_found, permission_denied, server_error
 
 
 schema_view = get_schema_view(
@@ -36,8 +36,15 @@ urlpatterns = (
         path("api/", include("api.urls", "api")),
         path("permission_denied/", permission_denied, name="permission_denied"),
         path("page_not_found/", page_not_found, name="page_not_found"),
+        path("server_error/", server_error, name="server_error"),
         path("ws/", include("api.ws_urls")),
     ]
     + static(settings.MEDIA_URL, document_root=settings.RENGINE_RESULTS)
     + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
 )
+
+# Custom error handlers - must be defined at module level in root URLconf
+handler400 = "reNgine.common_views.bad_request"
+handler403 = "reNgine.common_views.permission_denied"
+handler404 = "reNgine.common_views.page_not_found"
+handler500 = "reNgine.common_views.server_error"

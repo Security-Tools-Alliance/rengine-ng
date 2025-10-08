@@ -17,14 +17,14 @@ from reNgine.definitions import (
     THREADS,
 )
 from reNgine.settings import DEFAULT_THREADS
-from reNgine.tasks.command import stream_command
-from reNgine.utilities.command import generate_header_param
+from reNgine.utilities.command import generate_header_param, stream_command
 from reNgine.utilities.data import is_iterable
 from reNgine.utilities.database import (
     save_endpoint,
     save_ip_address,
-    save_subdomain,
     save_subdomain_metadata,
+    validate_and_save_subdomain,
+    with_batch_geolocalization,
 )
 from reNgine.utilities.dns import resolve_subdomain_ips
 from reNgine.utilities.endpoint import get_http_urls, smart_http_crawl_if_needed
@@ -44,6 +44,7 @@ logger = get_task_logger(__name__)
 
 
 @app.task(name="http_crawl", queue="io_queue", base=RengineTask, bind=True)
+@with_batch_geolocalization
 def http_crawl(
     self,
     urls=None,  # Changed from urls=[]
@@ -176,7 +177,6 @@ def http_crawl(
 
         # Check if the http request has an error
         if "error" in line:
-            logger.error(line)
             continue
 
         line_str = json.dumps(line, indent=2)
@@ -197,7 +197,6 @@ def http_crawl(
         cdn = line.get("cdn", False)
         rt = line.get("time")
         techs = line.get("tech", [])
-        cname = line.get("cname", "")
         content_type = line.get("content_type", "")
         response_time = -1
         port_number = line.get("port")
@@ -209,9 +208,8 @@ def http_crawl(
 
         # Create/get Subdomain object in DB
         subdomain_name = get_subdomain_from_url(http_url)
-        subdomain, _ = save_subdomain(subdomain_name, ctx=ctx)
-        if not isinstance(subdomain, Subdomain):
-            logger.error(f"Invalid subdomain encountered: {subdomain}")
+        subdomain, _ = validate_and_save_subdomain(subdomain_name, ctx=ctx)
+        if subdomain is None:
             continue
 
         # Save default HTTP URL to endpoint object in DB
@@ -300,7 +298,7 @@ def http_crawl(
     # Check if httpx returned any lines
     if not results:
         logger.warning(f"httpx returned no lines for command: {cmd}")
-        logger.warning(f"URLs processed: {urls}")
+        logger.debug(f"URLs processed: {urls}")
         if len(urls) > 1:
             logger.error(f"Input file path: {input_path}")
 
@@ -320,6 +318,7 @@ def http_crawl(
 
 
 @app.task(name="pre_crawl", queue="cpu_queue", base=RengineTask, bind=True)
+@with_batch_geolocalization
 def pre_crawl(self, ctx={}, description=None):
     """
     Pre-crawl existing subdomains to ensure endpoints are alive
@@ -389,9 +388,11 @@ def pre_crawl(self, ctx={}, description=None):
         # Create endpoints and test ports for each discovered IP
         for ip_address in all_discovered_ips:
             # Create a subdomain entry for the IP itself (for endpoint association)
-            ip_subdomain, ip_subdomain_created = save_subdomain(ip_address, ctx=ctx)
-            if ip_subdomain_created:
+            ip_subdomain, ip_subdomain_created = validate_and_save_subdomain(ip_address, ctx=ctx)
+            if ip_subdomain and ip_subdomain_created:
                 logger.info(f"Created subdomain entry for IP: {ip_address}")
+            else:
+                logger.warning(f"Failed to create subdomain entry for IP: {ip_address}")
 
             # Create basic HTTP endpoint
             url = f"http://{ip_address}"
@@ -465,6 +466,7 @@ def pre_crawl(self, ctx={}, description=None):
 
 
 @app.task(name="intermediate_crawl", queue="cpu_queue", base=RengineTask, bind=True)
+@with_batch_geolocalization
 def intermediate_crawl(self, ctx={}, description=None):
     """
     Intermediate crawl phase - crawl newly discovered endpoints after fetch_url
@@ -510,6 +512,7 @@ def intermediate_crawl(self, ctx={}, description=None):
 
 
 @app.task(name="post_crawl", queue="cpu_queue", base=RengineTask, bind=True)
+@with_batch_geolocalization
 def post_crawl(self, ctx={}, description=None):
     """
     Post-crawl phase - final verification and cleanup of endpoints

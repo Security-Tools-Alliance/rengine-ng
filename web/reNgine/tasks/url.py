@@ -30,11 +30,11 @@ from reNgine.settings import DEFAULT_THREADS, DELETE_DUPLICATES_THRESHOLD
 from reNgine.tasks.command import run_command
 from reNgine.utilities.command import generate_header_param
 from reNgine.utilities.data import is_iterable
-from reNgine.utilities.database import save_endpoint, save_subdomain
+from reNgine.utilities.database import save_endpoint, validate_and_save_subdomain
 from reNgine.utilities.endpoint import get_http_urls
 from reNgine.utilities.proxy import get_random_proxy
 from reNgine.utilities.url import get_subdomain_from_url, sanitize_url
-from startScan.models import EndPoint, Subdomain
+from startScan.models import EndPoint
 
 
 logger = get_task_logger(__name__)
@@ -277,9 +277,8 @@ def fetch_url(self, urls=[], ctx={}, description=None):
         for url in lines:
             http_url = sanitize_url(url)
             subdomain_name = get_subdomain_from_url(http_url)
-            subdomain, _ = save_subdomain(subdomain_name, ctx=ctx)
-            if not isinstance(subdomain, Subdomain):
-                logger.error(f"Invalid subdomain encountered: {subdomain}")
+            subdomain, _ = validate_and_save_subdomain(subdomain_name, ctx=ctx)
+            if subdomain is None:
                 continue
             endpoint, created = save_endpoint(http_url=http_url, subdomain=subdomain, ctx=ctx)
             if not endpoint:
@@ -292,6 +291,13 @@ def fetch_url(self, urls=[], ctx={}, description=None):
             # TODO Add tool that found the URL to the db (need to update db model)
             # endpoint.found_by_tools = ','.join(tool_mapping.get(url, []))  # Save tools in the endpoint
             endpoint.save()
+
+    # Remove duplicate endpoints if configured
+    if should_remove_duplicate_endpoints and all_urls:
+        logger.info("Removing duplicate endpoints after URL discovery")
+        remove_duplicate_endpoints(
+            scan_history_id=self.scan_id, domain_id=self.domain_id, duplicate_removal_fields=duplicate_removal_fields
+        )
 
     return all_urls
 

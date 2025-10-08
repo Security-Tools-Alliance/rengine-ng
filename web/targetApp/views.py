@@ -1,6 +1,7 @@
 import csv
 from datetime import timedelta
 import io
+import ipaddress
 import json
 import logging
 from urllib.parse import urlparse
@@ -10,7 +11,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db.models import Count
-from django.http import Http404
+from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.utils import timezone
@@ -27,6 +28,7 @@ from reNgine.tasks import (
     run_command,
 )
 from reNgine.utilities.data import get_ip_info, get_ips_from_cidr_range
+from reNgine.utilities.dns import get_reverse_dns
 from reNgine.utilities.url import sanitize_url
 from scanEngine.models import EngineType
 from startScan.models import (
@@ -54,9 +56,93 @@ from targetApp.models import (
     Organization,
     Project,
 )
+from targetApp.utilities import StatsTracker
 
 
 logger = logging.getLogger(__name__)
+
+
+def validate_dns_servers(dns_servers_string):
+    """
+    Validate a comma-separated string of DNS servers.
+
+    Validates that each entry is either a valid IPv4 address, IPv6 address, or hostname.
+    Supports optional port specification (e.g., 8.8.8.8:53).
+
+    Args:
+        dns_servers_string (str): Comma-separated DNS servers string
+
+    Returns:
+        tuple: (is_valid, error_message, cleaned_servers)
+            - is_valid: Boolean indicating if validation passed
+            - error_message: Error message if validation failed, None otherwise
+            - cleaned_servers: Cleaned and validated DNS servers string
+
+    Examples:
+        >>> validate_dns_servers("8.8.8.8,1.1.1.1")
+        (True, None, "8.8.8.8,1.1.1.1")
+
+        >>> validate_dns_servers("8.8.8.8,invalid!@#,1.1.1.1")
+        (False, "Invalid DNS server: invalid!@#", None)
+    """
+    if not dns_servers_string:
+        return True, None, ""
+
+    # Split by comma and clean up whitespace
+    servers = [s.strip() for s in dns_servers_string.split(",") if s.strip()]
+
+    if not servers:
+        return True, None, ""
+
+    validated_servers = []
+
+    for server in servers:
+        # Split address and port if port is specified
+        if ":" in server and not server.count(":") > 1:  # IPv4 with port
+            address, port = server.rsplit(":", 1)
+            try:
+                port_num = int(port)
+                if port_num < 1 or port_num > 65535:
+                    return False, f"Invalid port number in DNS server: {server}", None
+            except ValueError:
+                return False, f"Invalid port in DNS server: {server}", None
+        elif server.count(":") > 1:  # Likely IPv6
+            # Handle IPv6 - could be with or without port
+            # For simplicity, we'll treat it as full address for now
+            address = server
+        else:
+            address = server
+
+        # Validate the address part
+        is_valid = False
+
+        # Try IPv4
+        try:
+            ipaddress.IPv4Address(address)
+            is_valid = True
+        except (ipaddress.AddressValueError, ValueError):
+            pass
+
+        # Try IPv6 if IPv4 failed
+        if not is_valid:
+            try:
+                ipaddress.IPv6Address(address)
+                is_valid = True
+            except (ipaddress.AddressValueError, ValueError):
+                pass
+
+        # Try hostname validation if IP validation failed
+        if not is_valid and (validators.domain(address) or validators.ipv4(address) or validators.ipv6(address)):
+            is_valid = True
+
+        if not is_valid:
+            return False, f"Invalid DNS server address: {server}", None
+
+        validated_servers.append(server)
+
+    # Return cleaned servers string
+    cleaned = ",".join(validated_servers)
+    return True, None, cleaned
 
 
 def index(request):
@@ -83,8 +169,8 @@ def add_target(request, slug):
     project = Project.objects.get(slug=slug)
     form = AddTargetForm(request.POST or None)
     if request.method == "POST":
-        logger.info(request.POST)
-        added_target_count = 0
+        logger.info("POST data received: %s", dict(request.POST))
+        total_processed_count = 0
         multiple_targets = request.POST.get("add-multiple-targets")
         ip_target = request.POST.get("add-ip-target")
         try:
@@ -186,9 +272,9 @@ def add_target(request, slug):
                             )
                             domain.insert_date = timezone.now()
                             domain.save()
-                            added_target_count += 1
+                            total_processed_count += 1
                             if created:
-                                logger.info("Added new domain %s", domain.name)
+                                logger.info("Added new target %s", domain.name)
 
                             if organization_name:
                                 organization = None
@@ -210,7 +296,9 @@ def add_target(request, slug):
                     for ip_address in ips:
                         ip_data = get_ip_info(ip_address)
                         ip, created = IpAddress.objects.get_or_create(address=ip_address)
-                        ip.reverse_pointer = ip_data.reverse_pointer
+
+                        # Perform reverse DNS lookup for accurate reverse pointer
+                        ip.reverse_pointer = get_reverse_dns(ip_address)
                         ip.is_private = ip_data.is_private
                         ip.version = ip_data.version
                         ip.save()
@@ -258,7 +346,7 @@ def add_target(request, slug):
                                 )
                                 continue
                             Domain.objects.create(name=target_domain, project=project, insert_date=timezone.now())
-                            added_target_count += 1
+                            total_processed_count += 1
 
                 elif csv_file:
                     is_csv = csv_file.content_type = "text/csv" or csv_file.name.split(".")[-1] == "csv"
@@ -281,7 +369,7 @@ def add_target(request, slug):
                             domain_obj = Domain.objects.create(
                                 name=domain, project=project, description=description, insert_date=timezone.now()
                             )
-                            added_target_count += 1
+                            total_processed_count += 1
 
                             # Optionally add domain to organization
                             if organization:
@@ -294,59 +382,441 @@ def add_target(request, slug):
                                     )
                                 organization.domains.add(domain_obj)
             elif ip_target:
-                # add ip's from "resolve and add ip address" tab
-                resolved_ips = [ip.rstrip() for ip in request.POST.getlist("resolved_ip_domains") if ip]
-                for ip in resolved_ips:
-                    is_domain = bool(validators.domain(ip))
-                    is_ip = bool(validators.ipv4(ip)) or bool(validators.ipv6(ip))
-                    if not is_ip and not is_domain:
-                        messages.add_message(
-                            request, messages.ERROR, f"IP {ip} is not a valid IP address / domain. Skipping."
+                # add targets from "resolve and add ip address" tab with improved methodology
+                from ipaddress import AddressValueError
+                import json
+
+                from reNgine.utilities.url import get_domain_from_subdomain
+                from startScan.models import Subdomain
+
+                # Get selected items from the form
+                discovered_domains = request.POST.getlist("discovered_domains")
+                resolved_hosts_data = request.POST.getlist("resolved_hosts")
+
+                target_name = request.POST.get("targetName", "").strip()
+                description = request.POST.get("targetDescription", "")
+                h1_team_handle = request.POST.get("targetH1TeamHandle")
+                original_ip_range = request.POST.get("ip_address", "")
+                used_dns_servers = request.POST.get("used_dns_servers", "").strip()
+
+                # Validate DNS servers input for security
+                if used_dns_servers:
+                    is_valid, error_msg, cleaned_dns = validate_dns_servers(used_dns_servers)
+                    if not is_valid:
+                        messages.add_message(request, messages.ERROR, f"Invalid DNS servers configuration: {error_msg}")
+                        logger.warning(f"Invalid DNS servers submitted: {used_dns_servers} - {error_msg}")
+                        context = {"current_project": project}
+                        return render(request, "target/add.html", context)
+                    used_dns_servers = cleaned_dns
+
+                logger.info(f"Processing IP scan results for {original_ip_range}")
+                logger.info(f"Target name: {target_name}")
+                logger.info(f"Selected domains: {discovered_domains}")
+                logger.info(f"Selected hosts count: {len(resolved_hosts_data)}")
+                logger.info(f"DNS servers used: {used_dns_servers}")
+
+                # Parse selected hosts to categorize them and deduplicate
+                selected_domains = set()
+                selected_hostnames = []
+                selected_ips = []
+                seen_hostnames = set()
+                seen_ips = set()
+
+                # Initialize stats tracker for detailed feedback
+                stats = StatsTracker()
+
+                # If target name is provided, create a single target and group everything under it
+                if target_name:
+                    logger.info(f"Creating single target '{target_name}' to group all selected items")
+
+                    # Create the main target with the provided name
+                    main_target, created = Domain.objects.get_or_create(
+                        name=target_name,
+                        project=project,
+                        defaults={
+                            "description": description or f"Grouped target from {original_ip_range}",
+                            "h1_team_handle": h1_team_handle,
+                            "insert_date": timezone.now(),
+                            "custom_dns_servers": used_dns_servers if used_dns_servers else None,
+                        },
+                    )
+
+                    # Update DNS servers if target already exists and DNS was provided
+                    if not created and used_dns_servers:
+                        # Use select_for_update to prevent race conditions
+                        from django.db import transaction
+
+                        with transaction.atomic():
+                            main_target_locked = type(main_target).objects.select_for_update().get(pk=main_target.pk)
+                            main_target_locked.custom_dns_servers = used_dns_servers
+                            main_target_locked.save()
+                        logger.info(f"Updated DNS servers for existing target {main_target.name}")
+
+                    stats.domain(created)
+                    if created:
+                        logger.info(
+                            "Created new grouped target %s with DNS servers: %s", main_target.name, used_dns_servers
                         )
-                        logger.warning("Invalid IP address/domain provided. Skipping.")
-                        continue
-                    description = request.POST.get("targetDescription", "")
-                    h1_team_handle = request.POST.get("targetH1TeamHandle")
-                    if not Domain.objects.filter(name=ip).exists():
-                        domain, created = Domain.objects.get_or_create(
-                            name=ip,
-                            description=description,
-                            h1_team_handle=h1_team_handle,
-                            project=project,
-                            ip_address_cidr=ip if is_ip else None,
-                        )
-                        domain.insert_date = timezone.now()
-                        domain.save()
-                        added_target_count += 1
-                        if created:
-                            logger.info("Added new domain %s", domain.name)
-                        if is_ip:
-                            ip_data = get_ip_info(ip)
-                            ip, created = IpAddress.objects.get_or_create(address=ip)
-                            ip.reverse_pointer = ip_data.reverse_pointer
-                            ip.is_private = ip_data.is_private
-                            ip.version = ip_data.version
-                            ip.save()
+                    else:
+                        logger.info("Using existing target %s", main_target.name)
+
+                    # Process all selected items as subdomains of the main target
+                    logger.info(f"Processing {len(resolved_hosts_data)} selected hosts for target {main_target.name}")
+                    for i, host_data_json in enumerate(resolved_hosts_data):
+                        try:
+                            logger.debug(f"Processing host {i + 1}/{len(resolved_hosts_data)}: {host_data_json}")
+                            host_info = json.loads(host_data_json.replace("&quot;", '"'))
+                            ip = host_info.get("ip")
+                            hostname = host_info.get("domain")
+                            is_alive = host_info.get("is_alive", False)
+
+                            logger.debug(f"Parsed host info - IP: {ip}, Hostname: {hostname}, Alive: {is_alive}")
+
+                            # Deduplication: Skip if we've already processed this hostname
+                            if hostname in seen_hostnames:
+                                logger.debug("Skipping duplicate hostname: %s", hostname)
+                                continue
+                            seen_hostnames.add(hostname)
+
+                            # Create subdomain entry
+                            subdomain, created = Subdomain.objects.get_or_create(
+                                name=hostname,
+                                target_domain=main_target,
+                                defaults={
+                                    "discovered_date": timezone.now(),
+                                },
+                            )
+
+                            stats.subdomain(created)
                             if created:
-                                logger.info("Added new IP %s", ip)
+                                logger.info("Added subdomain %s to grouped target %s", hostname, main_target.name)
+                            else:
+                                logger.info("Subdomain %s already exists for target %s", hostname, main_target.name)
+
+                            # Create/update IP address record
+                            if validators.ipv4(ip) or validators.ipv6(ip):
+                                ip_data = get_ip_info(ip)
+
+                                # Perform reverse DNS lookup for accurate reverse pointer
+                                reverse_pointer = get_reverse_dns(ip)
+
+                                ip_obj, ip_created = IpAddress.objects.get_or_create(
+                                    address=ip,
+                                    defaults={
+                                        "reverse_pointer": reverse_pointer,
+                                        "is_private": ip_data.is_private,
+                                        "version": ip_data.version,
+                                    },
+                                )
+                                subdomain.ip_addresses.add(ip_obj)
+
+                                stats.ip(ip_created)
+                                if ip_created:
+                                    logger.info("Added new IP %s", ip_obj.address)
+
+                            subdomain.save()
+
+                        except (json.JSONDecodeError, KeyError) as e:
+                            logger.warning(f"Error processing host data '{host_data_json}': {e}")
+                            continue
+
+                    # Also add discovered domains as subdomains
+                    for domain in discovered_domains:
+                        if validators.domain(domain):
+                            subdomain, created = Subdomain.objects.get_or_create(
+                                name=domain,
+                                target_domain=main_target,
+                                defaults={
+                                    "discovered_date": timezone.now(),
+                                },
+                            )
+                            stats.subdomain(created)
+                            if created:
+                                logger.info(
+                                    "Added discovered domain %s as subdomain to grouped target %s",
+                                    domain,
+                                    main_target.name,
+                                )
+                            else:
+                                logger.info(
+                                    "Discovered domain %s already exists as subdomain for target %s",
+                                    domain,
+                                    main_target.name,
+                                )
+
+                    # Update total_processed_count
+                    total_processed_count = stats.get_total_processed()
+                    logger.info(f"Grouped target processing complete: {stats.as_dict()}")
+
+                else:
+                    # Original logic for individual targets (when no target name is provided)
+                    for host_data_json in resolved_hosts_data:
+                        try:
+                            host_info = json.loads(host_data_json.replace("&quot;", '"'))
+                            ip = host_info.get("ip")
+                            hostname = host_info.get("domain")
+                            is_alive = host_info.get("is_alive", False)
+                            resolved_by = host_info.get("resolved_by")
+
+                            if hostname != ip:  # It's a hostname
+                                # Deduplicate hostnames
+                                if hostname not in seen_hostnames:
+                                    seen_hostnames.add(hostname)
+                                    selected_hostnames.append(host_info)
+
+                                    # Extract domain from hostname for domain creation using tldextract
+                                    # This handles complex TLDs like .co.uk, .com.au correctly
+                                    domain_name = get_domain_from_subdomain(hostname)
+                                    if domain_name:
+                                        selected_domains.add(domain_name)
+                            else:  # It's an IP only
+                                # Deduplicate IPs
+                                if ip not in seen_ips:
+                                    seen_ips.add(ip)
+                                    selected_ips.append(host_info)
+                        except (json.JSONDecodeError, KeyError) as e:
+                            logger.warning(f"Error processing host data: {e}")
+                            continue
+
+                    # Add discovered domains from checkboxes to the set
+                    for domain in discovered_domains:
+                        if validators.domain(domain):
+                            selected_domains.add(domain)
+
+                    subdomain_count = 0
+
+                    # 1. If user selected domains, add each domain as a target
+                    domain_targets = {}
+                    for domain_name in selected_domains:
+                        if validators.domain(domain_name):
+                            domain, created = Domain.objects.get_or_create(
+                                name=domain_name,
+                                project=project,
+                                defaults={
+                                    "description": f"{description} (Discovered from {original_ip_range})",
+                                    "h1_team_handle": h1_team_handle,
+                                    "insert_date": timezone.now(),
+                                    "custom_dns_servers": used_dns_servers if used_dns_servers else None,
+                                },
+                            )
+
+                            # Update DNS servers if target already exists and DNS was provided
+                            if not created and used_dns_servers:
+                                domain.custom_dns_servers = used_dns_servers
+                                domain.save()
+                                logger.info(f"Updated DNS servers for existing domain target {domain.name}")
+
+                            stats.domain(created)
+                            if created:
+                                logger.info("Added new target %s with DNS servers: %s", domain.name, used_dns_servers)
+                            else:
+                                logger.info("Domain target %s already exists", domain.name)
+                            domain_targets[domain_name] = domain
+
+                    # 2. Process selected hostnames - add them as subdomains to their respective domain targets
+                    for host_info in selected_hostnames:
+                        ip = host_info.get("ip")
+                        hostname = host_info.get("domain")
+                        is_alive = host_info.get("is_alive", False)
+
+                        # Find the domain target for this hostname using consistent extraction
+                        domain_name = get_domain_from_subdomain(hostname)
+                        if domain_name:
+                            target_domain = domain_targets.get(domain_name)
+
+                            if target_domain:
+                                # Create subdomain entry
+                                subdomain, created = Subdomain.objects.get_or_create(
+                                    name=hostname,
+                                    target_domain=target_domain,
+                                    defaults={
+                                        "discovered_date": timezone.now(),
+                                    },
+                                )
+
+                                stats.subdomain(created)
+                                if created:
+                                    logger.info(
+                                        "Added hostname subdomain %s for target %s", hostname, target_domain.name
+                                    )
+                                else:
+                                    logger.info(
+                                        "Subdomain %s already exists for target %s", hostname, target_domain.name
+                                    )
+
+                                # Create/update IP address record
+                                if validators.ipv4(ip) or validators.ipv6(ip):
+                                    ip_data = get_ip_info(ip)
+
+                                    # Perform reverse DNS lookup for accurate reverse pointer
+                                    reverse_pointer = get_reverse_dns(ip)
+
+                                    ip_obj, ip_created = IpAddress.objects.get_or_create(
+                                        address=ip,
+                                        defaults={
+                                            "reverse_pointer": reverse_pointer,
+                                            "is_private": ip_data.is_private,
+                                            "version": ip_data.version,
+                                        },
+                                    )
+                                    subdomain.ip_addresses.add(ip_obj)
+
+                                    stats.ip(ip_created)
+                                    if ip_created:
+                                        logger.info("Added new IP %s", ip_obj.address)
+
+                                subdomain.save()
+
+                    # 3. Process selected IPs - create a target with the IP range and add IPs as subdomains
+                    if selected_ips:
+                        try:
+                            # Create target with IP range naming convention and store original IP range
+                            # Use a clear naming convention that distinguishes IP ranges from domain names
+                            range_target_name = f"iprange-{original_ip_range.replace('/', '_').replace(':', '-')}"
+                            ip_range_domain, created = Domain.objects.get_or_create(
+                                name=range_target_name,
+                                project=project,
+                                defaults={
+                                    "description": f"{description} (IP Range {original_ip_range})",
+                                    "h1_team_handle": h1_team_handle,
+                                    "insert_date": timezone.now(),
+                                    "ip_address_cidr": original_ip_range,
+                                    "custom_dns_servers": used_dns_servers if used_dns_servers else None,
+                                },
+                            )
+
+                            # Update DNS servers if target already exists and DNS was provided
+                            if not created and used_dns_servers:
+                                ip_range_domain.custom_dns_servers = used_dns_servers
+                                ip_range_domain.save()
+                                logger.info(f"Updated DNS servers for existing IP range target {ip_range_domain.name}")
+
+                            stats.domain(created)
+                            if created:
+                                logger.info(
+                                    "Added new IP range target %s with DNS servers: %s",
+                                    ip_range_domain.name,
+                                    used_dns_servers,
+                                )
+                            else:
+                                logger.info("IP range target %s already exists", ip_range_domain.name)
+
+                            # Add selected IPs as subdomains
+                            for host_info in selected_ips:
+                                ip = host_info.get("ip")
+                                is_alive = host_info.get("is_alive", False)
+
+                                # Create subdomain entry for the IP
+                                subdomain, created = Subdomain.objects.get_or_create(
+                                    name=ip,
+                                    target_domain=ip_range_domain,
+                                    defaults={
+                                        "discovered_date": timezone.now(),
+                                    },
+                                )
+
+                                # Create/update IP address record
+                                if validators.ipv4(ip) or validators.ipv6(ip):
+                                    ip_data = get_ip_info(ip)
+
+                                    # Perform reverse DNS lookup for accurate reverse pointer
+                                    reverse_pointer = get_reverse_dns(ip)
+
+                                    ip_obj, ip_created = IpAddress.objects.get_or_create(
+                                        address=ip,
+                                        defaults={
+                                            "reverse_pointer": reverse_pointer,
+                                            "is_private": ip_data.is_private,
+                                            "version": ip_data.version,
+                                        },
+                                    )
+                                    subdomain.ip_addresses.add(ip_obj)
+
+                                    if ip_created:
+                                        logger.info("Added new IP %s", ip_obj.address)
+
+                                stats.subdomain(created)
+                                if created:
+                                    logger.info("Added IP subdomain %s for target %s", ip, ip_range_domain.name)
+                                else:
+                                    logger.info(
+                                        "IP subdomain %s already exists for target %s", ip, ip_range_domain.name
+                                    )
+
+                                subdomain.save()
+
+                        except (AddressValueError, ValueError) as e:
+                            logger.warning(f"Error creating IP range target: {e}")
+
+                    # Update total_processed_count to include both created and existing items
+                    total_processed_count = stats.get_total_processed()
+
+                    logger.info(f"Processing complete: {stats.as_dict()}")
 
         except (Http404, ValueError) as e:
             logger.exception(e)
             messages.add_message(request, messages.ERROR, f"Exception while adding domain: {e}")
             return http.HttpResponseRedirect(reverse("add_target", kwargs={"slug": slug}))
 
-        # No targets added, redirect to add target page
-        if added_target_count == 0:
-            messages.add_message(
-                request,
-                messages.ERROR,
-                "Oops! Could not import any targets, either targets already exists or is not a valid target.",
-            )
+        # No targets processed, handle error case
+        if total_processed_count == 0:
+            # Provide more detailed error message based on the operation type
+            if ip_target:
+                error_msg = "No targets were processed. This could be due to: 1) All selected hosts already exist, 2) Invalid host data format, or 3) Domain extraction errors. Check the logs for details."
+            else:
+                error_msg = (
+                    "Oops! Could not import any targets, either targets already exists or is not a valid target."
+                )
+
+            logger.warning(f"No targets processed (total_processed_count=0) for request: {dict(request.POST)}")
+            messages.add_message(request, messages.ERROR, error_msg)
+
+            # Handle AJAX requests with JSON error response
+            if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+                return JsonResponse({"status": "error", "message": error_msg, "added_count": 0}, status=400)
+
             return http.HttpResponseRedirect(reverse("add_target", kwargs={"slug": slug}))
 
-        # Targets added successfully, redirect to targets list
-        msg = f"{added_target_count} targets added successfully"
+        # Create detailed success message
+        if ip_target and "stats" in locals():
+            # Detailed feedback for IP target additions
+            stats_dict = stats.as_dict()
+            msg_parts = []
+            if stats_dict["domains_created"] > 0:
+                msg_parts.append(f"{stats_dict['domains_created']} new target(s)")
+            if stats_dict["domains_existing"] > 0:
+                msg_parts.append(f"{stats_dict['domains_existing']} existing target(s)")
+            if stats_dict["subdomains_created"] > 0:
+                msg_parts.append(f"{stats_dict['subdomains_created']} new subdomain(s)")
+            if stats_dict["subdomains_existing"] > 0:
+                msg_parts.append(f"{stats_dict['subdomains_existing']} existing subdomain(s)")
+
+            if msg_parts:
+                msg = f"Processing complete: {', '.join(msg_parts)} processed successfully"
+            else:
+                msg = "No targets were processed"
+        else:
+            # Standard message for other target types
+            msg = f"{total_processed_count} targets processed successfully"
+
         messages.add_message(request, messages.SUCCESS, msg)
+
+        # Handle AJAX requests with JSON response
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            response_data = {
+                "status": "success",
+                "message": msg,
+                "processed_count": total_processed_count,
+                "redirect_url": reverse("list_target", kwargs={"slug": slug}),
+            }
+
+            # Add detailed stats for IP targets
+            if ip_target and "stats" in locals():
+                response_data["stats"] = stats.as_dict()
+
+            return JsonResponse(response_data)
+
+        # Regular form submission redirect
         return http.HttpResponseRedirect(reverse("list_target", kwargs={"slug": slug}))
 
     # GET request
