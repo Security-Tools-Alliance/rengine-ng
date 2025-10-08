@@ -10,17 +10,18 @@ custom_header: {
 
 # Port scanning with service detection
 port_scan: {
-  'uses_tools': ['nmap'],
-  'threads': 30,
-  'timeout': 15,
-  'intensity': 'normal',
-  'rate_limit': 75,
+  'timeout': 5,
+  # 'exclude_ports': [],
+  # 'exclude_subdomains': [],
   'ports': ['top-1000'],
-  'scan_techniques': ['-sS', '-sV', '-O', '-A'],  # Comprehensive scan
-  'service_detection': true,
-  'os_detection': true,
-  'script_scanning': true,
-  'nmap_scripts': ['default', 'vuln', 'safe', 'discovery', 'version']
+  'rate_limit': 150,
+  'threads': 30,
+  'passive': false,
+  # 'use_naabu_config': false,
+  # 'enable_nmap': true,
+  # 'nmap_cmd': '',
+  # 'nmap_script': '',
+  # 'nmap_script_args': ''
 }
 
 # HTTP crawling for web services

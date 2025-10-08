@@ -34,8 +34,7 @@ from reNgine.settings import (
     DEFAULT_RATE_LIMIT,
     DEFAULT_THREADS,
 )
-from reNgine.tasks.command import stream_command
-from reNgine.utilities.command import generate_header_param
+from reNgine.utilities.command import generate_header_param, stream_command
 from reNgine.utilities.database import save_endpoint, save_fuzzing_file
 from reNgine.utilities.endpoint import ensure_endpoints_crawled_and_execute, get_http_urls
 from reNgine.utilities.proxy import get_random_proxy

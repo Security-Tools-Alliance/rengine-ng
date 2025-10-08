@@ -310,6 +310,7 @@ Add or Import Targets
     var currentPingTaskId = null;
     var socket = null; // Global WebSocket variable
     var lastWebSocketProgress = 0; // Track last WebSocket progress update
+    var usedDnsServers = ""; // Store DNS servers used during discovery
     
     var add_multiple_targets_btn = document.getElementById("add-multiple-targets");
     add_multiple_targets_btn.disabled = true;
@@ -551,6 +552,7 @@ Add or Import Targets
         addLogEntry('DNS discovery completed successfully', 'success');
         addLogEntry(`Found ${json_data.total_hosts} hosts (${json_data.hostname_count} with hostnames)`, 'success');
         if (json_data.used_dns_servers) {
+          usedDnsServers = json_data.used_dns_servers.join(',');
           addLogEntry(`DNS servers used: ${json_data.used_dns_servers.join(', ')}`, 'info');
         }
         
@@ -1187,6 +1189,7 @@ Add or Import Targets
       formData.append('targetName', $('[name=targetName]').val());
       formData.append('targetDescription', $('[name=targetDescription]').val());
       formData.append('targetH1TeamHandle', $('[name=targetH1TeamHandle]').val());
+      formData.append('used_dns_servers', usedDnsServers);
       formData.append('add-ip-target', 'submit');
       
       // Add selected discovered domains

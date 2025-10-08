@@ -10,16 +10,18 @@ custom_header: {
 
 # Quick port scan focusing on common services
 port_scan: {
-  'uses_tools': ['nmap'],
-  'threads': 50,
   'timeout': 5,
-  'intensity': 'normal',
-  'rate_limit': 200,
+  # 'exclude_ports': [],
+  # 'exclude_subdomains': [],
   'ports': ['top-100'],
-  'scan_techniques': ['-sS', '-sV'],
-  'service_detection': true,
-  'os_detection': false,
-  'script_scanning': false
+  'rate_limit': 150,
+  'threads': 30,
+  'passive': false,
+  # 'use_naabu_config': false,
+  # 'enable_nmap': true,
+  # 'nmap_cmd': '',
+  # 'nmap_script': '',
+  # 'nmap_script_args': ''
 }
 
 # HTTP crawling for common web ports

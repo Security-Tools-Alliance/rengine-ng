@@ -17,8 +17,7 @@ from reNgine.definitions import (
     THREADS,
 )
 from reNgine.settings import DEFAULT_THREADS
-from reNgine.tasks.command import stream_command
-from reNgine.utilities.command import generate_header_param
+from reNgine.utilities.command import generate_header_param, stream_command
 from reNgine.utilities.data import is_iterable
 from reNgine.utilities.database import (
     save_endpoint,

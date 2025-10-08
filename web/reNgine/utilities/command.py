@@ -1,13 +1,16 @@
 import json
 import os
 import re
+import select
 import shlex
 import subprocess
+import time
 
 from celery.utils.log import get_task_logger
 from django.utils import timezone
 
-from startScan.models import Command
+from reNgine.utilities.dns_wrapper import build_command_with_dns
+from startScan.models import Command, ScanHistory
 
 
 logger = get_task_logger(__name__)
@@ -170,6 +173,121 @@ def execute_command(command, shell, cwd):
     )
 
 
+def stream_command_internal(
+    cmd, cwd=None, shell=False, history_file=None, encoding="utf-8", scan_id=None, activity_id=None, trunc_char=None
+):
+    """
+    Internal implementation of stream command.
+    Use stream_command() instead which handles DNS automatically.
+    """
+    logger.info(f"Starting real-time execution of command: {cmd}")
+
+    command_obj = create_command_object(cmd, scan_id, activity_id)
+    command = prepare_command(cmd, shell)
+    logger.debug(f"Prepared stream command: {command}")
+
+    # Execute command with line buffering for better streaming
+    process = subprocess.Popen(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        shell=shell,
+        cwd=cwd,
+        bufsize=1,  # Line buffered
+        universal_newlines=True,
+        encoding=encoding,
+    )
+
+    # Initialize buffers and tracking variables
+    stdout_buffer = ""
+    stderr_buffer = ""
+    full_output = ""
+    full_error = ""
+
+    # Use select for real-time streaming on Linux
+    while True:
+        # Check if process has terminated
+        if process.poll() is not None:
+            # Read any remaining data
+            remaining_stdout = process.stdout.read()
+            remaining_stderr = process.stderr.read()
+
+            if remaining_stdout:
+                stdout_buffer += remaining_stdout
+                full_output += remaining_stdout
+            if remaining_stderr:
+                stderr_buffer += remaining_stderr
+                full_error += remaining_stderr
+
+            # Process any remaining complete lines
+            while "\n" in stdout_buffer:
+                line, stdout_buffer = stdout_buffer.split("\n", 1)
+                if line.strip():
+                    try:
+                        if item := process_line(line, trunc_char):
+                            yield item
+                    except Exception as e:
+                        logger.error(f"Error processing output line: {e}")
+            break
+
+        # Use select to wait for data availability
+        try:
+            ready, _, _ = select.select([process.stdout, process.stderr], [], [], 0.1)
+
+            for fd in ready:
+                try:
+                    if data := fd.read(1024):
+                        if fd == process.stdout:
+                            stdout_buffer += data
+                            full_output += data
+
+                            # Process complete lines immediately
+                            while "\n" in stdout_buffer:
+                                line, stdout_buffer = stdout_buffer.split("\n", 1)
+                                if line.strip():
+                                    try:
+                                        if item := process_line(line, trunc_char):
+                                            yield item
+                                    except Exception as e:
+                                        logger.error(f"Error processing output line: {e}")
+                        else:
+                            stderr_buffer += data
+                            full_error += data
+                except Exception as e:
+                    logger.debug(f"Error reading from file descriptor: {e}")
+                    continue
+
+        except Exception as e:
+            logger.debug(f"Select error: {e}")
+            # Fallback to simple polling if select fails
+            time.sleep(0.1)
+
+    # Wait for process completion
+    process.wait()
+    return_code = process.returncode
+
+    # Log completion status
+    if return_code != 0:
+        error_msg = f"Command failed with exit code {return_code}"
+        if full_error:
+            error_msg += f"\nError output:\n{full_error}"
+        logger.error(error_msg)
+    else:
+        logger.info(f"Command completed successfully with exit code {return_code}")
+
+    # Save command results
+    command_obj.output = full_output or None
+    command_obj.error_output = full_error or None
+    command_obj.return_code = return_code
+    command_obj.save()
+
+    logger.debug(f"Command returned exit code: {return_code}")
+
+    # Write history if requested
+    if history_file:
+        write_history(history_file, cmd, return_code, full_output)
+
+
 # ------------------#
 # Header generation #
 # ------------------#
@@ -271,3 +389,115 @@ def generate_gospider_params(custom_header):
         else:
             params.append(f' -H "{key}:{value}"')
     return " ".join(params)
+
+
+def apply_dns_wrapper(cmd, scan_id):
+    """
+    Apply DNS wrapper to command if scan has a target domain with custom DNS.
+
+    Args:
+        cmd (str): Original command string
+        scan_id (int): Scan ID to retrieve domain from
+
+    Returns:
+        str: Command with DNS arguments injected if applicable, original otherwise
+    """
+    if not scan_id:
+        return cmd
+
+    try:
+        return get_dns_command(scan_id, cmd)
+    except Exception as e:
+        logger.debug(f"DNS wrapper not applied: {e}")
+        return cmd
+
+
+def execute_with_dns(cmd, scan_id, executor_func, *args, **kwargs):
+    """
+    Execute a function with DNS arguments injection.
+
+    Args:
+        cmd (str): Command to execute
+        scan_id (int): Scan ID
+        executor_func: Function to execute (either _run_command_internal or stream_command_internal)
+        *args, **kwargs: Arguments to pass to executor_func
+
+    Returns:
+        Whatever executor_func returns
+    """
+    # Apply DNS wrapper (inject DNS arguments for tools that support it)
+    cmd = apply_dns_wrapper(cmd, scan_id)
+
+    # Execute the command
+    return executor_func(cmd, *args, **kwargs)
+
+
+def stream_command(
+    cmd, cwd=None, shell=False, history_file=None, encoding="utf-8", scan_id=None, activity_id=None, trunc_char=None
+):
+    """
+    Execute a command and yield its output line by line in real-time.
+
+    Automatically applies DNS arguments injection for tools that support it
+    (subfinder, httpx, nmap, nuclei, dnsx, etc.)
+
+    Args:
+        cmd (str): The command to execute.
+        cwd (str, optional): The working directory for the command. Defaults to None.
+        shell (bool, optional): Whether to use shell execution. Defaults to False.
+        history_file (str, optional): File to write command history. Defaults to None.
+        encoding (str, optional): Encoding for the command output. Defaults to 'utf-8'.
+        scan_id (int, optional): ID of the associated scan. Defaults to None.
+        activity_id (int, optional): ID of the associated activity. Defaults to None.
+        trunc_char (str, optional): Character to truncate lines. Defaults to None.
+
+    Yields:
+        str or dict: Each line of the command output, processed and potentially parsed as JSON.
+    """
+    yield from execute_with_dns(
+        cmd, scan_id, stream_command_internal, cwd, shell, history_file, encoding, scan_id, activity_id, trunc_char
+    )
+
+
+def get_dns_command(scan_id, cmd):
+    """
+    Injects DNS server arguments into a command if the associated scan's domain has custom DNS servers.
+
+    This function retrieves the scan's domain and, if DNS servers are configured, modifies the command to include them.
+
+    Args:
+        scan_id (int): The ID of the scan whose domain should be checked for DNS servers.
+        cmd (str): The original command string.
+
+    Returns:
+        str: The command string with DNS arguments injected if applicable, otherwise the original command.
+    """
+    scan = ScanHistory.objects.get(pk=scan_id)
+    domain = scan.domain
+
+    if not domain or not domain.get_dns_servers():
+        return cmd
+
+    # Parse command: extract tool and arguments
+    cmd_parts = cmd.split(maxsplit=1)
+    if len(cmd_parts) != 2:
+        return cmd
+
+    tool_path, args = cmd_parts
+
+    # Extract tool name from path (e.g., /home/rengine/tools/go/bin/httpx → httpx)
+    tool_name = os.path.basename(tool_path)
+
+    # Build command with DNS wrapper using tool name for detection
+    dns_cmd = build_command_with_dns(tool_name, args.split(), domain=domain)
+
+    # Replace tool name back with original path in the first element
+    if dns_cmd and dns_cmd[0] == tool_name:
+        dns_cmd[0] = tool_path
+
+    new_cmd = " ".join(dns_cmd)
+
+    if new_cmd != cmd:
+        logger.info(f"DNS wrapper applied: {tool_name} → added DNS {', '.join(domain.get_dns_servers())}")
+
+    return new_cmd

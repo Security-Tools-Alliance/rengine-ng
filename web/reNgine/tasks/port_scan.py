@@ -31,8 +31,8 @@ from reNgine.settings import (
     DEFAULT_RATE_LIMIT,
     DEFAULT_THREADS,
 )
-from reNgine.tasks.command import run_command, stream_command
-from reNgine.utilities.command import get_nmap_cmd
+from reNgine.tasks.command import run_command
+from reNgine.utilities.command import get_nmap_cmd, stream_command
 from reNgine.utilities.data import return_iterable
 from reNgine.utilities.database import save_endpoint, save_ip_address, save_vulnerability, with_batch_geolocalization
 from reNgine.utilities.notification import get_task_title
@@ -265,7 +265,7 @@ def port_scan(self, hosts=None, ctx=None, description=None):
             "nmap_script_args": nmap_script_args,
             "ports_data": ports_data,
         }
-        run_nmap(ctx, **nmap_args)
+        run_nmap.apply_async(args=(ctx,), kwargs=nmap_args)
 
     return ports_data
 

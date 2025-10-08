@@ -148,10 +148,10 @@ def get_domain_from_subdomain(subdomain):
         if extracted.domain and not extracted.suffix and extracted.subdomain:
             # This is likely a private TLD like .local
             # Extract the last two parts: subdomain.domain
-            parts = subdomain.split('.')
+            parts = subdomain.split(".")
             if len(parts) >= 2:
                 # Take the last two parts as domain.tld
-                potential_domain = '.'.join(parts[-2:])
+                potential_domain = ".".join(parts[-2:])
                 if is_valid_domain_or_subdomain(potential_domain):
                     logger.debug(f"Extracted private TLD domain: {potential_domain} from {subdomain}")
                     return potential_domain

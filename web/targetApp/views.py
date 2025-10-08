@@ -313,11 +313,13 @@ def add_target(request, slug):
                 description = request.POST.get("targetDescription", "")
                 h1_team_handle = request.POST.get("targetH1TeamHandle")
                 original_ip_range = request.POST.get("ip_address", "")
+                used_dns_servers = request.POST.get("used_dns_servers", "").strip()
 
                 logger.info(f"Processing IP scan results for {original_ip_range}")
                 logger.info(f"Target name: {target_name}")
                 logger.info(f"Selected domains: {discovered_domains}")
                 logger.info(f"Selected hosts count: {len(resolved_hosts_data)}")
+                logger.info(f"DNS servers used: {used_dns_servers}")
 
                 # Parse selected hosts to categorize them and deduplicate
                 selected_domains = set()
@@ -341,11 +343,21 @@ def add_target(request, slug):
                             "description": description or f"Grouped target from {original_ip_range}",
                             "h1_team_handle": h1_team_handle,
                             "insert_date": timezone.now(),
+                            "custom_dns_servers": used_dns_servers if used_dns_servers else None,
                         },
                     )
+
+                    # Update DNS servers if target already exists and DNS was provided
+                    if not created and used_dns_servers:
+                        main_target.custom_dns_servers = used_dns_servers
+                        main_target.save()
+                        logger.info(f"Updated DNS servers for existing target {main_target.name}")
+
                     stats.domain(created)
                     if created:
-                        logger.info("Created new grouped target %s", main_target.name)
+                        logger.info(
+                            "Created new grouped target %s with DNS servers: %s", main_target.name, used_dns_servers
+                        )
                     else:
                         logger.info("Using existing target %s", main_target.name)
 
@@ -353,7 +365,7 @@ def add_target(request, slug):
                     logger.info(f"Processing {len(resolved_hosts_data)} selected hosts for target {main_target.name}")
                     for i, host_data_json in enumerate(resolved_hosts_data):
                         try:
-                            logger.debug(f"Processing host {i+1}/{len(resolved_hosts_data)}: {host_data_json}")
+                            logger.debug(f"Processing host {i + 1}/{len(resolved_hosts_data)}: {host_data_json}")
                             host_info = json.loads(host_data_json.replace("&quot;", '"'))
                             ip = host_info.get("ip")
                             hostname = host_info.get("domain")
@@ -485,11 +497,19 @@ def add_target(request, slug):
                                     "description": f"{description} (Discovered from {original_ip_range})",
                                     "h1_team_handle": h1_team_handle,
                                     "insert_date": timezone.now(),
+                                    "custom_dns_servers": used_dns_servers if used_dns_servers else None,
                                 },
                             )
+
+                            # Update DNS servers if target already exists and DNS was provided
+                            if not created and used_dns_servers:
+                                domain.custom_dns_servers = used_dns_servers
+                                domain.save()
+                                logger.info(f"Updated DNS servers for existing domain target {domain.name}")
+
                             stats.domain(created)
                             if created:
-                                logger.info("Added new target target %s", domain.name)
+                                logger.info("Added new target %s with DNS servers: %s", domain.name, used_dns_servers)
                             else:
                                 logger.info("Domain target %s already exists", domain.name)
                             domain_targets[domain_name] = domain
@@ -562,11 +582,23 @@ def add_target(request, slug):
                                     "h1_team_handle": h1_team_handle,
                                     "insert_date": timezone.now(),
                                     "ip_address_cidr": original_ip_range,
+                                    "custom_dns_servers": used_dns_servers if used_dns_servers else None,
                                 },
                             )
+
+                            # Update DNS servers if target already exists and DNS was provided
+                            if not created and used_dns_servers:
+                                ip_range_domain.custom_dns_servers = used_dns_servers
+                                ip_range_domain.save()
+                                logger.info(f"Updated DNS servers for existing IP range target {ip_range_domain.name}")
+
                             stats.domain(created)
                             if created:
-                                logger.info("Added new IP range target %s", ip_range_domain.name)
+                                logger.info(
+                                    "Added new IP range target %s with DNS servers: %s",
+                                    ip_range_domain.name,
+                                    used_dns_servers,
+                                )
                             else:
                                 logger.info("IP range target %s already exists", ip_range_domain.name)
 
@@ -633,8 +665,10 @@ def add_target(request, slug):
             if ip_target:
                 error_msg = "No targets were processed. This could be due to: 1) All selected hosts already exist, 2) Invalid host data format, or 3) Domain extraction errors. Check the logs for details."
             else:
-                error_msg = "Oops! Could not import any targets, either targets already exists or is not a valid target."
-            
+                error_msg = (
+                    "Oops! Could not import any targets, either targets already exists or is not a valid target."
+                )
+
             logger.warning(f"No targets processed (total_processed_count=0) for request: {dict(request.POST)}")
             messages.add_message(request, messages.ERROR, error_msg)
 
