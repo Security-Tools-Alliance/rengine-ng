@@ -118,6 +118,202 @@ from .serializers import (
 logger = logging.getLogger(__name__)
 
 
+def parse_pagination_params(start=None, length=None, page=None, page_size=None):
+    """
+    Validate and parse pagination parameters from query string.
+
+    Supports two pagination modes:
+    - DataTables style: start (offset) and length (page size)
+    - REST style: page (page number, 1-indexed) and page_size
+
+    Args:
+        start: Starting offset for DataTables pagination
+        length: Number of items per page for DataTables pagination
+        page: Page number (1-indexed) for REST pagination
+        page_size: Number of items per page for REST pagination
+
+    Returns:
+        dict: Parsed pagination parameters with 'type', 'start', and 'length' keys
+
+    Raises:
+        rest_framework.exceptions.ValidationError: If parameters are invalid
+    """
+    from rest_framework.exceptions import ValidationError
+
+    try:
+        if start is not None and length is not None:
+            start_val = int(start)
+            length_val = int(length)
+
+            if start_val < 0:
+                raise ValueError("Start offset must be non-negative")
+            if length_val <= 0:
+                raise ValueError("Length must be positive")
+            if length_val > 10000:
+                raise ValueError("Length exceeds maximum allowed value (10000)")
+
+            return {'type': 'datatables', 'start': start_val, 'length': length_val}
+
+        elif page is not None and page_size is not None:
+            page_val = int(page)
+            page_size_val = int(page_size)
+
+            if page_val < 1:
+                raise ValueError("Page number must be at least 1")
+            if page_size_val <= 0:
+                raise ValueError("Page size must be positive")
+            if page_size_val > 10000:
+                raise ValueError("Page size exceeds maximum allowed value (10000)")
+
+            start_val = (page_val - 1) * page_size_val
+            return {'type': 'rest', 'start': start_val, 'length': page_size_val, 'page': page_val}
+
+        return None
+
+    except ValueError as e:
+        raise ValidationError(f"Invalid pagination parameters: {str(e)}")
+
+
+class AdvancedSearchMixin:
+    """
+    Mixin providing advanced search functionality with operators.
+
+    Supports operators: = (equals), > (greater than), < (less than), ! (exclude)
+    Supports logic: & (AND), | (OR)
+
+    Subclasses must define search_config attribute with the following structure:
+    {
+        'general_fields': [Q(...), Q(...), ...],  # Q objects for general text search
+        'special_fields': {
+            'field_name': 'model__field__lookup',  # Mapping for special searches
+            ...
+        },
+        'numeric_fields': {
+            'field_name': 'model__field',  # Fields supporting >, < operators
+            ...
+        },
+        'boolean_fields': {
+            'field_name': ('model__field', true_value, false_value),
+            ...
+        },
+        'custom_handlers': {
+            'field_name': callable,  # Custom handler function(queryset, operator, value)
+            ...
+        }
+    }
+    """
+
+    search_config = None
+
+    def apply_advanced_search(self, queryset, search_value):
+        """Apply advanced search with support for complex queries using & and | operators."""
+        if not search_value:
+            return queryset
+
+        has_operators = any(op in search_value for op in ["=", "&", "|", ">", "<", "!"])
+
+        if not has_operators:
+            return self.general_lookup(queryset, search_value)
+
+        if "&" in search_value:
+            complex_query = search_value.split("&")
+            for query in complex_query:
+                if query.strip():
+                    queryset = queryset & self.special_lookup(queryset, query.strip())
+        elif "|" in search_value:
+            new_queryset = queryset.none()
+            complex_query = search_value.split("|")
+            for query in complex_query:
+                if query.strip():
+                    new_queryset = self.special_lookup(queryset, query.strip()) | new_queryset
+            queryset = new_queryset
+        else:
+            queryset = self.special_lookup(queryset, search_value)
+
+        return queryset
+
+    def general_lookup(self, queryset, search_value):
+        """Perform general search across configured fields."""
+        if not self.search_config or 'general_fields' not in self.search_config:
+            return queryset
+
+        combined_q = Q()
+        for field_q in self.search_config['general_fields']:
+            if callable(field_q):
+                combined_q |= field_q(search_value)
+            else:
+                combined_q |= field_q
+
+        return queryset.filter(combined_q) if combined_q else queryset
+
+    def special_lookup(self, queryset, search_value):
+        """Perform special search with operators (=, >, <, !)."""
+        if not self.search_config:
+            return queryset
+
+        operator = None
+        for op in ["=", ">", "<", "!"]:
+            if op in search_value:
+                operator = op
+                break
+
+        if not operator:
+            return queryset
+
+        search_param = search_value.split(operator)
+        if len(search_param) != 2:
+            return queryset
+
+        lookup_title = search_param[0].lower().strip()
+        lookup_content = search_param[1].strip()
+
+        special_fields = self.search_config.get('special_fields', {})
+        numeric_fields = self.search_config.get('numeric_fields', {})
+        boolean_fields = self.search_config.get('boolean_fields', {})
+        custom_handlers = self.search_config.get('custom_handlers', {})
+
+        # Check for custom handler first
+        if lookup_title in custom_handlers:
+            return custom_handlers[lookup_title](queryset, operator, lookup_content)
+
+        # Handle boolean fields
+        if lookup_title in boolean_fields:
+            field_path, true_val, false_val = boolean_fields[lookup_title]
+            if operator == "=":
+                bool_value = lookup_content.lower() in ['true', '1', 'yes', true_val.lower()]
+                return queryset.filter(**{field_path: bool_value})
+            elif operator == "!":
+                bool_value = lookup_content.lower() in ['true', '1', 'yes', true_val.lower()]
+                return queryset.exclude(**{field_path: bool_value})
+
+        # Handle numeric comparisons
+        if lookup_title in numeric_fields:
+            field_path = numeric_fields[lookup_title]
+            try:
+                int_value = int(lookup_content)
+                if operator == "=":
+                    return queryset.filter(**{field_path: int_value})
+                elif operator == ">":
+                    return queryset.filter(**{f"{field_path}__gt": int_value})
+                elif operator == "<":
+                    return queryset.filter(**{f"{field_path}__lt": int_value})
+                elif operator == "!":
+                    return queryset.exclude(**{field_path: int_value})
+            except (ValueError, TypeError):
+                logger.warning(f"Invalid numeric value for field {lookup_title}: {lookup_content}")
+                return queryset
+
+        # Handle text field searches
+        if lookup_title in special_fields:
+            field_path = special_fields[lookup_title]
+            if operator == "=":
+                return queryset.filter(**{field_path: lookup_content})
+            elif operator == "!":
+                return queryset.exclude(**{field_path: lookup_content})
+
+        return queryset
+
+
 class OllamaManager(APIView):
     def clean_channel_name(self, name):
         """Clean channel name to only contain valid characters"""
@@ -1865,7 +2061,31 @@ class ListPorts(APIView):
         return Response({"ports": ports_data})
 
 
-class ListSubdomains(APIView):
+class ListSubdomains(AdvancedSearchMixin, APIView):
+    search_config = {
+        'general_fields': [
+            lambda sv: Q(name__icontains=sv),
+            lambda sv: Q(cname__icontains=sv),
+            lambda sv: Q(http_status__icontains=sv),
+            lambda sv: Q(page_title__icontains=sv),
+            lambda sv: Q(http_url__icontains=sv),
+            lambda sv: Q(technologies__name__icontains=sv),
+            lambda sv: Q(webserver__icontains=sv),
+            lambda sv: Q(ip_addresses__address__icontains=sv),
+        ],
+        'special_fields': {
+            'name': 'name__icontains',
+            'page_title': 'page_title__icontains',
+            'technology': 'technologies__name__icontains',
+            'webserver': 'webserver__icontains',
+        },
+        'numeric_fields': {
+            'http_status': 'http_status',
+        },
+        'boolean_fields': {
+            'is_important': ('is_important', 'true', 'false'),
+        },
+    }
     def get(self, request, format=None):
         req = self.request
         scan_id = safe_int_cast(req.query_params.get("scan_id"))
@@ -1908,35 +2128,17 @@ class ListSubdomains(APIView):
             "ip_addresses", "ip_addresses__ports", "technologies", "waf", "directories"
         )
 
-        # Handle pagination (similar to EndPointViewSet)
-        start = req.query_params.get('start')
-        length = req.query_params.get('length')
-        page = req.query_params.get('page')
-        page_size = req.query_params.get('page_size')
+        # Handle pagination
+        pagination = parse_pagination_params(
+            start=req.query_params.get('start'),
+            length=req.query_params.get('length'),
+            page=req.query_params.get('page'),
+            page_size=req.query_params.get('page_size')
+        )
 
-        if start is not None and length is not None:
-            # Pagination DataTables
-            start = int(start)
-            length = int(length)
+        if pagination:
             total_count = subdomain_query.count()
-            paginated_queryset = subdomain_query[start:start + length]
-
-            if "no_lookup_interesting" in req.query_params:
-                serializer = OnlySubdomainNameSerializer(paginated_queryset, many=True)
-            else:
-                serializer = SubdomainSerializer(paginated_queryset, many=True)
-
-            return Response({
-                'count': total_count,
-                'results': serializer.data
-            })
-        elif page is not None and page_size is not None:
-            # Pagination REST
-            page = int(page)
-            page_size = int(page_size)
-            start = (page - 1) * page_size
-            total_count = subdomain_query.count()
-            paginated_queryset = subdomain_query[start:start + page_size]
+            paginated_queryset = subdomain_query[pagination['start']:pagination['start'] + pagination['length']]
 
             if "no_lookup_interesting" in req.query_params:
                 serializer = OnlySubdomainNameSerializer(paginated_queryset, many=True)
@@ -1954,116 +2156,6 @@ class ListSubdomains(APIView):
         else:
             serializer = SubdomainSerializer(subdomain_query, many=True)
         return Response({"subdomains": serializer.data})
-
-    def apply_advanced_search(self, queryset, search_value):
-        """Apply advanced search filters similar to EndPointViewSet"""
-        if (
-            "=" in search_value
-            or "&" in search_value
-            or "|" in search_value
-            or ">" in search_value
-            or "<" in search_value
-            or "!" in search_value
-        ):
-            if "&" in search_value:
-                complex_query = search_value.split("&")
-                for query in complex_query:
-                    if query.strip():
-                        queryset = queryset & self.special_lookup(queryset, query.strip())
-            elif "|" in search_value:
-                from django.db.models import Q
-                new_queryset = queryset.none()
-                complex_query = search_value.split("|")
-                for query in complex_query:
-                    if query.strip():
-                        new_queryset = self.special_lookup(queryset, query.strip()) | new_queryset
-                queryset = new_queryset
-            else:
-                queryset = self.special_lookup(queryset, search_value)
-        else:
-            queryset = self.general_lookup(queryset, search_value)
-        return queryset
-
-    def general_lookup(self, queryset, search_value):
-        """General search across subdomain fields"""
-        from django.db.models import Q
-        return queryset.filter(
-            Q(name__icontains=search_value)
-            | Q(cname__icontains=search_value)
-            | Q(http_status__icontains=search_value)
-            | Q(page_title__icontains=search_value)
-            | Q(http_url__icontains=search_value)
-            | Q(technologies__name__icontains=search_value)
-            | Q(webserver__icontains=search_value)
-            | Q(ip_addresses__address__icontains=search_value)
-        )
-
-    def special_lookup(self, queryset, search_value):
-        """Special search with operators (=, >, <, !)"""
-        if "=" in search_value:
-            search_param = search_value.split("=")
-            lookup_title = search_param[0].lower().strip()
-            lookup_content = search_param[1].lower().strip()
-
-            if "http_status" in lookup_title:
-                try:
-                    int_http_status = int(lookup_content)
-                    return queryset.filter(http_status=int_http_status)
-                except Exception:
-                    pass
-            elif "name" in lookup_title:
-                return queryset.filter(name__icontains=lookup_content)
-            elif "page_title" in lookup_title:
-                return queryset.filter(page_title__icontains=lookup_content)
-            elif "technology" in lookup_title:
-                return queryset.filter(technologies__name__icontains=lookup_content)
-            elif "webserver" in lookup_title:
-                return queryset.filter(webserver__icontains=lookup_content)
-            elif "is_important" in lookup_title:
-                if "true" in lookup_content.lower():
-                    return queryset.filter(is_important=True)
-                else:
-                    return queryset.filter(is_important=False)
-
-        elif ">" in search_value:
-            search_param = search_value.split(">")
-            lookup_title = search_param[0].lower().strip()
-            lookup_content = search_param[1].lower().strip()
-
-            if "http_status" in lookup_title:
-                try:
-                    int_val = int(lookup_content)
-                    return queryset.filter(http_status__gt=int_val)
-                except Exception:
-                    pass
-
-        elif "<" in search_value:
-            search_param = search_value.split("<")
-            lookup_title = search_param[0].lower().strip()
-            lookup_content = search_param[1].lower().strip()
-
-            if "http_status" in lookup_title:
-                try:
-                    int_val = int(lookup_content)
-                    return queryset.filter(http_status__lt=int_val)
-                except Exception:
-                    pass
-
-        elif "!" in search_value:
-            search_param = search_value.split("!")
-            lookup_title = search_param[0].lower().strip()
-            lookup_content = search_param[1].lower().strip()
-
-            if "http_status" in lookup_title:
-                try:
-                    int_http_status = int(lookup_content)
-                    return queryset.exclude(http_status=int_http_status)
-                except Exception:
-                    pass
-            elif "name" in lookup_title:
-                return queryset.exclude(name__icontains=lookup_content)
-
-        return queryset
 
     def post(self, req):
         req = self.request
@@ -2442,9 +2534,65 @@ class InterestingEndpointViewSet(viewsets.ModelViewSet):
         return self.paginator.paginate_queryset(queryset.order_by(*self.ordering), self.request, view=self)
 
 
-class SubdomainDatatableViewSet(viewsets.ModelViewSet):
+class SubdomainDatatableViewSet(AdvancedSearchMixin, viewsets.ModelViewSet):
     queryset = Subdomain.objects.none()
     serializer_class = SubdomainSerializer
+
+    def _port_search_handler(self, queryset, operator, value):
+        """Custom handler for port searches across multiple port fields."""
+        if operator == "=":
+            return (
+                queryset.filter(ip_addresses__ports__number__icontains=value)
+                | queryset.filter(ip_addresses__ports__service_name__icontains=value)
+                | queryset.filter(ip_addresses__ports__description__icontains=value)
+            )
+        elif operator == "!":
+            return (
+                queryset.exclude(ip_addresses__ports__number__icontains=value)
+                | queryset.exclude(ip_addresses__ports__service_name__icontains=value)
+                | queryset.exclude(ip_addresses__ports__description__icontains=value)
+            )
+        return queryset
+
+    search_config = None
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.search_config = {
+            'general_fields': [
+                lambda sv: Q(name__icontains=sv),
+                lambda sv: Q(cname__icontains=sv),
+                lambda sv: Q(http_status__icontains=sv),
+                lambda sv: Q(page_title__icontains=sv),
+                lambda sv: Q(http_url__icontains=sv),
+                lambda sv: Q(technologies__name__icontains=sv),
+                lambda sv: Q(webserver__icontains=sv),
+                lambda sv: Q(ip_addresses__address__icontains=sv),
+                lambda sv: Q(ip_addresses__ports__number__icontains=sv),
+                lambda sv: Q(ip_addresses__ports__service_name__icontains=sv),
+                lambda sv: Q(ip_addresses__ports__description__icontains=sv),
+            ],
+            'special_fields': {
+                'name': 'name__icontains',
+                'page_title': 'page_title__icontains',
+                'http_url': 'http_url__icontains',
+                'content_type': 'content_type__icontains',
+                'cname': 'cname__icontains',
+                'webserver': 'webserver__icontains',
+                'ip_addresses': 'ip_addresses__address__icontains',
+                'technology': 'technologies__name__icontains',
+            },
+            'numeric_fields': {
+                'http_status': 'http_status',
+                'content_length': 'content_length',
+            },
+            'boolean_fields': {
+                'is_important': ('is_important', 'true', 'false'),
+            },
+            'custom_handlers': {
+                'port': self._port_search_handler,
+            },
+        }
 
     def get_queryset(self):
         req = self.request
@@ -2486,6 +2634,13 @@ class SubdomainDatatableViewSet(viewsets.ModelViewSet):
 
         return self.queryset
 
+    def general_lookup(self, queryset, search_value):
+        """Override to add only_directory support."""
+        qs = super().general_lookup(queryset, search_value)
+        if "only_directory" in self.request.query_params:
+            qs = qs | queryset.filter(Q(directories__directory_files__name__icontains=search_value))
+        return qs
+
     def filter_queryset(self, qs):
         qs = self.queryset.filter()
         search_value = self.request.GET.get("search[value]", None)
@@ -2506,168 +2661,11 @@ class SubdomainDatatableViewSet(viewsets.ModelViewSet):
             order_col = "response_time"
         if _order_direction == "desc":
             order_col = f"-{order_col}"
-        # if the search query is separated by = means, it is a specific lookup
-        # divide the search query into two half and lookup
+
         if search_value:
-            operators = ["=", "&", "|", ">", "<", "!"]
-            if any(x in search_value for x in operators):
-                if "&" in search_value:
-                    complex_query = search_value.split("&")
-                    for query in complex_query:
-                        if query.strip():
-                            qs = qs & self.special_lookup(query.strip())
-                elif "|" in search_value:
-                    qs = Subdomain.objects.none()
-                    complex_query = search_value.split("|")
-                    for query in complex_query:
-                        if query.strip():
-                            qs = self.special_lookup(query.strip()) | qs
-                else:
-                    qs = self.special_lookup(search_value)
-            else:
-                qs = self.general_lookup(search_value)
+            qs = self.apply_advanced_search(qs, search_value)
+
         return qs.order_by(order_col)
-
-    def general_lookup(self, search_value):
-        qs = self.queryset.filter(
-            Q(name__icontains=search_value)
-            | Q(cname__icontains=search_value)
-            | Q(http_status__icontains=search_value)
-            | Q(page_title__icontains=search_value)
-            | Q(http_url__icontains=search_value)
-            | Q(technologies__name__icontains=search_value)
-            | Q(webserver__icontains=search_value)
-            | Q(ip_addresses__address__icontains=search_value)
-            | Q(ip_addresses__ports__number__icontains=search_value)
-            | Q(ip_addresses__ports__service_name__icontains=search_value)
-            | Q(ip_addresses__ports__description__icontains=search_value)
-        )
-
-        if "only_directory" in self.request.query_params:
-            qs = qs | self.queryset.filter(Q(directories__directory_files__name__icontains=search_value))
-
-        return qs
-
-    def special_lookup(self, search_value):
-        qs = self.queryset.filter()
-        if "=" in search_value:
-            search_param = search_value.split("=")
-            title = search_param[0].lower().strip()
-            content = search_param[1].lower().strip()
-            if "name" in title:
-                qs = self.queryset.filter(name__icontains=content)
-            elif "page_title" in title:
-                qs = self.queryset.filter(page_title__icontains=content)
-            elif "http_url" in title:
-                qs = self.queryset.filter(http_url__icontains=content)
-            elif "content_type" in title:
-                qs = self.queryset.filter(content_type__icontains=content)
-            elif "cname" in title:
-                qs = self.queryset.filter(cname__icontains=content)
-            elif "webserver" in title:
-                qs = self.queryset.filter(webserver__icontains=content)
-            elif "ip_addresses" in title:
-                qs = self.queryset.filter(ip_addresses__address__icontains=content)
-            elif "is_important" in title:
-                if "true" in content.lower():
-                    qs = self.queryset.filter(is_important=True)
-                else:
-                    qs = self.queryset.filter(is_important=False)
-            elif "port" in title:
-                qs = (
-                    self.queryset.filter(ip_addresses__ports__number__icontains=content)
-                    | self.queryset.filter(ip_addresses__ports__service_name__icontains=content)
-                    | self.queryset.filter(ip_addresses__ports__description__icontains=content)
-                )
-            elif "technology" in title:
-                qs = self.queryset.filter(technologies__name__icontains=content)
-            elif "http_status" in title:
-                try:
-                    int_http_status = int(content)
-                    qs = self.queryset.filter(http_status=int_http_status)
-                except Exception as e:
-                    print(e)
-            elif "content_length" in title:
-                try:
-                    int_http_status = int(content)
-                    qs = self.queryset.filter(content_length=int_http_status)
-                except Exception as e:
-                    print(e)
-
-        elif ">" in search_value:
-            search_param = search_value.split(">")
-            title = search_param[0].lower().strip()
-            content = search_param[1].lower().strip()
-            if "http_status" in title:
-                try:
-                    int_val = int(content)
-                    qs = self.queryset.filter(http_status__gt=int_val)
-                except Exception as e:
-                    print(e)
-            elif "content_length" in title:
-                try:
-                    int_val = int(content)
-                    qs = self.queryset.filter(content_length__gt=int_val)
-                except Exception as e:
-                    print(e)
-
-        elif "<" in search_value:
-            search_param = search_value.split("<")
-            title = search_param[0].lower().strip()
-            content = search_param[1].lower().strip()
-            if "http_status" in title:
-                try:
-                    int_val = int(content)
-                    qs = self.queryset.filter(http_status__lt=int_val)
-                except Exception as e:
-                    print(e)
-            elif "content_length" in title:
-                try:
-                    int_val = int(content)
-                    qs = self.queryset.filter(content_length__lt=int_val)
-                except Exception as e:
-                    print(e)
-
-        elif "!" in search_value:
-            search_param = search_value.split("!")
-            title = search_param[0].lower().strip()
-            content = search_param[1].lower().strip()
-            if "name" in title:
-                qs = self.queryset.exclude(name__icontains=content)
-            elif "page_title" in title:
-                qs = self.queryset.exclude(page_title__icontains=content)
-            elif "http_url" in title:
-                qs = self.queryset.exclude(http_url__icontains=content)
-            elif "content_type" in title:
-                qs = self.queryset.exclude(content_type__icontains=content)
-            elif "cname" in title:
-                qs = self.queryset.exclude(cname__icontains=content)
-            elif "webserver" in title:
-                qs = self.queryset.exclude(webserver__icontains=content)
-            elif "ip_addresses" in title:
-                qs = self.queryset.exclude(ip_addresses__address__icontains=content)
-            elif "port" in title:
-                qs = (
-                    self.queryset.exclude(ip_addresses__ports__number__icontains=content)
-                    | self.queryset.exclude(ip_addresses__ports__service_name__icontains=content)
-                    | self.queryset.exclude(ip_addresses__ports__description__icontains=content)
-                )
-            elif "technology" in title:
-                qs = self.queryset.exclude(technologies__name__icontains=content)
-            elif "http_status" in title:
-                try:
-                    int_http_status = int(content)
-                    qs = self.queryset.exclude(http_status=int_http_status)
-                except Exception as e:
-                    print(e)
-            elif "content_length" in title:
-                try:
-                    int_http_status = int(content)
-                    qs = self.queryset.exclude(content_length=int_http_status)
-                except Exception as e:
-                    print(e)
-
-        return qs
 
 
 class ListActivityLogsViewSet(viewsets.ModelViewSet):
@@ -2723,9 +2721,34 @@ class ListEndpoints(APIView):
         return Response({"endpoints": endpoints_serializer.data})
 
 
-class EndPointViewSet(viewsets.ModelViewSet):
+class EndPointViewSet(AdvancedSearchMixin, viewsets.ModelViewSet):
     queryset = EndPoint.objects.none()
     serializer_class = EndpointSerializer
+    search_config = {
+        'general_fields': [
+            lambda sv: Q(http_url__icontains=sv),
+            lambda sv: Q(page_title__icontains=sv),
+            lambda sv: Q(http_status__icontains=sv),
+            lambda sv: Q(content_type__icontains=sv),
+            lambda sv: Q(webserver__icontains=sv),
+            lambda sv: Q(techs__name__icontains=sv),
+            lambda sv: Q(matched_gf_patterns__icontains=sv),
+        ],
+        'special_fields': {
+            'http_url': 'http_url__icontains',
+            'page_title': 'page_title__icontains',
+            'content_type': 'content_type__icontains',
+            'webserver': 'webserver__icontains',
+            'technology': 'techs__name__icontains',
+            'gf_pattern': 'matched_gf_patterns__icontains',
+        },
+        'numeric_fields': {
+            'http_status': 'http_status',
+            'content_length': 'content_length',
+        },
+        'boolean_fields': {},
+        'custom_handlers': {},
+    }
 
     def get_queryset(self):
         req = self.request
@@ -2799,136 +2822,12 @@ class EndPointViewSet(viewsets.ModelViewSet):
                 order_col = "response_time"
             if _order_direction == "desc":
                 order_col = f"-{order_col}"
-            # if the search query is separated by = means, it is a specific lookup
-            # divide the search query into two half and lookup
-            if (
-                "=" in search_value
-                or "&" in search_value
-                or "|" in search_value
-                or ">" in search_value
-                or "<" in search_value
-                or "!" in search_value
-            ):
-                if "&" in search_value:
-                    complex_query = search_value.split("&")
-                    for query in complex_query:
-                        if query.strip():
-                            qs = qs & self.special_lookup(query.strip())
-                elif "|" in search_value:
-                    qs = Subdomain.objects.none()
-                    complex_query = search_value.split("|")
-                    for query in complex_query:
-                        if query.strip():
-                            qs = self.special_lookup(query.strip()) | qs
-                else:
-                    qs = self.special_lookup(search_value)
-            else:
-                qs = self.general_lookup(search_value)
+
+            # Use AdvancedSearchMixin for search functionality
+            if search_value:
+                qs = self.apply_advanced_search(qs, search_value)
+
             return qs.order_by(order_col)
-        return qs
-
-    def general_lookup(self, search_value):
-        return self.queryset.filter(
-            Q(http_url__icontains=search_value)
-            | Q(page_title__icontains=search_value)
-            | Q(http_status__icontains=search_value)
-            | Q(content_type__icontains=search_value)
-            | Q(webserver__icontains=search_value)
-            | Q(techs__name__icontains=search_value)
-            | Q(content_type__icontains=search_value)
-            | Q(matched_gf_patterns__icontains=search_value)
-        )
-
-    def special_lookup(self, search_value):
-        qs = self.queryset.filter()
-        if "=" in search_value:
-            search_param = search_value.split("=")
-            lookup_title = search_param[0].lower().strip()
-            lookup_content = search_param[1].lower().strip()
-            if "http_url" in lookup_title:
-                qs = self.queryset.filter(http_url__icontains=lookup_content)
-            elif "page_title" in lookup_title:
-                qs = self.queryset.filter(page_title__icontains=lookup_content)
-            elif "content_type" in lookup_title:
-                qs = self.queryset.filter(content_type__icontains=lookup_content)
-            elif "webserver" in lookup_title:
-                qs = self.queryset.filter(webserver__icontains=lookup_content)
-            elif "technology" in lookup_title:
-                qs = self.queryset.filter(techs__name__icontains=lookup_content)
-            elif "gf_pattern" in lookup_title:
-                qs = self.queryset.filter(matched_gf_patterns__icontains=lookup_content)
-            elif "http_status" in lookup_title:
-                try:
-                    int_http_status = int(lookup_content)
-                    qs = self.queryset.filter(http_status=int_http_status)
-                except Exception as e:
-                    print(e)
-            elif "content_length" in lookup_title:
-                try:
-                    int_http_status = int(lookup_content)
-                    qs = self.queryset.filter(content_length=int_http_status)
-                except Exception as e:
-                    print(e)
-        elif ">" in search_value:
-            search_param = search_value.split(">")
-            lookup_title = search_param[0].lower().strip()
-            lookup_content = search_param[1].lower().strip()
-            if "http_status" in lookup_title:
-                try:
-                    int_val = int(lookup_content)
-                    qs = self.queryset.filter(http_status__gt=int_val)
-                except Exception as e:
-                    print(e)
-            elif "content_length" in lookup_title:
-                try:
-                    int_val = int(lookup_content)
-                    qs = self.queryset.filter(content_length__gt=int_val)
-                except Exception as e:
-                    print(e)
-        elif "<" in search_value:
-            search_param = search_value.split("<")
-            lookup_title = search_param[0].lower().strip()
-            lookup_content = search_param[1].lower().strip()
-            if "http_status" in lookup_title:
-                try:
-                    int_val = int(lookup_content)
-                    qs = self.queryset.filter(http_status__lt=int_val)
-                except Exception as e:
-                    print(e)
-            elif "content_length" in lookup_title:
-                try:
-                    int_val = int(lookup_content)
-                    qs = self.queryset.filter(content_length__lt=int_val)
-                except Exception as e:
-                    print(e)
-        elif "!" in search_value:
-            search_param = search_value.split("!")
-            lookup_title = search_param[0].lower().strip()
-            lookup_content = search_param[1].lower().strip()
-            if "http_url" in lookup_title:
-                qs = self.queryset.exclude(http_url__icontains=lookup_content)
-            elif "page_title" in lookup_title:
-                qs = self.queryset.exclude(page_title__icontains=lookup_content)
-            elif "content_type" in lookup_title:
-                qs = self.queryset.exclude(content_type__icontains=lookup_content)
-            elif "webserver" in lookup_title:
-                qs = self.queryset.exclude(webserver__icontains=lookup_content)
-            elif "technology" in lookup_title:
-                qs = self.queryset.exclude(techs__name__icontains=lookup_content)
-            elif "gf_pattern" in lookup_title:
-                qs = self.queryset.exclude(matched_gf_patterns__icontains=lookup_content)
-            elif "http_status" in lookup_title:
-                try:
-                    int_http_status = int(lookup_content)
-                    qs = self.queryset.exclude(http_status=int_http_status)
-                except Exception as e:
-                    print(e)
-            elif "content_length" in lookup_title:
-                try:
-                    int_http_status = int(lookup_content)
-                    qs = self.queryset.exclude(content_length=int_http_status)
-                except Exception as e:
-                    print(e)
         return qs
 
     def paginate_queryset(self, queryset, view=None):
@@ -2939,37 +2838,24 @@ class EndPointViewSet(viewsets.ModelViewSet):
     def list(self, request, *args, **kwargs):
         queryset = self.filter_queryset(self.get_queryset())
 
-        # Support pagination manuelle avec start/length (DataTables) ou page/page_size (REST)
-        start = request.query_params.get('start')
-        length = request.query_params.get('length')
-        page = request.query_params.get('page')
-        page_size = request.query_params.get('page_size')
+        # Support manual pagination with start/length (DataTables) or page/page_size (REST)
+        pagination = parse_pagination_params(
+            start=request.query_params.get('start'),
+            length=request.query_params.get('length'),
+            page=request.query_params.get('page'),
+            page_size=request.query_params.get('page_size')
+        )
 
-        if start is not None and length is not None:
-            # Pagination DataTables
-            start = int(start)
-            length = int(length)
+        if pagination:
             total_count = queryset.count()
-            paginated_queryset = queryset[start:start + length]
-            serializer = self.get_serializer(paginated_queryset, many=True)
-            return Response({
-                'count': total_count,
-                'results': serializer.data
-            })
-        elif page is not None and page_size is not None:
-            # Pagination REST
-            page = int(page)
-            page_size = int(page_size)
-            start = (page - 1) * page_size
-            total_count = queryset.count()
-            paginated_queryset = queryset[start:start + page_size]
+            paginated_queryset = queryset[pagination['start']:pagination['start'] + pagination['length']]
             serializer = self.get_serializer(paginated_queryset, many=True)
             return Response({
                 'count': total_count,
                 'results': serializer.data
             })
 
-        # Fallback vers pagination normale
+        # Fallback to normal pagination
         page = self.paginate_queryset(queryset)
         if page is not None:
             serializer = self.get_serializer(page, many=True)
@@ -3015,9 +2901,97 @@ class ProjectViewSet(viewsets.ModelViewSet):
         serializer.save()
 
 
-class VulnerabilityViewSet(viewsets.ModelViewSet):
+class VulnerabilityViewSet(AdvancedSearchMixin, viewsets.ModelViewSet):
     queryset = Vulnerability.objects.none()
     serializer_class = VulnerabilitySerializer
+
+    def _handle_severity(self, queryset, operator, value):
+        """Custom handler for severity field using NUCLEI_SEVERITY_MAP."""
+        severity_value = NUCLEI_SEVERITY_MAP.get(value.lower(), -1)
+        if operator == "=":
+            return queryset.filter(severity=severity_value)
+        elif operator == "!":
+            return queryset.exclude(severity=severity_value)
+        return queryset
+
+    def _handle_status(self, queryset, operator, value):
+        """Custom handler for status field."""
+        open_status = value.lower() == "open"
+        if operator == "=":
+            return queryset.filter(open_status=open_status)
+        elif operator == "!":
+            return queryset.exclude(open_status=open_status)
+        return queryset
+
+    def _handle_description(self, queryset, operator, value):
+        """Custom handler for description field - searches across multiple fields."""
+        description_q = Q(description__icontains=value) | Q(template__icontains=value) | Q(extracted_results__icontains=value)
+        if operator == "=":
+            return queryset.filter(description_q)
+        elif operator == "!":
+            return queryset.exclude(description_q)
+        return queryset
+
+    def _handle_cvss_score(self, queryset, operator, value):
+        """Custom handler for cvss_score field - supports numeric comparisons."""
+        try:
+            float_value = float(value)
+            if operator == "=":
+                return queryset.filter(cvss_score__exact=float_value)
+            elif operator == ">":
+                return queryset.filter(cvss_score__gt=float_value)
+            elif operator == "<":
+                return queryset.filter(cvss_score__lt=float_value)
+            elif operator == "!":
+                return queryset.exclude(cvss_score__exact=float_value)
+        except (ValueError, TypeError):
+            logger.warning(f"Invalid numeric value for cvss_score: {value}")
+        return queryset
+
+    @property
+    def search_config(self):
+        return {
+            'general_fields': [
+                lambda sv: Q(http_url__icontains=sv),
+                lambda sv: Q(target_domain__name__icontains=sv),
+                lambda sv: Q(template__icontains=sv),
+                lambda sv: Q(template_id__icontains=sv),
+                lambda sv: Q(name__icontains=sv),
+                lambda sv: Q(severity__icontains=sv),
+                lambda sv: Q(description__icontains=sv),
+                lambda sv: Q(extracted_results__icontains=sv),
+                lambda sv: Q(references__icontains=sv),
+                lambda sv: Q(cve_ids__name__icontains=sv),
+                lambda sv: Q(cwe_ids__name__icontains=sv),
+                lambda sv: Q(cvss_metrics__icontains=sv),
+                lambda sv: Q(cvss_score__icontains=sv),
+                lambda sv: Q(type__icontains=sv),
+                lambda sv: Q(open_status__icontains=sv),
+                lambda sv: Q(hackerone_report_id__icontains=sv),
+                lambda sv: Q(tags__name__icontains=sv),
+            ],
+            'special_fields': {
+                'name': 'name__icontains',
+                'http_url': 'http_url__icontains',
+                'template': 'template__icontains',
+                'template_id': 'template_id__icontains',
+                'cve_id': 'cve_ids__name__icontains',
+                'cve': 'cve_ids__name__icontains',
+                'cwe_id': 'cwe_ids__name__icontains',
+                'cwe': 'cwe_ids__name__icontains',
+                'cvss_metrics': 'cvss_metrics__icontains',
+                'type': 'type__icontains',
+                'tag': 'tags__name__icontains',
+            },
+            'numeric_fields': {},
+            'boolean_fields': {},
+            'custom_handlers': {
+                'severity': self._handle_severity,
+                'status': self._handle_status,
+                'description': self._handle_description,
+                'cvss_score': self._handle_cvss_score,
+            },
+        }
 
     def get_queryset(self):
         req = self.request
@@ -3101,148 +3075,13 @@ class VulnerabilityViewSet(viewsets.ModelViewSet):
 
             if _order_direction == "desc":
                 order_col = f"-{order_col}"
-            # if the search query is separated by = means, it is a specific lookup
-            # divide the search query into two half and lookup
-            operators = ["=", "&", "|", ">", "<", "!"]
-            if any(x in search_value for x in operators):
-                if "&" in search_value:
-                    complex_query = search_value.split("&")
-                    for query in complex_query:
-                        if query.strip():
-                            qs = qs & self.special_lookup(query.strip())
-                elif "|" in search_value:
-                    qs = Subdomain.objects.none()
-                    complex_query = search_value.split("|")
-                    for query in complex_query:
-                        if query.strip():
-                            qs = self.special_lookup(query.strip()) | qs
-                else:
-                    qs = self.special_lookup(search_value)
-            else:
-                qs = self.general_lookup(search_value)
+
+            # Use AdvancedSearchMixin for search functionality
+            if search_value:
+                qs = self.apply_advanced_search(qs, search_value)
+
             return qs.order_by(order_col)
         return qs.order_by("-severity")
-
-    def general_lookup(self, search_value):
-        qs = self.queryset.filter(
-            Q(http_url__icontains=search_value)
-            | Q(target_domain__name__icontains=search_value)
-            | Q(template__icontains=search_value)
-            | Q(template_id__icontains=search_value)
-            | Q(name__icontains=search_value)
-            | Q(severity__icontains=search_value)
-            | Q(description__icontains=search_value)
-            | Q(extracted_results__icontains=search_value)
-            | Q(references__icontains=search_value)
-            | Q(cve_ids__name__icontains=search_value)
-            | Q(cwe_ids__name__icontains=search_value)
-            | Q(cvss_metrics__icontains=search_value)
-            | Q(cvss_score__icontains=search_value)
-            | Q(type__icontains=search_value)
-            | Q(open_status__icontains=search_value)
-            | Q(hackerone_report_id__icontains=search_value)
-            | Q(tags__name__icontains=search_value)
-        )
-        return qs
-
-    def special_lookup(self, search_value):
-        qs = self.queryset.filter()
-        if "=" in search_value:
-            search_param = search_value.split("=")
-            lookup_title = search_param[0].lower().strip()
-            lookup_content = search_param[1].lower().strip()
-            if "severity" in lookup_title:
-                severity_value = NUCLEI_SEVERITY_MAP.get(lookup_content, -1)
-                qs = self.queryset.filter(severity=severity_value)
-            elif "name" in lookup_title:
-                qs = self.queryset.filter(name__icontains=lookup_content)
-            elif "http_url" in lookup_title:
-                qs = self.queryset.filter(http_url__icontains=lookup_content)
-            elif "template" in lookup_title:
-                qs = self.queryset.filter(template__icontains=lookup_content)
-            elif "template_id" in lookup_title:
-                qs = self.queryset.filter(template_id__icontains=lookup_content)
-            elif "cve_id" in lookup_title or "cve" in lookup_title:
-                qs = self.queryset.filter(cve_ids__name__icontains=lookup_content)
-            elif "cwe_id" in lookup_title or "cwe" in lookup_title:
-                qs = self.queryset.filter(cwe_ids__name__icontains=lookup_content)
-            elif "cvss_metrics" in lookup_title:
-                qs = self.queryset.filter(cvss_metrics__icontains=lookup_content)
-            elif "cvss_score" in lookup_title:
-                qs = self.queryset.filter(cvss_score__exact=lookup_content)
-            elif "type" in lookup_title:
-                qs = self.queryset.filter(type__icontains=lookup_content)
-            elif "tag" in lookup_title:
-                qs = self.queryset.filter(tags__name__icontains=lookup_content)
-            elif "status" in lookup_title:
-                open_status = lookup_content == "open"
-                qs = self.queryset.filter(open_status=open_status)
-            elif "description" in lookup_title:
-                qs = self.queryset.filter(
-                    Q(description__icontains=lookup_content)
-                    | Q(template__icontains=lookup_content)
-                    | Q(extracted_results__icontains=lookup_content)
-                )
-        elif "!" in search_value:
-            search_param = search_value.split("!")
-            lookup_title = search_param[0].lower().strip()
-            lookup_content = search_param[1].lower().strip()
-            if "severity" in lookup_title:
-                severity_value = NUCLEI_SEVERITY_MAP.get(lookup_content, -1)
-                qs = self.queryset.exclude(severity=severity_value)
-            elif "name" in lookup_title:
-                qs = self.queryset.exclude(name__icontains=lookup_content)
-            elif "http_url" in lookup_title:
-                qs = self.queryset.exclude(http_url__icontains=lookup_content)
-            elif "template" in lookup_title:
-                qs = self.queryset.exclude(template__icontains=lookup_content)
-            elif "template_id" in lookup_title:
-                qs = self.queryset.exclude(template_id__icontains=lookup_content)
-            elif "cve_id" in lookup_title or "cve" in lookup_title:
-                qs = self.queryset.exclude(cve_ids__icontains=lookup_content)
-            elif "cwe_id" in lookup_title or "cwe" in lookup_title:
-                qs = self.queryset.exclude(cwe_ids__icontains=lookup_content)
-            elif "cvss_metrics" in lookup_title:
-                qs = self.queryset.exclude(cvss_metrics__icontains=lookup_content)
-            elif "cvss_score" in lookup_title:
-                qs = self.queryset.exclude(cvss_score__exact=lookup_content)
-            elif "type" in lookup_title:
-                qs = self.queryset.exclude(type__icontains=lookup_content)
-            elif "tag" in lookup_title:
-                qs = self.queryset.exclude(tags__icontains=lookup_content)
-            elif "status" in lookup_title:
-                open_status = lookup_content == "open"
-                qs = self.queryset.exclude(open_status=open_status)
-            elif "description" in lookup_title:
-                qs = self.queryset.exclude(
-                    Q(description__icontains=lookup_content)
-                    | Q(template__icontains=lookup_content)
-                    | Q(extracted_results__icontains=lookup_content)
-                )
-
-        elif ">" in search_value:
-            search_param = search_value.split(">")
-            lookup_title = search_param[0].lower().strip()
-            lookup_content = search_param[1].lower().strip()
-            if "cvss_score" in lookup_title:
-                try:
-                    val = float(lookup_content)
-                    qs = self.queryset.filter(cvss_score__gt=val)
-                except Exception as e:
-                    print(e)
-
-        elif "<" in search_value:
-            search_param = search_value.split("<")
-            lookup_title = search_param[0].lower().strip()
-            lookup_content = search_param[1].lower().strip()
-            if "cvss_score" in lookup_title:
-                try:
-                    val = int(lookup_content)
-                    qs = self.queryset.filter(cvss_score__lt=val)
-                except Exception as e:
-                    print(e)
-
-        return qs
 
 
 class GetIpDetails(APIView):
