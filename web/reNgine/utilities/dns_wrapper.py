@@ -30,6 +30,7 @@ Note:
 """
 
 import re
+from typing import List, Optional, Union
 
 from celery.utils.log import get_task_logger
 
@@ -78,7 +79,7 @@ DNS_ARGS_MAP = {
 }
 
 
-def get_dns_args(tool_name, dns_servers):
+def get_dns_args(tool_name: str, dns_servers: List[str]) -> List[str]:
     """
     Get DNS arguments for a specific tool.
 
@@ -133,7 +134,12 @@ def get_dns_args(tool_name, dns_servers):
     return []
 
 
-def build_command_with_dns(tool_name, base_args, domain=None, dns_servers=None):
+def build_command_with_dns(
+    tool_name_or_command: Union[str, List[str]], 
+    base_args: Optional[List[str]] = None, 
+    domain=None, 
+    dns_servers: Optional[List[str]] = None
+) -> Union[str, List[str]]:
     """
     Build command with DNS arguments if custom DNS is configured.
 
@@ -143,27 +149,37 @@ def build_command_with_dns(tool_name, base_args, domain=None, dns_servers=None):
     3. Tool's native DNS support
 
     Args:
-        tool_name (str): Name of the tool (e.g., 'subfinder', 'nmap')
-        base_args (list): Base command arguments
-        domain (Domain, optional): Domain object with potential custom DNS
-        dns_servers (list, optional): Explicit DNS servers to use
+        tool_name_or_command: Either tool name (str) or complete command (str/list)
+        base_args: Base command arguments (when tool_name is provided)
+        domain: Domain object with potential custom DNS
+        dns_servers: Explicit DNS servers to use
 
     Returns:
-        list: Complete command with DNS arguments injected
+        Complete command with DNS arguments injected
 
     Examples:
-        >>> # Domain with custom DNS
-        >>> domain = Domain.objects.get(name="internal.local")
-        >>> domain.set_dns_servers(["172.16.0.1"])
-        >>> cmd = build_command_with_dns("subfinder", ["-d", "internal.local"], domain)
-        >>> # Returns: ['subfinder', '-r', '172.16.0.1', '-d', 'internal.local']
+        >>> # With tool name and args
+        >>> cmd = build_command_with_dns("subfinder", ["-d", "example.com"])
+        >>> # Returns: ['subfinder', '-r', '8.8.8.8', '-d', 'example.com']
 
-        >>> # Explicit DNS servers
-        >>> cmd = build_command_with_dns(
-        ...     "nmap", ["-sS", "192.168.1.1"], dns_servers=["172.16.0.1"]
-        ... )
-        >>> # Returns: ['nmap', '--dns-servers', '172.16.0.1', '-sS', '192.168.1.1']
+        >>> # With complete command string
+        >>> cmd = build_command_with_dns("nmap -sS 192.168.1.1")
+        >>> # Returns: "nmap --dns-servers 8.8.8.8 -sS 192.168.1.1"
     """
+    # Handle different input formats
+    if isinstance(tool_name_or_command, str) and base_args is None and len(tool_name_or_command.split()) > 1:
+        # Complete command string provided (multiple words)
+        command_str = tool_name_or_command
+        command_parts = command_str.split()
+        tool_name = command_parts[0] if command_parts else ""
+        base_args = command_parts[1:] if len(command_parts) > 1 else []
+        return_as_string = True
+    else:
+        # Tool name and args provided separately
+        tool_name = tool_name_or_command
+        base_args = base_args or []
+        return_as_string = False
+
     # Determine DNS servers to use
     dns_list = []
 
@@ -194,8 +210,11 @@ def build_command_with_dns(tool_name, base_args, domain=None, dns_servers=None):
             # Match flags like -r, --dns-servers, --dns-servers=8.8.8.8, etc.
             dns_flag_pattern = re.compile(rf"^(?:{re.escape(flag)})(?:[ =].+)?$")
         has_existing_dns = any(dns_flag_pattern.match(arg) for arg in base_args_list)
+    
     if has_existing_dns:
         logger.debug(f"DNS arguments already present in command for {tool_name}, skipping injection")
+        if return_as_string:
+            return " ".join([tool_name] + list(base_args or []))
         return [tool_name] + list(base_args or [])
 
     # Build command
@@ -212,10 +231,12 @@ def build_command_with_dns(tool_name, base_args, domain=None, dns_servers=None):
     # Add base arguments
     command.extend(base_args or [])
 
+    if return_as_string:
+        return " ".join(command)
     return command
 
 
-def tool_supports_custom_dns(tool_name):
+def tool_supports_custom_dns(tool_name: str) -> bool:
     """
     Check if a tool supports custom DNS arguments natively.
 
@@ -229,7 +250,7 @@ def tool_supports_custom_dns(tool_name):
     return tool_config[0] is not None
 
 
-def get_domain_dns_servers(domain_obj):
+def get_domain_dns_servers(domain_obj) -> List[str]:
     """
     Helper function to get DNS servers for a domain.
 
@@ -242,3 +263,18 @@ def get_domain_dns_servers(domain_obj):
     if domain_obj and hasattr(domain_obj, "get_dns_servers"):
         return domain_obj.get_dns_servers()
     return []
+
+
+def get_dns_command(tool_name: str, dns_servers: List[str]) -> str:
+    """
+    Get DNS command for a specific tool.
+
+    Args:
+        tool_name (str): Name of the tool
+        dns_servers (list): List of DNS server IPs
+
+    Returns:
+        str: DNS command string
+    """
+    dns_args = get_dns_args(tool_name, dns_servers)
+    return " ".join(dns_args) if dns_args else ""

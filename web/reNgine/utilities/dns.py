@@ -1,18 +1,31 @@
+"""
+DNS resolution utilities.
+
+This module provides DNS resolution capabilities that can be
+reused across different task types while following SOLID, KISS, and DRY principles.
+
+Key components:
+1. resolve_subdomain_ips - Simple DNS resolution for subdomains
+2. get_reverse_dns - Reverse DNS lookup for IP addresses
+3. get_current_dns_servers - Get system DNS servers
+4. check_host_alive - Ping check for host availability
+5. resolve_ip_with_dns - Advanced IP resolution with custom DNS servers
+6. resolve_ip_chunk - Parallel IP resolution for chunks
+"""
+
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import contextlib
 import socket
 import subprocess
+from typing import List, Optional, Dict, Any
 
 from celery.utils.log import get_task_logger
-import validators
-
-from reNgine.settings import DEFAULT_THREADS
-
+from reNgine.utilities.core.validation import is_valid_ipv4, is_valid_ipv6
+from reNgine.utilities.core.network import resolve_hostname
 
 try:
     import dns.resolver
     import dns.reversename
-
     DNS_AVAILABLE = True
 except ImportError:
     DNS_AVAILABLE = False
@@ -20,7 +33,7 @@ except ImportError:
 logger = get_task_logger(__name__)
 
 
-def resolve_subdomain_ips(subdomain_name):
+def resolve_subdomain_ips(subdomain_name: str) -> List[str]:
     """Simple DNS resolution to get IP addresses for a subdomain.
 
     Args:
@@ -31,24 +44,22 @@ def resolve_subdomain_ips(subdomain_name):
     """
     ips = []
     try:
-        # Get all IPs for the subdomain
-        hostname, aliaslist, ipaddrlist = socket.gethostbyname_ex(subdomain_name)
-
-        for ip in ipaddrlist:
-            # Validate IP before adding
-            if validators.ipv4(ip) or validators.ipv6(ip):
+        # Use core network function for hostname resolution
+        resolved_ips = resolve_hostname(subdomain_name)
+        
+        for ip in resolved_ips:
+            # Validate IP before adding using core validation
+            if is_valid_ipv4(ip) or is_valid_ipv6(ip):
                 ips.append(ip)
                 logger.debug(f"Resolved {subdomain_name} -> {ip}")
 
-    except socket.gaierror as e:
-        logger.debug(f"DNS resolution failed for {subdomain_name}: {e}")
     except Exception as e:
-        logger.warning(f"Unexpected error resolving {subdomain_name}: {e}")
+        logger.debug(f"DNS resolution failed for {subdomain_name}: {e}")
 
     return ips
 
 
-def get_reverse_dns(ip_address):
+def get_reverse_dns(ip_address: str) -> Optional[str]:
     """Perform reverse DNS lookup to get the hostname for an IP address.
 
     Args:
@@ -66,7 +77,7 @@ def get_reverse_dns(ip_address):
         return None
 
 
-def get_current_dns_servers():
+def get_current_dns_servers() -> List[str]:
     """Get current system DNS servers"""
     dns_servers = []
     try:
@@ -88,21 +99,22 @@ def get_current_dns_servers():
     return dns_servers
 
 
-def check_host_alive(ip):
+def check_host_alive(ip: str) -> bool:
     """Quick ping check to see if host is alive"""
     try:
         cmd = ["ping", "-c", "1", "-W", "2", ip]
 
         result = subprocess.run(cmd, capture_output=True, timeout=5)
         is_alive = result.returncode == 0
-        logger.debug(f"Ping {ip}: {'alive' if is_alive else 'dead'}")
+        if is_alive:
+            logger.debug(f"Ping {ip}: alive")
         return is_alive
     except Exception as e:
         logger.debug(f"Ping {ip} failed: {e}")
         return False
 
 
-def _create_dns_resolver(dns_server):
+def _create_dns_resolver(dns_server: str):
     """Create DNS resolver with specific server (Single Responsibility)"""
     resolver = dns.resolver.Resolver()
     resolver.nameservers = [dns_server]
@@ -111,7 +123,7 @@ def _create_dns_resolver(dns_server):
     return resolver
 
 
-def _resolve_with_custom_dns(ip_str, dns_servers):
+def _resolve_with_custom_dns(ip_str: str, dns_servers: List[str]) -> tuple[Optional[str], Optional[str]]:
     """Resolve IP using custom DNS servers (Single Responsibility)"""
     if not DNS_AVAILABLE or not dns_servers:
         return None, None
@@ -135,7 +147,7 @@ def _resolve_with_custom_dns(ip_str, dns_servers):
     return None, None
 
 
-def _resolve_with_system_dns(ip_str):
+def _resolve_with_system_dns(ip_str: str) -> tuple[Optional[str], List[str]]:
     """Resolve IP using system DNS (Single Responsibility)"""
     try:
         (domain, domains, ips) = socket.gethostbyaddr(ip_str)
@@ -147,7 +159,7 @@ def _resolve_with_system_dns(ip_str):
     return None, []
 
 
-def resolve_ip_with_dns(ip_str, dns_servers, use_system_fallback=False):
+def resolve_ip_with_dns(ip_str: str, dns_servers: List[str], use_system_fallback: bool = False) -> Dict[str, Any]:
     """
     Resolve an IP address using specific DNS servers (Open/Closed Principle)
 
@@ -187,19 +199,19 @@ def resolve_ip_with_dns(ip_str, dns_servers, use_system_fallback=False):
     return domain_info
 
 
-def _create_failed_resolution_result(ip):
+def _create_failed_resolution_result(ip: str) -> Dict[str, Any]:
     """Create result for failed IP resolution"""
     return {
-        "ip": str(ip),
-        "domain": str(ip),
+        "ip": ip,
+        "domain": ip,
         "domains": [],
         "ips": [],
         "resolved_by": None,
-        "is_alive": check_host_alive(str(ip)),
+        "is_alive": check_host_alive(ip),
     }
 
 
-def resolve_ip_chunk(ip_chunk, dns_servers, use_system_fallback=False, dns_resolution_timeout=10):
+def resolve_ip_chunk(ip_chunk: List[str], dns_servers: List[str], use_system_fallback: bool = False, dns_resolution_timeout: int = 10) -> List[Dict[str, Any]]:
     """
     Resolve a chunk of IPs in parallel (Interface Segregation)
 
@@ -215,7 +227,8 @@ def resolve_ip_chunk(ip_chunk, dns_servers, use_system_fallback=False, dns_resol
     results = []
 
     # Use ThreadPoolExecutor for chunk-level parallelization
-    with ThreadPoolExecutor(max_workers=DEFAULT_THREADS) as executor:
+    # Default to 10 workers to avoid circular import with settings
+    with ThreadPoolExecutor(max_workers=10) as executor:
         future_to_ip = {
             executor.submit(resolve_ip_with_dns, str(ip), dns_servers, use_system_fallback): ip for ip in ip_chunk
         }
@@ -228,11 +241,11 @@ def resolve_ip_chunk(ip_chunk, dns_servers, use_system_fallback=False, dns_resol
                 ip = future_to_ip[future]
                 logger.debug(f"DNS resolution timeout for {ip} after {dns_resolution_timeout}s: {e}")
                 # Add IP even if resolution times out
-                results.append(_create_failed_resolution_result(ip))
+                results.append(_create_failed_resolution_result(str(ip)))
             except Exception as e:
                 ip = future_to_ip[future]
                 logger.debug(f"Error resolving {ip}: {e}")
                 # Add IP even if resolution fails
-                results.append(_create_failed_resolution_result(ip))
+                results.append(_create_failed_resolution_result(str(ip)))
 
     return results

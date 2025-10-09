@@ -518,9 +518,9 @@ class RengineTask(Task):
             return
 
         # Import here to avoid Celery circular import and be able to use `delay`
-        from reNgine.tasks import send_task_notif
+        from reNgine.tasks import send_notification
 
-        return send_task_notif.delay(
+        return send_notification.delay(
             name or context.task_name,
             status=context.status_str,
             result=context.result,

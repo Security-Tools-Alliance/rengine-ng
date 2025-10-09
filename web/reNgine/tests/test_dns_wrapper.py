@@ -532,7 +532,7 @@ class TestGetDNSCommand(BaseTestCase):
         from unittest.mock import MagicMock, patch
 
         # Mock a scan with no domain
-        with patch("reNgine.utilities.command.ScanHistory.objects.get") as mock_get:
+        with patch("startScan.models.ScanHistory.objects.get") as mock_get:
             mock_scan = MagicMock()
             mock_scan.domain = None
             mock_get.return_value = mock_scan

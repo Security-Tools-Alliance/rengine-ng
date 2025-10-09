@@ -34,8 +34,9 @@ from reNgine.definitions import (
     SUCCESS_TASK,
 )
 from reNgine.settings import RENGINE_RESULTS
-from reNgine.tasks import initiate_scan, run_command
-from reNgine.utilities.data import safe_int_cast
+from reNgine.tasks import initiate_scan
+from reNgine.utilities.command import run_command
+from reNgine.utilities.core import safe_int_cast
 from reNgine.utilities.database import create_scan_activity, create_scan_object
 from reNgine.utilities.subdomain import get_interesting_subdomains
 from scanEngine.models import EngineType, VulnerabilityReportSetting

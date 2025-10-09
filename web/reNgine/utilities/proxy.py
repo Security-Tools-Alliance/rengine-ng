@@ -1,25 +1,24 @@
+"""
+Proxy utilities for reNgine.
+
+This module provides utilities for working with proxies and proxy management.
+"""
+
 import random
 import re
+import logging
 
-from celery.utils.log import get_task_logger
-
-from scanEngine.models import Proxy
-
-
-logger = get_task_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
-# -------#
-# Utils #
-# -------#
-
-
-def get_random_proxy():
+def get_random_proxy() -> str:
     """Get a random proxy from the list of proxies input by user in the UI.
 
     Returns:
         str: Proxy name or '' if no proxy defined in db or use_proxy is False.
     """
+    from scanEngine.models import Proxy
+    
     proxy = Proxy.objects.filter(use_proxy=True).order_by("?").first()
     if not proxy:
         return ""
@@ -30,5 +29,14 @@ def get_random_proxy():
     return proxy_name
 
 
-def remove_ansi_escape_sequences(text):
+def remove_ansi_escape_sequences(text: str) -> str:
+    """
+    Remove ANSI escape sequences from text.
+    
+    Args:
+        text: Text to clean
+        
+    Returns:
+        str: Text without ANSI escape sequences
+    """
     return re.sub(r"\x1b\[[0-9;]*m", "", text)

@@ -1,126 +1,576 @@
-from urllib.parse import urlparse
+"""
+URL utilities for URL manipulation and validation.
 
-from celery.utils.log import get_task_logger
-from django.core.exceptions import ValidationError
-from django.core.validators import URLValidator
+This module provides functionality for URL manipulation, validation,
+and processing using core utilities.
+"""
+
+from reNgine.utilities.core.data import remove_control_characters
+from urllib.parse import urljoin
+from reNgine.utilities.core.network import parse_url, build_url
+from typing import List, Optional, Dict, Any
+
 import tldextract
-import validators
+from celery.utils.log import get_task_logger
 
+from reNgine.utilities.core.validation import (
+    is_valid_url, 
+    is_valid_ipv4, 
+    is_valid_ipv6, 
+    is_valid_domain,
+    is_valid_subdomain
+)
+from reNgine.utilities.core.network import parse_url, extract_domain_from_url
 
 logger = get_task_logger(__name__)
 
 
-# -----------#
-# URL utils #
-# -----------#
+class URLProcessor:
+    """URL processor using core utilities"""
+    
+    def __init__(self):
+        pass
+    
+    def sanitize_url(self, url: str) -> str:
+        """
+        Sanitize URL by removing unwanted characters and normalizing.
+        
+        Args:
+            url: URL to sanitize
+            
+        Returns:
+            Sanitized URL
+        """
+        if not url or not isinstance(url, str):
+            return ""
+        
+        # Remove whitespace
+        url = url.strip()
+        
+        # Remove control characters
+        url = remove_control_characters(url)
+        
+        # Ensure URL starts with protocol
+        if not url.startswith(('http://', 'https://')):
+            url = 'http://' + url
+        
+        return url
+    
+    def get_subdomain_from_url(self, url: str) -> str:
+        """
+        Extract subdomain from URL.
+        
+        Args:
+            url: URL to extract subdomain from
+            
+        Returns:
+            Subdomain name
+        """
+        try:
+            parsed = parse_url(url)
+            if parsed and parsed['netloc']:
+                domain = parsed['netloc'].split(':')[0]  # Remove port
+                return domain
+        except Exception:
+            return ""
+    
+    def add_port_to_url(self, url: str, port: int) -> str:
+        """
+        Add port to URL.
+        
+        Args:
+            url: Base URL
+            port: Port number to add
+            
+        Returns:
+            URL with port
+        """
+        try:
+            parsed = parse_url(url)
+            if parsed:
+                if parsed['port']:
+                    # Replace existing port
+                    netloc = f"{parsed['hostname']}:{port}"
+                else:
+                    # Add new port
+                    netloc = f"{parsed['netloc']}:{port}"
+                
+                return build_url(
+                    parsed['scheme'],
+                    parsed['hostname'],
+                    port,
+                    parsed['path'],
+                    parsed['query'],
+                    parsed['fragment']
+                )
+        except Exception:
+            return url
+    
+    def remove_port_from_url(self, url: str) -> str:
+        """
+        Remove port from URL.
+        
+        Args:
+            url: URL to remove port from
+            
+        Returns:
+            URL without port
+        """
+        try:
+            parsed = parse_url(url)
+            if parsed and parsed['port']:
+                return build_url(
+                    parsed['scheme'],
+                    parsed['hostname'],
+                    None,  # Remove port
+                    parsed['path'],
+                    parsed['query'],
+                    parsed['fragment']
+                )
+            return url
+        except Exception:
+            return url
+    
+    def normalize_url(self, url: str) -> str:
+        """
+        Normalize URL by removing trailing slashes and normalizing path.
+        
+        Args:
+            url: URL to normalize
+            
+        Returns:
+            Normalized URL
+        """
+        try:
+            parsed = parse_url(url)
+            if parsed:
+                # Normalize path
+                path = parsed['path']
+                if path and path != '/' and path.endswith('/'):
+                    path = path.rstrip('/')
+                
+                return build_url(
+                    parsed['scheme'],
+                    parsed['hostname'],
+                    parsed['port'],
+                    path,
+                    parsed['query'],
+                    parsed['fragment']
+                )
+        except Exception:
+            return url
+    
+    def is_same_domain(self, url1: str, url2: str) -> bool:
+        """
+        Check if two URLs belong to the same domain.
+        
+        Args:
+            url1: First URL
+            url2: Second URL
+            
+        Returns:
+            True if same domain, False otherwise
+        """
+        try:
+            domain1 = extract_domain_from_url(url1)
+            domain2 = extract_domain_from_url(url2)
+            return domain1 == domain2
+        except Exception:
+            return False
+    
+    def extract_paths_from_urls(self, urls: List[str]) -> List[str]:
+        """
+        Extract unique paths from a list of URLs.
+        
+        Args:
+            urls: List of URLs
+            
+        Returns:
+            List of unique paths
+        """
+        paths = set()
+        
+        for url in urls:
+            try:
+                parsed = parse_url(url)
+                if parsed and parsed['path'] and parsed['path'] != '/':
+                    paths.add(parsed['path'])
+            except Exception:
+                continue
+        
+        return list(paths)
+    
+    def filter_urls_by_domain(self, urls: List[str], domain: str) -> List[str]:
+        """
+        Filter URLs by domain.
+        
+        Args:
+            urls: List of URLs to filter
+            domain: Domain to filter by
+            
+        Returns:
+            List of URLs belonging to the domain
+        """
+        filtered_urls = []
+        
+        for url in urls:
+            if self.is_same_domain(url, f"http://{domain}"):
+                filtered_urls.append(url)
+        
+        return filtered_urls
+    
+    def validate_urls_batch(self, urls: List[str]) -> Dict[str, Any]:
+        """
+        Validate a batch of URLs.
+        
+        Args:
+            urls: List of URLs to validate
+            
+        Returns:
+            Validation results
+        """
+        valid_urls = []
+        invalid_urls = []
+        
+        for url in urls:
+            if is_valid_url(url):
+                valid_urls.append(url)
+            else:
+                invalid_urls.append(url)
+        
+        return {
+            "valid_urls": valid_urls,
+            "invalid_urls": invalid_urls,
+            "total_count": len(urls),
+            "valid_count": len(valid_urls),
+            "invalid_count": len(invalid_urls)
+        }
 
 
-def add_port_urls_to_crawl(
-    name,
-    urls_to_crawl,
-    additional_urls_to_test,
-    precrawl_ports,
-    precrawl_all_ports,
-    precrawl_uncommon_ports,
-    entity_type="subdomain",
-):
+def sanitize_url(url: str) -> str:
     """
-    Add port URLs to crawl list for a given name (subdomain or IP)
+    Sanitize URL by removing unwanted characters and normalizing.
+    
+    Args:
+        url: URL to sanitize
+        
+    Returns:
+        Sanitized URL
+    """
+    processor = URLProcessor()
+    return processor.sanitize_url(url)
+
+
+def get_subdomain_from_url(url: str) -> str:
+    """
+    Extract subdomain from URL.
+    
+    Args:
+        url: URL to extract subdomain from
+        
+    Returns:
+        Subdomain name
+    """
+    processor = URLProcessor()
+    return processor.get_subdomain_from_url(url)
+
+
+def add_port_to_url(url: str, port: int) -> str:
+    """
+    Add port to URL.
+    
+    Args:
+        url: Base URL
+        port: Port number to add
+        
+    Returns:
+        URL with port
+    """
+    processor = URLProcessor()
+    return processor.add_port_to_url(url, port)
+
+
+def remove_port_from_url(url: str) -> str:
+    """
+    Remove port from URL.
+    
+    Args:
+        url: URL to remove port from
+        
+    Returns:
+        URL without port
+    """
+    processor = URLProcessor()
+    return processor.remove_port_from_url(url)
+
+
+def normalize_url(url: str) -> str:
+    """
+    Normalize URL by removing trailing slashes and normalizing path.
+    
+    Args:
+        url: URL to normalize
+        
+    Returns:
+        Normalized URL
+    """
+    processor = URLProcessor()
+    return processor.normalize_url(url)
+
+
+def is_same_domain(url1: str, url2: str) -> bool:
+    """
+    Check if two URLs belong to the same domain.
+    
+    Args:
+        url1: First URL
+        url2: Second URL
+        
+    Returns:
+        True if same domain, False otherwise
+    """
+    processor = URLProcessor()
+    return processor.is_same_domain(url1, url2)
+
+
+def extract_paths_from_urls(urls: List[str]) -> List[str]:
+    """
+    Extract unique paths from a list of URLs.
+    
+    Args:
+        urls: List of URLs
+        
+    Returns:
+        List of unique paths
+    """
+    processor = URLProcessor()
+    return processor.extract_paths_from_urls(urls)
+
+
+def filter_urls_by_domain(urls: List[str], domain: str) -> List[str]:
+    """
+    Filter URLs by domain.
+    
+    Args:
+        urls: List of URLs to filter
+        domain: Domain to filter by
+        
+    Returns:
+        List of URLs belonging to the domain
+    """
+    processor = URLProcessor()
+    return processor.filter_urls_by_domain(urls, domain)
+
+
+def validate_urls_batch(urls: List[str]) -> Dict[str, Any]:
+    """
+    Validate a batch of URLs.
+    
+    Args:
+        urls: List of URLs to validate
+        
+    Returns:
+        Validation results
+    """
+    processor = URLProcessor()
+    return processor.validate_urls_batch(urls)
+
+
+def get_url_statistics(urls: List[str]) -> Dict[str, Any]:
+    """
+    Get statistics from a list of URLs.
+    
+    Args:
+        urls: List of URLs
+        
+    Returns:
+        Statistics dictionary
+    """
+    if not urls:
+        return {
+            "total_urls": 0,
+            "unique_domains": 0,
+            "unique_paths": 0,
+            "http_urls": 0,
+            "https_urls": 0
+        }
+    
+    unique_domains = set()
+    unique_paths = set()
+    http_count = 0
+    https_count = 0
+    
+    for url in urls:
+        try:
+            parsed = parse_url(url)
+            if not parsed:
+                continue
+            
+            # Count protocols
+            if parsed['scheme'] == 'http':
+                http_count += 1
+            elif parsed['scheme'] == 'https':
+                https_count += 1
+            
+            # Collect unique domains
+            if parsed['netloc']:
+                unique_domains.add(parsed['netloc'].split(':')[0])
+            
+            # Collect unique paths
+            if parsed['path'] and parsed['path'] != '/':
+                unique_paths.add(parsed['path'])
+                
+        except Exception:
+            continue
+    
+    return {
+        "total_urls": len(urls),
+        "unique_domains": len(unique_domains),
+        "unique_paths": len(unique_paths),
+        "http_urls": http_count,
+        "https_urls": https_count
+    }
+
+
+def get_http_urls(
+    is_alive: bool = False,
+    is_uncrawled: bool = False,
+    strict: bool = False,
+    ignore_files: bool = False,
+    write_filepath: Optional[str] = None,
+    exclude_subdomains: bool = False,
+    get_only_default_urls: bool = False,
+    ctx: Optional[Dict[str, Any]] = None,
+) -> List[str]:
+    """
+    Get HTTP URLs from EndPoint objects in database with filtering support.
 
     Args:
-        name: subdomain name or IP address
-        urls_to_crawl: list to append URLs to
-        additional_urls_to_test: list to append additional URLs to
-        precrawl_ports: configured common ports
-        precrawl_all_ports: whether to test all ports
-        precrawl_uncommon_ports: whether to test uncommon ports
-        entity_type: "subdomain" or "IP" for logging
-    """
-    from reNgine.definitions import COMMON_WEB_PORTS, UNCOMMON_WEB_PORTS
-
-    # Determine which ports to test based on configuration
-    ports_to_test = list(precrawl_ports)  # Start with configured common ports
-
-    if precrawl_all_ports:
-        # If all ports requested, combine common and uncommon
-        ports_to_test = list(set(COMMON_WEB_PORTS + UNCOMMON_WEB_PORTS))
-        logger.info(f"Found single default endpoint for {entity_type} {name}, testing ALL ports (COMMON + UNCOMMON)")
-    elif precrawl_uncommon_ports:
-        # If uncommon ports requested, add them to the configured ports
-        ports_to_test = list(set(precrawl_ports + UNCOMMON_WEB_PORTS))
-        logger.info(f"Found single default endpoint for {entity_type} {name}, testing COMMON and UNCOMMON ports")
-    else:
-        # Only test configured common ports (default behavior)
-        logger.info(
-            f"Found single default endpoint for {entity_type} {name}, testing configured ports: {precrawl_ports}"
-        )
-
-    # Add port URLs to crawl list (not to database yet)
-    # Test both http and https schemes since we don't know which one is available
-    for port in ports_to_test:
-        # Special handling for default ports 80 and 443
-        if port == 80:
-            # Port 80 is HTTP default, no need to specify port
-            url = f"http://{name}"
-            if url not in urls_to_crawl:
-                urls_to_crawl.append(url)
-                additional_urls_to_test.append(url)
-                logger.debug(f"Added port URL to crawl: {url}")
-        elif port == 443:
-            # Port 443 is HTTPS default, no need to specify port
-            url = f"https://{name}"
-            if url not in urls_to_crawl:
-                urls_to_crawl.append(url)
-                additional_urls_to_test.append(url)
-                logger.debug(f"Added port URL to crawl: {url}")
-        else:
-            # For all other ports, test both schemes
-            for scheme in ["http", "https"]:
-                url = f"{scheme}://{name}:{port}"
-
-                # Don't add if it already exists in crawl list
-                if url not in urls_to_crawl:
-                    urls_to_crawl.append(url)
-                    additional_urls_to_test.append(url)
-                    logger.debug(f"Added port URL to crawl: {url}")
-
-
-def get_subdomain_from_url(url):
-    """Get subdomain from HTTP URL.
-
-    Args:
-        url (str): HTTP URL.
+        is_alive (bool): If True, select only alive URLs
+        is_uncrawled (bool): If True, select only URLs that have not been crawled
+        strict (bool): Apply strict filtering
+        ignore_files (bool): Ignore file URLs
+        write_filepath (str, optional): Write URLs to file
+        exclude_subdomains (bool): Exclude subdomain URLs
+        get_only_default_urls (bool): Get only default URLs (/, /index.html, etc.)
+        ctx (dict, optional): Context with domain_id, scan_history_id, subdomain_id, url_filter
 
     Returns:
-        str: Subdomain name.
+        list: List of URLs matching query
+
+    Example:
+        >>> urls = get_http_urls(is_alive=True, ctx={"domain_id": 1})
+        >>> # Returns: ["http://example.com", "https://example.com/api"]
     """
-    # Check if the URL has a scheme. If not, add a temporary one to prevent empty netloc.
-    if "://" not in url:
-        url = f"http://{url}"
-
-    url_obj = urlparse(url.strip())
-    return url_obj.netloc.split(":")[0]
-
-
-def is_valid_domain_or_subdomain(domain):
     try:
-        URLValidator(schemes=["http", "https"])(f"http://{domain}")
-        return True
-    except ValidationError:
-        return False
+        from startScan.models import EndPoint, ScanHistory
+        from targetApp.models import Domain, Subdomain
+        from celery.utils.log import get_task_logger
+        
+        logger = get_task_logger(__name__)
+        
+        if ctx is None:
+            ctx = {}
+
+        domain_id = ctx.get("domain_id")
+        scan_id = ctx.get("scan_history_id")
+        subdomain_id = ctx.get("subdomain_id")
+        url_filter = ctx.get("url_filter", "")
+        
+        domain = Domain.objects.filter(pk=domain_id).first() if domain_id else None
+        subdomain = Subdomain.objects.filter(pk=subdomain_id).first() if subdomain_id else None
+        scan = ScanHistory.objects.filter(pk=scan_id).first() if scan_id else None
+        
+        if subdomain:
+            logger.info(f"Searching for endpoints on subdomain {subdomain}")
+        else:
+            logger.info(f"Searching for endpoints on domain {domain}")
+
+        # Build query
+        query = EndPoint.objects
+        
+        if domain:
+            logger.debug(f"Searching URLs by domain {domain}")
+            query = query.filter(target_domain=domain)
+            
+        if scan:
+            logger.debug(f"Searching URLs by scan {scan}")
+            query = query.filter(scan_history=scan)
+            
+        if subdomain:
+            logger.debug(f"Searching URLs by subdomain {subdomain}")
+            query = query.filter(target_subdomain=subdomain)
+
+        # Apply filters
+        if is_alive:
+            query = query.filter(is_alive=True)
+            
+        if is_uncrawled:
+            query = query.filter(is_uncrawled=True)
+            
+        if strict:
+            query = query.filter(is_alive=True, http_status__in=[200, 301, 302, 403, 401])
+            
+        if ignore_files:
+            # Exclude common file extensions
+            file_extensions = ['.pdf', '.jpg', '.jpeg', '.png', '.gif', '.css', '.js', '.ico', '.svg', '.woff', '.woff2']
+            for ext in file_extensions:
+                query = query.exclude(http_url__endswith=ext)
+                
+        if exclude_subdomains:
+            query = query.filter(target_subdomain__isnull=True)
+            
+        if get_only_default_urls:
+            default_paths = ['/', '/index.html', '/index.php', '/default.html', '/home.html']
+            query = query.filter(http_url__in=default_paths)
+            
+        if url_filter:
+            query = query.filter(http_url__icontains=url_filter)
+
+        # Get URLs
+        endpoints = query.values_list('http_url', flat=True).distinct()
+        urls = list(endpoints)
+        
+        logger.info(f"Found {len(urls)} URLs matching criteria")
+        
+        # Write to file if requested
+        if write_filepath and urls:
+            try:
+                with open(write_filepath, 'w', encoding='utf-8') as f:
+                    for url in urls:
+                        f.write(f"{url}\n")
+                logger.info(f"URLs written to {write_filepath}")
+            except Exception as e:
+                logger.error(f"Failed to write URLs to file {write_filepath}: {e}")
+        
+        return urls
+        
+    except ImportError as e:
+        logger.error(f"Database models not available: {e}")
+        return []
+    except Exception as e:
+        logger.error(f"Error getting HTTP URLs: {e}")
+        return []
 
 
-def get_domain_from_subdomain(subdomain):
-    """Get domain from subdomain with improved handling of edge cases.
+def get_domain_from_subdomain(subdomain: str) -> Optional[str]:
+    """
+    Get domain from subdomain with improved handling of edge cases.
 
     This function handles complex TLDs like .co.uk, .com.au, and internationalized
     domains correctly using tldextract library.
 
     Args:
-        subdomain (str): Subdomain name.
+        subdomain (str): Subdomain name
 
     Returns:
-        str: Domain name, or None if extraction fails.
+        str: Domain name, or None if extraction fails
+
+    Example:
+        >>> get_domain_from_subdomain("www.example.com")
+        "example.com"
+        >>> get_domain_from_subdomain("api.subdomain.example.co.uk")
+        "example.co.uk"
     """
     if not subdomain or not isinstance(subdomain, str):
         return None
@@ -128,7 +578,7 @@ def get_domain_from_subdomain(subdomain):
     # Clean the input - remove whitespace and convert to lowercase
     subdomain = subdomain.strip().lower()
 
-    if not is_valid_domain_or_subdomain(subdomain):
+    if not is_valid_subdomain(subdomain):
         return None
 
     # Use tldextract to parse the subdomain - handles complex TLDs and IDNs
@@ -140,7 +590,7 @@ def get_domain_from_subdomain(subdomain):
             domain = f"{extracted.domain}.{extracted.suffix}"
 
             # Additional validation to ensure the extracted domain is valid
-            if is_valid_domain_or_subdomain(domain):
+            if is_valid_domain(domain):
                 return domain
 
         # Special handling for .local domains and other private TLDs
@@ -152,7 +602,7 @@ def get_domain_from_subdomain(subdomain):
             if len(parts) >= 2:
                 # Take the last two parts as domain.tld
                 potential_domain = ".".join(parts[-2:])
-                if is_valid_domain_or_subdomain(potential_domain):
+                if is_valid_domain(potential_domain):
                     logger.debug(f"Extracted private TLD domain: {potential_domain} from {subdomain}")
                     return potential_domain
 
@@ -161,7 +611,7 @@ def get_domain_from_subdomain(subdomain):
         fallback_extracted = tldextract.extract(subdomain, include_psl_private_domains=True)
         if fallback_extracted.domain and fallback_extracted.suffix:
             potential_domain = f"{fallback_extracted.domain}.{fallback_extracted.suffix}"
-            if is_valid_domain_or_subdomain(potential_domain):
+            if is_valid_domain(potential_domain):
                 return potential_domain
 
         # If all else fails, return None
@@ -172,139 +622,7 @@ def get_domain_from_subdomain(subdomain):
         return None
 
 
-def sanitize_url(http_url):
-    """Removes HTTP ports 80 and 443 from HTTP URL because it's ugly.
-
-    Args:
-        http_url (str): Input HTTP URL.
-
-    Returns:
-        str: Stripped HTTP URL.
-    """
-    # Check if the URL has a scheme. If not, add a temporary one to prevent empty netloc.
-    if "://" not in http_url:
-        http_url = f"http://{http_url}"
-    url = urlparse(http_url)
-
-    if url.netloc.endswith(":80"):
-        url = url._replace(netloc=url.netloc.replace(":80", ""))
-    elif url.netloc.endswith(":443"):
-        url = url._replace(scheme=url.scheme.replace("http", "https"))
-        url = url._replace(netloc=url.netloc.replace(":443", ""))
-    return url.geturl().rstrip("/")
-
-
-def extract_path_from_url(url):
-    parsed_url = urlparse(url)
-
-    # Reconstruct the URL without scheme and netloc
-    reconstructed_url = parsed_url.path
-
-    if reconstructed_url.startswith("/"):
-        reconstructed_url = reconstructed_url[1:]  # Remove the first slash
-
-    if parsed_url.params:
-        reconstructed_url += f";{parsed_url.params}"
-    if parsed_url.query:
-        reconstructed_url += f"?{parsed_url.query}"
-    if parsed_url.fragment:
-        reconstructed_url += f"#{parsed_url.fragment}"
-
-    return reconstructed_url
-
-
-def is_valid_url(url):
-    """Check if a URL is valid, including both full URLs and domain:port format.
-
-    Args:
-        url (str): URL to validate (https://domain.com or domain.com:port)
-
-    Returns:
-        bool: True if valid URL, False otherwise
-    """
-    logger.debug(f"Validating URL: {url}")
-
-    # Handle URLs with scheme (http://, https://)
-    if url.startswith(("http://", "https://")):
-        return validators.url(url)
-
-    # Handle domain:port format
-    try:
-        if ":" in url:
-            domain, port = url.rsplit(":", 1)
-            # Validate port
-            port = int(port)
-            if not 1 <= port <= 65535:
-                logger.debug(f"Invalid port number: {port}")
-                return False
-        else:
-            domain = url
-
-        # Validate domain
-        if validators.domain(domain) or validators.ipv4(domain) or validators.ipv6(domain):
-            logger.debug(f"Valid domain/IP found: {domain}")
-            return True
-
-        logger.debug(f"Invalid domain/IP: {domain}")
-        return False
-
-    except (ValueError, ValidationError) as e:
-        logger.debug(f"Validation error: {str(e)}")
-        return False
-
-
-def is_target_allowed_for_domain(target, domain_name, ctx=None, target_type="subdomain"):
-    """
-    Check if a target (subdomain or URL) is allowed for a given domain based on scan context and target type.
-
-    This function centralizes the validation logic for determining whether a target
-    should be allowed for a specific domain, taking into account:
-    - Regular domain scans (strict validation)
-    - IP address scans (allow IP targets)
-    - Custom text targets (allow any valid target)
-
-    Args:
-        target (str): The target to validate (subdomain name or URL)
-        domain_name (str): The domain name being scanned
-        ctx (dict, optional): Scan context containing domain_id and other info
-        target_type (str): Type of target - "subdomain" or "url"
-
-    Returns:
-        bool: True if target is allowed, False otherwise
-    """
-    from reNgine.utilities.misc import determine_target_type
-
-    # Extract hostname from URL if needed
-    if target_type == "url":
-        parsed_url = urlparse(target)
-        hostname = parsed_url.hostname
-        if not hostname:
-            # Invalid URL without hostname
-            return False
-    else:
-        hostname = target
-
-    # IP addresses are always allowed
-    if validators.ipv4(hostname) or validators.ipv6(hostname):
-        return True
-
-    # Determine target type for custom text targets
-    scan_target_type = determine_target_type(domain_name)
-    is_custom_text_target = scan_target_type == "custom_text"
-
-    # For custom text targets, allow any valid target (no strict domain validation)
-    if is_custom_text_target:
-        return True
-
-    # If no domain_id in context, allow the target (backward compatibility)
-    if not ctx or not ctx.get("domain_id"):
-        return True
-
-    # Strict validation: hostname must be a subdomain of the domain
-    return _is_valid_subdomain(hostname, domain_name)
-
-
-def _is_valid_subdomain(target, domain_name):
+def _is_valid_subdomain(target: str, domain_name: str) -> bool:
     """
     Check if target is a valid subdomain of the given domain.
 
@@ -338,44 +656,72 @@ def _is_valid_subdomain(target, domain_name):
     return extracted_domain == domain_name
 
 
-def extract_httpx_url(line, follow_redirect):
-    """Extract final URL from httpx results.
+def is_target_allowed_for_domain(
+    target: str, 
+    domain_name: str, 
+    ctx: Optional[Dict[str, Any]] = None, 
+    target_type: str = "subdomain"
+) -> bool:
+    """
+    Check if a target (subdomain or URL) is allowed for a given domain based on scan context and target type.
+
+    This function centralizes the validation logic for determining whether a target
+    should be allowed for a specific domain, taking into account:
+    - Regular domain scans (strict validation)
+    - IP address scans (allow IP targets)
+    - Custom text targets (allow any valid target)
 
     Args:
-        line (dict): URL data output by httpx.
-        follow_redirect (bool): Whether redirects were followed by httpx.
+        target (str): The target to validate (subdomain name or URL)
+        domain_name (str): The domain name being scanned
+        ctx (dict, optional): Scan context containing domain_id and other info
+        target_type (str): Type of target - "subdomain" or "url"
 
     Returns:
-        tuple: (final_url, redirect_bool) tuple.
+        bool: True if target is allowed, False otherwise
+
+    Example:
+        >>> is_target_allowed_for_domain("www.example.com", "example.com")
+        True
+        >>> is_target_allowed_for_domain("evil.com", "example.com")
+        False
+        >>> is_target_allowed_for_domain("192.168.1.1", "example.com")
+        True
     """
-    status_code = line.get("status_code", 0)
-    final_url = line.get("final_url")
-    location = line.get("location")
-    chain_status_codes = line.get("chain_status_codes", [])
-    original_url = line.get("url")
+    try:
+        # Extract hostname from URL if needed
+        if target_type == "url":
+            parsed_url = parse_url(target)
+            hostname = parsed_url['hostname'] if parsed_url else None
+            if not hostname:
+                # Invalid URL without hostname
+                return False
+        else:
+            hostname = target
 
-    # Detect if there was a redirection based on status codes, location header, or URL change
-    redirect_status_codes = [301, 302, 303, 307, 308]
-    has_redirect = (
-        status_code in redirect_status_codes  # Direct redirect status
-        or location is not None  # Location header present
-        or (final_url is not None and final_url != original_url)  # Final URL different from original
-        or any(x in redirect_status_codes for x in chain_status_codes)  # Redirect in chain
-    )
+        # IP addresses are always allowed
+        if is_valid_ipv4(hostname) or is_valid_ipv6(hostname):
+            return True
 
-    if follow_redirect:
-        # When following redirects, return the final destination
-        if final_url:
-            # httpx followed redirects and gave us the final URL
-            return final_url, has_redirect
-        elif location:
-            # Fallback: use location header if final_url not provided
-            if location.startswith(("http", "https")):
-                return sanitize_url(location), has_redirect
-            else:
-                # Relative redirect
-                return sanitize_url(f"{original_url.rstrip('/')}/{location.lstrip('/')}"), has_redirect
+        # Determine target type for custom text targets
+        # For now, we'll use a simple heuristic - if domain_name looks like an IP or custom text
+        is_custom_text_target = (
+            is_valid_ipv4(domain_name) or 
+            is_valid_ipv6(domain_name) or
+            not is_valid_domain(domain_name)
+        )
 
-    # When not following redirects, always return the original URL
-    # This ensures we record the actual endpoint that was tested
-    return sanitize_url(original_url), has_redirect
+        # For custom text targets, allow any valid target (no strict domain validation)
+        if is_custom_text_target:
+            return True
+
+        # If no domain_id in context, allow the target (backward compatibility)
+        if not ctx or not ctx.get("domain_id"):
+            return True
+
+        # Strict validation: hostname must be a subdomain of the domain
+        return _is_valid_subdomain(hostname, domain_name)
+
+    except Exception as e:
+        logger.warning(f"Error validating target '{target}' for domain '{domain_name}': {str(e)}")
+        return False

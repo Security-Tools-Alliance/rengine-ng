@@ -294,7 +294,9 @@ def on_user_logged_out(sender, request, **kwargs):
 @receiver(user_logged_in)
 def on_user_logged_in(sender, request, **kwargs):
     user = kwargs.get("user")
-    messages.add_message(request, messages.INFO, "Hi @" + user.username + " welcome back!")
+    messages.add_message(
+        request, messages.INFO, f"Hi @{user.username} welcome back!"
+    )
 
 
 def search(request):
@@ -352,28 +354,23 @@ def onboarding(request):
             error = "Could not create User, check logs for more details"
 
         if key_openai:
-            openai_api_key = OpenAiAPIKey.objects.first()
-            if openai_api_key:
+            if openai_api_key := OpenAiAPIKey.objects.first():
                 openai_api_key.key = key_openai
                 openai_api_key.save()
             else:
                 OpenAiAPIKey.objects.create(key=key_openai)
 
         if key_netlas:
-            netlas_api_key = NetlasAPIKey.objects.first()
-            if netlas_api_key:
+            if netlas_api_key := NetlasAPIKey.objects.first():
                 netlas_api_key.key = key_netlas
                 netlas_api_key.save()
             else:
                 NetlasAPIKey.objects.create(key=key_netlas)
 
-    context = {}
-    context["error"] = error
-
     # Get first available project
     project = get_user_projects(request.user).first()
 
-    context["openai_key"] = OpenAiAPIKey.objects.first()
+    context = {"error": error, "openai_key": OpenAiAPIKey.objects.first()}
     context["netlas_key"] = NetlasAPIKey.objects.first()
 
     # then redirect to the dashboard
@@ -449,9 +446,7 @@ def api_key_management(request):
     user_api_keys = UserAPIKey.objects.filter(user=request.user).order_by("-created_at")
     context = {"api_keys": user_api_keys, "page_title": "API Keys Management"}
 
-    # Check if there's a newly created API key to show
-    new_api_key = request.session.pop("new_api_key", None)
-    if new_api_key:
+    if new_api_key := request.session.pop("new_api_key", None):
         context["new_api_key"] = new_api_key
 
     return render(request, "dashboard/api_keys.html", context)
@@ -465,8 +460,7 @@ def create_api_key(request):
     Returns the generated key only once for security.
     """
     if request.method == "POST":
-        name = request.POST.get("name", "").strip()
-        if name:
+        if name := request.POST.get("name", "").strip():
             # Check if user already has an API key with this name
             if UserAPIKey.objects.filter(user=request.user, name=name).exists():
                 messages.error(request, f'API Key with name "{name}" already exists. Please choose a different name.')

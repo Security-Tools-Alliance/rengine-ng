@@ -13,6 +13,14 @@ services:
       - CELERY_DEBUG=1
       - CELERY_REMOTE_DEBUG=0
       - CELERY_REMOTE_DEBUG_PORT=5679
+      - MAX_CONCURRENCY=20
+      - MIN_CONCURRENCY=5
+      - ORCHESTRATOR_WORKERS=1
+      - IO_WORKERS=2
+      - CPU_WORKERS=1
+      - COMMAND_WORKERS=2
+      - REPORT_WORKERS=1
+      - NOTIFICATION_WORKERS=1
     volumes:
       - ./celery/entrypoint-dev.sh:/entrypoint-dev.sh:ro
     ports:

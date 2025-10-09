@@ -42,13 +42,12 @@ from reNgine.tasks import (
     query_ip_history,
     query_reverse_whois,
     query_whois,
-    run_cmseek,
-    run_command,
-    run_gf_list,
-    run_wafw00f,
-    send_hackerone_report,
 )
-from reNgine.utilities.data import get_data_from_post_request, safe_int_cast
+from reNgine.tasks.detect import run_cmseek, run_wafw00f
+from reNgine.tasks.url import run_gf_list
+from reNgine.tasks.notification import send_hackerone_report
+from reNgine.utilities.command import run_command
+from reNgine.utilities.core import get_data_from_post_request, safe_int_cast
 from reNgine.utilities.database import create_scan_activity
 from reNgine.utilities.dns import check_host_alive, get_current_dns_servers
 from reNgine.utilities.endpoint import get_interesting_endpoints
@@ -3322,7 +3321,7 @@ class PingHosts(APIView):
         """
         import uuid
 
-        from reNgine.tasks.dns import ping_hosts_task
+        from reNgine.tasks.dns import ping_hosts_distributed
 
         req = self.request
         ip_list = req.data.get("ip_list", [])
@@ -3335,7 +3334,7 @@ class PingHosts(APIView):
             logger.info(f"Starting ping task for {len(ip_list)} hosts with scan_id {scan_id}")
 
             # Launch ping task
-            task = ping_hosts_task.delay(ip_list, scan_id)
+            task = ping_hosts_distributed.delay(ip_list, scan_id)
 
             return Response(
                 {

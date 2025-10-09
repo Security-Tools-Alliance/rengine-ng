@@ -24,10 +24,8 @@ from reNgine.definitions import (
     FOUR_OH_FOUR_URL,
     PERM_MODIFY_TARGETS,
 )
-from reNgine.tasks import (
-    run_command,
-)
-from reNgine.utilities.data import get_ip_info, get_ips_from_cidr_range
+from reNgine.utilities.command import run_command
+from reNgine.utilities.core import get_ip_info, get_ips_from_cidr_range
 from reNgine.utilities.dns import get_reverse_dns
 from reNgine.utilities.url import sanitize_url
 from scanEngine.models import EngineType

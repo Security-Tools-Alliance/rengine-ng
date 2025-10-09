@@ -24,7 +24,8 @@ from reNgine.definitions import (
     PERM_MODIFY_WORDLISTS,
 )
 from reNgine.settings import RENGINE_HOME, RENGINE_TOOL_GITHUB_PATH, RENGINE_WORDLISTS
-from reNgine.tasks import run_command, run_gf_list
+from reNgine.tasks import run_gf_list
+from reNgine.utilities.command import run_command
 from reNgine.utilities.notification import (
     send_discord_message,
     send_lark_message,

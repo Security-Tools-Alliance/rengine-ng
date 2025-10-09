@@ -1,22 +1,23 @@
-from celery.utils.log import get_task_logger
+"""
+Lookup utilities for reNgine.
 
-from scanEngine.models import InterestingLookupModel
+This module provides utilities for working with lookup keywords and interesting lookups.
+"""
+
+import logging
+from typing import List
+
+logger = logging.getLogger(__name__)
 
 
-logger = get_task_logger(__name__)
-
-
-# --------------------------------#
-# InterestingLookupModel queries #
-# --------------------------------#
-
-
-def get_lookup_keywords():
+def get_lookup_keywords() -> List[str]:
     """Get lookup keywords from InterestingLookupModel.
 
     Returns:
         list: Lookup keywords.
     """
+    from scanEngine.models import InterestingLookupModel
+    
     lookup_obj = InterestingLookupModel.objects.order_by("-id").first()
     if not lookup_obj:
         return []

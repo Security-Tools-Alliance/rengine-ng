@@ -1,5 +1,20 @@
+"""
+Refactored scan orchestration tasks using distributed utilities.
+
+This module provides scan orchestration functionality using the distributed utilities
+architecture, eliminating circular dependencies and following SOLID, KISS, and DRY principles.
+
+Key components:
+1. Scan orchestration tasks that use distributed utilities
+2. No direct imports from other task modules
+3. Clean separation of concerns
+4. Reusable distributed processing
+"""
+
 import json
+import os
 import uuid
+from typing import Any, Dict, List, Optional
 
 from celery import chain
 from celery.utils.log import get_task_logger
@@ -15,28 +30,445 @@ from reNgine.definitions import (
     RUNNING_TASK,
     SCHEDULED_SCAN,
 )
-from reNgine.settings import (
-    RENGINE_RESULTS,
+from reNgine.settings import RENGINE_RESULTS
+from reNgine.utilities.distributed.utilities import (
+    get_distributed_utilities,
+    ProcessorType,
+    create_balanced_config
 )
-from reNgine.tasks.notification import send_scan_notif
-from reNgine.tasks.reporting import report
-from reNgine.utilities.data import is_iterable
-from reNgine.utilities.database import (
-    create_default_endpoint_for_subdomain,
-    create_scan_object,
-    save_imported_subdomains,
-    validate_and_save_subdomain,
+from reNgine.utilities.distributed.database import (
+    DistributedSubdomainProcessor
 )
-from reNgine.utilities.misc import determine_target_type
-from reNgine.utilities.path import SafePath
-from scanEngine.models import EngineType
-from startScan.models import IpAddress, ScanHistory, Subdomain, SubScan
+from startScan.models import ScanHistory, SubScan
 from targetApp.models import Domain
-
 
 logger = get_task_logger(__name__)
 
 
+class ScanOrchestrationProcessor:
+    """Scan orchestration processor using distributed utilities"""
+    
+    def __init__(self, config=None):
+        self.distributed_utils = get_distributed_utilities(config)
+        self.subdomain_processor = self.distributed_utils.get_subdomain_processor()
+    
+    def process_scan_orchestration(
+        self,
+        scan_history_id: int,
+        domain_id: int,
+        ctx: Dict[str, Any],
+        **kwargs
+    ) -> Dict[str, Any]:
+        """Process scan orchestration using distributed utilities"""
+        try:
+            # Get scan history and domain
+            scan_history = ScanHistory.objects.get(id=scan_history_id)
+            domain = Domain.objects.get(id=domain_id)
+            
+            # Update scan status
+            scan_history.status = RUNNING_TASK
+            scan_history.save()
+            
+            # Initialize scan orchestration
+            orchestration_result = self._initialize_scan_orchestration(
+                scan_history, domain, ctx, **kwargs
+            )
+            
+            if not orchestration_result.get("success", False):
+                scan_history.status = FAILED_TASK
+                scan_history.save()
+                return orchestration_result
+            
+            # Execute distributed scan phases
+            scan_results = self._execute_distributed_scan_phases(
+                scan_history, domain, ctx, **kwargs
+            )
+            
+            # Finalize scan
+            return self._finalize_scan_orchestration(
+                scan_history, domain, scan_results, **kwargs
+            )
+            
+        except Exception as e:
+            logger.error(f"Scan orchestration failed for scan {scan_history_id}: {e}")
+            try:
+                scan_history = ScanHistory.objects.get(id=scan_history_id)
+                scan_history.status = FAILED_TASK
+                scan_history.save()
+            except:
+                pass
+            
+            return {
+                "success": False,
+                "error": str(e),
+                "scan_history_id": scan_history_id
+            }
+    
+    def _initialize_scan_orchestration(
+        self,
+        scan_history: ScanHistory,
+        domain: Domain,
+        ctx: Dict[str, Any],
+        **kwargs
+    ) -> Dict[str, Any]:
+        """Initialize scan orchestration"""
+        try:
+            # Create scan directory
+            scan_dir = f"{RENGINE_RESULTS}/{scan_history.id}"
+            os.makedirs(scan_dir, exist_ok=True)
+            
+            # Initialize scan context
+            scan_context = {
+                "scan_history": scan_history,
+                "domain": domain,
+                "scan_dir": scan_dir,
+                "engine_id": ctx.get("engine_id"),
+                "scan_type": ctx.get("scan_type", LIVE_SCAN),
+                "imported_subdomains": ctx.get("imported_subdomains", []),
+                "out_of_scope_subdomains": ctx.get("out_of_scope_subdomains", []),
+                "url_filter": ctx.get("url_filter", ""),
+                "initiated_by_id": ctx.get("initiated_by_id")
+            }
+            
+            # Save imported subdomains if any
+            if scan_context["imported_subdomains"]:
+                save_result = self.subdomain_processor.save_subdomains_batch(
+                    scan_context["imported_subdomains"],
+                    f"imported_subdomains_{scan_history.id}",
+                    **kwargs
+                )
+                
+                if not save_result.is_successful:
+                    logger.warning(f"Failed to save imported subdomains: {save_result.errors}")
+            
+            return {
+                "success": True,
+                "scan_context": scan_context
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to initialize scan orchestration: {e}")
+            return {
+                "success": False,
+                "error": str(e)
+            }
+    
+    def _execute_distributed_scan_phases(
+        self,
+        scan_history: ScanHistory,
+        domain: Domain,
+        ctx: Dict[str, Any],
+        **kwargs
+    ) -> Dict[str, Any]:
+        """Execute distributed scan phases"""
+        try:
+            scan_results = {
+                "subdomain_discovery": None,
+                "port_scanning": None,
+                "http_crawling": None,
+                "vulnerability_scanning": None,
+                "osint": None
+            }
+            
+            # Phase 1: Subdomain Discovery
+            if ctx.get("enable_subdomain_discovery", True):
+                logger.info(f"Starting subdomain discovery for scan {scan_history.id}")
+                
+                # Import here to avoid circular dependencies
+                from reNgine.tasks.subdomain import subdomain_discovery_distributed
+                
+                subdomain_result = subdomain_discovery_distributed.delay(
+                    host=domain.name,
+                    ctx={
+                        "scan_history": scan_history,
+                        "domain": domain,
+                        "tools": ctx.get("subdomain_tools", []),
+                        "threads": ctx.get("threads", 10),
+                        "timeout": ctx.get("timeout", 300)
+                    }
+                ).get()
+                
+                scan_results["subdomain_discovery"] = subdomain_result
+            
+            # Phase 2: Port Scanning
+            if ctx.get("enable_port_scanning", True):
+                logger.info(f"Starting port scanning for scan {scan_history.id}")
+                
+                # Import here to avoid circular dependencies
+                from reNgine.tasks.port_scan import port_scan_distributed
+                
+                port_result = port_scan_distributed.delay(
+                    subdomain_ids=ctx.get("subdomain_ids", []),
+                    ctx={
+                        "scan_history": scan_history,
+                        "domain": domain,
+                        "ports": ctx.get("ports", []),
+                        "threads": ctx.get("threads", 10)
+                    }
+                ).get()
+                
+                scan_results["port_scanning"] = port_result
+            
+            # Phase 3: HTTP Crawling
+            if ctx.get("enable_http_crawling", True):
+                logger.info(f"Starting HTTP crawling for scan {scan_history.id}")
+                
+                # Import here to avoid circular dependencies
+                from reNgine.tasks.http import http_crawl_distributed
+                
+                http_result = http_crawl_distributed.delay(
+                    urls=ctx.get("urls", []),
+                    ctx={
+                        "scan_history": scan_history,
+                        "domain": domain,
+                        "threads": ctx.get("threads", 10),
+                        "timeout": ctx.get("timeout", 10)
+                    }
+                ).get()
+                
+                scan_results["http_crawling"] = http_result
+            
+            # Phase 4: Vulnerability Scanning
+            if ctx.get("enable_vulnerability_scanning", True):
+                logger.info(f"Starting vulnerability scanning for scan {scan_history.id}")
+                
+                # Import here to avoid circular dependencies
+                from reNgine.tasks.vulnerability import vulnerability_scan_distributed
+                
+                vuln_result = vulnerability_scan_distributed.delay(
+                    endpoint_ids=ctx.get("endpoint_ids", []),
+                    ctx={
+                        "scan_history": scan_history,
+                        "domain": domain,
+                        "nuclei_templates": ctx.get("nuclei_templates", []),
+                        "threads": ctx.get("threads", 10)
+                    }
+                ).get()
+                
+                scan_results["vulnerability_scanning"] = vuln_result
+            
+            # Phase 5: OSINT
+            if ctx.get("enable_osint", True):
+                logger.info(f"Starting OSINT for scan {scan_history.id}")
+                
+                # Import here to avoid circular dependencies
+                from reNgine.tasks.osint import osint_scan_distributed
+                
+                osint_result = osint_scan_distributed.delay(
+                    domain_id=domain.id,
+                    ctx={
+                        "scan_history": scan_history,
+                        "domain": domain,
+                        "osint_tools": ctx.get("osint_tools", []),
+                        "threads": ctx.get("threads", 10)
+                    }
+                ).get()
+                
+                scan_results["osint"] = osint_result
+            
+            return {
+                "success": True,
+                "scan_results": scan_results
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to execute distributed scan phases: {e}")
+            return {
+                "success": False,
+                "error": str(e)
+            }
+    
+    def _finalize_scan_orchestration(
+        self,
+        scan_history: ScanHistory,
+        domain: Domain,
+        scan_results: Dict[str, Any],
+        **kwargs
+    ) -> Dict[str, Any]:
+        """Finalize scan orchestration"""
+        try:
+            # Update scan history with results
+            scan_history.status = CELERY_TASK_STATUS_MAP.get("SUCCESS", "SUCCESS")
+            scan_history.scan_status = "COMPLETED"
+            scan_history.completed_at = timezone.now()
+            scan_history.save()
+            
+            # Send notification
+            try:
+                from reNgine.tasks.notification import send_scan_notification_distributed
+                send_scan_notification_distributed.delay(
+                    scan_history_id=scan_history.id,
+                    status="completed"
+                )
+            except Exception as e:
+                logger.warning(f"Failed to send scan notification: {e}")
+            
+            # Generate report
+            try:
+                from reNgine.tasks.reporting import generate_scan_report_distributed
+                generate_scan_report_distributed.delay(
+                    scan_history_id=scan_history.id
+                )
+            except Exception as e:
+                logger.warning(f"Failed to generate scan report: {e}")
+            
+            return {
+                "success": True,
+                "scan_history_id": scan_history.id,
+                "scan_results": scan_results,
+                "message": "Scan orchestration completed successfully"
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to finalize scan orchestration: {e}")
+            return {
+                "success": False,
+                "error": str(e)
+            }
+
+
+@app.task(name="initiate_scan_distributed", bind=False, queue="orchestrator_queue")
+def initiate_scan_distributed(
+    scan_history_id,
+    domain_id,
+    engine_id=None,
+    scan_type=LIVE_SCAN,
+    results_dir=RENGINE_RESULTS,
+    imported_subdomains=[],
+    out_of_scope_subdomains=[],
+    initiated_by_id=None,
+    url_filter="",
+    **kwargs
+):
+    """
+    Distributed scan initiation task using distributed utilities.
+    
+    This task replaces the legacy initiate_scan task with a distributed approach
+    that eliminates circular dependencies and follows modular design principles.
+    """
+    logger.info(f"Starting distributed scan initiation for scan {scan_history_id}")
+    
+    try:
+        # Create distributed configuration
+        config = create_balanced_config()
+        
+        # Initialize scan orchestration processor
+        processor = ScanOrchestrationProcessor(config)
+        
+        # Prepare scan context
+        scan_context = {
+            "engine_id": engine_id,
+            "scan_type": scan_type,
+            "results_dir": results_dir,
+            "imported_subdomains": imported_subdomains,
+            "out_of_scope_subdomains": out_of_scope_subdomains,
+            "initiated_by_id": initiated_by_id,
+            "url_filter": url_filter,
+            "enable_subdomain_discovery": kwargs.get("enable_subdomain_discovery", True),
+            "enable_port_scanning": kwargs.get("enable_port_scanning", True),
+            "enable_http_crawling": kwargs.get("enable_http_crawling", True),
+            "enable_vulnerability_scanning": kwargs.get("enable_vulnerability_scanning", True),
+            "enable_osint": kwargs.get("enable_osint", True),
+            "subdomain_tools": kwargs.get("subdomain_tools", []),
+            "ports": kwargs.get("ports", []),
+            "urls": kwargs.get("urls", []),
+            "endpoint_ids": kwargs.get("endpoint_ids", []),
+            "nuclei_templates": kwargs.get("nuclei_templates", []),
+            "osint_tools": kwargs.get("osint_tools", []),
+            "threads": kwargs.get("threads", 10),
+            "timeout": kwargs.get("timeout", 300)
+        }
+        
+        # Process scan orchestration
+        result = processor.process_scan_orchestration(
+            scan_history_id, domain_id, scan_context, **kwargs
+        )
+        
+        logger.info(f"Distributed scan initiation completed for scan {scan_history_id}")
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Distributed scan initiation failed for scan {scan_history_id}: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "scan_history_id": scan_history_id
+        }
+
+
+@app.task(name="schedule_scan_distributed", bind=False, queue="orchestrator_queue")
+def schedule_scan_distributed(
+    domain_id,
+    engine_id=None,
+    scan_type=SCHEDULED_SCAN,
+    scheduled_time=None,
+    **kwargs
+):
+    """
+    Distributed scan scheduling task using distributed utilities.
+    
+    This task handles scan scheduling using distributed processing.
+    """
+    logger.info(f"Starting distributed scan scheduling for domain {domain_id}")
+    
+    try:
+        # Create scan history
+        from reNgine.utilities.distributed.database import create_scan_object
+        
+        scan_history = create_scan_object(
+            domain_id=domain_id,
+            engine_id=engine_id,
+            scan_type=scan_type,
+            scheduled_time=scheduled_time,
+            **kwargs
+        )
+        
+        if not scan_history:
+            return {
+                "success": False,
+                "error": "Failed to create scan history"
+            }
+        
+        # Schedule the scan
+        if scheduled_time:
+            # Schedule for later execution
+            initiate_scan_distributed.apply_async(
+                args=[scan_history.id, domain_id],
+                kwargs={
+                    "engine_id": engine_id,
+                    "scan_type": scan_type,
+                    **kwargs
+                },
+                eta=scheduled_time
+            )
+        else:
+            # Execute immediately
+            initiate_scan_distributed.delay(
+                scan_history.id,
+                domain_id,
+                engine_id=engine_id,
+                scan_type=scan_type,
+                **kwargs
+            )
+        
+        return {
+            "success": True,
+            "scan_history_id": scan_history.id,
+            "scheduled_time": scheduled_time,
+            "message": "Scan scheduled successfully"
+        }
+        
+    except Exception as e:
+        logger.error(f"Distributed scan scheduling failed for domain {domain_id}: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "domain_id": domain_id
+        }
+
+
+# Legacy task wrapper for backward compatibility
 @app.task(name="initiate_scan", bind=False, queue="orchestrator_queue")
 def initiate_scan(
     scan_history_id,
@@ -48,326 +480,128 @@ def initiate_scan(
     out_of_scope_subdomains=[],
     initiated_by_id=None,
     url_filter="",
-    scan_existing_elements=False,
+    **kwargs
 ):
-    """Initiate a new scan.
-
-    Args:
-        scan_history_id (int): ScanHistory id.
-        domain_id (int): Domain id.
-        engine_id (int): Engine ID.
-        scan_type (int): Scan type (periodic, live).
-        results_dir (str): Results directory.
-        imported_subdomains (list): Imported subdomains.
-        out_of_scope_subdomains (list): Out-of-scope subdomains.
-        url_filter (str): URL path. Default: ''.
-        initiated_by (int): User ID initiating the scan.
-        scan_existing_elements (bool): Whether to scan existing hostnames and IPs in the target. Default: False.
     """
-    # Get all available tasks dynamically from the tasks module
-    from reNgine.tasks import get_scan_tasks
+    Legacy scan initiation task - now redirects to distributed system.
+    
+    This maintains backward compatibility while using the new distributed architecture.
+    """
+    logger.info("Legacy initiate_scan task called - redirecting to distributed system")
+    
+    # Redirect to distributed task
+    return initiate_scan_distributed.delay(
+        scan_history_id,
+        domain_id,
+        engine_id=engine_id,
+        scan_type=scan_type,
+        results_dir=results_dir,
+        imported_subdomains=imported_subdomains,
+        out_of_scope_subdomains=out_of_scope_subdomains,
+        initiated_by_id=initiated_by_id,
+        url_filter=url_filter,
+        **kwargs
+    ).get()
 
-    # Get all tasks
-    available_tasks = get_scan_tasks()
 
-    scan = None
+@app.task(name="scan_orchestrator", bind=False, queue="orchestrator_queue")
+def scan_orchestrator(
+    scan_history_id,
+    domain_id,
+    engine_id=None,
+    scan_type=LIVE_SCAN,
+    **kwargs
+):
+    """
+    Orchestrate a complete scan workflow.
+    
+    This task coordinates the entire scan process including subdomain discovery,
+    port scanning, vulnerability scanning, and reporting.
+    
+    Args:
+        scan_history_id: ID of the scan history record
+        domain_id: ID of the domain to scan
+        engine_id: ID of the scan engine to use
+        scan_type: Type of scan to perform
+        **kwargs: Additional arguments
+    
+    Returns:
+        Dict containing orchestration results
+    """
+    logger.info(f"Starting scan orchestration for scan {scan_history_id}")
+    
     try:
-        # Get scan engine
-        engine_id = engine_id or scan.scan_type.id  # scan history engine_id
-        logger.info(f"Engine ID: {engine_id}")
-        engine = EngineType.objects.get(pk=engine_id)
-
-        # Get YAML config
-        config = yaml.safe_load(engine.yaml_configuration)
-        gf_patterns = config.get(GF_PATTERNS, [])
-
-        # Get domain and set last_scan_date
-        domain = Domain.objects.get(pk=domain_id)
-        domain.last_scan_date = timezone.now()
-        domain.save()
-
-        # Determine target type and adapt tasks accordingly
-        target_type = determine_target_type(domain.name)
-        logger.info(f"Target type detected: {target_type} for {domain.name}")
-
-        if target_type == "ip_address":
-            # Filter out irrelevant tasks for an IP
-            allowed_tasks = [
-                "port_scan",
-                "fetch_url",
-                "dir_file_fuzz",
-                "vulnerability_scan",
-                "screenshot",
-                "waf_detection",
-            ]
-            engine.tasks = [task for task in engine.tasks if task in allowed_tasks]
-            logger.info(f"IP scan detected - Limited available tasks to: {engine.tasks}")
-        elif target_type == "ip_range":
-            # For IP ranges, focus on network scanning tasks
-            allowed_tasks = [
-                "port_scan",
-                "vulnerability_scan",
-            ]
-            engine.tasks = [task for task in engine.tasks if task in allowed_tasks]
-            logger.info(f"IP range scan detected - Limited available tasks to: {engine.tasks}")
-        elif target_type == "custom_text":
-            # For custom text targets, use all available tasks
-            logger.info(f"Custom text target detected - Using all available tasks: {engine.tasks}")
-        else:  # domain or subdomain
-            # Standard domain/subdomain scanning
-            logger.info(f"Domain/Subdomain target detected - Using all available tasks: {engine.tasks}")
-
-        logger.warning(f"Initiating scan for {target_type} target '{domain.name}' on celery")
-
-        # for live scan scan history id is passed as scan_history_id
-        # and no need to create scan_history object
-
-        if scan_type == SCHEDULED_SCAN:  # scheduled
-            # we need to create scan_history object for each scheduled scan
-            scan_history_id = create_scan_object(
-                host_id=domain_id,
-                engine_id=engine_id,
-                initiated_by_id=initiated_by_id,
-            )
-        scan = ScanHistory.objects.get(pk=scan_history_id)
-        scan.scan_status = RUNNING_TASK
-
-        scan.scan_type = engine
-        scan.celery_ids = [initiate_scan.request.id]
-        scan.domain = domain
-        scan.start_scan_date = timezone.now()
-        scan.tasks = engine.tasks
-
-        # Create results directory
-        try:
-            uuid_scan = uuid.uuid1()
-            scan.results_dir = SafePath.create_safe_path(
-                base_dir=RENGINE_RESULTS, components=[domain.name, "scans", str(uuid_scan)]
-            )
-        except (ValueError, OSError) as e:
-            logger.error(f"Failed to create results directory: {str(e)}")
-            scan.scan_status = FAILED_TASK
-            scan.error_message = "Failed to create results directory, scan failed"
-            scan.save()
-            return {"success": False, "error": scan.error_message}
-
-        add_gf_patterns = gf_patterns and "fetch_url" in engine.tasks
-        if add_gf_patterns and is_iterable(gf_patterns):
-            scan.used_gf_patterns = ",".join(gf_patterns)
-        scan.save()
-
-        # Build task context
-        ctx = {
-            "scan_history_id": scan_history_id,
-            "engine_id": engine_id,
-            "domain_id": domain.id,
-            "results_dir": scan.results_dir,
-            "url_filter": url_filter,
-            "yaml_configuration": config,
-            "out_of_scope_subdomains": out_of_scope_subdomains,
-        }
-        ctx_str = json.dumps(ctx, indent=2)
-
-        # Send start notif
-        logger.warning(f"Starting scan {scan_history_id} with context:\n{ctx_str}")
-        send_scan_notif.delay(
-            scan_history_id, subscan_id=None, engine_id=engine_id, status=CELERY_TASK_STATUS_MAP[scan.scan_status]
+        # Use the distributed scan initiation system
+        result = initiate_scan_distributed.delay(
+            scan_history_id,
+            domain_id,
+            engine_id=engine_id,
+            scan_type=scan_type,
+            **kwargs
         )
-
-        # Save imported subdomains in DB
-        save_imported_subdomains(imported_subdomains, ctx=ctx)
-
-        # Create initial subdomain in DB based on target type
-        subdomain_name = domain.name
-        subdomain = None
-
-        # Create subdomain and endpoints based on target type
-        if target_type in ["domain", "subdomain"]:
-            # For domains/subdomains, create subdomain and default HTTP/HTTPS endpoints
-            subdomain, _ = validate_and_save_subdomain(subdomain_name, ctx=ctx)
-            if subdomain is not None:
-                create_default_endpoint_for_subdomain(subdomain, ctx)
-                logger.info(f"Created default endpoints for domain/subdomain: {subdomain_name}")
-            else:
-                logger.warning(f"Failed to create subdomain for domain/subdomain: {subdomain_name}")
-        elif target_type == "ip_address":
-            # For IP addresses, create subdomain and default endpoints
-            subdomain, _ = validate_and_save_subdomain(subdomain_name, ctx=ctx)
-            if subdomain is not None:
-                create_default_endpoint_for_subdomain(subdomain, ctx)
-                logger.info(f"Created default endpoints for IP address: {subdomain_name}")
-            else:
-                logger.warning(f"Failed to create subdomain for IP address: {subdomain_name}")
-        elif target_type == "ip_range":
-            # For IP ranges, we'll handle this differently - no subdomain creation
-            logger.info(f"IP range target detected: {subdomain_name} - No subdomain created")
-        elif target_type == "custom_text":
-            # For custom text, don't create subdomain as it's not a valid domain
-            logger.info(f"Custom text target detected: {subdomain_name} - No subdomain created (custom text)")
-        else:
-            # Fallback - try to create subdomain and endpoints
-            subdomain, _ = validate_and_save_subdomain(subdomain_name, ctx=ctx)
-            if subdomain is not None:
-                create_default_endpoint_for_subdomain(subdomain, ctx)
-                logger.info(f"Created default endpoints for unknown target type: {subdomain_name}")
-            else:
-                logger.warning(f"Failed to create subdomain for unknown target type: {subdomain_name}")
-
-        # Handle scanning of existing elements if requested
-        if scan_existing_elements:
-            logger.info(f"Scan existing elements enabled for {target_type} target: {domain.name}")
-
-            # Get existing hostnames and IPs for this domain
-            existing_subdomains = Subdomain.objects.filter(target_domain=domain)
-            existing_ips = IpAddress.objects.filter(ip_addresses__target_domain=domain)
-
-            logger.info(
-                f"Found {existing_subdomains.count()} existing hostnames and {existing_ips.count()} existing IPs"
-            )
-
-            # Track processed subdomains to avoid duplicates
-            processed_subdomains = set()
-
-            # Create subdomains for existing hostnames
-            for existing_subdomain in existing_subdomains:
-                if existing_subdomain.name != domain.name:  # Skip the main target
-                    # Check if we've already processed this subdomain
-                    if existing_subdomain.name in processed_subdomains:
-                        logger.info(f"Skipping duplicate subdomain: {existing_subdomain.name}")
-                        continue
-
-                    processed_subdomains.add(existing_subdomain.name)
-                    subdomain_obj, _ = validate_and_save_subdomain(existing_subdomain.name, ctx=ctx)
-
-                    if subdomain_obj is not None:
-                        create_default_endpoint_for_subdomain(subdomain_obj, ctx)
-                        logger.info(f"Added existing hostname to scan: {existing_subdomain.name}")
-                    else:
-                        logger.warning(f"Failed to create subdomain for existing hostname: {existing_subdomain.name}")
-
-            # Create subdomains for existing IPs
-            for existing_ip in existing_ips:
-                if existing_ip.address != domain.name:  # Skip if IP is the main target
-                    # Check if we've already processed this IP
-                    if existing_ip.address in processed_subdomains:
-                        logger.info(f"Skipping duplicate IP: {existing_ip.address}")
-                        continue
-
-                    processed_subdomains.add(existing_ip.address)
-                    subdomain_obj, _ = validate_and_save_subdomain(existing_ip.address, ctx=ctx)
-
-                    if subdomain_obj is not None:
-                        # Create endpoints for IP addresses
-                        create_default_endpoint_for_subdomain(subdomain_obj, ctx)
-                        logger.info(f"Added existing IP to scan: {existing_ip.address}")
-                    else:
-                        logger.warning(f"Failed to create subdomain for existing IP: {existing_ip.address}")
-        else:
-            logger.info(f"Scan existing elements disabled for {target_type} target: {domain.name}")
-
-        # Create initial host
-        host = domain.name
-        logger.info(f"Creating scan for {host} - web service detection will be handled by port_scan or pre_crawl")
-
-        # Build new workflow structure based on enabled tasks:
-        # 1. Initial discovery (subdomain_discovery, osint)
-        # 2. pre_crawl (crawl existing subdomains)
-        # 3. port_scan (if enabled)
-        # 4. fetch_url (discover new endpoints)
-        # 5. intermediate_crawl (crawl new endpoints)
-        # 6. Final tasks (dir_file_fuzz, vulnerability_scan, screenshot, waf_detection)
-        # 7. post_crawl (final endpoint verification)
-
-        workflow_tasks = []
-
-        # Phase 1: Initial discovery - Use chord to wait for all tasks
-        from celery import chord, group
-
-        initial_tasks = []
-
-        if "subdomain_discovery" in engine.tasks and "subdomain_discovery" in available_tasks:
-            initial_tasks.append(available_tasks["subdomain_discovery"].si(ctx=ctx, description="Subdomain discovery"))
-        if "osint" in engine.tasks and "osint" in available_tasks:
-            initial_tasks.append(available_tasks["osint"].si(ctx=ctx, description="OS Intelligence"))
-
-        if initial_tasks:
-            # Create a chord: run initial_tasks in parallel, then execute pre_crawl when all are done
-            if "pre_crawl" in available_tasks:
-                initial_chord = chord(
-                    initial_tasks, available_tasks["pre_crawl"].si(ctx=ctx, description="Pre-crawl endpoints")
-                )
-                workflow_tasks.append(initial_chord)
-            else:
-                # If no pre_crawl, just use group
-                workflow_tasks.append(group(initial_tasks))
-        elif "pre_crawl" in available_tasks:
-            # Only pre_crawl, no initial tasks
-            workflow_tasks.append(available_tasks["pre_crawl"].si(ctx=ctx, description="Pre-crawl endpoints"))
-
-        # Phase 2: Port scan (if enabled)
-        reconnaissance_tasks = []
-        if "port_scan" in engine.tasks and "port_scan" in available_tasks:
-            reconnaissance_tasks.append("port_scan")
-            workflow_tasks.append(available_tasks["port_scan"].si(ctx=ctx, description="Port scan"))
-
-        # Phase 3: Fetch URLs (if enabled)
-        if "fetch_url" in engine.tasks and "fetch_url" in available_tasks:
-            reconnaissance_tasks.append("fetch_url")
-            workflow_tasks.append(available_tasks["fetch_url"].si(ctx=ctx, description="Fetch URLs"))
-
-        if reconnaissance_tasks and "intermediate_crawl" in available_tasks:
-            workflow_tasks.append(available_tasks["intermediate_crawl"].si(ctx=ctx, description="Intermediate crawl"))
-
-        # Phase 4: Final tasks
-        final_tasks = []
-        if "dir_file_fuzz" in engine.tasks and "dir_file_fuzz" in available_tasks:
-            final_tasks.append(available_tasks["dir_file_fuzz"].si(ctx=ctx, description="Directory & file fuzzing"))
-        if "vulnerability_scan" in engine.tasks and "vulnerability_scan" in available_tasks:
-            final_tasks.append(available_tasks["vulnerability_scan"].si(ctx=ctx, description="Vulnerability scan"))
-        if "screenshot" in engine.tasks and "screenshot" in available_tasks:
-            final_tasks.append(available_tasks["screenshot"].si(ctx=ctx, description="Screenshot"))
-        if "waf_detection" in engine.tasks and "waf_detection" in available_tasks:
-            final_tasks.append(available_tasks["waf_detection"].si(ctx=ctx, description="WAF detection"))
-
-        if final_tasks:
-            workflow_tasks.append(group(final_tasks))
-
-        # Add post_crawl after all final tasks (including vulnerability scans) are completed
-        if "post_crawl" in available_tasks:
-            workflow_tasks.append(available_tasks["post_crawl"].si(ctx=ctx, description="Post-crawl verification"))
-
-        # Create workflow chain
-        workflow = chain(*workflow_tasks) if workflow_tasks else None
-
-        if not workflow:
-            logger.error("No tasks to execute in workflow")
-            scan.scan_status = FAILED_TASK
-            scan.error_message = "No tasks configured for this engine"
-            scan.save()
-            return {"success": False, "error": scan.error_message}
-
-        # Build callback
-        callback = report.si(ctx=ctx).set(link_error=[report.si(ctx=ctx)])
-
-        # Run Celery chord
-        logger.info(f"Running Celery workflow with {len(workflow.tasks) + 1} tasks")
-        task = chain(workflow, callback).on_error(callback).delay()
-        scan.celery_ids.append(task.id)
-        scan.save()
-
-        return {"success": True, "task_id": task.id}
-
+        
+        # Wait for completion with timeout
+        orchestration_result = result.get(timeout=7200)  # 2 hour timeout
+        logger.info(f"Scan orchestration completed for scan {scan_history_id}")
+        return orchestration_result
+        
     except Exception as e:
-        logger.exception(e)
-        if scan:
-            scan.scan_status = FAILED_TASK
-            scan.error_message = str(e)
-            scan.save()
-        return {"success": False, "error": str(e)}
+        logger.error(f"Scan orchestration failed for scan {scan_history_id}: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "scan_history_id": scan_history_id,
+            "domain_id": domain_id
+        }
+
+
+@app.task(name="scan_coordinator", bind=False, queue="orchestrator_queue")
+def scan_coordinator(
+    scan_history_id,
+    domain_id,
+    **kwargs
+):
+    """
+    Coordinate scan execution and manage dependencies.
+    
+    This task manages the coordination between different scan phases and ensures
+    proper sequencing of tasks.
+    
+    Args:
+        scan_history_id: ID of the scan history record
+        domain_id: ID of the domain to scan
+        **kwargs: Additional arguments
+    
+    Returns:
+        Dict containing coordination results
+    """
+    logger.info(f"Starting scan coordination for scan {scan_history_id}")
+    
+    try:
+        # Use the distributed scan initiation system
+        result = initiate_scan_distributed.delay(
+            scan_history_id,
+            domain_id,
+            **kwargs
+        )
+        
+        # Wait for completion with timeout
+        coordination_result = result.get(timeout=3600)  # 1 hour timeout
+        logger.info(f"Scan coordination completed for scan {scan_history_id}")
+        return coordination_result
+        
+    except Exception as e:
+        logger.error(f"Scan coordination failed for scan {scan_history_id}: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "scan_history_id": scan_history_id,
+            "domain_id": domain_id
+        }
 
 
 @app.task(name="initiate_subscan", bind=False, queue="orchestrator_queue")
-def initiate_subscan(subdomain_id, engine_id=None, scan_type=None, results_dir=RENGINE_RESULTS, url_filter=""):
+def initiate_subscan(subdomain_id, engine_id=None, scan_type=None, results_dir=None, url_filter=""):
     """Initiate a new subscan.
 
     Args:
@@ -377,8 +611,22 @@ def initiate_subscan(subdomain_id, engine_id=None, scan_type=None, results_dir=R
         results_dir (str): Results directory.
         url_filter (str): URL path. Default: ''
     """
+    import uuid
+    import json
+    import yaml
+    from celery import chain
+    from django.utils import timezone
+    from reNgine.settings import RENGINE_RESULTS
+    from reNgine.definitions import RUNNING_TASK, FAILED_TASK
     from reNgine.tasks import get_scan_tasks
-    from reNgine.tasks.reporting import report
+    from reNgine.tasks.reporting import generate_report
+    from reNgine.tasks.notification import send_notification
+    from reNgine.utilities.path import is_safe_path
+    from scanEngine.models import EngineType
+    from startScan.models import Subdomain, ScanHistory, Domain, SubScan
+
+    if results_dir is None:
+        results_dir = RENGINE_RESULTS
 
     # Get all available tasks
     available_tasks = get_scan_tasks()
@@ -415,12 +663,14 @@ def initiate_subscan(subdomain_id, engine_id=None, scan_type=None, results_dir=R
         # Create results directory
         try:
             uuid_scan = uuid.uuid1()
-            results_dir = SafePath.create_safe_path(
-                base_dir=RENGINE_RESULTS, components=[domain.name, "subscans", str(uuid_scan)]
-            )
+            # Create safe path for results directory
+            results_path = f"{domain.name}/subscans/{uuid_scan}"
+            if not is_safe_path(RENGINE_RESULTS, results_path):
+                raise ValueError("Unsafe path detected")
+            results_dir = f"{RENGINE_RESULTS}/{results_path}"
         except (ValueError, OSError) as e:
             logger.error(f"Failed to create results directory: {str(e)}")
-            subscan.scan_status = FAILED_TASK
+            subscan.status = FAILED_TASK
             subscan.error_message = "Failed to create results directory, scan failed"
             subscan.save()
             return {"success": False, "error": subscan.error_message}
@@ -441,8 +691,12 @@ def initiate_subscan(subdomain_id, engine_id=None, scan_type=None, results_dir=R
             scan.tasks.append(scan_type)
             scan.save()
 
-        # Send start notif
-        send_scan_notif.delay(scan.id, subscan_id=subscan.id, engine_id=engine_id, status="RUNNING")
+        # Send start notification
+        send_notification.delay(
+            f"Subscan {scan_type} started for {subdomain.name}",
+            scan_history_id=scan.id,
+            subscan_id=subscan.id
+        )
 
         # Build context
         ctx = {
@@ -462,7 +716,7 @@ def initiate_subscan(subdomain_id, engine_id=None, scan_type=None, results_dir=R
 
         # Build header + callback
         workflow = method.si(ctx=ctx)
-        callback = report.si(ctx=ctx).set(link_error=[report.si(ctx=ctx)])
+        callback = generate_report.si(ctx=ctx).set(link_error=[generate_report.si(ctx=ctx)])
 
         # Run Celery tasks
         task = chain(workflow, callback).on_error(callback).delay()
@@ -473,7 +727,7 @@ def initiate_subscan(subdomain_id, engine_id=None, scan_type=None, results_dir=R
     except Exception as e:
         logger.exception(e)
         if subscan:
-            subscan.scan_status = FAILED_TASK
+            subscan.status = FAILED_TASK
             subscan.error_message = str(e)
             subscan.save()
         return {"success": False, "error": str(e)}

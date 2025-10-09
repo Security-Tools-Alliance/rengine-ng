@@ -1,7 +1,15 @@
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from ipaddress import IPv4Network
+"""
+DNS tasks for WHOIS queries, reverse DNS lookups, and IP range discovery.
+
+This module provides functionality for DNS-related operations including
+WHOIS queries, reverse DNS lookups, and IP range discovery.
+"""
+
 import json
 import subprocess
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from ipaddress import IPv4Network
+from typing import Any, Dict, List, Optional, Union
 
 from asgiref.sync import async_to_sync
 from celery.utils.log import get_task_logger
@@ -20,7 +28,27 @@ from reNgine.common_serializers import (
 )
 from reNgine.definitions import EMAIL_REGEX
 from reNgine.settings import DEFAULT_THREADS
-from reNgine.tasks.command import run_command
+from reNgine.utilities.distributed import (
+    get_distributed_utilities,
+    ProcessorType,
+    create_balanced_config,
+    DistributedDNSProcessor,
+    DistributedNetworkResult,
+    DistributedCommandExecutor,
+    DistributedCommandBuilder
+)
+from reNgine.utilities.core import (
+    is_iterable,
+    chunk_list,
+    remove_duplicates,
+    is_valid_ip,
+    is_valid_domain
+)
+from reNgine.utilities.core import (
+    resolve_hostname,
+    reverse_dns_lookup,
+    get_common_ports
+)
 from reNgine.utilities.external import (
     get_associated_domains,
     get_domain_historical_ip_address,
@@ -42,6 +70,136 @@ from targetApp.models import (
 
 logger = get_task_logger(__name__)
 
+
+class DNSProcessor:
+    """DNS processor using distributed utilities"""
+    
+    def __init__(self, config=None):
+        self.distributed_utils = get_distributed_utilities(config)
+        self.dns_processor = self.distributed_utils.get_dns_processor()
+        self.command_processor = self.distributed_utils.get_command_processor()
+    
+    def resolve_domains_batch(
+        self,
+        domains: List[str],
+        batch_id: str,
+        **kwargs
+    ) -> Dict[str, Any]:
+        """Resolve multiple domains using distributed DNS processor"""
+        try:
+            result = self.dns_processor.resolve_domains_batch(
+                domains, batch_id, **kwargs
+            )
+            
+            return {
+                "success": result.is_successful,
+                "batch_id": batch_id,
+                "total_domains": len(domains),
+                "resolved_domains": result.data.get("resolved_domains", []),
+                "failed_domains": result.data.get("failed_domains", []),
+                "errors": result.errors,
+                "processing_time": result.processing_time
+            }
+            
+        except Exception as e:
+            logger.error(f"DNS resolution batch processing failed for batch {batch_id}: {e}")
+            return {
+                "success": False,
+                "batch_id": batch_id,
+                "error": str(e),
+                "total_domains": len(domains)
+            }
+    
+    def reverse_dns_lookup_batch(
+        self,
+        ips: List[str],
+        batch_id: str,
+        **kwargs
+    ) -> Dict[str, Any]:
+        """Perform reverse DNS lookup for multiple IPs using distributed DNS processor"""
+        try:
+            # Use the method that returns a dictionary directly
+            result = self.dns_processor.reverse_dns_lookup_batch(
+                ips, batch_id, **kwargs
+            )
+            
+            # The result is already in the correct format, just add batch_id
+            result["batch_id"] = batch_id
+            return result
+            
+        except Exception as e:
+            logger.error(f"Reverse DNS lookup batch processing failed for batch {batch_id}: {e}")
+            return {
+                "success": False,
+                "batch_id": batch_id,
+                "error": str(e),
+                "total_ips": len(ips)
+            }
+    
+    def build_tlsx_command(
+        self,
+        host: str,
+        output_file: str,
+        flags: List[str] = None
+    ) -> str:
+        """Build tlsx command using distributed command builder"""
+        if flags is None:
+            flags = ["-san", "-cn", "-silent", "-ro"]
+        
+        command_builder = DistributedCommandBuilder("tlsx")
+        
+        # Add flags
+        for flag in flags:
+            command_builder.add_flag(flag)
+        
+        # Add host
+        command_builder.add_option("-host", host)
+        
+        # Add output file
+        command_builder.add_option("-o", output_file)
+        
+        return command_builder.build()
+    
+    def execute_tlsx_command(
+        self,
+        host: str,
+        output_file: str,
+        **kwargs
+    ) -> Dict[str, Any]:
+        """Execute tlsx command using distributed command processor"""
+        try:
+            command = self.build_tlsx_command(host, output_file)
+            
+            result = self.command_processor.execute_commands_batch(
+                [command], "tlsx_command", timeout=300, **kwargs
+            )
+            
+            if result.is_successful:
+                return {
+                    "success": True,
+                    "command": command,
+                    "output_file": output_file,
+                    "execution_time": result.processing_time
+                }
+            else:
+                return {
+                    "success": False,
+                    "command": command,
+                    "error": result.errors[0] if result.errors else "Unknown error",
+                    "execution_time": result.processing_time
+                }
+                
+        except Exception as e:
+            logger.error(f"TLSx command execution failed: {e}")
+            return {
+                "success": False,
+                "command": command,
+                "error": str(e),
+                "execution_time": 0
+            }
+
+
+# Celery tasks
 
 @app.task(name="query_whois", bind=False, queue="io_queue")
 def query_whois(ip_domain, force_reload_whois=False):
@@ -138,6 +296,10 @@ def query_whois(ip_domain, force_reload_whois=False):
     else:
         logger.info(f'Domain info for "{ip_domain}" not found in DB, querying whois')
         domain_info = DottedDict()
+        
+        # Use distributed DNS processor for network operations
+        dns_processor = DNSProcessor()
+        
         # find domain historical ip
         try:
             historical_ips = get_domain_historical_ip_address(ip_domain)
@@ -145,37 +307,39 @@ def query_whois(ip_domain, force_reload_whois=False):
         except Exception as e:
             logger.error(f"HistoricalIP for {ip_domain} not found!\nError: {str(e)}")
             historical_ips = []
+        
         # find associated domains using ip_domain
         try:
             related_domains = reverse_whois(ip_domain.split(".")[0])
         except Exception as e:
             logger.error(f"Associated domain not found for {ip_domain}\nError: {str(e)}")
+        
         # find related tlds using TLSx
         try:
             related_tlds = []
             output_path = "/tmp/ip_domain_tlsx.txt"
-            tlsx_command = f"tlsx -san -cn -silent -ro -host {ip_domain} -o {output_path}"
-            run_command(
-                tlsx_command,
-                shell=True,
-            )
-            tlsx_output = []
-            with open(output_path) as f:
-                tlsx_output = f.readlines()
+            
+            # Use distributed command processor for tlsx
+            tlsx_result = dns_processor.execute_tlsx_command(ip_domain, output_path)
+            
+            if tlsx_result["success"]:
+                tlsx_output = []
+                with open(output_path) as f:
+                    tlsx_output = f.readlines()
 
-            tldextract_target = tldextract.extract(ip_domain)
-            for doms in tlsx_output:
-                doms = doms.strip()
-                tldextract_res = tldextract.extract(doms)
-                if (
-                    ip_domain != doms
-                    and tldextract_res.domain == tldextract_target.domain
-                    and tldextract_res.subdomain == ""
-                ):
-                    related_tlds.append(doms)
+                tldextract_target = tldextract.extract(ip_domain)
+                for doms in tlsx_output:
+                    doms = doms.strip()
+                    tldextract_res = tldextract.extract(doms)
+                    if (
+                        ip_domain != doms
+                        and tldextract_res.domain == tldextract_target.domain
+                        and tldextract_res.subdomain == ""
+                    ):
+                        related_tlds.append(doms)
 
-            related_tlds = list(set(related_tlds))
-            domain_info.related_tlds = related_tlds
+                related_tlds = list(set(related_tlds))
+                domain_info.related_tlds = related_tlds
         except Exception as e:
             logger.error(f"Associated domain not found for {ip_domain}\nError: {str(e)}")
 
@@ -474,7 +638,6 @@ def query_whois(ip_domain, force_reload_whois=False):
             "email": domain_info.get("tech_email"),
         },
         "nameservers": domain_info.get("ns_records"),
-        # 'similar_domains': domain_info.get('similar_domains'),
         "related_domains": domain_info.get("related_domains"),
         "related_tlds": domain_info.get("related_tlds"),
         "historical_ips": domain_info.get("historical_ips"),
@@ -505,9 +668,6 @@ def query_ip_history(domain):
     """
 
     return get_domain_historical_ip_address(domain)
-
-
-# Removed test task
 
 
 @app.task(name="ip_range_discovery", bind=False, queue="io_queue")
@@ -603,11 +763,12 @@ def ip_range_discovery(ip_address, scan_id, custom_dns=None, use_system_fallback
             20, f"Processing {total_ips} IP addresses", f"Chunking into groups of {chunk_size} for parallel processing"
         )
 
-        # Process IPs directly without sub-tasks to avoid deadlocks
-        from reNgine.utilities.dns import resolve_ip_chunk
-
+        # Use distributed DNS processor for resolution
+        dns_processor = DNSProcessor()
+        
+        # Process IPs in chunks using distributed processing
         send_progress(
-            20, f"Processing {len(ip_list)} IPs", f"Using direct parallel processing with {chunk_size} chunk size"
+            20, f"Processing {len(ip_list)} IPs", f"Using distributed DNS processing with {chunk_size} chunk size"
         )
 
         # Process in chunks directly with detailed progress
@@ -619,46 +780,81 @@ def ip_range_discovery(ip_address, scan_id, custom_dns=None, use_system_fallback
 
         # Send initial progress for chunk processing
         send_progress(25, "Starting DNS resolution", f"Will process {total_chunks} chunks of {chunk_size} IPs each")
-        processed_ips = 0
-
-        for i, chunk in enumerate(chunks):
-            # Calculate progress based on actual IPs processed: 20% (setup) + 60% (processing) + 20% (finalization)
-            # Handle edge case where total_ips might be zero
-            if total_ips > 0:
-                chunk_progress = min(int(20 + (processed_ips * 60 / total_ips)), 80)
-            else:
-                chunk_progress = 20
-            send_progress(
-                chunk_progress,
-                f"Processing chunk {i + 1}/{total_chunks}",
-                f"Resolving {len(chunk)} IPs ({processed_ips + len(chunk)}/{total_ips} total)",
-            )
-
-            # Process chunk directly
-            chunk_results = resolve_ip_chunk(
-                ip_chunk=[str(ip) for ip in chunk], dns_servers=dns_servers, use_system_fallback=use_system_fallback
-            )
-
-            # Add results and update progress
-            for result in chunk_results:
-                if result and result.get("domain") != result.get("ip"):
-                    discovered_domains.add(result["domain"])
-                resolved_ips.append(result)
-
-            processed_ips += len(chunk)
-
-            # Send intermediate progress update based on actual IPs processed
-            # Ensure we don't exceed 80% during processing phase
-            # Handle edge case where total_ips might be zero
-            if total_ips > 0:
-                intermediate_progress = min(int(20 + (processed_ips * 60 / total_ips)), 80)
-            else:
-                intermediate_progress = 20
-            send_progress(
-                intermediate_progress,
-                f"Completed chunk {i + 1}/{total_chunks}",
-                f"Processed {processed_ips}/{total_ips} IPs ({len(discovered_domains)} domains found)",
-            )
+        
+        # Process chunks in parallel using ThreadPoolExecutor
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        
+        send_progress(30, "Starting parallel DNS processing", f"Processing {total_chunks} chunks in parallel", "Starting parallel DNS processing", "info")
+        
+        with ThreadPoolExecutor(max_workers=min(total_chunks, 10)) as executor:
+            # Submit all chunk processing tasks
+            future_to_chunk = {
+                executor.submit(dns_processor.reverse_dns_lookup_batch, [str(ip) for ip in chunk], f"ip_chunk_{i}"): (i, chunk) 
+                for i, chunk in enumerate(chunks)
+            }
+            
+            completed_chunks = 0
+            
+            # Collect results as they complete
+            for future in as_completed(future_to_chunk):
+                chunk_index, chunk = future_to_chunk[future]
+                completed_chunks += 1
+                
+                try:
+                    chunk_results = future.result()
+                    
+                    # Add results and update progress
+                    if chunk_results["success"]:
+                        logger.info(f"Chunk {chunk_index} successful: {len(chunk_results.get('resolved_ips', []))} results")
+                        for result in chunk_results.get("resolved_ips", []):
+                            if result and result.get("domain") != result.get("ip"):
+                                discovered_domains.add(result["domain"])
+                                logger.debug(f"Found domain: {result['domain']} for IP: {result['ip']}")
+                            resolved_ips.append(result)
+                    else:
+                        logger.warning(f"Chunk {chunk_index} failed, using fallback")
+                        # Fallback to individual resolution
+                        from reNgine.utilities.dns import resolve_ip_chunk
+                        chunk_results = resolve_ip_chunk(
+                            ip_chunk=[str(ip) for ip in chunk], dns_servers=dns_servers, use_system_fallback=use_system_fallback
+                        )
+                        for result in chunk_results:
+                            if result and result.get("domain") != result.get("ip"):
+                                discovered_domains.add(result["domain"])
+                            resolved_ips.append(result)
+                    
+                    # Send progress update
+                    progress_percent = min(int(30 + (completed_chunks * 50 / total_chunks)), 80)
+                    send_progress(
+                        progress_percent,
+                        f"Completed DNS chunk {chunk_index + 1}/{total_chunks}",
+                        f"Processed {completed_chunks}/{total_chunks} chunks ({len(discovered_domains)} domains found)",
+                        f"Completed DNS chunk {chunk_index + 1}/{total_chunks}",
+                        "info"
+                    )
+                    
+                except Exception as e:
+                    logger.error(f"Error processing DNS chunk {chunk_index + 1}: {e}")
+                    # Fallback: mark all hosts in chunk as failed
+                    for ip in chunk:
+                        resolved_ips.append({
+                            "ip": str(ip),
+                            "domain": str(ip),
+                            "domains": [],
+                            "ips": [],
+                            "resolved_by": None,
+                            "is_alive": False
+                        })
+                    
+                    # Send error progress update
+                    progress_percent = min(int(30 + (completed_chunks * 50 / total_chunks)), 80)
+                    send_progress(
+                        progress_percent,
+                        f"Error in DNS chunk {chunk_index + 1}/{total_chunks}",
+                        f"Chunk failed, using fallback",
+                        f"Error in DNS chunk {chunk_index + 1}/{total_chunks}",
+                        "warning"
+                    )
 
         send_progress(80, "DNS discovery completed", "Ready for ping checks")
 
@@ -816,3 +1012,203 @@ def ping_hosts_task(ip_list, scan_id=None):
             logger.debug(f"WebSocket final results error: {e}")
 
     return {"status": True, "ping_results": results, "alive_count": alive_count, "total_count": len(ip_list)}
+
+
+@app.task(name="ping_hosts_distributed", bind=False, queue="io_queue")
+def ping_hosts_distributed(ip_list, scan_id=None, chunk_size=50):
+    """
+    Distributed Celery task to ping multiple hosts using distributed processing
+    
+    Args:
+        ip_list (list): List of IP addresses to ping
+        scan_id (str): Scan ID for WebSocket updates
+        chunk_size (int): Size of chunks for distributed processing
+        
+    Returns:
+        dict: Ping results with is_alive status
+    """
+    from asgiref.sync import async_to_sync
+    from channels.layers import get_channel_layer
+    from reNgine.utilities.distributed.network import DistributedDNSProcessor
+    
+    logger.info(f"Starting distributed ping check for {len(ip_list)} hosts")
+    
+    # WebSocket for progress updates
+    channel_layer = get_channel_layer()
+    room_group_name = f"ip-scan-{scan_id}" if scan_id else None
+    
+    def send_progress(percentage=None, message="", details="", log_message=None, log_type="info"):
+        if channel_layer and room_group_name:
+            try:
+                message_data = {"log_message": log_message or message, "log_type": log_type, "scan_id": scan_id}
+                
+                # Add percentage if provided
+                if percentage is not None:
+                    message_data["percentage"] = percentage
+                    message_data["message"] = message
+                    message_data["details"] = details
+                
+                async_to_sync(channel_layer.group_send)(
+                    room_group_name, {"type": "scan_progress", "message": message_data}
+                )
+            except Exception as e:
+                logger.debug(f"Ping WebSocket error: {e}")
+                pass
+    
+    # Initialize distributed DNS processor
+    dns_processor = DistributedDNSProcessor()
+    
+    # Process in chunks for better performance
+    chunks = [ip_list[i:i + chunk_size] for i in range(0, len(ip_list), chunk_size)]
+    total_chunks = len(chunks)
+    
+    send_progress(0, "Starting distributed ping checks", f"Processing {total_chunks} chunks of {chunk_size} hosts each", "Starting distributed ping checks", "info")
+    
+    all_results = {}
+    total_alive_count = 0
+    
+    # Process chunks in parallel using ThreadPoolExecutor
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    
+    send_progress(20, "Starting parallel ping processing", f"Processing {total_chunks} chunks in parallel", "Starting parallel ping processing", "info")
+    
+    with ThreadPoolExecutor(max_workers=min(total_chunks, 10)) as executor:
+        # Submit all chunk processing tasks
+        future_to_chunk = {
+            executor.submit(dns_processor.ping_hosts_batch, chunk, f"ping_chunk_{i}"): (i, chunk) 
+            for i, chunk in enumerate(chunks)
+        }
+        
+        completed_chunks = 0
+        
+        # Collect results as they complete
+        for future in as_completed(future_to_chunk):
+            chunk_index, chunk = future_to_chunk[future]
+            completed_chunks += 1
+            
+            try:
+                chunk_results = future.result()
+                
+                # Merge results
+                if chunk_results.get("success"):
+                    all_results.update(chunk_results.get("ping_results", {}))
+                    total_alive_count += chunk_results.get("alive_count", 0)
+                else:
+                    # Fallback: mark all hosts in chunk as dead
+                    for ip in chunk:
+                        all_results[ip] = False
+                
+                # Send progress update
+                progress_percent = min(int(20 + (completed_chunks * 70 / total_chunks)), 90)
+                send_progress(
+                    progress_percent,
+                    f"Completed chunk {chunk_index + 1}/{total_chunks}",
+                    f"Processed {completed_chunks}/{total_chunks} chunks ({total_alive_count} alive hosts found)",
+                    f"Completed chunk {chunk_index + 1}/{total_chunks}",
+                    "info"
+                )
+                
+            except Exception as e:
+                logger.error(f"Error processing chunk {chunk_index + 1}: {e}")
+                # Mark all hosts in failed chunk as dead
+                for ip in chunk:
+                    all_results[ip] = False
+                
+                # Send error progress update
+                progress_percent = min(int(20 + (completed_chunks * 70 / total_chunks)), 90)
+                send_progress(
+                    progress_percent,
+                    f"Error in chunk {chunk_index + 1}/{total_chunks}",
+                    f"Chunk failed, marking hosts as dead",
+                    f"Error in chunk {chunk_index + 1}/{total_chunks}",
+                    "warning"
+                )
+    
+    # Send completion message with results
+    completion_message = f"Distributed ping completed: {total_alive_count}/{len(ip_list)} hosts alive"
+    send_progress(
+        100, "Distributed ping check completed!", f"{total_alive_count}/{len(ip_list)} hosts alive", completion_message, "success"
+    )
+    
+    # Send final results via WebSocket
+    if channel_layer and room_group_name:
+        try:
+            async_to_sync(channel_layer.group_send)(
+                room_group_name,
+                {
+                    "type": "scan_progress",
+                    "message": {
+                        "log_message": completion_message,
+                        "log_type": "success",
+                        "scan_id": scan_id,
+                        "ping_results": all_results,
+                        "alive_count": total_alive_count,
+                        "total_count": len(ip_list),
+                    },
+                },
+            )
+        except Exception as e:
+            logger.debug(f"WebSocket final results error: {e}")
+    
+    logger.info(f"Distributed ping check completed for {len(ip_list)} hosts: {total_alive_count} alive")
+    return {"status": True, "ping_results": all_results, "alive_count": total_alive_count, "total_count": len(ip_list)}
+
+
+# Utility functions for easy access
+
+def resolve_domains_distributed(
+    domains: List[str],
+    **kwargs
+) -> Dict[str, Any]:
+    """
+    Resolve domains using distributed processing.
+    """
+    processor = DNSProcessor()
+    return processor.resolve_domains_batch(
+        domains, "domain_resolution", **kwargs
+    )
+
+
+def reverse_dns_lookup_distributed(
+    ips: List[str],
+    **kwargs
+) -> Dict[str, Any]:
+    """
+    Perform reverse DNS lookup using distributed processing.
+    """
+    processor = DNSProcessor()
+    return processor.reverse_dns_lookup_batch(
+        ips, "reverse_dns_lookup", **kwargs
+    )
+
+
+def get_dns_statistics(results: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Get statistics from DNS resolution results.
+    
+    Args:
+        results: DNS resolution results
+        
+    Returns:
+        Statistics dictionary
+    """
+    if not results:
+        return {
+            "total_processed": 0,
+            "successful_resolutions": 0,
+            "failed_resolutions": 0,
+            "success_rate": 0
+        }
+    
+    total_processed = results.get("total_domains", 0) or results.get("total_ips", 0)
+    successful = len(results.get("resolved_domains", [])) or len(results.get("resolved_ips", []))
+    failed = len(results.get("failed_domains", [])) or len(results.get("failed_ips", []))
+    
+    success_rate = (successful / total_processed * 100) if total_processed > 0 else 0
+    
+    return {
+        "total_processed": total_processed,
+        "successful_resolutions": successful,
+        "failed_resolutions": failed,
+        "success_rate": success_rate
+    }

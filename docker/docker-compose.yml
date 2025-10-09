@@ -45,6 +45,14 @@ services:
     environment:
       - CELERY_BROKER=redis://redis:6379/0
       - CELERY_BACKEND=redis://redis:6379/0
+      - MAX_CONCURRENCY=40
+      - MIN_CONCURRENCY=10
+      - ORCHESTRATOR_WORKERS=2
+      - IO_WORKERS=4
+      - CPU_WORKERS=2
+      - COMMAND_WORKERS=3
+      - REPORT_WORKERS=2
+      - NOTIFICATION_WORKERS=1
     volumes:
       - ../web:/home/rengine/rengine:rw,z
       - ./celery/entrypoint.sh:/entrypoint.sh:ro

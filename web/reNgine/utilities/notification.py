@@ -1,13 +1,26 @@
-import json
+"""
+Notification utilities for reNgine-ng.
+
+This module provides utilities for handling notifications, file naming,
+and output management across different scan types.
+
+Key features:
+- File naming utilities for scan outputs
+- Notification formatting helpers
+- Output file management
+- Scan result organization
+"""
+
 import pickle
 from time import sleep
+from typing import Optional, Dict, Any, List
 
+from reNgine.utilities.core.formatting import format_duration, format_bytes, format_json
+import redis
+import requests
 from celery.utils.log import get_task_logger
 from discord_webhook import DiscordEmbed, DiscordWebhook
 from django.utils import timezone
-import humanize
-import redis
-import requests
 
 from reNgine.definitions import DISCORD_SEVERITY_COLORS
 from reNgine.settings import CELERY_BROKER_URL, DOMAIN_NAME
@@ -23,268 +36,333 @@ DISCORD_WEBHOOKS_CACHE = redis.Redis.from_url(CELERY_BROKER_URL)
 # --------------------#
 
 
-def send_telegram_message(message):
-    """Send Telegram message.
-
-    Args:
-        message (str): Message.
+def get_output_file_name(scan_history_id: int, subscan_id: Optional[int], filename: str) -> str:
     """
-    notif = Notification.objects.first()
-    do_send = notif and notif.send_to_telegram and notif.telegram_bot_token and notif.telegram_bot_chat_id
-    if not do_send:
-        return
-    telegram_bot_token = notif.telegram_bot_token
-    telegram_bot_chat_id = notif.telegram_bot_chat_id
-    send_url = f"https://api.telegram.org/bot{telegram_bot_token}/sendMessage?chat_id={telegram_bot_chat_id}&parse_mode=Markdown&text={message}"
-    requests.get(send_url)
-
-
-def send_slack_message(message):
-    """Send Slack message.
+    Generate standardized output file name for scan results.
 
     Args:
-        message (str): Message.
-    """
-    headers = {"content-type": "application/json"}
-    message = {"text": message}
-    notif = Notification.objects.first()
-    do_send = notif and notif.send_to_slack and notif.slack_hook_url
-    if not do_send:
-        return
-    hook_url = notif.slack_hook_url
-    requests.post(url=hook_url, data=json.dumps(message), headers=headers)
-
-
-def send_lark_message(message):
-    """Send lark message.
-
-    Args:
-        message (str): Message.
-    """
-    headers = {"content-type": "application/json"}
-    message = {
-        "msg_type": "interactive",
-        "card": {"elements": [{"tag": "div", "text": {"content": message, "tag": "lark_md"}}]},
-    }
-    notif = Notification.objects.first()
-    do_send = notif and notif.send_to_lark and notif.lark_hook_url
-    if not do_send:
-        return
-    hook_url = notif.lark_hook_url
-    requests.post(url=hook_url, data=json.dumps(message), headers=headers)
-
-
-def send_discord_message(message, title="", severity=None, url=None, files=None, fields=None, fields_append=None):
-    """Send Discord message.
-
-    If title and fields are specified, ignore the 'message' and create a Discord
-    embed that can be updated later if specifying the same title (title is the
-    cache key).
-
-    Args:
-        message (str): Message to send. If an embed is used, this is ignored.
-        severity (str, optional): Severity. Colors are picked based on severity.
-        files (list, optional): List of files to attach to message.
-        title (str, optional): Discord embed title.
-        url (str, optional): Discord embed URL.
-        fields (dict, optional): Discord embed fields.
-        fields_append (list, optional): Discord embed field names to update
-            instead of overwrite.
-    """
-
-    if fields is None:
-        fields = {}
-    if fields_append is None:
-        fields_append = []
-    # Check if do send
-    notif = Notification.objects.first()
-    if not (notif and notif.send_to_discord and notif.discord_hook_url):
-        return False
-
-    # If fields and title, use an embed
-    use_discord_embed = fields and title
-    if use_discord_embed:
-        message = ""  # no need for message in embeds
-
-    # Check for cached response in cache, using title as key
-    cached_response = DISCORD_WEBHOOKS_CACHE.get(title) if title else None
-    if cached_response:
-        cached_response = pickle.loads(cached_response)
-
-    # Get existing webhook if found in cache
-    cached_webhook = DISCORD_WEBHOOKS_CACHE.get(f"{title}_webhook") if title else None
-    if cached_webhook:
-        webhook = pickle.loads(cached_webhook)
-        webhook.remove_embeds()
-    else:
-        webhook = DiscordWebhook(url=notif.discord_hook_url, rate_limit_retry=False, content=message)
-
-    # Get existing embed if found in cache
-    embed = None
-    cached_embed = DISCORD_WEBHOOKS_CACHE.get(f"{title}_embed") if title else None
-    if cached_embed:
-        embed = pickle.loads(cached_embed)
-    elif use_discord_embed:
-        embed = DiscordEmbed(title=title)
-
-    # Set embed fields
-    if embed:
-        if url:
-            embed.set_url(url)
-        if severity:
-            embed.set_color(DISCORD_SEVERITY_COLORS[severity])
-        embed.set_description(message)
-        embed.set_timestamp()
-        existing_fields_dict = {field["name"]: field["value"] for field in embed.fields}
-        logger.debug("".join([f"\n\t{k}: {v}" for k, v in fields.items()]))
-        for name, value in fields.items():
-            if not value:  # cannot send empty field values to Discord [error 400]
-                continue
-            value = str(value)
-            new_field = {"name": name, "value": value, "inline": False}
-
-            # If field already existed in previous embed, update it.
-            if name in existing_fields_dict:
-                field = [f for f in embed.fields if f["name"] == name][0]
-
-                # Append to existing field value
-                if name in fields_append:
-                    existing_val = field["value"]
-                    existing_val = str(existing_val)
-                    if value not in existing_val:
-                        value = f"{existing_val}\n{value}"
-
-                    if len(value) > 1024:  # character limit for embed field
-                        value = value[:1016] + "\n[...]"
-
-                # Update existing embed
-                ix = embed.fields.index(field)
-                embed.fields[ix]["value"] = value
-
-            else:
-                embed.add_embed_field(**new_field)
-
-        webhook.add_embed(embed)
-
-        # Add webhook and embed objects to cache, so we can pick them up later
-        DISCORD_WEBHOOKS_CACHE.set(f"{title}_webhook", pickle.dumps(webhook))
-        DISCORD_WEBHOOKS_CACHE.set(f"{title}_embed", pickle.dumps(embed))
-
-    # Add files to webhook
-    if files:
-        for path, name in files:
-            with open(path, "r") as f:
-                content = f.read()
-            webhook.add_file(content, name)
-
-    # Edit webhook if it already existed, otherwise send new webhook
-    if cached_response:
-        response = webhook.edit(cached_response)
-    else:
-        response = webhook.execute()
-        if use_discord_embed and response.status_code == 200:
-            DISCORD_WEBHOOKS_CACHE.set(title, pickle.dumps(response))
-
-    # Get status code
-    if response.status_code == 429:
-        errors = json.loads(response.content.decode("utf-8"))
-        wh_sleep = (int(errors["retry_after"]) / 1000) + 0.15
-        sleep(wh_sleep)
-        send_discord_message(message, title, severity, url, files, fields, fields_append)
-    elif response.status_code != 200:
-        logger.error(
-            f"Error while sending webhook data to Discord."
-            f"\n\tHTTP code: {response.status_code}."
-            f"\n\tDetails: {response.content}"
-        )
-
-
-def enrich_notification(message, scan_history_id, subscan_id):
-    """Add scan id / subscan id to notification message.
-
-    Args:
-        message (str): Original notification message.
-        scan_history_id (int): Scan history id.
-        subscan_id (int): Subscan id.
+        scan_history_id (int): Scan history ID
+        subscan_id (int, optional): Subscan ID if applicable
+        filename (str): Base filename
 
     Returns:
-        str: Message.
+        str: Formatted filename with scan IDs
+
+    Example:
+        >>> get_output_file_name(123, 456, "subdomains.txt")
+        "123-456_subdomains.txt"
+        >>> get_output_file_name(123, None, "ports.txt")
+        "123_ports.txt"
     """
-    if scan_history_id is not None:
-        if subscan_id:
-            message = f"`#{scan_history_id}_{subscan_id}`: {message}"
-        else:
-            message = f"`#{scan_history_id}`: {message}"
-    return message
-
-
-def get_scan_title(scan_id, subscan_id=None, task_name=None):
-    return f"Subscan #{subscan_id} summary" if subscan_id else f"Scan #{scan_id} summary"
-
-
-def get_scan_url(scan_id=None, subscan_id=None):
-    return f"https://{DOMAIN_NAME}/scan/detail/{scan_id}" if scan_id else None
-
-
-def get_scan_fields(engine, scan, subscan=None, status="RUNNING", tasks=None):
-    if tasks is None:
-        tasks = []
-    scan_obj = subscan or scan
-    if subscan:
-        tasks_h = f"`{subscan.type}`"
-        host = subscan.subdomain.name
-        scan_obj = subscan
-    else:
-        tasks_h = "• " + "\n• ".join(f"`{task.name}`" for task in tasks) if tasks else ""
-        host = scan.domain.name
-        scan_obj = scan
-
-    # Find scan elapsed time
-    duration = None
-    if scan_obj:
-        if status in ["ABORTED", "FAILED", "SUCCESS"]:
-            td = scan_obj.stop_scan_date - scan_obj.start_scan_date
-        else:
-            td = timezone.now() - scan_obj.start_scan_date
-        duration = humanize.naturaldelta(td)
-    # Build fields
-    url = get_scan_url(scan.id)
-    fields = {"Status": f"**{status}**", "Engine": engine.engine_name, "Scan ID": f"[#{scan.id}]({url})"}
-
-    if subscan:
-        url = get_scan_url(scan.id, subscan.id)
-        fields["Subscan ID"] = f"[#{subscan.id}]({url})"
-
-    if duration:
-        fields["Duration"] = duration
-
-    fields["Host"] = host
-    if tasks:
-        fields["Tasks"] = tasks_h
-
-    return fields
-
-
-def get_task_title(task_name, scan_id=None, subscan_id=None):
-    if scan_id:
-        prefix = f"#{scan_id}"
-        if subscan_id:
-            prefix += f"-#{subscan_id}"
-        return f"`{prefix}` - `{task_name}`"
-    return f"`{task_name}` [unbound]"
-
-
-def get_task_header_message(name, scan_history_id, subscan_id):
-    msg = f"`{name}` [#{scan_history_id}"
-    if subscan_id:
-        msg += f"_#{subscan_id}]"
-    msg += "status"
-    return msg
-
-
-def get_output_file_name(scan_history_id, subscan_id, filename):
     title = f"{scan_history_id}"
     if subscan_id:
         title += f"-{subscan_id}"
     title += f"_{filename}"
     return title
+
+
+def send_telegram_message(message: str) -> bool:
+    """
+    Send Telegram message.
+
+    Args:
+        message (str): Message to send
+
+    Returns:
+        bool: True if message sent successfully, False otherwise
+    """
+    try:
+        notif = Notification.objects.first()
+        do_send = notif and notif.send_to_telegram and notif.telegram_bot_token and notif.telegram_bot_chat_id
+        if not do_send:
+            logger.debug("Telegram notification not configured or disabled")
+            return False
+            
+        telegram_bot_token = notif.telegram_bot_token
+        telegram_bot_chat_id = notif.telegram_bot_chat_id
+        send_url = f"https://api.telegram.org/bot{telegram_bot_token}/sendMessage?chat_id={telegram_bot_chat_id}&parse_mode=Markdown&text={message}"
+        
+        response = requests.get(send_url, timeout=30)
+        response.raise_for_status()
+        
+        logger.info("Telegram message sent successfully")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Failed to send Telegram message: {e}")
+        return False
+
+
+def send_slack_message(message: str) -> bool:
+    """
+    Send Slack message.
+
+    Args:
+        message (str): Message to send
+
+    Returns:
+        bool: True if message sent successfully, False otherwise
+    """
+    try:
+        headers = {"content-type": "application/json"}
+        message_data = {"text": message}
+        notif = Notification.objects.first()
+        
+        if not (notif and notif.send_to_slack and notif.slack_webhook_url):
+            logger.debug("Slack notification not configured or disabled")
+            return False
+            
+        response = requests.post(
+            notif.slack_webhook_url,
+            headers=headers,
+            data=format_json(message_data),
+            timeout=30
+        )
+        response.raise_for_status()
+        
+        logger.info("Slack message sent successfully")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Failed to send Slack message: {e}")
+        return False
+
+
+def send_discord_message(message: str, webhook_url: str, title: str = "reNgine Notification") -> bool:
+    """
+    Send Discord message.
+
+    Args:
+        message (str): Message to send
+        webhook_url (str): Discord webhook URL
+        title (str): Message title
+
+    Returns:
+        bool: True if message sent successfully, False otherwise
+    """
+    try:
+        webhook = DiscordWebhook(url=webhook_url, content=message)
+        embed = DiscordEmbed(title=title, description=message, color="03b2f8")
+        webhook.add_embed(embed)
+        webhook.execute()
+        
+        logger.info("Discord message sent successfully")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Failed to send Discord message: {e}")
+        return False
+
+
+def send_discord_file(file_path: str, webhook_url: str, filename: str = None) -> bool:
+    """
+    Send file to Discord.
+
+    Args:
+        file_path (str): Path to file to send
+        webhook_url (str): Discord webhook URL
+        filename (str, optional): Custom filename for Discord
+
+    Returns:
+        bool: True if file sent successfully, False otherwise
+    """
+    try:
+        webhook = DiscordWebhook(url=webhook_url)
+        webhook.add_file(file=open(file_path, "rb"), filename=filename or file_path.split("/")[-1])
+        webhook.execute()
+        
+        logger.info(f"Discord file sent successfully: {file_path}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Failed to send Discord file {file_path}: {e}")
+        return False
+
+
+def format_scan_summary(scan_data: Dict[str, Any]) -> str:
+    """
+    Format scan summary for notifications.
+
+    Args:
+        scan_data (dict): Scan data dictionary
+
+    Returns:
+        str: Formatted scan summary
+    """
+    try:
+        summary = f"🔍 **Scan Summary**\n"
+        summary += f"**Target:** {scan_data.get('target', 'N/A')}\n"
+        summary += f"**Scan Type:** {scan_data.get('scan_type', 'N/A')}\n"
+        summary += f"**Status:** {scan_data.get('status', 'N/A')}\n"
+        
+        if scan_data.get('subdomains_found'):
+            summary += f"**Subdomains Found:** {scan_data['subdomains_found']}\n"
+        if scan_data.get('ports_found'):
+            summary += f"**Ports Found:** {scan_data['ports_found']}\n"
+        if scan_data.get('endpoints_found'):
+            summary += f"**Endpoints Found:** {scan_data['endpoints_found']}\n"
+        if scan_data.get('vulnerabilities_found'):
+            summary += f"**Vulnerabilities Found:** {scan_data['vulnerabilities_found']}\n"
+            
+        summary += f"**Duration:** {scan_data.get('duration', 'N/A')}\n"
+        summary += f"**Started:** {scan_data.get('started_at', 'N/A')}\n"
+        
+        return summary
+        
+    except Exception as e:
+        logger.error(f"Failed to format scan summary: {e}")
+        return f"Scan completed for {scan_data.get('target', 'unknown target')}"
+
+
+def get_notification_config() -> Dict[str, Any]:
+    """
+    Get notification configuration.
+
+    Returns:
+        dict: Notification configuration
+    """
+    try:
+        notif = Notification.objects.first()
+        if not notif:
+            return {}
+            
+        return {
+            "send_to_telegram": notif.send_to_telegram,
+            "send_to_slack": notif.send_to_slack,
+            "send_to_discord": notif.send_to_discord,
+            "telegram_bot_token": notif.telegram_bot_token,
+            "telegram_bot_chat_id": notif.telegram_bot_chat_id,
+            "slack_webhook_url": notif.slack_webhook_url,
+            "discord_webhook_url": notif.discord_webhook_url,
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get notification config: {e}")
+        return {}
+
+
+def send_notification(message: str, notification_type: str = "info") -> bool:
+    """
+    Send notification through configured channels.
+
+    Args:
+        message (str): Message to send
+        notification_type (str): Type of notification (info, warning, error)
+
+    Returns:
+        bool: True if at least one notification sent successfully
+    """
+    config = get_notification_config()
+    success = False
+    
+    try:
+        # Send Telegram notification
+        if config.get("send_to_telegram") and config.get("telegram_bot_token"):
+            if send_telegram_message(message):
+                success = True
+                
+        # Send Slack notification
+        if config.get("send_to_slack") and config.get("slack_webhook_url"):
+            if send_slack_message(message):
+                success = True
+                
+        # Send Discord notification
+        if config.get("send_to_discord") and config.get("discord_webhook_url"):
+            if send_discord_message(message, config["discord_webhook_url"]):
+                success = True
+                
+    except Exception as e:
+        logger.error(f"Failed to send notifications: {e}")
+        
+    return success
+
+
+def cache_discord_webhook(webhook_url: str, scan_id: int) -> None:
+    """
+    Cache Discord webhook URL for a scan.
+
+    Args:
+        webhook_url (str): Discord webhook URL
+        scan_id (int): Scan ID
+    """
+    try:
+        DISCORD_WEBHOOKS_CACHE.set(f"discord_webhook_{scan_id}", webhook_url, ex=3600)  # 1 hour
+        logger.debug(f"Cached Discord webhook for scan {scan_id}")
+    except Exception as e:
+        logger.error(f"Failed to cache Discord webhook: {e}")
+
+
+def get_cached_discord_webhook(scan_id: int) -> Optional[str]:
+    """
+    Get cached Discord webhook URL for a scan.
+
+    Args:
+        scan_id (int): Scan ID
+
+    Returns:
+        str or None: Cached webhook URL or None if not found
+    """
+    try:
+        webhook_url = DISCORD_WEBHOOKS_CACHE.get(f"discord_webhook_{scan_id}")
+        return webhook_url.decode('utf-8') if webhook_url else None
+    except Exception as e:
+        logger.error(f"Failed to get cached Discord webhook: {e}")
+        return None
+
+
+def format_file_size(size_bytes: int) -> str:
+    """
+    Format file size in human readable format.
+
+    Args:
+        size_bytes (int): File size in bytes
+
+    Returns:
+        str: Human readable file size
+    """
+    return format_bytes(size_bytes)
+
+
+def send_lark_message(message: str) -> bool:
+    """
+    Send Lark message.
+    
+    Args:
+        message (str): Message to send
+        
+    Returns:
+        bool: True if message was sent successfully, False otherwise
+    """
+    try:
+        from scanEngine.models import Notification
+        import requests
+        import json
+        
+        notif = Notification.objects.first()
+        do_send = notif and notif.send_to_lark and notif.lark_hook_url
+        
+        if not do_send:
+            logger.warning("Lark notifications not configured or disabled")
+            return False
+            
+        headers = {"content-type": "application/json"}
+        message_data = {
+            "msg_type": "interactive",
+            "card": {"elements": [{"tag": "div", "text": {"content": message, "tag": "lark_md"}}]},
+        }
+        
+        hook_url = notif.lark_hook_url
+        response = requests.post(url=hook_url, data=json.dumps(message_data), headers=headers)
+        
+        if response.status_code == 200:
+            logger.info(f"Lark message sent successfully: {message[:100]}...")
+            return True
+        else:
+            logger.error(f"Failed to send Lark message: {response.status_code}")
+            return False
+            
+    except Exception as e:
+        logger.error(f"Failed to send Lark message: {e}")
+        return False
+
+
