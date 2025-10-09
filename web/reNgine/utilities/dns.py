@@ -16,7 +16,7 @@ Key components:
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import contextlib
 import socket
-import subprocess
+from scapy.all import IP, ICMP, sr1
 from typing import List, Optional, Dict, Any
 
 from celery.utils.log import get_task_logger
@@ -100,11 +100,13 @@ def get_current_dns_servers() -> List[str]:
 
 
 def check_host_alive(ip: str) -> bool:
-    """Quick ping check to see if host is alive"""
+    """Fast ping check using ping wrapper with cap_net_raw"""
     try:
-        cmd = ["ping", "-c", "1", "-W", "2", ip]
-
-        result = subprocess.run(cmd, capture_output=True, timeout=5)
+        import subprocess
+        
+        # Use ping wrapper with cap_net_raw for fast ICMP ping
+        result = subprocess.run(["/usr/local/bin/ping-wrapper", "-c", "1", "-W", "1", ip], 
+                              capture_output=True, timeout=2)
         is_alive = result.returncode == 0
         if is_alive:
             logger.debug(f"Ping {ip}: alive")
@@ -141,7 +143,7 @@ def _resolve_with_custom_dns(ip_str: str, dns_servers: List[str]) -> tuple[Optio
                     return hostname, dns_server
 
         except Exception as e:
-            logger.debug(f"DNS resolution failed for {ip_str} using {dns_server}: {e}")
+            # Silently continue to next DNS server on failure
             continue
 
     return None, None
@@ -154,7 +156,8 @@ def _resolve_with_system_dns(ip_str: str) -> tuple[Optional[str], List[str]]:
         if domain != ip_str:
             return domain, domains or [domain]
     except socket.herror:
-        logger.debug(f"No PTR record for {ip_str}")
+        # No PTR record found, silently continue
+        pass
 
     return None, []
 

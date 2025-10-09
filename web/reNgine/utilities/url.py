@@ -43,17 +43,17 @@ class URLProcessor:
         """
         if not url or not isinstance(url, str):
             return ""
-        
+
         # Remove whitespace
         url = url.strip()
-        
+
         # Remove control characters
         url = remove_control_characters(url)
-        
+
         # Ensure URL starts with protocol
         if not url.startswith(('http://', 'https://')):
-            url = 'http://' + url
-        
+            url = f'http://{url}'
+
         return url
     
     def get_subdomain_from_url(self, url: str) -> str:
@@ -69,8 +69,7 @@ class URLProcessor:
         try:
             parsed = parse_url(url)
             if parsed and parsed['netloc']:
-                domain = parsed['netloc'].split(':')[0]  # Remove port
-                return domain
+                return parsed['netloc'].split(':')[0]
         except Exception:
             return ""
     
@@ -86,15 +85,14 @@ class URLProcessor:
             URL with port
         """
         try:
-            parsed = parse_url(url)
-            if parsed:
+            if parsed := parse_url(url):
                 if parsed['port']:
                     # Replace existing port
                     netloc = f"{parsed['hostname']}:{port}"
                 else:
                     # Add new port
                     netloc = f"{parsed['netloc']}:{port}"
-                
+
                 return build_url(
                     parsed['scheme'],
                     parsed['hostname'],
@@ -142,13 +140,12 @@ class URLProcessor:
             Normalized URL
         """
         try:
-            parsed = parse_url(url)
-            if parsed:
+            if parsed := parse_url(url):
                 # Normalize path
                 path = parsed['path']
                 if path and path != '/' and path.endswith('/'):
                     path = path.rstrip('/')
-                
+
                 return build_url(
                     parsed['scheme'],
                     parsed['hostname'],
@@ -212,11 +209,10 @@ class URLProcessor:
             List of URLs belonging to the domain
         """
         filtered_urls = []
-        
-        for url in urls:
-            if self.is_same_domain(url, f"http://{domain}"):
-                filtered_urls.append(url)
-        
+
+        filtered_urls.extend(
+            url for url in urls if self.is_same_domain(url, f"http://{domain}")
+        )
         return filtered_urls
     
     def validate_urls_batch(self, urls: List[str]) -> Dict[str, Any]:
@@ -703,16 +699,11 @@ def is_target_allowed_for_domain(
         if is_valid_ipv4(hostname) or is_valid_ipv6(hostname):
             return True
 
-        # Determine target type for custom text targets
-        # For now, we'll use a simple heuristic - if domain_name looks like an IP or custom text
-        is_custom_text_target = (
-            is_valid_ipv4(domain_name) or 
-            is_valid_ipv6(domain_name) or
-            not is_valid_domain(domain_name)
-        )
-
-        # For custom text targets, allow any valid target (no strict domain validation)
-        if is_custom_text_target:
+        if is_custom_text_target := (
+            is_valid_ipv4(domain_name)
+            or is_valid_ipv6(domain_name)
+            or not is_valid_domain(domain_name)
+        ):
             return True
 
         # If no domain_id in context, allow the target (backward compatibility)

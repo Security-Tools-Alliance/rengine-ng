@@ -664,6 +664,13 @@ Add or Import Targets
             } else if (data.details) {
               addLogEntry(data.details, 'debug');
             }
+            
+            // Check if ping task is completed with results (even with percentage)
+            if (data.ping_completed && data.ping_results) {
+              handlePingCompletionWithResults(data);
+            } else if (data.ping_completed) {
+              handlePingCompletion();
+            }
           }
           // Handle log-only messages (for ping progress)
           else if (data.log_message) {
@@ -677,9 +684,9 @@ Add or Import Targets
             }
             
             // Check if ping task is completed with results
-            if (data.log_message.includes('Ping completed:') && data.ping_results) {
+            if (data.ping_completed && data.ping_results) {
               handlePingCompletionWithResults(data);
-            } else if (data.log_message.includes('Ping completed:')) {
+            } else if (data.ping_completed) {
               handlePingCompletion();
             }
           }

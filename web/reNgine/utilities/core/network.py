@@ -87,10 +87,7 @@ def build_url(scheme: str, hostname: str, port: Optional[int] = None,
     Returns:
         Built URL string
     """
-    netloc = hostname
-    if port and port not in (80, 443):
-        netloc = f"{hostname}:{port}"
-    
+    netloc = f"{hostname}:{port}" if port and port not in (80, 443) else hostname
     return urllib.parse.urlunparse((scheme, netloc, path, "", query, fragment))
 
 
@@ -104,12 +101,12 @@ def extract_domain_from_url(url: str) -> Optional[str]:
     Returns:
         Domain name or None if invalid
     """
-    parsed = parse_url(url)
-    if parsed and parsed.hostname:
-        return parsed.hostname
-    elif parsed and parsed.path and '.' in parsed.path and not parsed.scheme:
-        # Handle case where URL is just a domain (e.g., "example.com")
-        return parsed.path
+    if parsed := parse_url(url):
+        if parsed.hostname:
+            return parsed.hostname
+        elif parsed.path and '.' in parsed.path and not parsed.scheme:
+            # Handle case where URL is just a domain (e.g., "example.com")
+            return parsed.path
     return None
 
 
@@ -203,20 +200,16 @@ def normalize_url(url: str) -> str:
     Returns:
         Normalized URL
     """
-    parsed = parse_url(url)
-    if not parsed:
+    if parsed := parse_url(url):
+        return build_url(
+            parsed['scheme'],
+            parsed['hostname'],
+            parsed['port'],
+            parsed['path'],
+            parsed['query'],
+        )
+    else:
         return url
-    
-    # Remove fragment
-    normalized = build_url(
-        parsed['scheme'],
-        parsed['hostname'],
-        parsed['port'],
-        parsed['path'],
-        parsed['query']
-    )
-    
-    return normalized
 
 
 def resolve_hostname(hostname: str) -> List[str]:
@@ -369,9 +362,7 @@ def int_to_ip(ip_int: int, version: int = 4) -> Optional[str]:
     """
     try:
         ip_obj = ipaddress.ip_address(ip_int)
-        if ip_obj.version == version:
-            return str(ip_obj)
-        return None
+        return str(ip_obj) if ip_obj.version == version else None
     except ValueError:
         return None
 
@@ -433,9 +424,7 @@ def get_common_ports(count: Optional[int] = None) -> List[int]:
     ports = [
         21, 22, 23, 25, 53, 80, 110, 143, 443, 993, 995, 3389, 5432, 3306, 6379, 27017
     ]
-    if count is not None:
-        return ports[:count]
-    return ports
+    return ports[:count] if count is not None else ports
 
 
 def get_web_ports() -> List[int]:
@@ -741,14 +730,12 @@ def parse_host_port(hostport: str, default_port: Optional[int] = None) -> Tuple[
     Returns:
         Tuple of (host, port)
     """
-    if ':' in hostport:
-        host, port_str = hostport.rsplit(':', 1)
-        try:
-            port = int(port_str)
-            return host, port
-        except ValueError:
-            return hostport, default_port
-    else:
+    if ':' not in hostport:
+        return hostport, default_port
+    host, port_str = hostport.rsplit(':', 1)
+    try:
+        return host, int(port_str)
+    except ValueError:
         return hostport, default_port
 
 
@@ -763,7 +750,4 @@ def build_host_port(host: str, port: Optional[int] = None) -> str:
     Returns:
         Host:port string
     """
-    if port:
-        return f"{host}:{port}"
-    else:
-        return host
+    return f"{host}:{port}" if port else host

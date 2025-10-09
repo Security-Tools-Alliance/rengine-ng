@@ -66,7 +66,7 @@ class TestDNSUtilities(BaseTestCase):
         self.assertEqual(result["domain"], "dns.google")
         self.assertIn("dns.google", result["domains"])
 
-    @patch("reNgine.utilities.dns.subprocess.run")
+    @patch("subprocess.run")
     def test_check_host_alive_success(self, mock_subprocess):
         """Test successful host alive check."""
         from reNgine.utilities.dns import check_host_alive
@@ -80,8 +80,11 @@ class TestDNSUtilities(BaseTestCase):
 
         self.assertTrue(result)
         mock_subprocess.assert_called_once()
+        # Verify ping wrapper was used
+        call_args = mock_subprocess.call_args[0][0]
+        self.assertEqual(call_args[0], "/usr/local/bin/ping-wrapper")
 
-    @patch("reNgine.utilities.dns.subprocess.run")
+    @patch("subprocess.run")
     def test_check_host_alive_failure(self, mock_subprocess):
         """Test failed host alive check."""
         from reNgine.utilities.dns import check_host_alive
@@ -95,8 +98,11 @@ class TestDNSUtilities(BaseTestCase):
 
         self.assertFalse(result)
         mock_subprocess.assert_called_once()
+        # Verify ping wrapper was used
+        call_args = mock_subprocess.call_args[0][0]
+        self.assertEqual(call_args[0], "/usr/local/bin/ping-wrapper")
 
-    @patch("reNgine.utilities.dns.subprocess.run")
+    @patch("subprocess.run")
     def test_check_host_alive_timeout(self, mock_subprocess):
         """Test host alive check with timeout."""
         from reNgine.utilities.dns import check_host_alive
@@ -107,8 +113,11 @@ class TestDNSUtilities(BaseTestCase):
         result = check_host_alive("192.168.1.1")
 
         self.assertFalse(result)
+        # Verify ping wrapper was used
+        call_args = mock_subprocess.call_args[0][0]
+        self.assertEqual(call_args[0], "/usr/local/bin/ping-wrapper")
 
-    @patch("reNgine.utilities.dns.subprocess.run")
+    @patch("subprocess.run")
     def test_check_host_alive(self, mock_subprocess):
         """Test host alive check with specific command arguments."""
         from reNgine.utilities.dns import check_host_alive
@@ -121,9 +130,9 @@ class TestDNSUtilities(BaseTestCase):
         result = check_host_alive("8.8.8.8")
 
         self.assertTrue(result)
-        # Verify ping command was used with correct arguments
+        # Verify ping wrapper was used with correct arguments
         call_args = mock_subprocess.call_args[0][0]
-        self.assertIn("ping", call_args)
+        self.assertEqual(call_args[0], "/usr/local/bin/ping-wrapper")
         self.assertIn("-c", call_args)
         self.assertIn("-W", call_args)
         self.assertIn("8.8.8.8", call_args)

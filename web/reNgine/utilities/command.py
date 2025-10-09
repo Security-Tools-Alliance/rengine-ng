@@ -229,13 +229,9 @@ def generate_header_param(custom_header: str, tool: str) -> str:
     """
     if not custom_header:
         return ""
-    
-    if tool == "gospider":
-        return f' -H "{custom_header}"'
-    elif tool == "hakrawler":
+
+    if tool == "hakrawler":
         return f' -h "{custom_header}"'
-    elif tool == "katana":
-        return f' -H "{custom_header}"'
     else:
         return f' -H "{custom_header}"'
 
@@ -425,7 +421,7 @@ def build_command_with_dns(tool_name, args, domain=None, dns_servers=None):
     """
     import logging
     logger = logging.getLogger(__name__)
-    
+
     # Get DNS servers from domain or direct parameter
     if dns_servers is not None:
         dns_servers = dns_servers
@@ -433,17 +429,17 @@ def build_command_with_dns(tool_name, args, domain=None, dns_servers=None):
         dns_servers = domain.get_dns_servers()
     else:
         dns_servers = []
-    
+
     # Handle string input (convert to list)
     if isinstance(dns_servers, str):
         dns_servers = [dns_servers]
-    
+
     # Filter out empty/None values
     dns_servers = [s for s in dns_servers if s and str(s).strip()]
-    
+
     if not dns_servers:
         return [tool_name] + (args or [])
-    
+
     # Tool-specific DNS argument patterns
     dns_patterns = {
         'nmap': ['--dns-servers', ','.join(dns_servers)],
@@ -451,14 +447,12 @@ def build_command_with_dns(tool_name, args, domain=None, dns_servers=None):
         'subfinder': ['-r', ','.join(dns_servers)],
         'amass': ['-dns', ','.join(dns_servers)],
         'dnsrecon': ['-s', ','.join(dns_servers)],
-        'dig': ['@' + dns_servers[0]] if dns_servers else [],
+        'dig': [f'@{dns_servers[0]}'] if dns_servers else [],
         'nslookup': [dns_servers[0]] if dns_servers else [],
     }
-    
+
     if tool_name in dns_patterns:
-        dns_args = dns_patterns[tool_name]
-        return [tool_name] + dns_args + (args or [])
-    else:
-        # Generic fallback - try to add DNS servers as arguments
-        logger.debug(f"No specific DNS pattern for {tool_name}, using generic approach")
-        return [tool_name] + (args or [])
+        return [tool_name] + dns_patterns[tool_name] + (args or [])
+    # Generic fallback - try to add DNS servers as arguments
+    logger.debug(f"No specific DNS pattern for {tool_name}, using generic approach")
+    return [tool_name] + (args or [])

@@ -789,7 +789,13 @@ def ip_range_discovery(ip_address, scan_id, custom_dns=None, use_system_fallback
         with ThreadPoolExecutor(max_workers=min(total_chunks, 10)) as executor:
             # Submit all chunk processing tasks
             future_to_chunk = {
-                executor.submit(dns_processor.reverse_dns_lookup_batch, [str(ip) for ip in chunk], f"ip_chunk_{i}"): (i, chunk) 
+                executor.submit(
+                    dns_processor.reverse_dns_lookup_batch, 
+                    [str(ip) for ip in chunk], 
+                    f"ip_chunk_{i}",
+                    dns_servers=dns_servers,
+                    use_system_fallback=use_system_fallback
+                ): (i, chunk) 
                 for i, chunk in enumerate(chunks)
             }
             
@@ -987,11 +993,8 @@ def ping_hosts_task(ip_list, scan_id=None):
 
     # Send completion message with results
     completion_message = f"Ping completed: {alive_count}/{len(ip_list)} hosts alive"
-    send_progress(
-        100, "Ping check completed!", f"{alive_count}/{len(ip_list)} hosts alive", completion_message, "success"
-    )
-
-    # Send final results via WebSocket
+    
+    # Send final results via WebSocket with ping_results included
     if channel_layer and room_group_name:
         try:
             async_to_sync(channel_layer.group_send)(
@@ -999,12 +1002,16 @@ def ping_hosts_task(ip_list, scan_id=None):
                 {
                     "type": "scan_progress",
                     "message": {
+                        "percentage": 100,
+                        "message": "Ping check completed!",
+                        "details": f"{alive_count}/{len(ip_list)} hosts alive",
                         "log_message": completion_message,
                         "log_type": "success",
                         "scan_id": scan_id,
                         "ping_results": results,
                         "alive_count": alive_count,
                         "total_count": len(ip_list),
+                        "ping_completed": True,
                     },
                 },
             )
@@ -1126,11 +1133,8 @@ def ping_hosts_distributed(ip_list, scan_id=None, chunk_size=50):
     
     # Send completion message with results
     completion_message = f"Distributed ping completed: {total_alive_count}/{len(ip_list)} hosts alive"
-    send_progress(
-        100, "Distributed ping check completed!", f"{total_alive_count}/{len(ip_list)} hosts alive", completion_message, "success"
-    )
     
-    # Send final results via WebSocket
+    # Send final results via WebSocket with ping_results included
     if channel_layer and room_group_name:
         try:
             async_to_sync(channel_layer.group_send)(
@@ -1138,12 +1142,16 @@ def ping_hosts_distributed(ip_list, scan_id=None, chunk_size=50):
                 {
                     "type": "scan_progress",
                     "message": {
+                        "percentage": 100,
+                        "message": "Distributed ping check completed!",
+                        "details": f"{total_alive_count}/{len(ip_list)} hosts alive",
                         "log_message": completion_message,
                         "log_type": "success",
                         "scan_id": scan_id,
                         "ping_results": all_results,
                         "alive_count": total_alive_count,
                         "total_count": len(ip_list),
+                        "ping_completed": True,
                     },
                 },
             )

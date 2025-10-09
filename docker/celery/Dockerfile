@@ -43,7 +43,8 @@ RUN apt update -y && apt install -y      \
     geoip-bin           \
     htop                \
     firefox-esr         \
-    fontconfig fonts-freefont-ttf fonts-noto fonts-terminus
+    fontconfig fonts-freefont-ttf fonts-noto fonts-terminus \
+    libcap2-bin
 
 RUN fc-cache -f && \ 
     fc-list | sort
@@ -182,4 +183,12 @@ RUN mkdir -p /home/$USERNAME/rengine /home/$USERNAME/scan_results \
 VOLUME /home/$USERNAME/rengine
 VOLUME /home/$USERNAME/scan_results
 WORKDIR /home/$USERNAME/rengine
+
+# Create ping wrapper with cap_net_raw for scapy ICMP
+USER root
+RUN echo '#!/bin/bash\nping "$@"' > /usr/local/bin/ping-wrapper && \
+    chmod 4755 /usr/local/bin/ping-wrapper && \
+    setcap cap_net_raw+ep /usr/local/bin/ping-wrapper
+USER $USERNAME
+
 ENTRYPOINT ["/entrypoint.sh"]

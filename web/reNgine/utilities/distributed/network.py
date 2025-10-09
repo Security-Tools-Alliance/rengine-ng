@@ -212,90 +212,113 @@ class DistributedDNSProcessor(DistributedTaskBase):
         self, 
         ips: List[str], 
         batch_id: str,
+        dns_servers: Optional[List[str]] = None,
+        use_system_fallback: bool = False,
         **kwargs
     ) -> DistributedNetworkResult:
-        """Perform reverse DNS lookup for a batch of IP addresses"""
+        """Perform reverse DNS lookup for a batch of IP addresses using dnspython"""
         start_time = time.time()
         self.log_processing_start(batch_id, len(ips))
-        
+
         result = DistributedNetworkResult(
             data={},
             status=ProcessingStatus.IN_PROGRESS,
             batch_id=batch_id
         )
-        
+
         try:
             with self.safe_execution():
                 resolved_hostnames = []
                 network_errors = []
-                
-                for ip in ips:
-                    try:
-                        # Perform reverse DNS lookup
-                        hostname = socket.gethostbyaddr(ip)[0]
-                        resolved_hostnames.append({
-                            "ip": ip,
-                            "hostname": hostname,
-                            "timestamp": time.time()
-                        })
-                        result.add_resolved_ip(ip)
-                        result.add_resolved_domain(hostname)
-                        
-                    except (socket.herror, socket.gaierror) as e:
-                        error_msg = f"DNS lookup failed for {ip}: {str(e)}"
-                        network_errors.append({
-                            "ip": ip,
-                            "error": str(e),
-                            "timestamp": time.time()
-                        })
-                        result.add_network_error(error_msg)
-                    except Exception as e:
-                        error_msg = f"Unexpected error for {ip}: {str(e)}"
-                        network_errors.append({
-                            "ip": ip,
-                            "error": f"Unexpected error: {str(e)}",
-                            "timestamp": time.time()
-                        })
-                        result.add_network_error(error_msg)
-                
+
+                # Import the efficient DNS resolution function
+                from reNgine.utilities.dns import resolve_ip_with_dns
+                from concurrent.futures import ThreadPoolExecutor, as_completed
+
+                # Use ThreadPoolExecutor for parallel DNS resolution
+                with ThreadPoolExecutor(max_workers=min(len(ips), 20)) as executor:
+                    # Submit all DNS resolution tasks
+                    future_to_ip = {
+                        executor.submit(resolve_ip_with_dns, ip, dns_servers or [], use_system_fallback): ip 
+                        for ip in ips
+                    }
+
+                    # Collect results as they complete
+                    for future in as_completed(future_to_ip):
+                        ip = future_to_ip[future]
+                        try:
+                            resolution_result = future.result(timeout=10)
+
+                            if resolution_result["domain"] != ip:
+                                # Successfully resolved
+                                resolved_hostnames.append({
+                                    "ip": ip,
+                                    "hostname": resolution_result["domain"],
+                                    "resolved_by": resolution_result.get("resolved_by"),
+                                    "timestamp": time.time()
+                                })
+                                result.add_resolved_ip(ip)
+                                result.add_resolved_domain(resolution_result["domain"])
+                            else:
+                                # No resolution found, but not an error
+                                network_errors.append({
+                                    "ip": ip,
+                                    "error": "No PTR record found",
+                                    "timestamp": time.time()
+                                })
+
+                        except Exception as e:
+                            error_msg = f"DNS lookup failed for {ip}: {str(e)}"
+                            network_errors.append({
+                                "ip": ip,
+                                "error": str(e),
+                                "timestamp": time.time()
+                            })
+                            result.add_network_error(error_msg)
+
                 # Convert to format expected by ip_range_discovery task
                 resolved_ips = []
-                
+
                 # Add successfully resolved IPs with hostnames
-                for hostname_info in resolved_hostnames:
-                    resolved_ips.append({
+                resolved_ips.extend(
+                    {
                         "ip": hostname_info["ip"],
                         "domain": hostname_info["hostname"],
                         "domains": [hostname_info["hostname"]],
                         "ips": [],
                         "resolved_by": "distributed_dns_processor",
-                        "is_alive": False  # Will be updated by ping task
-                    })
-                
+                        "is_alive": False,  # Will be updated by ping task
+                    }
+                    for hostname_info in resolved_hostnames
+                )
                 # Add IPs that failed DNS resolution (but still exist)
-                for error_info in network_errors:
-                    resolved_ips.append({
+                resolved_ips.extend(
+                    {
                         "ip": error_info["ip"],
-                        "domain": error_info["ip"],  # Use IP as domain if no hostname
+                        "domain": error_info[
+                            "ip"
+                        ],  # Use IP as domain if no hostname
                         "domains": [],
                         "ips": [],
                         "resolved_by": None,
-                        "is_alive": False
-                    })
-                
+                        "is_alive": False,
+                    }
+                    for error_info in network_errors
+                )
                 # Add IPs that were processed but had no DNS errors (no hostname found)
                 processed_ips = {h["ip"] for h in resolved_hostnames} | {e["ip"] for e in network_errors}
-                for ip in ips:
-                    if ip not in processed_ips:
-                        resolved_ips.append({
-                            "ip": ip,
-                            "domain": ip,  # Use IP as domain if no hostname
-                            "domains": [],
-                            "ips": [],
-                            "resolved_by": None,
-                            "is_alive": False
-                        })
-                
+                resolved_ips.extend(
+                    {
+                        "ip": ip,
+                        "domain": ip,  # Use IP as domain if no hostname
+                        "domains": [],
+                        "ips": [],
+                        "resolved_by": None,
+                        "is_alive": False,
+                    }
+                    for ip in ips
+                    if ip not in processed_ips
+                )
                 # Update result
                 result.data = {
                     "resolved_hostnames": resolved_hostnames,
@@ -305,17 +328,17 @@ class DistributedDNSProcessor(DistributedTaskBase):
                     "error_count": len(network_errors)
                 }
                 result.status = ProcessingStatus.COMPLETED
-                
+
                 processing_time = time.time() - start_time
                 self.log_processing_completion(batch_id, True, processing_time)
-                
-                # Log results for debugging
-                logger.info(f"DNS batch {batch_id}: {len(resolved_hostnames)} hostnames resolved, {len(network_errors)} failed, {len(resolved_ips)} total IPs returned")
+
+                # Log results for debugging - only show successful DNS resolutions
                 if resolved_hostnames:
+                    logger.info(f"DNS batch {batch_id}: {len(resolved_hostnames)} hostnames resolved")
                     logger.info(f"Resolved hostnames: {[h['hostname'] for h in resolved_hostnames[:5]]}")  # Log first 5
                 else:
-                    logger.info(f"No hostnames resolved for {len(ips)} IPs, returning IPs as domains")
-                
+                    logger.info(f"DNS batch {batch_id}: No hostnames resolved for {len(ips)} IPs")
+
                 # Return format expected by ip_range_discovery task
                 return {
                     "success": True,
@@ -324,11 +347,11 @@ class DistributedDNSProcessor(DistributedTaskBase):
                     "successful_resolutions": len(resolved_hostnames),
                     "failed_resolutions": len(network_errors)
                 }
-                
+
         except Exception as e:
             processing_time = time.time() - start_time
             self.log_processing_error(batch_id, str(e), processing_time)
-            
+
             # Return format expected by ip_range_discovery task
             return {
                 "success": False,
