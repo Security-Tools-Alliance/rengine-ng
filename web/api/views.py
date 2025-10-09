@@ -152,7 +152,7 @@ def parse_pagination_params(start=None, length=None, page=None, page_size=None):
             if length_val > 10000:
                 raise ValueError("Length exceeds maximum allowed value (10000)")
 
-            return {'type': 'datatables', 'start': start_val, 'length': length_val}
+            return {"type": "datatables", "start": start_val, "length": length_val}
 
         elif page is not None and page_size is not None:
             page_val = int(page)
@@ -166,7 +166,7 @@ def parse_pagination_params(start=None, length=None, page=None, page_size=None):
                 raise ValueError("Page size exceeds maximum allowed value (10000)")
 
             start_val = (page_val - 1) * page_size_val
-            return {'type': 'rest', 'start': start_val, 'length': page_size_val, 'page': page_val}
+            return {"type": "rest", "start": start_val, "length": page_size_val, "page": page_val}
 
         return None
 
@@ -234,11 +234,11 @@ class AdvancedSearchMixin:
 
     def general_lookup(self, queryset, search_value):
         """Perform general search across configured fields."""
-        if not self.search_config or 'general_fields' not in self.search_config:
+        if not self.search_config or "general_fields" not in self.search_config:
             return queryset
 
         combined_q = Q()
-        for field_q in self.search_config['general_fields']:
+        for field_q in self.search_config["general_fields"]:
             if callable(field_q):
                 combined_q |= field_q(search_value)
             else:
@@ -267,10 +267,10 @@ class AdvancedSearchMixin:
         lookup_title = search_param[0].lower().strip()
         lookup_content = search_param[1].strip()
 
-        special_fields = self.search_config.get('special_fields', {})
-        numeric_fields = self.search_config.get('numeric_fields', {})
-        boolean_fields = self.search_config.get('boolean_fields', {})
-        custom_handlers = self.search_config.get('custom_handlers', {})
+        special_fields = self.search_config.get("special_fields", {})
+        numeric_fields = self.search_config.get("numeric_fields", {})
+        boolean_fields = self.search_config.get("boolean_fields", {})
+        custom_handlers = self.search_config.get("custom_handlers", {})
 
         # Check for custom handler first
         if lookup_title in custom_handlers:
@@ -280,10 +280,10 @@ class AdvancedSearchMixin:
         if lookup_title in boolean_fields:
             field_path, true_val, false_val = boolean_fields[lookup_title]
             if operator == "=":
-                bool_value = lookup_content.lower() in ['true', '1', 'yes', true_val.lower()]
+                bool_value = lookup_content.lower() in ["true", "1", "yes", true_val.lower()]
                 return queryset.filter(**{field_path: bool_value})
             elif operator == "!":
-                bool_value = lookup_content.lower() in ['true', '1', 'yes', true_val.lower()]
+                bool_value = lookup_content.lower() in ["true", "1", "yes", true_val.lower()]
                 return queryset.exclude(**{field_path: bool_value})
 
         # Handle numeric comparisons
@@ -2113,7 +2113,7 @@ class ListPorts(APIView):
 
 class ListSubdomains(AdvancedSearchMixin, APIView):
     search_config = {
-        'general_fields': [
+        "general_fields": [
             lambda sv: Q(name__icontains=sv),
             lambda sv: Q(cname__icontains=sv),
             lambda sv: Q(http_status__icontains=sv),
@@ -2123,19 +2123,20 @@ class ListSubdomains(AdvancedSearchMixin, APIView):
             lambda sv: Q(webserver__icontains=sv),
             lambda sv: Q(ip_addresses__address__icontains=sv),
         ],
-        'special_fields': {
-            'name': 'name__icontains',
-            'page_title': 'page_title__icontains',
-            'technology': 'technologies__name__icontains',
-            'webserver': 'webserver__icontains',
+        "special_fields": {
+            "name": "name__icontains",
+            "page_title": "page_title__icontains",
+            "technology": "technologies__name__icontains",
+            "webserver": "webserver__icontains",
         },
-        'numeric_fields': {
-            'http_status': 'http_status',
+        "numeric_fields": {
+            "http_status": "http_status",
         },
-        'boolean_fields': {
-            'is_important': ('is_important', 'true', 'false'),
+        "boolean_fields": {
+            "is_important": ("is_important", "true", "false"),
         },
     }
+
     def get(self, request, format=None):
         req = self.request
         scan_id = safe_int_cast(req.query_params.get("scan_id"))
@@ -2180,25 +2181,22 @@ class ListSubdomains(AdvancedSearchMixin, APIView):
 
         # Handle pagination
         pagination = parse_pagination_params(
-            start=req.query_params.get('start'),
-            length=req.query_params.get('length'),
-            page=req.query_params.get('page'),
-            page_size=req.query_params.get('page_size')
+            start=req.query_params.get("start"),
+            length=req.query_params.get("length"),
+            page=req.query_params.get("page"),
+            page_size=req.query_params.get("page_size"),
         )
 
         if pagination:
             total_count = subdomain_query.count()
-            paginated_queryset = subdomain_query[pagination['start']:pagination['start'] + pagination['length']]
+            paginated_queryset = subdomain_query[pagination["start"] : pagination["start"] + pagination["length"]]
 
             if "no_lookup_interesting" in req.query_params:
                 serializer = OnlySubdomainNameSerializer(paginated_queryset, many=True)
             else:
                 serializer = SubdomainSerializer(paginated_queryset, many=True)
 
-            return Response({
-                'count': total_count,
-                'results': serializer.data
-            })
+            return Response({"count": total_count, "results": serializer.data})
 
         # Default response (no pagination) - maintain backward compatibility
         if "no_lookup_interesting" in req.query_params:
@@ -2609,7 +2607,7 @@ class SubdomainDatatableViewSet(AdvancedSearchMixin, viewsets.ModelViewSet):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.search_config = {
-            'general_fields': [
+            "general_fields": [
                 lambda sv: Q(name__icontains=sv),
                 lambda sv: Q(cname__icontains=sv),
                 lambda sv: Q(http_status__icontains=sv),
@@ -2622,25 +2620,25 @@ class SubdomainDatatableViewSet(AdvancedSearchMixin, viewsets.ModelViewSet):
                 lambda sv: Q(ip_addresses__ports__service_name__icontains=sv),
                 lambda sv: Q(ip_addresses__ports__description__icontains=sv),
             ],
-            'special_fields': {
-                'name': 'name__icontains',
-                'page_title': 'page_title__icontains',
-                'http_url': 'http_url__icontains',
-                'content_type': 'content_type__icontains',
-                'cname': 'cname__icontains',
-                'webserver': 'webserver__icontains',
-                'ip_addresses': 'ip_addresses__address__icontains',
-                'technology': 'technologies__name__icontains',
+            "special_fields": {
+                "name": "name__icontains",
+                "page_title": "page_title__icontains",
+                "http_url": "http_url__icontains",
+                "content_type": "content_type__icontains",
+                "cname": "cname__icontains",
+                "webserver": "webserver__icontains",
+                "ip_addresses": "ip_addresses__address__icontains",
+                "technology": "technologies__name__icontains",
             },
-            'numeric_fields': {
-                'http_status': 'http_status',
-                'content_length': 'content_length',
+            "numeric_fields": {
+                "http_status": "http_status",
+                "content_length": "content_length",
             },
-            'boolean_fields': {
-                'is_important': ('is_important', 'true', 'false'),
+            "boolean_fields": {
+                "is_important": ("is_important", "true", "false"),
             },
-            'custom_handlers': {
-                'port': self._port_search_handler,
+            "custom_handlers": {
+                "port": self._port_search_handler,
             },
         }
 
@@ -2775,7 +2773,7 @@ class EndPointViewSet(AdvancedSearchMixin, viewsets.ModelViewSet):
     queryset = EndPoint.objects.none()
     serializer_class = EndpointSerializer
     search_config = {
-        'general_fields': [
+        "general_fields": [
             lambda sv: Q(http_url__icontains=sv),
             lambda sv: Q(page_title__icontains=sv),
             lambda sv: Q(http_status__icontains=sv),
@@ -2784,20 +2782,20 @@ class EndPointViewSet(AdvancedSearchMixin, viewsets.ModelViewSet):
             lambda sv: Q(techs__name__icontains=sv),
             lambda sv: Q(matched_gf_patterns__icontains=sv),
         ],
-        'special_fields': {
-            'http_url': 'http_url__icontains',
-            'page_title': 'page_title__icontains',
-            'content_type': 'content_type__icontains',
-            'webserver': 'webserver__icontains',
-            'technology': 'techs__name__icontains',
-            'gf_pattern': 'matched_gf_patterns__icontains',
+        "special_fields": {
+            "http_url": "http_url__icontains",
+            "page_title": "page_title__icontains",
+            "content_type": "content_type__icontains",
+            "webserver": "webserver__icontains",
+            "technology": "techs__name__icontains",
+            "gf_pattern": "matched_gf_patterns__icontains",
         },
-        'numeric_fields': {
-            'http_status': 'http_status',
-            'content_length': 'content_length',
+        "numeric_fields": {
+            "http_status": "http_status",
+            "content_length": "content_length",
         },
-        'boolean_fields': {},
-        'custom_handlers': {},
+        "boolean_fields": {},
+        "custom_handlers": {},
     }
 
     def get_queryset(self):
@@ -2890,20 +2888,17 @@ class EndPointViewSet(AdvancedSearchMixin, viewsets.ModelViewSet):
 
         # Support manual pagination with start/length (DataTables) or page/page_size (REST)
         pagination = parse_pagination_params(
-            start=request.query_params.get('start'),
-            length=request.query_params.get('length'),
-            page=request.query_params.get('page'),
-            page_size=request.query_params.get('page_size')
+            start=request.query_params.get("start"),
+            length=request.query_params.get("length"),
+            page=request.query_params.get("page"),
+            page_size=request.query_params.get("page_size"),
         )
 
         if pagination:
             total_count = queryset.count()
-            paginated_queryset = queryset[pagination['start']:pagination['start'] + pagination['length']]
+            paginated_queryset = queryset[pagination["start"] : pagination["start"] + pagination["length"]]
             serializer = self.get_serializer(paginated_queryset, many=True)
-            return Response({
-                'count': total_count,
-                'results': serializer.data
-            })
+            return Response({"count": total_count, "results": serializer.data})
 
         # Fallback to normal pagination
         page = self.paginate_queryset(queryset)
@@ -2975,7 +2970,9 @@ class VulnerabilityViewSet(AdvancedSearchMixin, viewsets.ModelViewSet):
 
     def _handle_description(self, queryset, operator, value):
         """Custom handler for description field - searches across multiple fields."""
-        description_q = Q(description__icontains=value) | Q(template__icontains=value) | Q(extracted_results__icontains=value)
+        description_q = (
+            Q(description__icontains=value) | Q(template__icontains=value) | Q(extracted_results__icontains=value)
+        )
         if operator == "=":
             return queryset.filter(description_q)
         elif operator == "!":
@@ -3001,7 +2998,7 @@ class VulnerabilityViewSet(AdvancedSearchMixin, viewsets.ModelViewSet):
     @property
     def search_config(self):
         return {
-            'general_fields': [
+            "general_fields": [
                 lambda sv: Q(http_url__icontains=sv),
                 lambda sv: Q(target_domain__name__icontains=sv),
                 lambda sv: Q(template__icontains=sv),
@@ -3020,26 +3017,26 @@ class VulnerabilityViewSet(AdvancedSearchMixin, viewsets.ModelViewSet):
                 lambda sv: Q(hackerone_report_id__icontains=sv),
                 lambda sv: Q(tags__name__icontains=sv),
             ],
-            'special_fields': {
-                'name': 'name__icontains',
-                'http_url': 'http_url__icontains',
-                'template': 'template__icontains',
-                'template_id': 'template_id__icontains',
-                'cve_id': 'cve_ids__name__icontains',
-                'cve': 'cve_ids__name__icontains',
-                'cwe_id': 'cwe_ids__name__icontains',
-                'cwe': 'cwe_ids__name__icontains',
-                'cvss_metrics': 'cvss_metrics__icontains',
-                'type': 'type__icontains',
-                'tag': 'tags__name__icontains',
+            "special_fields": {
+                "name": "name__icontains",
+                "http_url": "http_url__icontains",
+                "template": "template__icontains",
+                "template_id": "template_id__icontains",
+                "cve_id": "cve_ids__name__icontains",
+                "cve": "cve_ids__name__icontains",
+                "cwe_id": "cwe_ids__name__icontains",
+                "cwe": "cwe_ids__name__icontains",
+                "cvss_metrics": "cvss_metrics__icontains",
+                "type": "type__icontains",
+                "tag": "tags__name__icontains",
             },
-            'numeric_fields': {},
-            'boolean_fields': {},
-            'custom_handlers': {
-                'severity': self._handle_severity,
-                'status': self._handle_status,
-                'description': self._handle_description,
-                'cvss_score': self._handle_cvss_score,
+            "numeric_fields": {},
+            "boolean_fields": {},
+            "custom_handlers": {
+                "severity": self._handle_severity,
+                "status": self._handle_status,
+                "description": self._handle_description,
+                "cvss_score": self._handle_cvss_score,
             },
         }
 
