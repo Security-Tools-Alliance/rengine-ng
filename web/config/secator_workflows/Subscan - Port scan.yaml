@@ -1,0 +1,28 @@
+type: workflow
+name: Subscan - Port scan
+description: 'Converted from reNgine scan engine: Subscan - Port scan'
+tags:
+- bug_bounty
+input_types:
+- domain
+tasks:
+  naabu:
+    description: Port scanning
+    rate_limit: 150
+    timeout: 5
+    ports: top-100
+    targets_:
+    - type: subdomain
+      field: host
+  nmap:
+    description: Service detection
+    targets_:
+    - type: port
+      field: host:port
+    script: banner,version,discovery
+global_options:
+  custom_header:
+    User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:126.0) Gecko/20100101 Firefox/126.0
+metadata:
+  scan_type: bug_bounty
+  converted_from: rengine

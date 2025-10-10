@@ -1,0 +1,342 @@
+{% extends "base/base.html" %}
+{% load static %}
+{% load permission_tags %}
+
+{% block title %}Edit {{ workflow.name }} - Secator Workflow{% endblock %}
+
+{% block breadcrumb_title %}
+<li class="breadcrumb-item"><a href="{% url 'scan_engine_index' %}">Scan Engine</a></li>
+<li class="breadcrumb-item"><a href="{% url 'secator_workflow_list' %}">Workflows</a></li>
+<li class="breadcrumb-item"><a href="{% url 'secator_workflow_detail' workflow_id=workflow.name workflow_type=workflow_type %}">{{ workflow.name }}</a></li>
+<li class="breadcrumb-item active">Edit</li>
+{% endblock %}
+
+{% block page_title %}Edit Workflow: {{ workflow.name }}{% endblock %}
+
+{% block custom_js_css_link %}
+<link href="{% static 'plugins/codemirror/codemirror.css' %}" rel="stylesheet" type="text/css">
+<link href="{% static 'plugins/codemirror/theme/monokai.css' %}" rel="stylesheet" type="text/css">
+<style>
+.yaml-editor {
+    border: 1px solid #e3e6f0;
+    border-radius: 6px;
+    overflow: hidden;
+}
+.yaml-editor .CodeMirror {
+    height: 500px;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 14px;
+}
+.editor-toolbar {
+    background: #f8f9fc;
+    border-bottom: 1px solid #e3e6f0;
+    padding: 10px 15px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.editor-actions {
+    display: flex;
+    gap: 10px;
+}
+.validation-message {
+    margin-top: 10px;
+    padding: 10px;
+    border-radius: 4px;
+    display: none;
+}
+.validation-message.success {
+    background: #d4edda;
+    border: 1px solid #c3e6cb;
+    color: #155724;
+}
+.validation-message.error {
+    background: #f8d7da;
+    border: 1px solid #f5c6cb;
+    color: #721c24;
+}
+.workflow-preview {
+    background: #f8f9fc;
+    border: 1px solid #e3e6f0;
+    border-radius: 6px;
+    padding: 20px;
+    margin-top: 20px;
+}
+.preview-section {
+    margin-bottom: 15px;
+}
+.preview-section h6 {
+    color: #5a5c69;
+    margin-bottom: 10px;
+    border-bottom: 1px solid #e3e6f0;
+    padding-bottom: 5px;
+}
+</style>
+{% endblock %}
+
+{% block main_content %}
+<div class="row">
+    <div class="col-12">
+        <form method="post" id="workflowEditForm">
+            {% csrf_token %}
+            
+            <!-- Editor Section -->
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Workflow Configuration</h5>
+                </div>
+                <div class="card-body">
+                    <div class="yaml-editor">
+                        <div class="editor-toolbar">
+                            <div>
+                                <span class="text-muted">YAML Configuration</span>
+                            </div>
+                            <div class="editor-actions">
+                                <button type="button" class="btn btn-sm btn-outline-secondary" id="formatYaml">
+                                    <i class="fe-code me-1"></i> Format
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-info" id="validateYaml">
+                                    <i class="fe-check me-1"></i> Validate
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-primary" id="previewWorkflow">
+                                    <i class="fe-eye me-1"></i> Preview
+                                </button>
+                            </div>
+                        </div>
+                        <textarea id="workflowYaml" name="workflow_yaml">{{ workflow_yaml }}</textarea>
+                    </div>
+                    
+                    <div class="validation-message" id="validationMessage"></div>
+                </div>
+            </div>
+
+            <!-- Preview Section -->
+            <div class="workflow-preview" id="workflowPreview" style="display: none;">
+                <h5>Workflow Preview</h5>
+                <div class="preview-section">
+                    <h6>Basic Information</h6>
+                    <div id="previewBasic"></div>
+                </div>
+                <div class="preview-section">
+                    <h6>Tasks</h6>
+                    <div id="previewTasks"></div>
+                </div>
+                <div class="preview-section">
+                    <h6>Configuration</h6>
+                    <div id="previewConfig"></div>
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="row mt-3">
+                <div class="col-md-6">
+                    <a href="{% url 'secator_workflow_detail' workflow_id=workflow.name workflow_type=workflow_type %}" 
+                       class="btn btn-secondary">
+                        <i class="fe-arrow-left me-1"></i> Cancel
+                    </a>
+                </div>
+                <div class="col-md-6 text-end">
+                    <button type="button" class="btn btn-outline-primary me-2" id="saveDraft">
+                        <i class="fe-save me-1"></i> Save Draft
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fe-check me-1"></i> Save Changes
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block custom_js %}
+<script src="{% static 'plugins/codemirror/codemirror.js' %}"></script>
+<script src="{% static 'plugins/codemirror/mode/yaml/yaml.js' %}"></script>
+<script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
+
+<script>
+$(document).ready(function() {
+    // Initialize CodeMirror
+    const editor = CodeMirror.fromTextArea(document.getElementById('workflowYaml'), {
+        mode: 'yaml',
+        theme: 'default',
+        lineNumbers: true,
+        indentUnit: 2,
+        tabSize: 2,
+        lineWrapping: true,
+        autoCloseBrackets: true,
+        matchBrackets: true,
+        foldGutter: true,
+        gutters: ['CodeMirror-linenumbers', 'CodeMirror-foldgutter']
+    });
+
+    // Format YAML
+    $('#formatYaml').click(function() {
+        try {
+            const yamlContent = editor.getValue();
+            const parsed = jsyaml.load(yamlContent);
+            const formatted = jsyaml.dump(parsed, {
+                indent: 2,
+                lineWidth: -1,
+                noRefs: true,
+                sortKeys: false
+            });
+            editor.setValue(formatted);
+            showValidationMessage('YAML formatted successfully', 'success');
+        } catch (e) {
+            showValidationMessage('Error formatting YAML: ' + e.message, 'error');
+        }
+    });
+
+    // Validate YAML
+    $('#validateYaml').click(function() {
+        try {
+            const yamlContent = editor.getValue();
+            const parsed = jsyaml.load(yamlContent);
+            
+            // Basic validation
+            if (!parsed.name) {
+                throw new Error('Workflow must have a "name" field');
+            }
+            if (!parsed.type) {
+                throw new Error('Workflow must have a "type" field');
+            }
+            if (!parsed.tasks || Object.keys(parsed.tasks).length === 0) {
+                throw new Error('Workflow must have at least one task');
+            }
+            
+            showValidationMessage('YAML is valid', 'success');
+        } catch (e) {
+            showValidationMessage('Validation error: ' + e.message, 'error');
+        }
+    });
+
+    // Preview workflow
+    $('#previewWorkflow').click(function() {
+        try {
+            const yamlContent = editor.getValue();
+            const parsed = jsyaml.load(yamlContent);
+            
+            // Update preview
+            updatePreview(parsed);
+            $('#workflowPreview').show();
+            
+        } catch (e) {
+            showValidationMessage('Error parsing YAML for preview: ' + e.message, 'error');
+        }
+    });
+
+    // Save draft
+    $('#saveDraft').click(function() {
+        // Save to localStorage as draft
+        const yamlContent = editor.getValue();
+        localStorage.setItem('workflow_draft_{{ workflow.name }}', yamlContent);
+        showValidationMessage('Draft saved locally', 'success');
+    });
+
+    // Load draft on page load
+    const draft = localStorage.getItem('workflow_draft_{{ workflow.name }}');
+    if (draft) {
+        if (confirm('A draft version of this workflow was found. Would you like to load it?')) {
+            editor.setValue(draft);
+        }
+    }
+
+    // Auto-save draft every 30 seconds
+    setInterval(function() {
+        const yamlContent = editor.getValue();
+        localStorage.setItem('workflow_draft_{{ workflow.name }}', yamlContent);
+    }, 30000);
+
+    // Form submission validation
+    $('#workflowEditForm').submit(function(e) {
+        try {
+            const yamlContent = editor.getValue();
+            const parsed = jsyaml.load(yamlContent);
+            
+            // Basic validation
+            if (!parsed.name) {
+                e.preventDefault();
+                showValidationMessage('Workflow must have a "name" field', 'error');
+                return false;
+            }
+            if (!parsed.type) {
+                e.preventDefault();
+                showValidationMessage('Workflow must have a "type" field', 'error');
+                return false;
+            }
+            
+            // Clear draft
+            localStorage.removeItem('workflow_draft_{{ workflow.name }}');
+            
+        } catch (e) {
+            e.preventDefault();
+            showValidationMessage('Invalid YAML: ' + e.message, 'error');
+            return false;
+        }
+    });
+
+    // Helper functions
+    function showValidationMessage(message, type) {
+        const messageEl = $('#validationMessage');
+        messageEl.removeClass('success error').addClass(type);
+        messageEl.text(message).show();
+        
+        setTimeout(function() {
+            messageEl.fadeOut();
+        }, 5000);
+    }
+
+    function updatePreview(workflow) {
+        // Basic information
+        const basicHtml = `
+            <div class="row">
+                <div class="col-md-6">
+                    <p><strong>Name:</strong> ${workflow.name || 'Not specified'}</p>
+                    <p><strong>Type:</strong> ${workflow.type || 'Not specified'}</p>
+                </div>
+                <div class="col-md-6">
+                    <p><strong>Description:</strong> ${workflow.description || 'No description'}</p>
+                    <p><strong>Input Types:</strong> ${workflow.input_types ? workflow.input_types.join(', ') : 'Not specified'}</p>
+                </div>
+            </div>
+        `;
+        $('#previewBasic').html(basicHtml);
+
+        // Tasks
+        const tasks = workflow.tasks || {};
+        const tasksHtml = Object.keys(tasks).map(taskName => {
+            const task = tasks[taskName];
+            return `
+                <div class="card mb-2">
+                    <div class="card-body">
+                        <h6 class="card-title">${taskName}</h6>
+                        <p class="card-text">
+                            <strong>Tool:</strong> ${task.tool || 'Not specified'}<br>
+                            <strong>Arguments:</strong> ${task.args ? task.args.join(' ') : 'None'}<br>
+                            <strong>Description:</strong> ${task.description || 'No description'}
+                        </p>
+                    </div>
+                </div>
+            `;
+        }).join('');
+        $('#previewTasks').html(tasksHtml || '<p class="text-muted">No tasks defined</p>');
+
+        // Configuration
+        const configHtml = `
+            <div class="row">
+                <div class="col-md-6">
+                    <p><strong>Tags:</strong> ${workflow.tags ? workflow.tags.join(', ') : 'None'}</p>
+                    <p><strong>Concurrency:</strong> ${workflow.concurrency || 'Default'}</p>
+                </div>
+                <div class="col-md-6">
+                    <p><strong>Timeout:</strong> ${workflow.timeout || 'Default'}</p>
+                    <p><strong>Retries:</strong> ${workflow.retries || 'Default'}</p>
+                </div>
+            </div>
+        `;
+        $('#previewConfig').html(configHtml);
+    }
+});
+</script>
+{% endblock %}

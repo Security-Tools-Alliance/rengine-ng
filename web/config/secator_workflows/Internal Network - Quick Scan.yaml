@@ -1,0 +1,52 @@
+type: workflow
+name: Internal Network - Quick Scan
+description: 'Converted from reNgine scan engine: Internal Network - Quick Scan'
+tags:
+- internal_network
+input_types:
+- domain
+tasks:
+  naabu:
+    description: Port scanning
+    rate_limit: 150
+    timeout: 5
+    ports: top-100
+    targets_:
+    - type: subdomain
+      field: host
+  httpx:
+    description: HTTP probing and crawling
+    rate_limit: 30
+    timeout: 10
+    targets_:
+    - type: port
+      field: host:port
+      condition: item.port in [80, 443, 8080, 8081, 8082, 8443, 3000, 3001, 5000,
+        9000]
+  nuclei:
+    description: Vulnerability scanning
+    rate_limit: 100
+    timeout: 5
+    targets_:
+    - type: url
+      field: url
+      condition: item.status_code == 200
+    severities:
+    - high
+    - critical
+    tags:
+    - network
+    - service
+  aquatone:
+    description: Screenshot capture
+    timeout: 10
+    targets_:
+    - type: url
+      field: url
+      condition: item.status_code == 200
+global_options:
+  custom_header:
+    User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:126.0) Gecko/20100101 Firefox/126.0
+metadata:
+  scan_type: internal_network
+  converted_from: rengine

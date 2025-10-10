@@ -16,16 +16,18 @@ Key components:
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import contextlib
 import socket
-from scapy.all import IP, ICMP, sr1
-from typing import List, Optional, Dict, Any
+from typing import Any, Dict, List, Optional
 
 from celery.utils.log import get_task_logger
-from reNgine.utilities.core.validation import is_valid_ipv4, is_valid_ipv6
+
 from reNgine.utilities.core.network import resolve_hostname
+from reNgine.utilities.core.validation import is_valid_ipv4, is_valid_ipv6
+
 
 try:
     import dns.resolver
     import dns.reversename
+
     DNS_AVAILABLE = True
 except ImportError:
     DNS_AVAILABLE = False
@@ -46,7 +48,7 @@ def resolve_subdomain_ips(subdomain_name: str) -> List[str]:
     try:
         # Use core network function for hostname resolution
         resolved_ips = resolve_hostname(subdomain_name)
-        
+
         for ip in resolved_ips:
             # Validate IP before adding using core validation
             if is_valid_ipv4(ip) or is_valid_ipv6(ip):
@@ -103,10 +105,11 @@ def check_host_alive(ip: str) -> bool:
     """Fast ping check using ping wrapper with cap_net_raw"""
     try:
         import subprocess
-        
+
         # Use ping wrapper with cap_net_raw for fast ICMP ping
-        result = subprocess.run(["/usr/local/bin/ping-wrapper", "-c", "1", "-W", "1", ip], 
-                              capture_output=True, timeout=2)
+        result = subprocess.run(
+            ["/usr/local/bin/ping-wrapper", "-c", "1", "-W", "1", ip], capture_output=True, timeout=2
+        )
         is_alive = result.returncode == 0
         if is_alive:
             logger.debug(f"Ping {ip}: alive")
@@ -142,7 +145,7 @@ def _resolve_with_custom_dns(ip_str: str, dns_servers: List[str]) -> tuple[Optio
                     logger.debug(f"Resolved {ip_str} to {hostname} using {dns_server}")
                     return hostname, dns_server
 
-        except Exception as e:
+        except Exception:
             # Silently continue to next DNS server on failure
             continue
 
@@ -214,7 +217,9 @@ def _create_failed_resolution_result(ip: str) -> Dict[str, Any]:
     }
 
 
-def resolve_ip_chunk(ip_chunk: List[str], dns_servers: List[str], use_system_fallback: bool = False, dns_resolution_timeout: int = 10) -> List[Dict[str, Any]]:
+def resolve_ip_chunk(
+    ip_chunk: List[str], dns_servers: List[str], use_system_fallback: bool = False, dns_resolution_timeout: int = 10
+) -> List[Dict[str, Any]]:
     """
     Resolve a chunk of IPs in parallel (Interface Segregation)
 

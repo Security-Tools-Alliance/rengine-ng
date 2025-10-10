@@ -5,7 +5,7 @@ This module provides utilities for working with endpoints and interesting lookup
 """
 
 import logging
-from typing import Optional, Union
+
 
 logger = logging.getLogger(__name__)
 
@@ -20,9 +20,9 @@ def get_interesting_endpoints(scan_history=None, target=None):
     Returns:
         django.db.Q: QuerySet object.
     """
+    from reNgine.utilities.lookup import get_lookup_keywords
     from scanEngine.models import InterestingLookupModel
     from startScan.models import EndPoint
-    from reNgine.utilities.lookup import get_lookup_keywords
 
     lookup_keywords = get_lookup_keywords()
     lookup_obj = InterestingLookupModel.objects.filter().order_by("-id").first()
@@ -46,6 +46,7 @@ def get_interesting_endpoints(scan_history=None, target=None):
     # Filter on URL keywords
     if url_lookup:
         from django.db.models import Q
+
         url_conditions = Q()
         for keyword in lookup_keywords:
             url_conditions |= Q(url__icontains=keyword)
@@ -54,6 +55,7 @@ def get_interesting_endpoints(scan_history=None, target=None):
     # Filter on title keywords
     if title_lookup:
         from django.db.models import Q
+
         title_conditions = Q()
         for keyword in lookup_keywords:
             title_conditions |= Q(page_title__icontains=keyword)
@@ -75,10 +77,11 @@ def ensure_endpoints_crawled_and_execute(task_function, ctx, description=None, m
     Returns:
         Task result or None if no alive endpoints available
     """
-    import time
     from copy import deepcopy
+    import time
+
     from reNgine.utilities.url import get_http_urls
-    
+
     logger.info(f"Ensuring endpoints are crawled for {task_function.__name__}")
 
     if alive_endpoints := get_http_urls(is_alive=True, ctx=ctx):

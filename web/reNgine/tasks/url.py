@@ -6,13 +6,11 @@ and applying GF patterns for content discovery.
 """
 
 import os
-import re
 from pathlib import Path
+import re
+from typing import Any, Dict, List
 from urllib.parse import urlparse
-from typing import Any, Dict, List, Optional
 
-from celery import chain, chord, group
-from celery.result import allow_join_result
 from celery.utils.log import get_task_logger
 from django.db.models import Count
 
@@ -35,39 +33,13 @@ from reNgine.definitions import (
     USES_TOOLS,
 )
 from reNgine.settings import DEFAULT_THREADS, DELETE_DUPLICATES_THRESHOLD
-from reNgine.utilities.distributed.utilities import (
-    get_distributed_utilities,
-    ProcessorType,
-    create_balanced_config
-)
-from reNgine.utilities.distributed.command import (
-    DistributedCommandExecutor,
-    DistributedCommandBuilder
-)
-from reNgine.utilities.distributed.database import (
-    DistributedEndpointProcessor,
-    DistributedSubdomainProcessor
-)
-from reNgine.utilities.core.data import (
-    is_iterable,
-    chunk_list,
-    remove_duplicates
-)
-from reNgine.utilities.core.validation import (
-    is_valid_url
-)
-from reNgine.utilities.core.formatting import (
-    format_duration,
-    format_bytes
-)
-from reNgine.utilities.core.network import (
-    parse_url,
-    extract_path_from_url
-)
 from reNgine.utilities.command import generate_header_param, run_command
+from reNgine.utilities.core.data import is_iterable
+from reNgine.utilities.core.validation import is_valid_url
 from reNgine.utilities.database import save_endpoint, validate_and_save_subdomain
-from reNgine.utilities.url import get_subdomain_from_url, sanitize_url, get_http_urls
+from reNgine.utilities.distributed.utilities import get_distributed_utilities
 from reNgine.utilities.proxy import get_random_proxy
+from reNgine.utilities.url import get_http_urls, get_subdomain_from_url, sanitize_url
 from startScan.models import EndPoint
 
 
@@ -76,13 +48,13 @@ logger = get_task_logger(__name__)
 
 class URLProcessor:
     """URL processor using distributed utilities"""
-    
+
     def __init__(self, config=None):
         self.distributed_utils = get_distributed_utilities(config)
         self.command_processor = self.distributed_utils.get_command_processor()
         self.endpoint_processor = self.distributed_utils.get_endpoint_processor()
         self.subdomain_processor = self.distributed_utils.get_subdomain_processor()
-    
+
     def build_url_fetching_commands(
         self,
         urls: List[str],
@@ -90,11 +62,11 @@ class URLProcessor:
         threads: int = 10,
         custom_header: str = None,
         proxy: str = None,
-        follow_redirect: bool = True
+        follow_redirect: bool = True,
     ) -> List[str]:
         """Build URL fetching commands for multiple tools"""
         commands = []
-        
+
         # Initialize command map for tools
         cmd_map = {
             "gau": "gau --config " + str(Path.home() / ".config" / "gau" / "config.toml"),
@@ -103,56 +75,51 @@ class URLProcessor:
             "gospider": "gospider --js -d 2 --sitemap --robots -w -r -a",
             "katana": "katana -silent -jc -kf all -d 3 -fs rdn -td",
         }
-        
+
         # Add proxy configuration
         if proxy:
             cmd_map["gau"] += f' --proxy "{proxy}"'
             cmd_map["gospider"] += f" -p {proxy}"
             cmd_map["hakrawler"] += f" -proxy {proxy}"
             cmd_map["katana"] += f" -proxy {proxy}"
-        
+
         # Add thread configuration
         if threads > 0:
             cmd_map["gau"] += f" --threads {threads}"
             cmd_map["gospider"] += f" -t {threads}"
             cmd_map["hakrawler"] += f" -t {threads}"
             cmd_map["katana"] += f" -c {threads}"
-        
+
         # Add custom header configuration
         if custom_header:
             cmd_map["gospider"] += generate_header_param(custom_header, "gospider")
             cmd_map["hakrawler"] += generate_header_param(custom_header, "hakrawler")
             cmd_map["katana"] += generate_header_param(custom_header, "common")
-        
+
         # Add follow_redirect option to tools that support it
         if follow_redirect is False:
             cmd_map["gospider"] += " --no-redirect"
             cmd_map["hakrawler"] += " -dr"
             cmd_map["katana"] += " -dr"
-        
+
         # Generate commands for each URL and tool combination
         for url in urls:
             parsed_url = urlparse(url)
             base_domain = parsed_url.netloc.split(":")[0]  # Remove port if present
             host_regex = f"'https?://{re.escape(base_domain)}(:[0-9]+)?(/.*)?$'"
-            
+
             cat_input = f'echo "{url}"'
-            
+
             # Generate commands for each tool for the current URL
             for tool in tools:
                 if tool in cmd_map:
                     cmd = cmd_map[tool]
                     tool_cmd = f"{cat_input} | {cmd} | grep -Eo {host_regex}"
                     commands.append(tool_cmd)
-        
+
         return commands
-    
-    def execute_url_fetching_commands(
-        self,
-        commands: List[str],
-        output_files: List[str],
-        **kwargs
-    ) -> Dict[str, Any]:
+
+    def execute_url_fetching_commands(self, commands: List[str], output_files: List[str], **kwargs) -> Dict[str, Any]:
         """Execute URL fetching commands using distributed command processor"""
         try:
             # Create command-output file pairs
@@ -160,99 +127,70 @@ class URLProcessor:
             for i, (cmd, output_file) in enumerate(zip(commands, output_files)):
                 full_cmd = f"{cmd} > {output_file}"
                 command_output_pairs.append(full_cmd)
-            
+
             result = self.command_processor.execute_commands_batch(
                 command_output_pairs, "url_fetching", timeout=1800, **kwargs
             )
-            
+
             if result.is_successful:
                 return {
                     "success": True,
                     "commands": command_output_pairs,
                     "output_files": output_files,
-                    "execution_time": result.processing_time
+                    "execution_time": result.processing_time,
                 }
             else:
                 return {
                     "success": False,
                     "commands": command_output_pairs,
                     "error": result.errors[0] if result.errors else "Unknown error",
-                    "execution_time": result.processing_time
+                    "execution_time": result.processing_time,
                 }
-                
+
         except Exception as e:
             logger.error(f"URL fetching commands execution failed: {e}")
-            return {
-                "success": False,
-                "commands": commands,
-                "error": str(e),
-                "execution_time": 0
-            }
-    
-    def build_gf_command(
-        self,
-        input_file: str,
-        pattern: str,
-        domain_name: str,
-        output_file: str
-    ) -> str:
+            return {"success": False, "commands": commands, "error": str(e), "execution_time": 0}
+
+    def build_gf_command(self, input_file: str, pattern: str, domain_name: str, output_file: str) -> str:
         """Build GF pattern matching command"""
         host_regex = f"'https?://{re.escape(domain_name)}(:[0-9]+)?(/.*)?$'"
         return f"cat {input_file} | gf {pattern} | grep -Eo {host_regex} >> {output_file}"
-    
-    def execute_gf_commands(
-        self,
-        commands: List[str],
-        **kwargs
-    ) -> Dict[str, Any]:
+
+    def execute_gf_commands(self, commands: List[str], **kwargs) -> Dict[str, Any]:
         """Execute GF pattern matching commands"""
         try:
-            result = self.command_processor.execute_commands_batch(
-                commands, "gf_patterns", timeout=600, **kwargs
-            )
-            
+            result = self.command_processor.execute_commands_batch(commands, "gf_patterns", timeout=600, **kwargs)
+
             if result.is_successful:
-                return {
-                    "success": True,
-                    "commands": commands,
-                    "execution_time": result.processing_time
-                }
+                return {"success": True, "commands": commands, "execution_time": result.processing_time}
             else:
                 return {
                     "success": False,
                     "commands": commands,
                     "error": result.errors[0] if result.errors else "Unknown error",
-                    "execution_time": result.processing_time
+                    "execution_time": result.processing_time,
                 }
-                
+
         except Exception as e:
             logger.error(f"GF commands execution failed: {e}")
-            return {
-                "success": False,
-                "commands": commands,
-                "error": str(e),
-                "execution_time": 0
-            }
-    
+            return {"success": False, "commands": commands, "error": str(e), "execution_time": 0}
+
     def process_gf_results(
-        self,
-        gf_output_files: List[str],
-        gf_patterns: List[str],
-        ctx: Dict[str, Any]
+        self, gf_output_files: List[str], gf_patterns: List[str], ctx: Dict[str, Any]
     ) -> List[Dict[str, Any]]:
         """Process GF pattern matching results"""
         results = []
-        
+
         for gf_output_file, gf_pattern in zip(gf_output_files, gf_patterns):
             try:
                 if not os.path.exists(gf_output_file):
                     logger.error(f'Could not find GF output file {gf_output_file}. Skipping GF pattern "{gf_pattern}"')
                     continue
-                
+
                 # Read output file line by line
                 with open(gf_output_file, "r") as f:
                     lines = f.readlines()
-                
+
                 # Add endpoints / subdomains to DB
                 for url in lines:
                     try:
@@ -261,36 +199,33 @@ class URLProcessor:
                         subdomain, _ = validate_and_save_subdomain(subdomain_name, ctx=ctx)
                         if subdomain is None:
                             continue
-                        
+
                         endpoint, created = save_endpoint(http_url=http_url, subdomain=subdomain, ctx=ctx)
                         if not endpoint:
                             continue
-                        
+
                         earlier_pattern = None
                         if not created:
                             earlier_pattern = endpoint.matched_gf_patterns
                         pattern = f"{earlier_pattern},{gf_pattern}" if earlier_pattern else gf_pattern
                         endpoint.matched_gf_patterns = pattern
                         endpoint.save()
-                        
-                        results.append({
-                            "url": http_url,
-                            "pattern": gf_pattern,
-                            "created": created
-                        })
-                        
+
+                        results.append({"url": http_url, "pattern": gf_pattern, "created": created})
+
                     except Exception as e:
                         logger.error(f"Error processing GF result URL {url}: {e}")
                         continue
-                        
+
             except Exception as e:
                 logger.error(f"Error processing GF output file {gf_output_file}: {e}")
                 continue
-        
+
         return results
 
 
 # Celery tasks
+
 
 @app.task(name="fetch_url", queue="io_queue", base=RengineTask, bind=True)
 def fetch_url(self, urls=[], ctx={}, description=None):
@@ -309,7 +244,7 @@ def fetch_url(self, urls=[], ctx={}, description=None):
     duplicate_removal_fields = config.get(DUPLICATE_REMOVAL_FIELDS, ENDPOINT_SCAN_DEFAULT_DUPLICATE_FIELDS)
 
     gf_patterns = config.get(GF_PATTERNS, DEFAULT_GF_PATTERNS)
-    ignore_file_extension = config.get(IGNORE_FILE_EXTENSION, DEFAULT_IGNORE_FILE_EXTENSIONS)
+    config.get(IGNORE_FILE_EXTENSION, DEFAULT_IGNORE_FILE_EXTENSIONS)
     tools = config.get(USES_TOOLS, ENDPOINT_SCAN_DEFAULT_TOOLS)
     threads = config.get(THREADS) or self.yaml_configuration.get(THREADS, DEFAULT_THREADS)
     domain_request_headers = self.domain.request_headers if self.domain else None
@@ -352,7 +287,7 @@ def fetch_url(self, urls=[], ctx={}, description=None):
         threads=threads,
         custom_header=custom_header,
         proxy=proxy,
-        follow_redirect=follow_redirect
+        follow_redirect=follow_redirect,
     )
 
     # Create output files for each command
@@ -363,10 +298,7 @@ def fetch_url(self, urls=[], ctx={}, description=None):
 
     # Execute URL fetching commands
     fetch_result = processor.execute_url_fetching_commands(
-        commands, output_files,
-        history_file=self.history_file,
-        scan_id=self.scan_id,
-        activity_id=self.activity_id
+        commands, output_files, history_file=self.history_file, scan_id=self.scan_id, activity_id=self.activity_id
     )
 
     if not fetch_result["success"]:
@@ -376,7 +308,7 @@ def fetch_url(self, urls=[], ctx={}, description=None):
     # Process results and collect URLs
     all_urls = []
     tool_mapping = {}  # New dictionary to map URLs to tools
-    
+
     for i, (command, output_file) in enumerate(zip(commands, output_files)):
         if os.path.exists(output_file):
             with open(output_file, "r") as f:
@@ -452,7 +384,7 @@ def fetch_url(self, urls=[], ctx={}, description=None):
     # Run gf patterns on saved endpoints
     gf_commands = []
     gf_output_files = []
-    
+
     for gf_pattern in gf_patterns:
         # TODO: js var is causing issues, removing for now
         if gf_pattern == "jsvar":
@@ -463,29 +395,21 @@ def fetch_url(self, urls=[], ctx={}, description=None):
         logger.warning(f'Running gf on pattern "{gf_pattern}"')
         gf_output_file = str(Path(self.results_dir) / f"gf_patterns_{gf_pattern}.txt")
         gf_output_files.append(gf_output_file)
-        
+
         command = processor.build_gf_command(
-            input_file=self.output_path,
-            pattern=gf_pattern,
-            domain_name=self.domain.name,
-            output_file=gf_output_file
+            input_file=self.output_path, pattern=gf_pattern, domain_name=self.domain.name, output_file=gf_output_file
         )
         gf_commands.append(command)
 
     # Execute GF commands
     if gf_commands:
         gf_result = processor.execute_gf_commands(
-            gf_commands,
-            history_file=self.history_file,
-            scan_id=self.scan_id,
-            activity_id=self.activity_id
+            gf_commands, history_file=self.history_file, scan_id=self.scan_id, activity_id=self.activity_id
         )
-        
+
         if gf_result["success"]:
             # Process GF results
-            gf_results = processor.process_gf_results(
-                gf_output_files, gf_patterns, ctx
-            )
+            gf_results = processor.process_gf_results(gf_output_files, gf_patterns, ctx)
             logger.info(f"Processed {len(gf_results)} GF pattern matches")
         else:
             logger.error(f"GF pattern matching failed: {gf_result.get('error', 'Unknown error')}")
@@ -591,29 +515,22 @@ def run_gf_list():
 
 # Utility functions for easy access
 
-def fetch_urls_distributed(
-    urls: List[str],
-    tools: List[str],
-    **kwargs
-) -> Dict[str, Any]:
+
+def fetch_urls_distributed(urls: List[str], tools: List[str], **kwargs) -> Dict[str, Any]:
     """
     Fetch URLs using distributed processing.
     """
     processor = URLProcessor()
-    
+
     # Build commands
-    commands = processor.build_url_fetching_commands(
-        urls=urls,
-        tools=tools,
-        **kwargs
-    )
-    
+    commands = processor.build_url_fetching_commands(urls=urls, tools=tools, **kwargs)
+
     # Create output files
     output_files = [f"/tmp/urls_{i}.txt" for i in range(len(commands))]
-    
+
     # Execute commands
     result = processor.execute_url_fetching_commands(commands, output_files)
-    
+
     if result["success"]:
         # Collect results
         all_urls = []
@@ -622,95 +539,83 @@ def fetch_urls_distributed(
                 with open(output_file, "r") as f:
                     urls_from_file = [line.strip() for line in f.readlines()]
                     all_urls.extend(urls_from_file)
-        
+
         return {
             "success": True,
             "total_urls": len(all_urls),
             "unique_urls": len(set(all_urls)),
             "urls": list(set(all_urls)),
-            "execution_time": result["execution_time"]
+            "execution_time": result["execution_time"],
         }
     else:
         return {
             "success": False,
             "error": result.get("error", "Unknown error"),
-            "execution_time": result["execution_time"]
+            "execution_time": result["execution_time"],
         }
 
 
-def apply_gf_patterns_distributed(
-    urls: List[str],
-    patterns: List[str],
-    domain_name: str,
-    **kwargs
-) -> Dict[str, Any]:
+def apply_gf_patterns_distributed(urls: List[str], patterns: List[str], domain_name: str, **kwargs) -> Dict[str, Any]:
     """
     Apply GF patterns to URLs using distributed processing.
     """
     processor = URLProcessor()
-    
+
     # Build GF commands
     gf_commands = []
     gf_output_files = []
-    
+
     for pattern in patterns:
         if pattern == "jsvar":
             continue  # Skip problematic pattern
-        
+
         output_file = f"/tmp/gf_{pattern}.txt"
         gf_output_files.append(output_file)
-        
+
         command = processor.build_gf_command(
-            input_file="/tmp/input_urls.txt",
-            pattern=pattern,
-            domain_name=domain_name,
-            output_file=output_file
+            input_file="/tmp/input_urls.txt", pattern=pattern, domain_name=domain_name, output_file=output_file
         )
         gf_commands.append(command)
-    
+
     # Write input URLs to file
     with open("/tmp/input_urls.txt", "w") as f:
         f.write("\n".join(urls))
-    
+
     # Execute GF commands
     result = processor.execute_gf_commands(gf_commands, **kwargs)
-    
+
     if result["success"]:
         # Process results
         gf_results = processor.process_gf_results(gf_output_files, patterns, {})
-        
+
         return {
             "success": True,
             "total_patterns": len(patterns),
             "matched_urls": len(gf_results),
             "results": gf_results,
-            "execution_time": result["execution_time"]
+            "execution_time": result["execution_time"],
         }
     else:
         return {
             "success": False,
             "error": result.get("error", "Unknown error"),
-            "execution_time": result["execution_time"]
+            "execution_time": result["execution_time"],
         }
 
 
 def validate_url_input(urls: List[str], tools: List[str]) -> Dict[str, Any]:
     """
     Validate URL fetching input parameters.
-    
+
     Args:
         urls: List of URLs to fetch
         tools: List of tools to use
-        
+
     Returns:
         Validation result
     """
-    validation_result = {
-        "valid": True,
-        "errors": [],
-        "warnings": []
-    }
-    
+    validation_result = {"valid": True, "errors": [], "warnings": []}
+
     # Validate URLs
     if not urls:
         validation_result["valid"] = False
@@ -722,11 +627,11 @@ def validate_url_input(urls: List[str], tools: List[str]) -> Dict[str, Any]:
                 valid_urls.append(url)
             else:
                 validation_result["warnings"].append(f"Invalid URL: {url}")
-        
+
         if not valid_urls:
             validation_result["valid"] = False
             validation_result["errors"].append("No valid URLs found")
-    
+
     # Validate tools
     if not tools:
         validation_result["valid"] = False
@@ -734,44 +639,39 @@ def validate_url_input(urls: List[str], tools: List[str]) -> Dict[str, Any]:
     else:
         available_tools = ["gau", "hakrawler", "waybackurls", "gospider", "katana"]
         valid_tools = [tool for tool in tools if tool in available_tools]
-        
+
         if not valid_tools:
             validation_result["valid"] = False
             validation_result["errors"].append("No valid tools found")
         elif len(valid_tools) != len(tools):
             invalid_tools = [tool for tool in tools if tool not in available_tools]
             validation_result["warnings"].append(f"Invalid tools: {invalid_tools}")
-    
+
     return validation_result
 
 
 def get_url_statistics(results: Dict[str, Any]) -> Dict[str, Any]:
     """
     Get statistics from URL fetching results.
-    
+
     Args:
         results: URL fetching results
-        
+
     Returns:
         Statistics dictionary
     """
     if not results:
-        return {
-            "total_urls": 0,
-            "unique_urls": 0,
-            "duplicate_urls": 0,
-            "execution_time": 0
-        }
-    
+        return {"total_urls": 0, "unique_urls": 0, "duplicate_urls": 0, "execution_time": 0}
+
     total_urls = results.get("total_urls", 0)
     unique_urls = results.get("unique_urls", 0)
     duplicate_urls = total_urls - unique_urls
     execution_time = results.get("execution_time", 0)
-    
+
     return {
         "total_urls": total_urls,
         "unique_urls": unique_urls,
         "duplicate_urls": duplicate_urls,
         "execution_time": execution_time,
-        "duplicate_rate": (duplicate_urls / total_urls * 100) if total_urls > 0 else 0
+        "duplicate_rate": (duplicate_urls / total_urls * 100) if total_urls > 0 else 0,
     }

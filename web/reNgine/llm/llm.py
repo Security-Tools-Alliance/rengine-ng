@@ -164,9 +164,7 @@ class LLMVulnerabilityReportGenerator(BaseLLMGenerator):
         # Only forward supported OpenAI parameters
         provider_config = self._get_provider_config()
         openai_supported_kwargs = {
-            key: provider_config[key]
-            for key in ["max_tokens", "temperature"]
-            if key in provider_config
+            key: provider_config[key] for key in ["max_tokens", "temperature"] if key in provider_config
         }
         response = openai.ChatCompletion.create(
             model=model_name or self.model_name,

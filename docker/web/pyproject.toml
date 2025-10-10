@@ -100,6 +100,13 @@ extend-select = ["E501"]
 # Maximum cyclomatic complexity allowed per function
 max-complexity = 10
 
+# Per-file ignores
+[tool.ruff.lint.per-file-ignores]
+# Allow star imports in __init__.py files (common pattern for package APIs)
+"reNgine/utilities/__init__.py" = ["F403", "F405"]
+"reNgine/utilities/core/__init__.py" = ["F403", "F405"]
+"reNgine/utilities/distributed/__init__.py" = ["F403", "F405"]
+
 [tool.ruff.lint.isort]
 # Define which modules are part of the project (first-party)
 known-first-party = [

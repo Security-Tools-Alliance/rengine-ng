@@ -1,0 +1,27 @@
+type: workflow
+name: Subscan - Fetch URLs
+description: 'Converted from reNgine scan engine: Subscan - Fetch URLs'
+tags:
+- bug_bounty
+input_types:
+- domain
+tasks:
+  katana:
+    description: URL discovery and crawling
+    rate_limit: 30
+    timeout: 10
+    targets_:
+    - type: url
+      field: url
+      condition: item.status_code == 200
+  gau:
+    description: URL discovery from archives
+    targets_:
+    - type: subdomain
+      field: host
+global_options:
+  custom_header:
+    User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:126.0) Gecko/20100101 Firefox/126.0
+metadata:
+  scan_type: bug_bounty
+  converted_from: rengine

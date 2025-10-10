@@ -7,6 +7,7 @@ This module provides utilities for working with lookup keywords and interesting 
 import logging
 from typing import List
 
+
 logger = logging.getLogger(__name__)
 
 
@@ -17,7 +18,7 @@ def get_lookup_keywords() -> List[str]:
         list: Lookup keywords.
     """
     from scanEngine.models import InterestingLookupModel
-    
+
     lookup_obj = InterestingLookupModel.objects.order_by("-id").first()
     if not lookup_obj:
         return []

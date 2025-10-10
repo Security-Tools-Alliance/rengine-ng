@@ -1,0 +1,340 @@
+{% extends "base/base.html" %}
+{% load static %}
+{% load permission_tags %}
+
+{% block title %}Configure Task: {{ task_id }} - {{ workflow_name }}{% endblock %}
+
+{% block breadcrumb_title %}
+<li class="breadcrumb-item"><a href="{% url 'scan_engine_index' %}">Scan Engine</a></li>
+<li class="breadcrumb-item"><a href="{% url 'secator_workflow_list' %}">Workflows</a></li>
+<li class="breadcrumb-item"><a href="{% url 'secator_workflow_detail' workflow_id=workflow_id workflow_type=workflow_type %}">{{ workflow_name }}</a></li>
+<li class="breadcrumb-item active">Configure Task: {{ task_id }}</li>
+{% endblock %}
+
+{% block page_title %}Configure Task: {{ task_id }}{% endblock %}
+
+{% block custom_js_css_link %}
+<style>
+.task-config-section {
+    background: white;
+    border: 1px solid #e3e6f0;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+.task-info {
+    background: #f8f9fc;
+    border: 1px solid #e3e6f0;
+    border-radius: 6px;
+    padding: 15px;
+    margin-bottom: 20px;
+}
+.argument-item {
+    background: #f8f9fc;
+    border: 1px solid #e3e6f0;
+    border-radius: 6px;
+    padding: 15px;
+    margin-bottom: 10px;
+    position: relative;
+}
+.argument-item .remove-arg {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    color: #dc3545;
+    cursor: pointer;
+}
+.argument-item .remove-arg:hover {
+    color: #c82333;
+}
+.tool-info {
+    background: #e3f2fd;
+    border: 1px solid #bbdefb;
+    border-radius: 6px;
+    padding: 15px;
+    margin-bottom: 20px;
+}
+.variable-help {
+    background: #fff3cd;
+    border: 1px solid #ffeaa7;
+    border-radius: 6px;
+    padding: 15px;
+    margin-bottom: 20px;
+}
+.variable-item {
+    display: inline-block;
+    background: #f8f9fc;
+    border: 1px solid #e3e6f0;
+    border-radius: 4px;
+    padding: 4px 8px;
+    margin: 2px;
+    font-family: monospace;
+    font-size: 0.875rem;
+    cursor: pointer;
+}
+.variable-item:hover {
+    background: #e9ecef;
+}
+</style>
+{% endblock %}
+
+{% block main_content %}
+<div class="row">
+    <div class="col-12">
+        <!-- Task Information -->
+        <div class="task-info">
+            <div class="row">
+                <div class="col-md-6">
+                    <h5>{{ task_id }}</h5>
+                    <p class="text-muted mb-0">Task in workflow: {{ workflow_name }}</p>
+                </div>
+                <div class="col-md-6 text-end">
+                    <span class="badge bg-primary fs-6">{{ task_config.tool }}</span>
+                </div>
+            </div>
+        </div>
+
+        <form method="post" id="taskConfigForm">
+            {% csrf_token %}
+            
+            <!-- Tool Information -->
+            <div class="tool-info">
+                <h6><i class="fe-info me-2"></i>Tool Information</h6>
+                <p class="mb-0">
+                    <strong>Tool:</strong> {{ task_config.tool }}<br>
+                    <strong>Description:</strong> {{ task_config.description|default:"No description available" }}
+                </p>
+            </div>
+
+            <!-- Task Configuration -->
+            <div class="task-config-section">
+                <h5>Task Configuration</h5>
+                
+                <div class="mb-3">
+                    <label for="taskTool" class="form-label">Tool *</label>
+                    <input type="text" class="form-control" id="taskTool" name="tool" value="{{ task_config.tool }}" required>
+                    <div class="form-text">The tool/command to execute for this task</div>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="taskDescription" class="form-label">Description</label>
+                    <textarea class="form-control" id="taskDescription" name="description" rows="3">{{ task_config.description|default:"" }}</textarea>
+                    <div class="form-text">Describe what this task does</div>
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label">Arguments</label>
+                    <div id="argumentsContainer">
+                        {% for arg in task_config.args %}
+                        <div class="argument-item">
+                            <div class="row">
+                                <div class="col-11">
+                                    <input type="text" class="form-control" name="args" value="{{ arg }}" placeholder="Enter argument">
+                                </div>
+                                <div class="col-1">
+                                    <i class="fe-x remove-arg" title="Remove argument"></i>
+                                </div>
+                            </div>
+                        </div>
+                        {% empty %}
+                        <div class="argument-item">
+                            <div class="row">
+                                <div class="col-11">
+                                    <input type="text" class="form-control" name="args" placeholder="Enter argument">
+                                </div>
+                                <div class="col-1">
+                                    <i class="fe-x remove-arg" title="Remove argument"></i>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <button type="button" class="btn btn-outline-primary btn-sm" id="addArgument">
+                        <i class="fe-plus me-1"></i> Add Argument
+                    </button>
+                </div>
+            </div>
+
+            <!-- Variable Help -->
+            <div class="variable-help">
+                <h6><i class="fe-help-circle me-2"></i>Available Variables</h6>
+                <p class="mb-2">You can use these variables in your arguments:</p>
+                <div>
+                    <span class="variable-item" data-variable="{{ target }}">{{ target }}</span>
+                    <span class="variable-item" data-variable="{{ subdomains }}">{{ subdomains }}</span>
+                    <span class="variable-item" data-variable="{{ urls }}">{{ urls }}</span>
+                    <span class="variable-item" data-variable="{{ ips }}">{{ ips }}</span>
+                    <span class="variable-item" data-variable="{{ ports }}">{{ ports }}</span>
+                    <span class="variable-item" data-variable="{{ previous_task.output }}">{{ previous_task.output }}</span>
+                </div>
+                <p class="mt-2 mb-0 text-muted">
+                    <small>Click on a variable to insert it into the currently focused argument field.</small>
+                </p>
+            </div>
+
+            <!-- Advanced Configuration -->
+            <div class="task-config-section">
+                <h5>Advanced Configuration</h5>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="taskTimeout" class="form-label">Timeout (seconds)</label>
+                            <input type="number" class="form-control" id="taskTimeout" name="timeout" value="{{ task_config.timeout|default:300 }}" min="1">
+                            <div class="form-text">Maximum execution time for this task</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="taskRetries" class="form-label">Retries</label>
+                            <input type="number" class="form-control" id="taskRetries" name="retries" value="{{ task_config.retries|default:0 }}" min="0" max="5">
+                            <div class="form-text">Number of retry attempts on failure</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="taskConcurrency" class="form-label">Concurrency</label>
+                            <select class="form-select" id="taskConcurrency" name="concurrency">
+                                <option value="sequential" {% if task_config.concurrency == 'sequential' %}selected{% endif %}>Sequential</option>
+                                <option value="parallel" {% if task_config.concurrency == 'parallel' %}selected{% endif %}>Parallel</option>
+                            </select>
+                            <div class="form-text">How this task should be executed</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="taskPriority" class="form-label">Priority</label>
+                            <select class="form-select" id="taskPriority" name="priority">
+                                <option value="low" {% if task_config.priority == 'low' %}selected{% endif %}>Low</option>
+                                <option value="normal" {% if task_config.priority == 'normal' or not task_config.priority %}selected{% endif %}>Normal</option>
+                                <option value="high" {% if task_config.priority == 'high' %}selected{% endif %}>High</option>
+                            </select>
+                            <div class="form-text">Task execution priority</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="d-flex justify-content-between">
+                <a href="{% url 'secator_workflow_detail' workflow_id=workflow_id workflow_type=workflow_type %}" 
+                   class="btn btn-secondary">
+                    <i class="fe-arrow-left me-1"></i> Back to Workflow
+                </a>
+                <div>
+                    <button type="button" class="btn btn-outline-primary me-2" id="testTask">
+                        <i class="fe-play me-1"></i> Test Task
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fe-check me-1"></i> Save Changes
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block custom_js %}
+<script>
+$(document).ready(function() {
+    // Add argument
+    $('#addArgument').click(function() {
+        const argumentHtml = `
+            <div class="argument-item">
+                <div class="row">
+                    <div class="col-11">
+                        <input type="text" class="form-control" name="args" placeholder="Enter argument">
+                    </div>
+                    <div class="col-1">
+                        <i class="fe-x remove-arg" title="Remove argument"></i>
+                    </div>
+                </div>
+            </div>
+        `;
+        $('#argumentsContainer').append(argumentHtml);
+    });
+    
+    // Remove argument
+    $(document).on('click', '.remove-arg', function() {
+        $(this).closest('.argument-item').remove();
+    });
+    
+    // Variable insertion
+    $('.variable-item').click(function() {
+        const variable = $(this).data('variable');
+        const focusedInput = $('input[name="args"]:focus');
+        
+        if (focusedInput.length) {
+            const currentValue = focusedInput.val();
+            const cursorPos = focusedInput[0].selectionStart;
+            const newValue = currentValue.slice(0, cursorPos) + variable + currentValue.slice(cursorPos);
+            focusedInput.val(newValue);
+            
+            // Set cursor position after the inserted variable
+            const newCursorPos = cursorPos + variable.length;
+            focusedInput[0].setSelectionRange(newCursorPos, newCursorPos);
+        } else {
+            // If no input is focused, focus the first argument input
+            const firstArgInput = $('input[name="args"]').first();
+            if (firstArgInput.length) {
+                firstArgInput.focus();
+                firstArgInput.val(variable);
+            }
+        }
+    });
+    
+    // Test task
+    $('#testTask').click(function() {
+        const tool = $('#taskTool').val();
+        const args = $('input[name="args"]').map(function() {
+            return $(this).val();
+        }).get().filter(arg => arg.trim());
+        
+        if (!tool) {
+            alert('Please specify a tool first');
+            return;
+        }
+        
+        const command = tool + ' ' + args.join(' ');
+        
+        if (confirm(`Test this task with command: ${command}\n\nThis will execute the command in a test environment. Continue?`)) {
+            // TODO: Implement task testing
+            alert('Task testing not yet implemented. This would execute the command in a safe test environment.');
+        }
+    });
+    
+    // Form validation
+    $('#taskConfigForm').submit(function(e) {
+        const tool = $('#taskTool').val().trim();
+        if (!tool) {
+            e.preventDefault();
+            alert('Tool name is required');
+            return false;
+        }
+        
+        // Validate arguments
+        const args = $('input[name="args"]').map(function() {
+            return $(this).val().trim();
+        }).get().filter(arg => arg);
+        
+        // Check for empty argument inputs
+        const emptyArgs = $('input[name="args"]').filter(function() {
+            return !$(this).val().trim();
+        });
+        
+        if (emptyArgs.length > 0) {
+            if (confirm('Some argument fields are empty. Remove them?')) {
+                emptyArgs.closest('.argument-item').remove();
+            }
+        }
+    });
+    
+    // Auto-focus first argument input
+    $('input[name="args"]').first().focus();
+});
+</script>
+{% endblock %}

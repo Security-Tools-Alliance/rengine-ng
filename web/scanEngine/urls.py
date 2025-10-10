@@ -1,4 +1,4 @@
-from django.urls import path
+from django.urls import include, path
 
 from . import views
 
@@ -26,4 +26,6 @@ urlpatterns = [
     path("wordlist", views.wordlist_list, name="wordlist_list"),
     path("wordlist/delete/<int:id>", views.delete_wordlist, name="delete_wordlist"),
     path("wordlist/add", views.add_wordlist, name="add_wordlist"),
+    # Secator workflow management
+    path("", include("scanEngine.urls_secator")),
 ]

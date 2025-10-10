@@ -2,16 +2,16 @@ import mimetypes
 import os
 from pathlib import Path
 
-import environ
 from celery._state import get_current_task
 from celery.utils.log import ColorFormatter
+import environ
 
 from reNgine.init import first_run
 
 
 class RengineTaskFormatter(ColorFormatter):
     """Custom formatter for reNgine task logging"""
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         try:

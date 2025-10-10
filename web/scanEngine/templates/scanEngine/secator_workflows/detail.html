@@ -1,0 +1,461 @@
+{% extends "base/base.html" %}
+{% load static %}
+{% load permission_tags %}
+
+{% block title %}{{ workflow.name }} - Secator Workflow{% endblock %}
+
+{% block breadcrumb_title %}
+<li class="breadcrumb-item"><a href="{% url 'scan_engine_index' %}">Scan Engine</a></li>
+<li class="breadcrumb-item"><a href="{% url 'secator_workflow_list' %}">Workflows</a></li>
+<li class="breadcrumb-item active">{{ workflow.name }}</li>
+{% endblock %}
+
+{% block page_title %}{{ workflow.name }}{% endblock %}
+
+{% block custom_js_css_link %}
+<link href="{% static 'plugins/datatable/global.css' %}" rel="stylesheet" type="text/css">
+<style>
+.workflow-visualization {
+    background: #f8f9fc;
+    border: 1px solid #e3e6f0;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+    min-height: 300px;
+    position: relative;
+    overflow: hidden;
+}
+.workflow-node {
+    position: absolute;
+    background: white;
+    border: 2px solid #4e73df;
+    border-radius: 8px;
+    padding: 10px 15px;
+    min-width: 120px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+.workflow-node:hover {
+    transform: scale(1.05);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+    border-color: #2e59d9;
+}
+.workflow-node.tool {
+    background: #e3f2fd;
+    border-color: #1976d2;
+}
+.workflow-node.task {
+    background: #f3e5f5;
+    border-color: #7b1fa2;
+}
+.workflow-edge {
+    position: absolute;
+    height: 2px;
+    background: #4e73df;
+    transform-origin: left center;
+}
+.workflow-edge::after {
+    content: '';
+    position: absolute;
+    right: -6px;
+    top: -4px;
+    width: 0;
+    height: 0;
+    border-left: 6px solid #4e73df;
+    border-top: 4px solid transparent;
+    border-bottom: 4px solid transparent;
+}
+.workflow-info {
+    background: white;
+    border: 1px solid #e3e6f0;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+.workflow-actions {
+    background: white;
+    border: 1px solid #e3e6f0;
+    border-radius: 8px;
+    padding: 20px;
+}
+.task-config-modal .modal-body {
+    max-height: 70vh;
+    overflow-y: auto;
+}
+.config-section {
+    margin-bottom: 20px;
+    padding: 15px;
+    background: #f8f9fc;
+    border-radius: 6px;
+}
+.config-section h6 {
+    color: #5a5c69;
+    margin-bottom: 10px;
+    border-bottom: 1px solid #e3e6f0;
+    padding-bottom: 5px;
+}
+.workflow-stats {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 20px;
+}
+.stat-item {
+    flex: 1;
+    text-align: center;
+    padding: 15px;
+    background: #f8f9fc;
+    border-radius: 6px;
+    border: 1px solid #e3e6f0;
+}
+.stat-number {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #4e73df;
+}
+.stat-label {
+    font-size: 0.875rem;
+    color: #858796;
+    margin-top: 5px;
+}
+</style>
+{% endblock %}
+
+{% block main_content %}
+<div class="row">
+    <div class="col-12">
+        <!-- Workflow Information -->
+        <div class="workflow-info">
+            <div class="row">
+                <div class="col-md-8">
+                    <h4>{{ workflow.name }}</h4>
+                    <p class="text-muted mb-3">{{ workflow.description }}</p>
+                    
+                    <div class="workflow-stats">
+                        {% if visualization.nodes %}
+                        <div class="stat-item">
+                            <div class="stat-number">{{ visualization.nodes|length }}</div>
+                            <div class="stat-label">Tasks</div>
+                        </div>
+                        {% endif %}
+                        
+                        {% if workflow.input_type %}
+                        <div class="stat-item">
+                            <div class="stat-number">{{ workflow.input_type }}</div>
+                            <div class="stat-label">Input Type</div>
+                        </div>
+                        {% endif %}
+                        
+                        {% if workflow.tools %}
+                        <div class="stat-item">
+                            <div class="stat-number">{{ workflow.tools|length }}</div>
+                            <div class="stat-label">Tools</div>
+                        </div>
+                        {% endif %}
+                        
+                        {% if workflow.use_cases %}
+                        <div class="stat-item">
+                            <div class="stat-number">{{ workflow.use_cases|length }}</div>
+                            <div class="stat-label">Use Cases</div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <div class="col-md-4 text-end">
+                    <div class="mb-2">
+                        <span class="badge bg-{% if workflow.type == 'builtin' or workflow.type == 'builtin_engine' %}info{% else %}success{% endif %} fs-6">
+                            {% if workflow.type == 'builtin' or workflow.type == 'builtin_engine' %}Built-in Workflow
+                            {% else %}Custom Workflow{% endif %}
+                        </span>
+                    </div>
+                    
+                    {% if workflow.tags %}
+                    <div class="mb-2">
+                        {% for tag in workflow.tags %}
+                        <span class="badge bg-secondary me-1">{{ tag }}</span>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Workflow Visualization -->
+        <div class="workflow-visualization" id="workflow-visualization">
+            <div class="text-center text-muted" id="visualization-placeholder">
+                <i class="fe-cpu" style="font-size: 3rem; opacity: 0.3;"></i>
+                <p class="mt-2">Loading workflow visualization...</p>
+            </div>
+        </div>
+
+        <!-- Workflow Actions -->
+        <div class="workflow-actions">
+            <div class="row">
+                <div class="col-md-6">
+                    <h5>Actions</h5>
+                    <div class="d-flex gap-2">
+                        {% if user|can:'modify_scan_configurations' %}
+                        {% if can_edit %}
+                        <a href="{% url 'secator_workflow_edit' workflow_id=workflow.workflow_id workflow_type=workflow_type %}" 
+                           class="btn btn-primary">
+                            <i class="fe-edit me-1"></i> Edit Workflow
+                        </a>
+                        {% endif %}
+                        
+                        {% if workflow.type == 'custom' or workflow.type == 'custom_engine' %}
+                        <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#deleteModal">
+                            <i class="fe-trash-2 me-1"></i> Delete
+                        </button>
+                        {% endif %}
+                        {% endif %}
+                        
+                        <button type="button" class="btn btn-success" id="executeWorkflow">
+                            <i class="fe-play me-1"></i> Execute
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="col-md-6">
+                    <h5>Export</h5>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-outline-secondary" id="exportYaml">
+                            <i class="fe-download me-1"></i> Export YAML
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary" id="exportJson">
+                            <i class="fe-download me-1"></i> Export JSON
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Workflow Details -->
+        {% if workflow.tools %}
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Tools Used</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    {% for tool in workflow.tools %}
+                    <div class="col-md-3 mb-2">
+                        <span class="badge bg-light text-dark p-2 w-100">{{ tool }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if workflow.use_cases %}
+        <div class="card mt-3">
+            <div class="card-header">
+                <h5 class="mb-0">Use Cases</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    {% for use_case in workflow.use_cases %}
+                    <div class="col-md-4 mb-2">
+                        <span class="badge bg-info p-2 w-100">{{ use_case }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Task Configuration Modal -->
+<div class="modal fade" id="taskConfigModal" tabindex="-1" aria-labelledby="taskConfigModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg task-config-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="taskConfigModalLabel">Task Configuration</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="taskConfigModalBody">
+                <!-- Task configuration will be loaded here -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="saveTaskConfig">Save Changes</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+{% if can_edit %}
+<div class="modal fade" id="deleteModal" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deleteModalLabel">Delete Workflow</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete this workflow?</p>
+                <p class="text-danger"><strong>This action cannot be undone.</strong></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form method="post" action="{% url 'secator_workflow_delete' workflow_id=workflow.workflow_id workflow_type=workflow_type %}" class="d-inline">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger">Delete</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block page_level_script %}
+<script>
+$(document).ready(function() {
+    // Workflow visualization data
+    const visualizationData = {{ visualization|safe }};
+    
+    // Debug logging
+    console.log('Visualization data:', visualizationData);
+    console.log('Visualization type:', typeof visualizationData);
+    
+    // Render workflow visualization
+    function renderWorkflowVisualization() {
+        const container = $('#workflow-visualization');
+        const placeholder = $('#visualization-placeholder');
+        
+        console.log('Rendering visualization...');
+        console.log('Container found:', container.length > 0);
+        console.log('Placeholder found:', placeholder.length > 0);
+        
+        if (!visualizationData || !visualizationData.nodes) {
+            console.log('No visualization data or nodes found');
+            placeholder.html('<i class="fe-alert-triangle" style="font-size: 3rem; opacity: 0.3;"></i><p class="mt-2 text-muted">No visualization data available</p>');
+            return;
+        }
+        
+        console.log('Visualization data valid, nodes count:', visualizationData.nodes.length);
+        
+        placeholder.hide();
+        
+        // Create nodes
+        visualizationData.nodes.forEach(node => {
+            const nodeElement = $(`
+                <div class="workflow-node ${node.type}" 
+                     data-task-id="${node.id}" 
+                     data-tool="${node.tool || ''}"
+                     style="left: ${node.position.x}px; top: ${node.position.y}px;">
+                    <div class="fw-bold">${node.name}</div>
+                    ${node.tool ? `<div class="small text-muted">${node.tool}</div>` : ''}
+                </div>
+            `);
+            container.append(nodeElement);
+        });
+        
+        // Create edges
+        visualizationData.edges.forEach(edge => {
+            const sourceNode = $(`.workflow-node[data-task-id="${edge.source}"]`);
+            const targetNode = $(`.workflow-node[data-task-id="${edge.target}"]`);
+            
+            if (sourceNode.length && targetNode.length) {
+                const sourcePos = sourceNode.position();
+                const targetPos = targetNode.position();
+                
+                const edgeElement = $(`
+                    <div class="workflow-edge" 
+                         style="left: ${sourcePos.left + 120}px; 
+                                top: ${sourcePos.top + 20}px; 
+                                width: ${targetPos.left - sourcePos.left - 120}px; 
+                                transform: rotate(${Math.atan2(targetPos.top - sourcePos.top, targetPos.left - sourcePos.left)}rad);">
+                    </div>
+                `);
+                container.append(edgeElement);
+            }
+        });
+        
+        // Add click handlers for task configuration
+        $('.workflow-node').click(function() {
+            const taskId = $(this).data('task-id');
+            const tool = $(this).data('tool');
+            
+            if (taskId && tool) {
+                showTaskConfigModal(taskId, tool);
+            }
+        });
+        
+        console.log('Visualization rendering completed');
+    }
+    
+    // Show task configuration modal
+    function showTaskConfigModal(taskId, tool) {
+        const modalBody = $('#taskConfigModalBody');
+        modalBody.html(`
+            <div class="config-section">
+                <h6>Task Information</h6>
+                <p><strong>Task ID:</strong> ${taskId}</p>
+                <p><strong>Tool:</strong> ${tool}</p>
+            </div>
+            <div class="config-section">
+                <h6>Configuration</h6>
+                <div class="mb-3">
+                    <label for="taskArgs" class="form-label">Arguments</label>
+                    <textarea class="form-control" id="taskArgs" rows="3" placeholder="Enter command arguments..."></textarea>
+                </div>
+                <div class="mb-3">
+                    <label for="taskDescription" class="form-label">Description</label>
+                    <textarea class="form-control" id="taskDescription" rows="2" placeholder="Enter task description..."></textarea>
+                </div>
+            </div>
+        `);
+        
+        $('#taskConfigModal').modal('show');
+    }
+    
+    // Export functions
+    $('#exportYaml').click(function() {
+        const workflowData = {{ workflow|safe }};
+        const yamlContent = jsyaml.dump(workflowData, {indent: 2});
+        downloadFile(yamlContent, '{{ workflow.name }}.yaml', 'text/yaml');
+    });
+    
+    $('#exportJson').click(function() {
+        const workflowData = {{ workflow|safe }};
+        const jsonContent = JSON.stringify(workflowData, null, 2);
+        downloadFile(jsonContent, '{{ workflow.name }}.json', 'application/json');
+    });
+    
+    // Execute workflow
+    $('#executeWorkflow').click(function() {
+        if (confirm('Execute this workflow? This will start a new scan.')) {
+            // TODO: Implement workflow execution
+            alert('Workflow execution not yet implemented.');
+        }
+    });
+    
+    // Download file helper
+    function downloadFile(content, filename, mimeType) {
+        const blob = new Blob([content], {type: mimeType});
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+    }
+    
+    // Initialize visualization
+    console.log('Initializing visualization...');
+    renderWorkflowVisualization();
+    console.log('Visualization initialization completed');
+});
+</script>
+
+<!-- Include js-yaml for YAML export -->
+<script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
+{% endblock %}

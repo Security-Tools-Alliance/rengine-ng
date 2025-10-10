@@ -1,0 +1,294 @@
+{% extends "base/base.html" %}
+{% load static %}
+{% load permission_tags %}
+
+{% block title %}Secator Workflows - reNgine{% endblock %}
+
+{% block breadcrumb_title %}
+<li class="breadcrumb-item"><a href="{% url 'scan_engine_index' %}">Scan Engine</a></li>
+<li class="breadcrumb-item active">Workflows</li>
+{% endblock %}
+
+{% block page_title %}Secator Workflows{% endblock %}
+
+{% block custom_js_css_link %}
+<link href="{% static 'plugins/datatable/global.css' %}" rel="stylesheet" type="text/css">
+<script src="{% static 'custom/ajax_workflow_manager.js' %}"></script>
+<style>
+.workflow-card {
+    transition: transform 0.2s ease-in-out;
+    border: 1px solid #e3e6f0;
+    border-radius: 8px;
+    overflow: hidden;
+}
+.workflow-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+.workflow-type-badge {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    font-size: 0.75rem;
+    padding: 2px 8px;
+}
+.workflow-stats {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 20px;
+}
+.stat-card {
+    background: #f8f9fc;
+    border: 1px solid #e3e6f0;
+    border-radius: 6px;
+    padding: 15px;
+    text-align: center;
+    flex: 1;
+    margin: 0 5px;
+}
+.stat-number {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #5a5c69;
+}
+.stat-label {
+    font-size: 0.875rem;
+    color: #858796;
+    margin-top: 5px;
+}
+.filter-tabs {
+    margin-bottom: 20px;
+}
+.filter-tab {
+    padding: 8px 16px;
+    margin-right: 10px;
+    border: 1px solid #d1d3e2;
+    border-radius: 4px;
+    background: white;
+    color: #5a5c69;
+    text-decoration: none;
+    display: inline-block;
+}
+.filter-tab.active {
+    background: #4e73df;
+    color: white;
+    border-color: #4e73df;
+}
+.loading {
+    opacity: 0.6;
+    pointer-events: none;
+}
+.count {
+    background-color: #6c757d;
+    color: white;
+    border-radius: 10px;
+    padding: 2px 6px;
+    font-size: 0.75em;
+    margin-left: 5px;
+}
+.filter-tab.active .count {
+    background-color: #fff;
+    color: #4e73df;
+}
+.workflow-tools {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 10px;
+}
+.tool-badge {
+    background: #e3f2fd;
+    color: #1976d2;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 0.75rem;
+}
+</style>
+{% endblock %}
+
+{% block main_content %}
+<div class="row">
+    <div class="col-12">
+        <!-- Statistics Cards -->
+        <div class="workflow-stats">
+            <div class="stat-card">
+                <div class="stat-number">{{ custom_count }}</div>
+                <div class="stat-label">Custom Workflows</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">{{ builtin_count }}</div>
+                <div class="stat-label">Built-in Workflows</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">{{ engine_count }}</div>
+                <div class="stat-label">Engine Workflows</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">{{ total_count }}</div>
+                <div class="stat-label">Total</div>
+            </div>
+        </div>
+
+        <!-- Filter Tabs -->
+        <div class="filter-tabs">
+            <a href="#" class="filter-tab active" data-type="all">All <span class="count">0</span></a>
+            <a href="#" class="filter-tab" data-type="custom">Custom <span class="count">0</span></a>
+            <a href="#" class="filter-tab" data-type="builtin">Built-in <span class="count">0</span></a>
+            <a href="#" class="filter-tab" data-type="engines">Engines <span class="count">0</span></a>
+        </div>
+
+        <!-- Search and Actions -->
+        <div class="row mb-3">
+            <div class="col-md-6">
+                <div class="d-flex">
+                    <input type="text" id="workflow-search" class="form-control me-2" placeholder="Search workflows..." value="{{ search_query }}">
+                    <button type="button" id="refresh-workflows" class="btn btn-outline-secondary">
+                        <i class="fe-refresh-cw"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="col-md-6 text-end">
+                {% if user|can:'modify_scan_configurations' %}
+                <a href="{% url 'secator_workflow_create' %}" class="btn btn-success">
+                    <i class="fe-plus me-1"></i> Create Workflow
+                </a>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Workflows Grid -->
+        {% if page_obj %}
+        <div class="row">
+            {% for workflow in page_obj %}
+            <div class="col-lg-4 col-md-6 mb-4">
+                <div class="card workflow-card h-100 position-relative">
+                    <div class="workflow-type-badge badge 
+                        {% if workflow.workflow_type == 'builtin' or workflow.workflow_type == 'builtin_engine' %}bg-info
+                        {% elif workflow.workflow_type == 'custom' or workflow.workflow_type == 'custom_engine' %}bg-success
+                        {% else %}bg-secondary{% endif %}">
+                        {% if workflow.workflow_type == 'builtin' or workflow.workflow_type == 'builtin_engine' %}Built-in
+                        {% elif workflow.workflow_type == 'custom' or workflow.workflow_type == 'custom_engine' %}Custom
+                        {% else %}Engine{% endif %}
+                    </div>
+                    
+                    <div class="card-body">
+                        <h5 class="card-title">{{ workflow.name }}</h5>
+                        <p class="card-text text-muted">{{ workflow.description|truncatechars:100 }}</p>
+                        
+                        {% if workflow.input_type %}
+                        <p class="mb-2">
+                            <strong>Input:</strong> 
+                            <span class="badge bg-light text-dark">{{ workflow.input_type }}</span>
+                        </p>
+                        {% endif %}
+                        
+                        {% if workflow.tools %}
+                        <div class="workflow-tools">
+                            {% for tool in workflow.tools|slice:":5" %}
+                            <span class="tool-badge">{{ tool }}</span>
+                            {% endfor %}
+                            {% if workflow.tools|length > 5 %}
+                            <span class="tool-badge">+{{ workflow.tools|length|add:"-5" }} more</span>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                        
+                        {% if workflow.use_cases %}
+                        <div class="mt-2">
+                            {% for use_case in workflow.use_cases|slice:":3" %}
+                            <span class="badge bg-secondary me-1">{{ use_case }}</span>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="card-footer bg-transparent">
+                        <div class="d-flex justify-content-between">
+                            <a href="{% url 'secator_workflow_detail' workflow_id=workflow.workflow_id workflow_type=workflow.workflow_type %}" 
+                               class="btn btn-sm btn-primary">
+                                <i class="fe-eye me-1"></i> View
+                            </a>
+                            
+                            {% if user|can:'modify_scan_configurations' %}
+                            {% if workflow.workflow_type == 'custom' or workflow.workflow_type == 'custom_engine' %}
+                            <a href="{% url 'secator_workflow_edit' workflow_id=workflow.workflow_id workflow_type=workflow.workflow_type %}" 
+                               class="btn btn-sm btn-outline-secondary">
+                                <i class="fe-edit me-1"></i> Edit
+                            </a>
+                            {% endif %}
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- Pagination -->
+        {% if page_obj.has_other_pages %}
+        <nav aria-label="Workflow pagination">
+            <ul class="pagination justify-content-center">
+                {% if page_obj.has_previous %}
+                <li class="page-item">
+                    <a class="page-link" href="?page=1&type={{ workflow_type }}&search={{ search_query }}">First</a>
+                </li>
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page_obj.previous_page_number }}&type={{ workflow_type }}&search={{ search_query }}">Previous</a>
+                </li>
+                {% endif %}
+                
+                <li class="page-item active">
+                    <span class="page-link">
+                        Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+                    </span>
+                </li>
+                
+                {% if page_obj.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page_obj.next_page_number }}&type={{ workflow_type }}&search={{ search_query }}">Next</a>
+                </li>
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}&type={{ workflow_type }}&search={{ search_query }}">Last</a>
+                </li>
+                {% endif %}
+            </ul>
+        </nav>
+        {% endif %}
+
+        {% else %}
+        <div class="text-center py-5">
+            <i class="fe-cpu" style="font-size: 4rem; color: #d1d3e2;"></i>
+            <h4 class="mt-3 text-muted">No workflows found</h4>
+            <p class="text-muted">
+                {% if workflow_type == 'all' %}
+                No workflows are available. Create your first workflow to get started.
+                {% elif workflow_type == 'custom' %}
+                No custom workflows found. Create a custom workflow to get started.
+                {% elif workflow_type == 'builtin' %}
+                No built-in workflows available.
+                {% elif workflow_type == 'engines' %}
+                No scan engines using Secator workflows found.
+                {% endif %}
+            </p>
+            {% if user|can:'modify_scan_configurations' and workflow_type != 'builtin' %}
+            <a href="{% url 'secator_workflow_create' %}" class="btn btn-primary">
+                <i class="fe-plus me-1"></i> Create Workflow
+            </a>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block custom_js %}
+<script>
+$(document).ready(function() {
+    // Add smooth transitions
+    $('.workflow-card').hover(
+        function() { $(this).addClass('shadow-sm'); },
+        function() { $(this).removeClass('shadow-sm'); }
+    );
+});
+</script>
+{% endblock %}

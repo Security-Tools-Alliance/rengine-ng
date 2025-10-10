@@ -1,0 +1,78 @@
+type: workflow
+name: Scan - Active (common ports)
+description: 'Converted from reNgine scan engine: Scan - Active (common ports)'
+tags:
+- bug_bounty
+input_types:
+- domain
+tasks:
+  subfinder:
+    description: Subdomain discovery
+    rate_limit: 30
+    timeout: 5
+    additional_tools:
+    - ctfr
+    - sublist3r
+    - tlsx
+    - oneforall
+    - netlas
+  naabu:
+    description: Port scanning
+    rate_limit: 150
+    timeout: 5
+    ports: top-100
+    targets_:
+    - type: subdomain
+      field: host
+  httpx:
+    description: HTTP probing and crawling
+    rate_limit: 30
+    timeout: 10
+    targets_:
+    - type: port
+      field: host:port
+      condition: item.port in [80, 443, 8080, 8081, 8082, 8443, 3000, 3001, 5000,
+        9000]
+  katana:
+    description: URL discovery and crawling
+    rate_limit: 10
+    timeout: 10
+    targets_:
+    - type: url
+      field: url
+      condition: item.status_code == 200
+  gau:
+    description: URL discovery from archives
+    targets_:
+    - type: subdomain
+      field: host
+  nuclei:
+    description: Vulnerability scanning
+    rate_limit: 25
+    timeout: 5
+    targets_:
+    - type: url
+      field: url
+      condition: item.status_code == 200
+    severities:
+    - unknown
+    - info
+    - low
+    - medium
+    - high
+    - critical
+  ffuf:
+    description: Directory and file fuzzing
+    rate_limit: 150
+    timeout: 5
+    targets_:
+    - type: url
+      field: url
+      condition: item.status_code == 200
+    wordlist: default
+global_options:
+  custom_header:
+    User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:126.0) Gecko/20100101 Firefox/126.0
+metadata:
+  scan_type: bug_bounty
+  converted_from: rengine

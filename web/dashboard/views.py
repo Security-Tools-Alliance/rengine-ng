@@ -294,9 +294,7 @@ def on_user_logged_out(sender, request, **kwargs):
 @receiver(user_logged_in)
 def on_user_logged_in(sender, request, **kwargs):
     user = kwargs.get("user")
-    messages.add_message(
-        request, messages.INFO, f"Hi @{user.username} welcome back!"
-    )
+    messages.add_message(request, messages.INFO, f"Hi @{user.username} welcome back!")
 
 
 def search(request):

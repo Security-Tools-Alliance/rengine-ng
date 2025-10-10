@@ -11,19 +11,15 @@ Key features:
 - Scan result organization
 """
 
-import pickle
-from time import sleep
-from typing import Optional, Dict, Any, List
+from typing import Any, Dict, Optional
 
-from reNgine.utilities.core.formatting import format_duration, format_bytes, format_json
-import redis
-import requests
 from celery.utils.log import get_task_logger
 from discord_webhook import DiscordEmbed, DiscordWebhook
-from django.utils import timezone
+import redis
+import requests
 
-from reNgine.definitions import DISCORD_SEVERITY_COLORS
-from reNgine.settings import CELERY_BROKER_URL, DOMAIN_NAME
+from reNgine.settings import CELERY_BROKER_URL
+from reNgine.utilities.core.formatting import format_bytes, format_json
 from scanEngine.models import Notification
 
 
@@ -77,17 +73,17 @@ def send_telegram_message(message: str) -> bool:
         if not do_send:
             logger.debug("Telegram notification not configured or disabled")
             return False
-            
+
         telegram_bot_token = notif.telegram_bot_token
         telegram_bot_chat_id = notif.telegram_bot_chat_id
         send_url = f"https://api.telegram.org/bot{telegram_bot_token}/sendMessage?chat_id={telegram_bot_chat_id}&parse_mode=Markdown&text={message}"
-        
+
         response = requests.get(send_url, timeout=30)
         response.raise_for_status()
-        
+
         logger.info("Telegram message sent successfully")
         return True
-        
+
     except Exception as e:
         logger.error(f"Failed to send Telegram message: {e}")
         return False
@@ -107,22 +103,17 @@ def send_slack_message(message: str) -> bool:
         headers = {"content-type": "application/json"}
         message_data = {"text": message}
         notif = Notification.objects.first()
-        
+
         if not (notif and notif.send_to_slack and notif.slack_webhook_url):
             logger.debug("Slack notification not configured or disabled")
             return False
-            
-        response = requests.post(
-            notif.slack_webhook_url,
-            headers=headers,
-            data=format_json(message_data),
-            timeout=30
-        )
+
+        response = requests.post(notif.slack_webhook_url, headers=headers, data=format_json(message_data), timeout=30)
         response.raise_for_status()
-        
+
         logger.info("Slack message sent successfully")
         return True
-        
+
     except Exception as e:
         logger.error(f"Failed to send Slack message: {e}")
         return False
@@ -145,10 +136,10 @@ def send_discord_message(message: str, webhook_url: str, title: str = "reNgine N
         embed = DiscordEmbed(title=title, description=message, color="03b2f8")
         webhook.add_embed(embed)
         webhook.execute()
-        
+
         logger.info("Discord message sent successfully")
         return True
-        
+
     except Exception as e:
         logger.error(f"Failed to send Discord message: {e}")
         return False
@@ -170,10 +161,10 @@ def send_discord_file(file_path: str, webhook_url: str, filename: str = None) ->
         webhook = DiscordWebhook(url=webhook_url)
         webhook.add_file(file=open(file_path, "rb"), filename=filename or file_path.split("/")[-1])
         webhook.execute()
-        
+
         logger.info(f"Discord file sent successfully: {file_path}")
         return True
-        
+
     except Exception as e:
         logger.error(f"Failed to send Discord file {file_path}: {e}")
         return False
@@ -190,25 +181,25 @@ def format_scan_summary(scan_data: Dict[str, Any]) -> str:
         str: Formatted scan summary
     """
     try:
-        summary = f"🔍 **Scan Summary**\n"
+        summary = "🔍 **Scan Summary**\n"
         summary += f"**Target:** {scan_data.get('target', 'N/A')}\n"
         summary += f"**Scan Type:** {scan_data.get('scan_type', 'N/A')}\n"
         summary += f"**Status:** {scan_data.get('status', 'N/A')}\n"
-        
-        if scan_data.get('subdomains_found'):
+
+        if scan_data.get("subdomains_found"):
             summary += f"**Subdomains Found:** {scan_data['subdomains_found']}\n"
-        if scan_data.get('ports_found'):
+        if scan_data.get("ports_found"):
             summary += f"**Ports Found:** {scan_data['ports_found']}\n"
-        if scan_data.get('endpoints_found'):
+        if scan_data.get("endpoints_found"):
             summary += f"**Endpoints Found:** {scan_data['endpoints_found']}\n"
-        if scan_data.get('vulnerabilities_found'):
+        if scan_data.get("vulnerabilities_found"):
             summary += f"**Vulnerabilities Found:** {scan_data['vulnerabilities_found']}\n"
-            
+
         summary += f"**Duration:** {scan_data.get('duration', 'N/A')}\n"
         summary += f"**Started:** {scan_data.get('started_at', 'N/A')}\n"
-        
+
         return summary
-        
+
     except Exception as e:
         logger.error(f"Failed to format scan summary: {e}")
         return f"Scan completed for {scan_data.get('target', 'unknown target')}"
@@ -225,7 +216,7 @@ def get_notification_config() -> Dict[str, Any]:
         notif = Notification.objects.first()
         if not notif:
             return {}
-            
+
         return {
             "send_to_telegram": notif.send_to_telegram,
             "send_to_slack": notif.send_to_slack,
@@ -235,7 +226,7 @@ def get_notification_config() -> Dict[str, Any]:
             "slack_webhook_url": notif.slack_webhook_url,
             "discord_webhook_url": notif.discord_webhook_url,
         }
-        
+
     except Exception as e:
         logger.error(f"Failed to get notification config: {e}")
         return {}
@@ -254,26 +245,26 @@ def send_notification(message: str, notification_type: str = "info") -> bool:
     """
     config = get_notification_config()
     success = False
-    
+
     try:
         # Send Telegram notification
         if config.get("send_to_telegram") and config.get("telegram_bot_token"):
             if send_telegram_message(message):
                 success = True
-                
+
         # Send Slack notification
         if config.get("send_to_slack") and config.get("slack_webhook_url"):
             if send_slack_message(message):
                 success = True
-                
+
         # Send Discord notification
         if config.get("send_to_discord") and config.get("discord_webhook_url"):
             if send_discord_message(message, config["discord_webhook_url"]):
                 success = True
-                
+
     except Exception as e:
         logger.error(f"Failed to send notifications: {e}")
-        
+
     return success
 
 
@@ -304,7 +295,7 @@ def get_cached_discord_webhook(scan_id: int) -> Optional[str]:
     """
     try:
         webhook_url = DISCORD_WEBHOOKS_CACHE.get(f"discord_webhook_{scan_id}")
-        return webhook_url.decode('utf-8') if webhook_url else None
+        return webhook_url.decode("utf-8") if webhook_url else None
     except Exception as e:
         logger.error(f"Failed to get cached Discord webhook: {e}")
         return None
@@ -326,43 +317,43 @@ def format_file_size(size_bytes: int) -> str:
 def send_lark_message(message: str) -> bool:
     """
     Send Lark message.
-    
+
     Args:
         message (str): Message to send
-        
+
     Returns:
         bool: True if message was sent successfully, False otherwise
     """
     try:
-        from scanEngine.models import Notification
-        import requests
         import json
-        
+
+        import requests
+
+        from scanEngine.models import Notification
+
         notif = Notification.objects.first()
         do_send = notif and notif.send_to_lark and notif.lark_hook_url
-        
+
         if not do_send:
             logger.warning("Lark notifications not configured or disabled")
             return False
-            
+
         headers = {"content-type": "application/json"}
         message_data = {
             "msg_type": "interactive",
             "card": {"elements": [{"tag": "div", "text": {"content": message, "tag": "lark_md"}}]},
         }
-        
+
         hook_url = notif.lark_hook_url
         response = requests.post(url=hook_url, data=json.dumps(message_data), headers=headers)
-        
+
         if response.status_code == 200:
             logger.info(f"Lark message sent successfully: {message[:100]}...")
             return True
         else:
             logger.error(f"Failed to send Lark message: {response.status_code}")
             return False
-            
+
     except Exception as e:
         logger.error(f"Failed to send Lark message: {e}")
         return False
-
-

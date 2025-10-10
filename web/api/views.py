@@ -44,8 +44,8 @@ from reNgine.tasks import (
     query_whois,
 )
 from reNgine.tasks.detect import run_cmseek, run_wafw00f
-from reNgine.tasks.url import run_gf_list
 from reNgine.tasks.notification import send_hackerone_report
+from reNgine.tasks.url import run_gf_list
 from reNgine.utilities.command import run_command
 from reNgine.utilities.core import get_data_from_post_request, safe_int_cast
 from reNgine.utilities.database import create_scan_activity
@@ -521,15 +521,22 @@ class QueryInterestingSubdomains(APIView):
         domain_id = safe_int_cast(req.query_params.get("target_id"))
 
         if scan_id:
-            queryset = get_interesting_subdomains(scan_history=scan_id)
+            interesting_subdomains = get_interesting_subdomains(scan_history=scan_id)
         elif domain_id:
-            queryset = get_interesting_subdomains(domain_id=domain_id)
+            interesting_subdomains = get_interesting_subdomains(domain_id=domain_id)
         else:
-            queryset = get_interesting_subdomains()
+            interesting_subdomains = get_interesting_subdomains()
 
-        queryset = queryset.distinct("name")
+        # Get unique subdomain names from the list
+        unique_names = set()
+        unique_subdomains = []
+        for record in interesting_subdomains:
+            name = record.data.get("name")
+            if name and name not in unique_names:
+                unique_names.add(name)
+                unique_subdomains.append(record)
 
-        return Response(InterestingSubdomainSerializer(queryset, many=True).data)
+        return Response(InterestingSubdomainSerializer(unique_subdomains, many=True).data)
 
 
 class ListTargetsDatatableViewSet(viewsets.ModelViewSet):
@@ -2250,23 +2257,26 @@ class InterestingSubdomainViewSet(viewsets.ModelViewSet):
             self.serializer_class = InterestingSubdomainSerializer
 
         if scan_id:
-            queryset = get_interesting_subdomains(scan_history=scan_id)
+            interesting_subdomains = get_interesting_subdomains(scan_history=scan_id)
         elif target_id:
-            queryset = get_interesting_subdomains(domain_id=target_id)
+            interesting_subdomains = get_interesting_subdomains(domain_id=target_id)
         else:
-            queryset = get_interesting_subdomains()
+            interesting_subdomains = get_interesting_subdomains()
+
+        # Convert DatabaseRecord list to Django Subdomain objects
+        subdomain_names = [record.data.get("name") for record in interesting_subdomains if record.data.get("name")]
+        queryset = Subdomain.objects.filter(name__in=subdomain_names)
 
         # Optimize queries with prefetch_related to avoid N+1 queries
-        if hasattr(queryset, "prefetch_related"):
-            queryset = queryset.prefetch_related(
-                "ip_addresses",
-                "ip_addresses__ports",
-                "technologies",
-                "waf",
-                "directories",
-                "scan_history",
-                "target_domain",
-            )
+        queryset = queryset.prefetch_related(
+            "ip_addresses",
+            "ip_addresses__ports",
+            "technologies",
+            "waf",
+            "directories",
+            "scan_history",
+            "target_domain",
+        )
 
         self.queryset = queryset
 

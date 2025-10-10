@@ -499,7 +499,8 @@ class VisualiseSubdomainSerializer(serializers.ModelSerializer):
         return subdomain.name
 
     def get_title(self, subdomain):
-        if get_interesting_subdomains(subdomain.scan_history.id).filter(name=subdomain.name).exists():
+        interesting_subdomains = get_interesting_subdomains(subdomain.scan_history.id)
+        if any(record.data.get("name") == subdomain.name for record in interesting_subdomains):
             return "Interesting"
 
     def get_children(self, subdomain_name):
@@ -784,7 +785,8 @@ class SubdomainChangesSerializer(serializers.ModelSerializer):
         return Subdomain.change
 
     def get_is_interesting(self, Subdomain):
-        return get_interesting_subdomains(Subdomain.scan_history.id).filter(name=Subdomain.name).exists()
+        interesting_subdomains = get_interesting_subdomains(Subdomain.scan_history.id)
+        return any(record.data.get("name") == Subdomain.name for record in interesting_subdomains)
 
 
 class EndPointChangesSerializer(serializers.ModelSerializer):
@@ -1029,7 +1031,9 @@ class SubdomainSerializer(serializers.ModelSerializer):
 
     def get_is_interesting(self, subdomain):
         scan_id = subdomain.scan_history.id if subdomain.scan_history else None
-        return get_interesting_subdomains(scan_id).filter(name=subdomain.name).exists()
+        interesting_subdomains = get_interesting_subdomains(scan_id)
+        # Check if subdomain name exists in the list of interesting subdomains
+        return any(record.data.get("name") == subdomain.name for record in interesting_subdomains)
 
     def get_endpoint_count(self, subdomain):
         return subdomain.get_endpoint_count

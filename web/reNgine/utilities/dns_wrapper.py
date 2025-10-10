@@ -135,10 +135,10 @@ def get_dns_args(tool_name: str, dns_servers: List[str]) -> List[str]:
 
 
 def build_command_with_dns(
-    tool_name_or_command: Union[str, List[str]], 
-    base_args: Optional[List[str]] = None, 
-    domain=None, 
-    dns_servers: Optional[List[str]] = None
+    tool_name_or_command: Union[str, List[str]],
+    base_args: Optional[List[str]] = None,
+    domain=None,
+    dns_servers: Optional[List[str]] = None,
 ) -> Union[str, List[str]]:
     """
     Build command with DNS arguments if custom DNS is configured.
@@ -210,7 +210,7 @@ def build_command_with_dns(
             # Match flags like -r, --dns-servers, --dns-servers=8.8.8.8, etc.
             dns_flag_pattern = re.compile(rf"^(?:{re.escape(flag)})(?:[ =].+)?$")
         has_existing_dns = any(dns_flag_pattern.match(arg) for arg in base_args_list)
-    
+
     if has_existing_dns:
         logger.debug(f"DNS arguments already present in command for {tool_name}, skipping injection")
         if return_as_string:

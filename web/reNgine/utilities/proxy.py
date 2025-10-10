@@ -4,9 +4,10 @@ Proxy utilities for reNgine.
 This module provides utilities for working with proxies and proxy management.
 """
 
+import logging
 import random
 import re
-import logging
+
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +19,7 @@ def get_random_proxy() -> str:
         str: Proxy name or '' if no proxy defined in db or use_proxy is False.
     """
     from scanEngine.models import Proxy
-    
+
     proxy = Proxy.objects.filter(use_proxy=True).order_by("?").first()
     if not proxy:
         return ""
@@ -32,10 +33,10 @@ def get_random_proxy() -> str:
 def remove_ansi_escape_sequences(text: str) -> str:
     """
     Remove ANSI escape sequences from text.
-    
+
     Args:
         text: Text to clean
-        
+
     Returns:
         str: Text without ANSI escape sequences
     """

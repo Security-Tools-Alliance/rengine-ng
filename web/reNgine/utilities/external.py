@@ -18,14 +18,14 @@ Supported services:
 - Google dorking via GooFuzz
 """
 
-from reNgine.utilities.core.file import join_path, delete_file, file_exists
-from typing import List, Dict, Any, Optional, Union
+from typing import Any, Dict, List, Optional
 
-import requests
 from bs4 import BeautifulSoup
 from celery.utils.log import get_task_logger
+import requests
 
 from dashboard.models import NetlasAPIKey, OpenAiAPIKey
+from reNgine.utilities.core.file import delete_file, file_exists, join_path
 
 
 logger = get_task_logger(__name__)
@@ -51,7 +51,7 @@ def reverse_whois(lookup_keyword: str) -> List[Dict[str, str]]:
         >>> # Returns: [{"name": "example.com", "created_on": "2020-01-01"}, ...]
     """
     domains = []
-    
+
     try:
         url = f"https://viewdns.info:443/reversewhois/?q={lookup_keyword}"
         headers = {
@@ -69,36 +69,33 @@ def reverse_whois(lookup_keyword: str) -> List[Dict[str, str]]:
             "Accept-Encoding": "gzip, deflate",
             "Accept-Language": "en-GB,en-US;q=0.9,en;q=0.8",
         }
-        
+
         response = requests.get(url, headers=headers, timeout=30)
         response.raise_for_status()
-        
+
         soup = BeautifulSoup(response.content, "lxml")
         table = soup.find("table", {"border": "1"})
-        
+
         if not table:
             logger.warning(f"No reverse WHOIS data found for keyword: {lookup_keyword}")
             return domains
-        
+
         for row in table.find_all("tr"):
             cells = row.find_all("td")
             if len(cells) >= 2:
                 dom = cells[0].get_text(strip=True)
                 created_on = cells[1].get_text(strip=True)
-                
+
                 if dom == "Domain Name":
                     continue
-                    
-                domains.append({
-                    "name": dom,
-                    "created_on": created_on
-                })
-                
+
+                domains.append({"name": dom, "created_on": created_on})
+
     except requests.RequestException as e:
         logger.error(f"Request failed for reverse WHOIS lookup '{lookup_keyword}': {e}")
     except Exception as e:
         logger.error(f"Error in reverse WHOIS lookup for '{lookup_keyword}': {e}")
-    
+
     return domains
 
 
@@ -117,7 +114,7 @@ def get_domain_historical_ip_address(domain: str) -> List[Dict[str, str]]:
         >>> # Returns: [{"ip": "1.2.3.4", "location": "US", "owner": "Example Corp", "last_seen": "2023-01-01"}, ...]
     """
     ips = []
-    
+
     try:
         url = f"https://viewdns.info/iphistory/?domain={domain}"
         headers = {
@@ -135,17 +132,17 @@ def get_domain_historical_ip_address(domain: str) -> List[Dict[str, str]]:
             "Accept-Encoding": "gzip, deflate",
             "Accept-Language": "en-GB,en-US;q=0.9,en;q=0.8",
         }
-        
+
         response = requests.get(url, headers=headers, timeout=30)
         response.raise_for_status()
-        
+
         soup = BeautifulSoup(response.content, "lxml")
         table = soup.find("table", {"border": "1"})
-        
+
         if not table:
             logger.warning(f"No historical IP data found for domain: {domain}")
             return ips
-        
+
         for row in table.find_all("tr"):
             cells = row.find_all("td")
             if len(cells) >= 4:
@@ -153,22 +150,24 @@ def get_domain_historical_ip_address(domain: str) -> List[Dict[str, str]]:
                 location = cells[1].get_text(strip=True)
                 owner = cells[2].get_text(strip=True)
                 last_seen = cells[3].get_text(strip=True)
-                
+
                 if ip == "IP Address":
                     continue
-                    
-                ips.append({
-                    "ip": ip,
-                    "location": location,
-                    "owner": owner,
-                    "last_seen": last_seen,
-                })
-                
+
+                ips.append(
+                    {
+                        "ip": ip,
+                        "location": location,
+                        "owner": owner,
+                        "last_seen": last_seen,
+                    }
+                )
+
     except requests.RequestException as e:
         logger.error(f"Request failed for historical IP lookup '{domain}': {e}")
     except Exception as e:
         logger.error(f"Error in historical IP lookup for '{domain}': {e}")
-    
+
     return ips
 
 
@@ -205,7 +204,7 @@ def get_netlas_key() -> Optional[NetlasAPIKey]:
 def get_associated_domains(keywords: List[str]) -> List[str]:
     """
     Get associated domains based on keywords.
-    
+
     TODO: Implement associated domains discovery logic.
 
     Args:
@@ -251,12 +250,12 @@ def get_and_save_dork_results(
         ...     "/tmp/results",
         ...     "filetype:pdf",
         ...     lookup_keywords="confidential,secret",
-        ...     page_count=3
+        ...     page_count=3,
         ... )
         >>> # Returns: {"results": ["url1", "url2"], "error": None}
     """
     results = []
-    
+
     try:
         from reNgine.definitions import GOFUZZ_EXEC_PATH
         from reNgine.utilities.command import run_command
@@ -296,12 +295,12 @@ def get_and_save_dork_results(
             return {"results": results, "error": error_msg}
 
         # Process results
-        with open(output_file, 'r', encoding='utf-8') as f:
+        with open(output_file, "r", encoding="utf-8") as f:
             for line in f:
                 url = line.strip()
                 if url:
                     results.append(url)
-                    
+
                     # Save dork to database
                     dork, created = Dork.objects.get_or_create(type=dork_type, url=url)
                     if scan_history:

@@ -58,6 +58,7 @@
             </a>
             <div class="dropdown-menu" aria-labelledby="topnav-scanengine">
               {% if user|can:'modify_scan_configurations' %}
+              <a href="{% url 'secator_workflow_list' %}" class="dropdown-item">Workflows</a>
               <a href="{% url 'scan_engine_index' %}" class="dropdown-item">Scan Engines</a>
               {% endif %}
               {% if user|can:'modify_wordlists' %}

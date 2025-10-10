@@ -1,3 +1,5 @@
+import os
+
 from django.db import models
 import yaml
 
@@ -259,3 +261,147 @@ class InstalledExternalTool(models.Model):
 
     def __str__(self):
         return self.name
+
+
+# Define choices for workflow modes
+WORKFLOW_MODE_CHOICES = [
+    ("legacy", "Legacy YAML (ancien système)"),
+    ("secator", "Secator Workflow (nouveau système)"),
+]
+
+# Define choices for predefined Secator workflows
+SECATOR_WORKFLOW_CHOICES = [
+    ("bug_bounty_basic", "Bug Bounty Basic"),
+    ("internal_network_basic", "Internal Network Basic"),
+    ("vulnerability_assessment", "Vulnerability Assessment"),
+    ("custom", "Custom Workflow"),
+]
+
+# Define choices for Secator built-in workflows
+SECATOR_BUILTIN_WORKFLOW_CHOICES = [
+    ("cidr_recon", "CIDR Reconnaissance"),
+    ("code_scan", "Code Vulnerability Scan"),
+    ("host_recon", "Host Reconnaissance"),
+    ("subdomain_recon", "Subdomain Discovery"),
+    ("url_bypass", "URL Bypass"),
+    ("url_crawl", "URL Crawl (Fast)"),
+    ("url_dirsearch", "URL Directory Search"),
+    ("url_fuzz", "URL Fuzz (Slow)"),
+    ("url_params_fuzz", "URL Parameters Fuzz"),
+    ("url_vuln", "URL Vulnerability Scan"),
+    ("user_hunt", "User Account Search"),
+    ("wordpress", "WordPress Vulnerability Scan"),
+]
+
+
+class ScanEngine(models.Model):
+    """
+    Represents a scan engine configuration, supporting both legacy YAML
+    and new Secator workflow definitions for a phased migration.
+    """
+
+    id = models.AutoField(primary_key=True)
+    name = models.CharField(max_length=200, unique=True)
+    description = models.TextField(blank=True, null=True)
+    default_engine = models.BooleanField(null=True, default=False)
+
+    # Legacy system fields
+    yaml_config = models.TextField(blank=True, null=True, help_text="Legacy YAML configuration for the scan engine.")
+
+    # New Secator system fields
+    secator_workflow_name = models.CharField(
+        max_length=100,
+        choices=SECATOR_WORKFLOW_CHOICES,
+        blank=True,
+        null=True,
+        help_text="Name of the predefined Secator workflow to use.",
+    )
+    secator_builtin_workflow = models.CharField(
+        max_length=100,
+        choices=SECATOR_BUILTIN_WORKFLOW_CHOICES,
+        blank=True,
+        null=True,
+        help_text="Name of the Secator built-in workflow to use.",
+    )
+    custom_secator_workflow_file = models.FileField(
+        upload_to="secator_workflows/", blank=True, null=True, help_text="Upload a custom Secator workflow YAML file."
+    )
+
+    # Mode of operation for the scan engine
+    workflow_mode = models.CharField(
+        max_length=20,
+        choices=WORKFLOW_MODE_CHOICES,
+        default="legacy",
+        help_text="Determines whether to use legacy YAML or Secator workflow.",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Scan Engine"
+        verbose_name_plural = "Scan Engines"
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+    def get_workflow_config(self):
+        """
+        Returns the appropriate workflow configuration based on the workflow_mode.
+
+        Returns:
+            A dictionary representing the workflow configuration.
+
+        Raises:
+            ValueError: If no valid workflow configuration is found.
+        """
+        if self.workflow_mode == "secator":
+            # Check for built-in workflow first
+            if self.secator_builtin_workflow:
+                return {
+                    "type": "builtin",
+                    "workflow_id": self.secator_builtin_workflow,
+                    "name": self.name,
+                    "description": self.description,
+                }
+            # Check for custom workflow file
+            elif self.secator_workflow_name == "custom" and self.custom_secator_workflow_file:
+                return self._load_secator_workflow_from_file(self.custom_secator_workflow_file.path)
+            # Check for predefined workflow
+            elif self.secator_workflow_name:
+                workflow_path = os.path.join(
+                    os.path.dirname(os.path.abspath(__file__)),
+                    "..",
+                    "config",
+                    "secator_workflows",
+                    f"{self.secator_workflow_name}.yaml",
+                )
+                return self._load_secator_workflow_from_file(workflow_path)
+            else:
+                raise ValueError("Secator workflow mode selected but no workflow specified.")
+        elif self.workflow_mode == "legacy":
+            if self.yaml_config:
+                return yaml.safe_load(self.yaml_config)
+            else:
+                raise ValueError("Legacy workflow mode selected but no YAML configuration found.")
+        else:
+            raise ValueError(f"Unknown workflow mode: {self.workflow_mode}")
+
+    def _load_secator_workflow_from_file(self, file_path):
+        """Helper to load Secator workflow from a given file path."""
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"Secator workflow file not found: {file_path}")
+        with open(file_path, "r") as f:
+            return yaml.safe_load(f)
+
+    def save(self, *args, **kwargs):
+        """Override save to handle default engine logic and ensure consistency."""
+        # Ensure that if a custom file is uploaded, the secator_workflow_name is set to 'custom'
+        if self.custom_secator_workflow_file and self.secator_workflow_name != "custom":
+            self.secator_workflow_name = "custom"
+        elif not self.custom_secator_workflow_file and self.secator_workflow_name == "custom":
+            # If custom is selected but no file, reset to None or default
+            self.secator_workflow_name = None  # Or a sensible default like 'bug_bounty_basic'
+
+        super().save(*args, **kwargs)

@@ -6,32 +6,26 @@ and executing them using various tools and frameworks.
 """
 
 import subprocess
-from typing import List, Dict, Any, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
-from reNgine.utilities.distributed.utilities import get_distributed_utilities
-from reNgine.utilities.distributed.command import DistributedCommandBuilder
-from reNgine.utilities.core.validation import is_valid_url
 from reNgine.utilities.core.data import remove_ansi_sequences
+from reNgine.utilities.distributed.command import DistributedCommandBuilder
+from reNgine.utilities.distributed.utilities import get_distributed_utilities
 
 
 class CommandProcessor:
     """Command processor using distributed utilities"""
-    
+
     def __init__(self, config=None):
         self.distributed_utils = get_distributed_utilities(config)
         self.command_processor = self.distributed_utils.get_command_processor()
-    
+
     def build_nmap_command(
-        self,
-        target: str,
-        ports: List[int] = None,
-        scan_type: str = "syn",
-        output_file: str = None,
-        **kwargs
+        self, target: str, ports: List[int] = None, scan_type: str = "syn", output_file: str = None, **kwargs
     ) -> str:
         """Build nmap command using distributed command builder"""
         command_builder = DistributedCommandBuilder("nmap")
-        
+
         # Add scan type
         if scan_type == "syn":
             command_builder.add_flag("-sS")
@@ -39,177 +33,134 @@ class CommandProcessor:
             command_builder.add_flag("-sT")
         elif scan_type == "udp":
             command_builder.add_flag("-sU")
-        
+
         # Add ports
         if ports:
             port_list = ",".join(map(str, ports))
             command_builder.add_option("-p", port_list)
-        
+
         # Add output file
         if output_file:
             command_builder.add_option("-oN", output_file)
-        
+
         # Add target
         command_builder.add_argument(target)
-        
+
         return command_builder.build()
-    
+
     def build_httpx_command(
-        self,
-        urls: List[str],
-        threads: int = 10,
-        timeout: int = 10,
-        output_file: str = None,
-        **kwargs
+        self, urls: List[str], threads: int = 10, timeout: int = 10, output_file: str = None, **kwargs
     ) -> str:
         """Build httpx command using distributed command builder"""
         command_builder = DistributedCommandBuilder("httpx")
-        
+
         # Add flags
         command_builder.add_flag("-silent")
         command_builder.add_flag("-json")
-        
+
         # Add options
         command_builder.add_option("-threads", threads)
         command_builder.add_option("-timeout", timeout)
-        
+
         # Add output file
         if output_file:
             command_builder.add_option("-o", output_file)
-        
+
         # Add URLs
         for url in urls:
             command_builder.add_argument(url)
-        
+
         return command_builder.build()
-    
-    def build_subfinder_command(
-        self,
-        domain: str,
-        output_file: str = None,
-        threads: int = 10,
-        **kwargs
-    ) -> str:
+
+    def build_subfinder_command(self, domain: str, output_file: str = None, threads: int = 10, **kwargs) -> str:
         """Build subfinder command using distributed command builder"""
         command_builder = DistributedCommandBuilder("subfinder")
-        
+
         # Add options
         command_builder.add_option("-d", domain)
         command_builder.add_option("-t", threads)
-        
+
         # Add output file
         if output_file:
             command_builder.add_option("-o", output_file)
-        
+
         return command_builder.build()
-    
-    def execute_command(
-        self,
-        command: str,
-        timeout: int = 300,
-        **kwargs
-    ) -> Dict[str, Any]:
+
+    def execute_command(self, command: str, timeout: int = 300, **kwargs) -> Dict[str, Any]:
         """Execute a single command using distributed command processor"""
         try:
             result = self.command_processor.execute_commands_batch(
                 [command], "single_command", timeout=timeout, **kwargs
             )
-            
+
             if result.is_successful:
                 return {
                     "success": True,
                     "command": command,
                     "output": result.data.get("output", ""),
-                    "execution_time": result.processing_time
+                    "execution_time": result.processing_time,
                 }
             else:
                 return {
                     "success": False,
                     "command": command,
                     "error": result.errors[0] if result.errors else "Unknown error",
-                    "execution_time": result.processing_time
+                    "execution_time": result.processing_time,
                 }
-                
+
         except Exception as e:
-            return {
-                "success": False,
-                "command": command,
-                "error": str(e),
-                "execution_time": 0
-            }
-    
+            return {"success": False, "command": command, "error": str(e), "execution_time": 0}
+
     def execute_commands_batch(
-        self,
-        commands: List[str],
-        batch_id: str = "batch",
-        timeout: int = 300,
-        **kwargs
+        self, commands: List[str], batch_id: str = "batch", timeout: int = 300, **kwargs
     ) -> Dict[str, Any]:
         """Execute multiple commands using distributed command processor"""
         try:
-            result = self.command_processor.execute_commands_batch(
-                commands, batch_id, timeout=timeout, **kwargs
-            )
-            
+            result = self.command_processor.execute_commands_batch(commands, batch_id, timeout=timeout, **kwargs)
+
             if result.is_successful:
                 return {
                     "success": True,
                     "commands": commands,
                     "results": result.data.get("results", []),
-                    "execution_time": result.processing_time
+                    "execution_time": result.processing_time,
                 }
             else:
                 return {
                     "success": False,
                     "commands": commands,
                     "error": result.errors[0] if result.errors else "Unknown error",
-                    "execution_time": result.processing_time
+                    "execution_time": result.processing_time,
                 }
-                
+
         except Exception as e:
-            return {
-                "success": False,
-                "commands": commands,
-                "error": str(e),
-                "execution_time": 0
-            }
+            return {"success": False, "commands": commands, "error": str(e), "execution_time": 0}
 
 
 def run_command(
-    cmd: str,
-    shell: bool = True,
-    timeout: int = 300,
-    remove_ansi_sequence: bool = False,
-    **kwargs
+    cmd: str, shell: bool = True, timeout: int = 300, remove_ansi_sequence: bool = False, **kwargs
 ) -> Tuple[int, str]:
     """
     Run a command and return exit code and output.
-    
+
     Args:
         cmd: Command to execute
         shell: Whether to use shell execution
         timeout: Command timeout in seconds
         remove_ansi_sequence: Whether to remove ANSI escape sequences
-        
+
     Returns:
         Tuple of (exit_code, output)
     """
     try:
-        result = subprocess.run(
-            cmd,
-            shell=shell,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            **kwargs
-        )
-        
+        result = subprocess.run(cmd, shell=shell, capture_output=True, text=True, timeout=timeout, **kwargs)
+
         output = result.stdout
         if remove_ansi_sequence:
             output = remove_ansi_sequences(output)
-        
+
         return result.returncode, output
-        
+
     except subprocess.TimeoutExpired:
         return -1, f"Command timed out after {timeout} seconds"
     except Exception as e:
@@ -219,11 +170,11 @@ def run_command(
 def generate_header_param(custom_header: str, tool: str) -> str:
     """
     Generate header parameter for different tools.
-    
+
     Args:
         custom_header: Custom header string
         tool: Tool name (gospider, hakrawler, etc.)
-        
+
     Returns:
         Formatted header parameter
     """
@@ -236,46 +187,39 @@ def generate_header_param(custom_header: str, tool: str) -> str:
         return f' -H "{custom_header}"'
 
 
-def validate_command_input(
-    command: str,
-    required_tools: List[str] = None
-) -> Dict[str, Any]:
+def validate_command_input(command: str, required_tools: List[str] = None) -> Dict[str, Any]:
     """
     Validate command input parameters.
-    
+
     Args:
         command: Command to validate
         required_tools: List of required tools
-        
+
     Returns:
         Validation result
     """
-    validation_result = {
-        "valid": True,
-        "errors": [],
-        "warnings": []
-    }
-    
+    validation_result = {"valid": True, "errors": [], "warnings": []}
+
     if not command or not isinstance(command, str):
         validation_result["valid"] = False
         validation_result["errors"].append("Command must be a non-empty string")
         return validation_result
-    
+
     if required_tools:
         for tool in required_tools:
             if tool not in command:
                 validation_result["warnings"].append(f"Tool '{tool}' not found in command")
-    
+
     return validation_result
 
 
 def get_command_statistics(results: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
     Get statistics from command execution results.
-    
+
     Args:
         results: List of command execution results
-        
+
     Returns:
         Statistics dictionary
     """
@@ -285,22 +229,22 @@ def get_command_statistics(results: List[Dict[str, Any]]) -> Dict[str, Any]:
             "successful_commands": 0,
             "failed_commands": 0,
             "success_rate": 0,
-            "total_execution_time": 0
+            "total_execution_time": 0,
         }
-    
+
     total_commands = len(results)
     successful_commands = sum(1 for r in results if r.get("success", False))
     failed_commands = total_commands - successful_commands
     total_execution_time = sum(r.get("execution_time", 0) for r in results)
-    
+
     success_rate = (successful_commands / total_commands * 100) if total_commands > 0 else 0
-    
+
     return {
         "total_commands": total_commands,
         "successful_commands": successful_commands,
         "failed_commands": failed_commands,
         "success_rate": success_rate,
-        "total_execution_time": total_execution_time
+        "total_execution_time": total_execution_time,
     }
 
 
@@ -320,8 +264,9 @@ def decode_bytes_robust(data, primary_encoding="utf-8", fallback_encoding="latin
         str: Decoded string
     """
     import logging
+
     logger = logging.getLogger(__name__)
-    
+
     if not data:
         return ""
 
@@ -351,12 +296,14 @@ def get_dns_command(scan_id, cmd):
         str: The command string with DNS arguments injected if applicable, otherwise the original command.
     """
     import logging
-    import shlex
     import os
+    import shlex
+
     logger = logging.getLogger(__name__)
-    
+
     try:
         from startScan.models import ScanHistory
+
         scan = ScanHistory.objects.get(pk=scan_id)
     except Exception as e:
         logger.warning(f"Error retrieving scan {scan_id}: {e}. DNS wrapper not applied.")
@@ -409,17 +356,18 @@ def get_dns_command(scan_id, cmd):
 def build_command_with_dns(tool_name, args, domain=None, dns_servers=None):
     """
     Build command with DNS server arguments for specific tools.
-    
+
     Args:
         tool_name (str): Name of the tool
         args (list): Original command arguments
         domain: Domain object with DNS servers (optional)
         dns_servers: List of DNS servers (optional)
-        
+
     Returns:
         list: Command parts with DNS arguments added
     """
     import logging
+
     logger = logging.getLogger(__name__)
 
     # Get DNS servers from domain or direct parameter
@@ -442,13 +390,13 @@ def build_command_with_dns(tool_name, args, domain=None, dns_servers=None):
 
     # Tool-specific DNS argument patterns
     dns_patterns = {
-        'nmap': ['--dns-servers', ','.join(dns_servers)],
-        'httpx': ['-dns', ','.join(dns_servers)],
-        'subfinder': ['-r', ','.join(dns_servers)],
-        'amass': ['-dns', ','.join(dns_servers)],
-        'dnsrecon': ['-s', ','.join(dns_servers)],
-        'dig': [f'@{dns_servers[0]}'] if dns_servers else [],
-        'nslookup': [dns_servers[0]] if dns_servers else [],
+        "nmap": ["--dns-servers", ",".join(dns_servers)],
+        "httpx": ["-dns", ",".join(dns_servers)],
+        "subfinder": ["-r", ",".join(dns_servers)],
+        "amass": ["-dns", ",".join(dns_servers)],
+        "dnsrecon": ["-s", ",".join(dns_servers)],
+        "dig": [f"@{dns_servers[0]}"] if dns_servers else [],
+        "nslookup": [dns_servers[0]] if dns_servers else [],
     }
 
     if tool_name in dns_patterns:

@@ -1,0 +1,448 @@
+{% extends "base/base.html" %}
+{% load static %}
+{% load permission_tags %}
+
+{% block title %}Create New Workflow - Secator Workflow{% endblock %}
+
+{% block breadcrumb_title %}
+<li class="breadcrumb-item"><a href="{% url 'scan_engine_index' %}">Scan Engine</a></li>
+<li class="breadcrumb-item"><a href="{% url 'secator_workflow_list' %}">Workflows</a></li>
+<li class="breadcrumb-item active">Create</li>
+{% endblock %}
+
+{% block page_title %}Create New Workflow{% endblock %}
+
+{% block custom_js_css_link %}
+<style>
+.template-card {
+    transition: transform 0.2s ease-in-out;
+    border: 1px solid #e3e6f0;
+    border-radius: 8px;
+    overflow: hidden;
+    cursor: pointer;
+}
+.template-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+.template-card.selected {
+    border-color: #4e73df;
+    box-shadow: 0 0 0 2px rgba(78, 115, 223, 0.25);
+}
+.template-preview {
+    background: #f8f9fc;
+    border: 1px solid #e3e6f0;
+    border-radius: 6px;
+    padding: 20px;
+    margin-top: 20px;
+    display: none;
+}
+.template-preview.show {
+    display: block;
+}
+.workflow-form {
+    background: white;
+    border: 1px solid #e3e6f0;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+.step-indicator {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 30px;
+}
+.step {
+    display: flex;
+    align-items: center;
+    margin: 0 20px;
+}
+.step-number {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: #e3e6f0;
+    color: #858796;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    margin-right: 10px;
+}
+.step.active .step-number {
+    background: #4e73df;
+    color: white;
+}
+.step.completed .step-number {
+    background: #28a745;
+    color: white;
+}
+.step-label {
+    font-weight: 500;
+    color: #5a5c69;
+}
+.step.active .step-label {
+    color: #4e73df;
+}
+.step.completed .step-label {
+    color: #28a745;
+}
+</style>
+{% endblock %}
+
+{% block main_content %}
+<div class="row">
+    <div class="col-12">
+        <!-- Step Indicator -->
+        <div class="step-indicator">
+            <div class="step active" id="step1">
+                <div class="step-number">1</div>
+                <div class="step-label">Choose Template</div>
+            </div>
+            <div class="step" id="step2">
+                <div class="step-number">2</div>
+                <div class="step-label">Configure Workflow</div>
+            </div>
+            <div class="step" id="step3">
+                <div class="step-number">3</div>
+                <div class="step-label">Review & Create</div>
+            </div>
+        </div>
+
+        <form method="post" id="workflowCreateForm">
+            {% csrf_token %}
+            
+            <!-- Step 1: Template Selection -->
+            <div class="workflow-form" id="step1Form">
+                <h4>Choose a Template</h4>
+                <p class="text-muted">Select a template to start creating your workflow, or start from scratch.</p>
+                
+                <div class="row">
+                    <!-- Blank Template -->
+                    <div class="col-md-4 mb-3">
+                        <div class="card template-card" data-template="blank">
+                            <div class="card-body text-center">
+                                <i class="fe-file-plus" style="font-size: 3rem; color: #6c757d;"></i>
+                                <h5 class="mt-3">Blank Workflow</h5>
+                                <p class="text-muted">Start from scratch with an empty workflow</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Built-in Templates -->
+                    {% for builtin in builtin_workflows %}
+                    <div class="col-md-4 mb-3">
+                        <div class="card template-card" data-template="builtin" data-builtin-id="{{ builtin.id }}">
+                            <div class="card-body text-center">
+                                <i class="fe-cpu" style="font-size: 3rem; color: #4e73df;"></i>
+                                <h5 class="mt-3">{{ builtin.name }}</h5>
+                                <p class="text-muted">{{ builtin.description }}</p>
+                                <div class="mt-2">
+                                    <span class="badge bg-info">{{ builtin.input_type }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                    
+                    <!-- Predefined Templates -->
+                    <div class="col-md-4 mb-3">
+                        <div class="card template-card" data-template="subdomain_discovery">
+                            <div class="card-body text-center">
+                                <i class="fe-globe" style="font-size: 3rem; color: #28a745;"></i>
+                                <h5 class="mt-3">Subdomain Discovery</h5>
+                                <p class="text-muted">Discover subdomains using multiple tools</p>
+                                <div class="mt-2">
+                                    <span class="badge bg-success">domain</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-4 mb-3">
+                        <div class="card template-card" data-template="url_discovery">
+                            <div class="card-body text-center">
+                                <i class="fe-link" style="font-size: 3rem; color: #ffc107;"></i>
+                                <h5 class="mt-3">URL Discovery</h5>
+                                <p class="text-muted">Discover URLs and endpoints</p>
+                                <div class="mt-2">
+                                    <span class="badge bg-warning">url</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-4 mb-3">
+                        <div class="card template-card" data-template="vulnerability_scan">
+                            <div class="card-body text-center">
+                                <i class="fe-shield" style="font-size: 3rem; color: #dc3545;"></i>
+                                <h5 class="mt-3">Vulnerability Scan</h5>
+                                <p class="text-muted">Scan for vulnerabilities</p>
+                                <div class="mt-2">
+                                    <span class="badge bg-danger">url</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="text-end mt-3">
+                    <button type="button" class="btn btn-primary" id="nextStep1" disabled>
+                        Next <i class="fe-arrow-right ms-1"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Step 2: Configuration -->
+            <div class="workflow-form" id="step2Form" style="display: none;">
+                <h4>Configure Workflow</h4>
+                <p class="text-muted">Provide basic information for your workflow.</p>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="workflowName" class="form-label">Workflow Name *</label>
+                            <input type="text" class="form-control" id="workflowName" name="workflow_name" required>
+                            <div class="form-text">A unique name for your workflow</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="workflowDescription" class="form-label">Description</label>
+                            <textarea class="form-control" id="workflowDescription" name="workflow_description" rows="3"></textarea>
+                            <div class="form-text">Describe what this workflow does</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="inputTypes" class="form-label">Input Types</label>
+                            <select class="form-select" id="inputTypes" name="input_types" multiple>
+                                <option value="domain">Domain</option>
+                                <option value="url">URL</option>
+                                <option value="ip">IP Address</option>
+                                <option value="cidr">CIDR Range</option>
+                                <option value="host">Host</option>
+                                <option value="path">File Path</option>
+                            </select>
+                            <div class="form-text">What types of input this workflow accepts</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="workflowTags" class="form-label">Tags</label>
+                            <input type="text" class="form-control" id="workflowTags" name="workflow_tags" placeholder="reconnaissance, web, security">
+                            <div class="form-text">Comma-separated tags for categorization</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Template-specific configuration -->
+                <div id="templateConfig" style="display: none;">
+                    <h5>Template Configuration</h5>
+                    <div id="templateConfigContent"></div>
+                </div>
+                
+                <div class="d-flex justify-content-between mt-3">
+                    <button type="button" class="btn btn-secondary" id="prevStep2">
+                        <i class="fe-arrow-left me-1"></i> Previous
+                    </button>
+                    <button type="button" class="btn btn-primary" id="nextStep2">
+                        Next <i class="fe-arrow-right ms-1"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Step 3: Review -->
+            <div class="workflow-form" id="step3Form" style="display: none;">
+                <h4>Review & Create</h4>
+                <p class="text-muted">Review your workflow configuration before creating it.</p>
+                
+                <div class="template-preview" id="workflowPreview">
+                    <h5>Workflow Preview</h5>
+                    <div id="previewContent"></div>
+                </div>
+                
+                <div class="d-flex justify-content-between mt-3">
+                    <button type="button" class="btn btn-secondary" id="prevStep3">
+                        <i class="fe-arrow-left me-1"></i> Previous
+                    </button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="fe-check me-1"></i> Create Workflow
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block custom_js %}
+<script>
+$(document).ready(function() {
+    let selectedTemplate = null;
+    let selectedBuiltinId = null;
+    let currentStep = 1;
+    
+    // Template selection
+    $('.template-card').click(function() {
+        $('.template-card').removeClass('selected');
+        $(this).addClass('selected');
+        
+        selectedTemplate = $(this).data('template');
+        selectedBuiltinId = $(this).data('builtin-id');
+        
+        $('#nextStep1').prop('disabled', false);
+    });
+    
+    // Step navigation
+    $('#nextStep1').click(function() {
+        if (selectedTemplate) {
+            showStep(2);
+            loadTemplateConfig();
+        }
+    });
+    
+    $('#prevStep2').click(function() {
+        showStep(1);
+    });
+    
+    $('#nextStep2').click(function() {
+        if (validateStep2()) {
+            showStep(3);
+            generatePreview();
+        }
+    });
+    
+    $('#prevStep3').click(function() {
+        showStep(2);
+    });
+    
+    // Form validation
+    function validateStep2() {
+        const name = $('#workflowName').val().trim();
+        if (!name) {
+            alert('Workflow name is required');
+            return false;
+        }
+        return true;
+    }
+    
+    // Show step
+    function showStep(step) {
+        // Hide all forms
+        $('.workflow-form').hide();
+        
+        // Update step indicators
+        $('.step').removeClass('active completed');
+        for (let i = 1; i <= step; i++) {
+            if (i < step) {
+                $(`#step${i}`).addClass('completed');
+            } else {
+                $(`#step${i}`).addClass('active');
+            }
+        }
+        
+        // Show current form
+        $(`#step${step}Form`).show();
+        currentStep = step;
+    }
+    
+    // Load template configuration
+    function loadTemplateConfig() {
+        const configDiv = $('#templateConfig');
+        const contentDiv = $('#templateConfigContent');
+        
+        if (selectedTemplate === 'builtin' && selectedBuiltinId) {
+            // Load built-in template configuration
+            configDiv.show();
+            contentDiv.html(`
+                <div class="alert alert-info">
+                    <h6>Built-in Template: ${selectedBuiltinId}</h6>
+                    <p>This template will be used as a base for your workflow. You can modify it after creation.</p>
+                </div>
+            `);
+        } else if (selectedTemplate !== 'blank') {
+            // Load predefined template configuration
+            configDiv.show();
+            contentDiv.html(`
+                <div class="alert alert-success">
+                    <h6>Predefined Template: ${selectedTemplate}</h6>
+                    <p>This template includes common tools and configurations for ${selectedTemplate.replace('_', ' ')}.</p>
+                </div>
+            `);
+        } else {
+            configDiv.hide();
+        }
+    }
+    
+    // Generate preview
+    function generatePreview() {
+        const name = $('#workflowName').val();
+        const description = $('#workflowDescription').val();
+        const inputTypes = $('#inputTypes').val() || [];
+        const tags = $('#workflowTags').val().split(',').map(t => t.trim()).filter(t => t);
+        
+        let previewHtml = `
+            <div class="row">
+                <div class="col-md-6">
+                    <h6>Basic Information</h6>
+                    <p><strong>Name:</strong> ${name}</p>
+                    <p><strong>Description:</strong> ${description || 'No description'}</p>
+                    <p><strong>Template:</strong> ${selectedTemplate}</p>
+                </div>
+                <div class="col-md-6">
+                    <h6>Configuration</h6>
+                    <p><strong>Input Types:</strong> ${inputTypes.join(', ') || 'Not specified'}</p>
+                    <p><strong>Tags:</strong> ${tags.join(', ') || 'None'}</p>
+                </div>
+            </div>
+        `;
+        
+        if (selectedTemplate === 'builtin' && selectedBuiltinId) {
+            previewHtml += `
+                <div class="mt-3">
+                    <h6>Built-in Template Details</h6>
+                    <p>This workflow will be based on the <strong>${selectedBuiltinId}</strong> built-in template.</p>
+                </div>
+            `;
+        } else if (selectedTemplate !== 'blank') {
+            previewHtml += `
+                <div class="mt-3">
+                    <h6>Template Details</h6>
+                    <p>This workflow will include predefined tasks for <strong>${selectedTemplate.replace('_', ' ')}</strong>.</p>
+                </div>
+            `;
+        }
+        
+        $('#previewContent').html(previewHtml);
+        $('#workflowPreview').addClass('show');
+    }
+    
+    // Form submission
+    $('#workflowCreateForm').submit(function(e) {
+        if (!validateStep2()) {
+            e.preventDefault();
+            return false;
+        }
+        
+        // Add hidden fields for template selection
+        $('<input>').attr({
+            type: 'hidden',
+            name: 'template_type',
+            value: selectedTemplate
+        }).appendTo(this);
+        
+        if (selectedBuiltinId) {
+            $('<input>').attr({
+                type: 'hidden',
+                name: 'builtin_template',
+                value: selectedBuiltinId
+            }).appendTo(this);
+        }
+    });
+});
+</script>
+{% endblock %}

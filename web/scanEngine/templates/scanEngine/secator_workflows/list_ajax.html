@@ -1,0 +1,250 @@
+{% extends "base/base.html" %}
+{% load static %}
+{% load permission_tags %}
+
+{% block title %}Secator Workflows - reNgine{% endblock %}
+
+{% block breadcrumb_title %}
+<li class="breadcrumb-item"><a href="{% url 'scan_engine_index' %}">Scan Engine</a></li>
+<li class="breadcrumb-item active">Workflows</li>
+{% endblock %}
+
+{% block page_title %}Secator Workflows{% endblock %}
+
+{% block custom_js_css_link %}
+<link href="{% static 'plugins/datatable/global.css' %}" rel="stylesheet" type="text/css">
+<script src="{% static 'custom/ajax_workflow_manager.js' %}"></script>
+<style>
+.workflow-card {
+    transition: transform 0.2s ease-in-out;
+    border: 1px solid #e3e6f0;
+    border-radius: 8px;
+    overflow: hidden;
+}
+.workflow-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+.workflow-type-badge {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    font-size: 0.75rem;
+    padding: 2px 8px;
+}
+.workflow-stats {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 20px;
+}
+.stat-card {
+    background: #f8f9fc;
+    border: 1px solid #e3e6f0;
+    border-radius: 6px;
+    padding: 15px;
+    text-align: center;
+    flex: 1;
+    margin: 0 5px;
+}
+.stat-number {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #4e73df;
+}
+.stat-label {
+    font-size: 0.875rem;
+    color: #5a5c69;
+    margin-top: 5px;
+}
+.filter-tabs {
+    margin-bottom: 20px;
+}
+.filter-tab {
+    padding: 10px 20px;
+    border: 1px solid #e3e6f0;
+    border-radius: 6px;
+    margin-right: 10px;
+    background: white;
+    color: #5a5c69;
+    text-decoration: none;
+    display: inline-block;
+    cursor: pointer;
+}
+.filter-tab.active {
+    background: #4e73df;
+    color: white;
+    border-color: #4e73df;
+}
+.loading {
+    opacity: 0.6;
+    pointer-events: none;
+}
+.count {
+    background-color: #6c757d;
+    color: white;
+    border-radius: 10px;
+    padding: 2px 6px;
+    font-size: 0.75em;
+    margin-left: 5px;
+}
+.filter-tab.active .count {
+    background-color: #fff;
+    color: #4e73df;
+}
+.workflow-tools {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 10px;
+}
+.tool-badge {
+    background: #e3e6f0;
+    color: #5a5c69;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+}
+</style>
+{% endblock %}
+
+{% block main_content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <h4 class="header-title mb-3">Manage Secator Workflows</h4>
+
+                <!-- Workflow Statistics -->
+                <div class="workflow-stats">
+                    <div class="stat-card">
+                        <div class="stat-number" id="total-count">0</div>
+                        <div class="stat-label">Total Workflows</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="custom-count">0</div>
+                        <div class="stat-label">Custom Workflows</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="builtin-count">0</div>
+                        <div class="stat-label">Built-in Workflows</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="engines-count">0</div>
+                        <div class="stat-label">Engine Workflows</div>
+                    </div>
+                </div>
+
+                <!-- Filter Tabs -->
+                <div class="filter-tabs">
+                    <a href="#" class="filter-tab active" data-type="all">All <span class="count">0</span></a>
+                    <a href="#" class="filter-tab" data-type="custom">Custom <span class="count">0</span></a>
+                    <a href="#" class="filter-tab" data-type="builtin">Built-in <span class="count">0</span></a>
+                    <a href="#" class="filter-tab" data-type="engines">Engines <span class="count">0</span></a>
+                </div>
+
+                <!-- Search and Actions -->
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <div class="d-flex">
+                            <input type="text" id="workflow-search" class="form-control me-2" placeholder="Search workflows..." value="{{ search_query }}">
+                            <button type="button" id="refresh-workflows" class="btn btn-outline-secondary">
+                                <i class="fe-refresh-cw"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="col-md-6 text-end">
+                        {% if user|can:'modify_scan_configurations' %}
+                        <a href="{% url 'secator_workflow_create' %}" class="btn btn-success">
+                            <i class="fe-plus me-1"></i> Create Workflow
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Loading Indicator -->
+                <div id="workflows-loading" class="text-center mb-3" style="display: none;">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2 text-muted">Chargement des workflows...</p>
+                </div>
+
+                <!-- Workflows Grid -->
+                <div id="workflows-container" class="row">
+                    <!-- Workflows will be loaded here via AJAX -->
+                </div>
+
+                <!-- Pagination -->
+                <div id="workflows-pagination" class="row">
+                    <!-- Pagination will be loaded here via AJAX -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block page_level_script %}
+<script>
+$(document).ready(function() {
+    // Initialize AJAX Workflow Manager
+    const workflowManager = new AjaxWorkflowManager({
+        apiUrl: '{% url "secator_workflow_api" %}',
+        containerSelector: '#workflows-container',
+        paginationSelector: '#workflows-pagination',
+        searchSelector: '#workflow-search',
+        loadingSelector: '#workflows-loading'
+    });
+    
+    // Handle filter tab clicks
+    $('.filter-tab').on('click', function(e) {
+        e.preventDefault();
+        const type = $(this).data('type');
+        
+        // Update active tab
+        $('.filter-tab').removeClass('active');
+        $(this).addClass('active');
+        
+        // Update workflow manager
+        workflowManager.setFilter(type);
+    });
+    
+    // Update statistics when data is loaded
+    workflowManager.originalLoadWorkflows = workflowManager.loadWorkflows;
+    workflowManager.loadWorkflows = function() {
+        this.originalLoadWorkflows();
+        
+        // Update statistics after a short delay to ensure data is loaded
+        setTimeout(() => {
+            this.updateStatistics();
+        }, 100);
+    };
+    
+    // Add method to update statistics
+    workflowManager.updateStatistics = function() {
+        // This will be called after workflows are loaded
+        // The counts will be updated by the API response
+    };
+    
+    // Override the updateFilters method to also update statistics
+    const originalUpdateFilters = workflowManager.updateFilters;
+    workflowManager.updateFilters = function(counts) {
+        originalUpdateFilters.call(this, counts);
+        
+        // Update statistics display
+        $('#total-count').text(counts.total);
+        $('#custom-count').text(counts.custom);
+        $('#builtin-count').text(counts.builtin);
+        $('#engines-count').text(counts.engines);
+    };
+    
+    // Add smooth transitions
+    $(document).on('mouseenter', '.workflow-card', function() {
+        $(this).addClass('shadow-sm');
+    }).on('mouseleave', '.workflow-card', function() {
+        $(this).removeClass('shadow-sm');
+    });
+});
+</script>
+{% endblock %}
+

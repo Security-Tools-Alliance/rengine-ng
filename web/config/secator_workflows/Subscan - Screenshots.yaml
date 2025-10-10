@@ -1,0 +1,21 @@
+type: workflow
+name: Subscan - Screenshots
+description: 'Converted from reNgine scan engine: Subscan - Screenshots'
+tags:
+- bug_bounty
+input_types:
+- domain
+tasks:
+  aquatone:
+    description: Screenshot capture
+    timeout: 10
+    targets_:
+    - type: url
+      field: url
+      condition: item.status_code == 200
+global_options:
+  custom_header:
+    User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:126.0) Gecko/20100101 Firefox/126.0
+metadata:
+  scan_type: bug_bounty
+  converted_from: rengine

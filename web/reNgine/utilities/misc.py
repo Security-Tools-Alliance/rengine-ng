@@ -5,17 +5,17 @@ This module provides various utility functions for debugging, error handling,
 and target type determination.
 """
 
-import os
-import traceback
 from contextlib import suppress
+import os
 from pathlib import Path
-from typing import Optional, Union
+import traceback
+from typing import Optional
 
 from celery.utils.log import get_task_logger
 
-from reNgine.utilities.core.validation import is_valid_ipv4, is_valid_ipv6, is_valid_domain
-from reNgine.utilities.core.file import join_path, file_exists, write_file_content, read_file_content
 from reNgine.utilities.core.data import extract_emails
+from reNgine.utilities.core.file import file_exists, join_path, read_file_content, write_file_content
+from reNgine.utilities.core.validation import is_valid_domain, is_valid_ipv4, is_valid_ipv6
 
 
 logger = get_task_logger(__name__)
@@ -24,14 +24,14 @@ logger = get_task_logger(__name__)
 def debug():
     """
     Activate remote debug for scan worker.
-    
+
     This function sets up remote debugging for Celery workers when enabled
     in the configuration.
     """
     try:
         # Import settings here to avoid circular imports
         from reNgine.settings import CELERY_REMOTE_DEBUG, CELERY_REMOTE_DEBUG_PORT
-        
+
         if CELERY_REMOTE_DEBUG:
             logger.info(
                 f"\n⚡ Debugger started on port {str(CELERY_REMOTE_DEBUG_PORT)}"
@@ -49,13 +49,13 @@ def debug():
 def fmt_traceback(exc: Exception) -> str:
     """
     Format an exception traceback as a string.
-    
+
     Args:
         exc: The exception to format
-        
+
     Returns:
         Formatted traceback string
-        
+
     Examples:
         >>> try:
         ...     raise ValueError("Test error")
@@ -66,27 +66,24 @@ def fmt_traceback(exc: Exception) -> str:
 
 
 def get_traceback_path(
-    task_name: str,
-    results_dir: str,
-    scan_history_id: Optional[int] = None,
-    subscan_id: Optional[int] = None
+    task_name: str, results_dir: str, scan_history_id: Optional[int] = None, subscan_id: Optional[int] = None
 ) -> str:
     """
     Generate a traceback file path for a task.
-    
+
     Args:
         task_name: Name of the task
         results_dir: Results directory path
         scan_history_id: Scan history ID (optional)
         subscan_id: Subscan ID (optional)
-        
+
     Returns:
         Full path to the traceback file
-        
+
     Examples:
         >>> get_traceback_path("http_crawl", "/tmp/results", 123)
         '/tmp/results/#123-http_crawl.txt'
-        
+
         >>> get_traceback_path("subdomain_scan", "/tmp/results", 123, 456)
         '/tmp/results/#123-456-subdomain_scan.txt'
     """
@@ -100,10 +97,7 @@ def get_traceback_path(
 
 
 def get_and_save_emails(
-    domain_name: str,
-    activity_id: Optional[int] = None,
-    results_dir: str = "/tmp",
-    db_interface=None
+    domain_name: str, activity_id: Optional[int] = None, results_dir: str = "/tmp", db_interface=None
 ) -> list:
     """
     Get and save emails from Google, Bing and Baidu.
@@ -125,7 +119,7 @@ def get_and_save_emails(
     output_file = join_path(results_dir, "emails_tmp.txt")
     history_file = join_path(results_dir, "commands.txt")
     command = f"infoga --domain {domain_name} --source all --report {output_file}"
-    
+
     try:
         run_command(command, shell=False, history_file=history_file, activity_id=activity_id)
 
@@ -136,7 +130,7 @@ def get_and_save_emails(
         # Read and parse email results
         content = read_file_content(output_file)
         if content:
-            for line in content.split('\n'):
+            for line in content.split("\n"):
                 if "Email" in line:
                     parts = line.split(" ")
                     if len(parts) > 2:
@@ -152,17 +146,14 @@ def get_and_save_emails(
         if db_interface and emails:
             for email_address in emails:
                 try:
-                    email_data = {
-                        "email": email_address,
-                        "scan_history_id": activity_id
-                    }
+                    email_data = {"email": email_address, "scan_history_id": activity_id}
                     db_interface.create_record("email", email_data)
                 except Exception as e:
                     logger.warning(f"Failed to save email {email_address}: {e}")
 
     except Exception as e:
         logger.exception(f"Error getting emails for domain {domain_name}: {e}")
-    
+
     return emails
 
 
@@ -218,6 +209,7 @@ def determine_target_type(target_name: str) -> str:
         # Use tldextract for accurate parsing if available
         try:
             import tldextract
+
             extracted = tldextract.extract(target_name)
             if extracted.domain and extracted.suffix:
                 return "subdomain" if extracted.subdomain else "domain"
@@ -262,6 +254,7 @@ def determine_scan_type_from_engine_name(engine_name: str) -> str:
             if content:
                 try:
                     import yaml
+
                     engine_config = yaml.safe_load(content)
 
                     # Extract scan_type from the configuration
@@ -289,18 +282,18 @@ def save_traceback_to_file(
     exception: Exception,
     results_dir: str,
     scan_history_id: Optional[int] = None,
-    subscan_id: Optional[int] = None
+    subscan_id: Optional[int] = None,
 ) -> str:
     """
     Save a traceback to a file.
-    
+
     Args:
         task_name: Name of the task that failed
         exception: The exception that occurred
         results_dir: Results directory path
         scan_history_id: Scan history ID (optional)
         subscan_id: Subscan ID (optional)
-        
+
     Returns:
         Path to the saved traceback file
     """
@@ -318,10 +311,10 @@ def save_traceback_to_file(
 def extract_emails_from_text(text: str) -> list:
     """
     Extract email addresses from text content.
-    
+
     Args:
         text: Text content to extract emails from
-        
+
     Returns:
         List of email addresses found
     """
@@ -335,50 +328,50 @@ def extract_emails_from_text(text: str) -> list:
 def validate_target_name(target_name: str) -> bool:
     """
     Validate if a target name is acceptable for scanning.
-    
+
     Args:
         target_name: Target name to validate
-        
+
     Returns:
         True if target is valid, False otherwise
     """
     if not target_name or not isinstance(target_name, str):
         return False
-    
+
     # Check for minimum length
     if len(target_name.strip()) < 1:
         return False
-    
+
     # Check for dangerous characters
-    dangerous_chars = ['<', '>', '|', '&', ';', '`', '$', '(', ')']
+    dangerous_chars = ["<", ">", "|", "&", ";", "`", "$", "(", ")"]
     if any(char in target_name for char in dangerous_chars):
         return False
-    
+
     return True
 
 
 def sanitize_target_name(target_name: str) -> str:
     """
     Sanitize a target name for safe use.
-    
+
     Args:
         target_name: Target name to sanitize
-        
+
     Returns:
         Sanitized target name
     """
     if not target_name or not isinstance(target_name, str):
         return ""
-    
+
     # Remove dangerous characters
-    dangerous_chars = ['<', '>', '|', '&', ';', '`', '$', '(', ')']
+    dangerous_chars = ["<", ">", "|", "&", ";", "`", "$", "(", ")"]
     sanitized = target_name
     for char in dangerous_chars:
-        sanitized = sanitized.replace(char, '')
-    
+        sanitized = sanitized.replace(char, "")
+
     # Strip whitespace
     sanitized = sanitized.strip()
-    
+
     return sanitized
 
 

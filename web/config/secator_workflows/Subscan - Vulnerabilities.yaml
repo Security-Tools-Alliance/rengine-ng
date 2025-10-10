@@ -1,0 +1,29 @@
+type: workflow
+name: Subscan - Vulnerabilities
+description: 'Converted from reNgine scan engine: Subscan - Vulnerabilities'
+tags:
+- bug_bounty
+input_types:
+- domain
+tasks:
+  nuclei:
+    description: Vulnerability scanning
+    rate_limit: 150
+    timeout: 5
+    targets_:
+    - type: url
+      field: url
+      condition: item.status_code == 200
+    severities:
+    - unknown
+    - info
+    - low
+    - medium
+    - high
+    - critical
+global_options:
+  custom_header:
+    User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:126.0) Gecko/20100101 Firefox/126.0
+metadata:
+  scan_type: bug_bounty
+  converted_from: rengine
