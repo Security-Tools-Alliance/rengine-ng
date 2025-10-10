@@ -302,7 +302,6 @@ class AdvancedSearchMixin:
                 elif operator == "!":
                     return queryset.exclude(**{field_path: int_value})
             except (ValueError, TypeError):
-                logger.warning(f"Invalid numeric value for field {lookup_title}: {lookup_content}")
                 return queryset
 
         # Handle text field searches
