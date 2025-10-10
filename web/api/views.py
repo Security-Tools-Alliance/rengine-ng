@@ -1315,6 +1315,7 @@ class StartScan(APIView):
     This endpoint creates a scan history object and initiates a scan task
     using Celery for asynchronous execution.
     """
+
     parser_classes = [JSONParser]
 
     def post(self, request):
@@ -1340,28 +1341,19 @@ class StartScan(APIView):
 
         # Validate required parameters
         if not domain_id or not engine_id:
-            return Response({
-                "status": False,
-                "error": "domain_id and engine_id are required"
-            }, status=400)
+            return Response({"status": False, "error": "domain_id and engine_id are required"}, status=400)
 
         # Verify domain exists
         try:
             domain = get_object_or_404(Domain, id=domain_id)
         except Exception:
-            return Response({
-                "status": False,
-                "error": f"Domain with ID {domain_id} not found"
-            }, status=404)
+            return Response({"status": False, "error": f"Domain with ID {domain_id} not found"}, status=404)
 
         # Verify engine exists
         try:
             engine = get_object_or_404(EngineType, id=engine_id)
         except Exception:
-            return Response({
-                "status": False,
-                "error": f"Engine with ID {engine_id} not found"
-            }, status=404)
+            return Response({"status": False, "error": f"Engine with ID {engine_id} not found"}, status=404)
 
         # Get optional parameters with defaults
         imported_subdomains = data.get("imported_subdomains", [])
@@ -1378,9 +1370,7 @@ class StartScan(APIView):
         try:
             # Create scan object
             scan_history_id = create_scan_object(
-                host_id=domain_id,
-                engine_id=engine_id,
-                initiated_by_id=request.user.id
+                host_id=domain_id, engine_id=engine_id, initiated_by_id=request.user.id
             )
             scan = ScanHistory.objects.get(pk=scan_history_id)
 
@@ -1405,23 +1395,22 @@ class StartScan(APIView):
             # Log scan initiation
             logger.info(f"Scan {scan.id} initiated for domain {domain.name} by user {request.user.username}")
 
-            return Response({
-                "status": True,
-                "scan_id": scan.id,
-                "scan_status": scan.scan_status,
-                "domain_id": domain.id,
-                "domain_name": domain.name,
-                "engine_id": engine.id,
-                "engine_name": engine.engine_name,
-                "message": f"Scan started successfully for {domain.name}"
-            })
+            return Response(
+                {
+                    "status": True,
+                    "scan_id": scan.id,
+                    "scan_status": scan.scan_status,
+                    "domain_id": domain.id,
+                    "domain_name": domain.name,
+                    "engine_id": engine.id,
+                    "engine_name": engine.engine_name,
+                    "message": f"Scan started successfully for {domain.name}",
+                }
+            )
 
         except Exception as e:
             logger.error(f"Error starting scan: {str(e)}")
-            return Response({
-                "status": False,
-                "error": f"Failed to start scan: {str(e)}"
-            }, status=500)
+            return Response({"status": False, "error": f"Failed to start scan: {str(e)}"}, status=500)
 
 
 class InitiateSubTask(APIView):
