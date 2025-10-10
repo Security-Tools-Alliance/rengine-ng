@@ -1411,7 +1411,7 @@ class StartScan(APIView):
 
         except Exception as e:
             logger.error(f"Error starting scan: {str(e)}")
-            return Response({"status": False, "error": f"Failed to start scan: {str(e)}"}, status=500)
+            return Response({"status": False, "error": "Failed to start scan due to a server error."}, status=500)
 
 
 class InitiateSubTask(APIView):
