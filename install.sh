@@ -6,6 +6,22 @@ source "$(pwd)/scripts/common_functions.sh" # Open the file if you want to know 
 # Import GPU support script
 source "$(pwd)/scripts/gpu_support.sh"
 
+# Fetch the internal and external IP address
+external_ip=$(curl -s https://ipecho.net/plain)
+
+# Get internal IPs - cross-platform approach
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    # macOS
+    internal_ips=$(ifconfig | grep 'inet ' | grep -v '127.0.0.1' | awk '{print $2}')
+else
+    # Linux
+    internal_ips=$(ip -4 -br addr | awk '$2 == "UP" {print $3} /^lo/ {print $3}' | cut -d'/' -f1)
+fi
+
+formatted_ips=""
+for ip in $internal_ips; do
+    formatted_ips="${formatted_ips}https://$ip\n"
+done
 
 # Check Docker installation
 check_docker_installation() {
@@ -600,15 +616,16 @@ main() {
   # Add configuration files management
   log "Setting up tool configurations..." $COLOR_CYAN
   
-  declare -A config_files=(
-    ["theHarvester/api-keys.yaml"]="docker/celery/config/the-harvester-api-keys.yaml"
-    ["amass/config.ini"]="docker/celery/config/amass.ini"
-    ["gau/config.toml"]="docker/celery/config/gau.toml"
+  config_files=(
+    "theHarvester/api-keys.yaml|docker/celery/config/the-harvester-api-keys.yaml"
+    "amass/config.ini|docker/celery/config/amass.ini"
+    "gau/config.toml|docker/celery/config/gau.toml"
   )
 
-  for target in "${!config_files[@]}"; do
+  for entry in "${config_files[@]}"; do
+    target="${entry%%|*}"
+    source_path="${entry#*|}"
     target_path="/home/rengine/.config/$target"
-    source_path="${config_files[$target]}"
     
     if [ ! -f "$target_path" ]; then
       log "Copying $target configuration..." $COLOR_CYAN

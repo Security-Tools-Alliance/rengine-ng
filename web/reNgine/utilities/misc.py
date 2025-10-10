@@ -12,6 +12,8 @@ import traceback
 from typing import Optional
 
 from celery.utils.log import get_task_logger
+import tldextract
+import yaml
 
 from reNgine.utilities.core.data import extract_emails
 from reNgine.utilities.core.file import file_exists, join_path, read_file_content, write_file_content
@@ -208,8 +210,6 @@ def determine_target_type(target_name: str) -> str:
     if is_valid_domain(target_name):
         # Use tldextract for accurate parsing if available
         try:
-            import tldextract
-
             extracted = tldextract.extract(target_name)
             if extracted.domain and extracted.suffix:
                 return "subdomain" if extracted.subdomain else "domain"
@@ -253,8 +253,6 @@ def determine_scan_type_from_engine_name(engine_name: str) -> str:
             content = read_file_content(str(yaml_file_path))
             if content:
                 try:
-                    import yaml
-
                     engine_config = yaml.safe_load(content)
 
                     # Extract scan_type from the configuration
