@@ -1394,7 +1394,8 @@ class StartScan(APIView):
             scan.save()
 
             # Log scan initiation
-            logger.info(f"Scan {scan.id} initiated for domain {domain.name} by user {request.user.username}")
+            sanitized_username = request.user.username.replace('\r', '').replace('\n', '')
+            logger.info(f"Scan {scan.id} initiated for domain {domain.name} by user {sanitized_username}")
 
             return Response(
                 {
