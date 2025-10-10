@@ -31,12 +31,13 @@ import validators
 from dashboard.models import OllamaSettings, OpenAiAPIKey, Project, SearchHistory
 from recon_note.models import TodoNote
 from reNgine.celery import app
-from reNgine.definitions import ABORTED_TASK, FAILED_TASK, NUCLEI_SEVERITY_MAP, RUNNING_TASK, SUCCESS_TASK
+from reNgine.definitions import ABORTED_TASK, FAILED_TASK, LIVE_SCAN, NUCLEI_SEVERITY_MAP, RUNNING_TASK, SUCCESS_TASK
 from reNgine.llm.config import DEFAULT_GPT_MODELS, MODEL_REQUIREMENTS, OLLAMA_INSTANCE, RECOMMENDED_MODELS
 from reNgine.llm.llm import LLMAttackSuggestionGenerator
 from reNgine.llm.utils import convert_markdown_to_html, get_default_llm_model, is_empty_attack_surface
-from reNgine.settings import RENGINE_CURRENT_VERSION, RENGINE_TOOL_GITHUB_PATH
+from reNgine.settings import RENGINE_CURRENT_VERSION, RENGINE_RESULTS, RENGINE_TOOL_GITHUB_PATH
 from reNgine.tasks import (
+    initiate_scan,
     initiate_subscan,
     llm_vulnerability_report,
     query_ip_history,
@@ -49,7 +50,7 @@ from reNgine.tasks import (
     send_hackerone_report,
 )
 from reNgine.utilities.data import get_data_from_post_request, safe_int_cast
-from reNgine.utilities.database import create_scan_activity
+from reNgine.utilities.database import create_scan_activity, create_scan_object
 from reNgine.utilities.dns import check_host_alive, get_current_dns_servers
 from reNgine.utilities.endpoint import get_interesting_endpoints
 from reNgine.utilities.external import get_open_ai_key
@@ -1305,6 +1306,122 @@ class StopScan(APIView):
                 task.save()
 
         return Response(response)
+
+
+class StartScan(APIView):
+    """
+    API endpoint to start a new scan.
+
+    This endpoint creates a scan history object and initiates a scan task
+    using Celery for asynchronous execution.
+    """
+    parser_classes = [JSONParser]
+
+    def post(self, request):
+        """
+        Start a new scan.
+
+        Required parameters:
+            - domain_id (int): ID of the target domain
+            - engine_id (int): ID of the scan engine to use
+
+        Optional parameters:
+            - imported_subdomains (list): List of subdomains to import
+            - out_of_scope_subdomains (list): List of subdomains to exclude
+            - url_filter (str): URL filter/path to scan
+            - scan_existing_elements (bool): Whether to scan existing elements
+
+        Returns:
+            JSON response with scan details or error message
+        """
+        data = request.data
+        domain_id = safe_int_cast(data.get("domain_id"))
+        engine_id = safe_int_cast(data.get("engine_id"))
+
+        # Validate required parameters
+        if not domain_id or not engine_id:
+            return Response({
+                "status": False,
+                "error": "domain_id and engine_id are required"
+            }, status=400)
+
+        # Verify domain exists
+        try:
+            domain = get_object_or_404(Domain, id=domain_id)
+        except Exception:
+            return Response({
+                "status": False,
+                "error": f"Domain with ID {domain_id} not found"
+            }, status=404)
+
+        # Verify engine exists
+        try:
+            engine = get_object_or_404(EngineType, id=engine_id)
+        except Exception:
+            return Response({
+                "status": False,
+                "error": f"Engine with ID {engine_id} not found"
+            }, status=404)
+
+        # Get optional parameters with defaults
+        imported_subdomains = data.get("imported_subdomains", [])
+        out_of_scope_subdomains = data.get("out_of_scope_subdomains", [])
+        url_filter = data.get("url_filter", "")
+        scan_existing_elements = data.get("scan_existing_elements", False)
+
+        # Ensure lists are properly formatted
+        if isinstance(imported_subdomains, str):
+            imported_subdomains = [s.strip() for s in imported_subdomains.split("\n") if s.strip()]
+        if isinstance(out_of_scope_subdomains, str):
+            out_of_scope_subdomains = [s.strip() for s in out_of_scope_subdomains.split("\n") if s.strip()]
+
+        try:
+            # Create scan object
+            scan_history_id = create_scan_object(
+                host_id=domain_id,
+                engine_id=engine_id,
+                initiated_by_id=request.user.id
+            )
+            scan = ScanHistory.objects.get(pk=scan_history_id)
+
+            # Prepare celery task kwargs
+            kwargs = {
+                "scan_history_id": scan.id,
+                "domain_id": domain_id,
+                "engine_id": engine_id,
+                "scan_type": LIVE_SCAN,
+                "results_dir": RENGINE_RESULTS,
+                "imported_subdomains": imported_subdomains,
+                "out_of_scope_subdomains": out_of_scope_subdomains,
+                "url_filter": url_filter,
+                "initiated_by_id": request.user.id,
+                "scan_existing_elements": scan_existing_elements,
+            }
+
+            # Start the celery task
+            initiate_scan.apply_async(kwargs=kwargs)
+            scan.save()
+
+            # Log scan initiation
+            logger.info(f"Scan {scan.id} initiated for domain {domain.name} by user {request.user.username}")
+
+            return Response({
+                "status": True,
+                "scan_id": scan.id,
+                "scan_status": scan.scan_status,
+                "domain_id": domain.id,
+                "domain_name": domain.name,
+                "engine_id": engine.id,
+                "engine_name": engine.engine_name,
+                "message": f"Scan started successfully for {domain.name}"
+            })
+
+        except Exception as e:
+            logger.error(f"Error starting scan: {str(e)}")
+            return Response({
+                "status": False,
+                "error": f"Failed to start scan: {str(e)}"
+            }, status=500)
 
 
 class InitiateSubTask(APIView):
