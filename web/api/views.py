@@ -172,7 +172,8 @@ def parse_pagination_params(start=None, length=None, page=None, page_size=None):
         return None
 
     except ValueError as e:
-        raise ValidationError(f"Invalid pagination parameters: {str(e)}")
+        logger.warning("Pagination parameter validation error: %s", str(e))
+        raise ValidationError("Invalid pagination parameters.")
 
 
 class AdvancedSearchMixin:
