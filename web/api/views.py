@@ -2918,13 +2918,14 @@ class EndPointViewSet(AdvancedSearchMixin, viewsets.ModelViewSet):
 
         gf_tag = req.query_params.get("gf_tag") if "gf_tag" in req.query_params else None
 
+        # Start with base query without ordering
+        endpoints = endpoints_obj
+
         if scan_id:
-            endpoints = endpoints_obj.filter(scan_history__id=scan_id).distinct().order_by("id")
-        else:
-            endpoints = endpoints_obj.distinct().order_by("id")
+            endpoints = endpoints.filter(scan_history__id=scan_id)
 
         if url_query:
-            endpoints = endpoints.filter(Q(target_domain__name=url_query)).distinct().order_by("id")
+            endpoints = endpoints.filter(Q(target_domain__name=url_query))
 
         if gf_tag:
             endpoints = endpoints.filter(matched_gf_patterns__icontains=gf_tag)
@@ -2934,6 +2935,16 @@ class EndPointViewSet(AdvancedSearchMixin, viewsets.ModelViewSet):
 
         if subdomain_id:
             endpoints = endpoints.filter(subdomain__id=subdomain_id)
+
+        # Get unique endpoints by http_url, keeping the latest (highest ID) for each URL
+        # Use a subquery to get the latest ID for each unique http_url
+        from django.db.models import Max
+        latest_endpoint_ids = (
+            endpoints.values("http_url")
+            .annotate(max_id=Max("id"))
+            .values_list("max_id", flat=True)
+        )
+        endpoints = EndPoint.objects.filter(id__in=latest_endpoint_ids)
 
         if "only_urls" in req.query_params:
             self.serializer_class = EndpointOnlyURLsSerializer
