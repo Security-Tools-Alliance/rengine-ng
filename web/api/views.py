@@ -2939,11 +2939,8 @@ class EndPointViewSet(AdvancedSearchMixin, viewsets.ModelViewSet):
         # Get unique endpoints by http_url, keeping the latest (highest ID) for each URL
         # Use a subquery to get the latest ID for each unique http_url
         from django.db.models import Max
-        latest_endpoint_ids = (
-            endpoints.values("http_url")
-            .annotate(max_id=Max("id"))
-            .values_list("max_id", flat=True)
-        )
+
+        latest_endpoint_ids = endpoints.values("http_url").annotate(max_id=Max("id")).values_list("max_id", flat=True)
         endpoints = EndPoint.objects.filter(id__in=latest_endpoint_ids)
 
         if "only_urls" in req.query_params:
