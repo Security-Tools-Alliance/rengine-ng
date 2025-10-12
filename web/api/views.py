@@ -2758,28 +2758,37 @@ class SubdomainDatatableViewSet(AdvancedSearchMixin, viewsets.ModelViewSet):
         name = req.query_params.get("name")
         project = req.query_params.get("project")
 
+        # Start with base query without ordering
         subdomains = Subdomain.objects.filter(target_domain__project__slug=project)
 
         if "is_important" in req.query_params:
             subdomains = subdomains.filter(is_important=True)
 
         if target_id:
-            self.queryset = subdomains.filter(target_domain__id=target_id).distinct()
+            subdomains = subdomains.filter(target_domain__id=target_id)
         elif url_query:
-            self.queryset = subdomains.filter(Q(target_domain__name=url_query)).distinct()
+            subdomains = subdomains.filter(Q(target_domain__name=url_query))
         elif scan_id:
-            self.queryset = subdomains.filter(scan_history__id=scan_id).distinct()
-        else:
-            self.queryset = subdomains.distinct()
+            subdomains = subdomains.filter(scan_history__id=scan_id)
 
         if "only_directory" in req.query_params:
-            self.queryset = self.queryset.exclude(directories__isnull=True)
+            subdomains = subdomains.exclude(directories__isnull=True)
 
         if ip_address:
-            self.queryset = self.queryset.filter(ip_addresses__address__icontains=ip_address)
+            subdomains = subdomains.filter(ip_addresses__address__icontains=ip_address)
 
         if name:
-            self.queryset = self.queryset.filter(name=name)
+            subdomains = subdomains.filter(name=name)
+
+        # Get unique subdomains by name, keeping the latest (highest ID) for each name
+        # Use a subquery to get the latest ID for each unique subdomain name
+        from django.db.models import Max
+        latest_subdomain_ids = (
+            subdomains.values("name")
+            .annotate(max_id=Max("id"))
+            .values_list("max_id", flat=True)
+        )
+        self.queryset = Subdomain.objects.filter(id__in=latest_subdomain_ids)
 
         # Prefetching necessary relations for get_ports_by_ip
         self.queryset = self.queryset.prefetch_related(

@@ -394,10 +394,11 @@ class Subdomain(models.Model):
             alive=Count("id", filter=~Q(http_status=0)),
         )
 
-        subdomain_ids = queryset.values_list("id", flat=True)
+        # Get subdomain names instead of IDs to capture ALL vulnerabilities across scans
+        subdomain_names = queryset.values_list("name", flat=True)
 
-        # Get vulnerability counts directly from database in a single query
-        vuln_counts_raw = Vulnerability.objects.filter(subdomain_id__in=subdomain_ids).aggregate(
+        # Get vulnerability counts by subdomain name (not ID) to include all scans
+        vuln_counts_raw = Vulnerability.objects.filter(subdomain__name__in=subdomain_names).aggregate(
             vuln_info=Count("id", filter=Q(severity=0)),
             vuln_low=Count("id", filter=Q(severity=1)),
             vuln_medium=Count("id", filter=Q(severity=2)),
@@ -424,8 +425,16 @@ class Subdomain(models.Model):
 
     @classmethod
     def get_project_counts(cls, project):
-        """Get all counts for a specific project in a single query"""
-        queryset = cls.objects.filter(target_domain__project=project)
+        """Get all counts for a specific project with unique subdomains by name"""
+        # Get unique subdomains by name for the project, keeping the latest (highest ID)
+        from django.db.models import Max
+        latest_subdomain_ids = (
+            cls.objects.filter(target_domain__project=project)
+            .values("name")
+            .annotate(max_id=Max("id"))
+            .values_list("max_id", flat=True)
+        )
+        queryset = cls.objects.filter(id__in=latest_subdomain_ids)
         return cls.get_all_counts(queryset)
 
     @staticmethod
@@ -567,8 +576,16 @@ class EndPoint(models.Model):
 
     @classmethod
     def get_project_counts(cls, project):
-        """Get endpoint counts for a specific project"""
-        queryset = cls.objects.filter(scan_history__domain__project=project)
+        """Get endpoint counts for a specific project with unique URLs"""
+        # Get unique endpoints by http_url for the project, keeping the latest (highest ID)
+        from django.db.models import Max
+        latest_endpoint_ids = (
+            cls.objects.filter(scan_history__domain__project=project)
+            .values("http_url")
+            .annotate(max_id=Max("id"))
+            .values_list("max_id", flat=True)
+        )
+        queryset = cls.objects.filter(id__in=latest_endpoint_ids)
         return cls.get_counts(queryset)
 
     @staticmethod
