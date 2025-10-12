@@ -3251,6 +3251,37 @@ class VulnerabilityViewSet(AdvancedSearchMixin, viewsets.ModelViewSet):
             return qs.order_by(order_col)
         return qs.order_by("-severity")
 
+    def paginate_queryset(self, queryset, view=None):
+        if "no_page" in self.request.query_params:
+            return None
+        return self.paginator.paginate_queryset(queryset.order_by("-severity"), self.request, view=self)
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+
+        # Support manual pagination with start/length (DataTables) or page/page_size (REST)
+        pagination = parse_pagination_params(
+            start=request.query_params.get("start"),
+            length=request.query_params.get("length"),
+            page=request.query_params.get("page"),
+            page_size=request.query_params.get("page_size"),
+        )
+
+        if pagination:
+            total_count = queryset.count()
+            paginated_queryset = queryset[pagination["start"] : pagination["start"] + pagination["length"]]
+            serializer = self.get_serializer(paginated_queryset, many=True)
+            return Response({"count": total_count, "results": serializer.data})
+
+        # Fallback to normal pagination
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+
 
 class GetIpDetails(APIView):
     def get(self, request, format=None):
