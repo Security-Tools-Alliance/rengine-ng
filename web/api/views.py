@@ -2783,11 +2783,8 @@ class SubdomainDatatableViewSet(AdvancedSearchMixin, viewsets.ModelViewSet):
         # Get unique subdomains by name, keeping the latest (highest ID) for each name
         # Use a subquery to get the latest ID for each unique subdomain name
         from django.db.models import Max
-        latest_subdomain_ids = (
-            subdomains.values("name")
-            .annotate(max_id=Max("id"))
-            .values_list("max_id", flat=True)
-        )
+
+        latest_subdomain_ids = subdomains.values("name").annotate(max_id=Max("id")).values_list("max_id", flat=True)
         self.queryset = Subdomain.objects.filter(id__in=latest_subdomain_ids)
 
         # Prefetching necessary relations for get_ports_by_ip

@@ -428,6 +428,7 @@ class Subdomain(models.Model):
         """Get all counts for a specific project with unique subdomains by name"""
         # Get unique subdomains by name for the project, keeping the latest (highest ID)
         from django.db.models import Max
+
         latest_subdomain_ids = (
             cls.objects.filter(target_domain__project=project)
             .values("name")
@@ -579,6 +580,7 @@ class EndPoint(models.Model):
         """Get endpoint counts for a specific project with unique URLs"""
         # Get unique endpoints by http_url for the project, keeping the latest (highest ID)
         from django.db.models import Max
+
         latest_endpoint_ids = (
             cls.objects.filter(scan_history__domain__project=project)
             .values("http_url")
