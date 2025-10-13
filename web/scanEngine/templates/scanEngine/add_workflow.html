@@ -1,0 +1,76 @@
+<!-- DO NOT AUTO INDENT THIS FILE DUE TO PRELOADED YAML CONF -->
+{% extends 'base/base.html' %}
+{% load static %}
+
+{% block title %}
+Add Workflow
+{% endblock title %}
+
+
+{% block custom_js_css_link %}
+<link rel="stylesheet" type="text/css" href="{% static 'plugins/switches/switches.min.css' %}">
+{{ form.media }}
+<style media="screen">
+.ace_editor {
+  width:100%;
+  height:450px;
+  border:1px solid #CCC;
+}
+.django-ace-toolbar{
+  display: none;
+}
+</style>
+{% endblock custom_js_css_link %}
+
+{% block breadcrumb_title %}
+<li class="breadcrumb-item"><a href="{% url 'workflows' %}">Workflows</a></li>
+<li class="breadcrumb-item active">Add Workflow</li>
+{% endblock breadcrumb_title %}
+
+{% block page_title %}
+Add Workflow
+{% endblock page_title %}
+
+{% block main_content %}
+<div class="row">
+  <div class="col-xl-12">
+  <div class="card">
+  <div class="card-body">
+  <h4 class="header-title">Workflows</h4>
+  <p>
+  <code>Workflows</code> define the sequence of tasks to be executed during a scan. They allow you to create reusable configurations for different types of reconnaissance and security testing.
+  <br>
+  YAML configuration allows you to define the workflow structure, task dependencies, and execution parameters.
+  </p>
+  <form method="POST">
+  {% csrf_token %}
+  {% include "scanEngine/_items/form_workflow.html" %}
+  <div class="mt-3">
+    <button class="btn btn-primary submit-fn" type="submit">
+      <i class="fas fa-save"></i> Add Workflow
+    </button>
+    <a href="{% url 'workflows' %}" class="btn btn-secondary">
+      <i class="fas fa-arrow-left"></i> Back to Workflows
+    </a>
+  </div>
+  </form>
+  </div>
+  </div>
+  </div>
+</div>
+{% endblock main_content %}
+
+{% block page_level_script %}
+<script type="text/javascript">
+$(document).ready(function() {
+  // Assign unique IDs to ACE editor container elements instead of .ace_text-input
+  $('.ace_editor').each(function(index) {
+    const uniqueId = 'ace-editor-container-' + Date.now() + '-' + index;
+    $(this).attr('id', uniqueId);
+    // Optionally, if you are initializing ACE editors dynamically, you can use this ID
+    // to refer to the editor instance, e.g.:
+    // ace.edit(uniqueId)
+  });
+});
+</script>
+{% endblock page_level_script %}

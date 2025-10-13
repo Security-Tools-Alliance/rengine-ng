@@ -27,42 +27,26 @@ poetry run -C $RENGINE_FOLDER python3 manage.py loaddata fixtures/default_keywor
 print_msg "Load default external tools"
 poetry run -C $RENGINE_FOLDER python3 manage.py loaddata fixtures/external_tools.yaml --app scanEngine.InstalledExternalTool
 
-worker_command() {
-    local queue=$1
-    local worker_name=$2
-    
-    if [ "$CELERY_DEBUG" = "1" ]; then
-        echo "watchmedo auto-restart --recursive --pattern=\"*.py\" --directory=\"$RENGINE_FOLDER\" -- \
-            poetry run -C $RENGINE_FOLDER celery -A reNgine worker \
-            --pool=solo \
-            --loglevel=$CELERY_LOGLEVEL \
-            -Q $queue -n $worker_name"
-    else
-        echo "poetry run -C $RENGINE_FOLDER celery -A reNgine worker \
-            --pool=gevent \
-            --loglevel=$CELERY_LOGLEVEL \
-            --autoscale=$MAX_CONCURRENCY,$MIN_CONCURRENCY \
-            -Q $queue -n $worker_name"
-    fi
-}
+# Load Secator workflows and tasks
+print_msg "Load Secator workflows"
+poetry run -C $RENGINE_FOLDER python3 manage.py load_workflows --force
+print_msg "Migrate engines to Secator"
+poetry run -C $RENGINE_FOLDER python3 manage.py migrate_engines_to_secator
 
-queues=(
-    "orchestrator_queue:orchestrator_worker"
-    "io_queue:io_worker"
-    "run_command_queue:run_command_worker"
-    "group_queue:group_worker"
-    "cpu_queue:cpu_worker"
-    "report_queue:report_worker"
-    "send_notif_queue:send_notif_worker"
-)
+# Configure Secator to use Redis
+print_msg "Configure Secator with Redis"
+secator config set celery.broker_url redis://redis:6379/0
+secator config set celery.result_backend redis://redis:6379/0
 
-commands=""
-for queue in "${queues[@]}"; do
-    IFS=':' read -r queue worker_name <<< "$queue"
-    commands+="$(worker_command "$queue" "$worker_name") &"$'\n'
-done
-
-eval "$commands"
+# Start Secator worker
+print_msg "Starting Secator worker"
+if [ "$CELERY_DEBUG" = "1" ]; then
+    echo "Starting Secator worker in debug mode"
+    secator worker
+else
+    echo "Starting Secator worker in production mode"
+    secator worker --loglevel=$CELERY_LOGLEVEL --concurrency=$MAX_CONCURRENCY
+fi
 
 wait
 

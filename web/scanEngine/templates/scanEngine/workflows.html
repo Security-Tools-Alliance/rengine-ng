@@ -1,0 +1,306 @@
+{% extends "base/base.html" %}
+{% load static %}
+
+{% block title %}Workflows{% endblock %}
+
+{% block custom_js_css_link %}
+<link rel="stylesheet" href="{% static 'scanEngine/css/secator.css' %}">
+{% endblock %}
+
+{% block main_content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">
+                        <i class="fas fa-project-diagram"></i> Workflows
+                    </h3>
+                    <div class="card-tools">
+                        <a href="{% url 'add_workflow' %}" class="btn btn-primary btn-sm">
+                            <i class="fas fa-plus"></i> Create Workflow
+                        </a>
+                        <button type="button" class="btn btn-success btn-sm" onclick="loadBuiltinWorkflows()">
+                            <i class="fas fa-download"></i> Load Built-in
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="card-body">
+                    <!-- Filters -->
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <select class="form-control" id="filterSelect" onchange="filterWorkflows()">
+                                <option value="all">All Workflows</option>
+                                <option value="builtin">Built-in</option>
+                                <option value="custom">Custom</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <input type="text" class="form-control" id="searchInput" placeholder="Search workflows..." onkeyup="searchWorkflows()">
+                        </div>
+                        <div class="col-md-2">
+                            <button type="button" class="btn btn-secondary btn-block" onclick="clearFilters()">
+                                <i class="fas fa-times"></i> Clear
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Workflows Table -->
+                    <div class="table-responsive">
+                        <table class="table table-striped" id="workflowsTable">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Type</th>
+                                    <th>Scan Type</th>
+                                    <th>Status</th>
+                                    <th>Created</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for workflow in page_obj %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ workflow.name }}</strong>
+                                        {% if workflow.alias %}
+                                        <br><small class="text-info"><i class="fas fa-tag"></i> {{ workflow.alias }}</small>
+                                        {% endif %}
+                                        {% if workflow.description %}
+                                        <br><small class="text-muted">{{ workflow.description|truncatechars:100 }}</small>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="badge badge-soft-{% if workflow.workflow_type == 'builtin' %}primary{% else %}secondary{% endif %}">
+                                            {{ workflow.get_workflow_type_display }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <span class="badge badge-soft-info">{{ workflow.get_scan_type_display }}</span>
+                                    </td>
+                                    <td>
+                                        {% if workflow.is_active %}
+                                        <span class="badge badge-soft-success">Active</span>
+                                        {% else %}
+                                        <span class="badge badge-soft-danger">Inactive</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ workflow.created_at|date:"M d, Y" }}</td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm">
+                                            <a href="{% url 'workflow_detail' workflow.id %}" class="btn btn-info btn-sm">
+                                                <i class="fas fa-eye"></i>
+                                            </a>
+                                            {% if workflow.workflow_type == 'custom' %}
+                                            <a href="{% url 'update_workflow' workflow.id %}" class="btn btn-warning btn-sm">
+                                                <i class="fas fa-edit"></i>
+                                            </a>
+                                            <button type="button" class="btn btn-danger btn-sm" onclick="deleteWorkflow({{ workflow.id }}, '{{ workflow.name }}')">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                            {% endif %}
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="6" class="text-center text-muted">
+                                        <i class="fas fa-inbox fa-2x mb-2"></i><br>
+                                        No workflows found. Create one or load built-in workflows.
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <!-- Pagination -->
+                    {% if page_obj.has_other_pages %}
+                    <nav aria-label="Workflows pagination">
+                        <ul class="pagination justify-content-center">
+                            {% if page_obj.has_previous %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ page_obj.previous_page_number }}">Previous</a>
+                            </li>
+                            {% endif %}
+                            
+                            {% for num in page_obj.paginator.page_range %}
+                            {% if page_obj.number == num %}
+                            <li class="page-item active">
+                                <span class="page-link">{{ num }}</span>
+                            </li>
+                            {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ num }}">{{ num }}</a>
+                            </li>
+                            {% endif %}
+                            {% endfor %}
+                            
+                            {% if page_obj.has_next %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ page_obj.next_page_number }}">Next</a>
+                            </li>
+                            {% endif %}
+                        </ul>
+                    </nav>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block page_level_script %}
+<script src="{% static 'scanEngine/js/secator.js' %}"></script>
+<script>
+// Initialize page
+document.addEventListener('DOMContentLoaded', function() {
+    // Set current filter
+    const urlParams = new URLSearchParams(window.location.search);
+    const filter = urlParams.get('filter') || 'all';
+    document.getElementById('filterSelect').value = filter;
+    
+    // Set current search
+    const search = urlParams.get('search') || '';
+    document.getElementById('searchInput').value = search;
+});
+
+// Filter workflows
+function filterWorkflows() {
+    const filter = document.getElementById('filterSelect').value;
+    const search = document.getElementById('searchInput').value;
+    const url = new URL(window.location);
+    
+    if (filter !== 'all') {
+        url.searchParams.set('filter', filter);
+    } else {
+        url.searchParams.delete('filter');
+    }
+    
+    if (search) {
+        url.searchParams.set('search', search);
+    } else {
+        url.searchParams.delete('search');
+    }
+    
+    window.location.href = url.toString();
+}
+
+// Search workflows
+function searchWorkflows() {
+    const search = document.getElementById('searchInput').value;
+    const filter = document.getElementById('filterSelect').value;
+    const url = new URL(window.location);
+    
+    if (search) {
+        url.searchParams.set('search', search);
+    } else {
+        url.searchParams.delete('search');
+    }
+    
+    if (filter !== 'all') {
+        url.searchParams.set('filter', filter);
+    } else {
+        url.searchParams.delete('filter');
+    }
+    
+    // Debounce search
+    clearTimeout(window.searchTimeout);
+    window.searchTimeout = setTimeout(() => {
+        window.location.href = url.toString();
+    }, 500);
+}
+
+// Clear filters
+function clearFilters() {
+    window.location.href = '{% url "workflows" %}';
+}
+
+// Load built-in workflows
+function loadBuiltinWorkflows() {
+    if (confirm('This will load built-in Secator workflows. Continue?')) {
+        fetch('{% url "api:load_builtin_workflows" %}', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCookie('csrftoken'),
+                'Content-Type': 'application/json',
+            },
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                showAlert('success', 'Built-in workflows loading started. Please refresh the page in a few moments.');
+            } else {
+                showAlert('error', data.message);
+            }
+        })
+        .catch(error => {
+            showAlert('error', 'Error loading built-in workflows: ' + error);
+        });
+    }
+}
+
+// Delete workflow
+function deleteWorkflow(workflowId, workflowName) {
+    if (confirm(`Are you sure you want to delete the workflow "${workflowName}"?\n\nThis action cannot be undone. All related scan configurations will be affected.`)) {
+        // Create a form to submit POST request
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = `{% url 'delete_workflow' 0 %}`.replace('0', workflowId);
+        
+        // Add CSRF token
+        const csrfToken = document.createElement('input');
+        csrfToken.type = 'hidden';
+        csrfToken.name = 'csrfmiddlewaretoken';
+        csrfToken.value = getCookie('csrftoken');
+        form.appendChild(csrfToken);
+        
+        document.body.appendChild(form);
+        form.submit();
+    }
+}
+
+// Utility functions
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
+function showAlert(type, message) {
+    const alertClass = type === 'success' ? 'alert-success' : 'alert-danger';
+    const alertHtml = `
+        <div class="alert ${alertClass} alert-dismissible fade show" role="alert">
+            ${message}
+            <button type="button" class="close" data-dismiss="alert">
+                <span>&times;</span>
+            </button>
+        </div>
+    `;
+    
+    // Insert at top of card body
+    const cardBody = document.querySelector('.card-body');
+    cardBody.insertAdjacentHTML('afterbegin', alertHtml);
+    
+    // Auto-dismiss after 5 seconds
+    setTimeout(() => {
+        const alert = cardBody.querySelector('.alert');
+        if (alert) {
+            alert.remove();
+        }
+    }, 5000);
+}
+</script>
+{% endblock %}

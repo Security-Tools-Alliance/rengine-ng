@@ -1,0 +1,100 @@
+{% extends "base/base.html" %}
+{% load static %}
+
+{% block title %}{{ workflow.name }} - Workflow Detail{% endblock %}
+
+{% block custom_js_css_link %}
+<link rel="stylesheet" href="{% static 'scanEngine/css/secator.css' %}">
+{% endblock %}
+
+{% block main_content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">
+                        <i class="fas fa-project-diagram"></i> {{ workflow.name }}
+                    </h3>
+                    <div class="card-tools">
+                        <a href="{% url 'workflows' %}" class="btn btn-secondary btn-sm">
+                            <i class="fas fa-arrow-left"></i> Back to Workflows
+                        </a>
+                    </div>
+                </div>
+                
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-8">
+                            <h5>Description</h5>
+                            <p>{{ workflow.description|default:"No description available." }}</p>
+                            
+                            <h5>Configuration</h5>
+                            <div class="bg-light p-3 rounded">
+                                <pre><code>{{ workflow.yaml_configuration }}</code></pre>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-4">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h6>Workflow Information</h6>
+                                </div>
+                                <div class="card-body">
+                                    <p><strong>Type:</strong> 
+                                        <span class="badge badge-soft-{% if workflow.workflow_type == 'builtin' %}success{% else %}info{% endif %}">
+                                            {{ workflow.workflow_type|title }}
+                                        </span>
+                                    </p>
+                                    <p><strong>Scan Type:</strong> {{ workflow.scan_type|title }}</p>
+                                    <p><strong>Status:</strong> 
+                                        <span class="badge badge-soft-{% if workflow.is_active %}success{% else %}danger{% endif %}">
+                                            {{ workflow.is_active|yesno:"Active,Inactive" }}
+                                        </span>
+                                    </p>
+                                    <p><strong>Created:</strong> {{ workflow.created_at|date:"M d, Y H:i" }}</p>
+                                    <p><strong>Updated:</strong> {{ workflow.updated_at|date:"M d, Y H:i" }}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    {% if related_scans %}
+                    <div class="row mt-4">
+                        <div class="col-12">
+                            <h5>Related Scans</h5>
+                            <div class="table-responsive">
+                                <table class="table table-sm">
+                                    <thead>
+                                        <tr>
+                                            <th>Name</th>
+                                            <th>Type</th>
+                                            <th>Created</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for scan in related_scans %}
+                                        <tr>
+                                            <td>{{ scan.name }}</td>
+                                            <td>{{ scan.scan_type|title }}</td>
+                                            <td>{{ scan.created_at|date:"M d, Y" }}</td>
+                                            <td>
+                                                <a href="{% url 'scan_detail' scan.id %}" class="btn btn-sm btn-info">
+                                                    <i class="fas fa-eye"></i> View
+                                                </a>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

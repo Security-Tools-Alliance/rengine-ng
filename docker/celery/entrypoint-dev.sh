@@ -13,6 +13,5 @@ fi
 
 RENGINE_FOLDER="/home/$USERNAME/rengine"
 export FLOWER_UNAUTHENTICATED_API=true
-poetry run -C $RENGINE_FOLDER celery flower &
 
 /entrypoint.sh

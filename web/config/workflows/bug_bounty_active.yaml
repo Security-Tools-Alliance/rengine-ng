@@ -1,0 +1,56 @@
+name: bug_bounty_active
+description: Active reconnaissance with vulnerability scanning for bug bounty programs
+scan_type: bug_bounty
+workflow_type: custom
+
+tasks:
+  - name: subdomain_discovery
+    type: subfinder
+    config:
+      silent: true
+      threads: 10
+      
+  - name: dns_resolution
+    type: dnsx
+    config:
+      silent: true
+      threads: 10
+      
+  - name: port_scanning
+    type: naabu
+    config:
+      silent: true
+      threads: 20
+      top_ports: 1000
+      
+  - name: service_detection
+    type: nmap
+    config:
+      silent: true
+      threads: 10
+      
+  - name: url_crawling
+    type: katana
+    config:
+      silent: true
+      threads: 10
+      depth: 3
+      
+  - name: vulnerability_scanning
+    type: nuclei
+    config:
+      silent: true
+      threads: 20
+      severity: critical,high,medium
+      
+  - name: xss_scanning
+    type: dalfox
+    config:
+      silent: true
+      threads: 10
+      
+  - name: multipurpose_scan
+    type: bbot
+    config:
+      silent: true
+      threads: 10

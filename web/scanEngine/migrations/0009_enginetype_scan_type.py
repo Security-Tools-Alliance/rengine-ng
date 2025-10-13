@@ -13,8 +13,8 @@ class Migration(migrations.Migration):
             model_name="enginetype",
             name="scan_type",
             field=models.CharField(
-                choices=[("bug_bounty", "Bug Bounty"), ("internal_network", "Internal Network")],
-                default="bug_bounty",
+                choices=[("internet", "Internet"), ("internal_network", "Internal Network")],
+                default="internet",
                 help_text="Type of scan this engine is designed for",
                 max_length=20,
             ),

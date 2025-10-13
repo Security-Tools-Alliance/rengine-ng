@@ -26,4 +26,19 @@ urlpatterns = [
     path("wordlist", views.wordlist_list, name="wordlist_list"),
     path("wordlist/delete/<int:id>", views.delete_wordlist, name="delete_wordlist"),
     path("wordlist/add", views.add_wordlist, name="add_wordlist"),
+    
+    # Workflow Integration URLs
+    path("workflows/", views.secator_workflows, name="workflows"),
+    path("workflows/add/", views.add_workflow, name="add_workflow"),
+    path("workflows/<int:workflow_id>/", views.secator_workflow_detail, name="workflow_detail"),
+    path("workflows/<int:workflow_id>/update/", views.update_workflow, name="update_workflow"),
+    path("workflows/<int:workflow_id>/delete/", views.delete_workflow, name="delete_workflow"),
+    path("tasks/", views.secator_tasks, name="tasks"),
+    path("tasks/<int:task_id>/", views.secator_task_detail, name="task_detail"),
+    path("scans/", views.secator_scans, name="scans"),
+    path("scans/add/", views.add_scan, name="add_scan"),
+    path("scans/<int:scan_id>/", views.secator_scan_detail, name="scan_detail"),
+    path("scans/<int:scan_id>/update/", views.update_scan, name="update_scan"),
+    path("scans/<int:scan_id>/delete/", views.delete_scan, name="delete_scan"),
+    
 ]

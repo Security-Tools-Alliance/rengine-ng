@@ -278,7 +278,10 @@
     </div>
     <div class="mobile-submenu">
       {% if user|can:'modify_scan_configurations' %}
-      <a href="{% url 'scan_engine_index' %}" class="dropdown-item">Scan Engines</a>
+      <a href="{% url 'scan_engine_index' %}" class="dropdown-item">
+        <i class="fas fa-exclamation-triangle text-warning me-1"></i>Scan Engines
+        <small class="text-muted d-block">(Legacy - Use Secator instead)</small>
+      </a>
       {% endif %}
       {% if user|can:'modify_wordlists' %}
       <a href="{% url 'wordlist_list' %}" class="dropdown-item">Wordlists</a>

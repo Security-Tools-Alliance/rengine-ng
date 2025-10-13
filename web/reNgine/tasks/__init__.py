@@ -26,6 +26,13 @@ from reNgine.tasks.port_scan import (
 )
 from reNgine.tasks.reporting import report
 from reNgine.tasks.scan import initiate_scan, initiate_subscan
+from reNgine.tasks.secator_tasks import (
+    initiate_secator_scan,
+    run_secator_workflow,
+    run_secator_tasks,
+    load_secator_workflows,
+    load_secator_tasks,
+)
 from reNgine.tasks.screenshot import screenshot
 from reNgine.tasks.subdomain import subdomain_discovery
 from reNgine.tasks.url import (
@@ -56,9 +63,12 @@ __all__ = [
     "http_crawl",
     "initiate_scan",
     "initiate_subscan",
+    "initiate_secator_scan",
     "intermediate_crawl",
     "ip_range_discovery",
     "llm_vulnerability_report",
+    "load_secator_tasks",
+    "load_secator_workflows",
     "nmap",
     "nuclei_individual_severity_module",
     "nuclei_scan",
@@ -78,6 +88,8 @@ __all__ = [
     "run_command",
     "run_gf_list",
     "run_nmap",
+    "run_secator_tasks",
+    "run_secator_workflow",
     "run_wafw00f",
     "s3scanner",
     "screenshot",

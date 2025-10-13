@@ -43,6 +43,7 @@ MANIFEST
 .vscode/settings.json
 .vscode/tasks-and-contexts.json
 .idea/
+.cursor/
 
 *.manifest
 *.spec

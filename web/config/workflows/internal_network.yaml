@@ -1,0 +1,39 @@
+name: internal_network
+description: Internal network reconnaissance workflow
+scan_type: internal
+workflow_type: custom
+
+tasks:
+  - name: network_discovery
+    type: nmap
+    config:
+      silent: true
+      threads: 10
+      scan_type: ping
+      
+  - name: port_scanning
+    type: naabu
+    config:
+      silent: true
+      threads: 20
+      top_ports: 1000
+      
+  - name: service_detection
+    type: nmap
+    config:
+      silent: true
+      threads: 10
+      service_detection: true
+      
+  - name: vulnerability_scanning
+    type: nuclei
+    config:
+      silent: true
+      threads: 20
+      severity: critical,high,medium
+      
+  - name: multipurpose_scan
+    type: bbot
+    config:
+      silent: true
+      threads: 10

@@ -37,12 +37,12 @@ class TestScanEngineViews(BaseTestCase):
         """
         response = self.client.post(
             reverse("add_engine"),
-            {"engine_name": "New Engine", "yaml_configuration": "new: config", "scan_type": "bug_bounty"},
+            {"engine_name": "New Engine", "yaml_configuration": "new: config", "scan_type": "internet"},
         )
         self.assertEqual(response.status_code, 302)
         engine = EngineType.objects.filter(engine_name="New Engine").first()
         self.assertTrue(engine is not None)
-        self.assertEqual(engine.scan_type, "bug_bounty")
+        self.assertEqual(engine.scan_type, "internet")
 
     def test_delete_engine_view(self):
         """
@@ -289,7 +289,7 @@ port_scan: {
             {
                 "engine_name": "YAML Scan Type Engine",
                 "yaml_configuration": yaml_config_with_scan_type,
-                "scan_type": "bug_bounty",  # This should be overridden by YAML
+                "scan_type": "internet",  # This should be overridden by YAML
             },
         )
         self.assertEqual(response.status_code, 302)
@@ -345,7 +345,7 @@ port_scan: {
             engine_name="Test Invalid Scan Type", yaml_configuration="test: config", scan_type="invalid_type"
         )
         # The model should handle this gracefully
-        self.assertIn(engine.scan_type, ["bug_bounty", "internal_network"])
+        self.assertIn(engine.scan_type, ["internet", "internal_network"])
 
     def test_engine_model_yaml_scan_type_override(self):
         """
@@ -362,7 +362,7 @@ custom_header: {
         engine = EngineType.objects.create(
             engine_name="Test YAML Override",
             yaml_configuration=yaml_config,
-            scan_type="bug_bounty",  # This should be overridden by YAML
+            scan_type="internet",  # This should be overridden by YAML
         )
         # Should use scan_type from YAML
         self.assertEqual(engine.scan_type, "internal_network")
@@ -395,16 +395,16 @@ port_scan: {}
 """
         engine = EngineType.objects.create(engine_name="Test Missing YAML", yaml_configuration=yaml_config_missing)
         # Should return default fallback
-        self.assertEqual(engine.get_scan_type_from_yaml(), "bug_bounty")
+        self.assertEqual(engine.get_scan_type_from_yaml(), "internet")
 
         # Test with malformed YAML
         engine = EngineType.objects.create(
             engine_name="Test Malformed YAML", yaml_configuration="invalid: yaml: content: ["
         )
         # Should return default fallback
-        self.assertEqual(engine.get_scan_type_from_yaml(), "bug_bounty")
+        self.assertEqual(engine.get_scan_type_from_yaml(), "internet")
 
         # Test with empty YAML
         engine = EngineType.objects.create(engine_name="Test Empty YAML", yaml_configuration="")
         # Should return default fallback
-        self.assertEqual(engine.get_scan_type_from_yaml(), "bug_bounty")
+        self.assertEqual(engine.get_scan_type_from_yaml(), "internet")

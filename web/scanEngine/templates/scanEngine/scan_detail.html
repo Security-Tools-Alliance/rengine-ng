@@ -1,0 +1,83 @@
+{% extends "base/base.html" %}
+{% load static %}
+
+{% block title %}{{ scan.name }} - Scan Detail{% endblock %}
+
+{% block custom_js_css_link %}
+<link rel="stylesheet" href="{% static 'scanEngine/css/secator.css' %}">
+{% endblock %}
+
+{% block main_content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">
+                        <i class="fas fa-cogs"></i> {{ scan.name }}
+                    </h3>
+                    <div class="card-tools">
+                        <a href="{% url 'scans' %}" class="btn btn-secondary btn-sm">
+                            <i class="fas fa-arrow-left"></i> Back to Scans
+                        </a>
+                    </div>
+                </div>
+                
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-8">
+                            <h5>Description</h5>
+                            <p>{{ scan.description|default:"No description available." }}</p>
+                            
+                            <h5>Configuration Details</h5>
+                            <div class="bg-light p-3 rounded">
+                                <p><strong>Execution Mode:</strong> {{ scan.execution_mode|title }}</p>
+                                {% if scan.execution_mode == 'workflow' and scan.workflow %}
+                                    <p><strong>Workflow:</strong> 
+                                        <a href="{% url 'workflow_detail' scan.workflow.id %}">{{ scan.workflow.name }}</a>
+                                    </p>
+                                {% elif scan.execution_mode == 'tasks' %}
+                                    <p><strong>Tasks:</strong></p>
+                                    <ul>
+                                        {% for task in scan.tasks.all %}
+                                        <li>
+                                            <a href="{% url 'task_detail' task.id %}">{{ task.name }}</a> 
+                                            <span class="badge badge-soft-info">{{ task.task_type }}</span>
+                                        </li>
+                                        {% endfor %}
+                                    </ul>
+                                {% endif %}
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-4">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h6>Configuration Information</h6>
+                                </div>
+                                <div class="card-body">
+                                    <p><strong>Type:</strong> 
+                                        <span class="badge badge-soft-info">{{ scan.scan_type|title }}</span>
+                                    </p>
+                                    <p><strong>Config Type:</strong> 
+                                        <span class="badge badge-soft-{% if scan.scan_config_type == 'builtin' %}success{% else %}secondary{% endif %}">
+                                            {{ scan.scan_config_type|title }}
+                                        </span>
+                                    </p>
+                                    <p><strong>Default:</strong> 
+                                        <span class="badge badge-soft-{% if scan.is_default %}success{% else %}light{% endif %}">
+                                            {{ scan.is_default|yesno:"Yes,No" }}
+                                        </span>
+                                    </p>
+                                    <p><strong>Created:</strong> {{ scan.created_at|date:"M d, Y H:i" }}</p>
+                                    <p><strong>Updated:</strong> {{ scan.updated_at|date:"M d, Y H:i" }}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

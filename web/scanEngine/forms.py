@@ -1,5 +1,7 @@
 from django import forms
+from django.core.exceptions import ValidationError
 from django_ace import AceWidget
+import yaml
 
 from reNgine.validators import validate_short_name
 from scanEngine.models import (
@@ -10,6 +12,9 @@ from scanEngine.models import (
     InterestingLookupModel,
     Notification,
     Proxy,
+    SecatorWorkflow,
+    SecatorTask,
+    SecatorScan,
     VulnerabilityReportSetting,
 )
 
@@ -815,3 +820,331 @@ class ExternalToolForm(forms.ModelForm):
         self.initial["version_match_regex"] = key.version_match_regex
         self.initial["version_lookup_command"] = key.version_lookup_command
         self.initial["subdomain_gathering_command"] = key.subdomain_gathering_command
+
+
+# =============================================================================
+# SECATOR INTEGRATION FORMS
+# =============================================================================
+
+class SecatorWorkflowForm(forms.ModelForm):
+    """Form for creating/editing Secator workflows."""
+    
+    class Meta:
+        model = SecatorWorkflow
+        fields = [
+            'name', 'alias', 'description', 'scan_type', 
+            'yaml_configuration', 'is_active'
+        ]
+
+    name = forms.CharField(
+        required=True,
+        widget=forms.TextInput(
+            attrs={"class": "form-control form-control-lg", "id": "workflow_name", "placeholder": "Workflow Name"}
+        ),
+    )
+    alias = forms.ChoiceField(
+        choices=[('', 'Select an alias (optional)')] + list(SecatorWorkflow.WORKFLOW_ALIAS_CHOICES),
+        required=False,
+        widget=forms.Select(attrs={"class": "form-control form-control-lg", "id": "workflow_alias"}),
+        help_text="Select a built-in workflow alias from Secator (optional)",
+    )
+    description = forms.CharField(
+        required=False,
+        widget=forms.Textarea(
+            attrs={
+                "class": "form-control",
+                "id": "workflow_description",
+                "rows": 3,
+                "placeholder": "Enter workflow description"
+            }
+        ),
+    )
+    scan_type = forms.ChoiceField(
+        choices=EngineType.SCAN_TYPE_CHOICES,
+        required=True,
+        widget=forms.Select(attrs={"class": "form-control form-control-lg", "id": "scan_type"}),
+        help_text="Select the type of scan this workflow is designed for",
+    )
+    yaml_configuration = forms.CharField(
+        widget=AceWidget(
+            mode="yaml",
+            theme="tomorrow_night_eighties",
+            width="100%",
+            height="450px",
+            tabsize=2,
+            fontsize="17px",
+            showinvisibles=True,
+            attrs={"id": "editor"},
+        )
+    )
+    is_active = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "form-check-input", "id": "is_active"}),
+    )
+    
+    def clean_yaml_configuration(self):
+        """Validate YAML configuration and schema."""
+        yaml_config = self.cleaned_data.get('yaml_configuration')
+        
+        if yaml_config:
+            try:
+                parsed_yaml = yaml.safe_load(yaml_config)
+            except yaml.YAMLError as e:
+                raise ValidationError(f"Invalid YAML configuration: {e}")
+            
+            # Schema validation: check for required fields
+            if not isinstance(parsed_yaml, dict):
+                raise ValidationError("YAML configuration must be a mapping (dictionary) at the top level.")
+            
+            # Required top-level fields
+            required_fields = ["name", "description", "scan_type", "workflow_type"]
+            missing_fields = [field for field in required_fields if field not in parsed_yaml]
+            if missing_fields:
+                raise ValidationError(f"Missing required field(s) in YAML configuration: {', '.join(missing_fields)}")
+            
+            # Validate field types and values
+            self._validate_yaml_field_types(parsed_yaml)
+            
+            # Validate tasks section if present
+            if "tasks" in parsed_yaml:
+                self._validate_tasks_section(parsed_yaml["tasks"])
+        
+        return yaml_config
+    
+    def _validate_yaml_field_types(self, parsed_yaml):
+        """Validate types and values of YAML fields."""
+        # Validate name field
+        if not isinstance(parsed_yaml.get("name"), str) or not parsed_yaml.get("name").strip():
+            raise ValidationError("Field 'name' must be a non-empty string.")
+        
+        # Validate description field
+        if not isinstance(parsed_yaml.get("description"), str) or not parsed_yaml.get("description").strip():
+            raise ValidationError("Field 'description' must be a non-empty string.")
+        
+        # Validate scan_type field
+        valid_scan_types = ["domain", "host", "network", "subdomain", "url", "internet", "internal"]
+        scan_type = parsed_yaml.get("scan_type")
+        if not isinstance(scan_type, str) or scan_type not in valid_scan_types:
+            raise ValidationError(f"Field 'scan_type' must be one of: {', '.join(valid_scan_types)}")
+        
+        # Validate workflow_type field
+        valid_workflow_types = ["builtin", "custom"]
+        workflow_type = parsed_yaml.get("workflow_type")
+        if not isinstance(workflow_type, str) or workflow_type not in valid_workflow_types:
+            raise ValidationError(f"Field 'workflow_type' must be one of: {', '.join(valid_workflow_types)}")
+    
+    def _validate_tasks_section(self, tasks):
+        """Validate the tasks section of the YAML configuration."""
+        if not isinstance(tasks, list):
+            raise ValidationError("Field 'tasks' must be a list.")
+        
+        if not tasks:
+            raise ValidationError("Field 'tasks' cannot be empty.")
+        
+        for i, task in enumerate(tasks):
+            if not isinstance(task, dict):
+                raise ValidationError(f"Task at index {i} must be a dictionary.")
+            
+            # Required task fields
+            required_task_fields = ["name", "type"]
+            missing_task_fields = [field for field in required_task_fields if field not in task]
+            if missing_task_fields:
+                raise ValidationError(f"Task at index {i} missing required field(s): {', '.join(missing_task_fields)}")
+            
+            # Validate task field types
+            if not isinstance(task.get("name"), str) or not task.get("name").strip():
+                raise ValidationError(f"Task at index {i}: field 'name' must be a non-empty string.")
+            
+            if not isinstance(task.get("type"), str) or not task.get("type").strip():
+                raise ValidationError(f"Task at index {i}: field 'type' must be a non-empty string.")
+            
+            # Validate config field if present
+            if "config" in task and not isinstance(task["config"], dict):
+                raise ValidationError(f"Task at index {i}: field 'config' must be a dictionary.")
+    
+    def clean_name(self):
+        """Validate workflow name uniqueness."""
+        name = self.cleaned_data.get('name')
+        
+        if name:
+            # Check for duplicates (excluding current instance)
+            queryset = SecatorWorkflow.objects.filter(name=name)
+            if self.instance.pk:
+                queryset = queryset.exclude(pk=self.instance.pk)
+            
+            if queryset.exists():
+                raise ValidationError("A workflow with this name already exists.")
+        
+        return name
+    
+    def clean(self):
+        """Validate that built-in workflows cannot be modified."""
+        cleaned_data = super().clean()
+        
+        # Check if this is an update operation on a built-in workflow
+        if self.instance.pk and self.instance.workflow_type == 'builtin':
+            # Set a flag to indicate the error was raised in clean()
+            self._builtin_modification_error = True
+            raise ValidationError("Built-in workflows cannot be modified.")
+        
+        return cleaned_data
+
+    def save(self, *args, **kwargs):
+        # Prevent duplicate error messages if clean() already raised the error
+        if getattr(self, '_builtin_modification_error', False):
+            # clean() already raised the error, so just return without saving
+            return self.instance
+        # Additional safeguard: if somehow save() is called directly, block modification
+        if self.instance.pk and self.instance.workflow_type == 'builtin':
+            raise ValidationError("Built-in workflows cannot be modified.")
+        return super().save(*args, **kwargs)
+
+
+class SecatorTaskForm(forms.ModelForm):
+    """Form for creating/editing Secator tasks."""
+    
+    class Meta:
+        model = SecatorTask
+        fields = [
+            'name', 'task_type', 'category', 'description', 'yaml_configuration', 'is_active'
+        ]
+        widgets = {
+            'name': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Enter task name'
+            }),
+            'task_type': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'e.g., subfinder, nuclei, httpx'
+            }),
+            'category': forms.Select(attrs={
+                'class': 'form-control'
+            }),
+            'description': forms.Textarea(attrs={
+                'class': 'form-control',
+                'rows': 3,
+                'placeholder': 'Enter task description'
+            }),
+            'is_active': forms.CheckboxInput(attrs={
+                'class': 'form-check-input'
+            }),
+            'yaml_configuration': forms.Textarea(attrs={
+                'class': 'form-control',
+                'rows': 10,
+                'placeholder': 'Enter YAML configuration (optional)'
+            }),
+        }
+    
+    def clean_yaml_configuration(self):
+        """Validate YAML configuration."""
+        yaml_config = self.cleaned_data.get('yaml_configuration')
+        
+        if yaml_config:
+            try:
+                yaml.safe_load(yaml_config)
+            except yaml.YAMLError as e:
+                raise ValidationError(f"Invalid YAML configuration: {e}")
+        
+        return yaml_config
+    
+    def clean(self):
+        """Validate task name and type uniqueness."""
+        cleaned_data = super().clean()
+        name = cleaned_data.get('name')
+        task_type = cleaned_data.get('task_type')
+        
+        if name and task_type:
+            # Check for duplicates (excluding current instance)
+            queryset = SecatorTask.objects.filter(name=name, task_type=task_type)
+            if self.instance.pk:
+                queryset = queryset.exclude(pk=self.instance.pk)
+            
+            if queryset.exists():
+                raise ValidationError("A task with this name and type already exists.")
+        
+        return cleaned_data
+
+
+class SecatorScanForm(forms.ModelForm):
+    """Form for creating/editing Secator scan configurations."""
+    
+    class Meta:
+        model = SecatorScan
+        fields = [
+            'name', 'description', 'scan_type', 'secator_scan_type', 'execution_mode', 
+            'workflow', 'tasks', 'is_default', 'is_active'
+        ]
+        widgets = {
+            'name': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Enter scan configuration name'
+            }),
+            'description': forms.Textarea(attrs={
+                'class': 'form-control',
+                'rows': 3,
+                'placeholder': 'Enter scan description'
+            }),
+            'scan_type': forms.Select(attrs={
+                'class': 'form-control'
+            }),
+            'secator_scan_type': forms.Select(attrs={
+                'class': 'form-control',
+                'id': 'secator-scan-type'
+            }),
+            'execution_mode': forms.Select(attrs={
+                'class': 'form-control',
+                'onchange': 'toggleExecutionMode()'
+            }),
+            'scan_config_type': forms.Select(attrs={
+                'class': 'form-control'
+            }),
+            'workflow': forms.Select(attrs={
+                'class': 'form-control',
+                'id': 'workflow-select'
+            }),
+            'tasks': forms.SelectMultiple(attrs={
+                'class': 'form-control',
+                'id': 'tasks-select',
+                'size': 10
+            }),
+            'is_default': forms.CheckboxInput(attrs={
+                'class': 'form-check-input'
+            }),
+            'is_active': forms.CheckboxInput(attrs={
+                'class': 'form-check-input'
+            }),
+        }
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+        # Set querysets for workflow and tasks
+        self.fields['workflow'].queryset = SecatorWorkflow.objects.filter(is_active=True)
+        self.fields['tasks'].queryset = SecatorTask.objects.all()
+        
+        # Make workflow and tasks not required initially
+        self.fields['workflow'].required = False
+        self.fields['tasks'].required = False
+    
+    def clean(self):
+        """Validate execution mode and required fields."""
+        cleaned_data = super().clean()
+        execution_mode = cleaned_data.get('execution_mode')
+        workflow = cleaned_data.get('workflow')
+        tasks = cleaned_data.get('tasks')
+        secator_scan_type = cleaned_data.get('secator_scan_type')
+        
+        # Check if this is an update operation on a built-in scan configuration
+        if self.instance.pk and self.instance.scan_config_type == 'builtin':
+            raise ValidationError("Built-in scan configurations cannot be modified.")
+        
+        if execution_mode == 'workflow' and not workflow:
+            raise ValidationError("Workflow is required when execution mode is 'Workflow'.")
+        
+        if execution_mode == 'tasks' and not tasks:
+            raise ValidationError("At least one task is required when execution mode is 'Individual Tasks'.")
+        
+        if execution_mode == 'scan' and not secator_scan_type:
+            raise ValidationError("Secator scan type is required when execution mode is 'Scan Type'.")
+        
+        return cleaned_data

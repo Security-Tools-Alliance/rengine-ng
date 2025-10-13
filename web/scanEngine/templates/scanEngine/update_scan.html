@@ -1,0 +1,192 @@
+{% extends "base/base.html" %}
+{% load static %}
+
+{% block title %}Update Scan{% endblock %}
+
+{% block custom_js_css_link %}
+<link rel="stylesheet" href="{% static 'scanEngine/css/secator.css' %}">
+<script src="{% static 'scanEngine/js/secator.js' %}"></script>
+{% endblock %}
+
+{% block main_content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">
+                        <i class="fas fa-edit"></i> Update Scan
+                    </h3>
+                    <div class="card-tools">
+                        <a href="{% url 'scans' %}" class="btn btn-secondary btn-sm">
+                            <i class="fas fa-arrow-left"></i> Back to Scans
+                        </a>
+                    </div>
+                </div>
+                
+                <div class="card-body">
+                    <form method="post" id="scanForm">
+                        {% csrf_token %}
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="{{ form.name.id_for_label }}">Name *</label>
+                                    {{ form.name }}
+                                    {% if form.name.errors %}
+                                        <div class="text-danger">{{ form.name.errors }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="{{ form.scan_type.id_for_label }}">Scan Type *</label>
+                                    {{ form.scan_type }}
+                                    {% if form.scan_type.errors %}
+                                        <div class="text-danger">{{ form.scan_type.errors }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="{{ form.execution_mode.id_for_label }}">Execution Mode *</label>
+                                    {{ form.execution_mode }}
+                                    {% if form.execution_mode.errors %}
+                                        <div class="text-danger">{{ form.execution_mode.errors }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Secator Scan Type (only shown when execution_mode is 'scan') -->
+                        <div class="row" id="secator-scan-type-row" style="display: none;">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="{{ form.secator_scan_type.id_for_label }}">Secator Scan Type *</label>
+                                    {{ form.secator_scan_type }}
+                                    {% if form.secator_scan_type.errors %}
+                                        <div class="text-danger">{{ form.secator_scan_type.errors }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Workflow Selection (only shown when execution_mode is 'workflow') -->
+                        <div class="row" id="workflow-selection-row" style="display: none;">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="{{ form.workflow.id_for_label }}">Workflow *</label>
+                                    {{ form.workflow }}
+                                    {% if form.workflow.errors %}
+                                        <div class="text-danger">{{ form.workflow.errors }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Tasks Selection (only shown when execution_mode is 'tasks') -->
+                        <div class="row" id="tasks-selection-row" style="display: none;">
+                            <div class="col-md-12">
+                                <div class="form-group">
+                                    <label for="{{ form.tasks.id_for_label }}">Tasks *</label>
+                                    {{ form.tasks }}
+                                    {% if form.tasks.errors %}
+                                        <div class="text-danger">{{ form.tasks.errors }}</div>
+                                    {% endif %}
+                                    <small class="form-text text-muted">Hold Ctrl/Cmd to select multiple tasks</small>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-12">
+                                <div class="form-group">
+                                    <label for="{{ form.description.id_for_label }}">Description</label>
+                                    {{ form.description }}
+                                    {% if form.description.errors %}
+                                        <div class="text-danger">{{ form.description.errors }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-check">
+                                    {{ form.is_default }}
+                                    <label class="form-check-label" for="{{ form.is_default.id_for_label }}">
+                                        Set as default scan configuration
+                                    </label>
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <div class="form-check">
+                                    {{ form.is_active }}
+                                    <label class="form-check-label" for="{{ form.is_active.id_for_label }}">
+                                        Active
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        {% if form.non_field_errors %}
+                            <div class="alert alert-danger">
+                                {{ form.non_field_errors }}
+                            </div>
+                        {% endif %}
+                        
+                        <div class="form-group mt-3">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save"></i> Update Scan
+                            </button>
+                            <a href="{% url 'scans' %}" class="btn btn-secondary">
+                                <i class="fas fa-arrow-left"></i> Back to Scans
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const executionModeSelect = document.getElementById('{{ form.execution_mode.id_for_label }}');
+    const secatorScanTypeRow = document.getElementById('secator-scan-type-row');
+    const workflowSelectionRow = document.getElementById('workflow-selection-row');
+    const tasksSelectionRow = document.getElementById('tasks-selection-row');
+    
+    function toggleExecutionMode() {
+        const mode = executionModeSelect.value;
+        
+        // Hide all rows first
+        secatorScanTypeRow.style.display = 'none';
+        workflowSelectionRow.style.display = 'none';
+        tasksSelectionRow.style.display = 'none';
+        
+        // Show relevant row based on mode
+        if (mode === 'scan') {
+            secatorScanTypeRow.style.display = 'block';
+        } else if (mode === 'workflow') {
+            workflowSelectionRow.style.display = 'block';
+        } else if (mode === 'tasks') {
+            tasksSelectionRow.style.display = 'block';
+        }
+    }
+    
+    if (executionModeSelect) {
+        // Initial call
+        toggleExecutionMode();
+        
+        // Add event listener
+        executionModeSelect.addEventListener('change', toggleExecutionMode);
+    }
+});
+</script>
+{% endblock %}

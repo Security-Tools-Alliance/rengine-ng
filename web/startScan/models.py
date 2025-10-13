@@ -55,6 +55,10 @@ class ScanHistory(models.Model):
         User, on_delete=models.CASCADE, related_name="initiated_scans", blank=True, null=True
     )
     aborted_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="aborted_scans")
+    is_legacy_scan = models.BooleanField(
+        default=False,
+        help_text="Whether this scan uses legacy EngineType (True) or new SecatorScan (False)"
+    )
 
     def __str__(self):
         return self.domain.name

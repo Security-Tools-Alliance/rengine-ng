@@ -135,9 +135,9 @@ build-service:		## Build a specific Docker service without removing images. Usag
 	fi
 	$(call gpu_config)
 	@if [ "$(REBUILD)" = "1" ]; then \
-		${DOCKER_COMPOSE_FILE_CMD} -f ${COMPOSE_FILE_BUILD} ${COMPOSE_GPU_FILE} build --no-cache --build-arg HOST_UID=$(HOST_UID) --build-arg HOST_GID=$(HOST_GID) $(SERVICE); \
+		${DOCKER_COMPOSE_FILE_CMD} -f ${COMPOSE_FILE_BUILD} ${COMPOSE_GPU_FILE} build --no-cache --build-arg HOST_UID=$(HOST_UID) --build-arg HOST_GID=$(HOST_GID) $(SERVICE) --progress=plain; \
 	else \
-		${DOCKER_COMPOSE_FILE_CMD} -f ${COMPOSE_FILE_BUILD} ${COMPOSE_GPU_FILE} build --build-arg HOST_UID=$(HOST_UID) --build-arg HOST_GID=$(HOST_GID) $(SERVICE); \
+		${DOCKER_COMPOSE_FILE_CMD} -f ${COMPOSE_FILE_BUILD} ${COMPOSE_GPU_FILE} build --build-arg HOST_UID=$(HOST_UID) --build-arg HOST_GID=$(HOST_GID) $(SERVICE) --progress=plain; \
 	fi
 
 build_up:		## Build and start all services.

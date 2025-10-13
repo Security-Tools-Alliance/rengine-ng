@@ -27,7 +27,60 @@ from startScan.models import (
 )
 
 
-admin.site.register(ScanHistory)
+@admin.register(ScanHistory)
+class ScanHistoryAdmin(admin.ModelAdmin):
+    """Admin interface for ScanHistory model with legacy scan support."""
+    
+    list_display = [
+        "domain",
+        "scan_type",
+        "is_legacy_scan",
+        "scan_status",
+        "start_scan_date",
+        "stop_scan_date",
+        "initiated_by",
+    ]
+    list_filter = [
+        "is_legacy_scan",
+        "scan_status",
+        "scan_type__scan_type",
+        "start_scan_date",
+        "initiated_by",
+    ]
+    search_fields = [
+        "domain__name",
+        "scan_type__name",
+        "initiated_by__username",
+    ]
+    readonly_fields = [
+        "start_scan_date",
+        "stop_scan_date",
+        "results_dir",
+        "celery_ids",
+        "tasks",
+    ]
+    fieldsets = (
+        ("Scan Information", {
+            "fields": ("domain", "scan_type", "is_legacy_scan", "scan_status")
+        }),
+        ("Execution Details", {
+            "fields": ("start_scan_date", "stop_scan_date", "results_dir", "celery_ids", "tasks", "error_message"),
+            "classes": ("collapse",),
+        }),
+        ("User Information", {
+            "fields": ("initiated_by", "aborted_by"),
+        }),
+        ("Results", {
+            "fields": ("emails", "employees", "buckets", "dorks", "used_gf_patterns"),
+            "classes": ("collapse",),
+        }),
+    )
+    filter_horizontal = [
+        "emails",
+        "employees", 
+        "buckets",
+        "dorks",
+    ]
 admin.site.register(SubScan)
 admin.site.register(Subdomain)
 admin.site.register(ScanActivity)

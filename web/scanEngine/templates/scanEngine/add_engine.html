@@ -56,7 +56,11 @@ Add Scan Engine
 {% block page_level_script %}
 <script type="text/javascript">
 $(document).ready(function() {
-  $('.ace_text-input').attr('id','editor');
+  // Generate unique IDs for ACE editors to avoid conflicts
+  $('.ace_text-input').each(function(index) {
+    const uniqueId = 'ace-editor-' + Date.now() + '-' + index;
+    $(this).attr('id', uniqueId);
+  });
 });
 </script>
 {% endblock page_level_script %}

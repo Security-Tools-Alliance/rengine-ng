@@ -13,7 +13,23 @@ ENV USERNAME="rengine"
 ARG HOST_UID
 ARG HOST_GID
 
-RUN apt update -y && apt install -y      \
+# Install nala for faster package management
+RUN apt update -y && apt install -y nala
+
+# Modify existing debian.sources to remove trixie from Suites (keep only trixie-updates and trixie-security)
+RUN sed -i 's/Suites: trixie trixie-updates/Suites: trixie-updates/' /etc/apt/sources.list.d/debian.sources && \
+    echo "Modified debian.sources:" && \
+    cat /etc/apt/sources.list.d/debian.sources
+
+# Use nala to fetch fast mirrors and update package lists
+RUN nala fetch --auto --debian trixie --non-free
+
+# Update package lists with nala and install all required packages
+RUN nala update && nala upgrade -y
+RUN nala install -y     \
+    gcc g++ make        \
+    openssl unzip   \
+    tar git             \
     build-essential     \
     zlib1g-dev          \
     libncurses5-dev     \
@@ -32,9 +48,7 @@ RUN apt update -y && apt install -y      \
     file                \
     vim                 \
     xvfb                \
-    git                 \
-    iputils-ping                 \
-    unzip               \
+    iputils-ping        \
     curl                \
     dnsutils            \
     gettext             \
@@ -42,8 +56,29 @@ RUN apt update -y && apt install -y      \
     net-tools           \
     geoip-bin           \
     htop                \
-    firefox-esr         \
-    fontconfig fonts-freefont-ttf fonts-noto fonts-terminus
+    sudo                \
+    chromium fping      \
+    fontconfig          \
+    fonts-freefont-ttf  \
+    fonts-noto          \
+    fonts-terminus      \
+    # Install python 3 and development tools
+    python3 python3-venv \
+    python3-dev pipx
+
+# Secator tools dependencies
+RUN nala install -y     \
+    # Install go
+    golang              \
+    # Install rust
+    rustc cargo         \
+    # Install ruby
+    ruby-full rubygems  \
+    # For maigret - Cairo development libraries
+    libcairo2-dev       \
+    libgirepository1.0-dev \
+    libpango1.0-dev     \
+    python3-gi-cairo
 
 RUN fc-cache -f && \ 
     fc-list | sort
@@ -53,27 +88,6 @@ RUN addgroup --gid $HOST_GID --system $USERNAME && \
     mkdir -p /home/$USERNAME && \
     adduser --gid $HOST_GID --system --shell /bin/false --disabled-password --uid $HOST_UID --home /home/$USERNAME $USERNAME && \
     chown $USERNAME:$USERNAME /home/$USERNAME
-
-# Download and install geckodriver
-RUN ARCH=$(dpkg --print-architecture) && \
-    version=0.35.0 && \
-    geckodriver_arm="geckodriver-v${version}-linux-aarch64.tar.gz" && \
-    geckodriver_amd="geckodriver-v${version}-linux64.tar.gz" && \
-    if [ "${ARCH}" = "arm64" ]; then \
-        wget "https://github.com/mozilla/geckodriver/releases/download/v${version}/${geckodriver_arm}" && \
-        tar -xvf "${geckodriver_arm}" -C /usr/local/bin/ && \
-        rm "${geckodriver_arm}"; \
-    elif [ "${ARCH}" = "amd64" ]; then \
-        wget "https://github.com/mozilla/geckodriver/releases/download/v${version}/${geckodriver_amd}" && \
-        tar -xvf "${geckodriver_amd}" -C /usr/local/bin/ && \
-        rm "${geckodriver_amd}"; \
-    else \
-        echo "Unknown architecture: $ARCH" && \
-        exit 1; \
-    fi
-
-# Install go
-RUN apt install -y golang
 
 USER $USERNAME
 WORKDIR /home/$USERNAME
@@ -88,93 +102,60 @@ ENV PATH="${PATH}:${GOROOT}/bin:${GOPATH}/bin:${PIPX_BIN_DIR}"
 RUN mkdir -p $TOOLPATH/.github && \
     mkdir -p $BINPATH
 
-
-# Download Go packages
-RUN ARCH=$(dpkg --print-architecture) \
-    && if [ "$ARCH" = "arm64" ] || [ "$ARCH" = "amd64" ]; then \
-        GOARCH=$ARCH go install -v github.com/jaeles-project/gospider@v1.1.6 \
-        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/tomnomnom/gf@dcd4c361f9f5ba302294ed38b8ce278e8ba69006 \
-        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/tomnomnom/unfurl@v0.4.3 \
-        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/tomnomnom/waybackurls@v0.1.0 \
-        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/projectdiscovery/httpx/cmd/httpx@v1.7.1 \
-        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@v2.8.0 \
-        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@v3.4.7 \
-        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/projectdiscovery/naabu/v2/cmd/naabu@v2.3.5 \
-        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/hakluke/hakrawler@latest \
-        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/lc/gau/v2/cmd/gau@v2.2.4 \
-        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/owasp-amass/amass/v4/...@v4.2.0 \
-        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/ffuf/ffuf/v2@v2.1.0 \
-        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/projectdiscovery/tlsx/cmd/tlsx@v1.2.0 \
-        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/hahwul/dalfox/v2@v2.12.0 \
-        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/projectdiscovery/katana/cmd/katana@v1.2.1 \
-        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/dwisiswant0/crlfuzz/cmd/crlfuzz@v1.4.1 \
-        && GOARCH=$ARCH go install -ldflags="-s -w" -v github.com/sa7mon/s3scanner@b6c26d67bc2abe346555dd7010e6065889d66039 \
-        && chmod 700 -R $GOPATH/pkg/* \
-        && rm -rf $GOPATH/pkg/* \
-        && rm -rf /home/$USERNAME/.cache/go-build/*; \
-    else \
-        echo "Unknown architecture: $ARCH" ; \
-        exit 1; \
-    fi
-
-USER root
-# Install python 3 and development tools
-RUN apt install -y python3 python3-dev python3-venv pipx build-essential gcc g++ make
-
-USER $USERNAME
-
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV PATH="${PATH}:${BINPATH}"
 
-# Install python tools
-RUN pipx ensurepath && \
-    pipx install poetry --verbose && \
-    printf "watchdog\n\
-    https://github.com/aboul3la/Sublist3r/archive/refs/tags/1.1.zip\n\
-    https://github.com/laramies/theHarvester/archive/refs/tags/4.8.2.zip\n\
-    git+https://github.com/EnableSecurity/wafw00f@2b948682064825bc319b0b80d8992d9f661a3cbb\n\
-    h8mail\n" | xargs -L1 pipx install || true
+# Install Secator and all its supported tools
+RUN pipx install secator && \
+    pipx install watchdog
 
-# Install tools
-RUN ln -s /usr/local/bin/geckodriver $BINPATH/geckodriver && \
-    cd $TOOLPATH/.github && git clone https://github.com/shmilylty/OneForAll.git && cd OneForAll && git reset --hard cefa100ba6472e1bf0f5ee128868e4b3739b684e && \
-    cd $TOOLPATH/.github && git clone https://github.com/FortyNorthSecurity/EyeWitness.git && cd EyeWitness && git reset --hard 8a2152657b52e0c4c5ce7d89c7a4c050a6e93ddc && \
-    cd $TOOLPATH/.github && git clone https://github.com/UnaPibaGeek/ctfr.git && cd ctfr && git reset --hard 6c7fecdc6346c4f5322049e38f415d5bddaa420d && \
-    cd $TOOLPATH/.github && git clone https://github.com/Tuhinshubhra/CMSeeK.git && cd CMSeeK && git reset --hard 20f9780d2e682874be959cfd487045c92e3c73f4 && \
-    cd $TOOLPATH/.github && git clone https://github.com/Security-Tools-Alliance/Infoga.git && cd Infoga && git reset --hard 6834c6f863c2bdc92cc808934bb293571d1939c1 && \
-    cd $TOOLPATH/.github && wget https://github.com/m3n0sd0n4ld/GooFuzz/releases/download/1.2.6/GooFuzz.v.1.2.6.zip && unzip GooFuzz.v.1.2.6.zip && rm GooFuzz.v.1.2.6.zip && mv GooFuzz* GooFuzz && echo "#!/bin/bash\n\nbash $TOOLPATH/.github/GooFuzz/GooFuzz \"\$@\"" > $BINPATH/GooFuzz && chmod +x $BINPATH/GooFuzz && \
-    cd $TOOLPATH/.github && git clone https://github.com/1ndianl33t/Gf-Patterns && cd Gf-Patterns && git reset --hard f686f06ae647726578920084c894100d702496cc && mkdir -p /home/$USERNAME/.gf/ && cp -r *.json /home/$USERNAME/.gf/ && \
-    cd $TOOLPATH/.github && git clone https://github.com/tomnomnom/gf.git && cd gf && git reset --hard dcd4c361f9f5ba302294ed38b8ce278e8ba69006 && cp -r examples/*.json /home/$USERNAME/.gf/ && \ 
-    mkdir -p /home/$USERNAME/.nmap/ && cd /home/$USERNAME/.nmap/ && git clone https://github.com/scipag/vulscan.git && cd vulscan && git reset --hard a87aa9775d305deabd353c0c3fd8abf4b5cc0d8c && ln -s $TOOLPATH/.github/vulscan /home/$USERNAME/.nmap/vulscan && \
-    mkdir -p $WORDLISTPATH && \
-    wget https://raw.githubusercontent.com/maurosoria/dirsearch/master/db/dicc.txt -O $WORDLISTPATH/dicc.txt && \
-    wget https://raw.githubusercontent.com/danielmiessler/SecLists/master/Fuzzing/fuzz-Bo0oM.txt -O $WORDLISTPATH/fuzz-Bo0oM.txt && \
-    wget https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/DNS/deepmagic.com-prefixes-top50000.txt -O $WORDLISTPATH/deepmagic.com-prefixes-top50000.txt && \
-    mkdir -p /home/$USERNAME/nuclei-templates && wget https://raw.githubusercontent.com/NagliNagli/Shockwave-OSS/bd7445cd320a174d3073f0a61867a40849d28436/ssrf.yaml -O /home/$USERNAME/nuclei-templates/ssrf_nagli.yaml && \
-    mkdir -p /home/$USERNAME/results
+# Install python tools
+RUN pipx install poetry --verbose
 
 # Copy poetry config files
 COPY --chown=$USERNAME:$USERNAME ./*.toml /home/$USERNAME
 
-# Install aliases for tools needing a pyproject.toml
-RUN cd $TOOLPATH/.github/OneForAll && mv /home/$USERNAME/oneforall-pyproject.toml pyproject.toml && poetry env use python3 && poetry install --no-cache && echo "#!/bin/bash\n\npoetry -C $TOOLPATH/.github/OneForAll/ run python $TOOLPATH/.github/OneForAll/oneforall.py \"\$@\"" > $BINPATH/oneforall && chmod +x $BINPATH/oneforall && \
-    cd $TOOLPATH/.github/ctfr && mv /home/$USERNAME/ctfr-pyproject.toml pyproject.toml && poetry env use python3 && poetry install --no-cache && echo "#!/bin/bash\n\npoetry -C $TOOLPATH/.github/ctfr/ run python $TOOLPATH/.github/ctfr/ctfr.py \"\$@\"" > $BINPATH/ctfr && chmod +x $BINPATH/ctfr && \
-    cd $TOOLPATH/.github/EyeWitness/Python && mv /home/$USERNAME/eyewitness-pyproject.toml pyproject.toml && poetry env use python3 && poetry install --no-cache && echo "#!/bin/bash\n\npoetry -C $TOOLPATH/.github/EyeWitness/Python run python $TOOLPATH/.github/EyeWitness/Python/EyeWitness.py \"\$@\"" > $BINPATH/EyeWitness && chmod +x $BINPATH/EyeWitness && \
-    cd $TOOLPATH/.github/CMSeeK && mv /home/$USERNAME/cmseek-pyproject.toml pyproject.toml && poetry env use python3 && poetry install --no-cache && echo "#!/bin/bash\n\npoetry -C $TOOLPATH/.github/CMSeeK/ run python $TOOLPATH/.github/CMSeeK/cmseek.py \"\$@\"" > $BINPATH/cmseek && chmod +x $BINPATH/cmseek && \
-    cd $TOOLPATH/.github/Infoga && mv /home/$USERNAME/infoga-pyproject.toml pyproject.toml && poetry env use python3 && poetry install --no-cache && echo "#!/bin/bash\n\npoetry -C $TOOLPATH/.github/Infoga/ run python $TOOLPATH/.github/Infoga/infoga.py \"\$@\"" > $BINPATH/infoga && chmod +x $BINPATH/infoga && \
-    cd /home/$USERNAME && poetry install
+# Install reNgine dependencies
+RUN cd /home/$USERNAME && poetry install
 
-# Create tools config files
-RUN nuclei -silent && naabu -version && subfinder -version && \
-    mkdir -p /home/$USERNAME/.config/theHarvester && \
-    mkdir -p /home/$USERNAME/.config/amass && \
-    mkdir -p /home/$USERNAME/.config/gau
-COPY --chown=$USERNAME:$USERNAME ./config/the-harvester-api-keys.yaml /home/$USERNAME/.config/theHarvester/api-keys.yaml
-COPY --chown=$USERNAME:$USERNAME ./config/amass.ini /home/$USERNAME/.config/amass/config.ini
-COPY --chown=$USERNAME:$USERNAME ./config/gau.toml /home/$USERNAME/.config/gau/config.toml
-RUN ln -s /home/$USERNAME/.config/theHarvester /home/$USERNAME/.theHarvester
+# Switch to root to configure sudoers for secator install
+USER root
+
+# Temporarily give rengine user full sudo access for secator tools installation
+RUN mkdir -p /etc/sudoers.d && \
+    echo "$USERNAME ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers.d/secator_temp && \
+    chmod 440 /etc/sudoers.d/secator_temp && \
+    usermod -aG sudo $USERNAME
+
+# Switch to rengine user for secator tools installation
+USER $USERNAME
+
+# Install secator tools
+RUN secator install tools
+
+# Install secator addons
+RUN secator install addons redis && \
+    secator install addons worker
+
+# Switch back to root to remove sudo access
+USER root
+
+# Remove temporary sudo access for security
+RUN rm -f /etc/sudoers.d/secator_temp && \
+    gpasswd -d $USERNAME sudo
+
+USER $USERNAME
+
+# Create directories for results and wordlists
+RUN mkdir -p $WORDLISTPATH && \
+    mkdir -p /home/$USERNAME/results && \
+    mkdir -p /home/$USERNAME/nuclei-templates
+
+# Initialize Secator tools
+RUN secator --version && \
+    ln -s /home/$USERNAME/.local/share/pipx/venvs/secator/bin/celery /home/$USERNAME/.local/bin/celery
 COPY ./entrypoint.sh /entrypoint.sh
 RUN mkdir -p /home/$USERNAME/rengine /home/$USERNAME/scan_results \
     && chown -R $USERNAME:$USERNAME /home/$USERNAME/rengine \

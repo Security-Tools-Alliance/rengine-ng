@@ -71,7 +71,7 @@ class Command(BaseCommand):
                     yaml_content = f.read()
 
                 # Determine scan type from engine's YAML configuration
-                scan_type = "bug_bounty"  # Default fallback
+                scan_type = "internet"  # Default fallback
                 try:
                     engine_config = yaml.safe_load(yaml_content)
                     if isinstance(engine_config, dict) and "scan_type" in engine_config:

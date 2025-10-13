@@ -1,0 +1,80 @@
+name: full_recon
+description: Complete reconnaissance workflow combining all techniques
+scan_type: bug_bounty
+workflow_type: custom
+
+tasks:
+  - name: subdomain_discovery
+    type: subfinder
+    config:
+      silent: true
+      threads: 10
+      
+  - name: dns_resolution
+    type: dnsx
+    config:
+      silent: true
+      threads: 10
+      
+  - name: port_scanning
+    type: naabu
+    config:
+      silent: true
+      threads: 20
+      top_ports: 1000
+      
+  - name: service_detection
+    type: nmap
+    config:
+      silent: true
+      threads: 10
+      
+  - name: url_discovery
+    type: gau
+    config:
+      silent: true
+      threads: 5
+      
+  - name: url_crawling
+    type: katana
+    config:
+      silent: true
+      threads: 10
+      depth: 3
+      
+  - name: directory_fuzzing
+    type: ffuf
+    config:
+      silent: true
+      threads: 20
+      
+  - name: parameter_fuzzing
+    type: arjun
+    config:
+      silent: true
+      threads: 10
+      
+  - name: vulnerability_scanning
+    type: nuclei
+    config:
+      silent: true
+      threads: 20
+      severity: critical,high,medium,low
+      
+  - name: xss_scanning
+    type: dalfox
+    config:
+      silent: true
+      threads: 10
+      
+  - name: waf_detection
+    type: wafw00f
+    config:
+      silent: true
+      threads: 10
+      
+  - name: multipurpose_scan
+    type: bbot
+    config:
+      silent: true
+      threads: 10

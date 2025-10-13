@@ -8,8 +8,13 @@ import shutil
 
 from django import http
 from django.contrib import messages
+from django.contrib.auth.decorators import login_required
+from django.core.paginator import Paginator
+from django.db.models import Q
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
+from django.views.decorators.http import require_http_methods
 import requests
 from rolepermissions.decorators import has_permission_decorator
 
@@ -40,6 +45,8 @@ from scanEngine.forms import (
     NotificationForm,
     ProxyForm,
     ReportForm,
+    SecatorWorkflowForm,
+    SecatorScanForm,
     UpdateEngineForm,
 )
 from scanEngine.models import (
@@ -49,9 +56,13 @@ from scanEngine.models import (
     InterestingLookupModel,
     Notification,
     Proxy,
+    SecatorWorkflow,
+    SecatorTask,
+    SecatorScan,
     VulnerabilityReportSetting,
     Wordlist,
 )
+from startScan.models import ScanHistory
 
 
 def index(request):
@@ -136,10 +147,10 @@ def delete_engine(request, id):
     obj = get_object_or_404(EngineType, id=id)
     if request.method == "POST":
         obj.delete()
-        response_data = {"status": "true"}
+        response_data = {"status": True}
         messages.add_message(request, messages.INFO, "Engine successfully deleted!")
     else:
-        response_data = {"status": "false"}
+        response_data = {"status": False}
         messages.add_message(request, messages.ERROR, "Oops! Engine could not be deleted!")
     return http.JsonResponse(response_data)
 
@@ -212,7 +223,7 @@ def delete_wordlist(request, id):
             response_data = {"status": False}
         messages.add_message(request, messages.INFO, "Wordlist successfully deleted!")
     else:
-        response_data = {"status": "false"}
+        response_data = {"status": False}
         messages.add_message(request, messages.ERROR, "Oops! Wordlist could not be deleted!")
     return http.JsonResponse(response_data)
 
@@ -566,3 +577,363 @@ def modify_tool_in_arsenal(request, id):
         form.set_value(external_tool)
     context = {"scan_engine_nav_active": "active", "form": form}
     return render(request, "scanEngine/settings/update_tool.html", context)
+
+
+# =============================================================================
+# WORKFLOW INTEGRATION VIEWS
+# =============================================================================
+
+@login_required
+def secator_workflows(request):
+    """List workflows with filtering."""
+    filter_type = request.GET.get('filter', 'all')
+    search_query = request.GET.get('search', '')
+
+    # Validate filter_type
+    valid_filter_types = {'all', 'builtin', 'custom'}
+    if filter_type not in valid_filter_types:
+        filter_type = 'all'
+    
+    workflows = SecatorWorkflow.objects.all()
+    
+    # Apply filters
+    if filter_type == 'builtin':
+        workflows = workflows.filter(workflow_type='builtin')
+    elif filter_type == 'custom':
+        workflows = workflows.filter(workflow_type='custom')
+    
+    # Apply search
+    if search_query:
+        workflows = workflows.filter(
+            Q(name__icontains=search_query) | 
+            Q(description__icontains=search_query)
+        )
+    
+    workflows = workflows.order_by('workflow_type', 'name')
+    
+    # Pagination
+    paginator = Paginator(workflows, 20)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+    
+    context = {
+        'page_obj': page_obj,
+        'filter_type': filter_type,
+        'search_query': search_query,
+    }
+    
+    return render(request, 'scanEngine/workflows.html', context)
+
+
+@login_required
+def secator_tasks(request):
+    """List tasks with filtering."""
+    filter_type = request.GET.get('filter', 'all')
+    search_query = request.GET.get('search', '')
+    
+    tasks = SecatorTask.objects.all()
+    
+    # Apply filters
+    if filter_type == 'builtin':
+        tasks = tasks.filter(is_builtin=True)
+    elif filter_type == 'custom':
+        tasks = tasks.filter(is_builtin=False)
+    elif filter_type == 'active':
+        tasks = tasks.filter(is_active=True)
+    elif filter_type == 'inactive':
+        tasks = tasks.filter(is_active=False)
+    
+    # Apply search
+    if search_query:
+        tasks = tasks.filter(
+            Q(name__icontains=search_query) | 
+            Q(task_type__icontains=search_query) |
+            Q(description__icontains=search_query) |
+            Q(category__icontains=search_query)
+        )
+    
+    # Sort alphabetically by name
+    tasks = tasks.order_by('name')
+    
+    context = {
+        'tasks': tasks,
+        'filter_type': filter_type,
+        'search_query': search_query,
+    }
+    
+    return render(request, 'scanEngine/tasks.html', context)
+
+
+@login_required
+def secator_task_detail(request, task_id):
+    """Detail view for a task."""
+    task = get_object_or_404(SecatorTask, id=task_id)
+    
+    # Get related scans
+    related_scans = SecatorScan.objects.filter(tasks=task)
+    
+    context = {
+        'task': task,
+        'related_scans': related_scans,
+    }
+    
+    return render(request, 'scanEngine/task_detail.html', context)
+
+
+@login_required
+def secator_scans(request):
+    """List scan configurations with filtering."""
+    filter_type = request.GET.get('filter', 'all')
+    search_query = request.GET.get('search', '')
+    
+    scans = SecatorScan.objects.all()
+    
+    # Apply filters
+    if filter_type == 'builtin':
+        scans = scans.filter(scan_config_type='builtin')
+    elif filter_type == 'custom':
+        scans = scans.filter(scan_config_type='custom')
+    elif filter_type == 'workflow':
+        scans = scans.filter(execution_mode='workflow')
+    elif filter_type == 'tasks':
+        scans = scans.filter(execution_mode='tasks')
+    elif filter_type == 'scan':
+        scans = scans.filter(execution_mode='scan')
+    
+    # Apply search
+    if search_query:
+        scans = scans.filter(
+            Q(name__icontains=search_query) | 
+            Q(description__icontains=search_query)
+        )
+    
+    scans = scans.order_by('scan_config_type', 'name')
+    
+    # Pagination
+    paginator = Paginator(scans, 20)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+    
+    context = {
+        'page_obj': page_obj,
+        'filter_type': filter_type,
+        'search_query': search_query,
+    }
+    
+    return render(request, 'scanEngine/scans.html', context)
+
+
+@login_required
+def secator_workflow_detail(request, workflow_id):
+    """Detail view for a workflow."""
+    workflow = get_object_or_404(SecatorWorkflow, id=workflow_id)
+    
+    # Get related scans
+    related_scans = SecatorScan.objects.filter(workflow=workflow)
+    
+    context = {
+        'workflow': workflow,
+        'related_scans': related_scans,
+    }
+    
+    return render(request, 'scanEngine/workflow_detail.html', context)
+
+
+
+
+@login_required
+def secator_scan_detail(request, scan_id):
+    """Detail view for a scan configuration."""
+    scan = get_object_or_404(SecatorScan, id=scan_id)
+    
+    # Get recent scan history using this configuration
+    recent_scans = ScanHistory.objects.filter(
+        scan_type__isnull=False,  # This will need to be updated when we link SecatorScan to ScanHistory
+        is_legacy_scan=False
+    ).order_by('-start_scan_date')[:10]
+    
+    context = {
+        'scan': scan,
+        'recent_scans': recent_scans,
+    }
+    
+    return render(request, 'scanEngine/scan_detail.html', context)
+
+
+@login_required
+def add_workflow(request):
+    """Create a new workflow."""
+    form = SecatorWorkflowForm()
+    
+    if request.method == "POST":
+        form = SecatorWorkflowForm(request.POST)
+        if form.is_valid():
+            cleaned_data = {key: clean_quotes(value) for key, value in form.cleaned_data.items()}
+            for key, value in cleaned_data.items():
+                setattr(form.instance, key, value)
+            # Custom workflows are not built-in
+            form.instance.workflow_type = 'custom'
+            form.instance.save()
+            messages.add_message(request, messages.INFO, "Workflow added successfully")
+            return http.HttpResponseRedirect(reverse("workflows"))
+    
+    context = {"scan_engine_nav_active": "active", "form": form}
+    return render(request, "scanEngine/add_workflow.html", context)
+
+
+@login_required
+def update_workflow(request, workflow_id):
+    """Update an existing workflow."""
+    workflow = get_object_or_404(SecatorWorkflow, id=workflow_id)
+    
+    # Check if workflow can be modified (early check for better UX)
+    if not workflow.can_modify():
+        messages.add_message(request, messages.ERROR, "Built-in workflows cannot be modified!")
+        return http.HttpResponseRedirect(reverse("workflows"))
+    
+    form = SecatorWorkflowForm(
+        initial={
+            "name": workflow.name,
+            "alias": workflow.alias,
+            "description": workflow.description,
+            "scan_type": workflow.scan_type,
+            "yaml_configuration": workflow.yaml_configuration,
+            "is_active": workflow.is_active,
+        }
+    )
+    
+    if request.method == "POST":
+        form = SecatorWorkflowForm(request.POST, instance=workflow)
+        if form.is_valid():
+            try:
+                cleaned_data = {key: clean_quotes(value) for key, value in form.cleaned_data.items()}
+                for key, value in cleaned_data.items():
+                    setattr(form.instance, key, value)
+                form.save()
+                messages.add_message(request, messages.INFO, "Workflow updated successfully")
+                return http.HttpResponseRedirect(reverse("workflows"))
+            except PermissionError as e:
+                messages.add_message(request, messages.ERROR, str(e))
+                return http.HttpResponseRedirect(reverse("workflows"))
+    
+    context = {"scan_engine_nav_active": "active", "form": form, "workflow": workflow}
+    return render(request, "scanEngine/update_workflow.html", context)
+
+
+@login_required
+def delete_workflow(request, workflow_id):
+    """Delete a workflow."""
+    workflow = get_object_or_404(SecatorWorkflow, id=workflow_id)
+    
+    # Check if workflow can be deleted (early check for better UX)
+    if not workflow.can_delete():
+        response_data = {"status": False, "message": "Built-in workflows cannot be deleted!"}
+        return http.JsonResponse(response_data)
+    
+    if request.method == "POST":
+        try:
+            workflow_name = workflow.name
+            workflow.delete()
+            response_data = {"status": True}
+            messages.add_message(request, messages.INFO, f"Workflow '{workflow_name}' successfully deleted!")
+        except PermissionError as e:
+            response_data = {"status": False, "message": str(e)}
+        except Exception as e:
+            response_data = {"status": False, "message": "Oops! Workflow could not be deleted!"}
+            messages.add_message(request, messages.ERROR, "Oops! Workflow could not be deleted!")
+    else:
+        response_data = {"status": False, "message": "Invalid request method"}
+        messages.add_message(request, messages.ERROR, "Oops! Workflow could not be deleted!")
+    return http.JsonResponse(response_data)
+
+
+@login_required
+def add_scan(request):
+    """Create a new scan configuration."""
+    form = SecatorScanForm()
+    
+    if request.method == "POST":
+        form = SecatorScanForm(request.POST)
+        if form.is_valid():
+            cleaned_data = {key: clean_quotes(value) for key, value in form.cleaned_data.items()}
+            for key, value in cleaned_data.items():
+                setattr(form.instance, key, value)
+            # Custom scan configurations are not built-in
+            form.instance.scan_config_type = 'custom'
+            form.instance.save()
+            messages.add_message(request, messages.INFO, "Scan configuration added successfully")
+            return http.HttpResponseRedirect(reverse("scans"))
+    
+    context = {"scan_engine_nav_active": "active", "form": form}
+    return render(request, "scanEngine/add_scan.html", context)
+
+
+@login_required
+def update_scan(request, scan_id):
+    """Update an existing scan configuration."""
+    scan = get_object_or_404(SecatorScan, id=scan_id)
+    
+    # Check if scan can be modified (early check for better UX)
+    if not scan.can_modify():
+        messages.add_message(request, messages.ERROR, "Built-in scan configurations cannot be modified!")
+        return http.HttpResponseRedirect(reverse("scans"))
+    
+    form = SecatorScanForm(
+        initial={
+            "name": scan.name,
+            "description": scan.description,
+            "scan_type": scan.scan_type,
+            "secator_scan_type": scan.secator_scan_type,
+            "execution_mode": scan.execution_mode,
+            "workflow": scan.workflow,
+            "tasks": scan.tasks.all(),
+            "is_default": scan.is_default,
+            "is_active": scan.is_active,
+        }
+    )
+    
+    if request.method == "POST":
+        form = SecatorScanForm(request.POST, instance=scan)
+        if form.is_valid():
+            try:
+                cleaned_data = {key: clean_quotes(value) for key, value in form.cleaned_data.items()}
+                for key, value in cleaned_data.items():
+                    setattr(form.instance, key, value)
+                form.save()
+                messages.add_message(request, messages.INFO, "Scan configuration updated successfully")
+                return http.HttpResponseRedirect(reverse("scans"))
+            except PermissionError as e:
+                messages.add_message(request, messages.ERROR, str(e))
+                return http.HttpResponseRedirect(reverse("scans"))
+    
+    context = {"scan_engine_nav_active": "active", "form": form, "scan": scan}
+    return render(request, "scanEngine/update_scan.html", context)
+
+
+@login_required
+def delete_scan(request, scan_id):
+    """Delete a scan configuration."""
+    scan = get_object_or_404(SecatorScan, id=scan_id)
+    
+    # Check if scan can be deleted (early check for better UX)
+    if not scan.can_delete():
+        response_data = {"status": False, "message": "Built-in scan configurations cannot be deleted!"}
+        return http.JsonResponse(response_data)
+    
+    if request.method == "POST":
+        try:
+            scan_name = scan.name
+            scan.delete()
+            response_data = {"status": True}
+            messages.add_message(request, messages.INFO, f"Scan configuration '{scan_name}' successfully deleted!")
+        except PermissionError as e:
+            response_data = {"status": False, "message": str(e)}
+        except Exception as e:
+            response_data = {"status": False, "message": "Oops! Scan configuration could not be deleted!"}
+            messages.add_message(request, messages.ERROR, "Oops! Scan configuration could not be deleted!")
+    else:
+        response_data = {"status": False, "message": "Invalid request method"}
+        messages.add_message(request, messages.ERROR, "Oops! Scan configuration could not be deleted!")
+    return http.JsonResponse(response_data)
+
+
