@@ -1,0 +1,72 @@
+{% load secator_extras %}
+<div class="workflow-selection">
+  <h5 class="mb-3">
+    <i class="fas fa-project-diagram text-primary me-2"></i>
+    Select Workflow
+  </h5>
+  
+  {% if workflows %}
+    <div class="workflow-tiles-container">
+      <div class="row">
+        {% for workflow in workflows %}
+          <div class="col-xxl-3 col-xl-4 col-lg-6 col-md-6 col-sm-12 mb-3">
+            <div class="workflow-tile" data-workflow-id="{{ workflow.id }}">
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="workflow_id" id="workflow_{{ workflow.id }}" value="{{ workflow.id }}" required>
+                <label class="form-check-label w-100" for="workflow_{{ workflow.id }}">
+                  <div class="workflow-tile-content">
+                    <div class="workflow-tile-header">
+                      <div class="tile-icon">
+                        <i class="fas fa-{{ workflow.name|workflow_icon }}"></i>
+                      </div>
+                    </div>
+                    
+                    <div class="workflow-tile-body">
+                      <div class="workflow-tile-title-row">
+                        <h6 class="workflow-tile-title">{{ workflow.name }}</h6>
+                        <div class="workflow-tasks-inline">
+                          <span class="workflow-tasks-count">{{ workflow.get_tasks|length }} tasks</span>
+                        </div>
+                      </div>
+                      <p class="workflow-tile-description">{{ workflow.description|truncatechars:80 }}</p>
+                      
+                      <!-- Tasks list compact -->
+                      <div class="workflow-tasks-compact">
+                        {% for task_name in workflow.get_tasks|slice:":4" %}
+                          {% get_task_info task_name as task_info %}
+                          <span class="workflow-task-compact-item" data-bs-toggle="tooltip" data-bs-placement="top" title="<strong>{{ task_info.category|title }}</strong><br>{{ task_info.description }}">
+                            <i class="fas fa-{{ task_info.icon }} text-muted me-1"></i>
+                            {{ task_info.name }}
+                          </span>
+                        {% endfor %}
+                        {% if workflow.get_tasks|length > 4 %}
+                          <span class="workflow-task-more-compact" data-bs-toggle="tooltip" data-bs-placement="top" title="Additional tasks: {% for task_name in workflow.get_tasks|slice:"4:" %}{{ task_name }}{% if not forloop.last %}, {% endif %}{% endfor %}">
+                            +{{ workflow.get_tasks|length|add:"-4" }} more
+                          </span>
+                        {% endif %}
+                      </div>
+                    </div>
+                    
+                    <div class="workflow-tile-footer">
+                      <div class="workflow-tile-meta">
+                        <span class="badge badge-soft-{% if workflow.workflow_type == 'builtin' %}primary{% else %}secondary{% endif %}">
+                          {{ workflow.get_workflow_type_display }}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </label>
+              </div>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  {% else %}
+    <div class="alert alert-warning">
+      <i class="fas fa-exclamation-triangle me-2"></i>
+      No workflows available for this scan type. Please select a different scan type or create custom workflows.
+    </div>
+  {% endif %}
+</div>
+

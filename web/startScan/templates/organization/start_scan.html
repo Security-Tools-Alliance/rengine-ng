@@ -8,8 +8,9 @@ Initiating Scan for Organization
 
 {% block custom_js_css_link %}
 <link href="{% static 'plugins/accordions/custom-accordions.css' %}" rel="stylesheet" type="text/css" />
+<link href="{% static 'custom/secator_scan.css' %}" rel="stylesheet" type="text/css" />
 <style>
-/* Styles pour les cartes de sélection de type de scan */
+/* Styles for scan type selection cards */
 .scan-type-card {
   border: 3px solid #e9ecef;
   border-radius: 12px;
@@ -99,7 +100,7 @@ Initiating Scan for Organization
   font-weight: 500;
 }
 
-/* Styles pour la section des éléments existants */
+/* Styles for existing elements section */
 .bg-soft-light {
   background-color: rgba(248, 249, 250, 0.8) !important;
 }
@@ -165,51 +166,35 @@ Initiating scan for {{organization.name}}
           {% csrf_token %}
           <div class="form-row">
             <div class="col-md-12 mb-4">
-              <h4>Choose Scan Type</h4>
-              <div class="mb-4">
+              <h4>Choose Execution Mode</h4>
+              <div class="execution-mode-selector mb-4">
                 <div class="row">
-                  <div class="col-md-6 mb-3">
-                    <div class="scan-type-card" data-scan-type="bug_bounty" 
-                         {% if scan_type == "bug_bounty" %}data-selected="true"{% endif %}>
-                      <div class="scan-type-icon">
-                        <i class="fas fa-bug"></i>
-                      </div>
-                      <div class="scan-type-content">
-                        <h5>Bug Bounty</h5>
-                        <p>Web application reconnaissance with subdomain discovery</p>
-                        <div class="scan-type-features">
-                          <span class="badge badge-soft-success">Subdomain Discovery</span>
-                          <span class="badge badge-soft-info">WAF Detection</span>
-                          <span class="badge badge-soft-primary">Screenshots</span>
-                          <span class="badge badge-soft-warning">OSINT</span>
-                        </div>
-                      </div>
-                      <input type="radio" name="scan_type" id="scan_type_bug_bounty" value="bug_bounty" 
-                             {% if scan_type == "bug_bounty" %}checked{% endif %} style="display: none;">
+                  <div class="col-md-4 mb-3">
+                    <div class="execution-mode-card" data-mode="workflow">
+                      <i class="fas fa-project-diagram"></i>
+                      <h5>Workflow</h5>
+                      <p>Pre-configured task sequences</p>
                     </div>
                   </div>
-                  <div class="col-md-6 mb-3">
-                    <div class="scan-type-card" data-scan-type="internal_network" 
-                         {% if scan_type == "internal_network" %}data-selected="true"{% endif %}>
-                      <div class="scan-type-icon">
-                        <i class="fas fa-network-wired"></i>
-                      </div>
-                      <div class="scan-type-content">
-                        <h5>Internal Network</h5>
-                        <p>Network infrastructure scanning and service discovery</p>
-                        <div class="scan-type-features">
-                          <span class="badge badge-soft-danger">Port Scan</span>
-                          <span class="badge badge-soft-secondary">Service Discovery</span>
-                          <span class="badge badge-soft-dark">Network Mapping</span>
-                          <span class="badge badge-soft-warning">Vulnerability Scan</span>
-                        </div>
-                      </div>
-                      <input type="radio" name="scan_type" id="scan_type_internal" value="internal_network" 
-                             {% if scan_type == "internal_network" %}checked{% endif %} style="display: none;">
+                  <div class="col-md-4 mb-3">
+                    <div class="execution-mode-card" data-mode="tasks">
+                      <i class="fas fa-tasks"></i>
+                      <h5>Individual Tasks</h5>
+                      <p>Custom task selection</p>
+                    </div>
+                  </div>
+                  <div class="col-md-4 mb-3">
+                    <div class="execution-mode-card" data-mode="scan">
+                      <i class="fas fa-radar"></i>
+                      <h5>Scan Type</h5>
+                      <p>Quick scan modes</p>
                     </div>
                   </div>
                 </div>
               </div>
+              
+              <!-- Step 2: Specific selection (dynamically loaded) -->
+              <div id="selection-container"></div>
               
               <h4>Scan Target Elements</h4>
               <div class="mb-4">
@@ -238,15 +223,96 @@ Initiating scan for {{organization.name}}
                 </div>
               </div>
               
-              <h4>Select Scan Engine</h4>
-              <div class="scan-engine-container">
-                {% if custom_engine_count == 0 %}
-                <div class="alert bg-soft-primary border-0 mb-4" role="alert">
-                  <span><b>Tips! </b> You do not have any custom scan engines. Would you like to create your own scan engine?</span>
-                  <a href="{% url 'add_engine' %}" class="text-primary">Create Custom Scan Engine</a>
+              <!-- Step 3: Advanced configuration -->
+              <div class="advanced-config-section">
+                <div class="accordion">
+                  <div class="accordion-item">
+                    <h2 class="accordion-header">
+                      <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#advancedConfig" aria-expanded="false" aria-controls="advancedConfig">
+                        <i class="fas fa-sliders-h me-2"></i> Advanced Configuration
+                      </button>
+                    </h2>
+                    <div id="advancedConfig" class="accordion-collapse collapse">
+                      <div class="accordion-body">
+                        <!-- Secator Profiles -->
+                        <div class="profile-selector">
+                          <h6>Speed Profile</h6>
+                          <div class="btn-group">
+                            <button class="btn btn-outline-primary" data-profile-type="speed" data-profile-value="jaguar">
+                              🐆 Jaguar (Fast)
+                            </button>
+                            <button class="btn btn-outline-primary" data-profile-type="speed" data-profile-value="rabbit">
+                              🐇 Rabbit (Balanced)
+                            </button>
+                            <button class="btn btn-outline-primary" data-profile-type="speed" data-profile-value="turtle">
+                              🐢 Turtle (Slow)
+                            </button>
+                          </div>
+                          
+                          <h6 class="mt-3">Stealth Profile</h6>
+                          <div class="btn-group">
+                            <button class="btn btn-outline-secondary" data-profile-type="stealth" data-profile-value="ninja">
+                              🥷 Ninja (Max Stealth)
+                            </button>
+                            <button class="btn btn-outline-secondary" data-profile-type="stealth" data-profile-value="chameleon">
+                              🦎 Chameleon (Moderate)
+                            </button>
+                            <button class="btn btn-outline-secondary" data-profile-type="stealth" data-profile-value="mouse">
+                              🐭 Mouse (Low Stealth)
+                            </button>
+                          </div>
+                        </div>
+                        
+                        <!-- Simplified/Expert Mode -->
+                        <div class="form-check form-switch mt-3">
+                          <input class="form-check-input" type="checkbox" id="expertMode">
+                          <label class="form-check-label" for="expertMode">Expert Mode</label>
+                        </div>
+                        
+                        <!-- Simplified options (always visible) -->
+                        <div class="simple-options mt-3">
+                          <div class="row">
+                            <div class="col-md-6">
+                              <label>Proxy</label>
+                              <input type="text" class="form-control" name="proxy" placeholder="socks5://host:port">
+                            </div>
+                            <div class="col-md-3">
+                              <label>Rate Limit</label>
+                              <input type="number" class="form-control" name="rate_limit" value="150">
+                            </div>
+                            <div class="col-md-3">
+                              <label>Threads</label>
+                              <input type="number" class="form-control" name="threads" value="20">
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <!-- Expert options (collapsible) -->
+                        <div id="expertOptions" class="expert-options mt-3" style="display: none;">
+                          <div class="row">
+                            <div class="col-md-6">
+                              <label>Timeout</label>
+                              <input type="number" class="form-control" name="timeout" value="300">
+                            </div>
+                            <div class="col-md-6">
+                              <label>Delay</label>
+                              <input type="number" class="form-control" name="delay" value="0">
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <!-- Automatic suggestions -->
+                        <div class="suggestions-box mt-3" style="display: none;">
+                          <div class="alert alert-info">
+                            <i class="fas fa-lightbulb"></i>
+                            <strong>Suggestions:</strong>
+                            <span id="auto-suggestions"></span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                {% endif %}
-                {% include "startScan/_items/scanEngine_select.html" %}
               </div>
               <button class="btn btn-primary submit-fn mt-2 float-end" type="submit"><i class="fe-zap"></i> Start Scan</button>
             </div>
@@ -260,36 +326,8 @@ Initiating scan for {{organization.name}}
 
 
 {% block page_level_script %}
+<script src="{% static 'custom/secator_scan.js' %}"></script>
 <script type="text/javascript">
-function updateScanEngines() {
-  var scanType = $("input[name='scan_type']:checked").val();
-  
-  // Show loading state
-  $('.scan-engine-container').html('<div class="text-center"><i class="fas fa-spinner fa-spin"></i> Loading scan engines...</div>');
-  
-  // Fetch engines for selected scan type via AJAX
-  $.ajax({
-    url: '{% url "start_organization_scan" current_project.slug organization.id %}',
-    type: 'GET',
-    data: {
-      'scan_type': scanType
-    },
-    headers: {
-      'X-Requested-With': 'XMLHttpRequest'
-    },
-    success: function(data) {
-      if (data.engine_html) {
-        $('.scan-engine-container').html(data.engine_html);
-      } else {
-        $('.scan-engine-container').html('<div class="alert alert-warning">No scan engines available for this scan type.</div>');
-      }
-    },
-    error: function() {
-      $('.scan-engine-container').html('<div class="alert alert-danger">Error loading scan engines.</div>');
-    }
-  });
-}
-
 $(function(){
   // Handle scan type card clicks
   $('.scan-type-card').click(function() {
@@ -300,9 +338,6 @@ $(function(){
     // Add selected state to clicked card
     $(this).attr('data-selected', 'true');
     $(this).find('input[type="radio"]').prop('checked', true);
-    
-    // Update scan engines
-    updateScanEngines();
   });
   
   // Handle scan type change (fallback for radio buttons)
@@ -312,9 +347,6 @@ $(function(){
     // Update card selection state
     $('.scan-type-card').removeAttr('data-selected');
     $('.scan-type-card[data-scan-type="' + scanType + '"]').attr('data-selected', 'true');
-    
-    // Update scan engines
-    updateScanEngines();
   });
 });
 </script>

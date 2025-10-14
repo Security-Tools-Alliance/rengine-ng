@@ -66,8 +66,9 @@ from startScan.models import ScanHistory
 
 
 def index(request):
-    # Get engines based on scan type
-    engine_type = EngineType.objects.order_by("engine_name").all()
+    # Get engines based on scan type - filter out legacy engines
+    # Legacy engines are kept only for retrocompatibility of old scans
+    engine_type = EngineType.objects.filter(is_legacy=False).order_by("engine_name")
     context = {
         "engine_ul_show": "show",
         "engine_li": "active",

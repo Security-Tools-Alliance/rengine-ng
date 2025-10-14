@@ -1,0 +1,63 @@
+{% load secator_extras %}
+<div class="scan-type-selection">
+  <h5 class="mb-3">
+    <i class="fas fa-radar text-primary me-2"></i>
+    Select Scan Type
+  </h5>
+  
+  {% if scan_types %}
+    <div class="scan-type-tiles-container">
+      <div class="row">
+        {% for value, label in scan_types %}
+          <div class="col-xxl-3 col-xl-4 col-lg-6 col-md-6 col-sm-12 mb-3">
+            <div class="scan-type-tile" data-scan-type="{{ value }}">
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="secator_scan_type" id="scan_type_{{ value }}" value="{{ value }}" required>
+                <label class="form-check-label w-100" for="scan_type_{{ value }}">
+                  <div class="scan-type-tile-content">
+                          <div class="scan-type-tile-header">
+                            <div class="tile-icon">
+                              <i class="fas fa-{% if value == 'domain' %}globe{% elif value == 'host' %}server{% elif value == 'network' %}network-wired{% elif value == 'subdomain' %}sitemap{% elif value == 'url' %}link{% endif %}"></i>
+                            </div>
+                          </div>
+
+                    <div class="scan-type-tile-body">
+                      <h6 class="scan-type-tile-title">{{ label }}</h6>
+                      <p class="scan-type-tile-description">
+                        {% if value == 'domain' %}
+                          Comprehensive domain reconnaissance and enumeration
+                        {% elif value == 'host' %}
+                          Single host scanning and service discovery
+                        {% elif value == 'network' %}
+                          Network-wide scanning and infrastructure mapping
+                        {% elif value == 'subdomain' %}
+                          Subdomain discovery and enumeration
+                        {% elif value == 'url' %}
+                          URL-based scanning and endpoint discovery
+                        {% endif %}
+                      </p>
+                    </div>
+
+                    <div class="scan-type-tile-footer">
+                      <div class="scan-type-tile-meta">
+                        <span class="badge badge-soft-primary">
+                          {{ value|title }} Scan
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </label>
+              </div>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  {% else %}
+    <div class="alert alert-warning">
+      <i class="fas fa-exclamation-triangle me-2"></i>
+      No scan types available. Please check the system configuration.
+    </div>
+  {% endif %}
+</div>
+

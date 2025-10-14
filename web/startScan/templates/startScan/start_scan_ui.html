@@ -7,144 +7,8 @@ Start Scan
 
 
 {% block custom_js_css_link %}
-<link href="{% static 'plugins/jquery-step/jquery.steps.css' %}" rel="stylesheet" type="text/css" />
 <link href="{% static 'plugins/accordions/custom-accordions.css' %}" rel="stylesheet" type="text/css" />
-<style>
-/* Styles pour les cartes de sélection de type de scan */
-.scan-type-card {
-  border: 3px solid #e9ecef;
-  border-radius: 12px;
-  padding: 25px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  background: #fff;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  position: relative;
-  overflow: hidden;
-}
-
-.scan-type-card:hover {
-  border-color: #007bff;
-  box-shadow: 0 8px 25px rgba(0, 123, 255, 0.15);
-  transform: translateY(-2px);
-}
-
-.scan-type-card[data-selected="true"] {
-  border-color: #007bff;
-  background: linear-gradient(135deg, rgba(0, 123, 255, 0.05) 0%, rgba(0, 123, 255, 0.1) 100%);
-  box-shadow: 0 8px 25px rgba(0, 123, 255, 0.2);
-}
-
-.scan-type-card[data-selected="true"]::before {
-  content: "✓";
-  position: absolute;
-  top: 15px;
-  right: 15px;
-  background: #007bff;
-  color: white;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: bold;
-  font-size: 16px;
-}
-
-.scan-type-icon {
-  font-size: 3.5rem;
-  margin-bottom: 20px;
-  color: #6c757d;
-  transition: all 0.3s ease;
-}
-
-.scan-type-card:hover .scan-type-icon {
-  color: #007bff;
-  transform: scale(1.1);
-}
-
-.scan-type-card[data-selected="true"] .scan-type-icon {
-  color: #007bff;
-}
-
-.scan-type-content h5 {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: #495057;
-  margin-bottom: 10px;
-}
-
-.scan-type-content p {
-  color: #6c757d;
-  margin-bottom: 20px;
-  line-height: 1.5;
-}
-
-.scan-type-features {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 8px;
-  margin-top: auto;
-}
-
-.scan-type-features .badge {
-  font-size: 0.75rem;
-  padding: 4px 8px;
-  border-radius: 6px;
-  font-weight: 500;
-}
-
-/* Styles pour la section des éléments existants */
-.bg-soft-light {
-  background-color: rgba(248, 249, 250, 0.8) !important;
-}
-
-.form-check-input:checked {
-  background-color: #007bff;
-  border-color: #007bff;
-}
-
-.form-check-input:focus {
-  border-color: #007bff;
-  outline: 0;
-  box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
-}
-
-#existing-elements-info {
-  transition: all 0.3s ease;
-}
-
-/* Responsive */
-@media (max-width: 768px) {
-  .scan-type-card {
-    padding: 20px 15px;
-  }
-  
-  .scan-type-icon {
-    font-size: 2.5rem;
-    margin-bottom: 15px;
-  }
-  
-  .scan-type-content h5 {
-    font-size: 1.25rem;
-  }
-  
-  .scan-type-features {
-    gap: 5px;
-  }
-  
-  .scan-type-features .badge {
-    font-size: 0.7rem;
-    padding: 3px 6px;
-  }
-}
-</style>
+<link href="{% static 'custom/secator_scan.css' %}" rel="stylesheet" type="text/css" />
 {% endblock custom_js_css_link %}
 
 {% block breadcrumb_title %}
@@ -165,145 +29,252 @@ Initiating scan for {{domain.name}}
         <form method="POST" id="start-scan-form">
           {% csrf_token %}
           <div id="select_engine">
-            <h4>Choose Scan Type</h4>
-            <div class="mb-4">
+            
+            <h4>Choose Execution Mode</h4>
+            <div class="execution-mode-selector mb-4">
               <div class="row">
-                <div class="col-md-6 mb-3">
-                  <div class="scan-type-card" data-scan-type="bug_bounty" 
-                       {% if scan_type == "bug_bounty" %}data-selected="true"{% endif %}>
-                    <div class="scan-type-icon">
-                      <i class="fas fa-bug"></i>
-                    </div>
-                    <div class="scan-type-content">
-                      <h5>Bug Bounty</h5>
-                      <p>Web application reconnaissance with subdomain discovery</p>
-                      <div class="scan-type-features">
-                        <span class="badge badge-soft-success">Subdomain Discovery</span>
-                        <span class="badge badge-soft-info">WAF Detection</span>
-                        <span class="badge badge-soft-primary">Screenshots</span>
-                        <span class="badge badge-soft-warning">OSINT</span>
-                      </div>
-                    </div>
-                    <input type="radio" name="scan_type" id="scan_type_bug_bounty" value="bug_bounty" 
-                           {% if scan_type == "bug_bounty" %}checked{% endif %} style="display: none;">
+                <div class="col-md-4 mb-3">
+                  <div class="execution-mode-card" data-mode="workflow">
+                    <i class="fas fa-project-diagram"></i>
+                    <h5>Workflow</h5>
+                    <p>Pre-configured task sequences</p>
                   </div>
                 </div>
-                <div class="col-md-6 mb-3">
-                  <div class="scan-type-card" data-scan-type="internal_network" 
-                       {% if scan_type == "internal_network" %}data-selected="true"{% endif %}>
-                    <div class="scan-type-icon">
-                      <i class="fas fa-network-wired"></i>
-                    </div>
-                    <div class="scan-type-content">
-                      <h5>Internal Network</h5>
-                      <p>Network infrastructure scanning and service discovery</p>
-                      <div class="scan-type-features">
-                        <span class="badge badge-soft-danger">Port Scan</span>
-                        <span class="badge badge-soft-secondary">Service Discovery</span>
-                        <span class="badge badge-soft-dark">Network Mapping</span>
-                        <span class="badge badge-soft-warning">Vulnerability Scan</span>
-                      </div>
-                    </div>
-                    <input type="radio" name="scan_type" id="scan_type_internal" value="internal_network" 
-                           {% if scan_type == "internal_network" %}checked{% endif %} style="display: none;">
+                <div class="col-md-4 mb-3">
+                  <div class="execution-mode-card" data-mode="tasks">
+                    <i class="fas fa-tasks"></i>
+                    <h5>Individual Tasks</h5>
+                    <p>Custom task selection</p>
+                  </div>
+                </div>
+                <div class="col-md-4 mb-3">
+                  <div class="execution-mode-card" data-mode="scan">
+                    <i class="fas fa-radar"></i>
+                    <h5>Scan Type</h5>
+                    <p>Quick scan modes</p>
                   </div>
                 </div>
               </div>
-              {% if has_ip_content %}
-              <div class="alert bg-soft-info border-0 mt-2" role="alert">
-                <i class="fas fa-info-circle"></i> This target contains IP addresses or network elements. Consider using <strong>Internal Network</strong> scan type for better results.
-              </div>
-              {% endif %}
             </div>
             
-            <h4>Choose Scan Engine</h4>
-            <div class="scan-engine-container">
-              <h4>Select Scan Engine</h4>
-              {% if custom_engine_count == 0 %}
-              <div class="alert bg-soft-primary border-0 mb-4" role="alert">
-                <span><b>Tips! </b> You do not have any custom scan engines. Would you like to create your own scan engine?</span>
-                <a href="{% url 'add_engine' %}" class="text-primary">Create Custom Scan Engine</a>
-              </div>
-              {% endif %}
-              {% include "startScan/_items/scanEngine_select.html" %}
-            </div>
+            <!-- Step 2: Specific selection (dynamically loaded) -->
+            <div id="selection-container"></div>
             
-            <h4>Scan Target Elements</h4>
-            <div class="mb-4">
-              <div class="card border-0 bg-soft-light">
-                <div class="card-body">
-                  <h5 class="card-title">
-                    <i class="fas fa-target text-primary me-2"></i>
-                    Scan Existing Target Elements
-                  </h5>
-                  <p class="card-text">
-                    Scan the hostnames and IP addresses already discovered in this target. This is particularly useful for internal network reconnaissance.
-                  </p>
-                  
-                  <div class="form-check form-switch">
-                    <input class="form-check-input" type="checkbox" id="scan_existing_elements" name="scan_existing_elements" value="true">
-                    <label class="form-check-label" for="scan_existing_elements">
-                      <strong>Enable scanning of existing target elements</strong>
-                    </label>
-                  </div>
-                  
-                  <div id="existing-elements-info" class="mt-3" style="display: none;">
-                    <div class="row">
-                      <div class="col-md-6">
-                        <div class="d-flex align-items-center">
-                          <i class="fas fa-globe text-success me-2"></i>
-                          <span>Hostnames: <span id="hostname-count" class="badge badge-soft-success">0</span></span>
+            <!-- Compact Configuration Sections -->
+            <div class="row">
+              <!-- Scan Target Elements -->
+              <div class="col-lg-6 mb-4">
+                <div class="card border-0 bg-soft-light h-100">
+                  <div class="card-body">
+                    <h5 class="card-title">
+                      <i class="fas fa-target text-primary me-2"></i>
+                      Scan Target Elements
+                    </h5>
+                    <p class="card-text small">
+                      Scan the hostnames and IP addresses already discovered in this target.
+                    </p>
+                    
+                    <div class="form-check form-switch">
+                      <input class="form-check-input" type="checkbox" id="scan_existing_elements" name="scan_existing_elements" value="true">
+                      <label class="form-check-label" for="scan_existing_elements">
+                        <strong>Enable scanning of existing target elements</strong>
+                      </label>
+                    </div>
+                    
+                    <div id="existing-elements-info" class="mt-3" style="display: none;">
+                      <div class="row">
+                        <div class="col-6">
+                          <div class="d-flex align-items-center">
+                            <i class="fas fa-globe text-success me-2"></i>
+                            <span class="small">Hostnames: <span id="hostname-count" class="badge badge-soft-success">0</span></span>
+                          </div>
+                        </div>
+                        <div class="col-6">
+                          <div class="d-flex align-items-center">
+                            <i class="fas fa-network-wired text-info me-2"></i>
+                            <span class="small">IP Addresses: <span id="ip-count" class="badge badge-soft-info">0</span></span>
+                          </div>
                         </div>
                       </div>
-                      <div class="col-md-6">
-                        <div class="d-flex align-items-center">
-                          <i class="fas fa-network-wired text-info me-2"></i>
-                          <span>IP Addresses: <span id="ip-count" class="badge badge-soft-info">0</span></span>
+                      
+                      <div class="alert bg-soft-info border-0 mt-2 small" role="alert">
+                        <i class="fas fa-info-circle"></i>
+                        <strong>Note:</strong> When enabled, the scan will target all discovered hostnames and IP addresses in this target, in addition to the main domain.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Import Subdomains -->
+              <div class="col-lg-6 mb-4">
+                <div class="card border-0 bg-soft-primary h-100">
+                  <div class="card-body">
+                    <h5 class="card-title">
+                      <i class="fas fa-download text-info me-2"></i>
+                      Import Subdomains
+                    </h5>
+                    <p class="card-text small">
+                      Import subdomains for <b>{{domain.name}}</b> using your private recon tools.
+                    </p>
+                    
+                    <div class="alert bg-soft-primary border-0 mt-1 mb-2 small" role="alert">
+                      <span>Separate the subdomains using <b>new line</b>. If the subdomain does not belong to <b>{{domain.name}}</b> it will be skipped.</span>
+                    </div>
+                    
+                    <label for="importSubdomainFormControlTextarea" class="form-label small">Subdomains List</label>
+                    <textarea class="form-control" id="importSubdomainFormControlTextarea" name="importSubdomainTextArea" rows="4" spellcheck="false"></textarea>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Out of Scope Subdomains -->
+              <div class="col-lg-6 mb-4">
+                <div class="card border-0 bg-soft-warning h-100">
+                  <div class="card-body">
+                    <h5 class="card-title">
+                      <i class="fas fa-ban text-warning me-2"></i>
+                      Out of Scope Subdomains
+                    </h5>
+                    <p class="card-text small">
+                      Define subdomains that should be excluded from the scan.
+                    </p>
+                    
+                    <div class="alert bg-soft-warning border-0 mt-1 mb-2 small" role="alert">
+                      <span>Separate the out of scope subdomains/keywords using new line. (No regex currently supported.)</span>
+                    </div>
+                    
+                    <label for="outOfScopeSubdomainTextarea" class="form-label small">Out of Scope Subdomains List</label>
+                    <textarea class="form-control" id="outOfScopeSubdomainTextarea" name="outOfScopeSubdomainTextarea" rows="4" spellcheck="false"></textarea>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Filters -->
+              <div class="col-lg-6 mb-4">
+                <div class="card border-0 bg-soft-info h-100">
+                  <div class="card-body">
+                    <h5 class="card-title">
+                      <i class="fas fa-filter text-info me-2"></i>
+                      Path Filters
+                    </h5>
+                    <p class="card-text small">
+                      Filter on a specific path for <b>{{domain.name}}</b>.
+                    </p>
+                    
+                    <label for="filterPath" class="form-label small">Path filter</label>
+                    <textarea class="form-control" id="filterPath" name="filterPath" rows="4" spellcheck="false"></textarea>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Advanced Configuration -->
+          <div class="advanced-config-section mt-4">
+            <div class="accordion">
+              <div class="accordion-item">
+                <div class="accordion-header">
+                  <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#advancedConfig" aria-expanded="false" aria-controls="advancedConfig">
+                    <i class="fas fa-sliders-h me-2"></i> Advanced Configuration
+                  </button>
+                </div>
+                <div id="advancedConfig" class="accordion-collapse collapse">
+                  <div class="accordion-body">
+                    <!-- Secator Profiles -->
+                    <div class="profile-selector">
+                      <h6>Speed Profile</h6>
+                      <div class="btn-group">
+                        <button class="btn btn-outline-primary" data-profile-type="speed" data-profile-value="jaguar">
+                          🐆 Jaguar (Fast)
+                        </button>
+                        <button class="btn btn-primary active" data-profile-type="speed" data-profile-value="rabbit">
+                          🐇 Rabbit (Balanced) <small class="ms-1">(Default)</small>
+                        </button>
+                        <button class="btn btn-outline-primary" data-profile-type="speed" data-profile-value="turtle">
+                          🐢 Turtle (Slow)
+                        </button>
+                      </div>
+                      
+                      <h6 class="mt-3">Stealth Profile</h6>
+                      <div class="btn-group">
+                        <button class="btn btn-outline-secondary" data-profile-type="stealth" data-profile-value="ninja">
+                          🥷 Ninja (Max Stealth)
+                        </button>
+                        <button class="btn btn-secondary active" data-profile-type="stealth" data-profile-value="chameleon">
+                          🦎 Chameleon (Moderate) <small class="ms-1">(Default)</small>
+                        </button>
+                        <button class="btn btn-outline-secondary" data-profile-type="stealth" data-profile-value="mouse">
+                          🐭 Mouse (Low Stealth)
+                        </button>
+                      </div>
+                    </div>
+                    
+                    <!-- Simplified/Expert Mode -->
+                    <div class="form-check form-switch mt-3">
+                      <input class="form-check-input" type="checkbox" id="expertMode">
+                      <label class="form-check-label" for="expertMode">Expert Mode</label>
+                    </div>
+                    
+                    <!-- Simplified options (always visible) -->
+                    <div class="simple-options mt-3">
+                      <div class="row">
+                        <div class="col-md-6">
+                          <label>Proxy</label>
+                          <input type="text" class="form-control" name="proxy" placeholder="socks5://host:port" id="proxy-input">
+                          <div class="form-check mt-2">
+                            <input class="form-check-input" type="checkbox" id="useRandomProxy" name="use_random_proxy">
+                            <label class="form-check-label" for="useRandomProxy">
+                              <small>Use random proxy from proxy settings</small>
+                            </label>
+                          </div>
+                        </div>
+                        <div class="col-md-3">
+                          <label>Rate Limit</label>
+                          <input type="number" class="form-control" name="rate_limit" value="150">
+                        </div>
+                        <div class="col-md-3">
+                          <label>Threads</label>
+                          <input type="number" class="form-control" name="threads" value="20">
                         </div>
                       </div>
                     </div>
                     
-                    <div class="alert bg-soft-info border-0 mt-3" role="alert">
-                      <i class="fas fa-info-circle"></i>
-                      <strong>Note:</strong> When enabled, the scan will target all discovered hostnames and IP addresses in this target, in addition to the main domain.
+                    <!-- Expert options (collapsible) -->
+                    <div id="expertOptions" class="expert-options mt-3" style="display: none;">
+                      <div class="row">
+                        <div class="col-md-6">
+                          <label>Timeout</label>
+                          <input type="number" class="form-control" name="timeout" value="300">
+                        </div>
+                        <div class="col-md-6">
+                          <label>Delay</label>
+                          <input type="number" class="form-control" name="delay" value="0">
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <!-- Automatic suggestions -->
+                    <div class="suggestions-box mt-3" style="display: none;">
+                      <div class="alert alert-info">
+                        <i class="fas fa-lightbulb"></i>
+                        <strong>Suggestions:</strong>
+                        <span id="auto-suggestions"></span>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
-            
-            <h4>Import/Ignore Subdomains</h4>
-            <div class="">
-              <div class="mb-3">
-                <h4 class="text-info">Import Subdomains(Optional)</h4>
-                <span class="">You can import subdomains for <b>{{domain.name}}</b> using your private recon tools.</span>
-                <br>
-                <div class="alert bg-soft-primary border-0 mt-1 mb-1" role="alert">
-                  <span class="">Separate the subdomains using <b>new line</b>. If the subdomain does not belong to <b>{{domain.name}}</b> it will be skipped.</span>
-                </div>
-                <label for="importSubdomainFormControlTextarea" class="form-label mt-1">Subdomains List</label>
-                <textarea class="form-control" id="importSubdomainFormControlTextarea" name="importSubdomainTextArea" rows="6" spellcheck="false"></textarea>
-              </div>
-              <div class="mb-3">
-                <h4 class="text-warning">Out of Scope Subdomains(Optional)</h4>
-                <span class="">You can import subdomains for <b>{{domain.name}}</b> using your private recon tools.</span>
-                <br>
-                <div class="alert bg-soft-warning border-0 mt-1 mb-1" role="alert">
-                  <span class="">Separate the out of scope subdomains/keywords using new line.(No regex currently supported.)</span>
-                </div>
-                <label for="outOfScopeSubdomainTextarea" class="form-label mt-1">Out of Scope Subdomains List</label>
-                <textarea class="form-control" id="outOfScopeSubdomainTextarea" name="outOfScopeSubdomainTextarea" rows="6" spellcheck="false"></textarea>
-              </div>
-            </div>
-
-            <h4>Filters</h4>
-            <div class="">
-              <div class="mb-3">
-                <h4 class="text-info">Filters (Optional)</h4>
-                <span class="">You can filter on a specific path for <b>{{domain.name}}</b>.</span>
-                <br>
-                <label for="filterPath" class="form-label mt-1">Path filter</label>
-                <textarea class="form-control" id="filterPath" name="filterPath" rows="6" spellcheck="false"></textarea>
+          </div>
+          
+          <!-- Submit Button -->
+          <div class="row mt-4">
+            <div class="col-12">
+              <div class="d-flex justify-content-center">
+                <button type="submit" class="btn btn-primary btn-lg px-5" id="start-scan-btn">
+                  <i class="fas fa-play me-2"></i>Start Scan
+                </button>
               </div>
             </div>
           </div>
@@ -316,7 +287,7 @@ Initiating scan for {{domain.name}}
 
 
 {% block page_level_script %}
-<script src="{% static 'plugins/jquery-step/jquery.steps.min.js' %}"></script>
+<script src="{% static 'custom/secator_scan.js' %}"></script>
 <script type="text/javascript">
 var buttonEnabled = true;
 var globalTimeout = 0;
@@ -446,23 +417,6 @@ function loadExistingElementsCount() {
 }
 
 $(function(){
-  $("#select_engine").steps({
-    headerTag: "h4",
-    bodyTag: "div",
-    transitionEffect: "slide",
-    cssClass: 'pill wizard',
-    enableKeyNavigation: false,
-    onStepChanging: updateButton,
-    onStepChanged: function(event, currentIndex, priorIndex) {
-      // Update button state when step changes
-      setTimeout(updateButton, 100);
-    },
-    labels: {finish: "Start Scan"},
-    onInit :function (event, current) {
-      $(".actions ul li:nth-child(3) a").attr('onclick', `$(this).closest('form').submit()`);
-    }
-  });
-  
   // Handle scan type card clicks
   $('.scan-type-card').click(function() {
     // Remove selected state from all cards
@@ -472,9 +426,6 @@ $(function(){
     // Add selected state to clicked card
     $(this).attr('data-selected', 'true');
     $(this).find('input[type="radio"]').prop('checked', true);
-    
-    // Update scan engines and button state
-    updateScanEngines();
   });
   
   // Handle scan type change (fallback for radio buttons)
@@ -484,14 +435,7 @@ $(function(){
     // Update card selection state
     $('.scan-type-card').removeAttr('data-selected');
     $('.scan-type-card[data-scan-type="' + scanType + '"]').attr('data-selected', 'true');
-    
-    updateScanEngines();
   });
-  
-  $("input[type=radio][name=scan_mode]").change(function() {
-    initTimer();
-    updateButton();
-  }).keyup(initTimer);
   
   // Handle existing elements checkbox
   $('#scan_existing_elements').change(function() {
