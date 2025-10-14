@@ -70,7 +70,7 @@ class Command(BaseCommand):
                 "scan_type": "internet",
                 "execution_mode": "workflow",
                 "scan_config_type": "builtin",
-                "workflow_name": "subdomain_recon",
+                "workflow_name": "Subdomain Recon",
             },
             {
                 "name": "Internet Active Recon",
@@ -78,7 +78,7 @@ class Command(BaseCommand):
                 "scan_type": "internet",
                 "execution_mode": "workflow",
                 "scan_config_type": "builtin",
-                "workflow_name": "url_vuln",
+                "workflow_name": "URL Vulnerability",
             },
             {
                 "name": "Internal Network Scan",
@@ -86,7 +86,7 @@ class Command(BaseCommand):
                 "scan_type": "internal",
                 "execution_mode": "workflow",
                 "scan_config_type": "builtin",
-                "workflow_name": "host_recon",
+                "workflow_name": "Host Recon",
             },
             {
                 "name": "WordPress Security Scan",
@@ -94,7 +94,7 @@ class Command(BaseCommand):
                 "scan_type": "internet",
                 "execution_mode": "workflow",
                 "scan_config_type": "builtin",
-                "workflow_name": "wordpress",
+                "workflow_name": "WordPress",
             },
             {
                 "name": "URL Discovery and Crawling",
@@ -102,7 +102,7 @@ class Command(BaseCommand):
                 "scan_type": "internet",
                 "execution_mode": "workflow",
                 "scan_config_type": "builtin",
-                "workflow_name": "url_crawl",
+                "workflow_name": "URL Crawl",
             },
         ]
 
@@ -154,14 +154,14 @@ class Command(BaseCommand):
     def get_builtin_workflow_yaml(self, workflow_name):
         """Get YAML configuration for built-in Secator workflows"""
         builtin_workflows = {
-            "subdomain_recon": """
+            "Subdomain Recon": """
 name: subdomain_recon
 description: Subdomain discovery workflow
 tasks:
   - subfinder
   - dnsx
 """,
-            "url_vuln": """
+            "URL Vulnerability": """
 name: url_vuln
 description: URL vulnerability scanning workflow
 tasks:
@@ -169,21 +169,21 @@ tasks:
   - dalfox
   - bbot
 """,
-            "host_recon": """
+            "Host Recon": """
 name: host_recon
 description: Host reconnaissance workflow
 tasks:
   - naabu
   - nmap
 """,
-            "wordpress": """
+            "WordPress": """
 name: wordpress
 description: WordPress vulnerability scanning workflow
 tasks:
   - wpscan
   - wpprobe
 """,
-            "url_crawl": """
+            "URL Crawl": """
 name: url_crawl
 description: URL crawling workflow
 tasks:

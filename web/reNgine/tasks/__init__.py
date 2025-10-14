@@ -1,9 +1,24 @@
-from reNgine.tasks.command import run_command
-from reNgine.tasks.detect import run_cmseek, run_wafw00f, waf_detection
-from reNgine.tasks.dns import ip_range_discovery, ping_hosts_task, query_ip_history, query_reverse_whois, query_whois
-from reNgine.tasks.fuzzing import dir_file_fuzz
+"""
+Celery tasks for reNgine.
+
+⚠️ LEGACY TASKS REMOVED ⚠️
+The following legacy tasks have been removed as Secator now handles all scanning:
+- command tasks (run_command)
+- subdomain tasks (subdomain_discovery)
+- dns tasks (ip_range_discovery, ping_hosts_task, etc.)
+- port scan tasks (nmap, port_scan, etc.)
+- url tasks (fetch_url, remove_duplicate_endpoints, etc.)
+- vulnerability tasks (nuclei_scan, dalfox_xss_scan, etc.)
+- fuzzing tasks (dir_file_fuzz)
+- screenshot tasks (screenshot)
+- http tasks (http_crawl, etc.)
+- detect tasks (run_cmseek, waf_detection, etc.)
+- osint tasks (dorking, h8mail, etc.)
+
+For all scanning needs, use Secator tasks via initiate_secator_scan.
+"""
+
 from reNgine.tasks.geo import geo_localize, geo_localize_batch
-from reNgine.tasks.http import http_crawl, intermediate_crawl, post_crawl, pre_crawl
 from reNgine.tasks.llm import llm_vulnerability_report
 from reNgine.tasks.notification import (
     send_file_to_discord,
@@ -12,118 +27,66 @@ from reNgine.tasks.notification import (
     send_scan_notif,
     send_task_notif,
 )
-from reNgine.tasks.osint import (
-    dorking,
-    h8mail,
-    osint,
-    osint_discovery,
-    the_harvester,
-)
-from reNgine.tasks.port_scan import (
-    nmap,
-    port_scan,
-    run_nmap,
-)
 from reNgine.tasks.reporting import report
 from reNgine.tasks.scan import initiate_scan, initiate_subscan
 from reNgine.tasks.secator_tasks import (
     initiate_secator_scan,
-    run_secator_workflow,
-    run_secator_tasks,
-    load_secator_workflows,
     load_secator_tasks,
-)
-from reNgine.tasks.screenshot import screenshot
-from reNgine.tasks.subdomain import subdomain_discovery
-from reNgine.tasks.url import (
-    fetch_url,
-    remove_duplicate_endpoints,
-    run_gf_list,
-)
-from reNgine.tasks.vulnerability import (
-    crlfuzz_scan,
-    dalfox_xss_scan,
-    nuclei_individual_severity_module,
-    nuclei_scan,
-    s3scanner,
-    vulnerability_scan,
+    load_secator_workflows,
+    run_secator_tasks,
+    run_secator_workflow,
 )
 
 
 # Export all tasks
 __all__ = [
-    "crlfuzz_scan",
-    "dalfox_xss_scan",
-    "dir_file_fuzz",
-    "dorking",
-    "fetch_url",
-    "geo_localize",
-    "geo_localize_batch",
-    "h8mail",
-    "http_crawl",
+    # Core scan tasks
     "initiate_scan",
     "initiate_subscan",
+    # Secator tasks
     "initiate_secator_scan",
-    "intermediate_crawl",
-    "ip_range_discovery",
-    "llm_vulnerability_report",
     "load_secator_tasks",
     "load_secator_workflows",
-    "nmap",
-    "nuclei_individual_severity_module",
-    "nuclei_scan",
-    "osint",
-    "osint_discovery",
-    "ping_hosts_task",
-    "port_scan",
-    "post_crawl",
-    "pre_crawl",
-    "query_ip_history",
-    "query_reverse_whois",
-    "query_whois",
-    "remove_duplicate_endpoints",
-    "report",
-    "resolve_ip_chunk_task",
-    "run_cmseek",
-    "run_command",
-    "run_gf_list",
-    "run_nmap",
     "run_secator_tasks",
     "run_secator_workflow",
-    "run_wafw00f",
-    "s3scanner",
-    "screenshot",
+    # Utility tasks
+    "geo_localize",
+    "geo_localize_batch",
+    "llm_vulnerability_report",
+    "report",
+    # Notification tasks
     "send_file_to_discord",
     "send_hackerone_report",
     "send_notif",
     "send_scan_notif",
     "send_task_notif",
-    "subdomain_discovery",
-    "the_harvester",
-    "vulnerability_scan",
-    "waf_detection",
 ]
 
 
 def get_scan_tasks():
-    """Return dictionary of all available scan tasks."""
+    """
+    Return dictionary of available Secator scan tasks.
+
+    ⚠️ DEPRECATED: Legacy scan tasks have been removed.
+    Only Secator tasks are returned: initiate_secator_scan, run_secator_workflow, run_secator_tasks.
+    All scanning is now handled by Secator via initiate_secator_scan.
+    """
     import sys
+    import warnings
+
+    warnings.warn(
+        "get_scan_tasks() is deprecated. Use Secator tasks via initiate_secator_scan instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
 
     current_module = sys.modules[__name__]
 
-    # All scan-compatible tasks
+    # Only Secator tasks are available
     scan_compatible_tasks = [
-        "subdomain_discovery",
-        "osint",
-        "pre_crawl",
-        "intermediate_crawl",
-        "post_crawl",
-        "port_scan",
-        "fetch_url",
-        "dir_file_fuzz",
-        "vulnerability_scan",
-        "screenshot",
-        "waf_detection",
+        "initiate_secator_scan",
+        "run_secator_workflow",
+        "run_secator_tasks",
     ]
 
     return {
@@ -133,7 +96,11 @@ def get_scan_tasks():
     }
 
 
-# Keep the old function for backward compatibility
 def get_subscan_tasks():
-    """Return dictionary of available subscan tasks."""
+    """
+    Return dictionary of available subscan tasks.
+
+    ⚠️ DEPRECATED: Legacy scan tasks have been removed.
+    Use Secator tasks via initiate_secator_scan instead.
+    """
     return get_scan_tasks()

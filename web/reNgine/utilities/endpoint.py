@@ -1,6 +1,16 @@
+"""
+⚠️ LEGACY MODULE ⚠️
+
+This module contains legacy endpoint utilities that use old task architecture.
+Functions using http_crawl task are deprecated and will not work with Secator-based scans.
+
+For new code, use Secator workflows/tasks directly via SecatorRunner.
+"""
+
 from copy import deepcopy
 import time
 from urllib.parse import urlparse
+import warnings
 
 from celery.utils.log import get_task_logger
 from django.db.models import Q
@@ -186,7 +196,10 @@ def get_interesting_endpoints(scan_history=None, target=None):
 
 def ensure_endpoints_crawled_and_execute(task_function, ctx, description=None, max_wait_time=300):
     """
-    Ensure endpoints are crawled before executing a task that needs alive endpoints.
+    DEPRECATED: Ensure endpoints are crawled before executing a task that needs alive endpoints.
+    
+    This function is deprecated and will raise NotImplementedError.
+    Use Secator workflows for endpoint crawling and task execution.
 
     Args:
         task_function: The task function to execute
@@ -196,64 +209,26 @@ def ensure_endpoints_crawled_and_execute(task_function, ctx, description=None, m
 
     Returns:
         Task result or None if no alive endpoints available
+        
+    Raises:
+        NotImplementedError: Always raised as this function is deprecated
     """
-    logger.info(f"Ensuring endpoints are crawled for {task_function.__name__}")
-
-    if alive_endpoints := get_http_urls(is_alive=True, ctx=ctx):
-        logger.info(f"Found {len(alive_endpoints)} alive endpoints, executing {task_function.__name__}")
-        return task_function(ctx=ctx, description=description)
-
-    # No alive endpoints found, check if we have uncrawled endpoints
-    uncrawled_endpoints = get_http_urls(is_uncrawled=True, ctx=ctx)
-
-    if not uncrawled_endpoints:
-        logger.warning(f"No endpoints found for {task_function.__name__}, skipping task")
-        return None
-
-    logger.info(f"Found {len(uncrawled_endpoints)} uncrawled endpoints, launching HTTP crawl first")
-
-    # Launch http_crawl synchronously for the specific endpoints we need
-    from reNgine.tasks import http_crawl
-
-    custom_ctx = deepcopy(ctx)
-    custom_ctx["track"] = False  # Don't track this internal crawl
-
-    # Execute http_crawl and wait for completion (but with timeout)
-    http_crawl_task = http_crawl.delay(
-        urls=uncrawled_endpoints[:50],  # Limit to avoid overwhelming
-        ctx=custom_ctx,
-        update_subdomain_metadatas=True,
+    # NOTE: http_crawl task removed - legacy task, functionality now in Secator
+    # This function is deprecated and will not work with Secator-based scans
+    logger.warning("ensure_endpoints_crawled_and_execute is deprecated - use Secator workflows instead")
+    raise NotImplementedError(
+        "ensure_endpoints_crawled_and_execute is deprecated and no longer supported. "
+        "Use Secator workflows for endpoint crawling and task execution."
     )
-
-    # Wait for crawl completion with timeout
-    wait_time = 0
-    check_interval = 10  # Check every 10 seconds
-
-    while wait_time < max_wait_time:
-        time.sleep(check_interval)
-        wait_time += check_interval
-
-        if alive_endpoints := get_http_urls(is_alive=True, ctx=ctx):
-            logger.info(f"HTTP crawl completed, found {len(alive_endpoints)} alive endpoints")
-            return task_function(ctx=ctx, description=description)
-
-        # Check if crawl task is done
-        if http_crawl_task.ready():
-            break
-
-    if alive_endpoints := get_http_urls(is_alive=True, ctx=ctx):
-        logger.info(f"Found {len(alive_endpoints)} alive endpoints after wait period")
-        return task_function(ctx=ctx, description=description)
-    else:
-        logger.warning(f"No alive endpoints found after {wait_time}s wait, skipping {task_function.__name__}")
-        return None
-
 
 def smart_http_crawl_if_needed(
     urls, ctx, wait_for_completion=False, max_wait_time=120, is_default=False, update_subdomain_metadatas=False
 ):
     """
-    Intelligently launch http_crawl only if endpoints need to be crawled.
+    DEPRECATED: Intelligently launch http_crawl only if endpoints need to be crawled.
+    
+    This function is deprecated and will raise NotImplementedError.
+    Use Secator workflows for HTTP crawling functionality.
 
     Args:
         urls: URLs to crawl
@@ -265,48 +240,13 @@ def smart_http_crawl_if_needed(
 
     Returns:
         True if crawl was launched/completed, False otherwise
+        
+    Raises:
+        NotImplementedError: Always raised as this function is deprecated
     """
-    from reNgine.tasks import http_crawl
-
-    if not urls:
-        return False
-
-    # Check which URLs actually need crawling
-    scan_id = ctx.get("scan_history_id")
-
-    urls_to_crawl = []
-    for url in urls:
-        # Check if endpoint exists and has been crawled
-        existing_endpoint = EndPoint.objects.filter(scan_history_id=scan_id, http_url=url).first()
-
-        if not existing_endpoint or existing_endpoint.http_status == 0:
-            urls_to_crawl.append(url)
-
-    if not urls_to_crawl:
-        logger.info("All endpoints already crawled, skipping HTTP crawl")
-        return True
-
-    logger.info(f"Launching HTTP crawl for {len(urls_to_crawl)} uncrawled URLs")
-
-    for url in urls_to_crawl:
-        logger.debug(f"URL to crawl: {url}")
-
-    custom_ctx = deepcopy(ctx)
-    custom_ctx["track"] = False
-
-    task = http_crawl.delay(
-        urls=urls_to_crawl, ctx=custom_ctx, update_subdomain_metadatas=update_subdomain_metadatas, is_default=is_default
+    # NOTE: http_crawl task removed - legacy task, functionality now in Secator
+    logger.warning("smart_http_crawl_if_needed is deprecated - use Secator workflows instead")
+    raise NotImplementedError(
+        "smart_http_crawl_if_needed is deprecated and no longer supported. "
+        "Use Secator workflows for HTTP crawling functionality."
     )
-
-    if not wait_for_completion:
-        return True
-
-    # Wait for completion
-    wait_time = 0
-    check_interval = 5
-
-    while wait_time < max_wait_time and not task.ready():
-        time.sleep(check_interval)
-        wait_time += check_interval
-
-    return task.ready()

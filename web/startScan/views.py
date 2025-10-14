@@ -19,7 +19,7 @@ import markdown
 from rolepermissions.decorators import has_permission_decorator
 from weasyprint import CSS, HTML
 
-from reNgine.utilities.data import safe_int_cast
+from reNgine.core.data import safe_int_cast
 
 from api.serializers import IpSerializer
 from reNgine.celery import app
@@ -36,8 +36,9 @@ from reNgine.definitions import (
     SUCCESS_TASK,
 )
 from reNgine.settings import RENGINE_RESULTS
-from reNgine.tasks import initiate_scan, run_command
-from reNgine.utilities.data import safe_int_cast
+from reNgine.tasks import initiate_scan
+# NOTE: run_command removed - legacy task, functionality now in Secator
+from reNgine.core.data import safe_int_cast
 from reNgine.utilities.database import create_scan_activity, create_scan_object
 from reNgine.utilities.subdomain import get_interesting_subdomains
 from scanEngine.models import EngineType, VulnerabilityReportSetting

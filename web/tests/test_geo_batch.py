@@ -233,7 +233,7 @@ class TestBatchGeolocalization(TestCase):
 
     def test_geoiplookup_injection_protection(self):
         """Test that geoiplookup protects against command injection."""
-        from reNgine.utilities.data import geoiplookup
+        from reNgine.core.data import geoiplookup
 
         # Test malicious IP addresses that could cause command injection
         malicious_ips = [
@@ -253,7 +253,7 @@ class TestBatchGeolocalization(TestCase):
 
     def test_geoiplookup_valid_ips(self):
         """Test that geoiplookup works with valid IP addresses."""
-        from reNgine.utilities.data import geoiplookup
+        from reNgine.core.data import geoiplookup
 
         # Test valid IP addresses
         valid_ips = [

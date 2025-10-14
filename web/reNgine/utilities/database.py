@@ -1,7 +1,27 @@
+"""
+⚠️ DEPRECATED MODULE ⚠️
+
+This module is deprecated and will be removed in a future version.
+Please use the new repository pattern from reNgine.services.repositories instead:
+
+- SubdomainRepository for subdomain operations
+- EndpointRepository for endpoint operations
+- VulnerabilityRepository for vulnerability operations
+- ScanRepository for scan operations
+
+Migration guide:
+- save_subdomain() → SubdomainRepository().save_from_secator()
+- save_endpoint() → EndpointRepository().save_from_secator()
+- save_vulnerability() → VulnerabilityRepository().save_from_secator()
+
+For new code, DO NOT USE THIS MODULE. Use the repositories in reNgine.services.repositories.
+"""
+
 import hashlib
 import threading
 import time
 from urllib.parse import urlparse
+import warnings
 
 from celery.utils.log import get_task_logger
 from django.core.exceptions import ValidationError
@@ -11,10 +31,15 @@ from redis.exceptions import LockError, RedisError
 import validators
 
 from dashboard.models import User
+from reNgine.core.data import is_iterable, replace_nulls
 from reNgine.settings import RENGINE_RESULTS, RENGINE_TASK_IGNORE_CACHE_KWARGS
-from reNgine.utilities.data import is_iterable, replace_nulls
 from reNgine.utilities.distributed_lock import DistributedLock, get_redis_connection
-from reNgine.utilities.url import get_domain_from_subdomain, is_target_allowed_for_domain, is_valid_url, sanitize_url
+from reNgine.utilities.url import (
+    get_domain_from_subdomain,
+    is_target_allowed_for_domain,
+    is_valid_url,
+    sanitize_url,
+)
 from startScan.models import (
     CveId,
     CweId,
@@ -34,6 +59,13 @@ from targetApp.models import Domain
 
 
 logger = get_task_logger(__name__)
+
+# Issue deprecation warning
+warnings.warn(
+    "reNgine.utilities.database is deprecated. Use reNgine.services.repositories instead.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 # Thread-local storage for IP collection
 _thread_local = threading.local()
@@ -401,7 +433,7 @@ def _collect_ip_for_geolocalization(ip_address):
     Args:
         ip_address (str): IP address to collect
     """
-    from reNgine.utilities.data import get_ip_info
+    from reNgine.core.data import get_ip_info
 
     # Check if this is a private/internal IP address
     ip_info = get_ip_info(ip_address)

@@ -20,7 +20,7 @@ from reNgine.settings import (
 )
 from reNgine.tasks.notification import send_scan_notif
 from reNgine.tasks.reporting import report
-from reNgine.utilities.data import is_iterable
+from reNgine.core.data import is_iterable
 from reNgine.utilities.database import (
     create_default_endpoint_for_subdomain,
     create_scan_object,
@@ -28,8 +28,8 @@ from reNgine.utilities.database import (
     validate_and_save_subdomain,
 )
 from reNgine.utilities.misc import determine_target_type
-from reNgine.utilities.path import SafePath
-from scanEngine.models import EngineType, SecatorScan
+from reNgine.core.path import SafePath
+from scanEngine.models import EngineType
 from startScan.models import IpAddress, ScanHistory, Subdomain, SubScan
 from targetApp.models import Domain
 
@@ -66,7 +66,6 @@ def initiate_scan(
         initiated_by (int): User ID initiating the scan.
         scan_existing_elements (bool): Whether to scan existing hostnames and IPs in the target. Default: False.
     """
-    scan = None
     try:
         # Check if this is a Secator scan or legacy scan
         if secator_scan_id:
@@ -77,9 +76,16 @@ def initiate_scan(
             # Legacy EngineType-based scan
             logger.info(f"Starting legacy scan with Engine ID: {engine_id}")
             return initiate_legacy_scan_task(
-                scan_history_id, domain_id, engine_id, scan_type, results_dir,
-                imported_subdomains, out_of_scope_subdomains, initiated_by_id,
-                url_filter, scan_existing_elements
+                scan_history_id,
+                domain_id,
+                engine_id,
+                scan_type,
+                results_dir,
+                imported_subdomains,
+                out_of_scope_subdomains,
+                initiated_by_id,
+                url_filter,
+                scan_existing_elements,
             )
     except Exception as e:
         logger.error(f"Error in initiate_scan: {e}")
@@ -90,34 +96,38 @@ def initiate_secator_scan_task(scan_history_id, secator_scan_id, domain_id):
     """Initiate a Secator-based scan."""
     try:
         from reNgine.tasks.secator_tasks import initiate_secator_scan
-        
-        # Get domain for targets
+
         domain = Domain.objects.get(id=domain_id)
         targets = [domain.name]
-        
-        # Mark scan as non-legacy
+
         scan_history = ScanHistory.objects.get(id=scan_history_id)
         scan_history.is_legacy_scan = False
         scan_history.save()
-        
-        # Start Secator scan task
-        task = initiate_secator_scan.delay(scan_history_id, secator_scan_id, targets)
-        
+
+        task = initiate_secator_scan.delay(scan_history_id, secator_scan_id, targets, domain_id)
+
         return {
             "status": "success",
             "task_id": task.id,
             "scan_type": "secator",
         }
-        
+
     except Exception as e:
         logger.error(f"Error initiating Secator scan: {e}")
         return {"status": "error", "error": str(e)}
 
 
 def initiate_legacy_scan_task(
-    scan_history_id, domain_id, engine_id, scan_type, results_dir,
-    imported_subdomains, out_of_scope_subdomains, initiated_by_id,
-    url_filter, scan_existing_elements
+    scan_history_id,
+    domain_id,
+    engine_id,
+    scan_type,
+    results_dir,
+    imported_subdomains,
+    out_of_scope_subdomains,
+    initiated_by_id,
+    url_filter,
+    scan_existing_elements,
 ):
     """Initiate a legacy EngineType-based scan."""
     # Get all available tasks dynamically from the tasks module

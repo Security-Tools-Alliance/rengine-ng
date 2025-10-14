@@ -39,22 +39,17 @@ from reNgine.settings import RENGINE_CURRENT_VERSION, RENGINE_TOOL_GITHUB_PATH
 from reNgine.tasks import (
     initiate_subscan,
     llm_vulnerability_report,
-    query_ip_history,
-    query_reverse_whois,
-    query_whois,
-    run_cmseek,
-    run_command,
-    run_gf_list,
-    run_wafw00f,
     send_hackerone_report,
 )
-from reNgine.utilities.data import get_data_from_post_request, safe_int_cast
+# NOTE: Legacy tasks removed (query_ip_history, query_reverse_whois, query_whois, 
+# run_cmseek, run_command, run_gf_list, run_wafw00f) - functionality now in Secator
+from reNgine.core.data import get_data_from_post_request, safe_int_cast
 from reNgine.utilities.database import create_scan_activity
 from reNgine.utilities.dns import check_host_alive, get_current_dns_servers
 from reNgine.utilities.endpoint import get_interesting_endpoints
 from reNgine.utilities.external import get_open_ai_key
 from reNgine.utilities.lookup import get_lookup_keywords
-from reNgine.utilities.path import is_safe_path, remove_lead_and_trail_slash
+from reNgine.core.path import is_safe_path, remove_lead_and_trail_slash
 from reNgine.utilities.subdomain import get_interesting_subdomains
 from scanEngine.models import EngineType, InstalledExternalTool, SecatorWorkflow, SecatorTask, SecatorScan
 from startScan.models import (

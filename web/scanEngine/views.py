@@ -29,7 +29,7 @@ from reNgine.definitions import (
     PERM_MODIFY_WORDLISTS,
 )
 from reNgine.settings import RENGINE_HOME, RENGINE_TOOL_GITHUB_PATH, RENGINE_WORDLISTS
-from reNgine.tasks import run_command, run_gf_list
+# NOTE: run_command and run_gf_list removed - legacy tasks, functionality now in Secator
 from reNgine.utilities.notification import (
     send_discord_message,
     send_lark_message,

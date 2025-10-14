@@ -9,8 +9,7 @@ import time
 from celery.utils.log import get_task_logger
 from django.utils import timezone
 
-from reNgine.utilities.dns_wrapper import build_command_with_dns
-from startScan.models import Command, ScanHistory
+from startScan.models import Command
 
 
 logger = get_task_logger(__name__)
@@ -209,9 +208,6 @@ def stream_command(
     """
     Execute a command and yield its output line by line in real-time.
 
-    Automatically applies DNS arguments injection for tools that support it
-    (subfinder, httpx, nmap, nuclei, dnsx, etc.)
-
     Handles subprocess output decoding with the specified encoding (default "utf-8").
     If decoding fails due to UnicodeDecodeError, falls back to "latin-1" encoding
     to ensure all bytes can be represented.
@@ -229,9 +225,7 @@ def stream_command(
     Yields:
         str or dict: Each line of the command output, processed and potentially parsed as JSON.
     """
-    yield from execute_with_dns(
-        cmd, scan_id, stream_command_internal, cwd, shell, history_file, encoding, scan_id, activity_id, trunc_char
-    )
+    yield from stream_command_internal(cmd, cwd, shell, history_file, encoding, scan_id, activity_id, trunc_char)
 
 
 def stream_command_internal(
@@ -518,113 +512,3 @@ def generate_gospider_params(custom_header):
         else:
             params.append(f' -H "{key}:{value}"')
     return " ".join(params)
-
-
-def apply_dns_wrapper(cmd, scan_id):
-    """
-    Apply DNS wrapper to command if scan has a target domain with custom DNS.
-
-    Args:
-        cmd (str): Original command string
-        scan_id (int): Scan ID to retrieve domain from
-
-    Returns:
-        str: Command with DNS arguments injected if applicable, original otherwise
-    """
-    if not scan_id:
-        return cmd
-
-    try:
-        return get_dns_command(scan_id, cmd)
-    except Exception as e:
-        logger.debug(f"DNS wrapper not applied: {e}")
-        return cmd
-
-
-def execute_with_dns(cmd, scan_id, executor_func, *args, **kwargs):
-    """
-    Execute a function with DNS arguments injection.
-
-    Args:
-        cmd (str): Command to execute
-        scan_id (int): Scan ID
-        executor_func: Function to execute (either _run_command_internal or stream_command_internal)
-        *args, **kwargs: Arguments to pass to executor_func
-
-    Returns:
-        Whatever executor_func returns
-    """
-    # Apply DNS wrapper (inject DNS arguments for tools that support it)
-    cmd = apply_dns_wrapper(cmd, scan_id)
-
-    # Execute the command
-    return executor_func(cmd, *args, **kwargs)
-
-
-def get_dns_command(scan_id, cmd):
-    """
-    Injects DNS server arguments into a command if the associated scan's domain has custom DNS servers.
-
-    This function retrieves the scan's domain and, if DNS servers are configured, modifies the command to include them.
-
-    Args:
-        scan_id (int): The ID of the scan whose domain should be checked for DNS servers.
-        cmd (str): The original command string.
-
-    Returns:
-        str: The command string with DNS arguments injected if applicable, otherwise the original command.
-    """
-    try:
-        scan = ScanHistory.objects.get(pk=scan_id)
-    except ScanHistory.DoesNotExist:
-        logger.warning(f"Scan with ID {scan_id} does not exist. DNS wrapper not applied.")
-        return cmd
-    except Exception:
-        # Use logger.exception() to capture full traceback for unexpected database errors
-        logger.exception(f"Error retrieving scan {scan_id}. DNS wrapper not applied.")
-        return cmd
-
-    try:
-        domain = scan.domain
-    except Exception:
-        # Use logger.exception() to capture full traceback
-        logger.exception(f"Error accessing domain for scan {scan_id}. DNS wrapper not applied.")
-        return cmd
-
-    if not domain or not domain.get_dns_servers():
-        return cmd
-
-    # Parse command: extract tool and arguments using shlex for proper handling of quoted arguments
-    try:
-        cmd_parts = shlex.split(cmd)
-    except ValueError as e:
-        logger.warning(f"Failed to parse command with shlex: {e}. Falling back to simple split.")
-        cmd_parts = cmd.split()
-
-    if len(cmd_parts) < 1:
-        return cmd
-
-    tool_path = cmd_parts[0]
-    args = cmd_parts[1:] if len(cmd_parts) > 1 else []
-
-    # Extract tool name from path (e.g., /home/rengine/tools/go/bin/httpx → httpx)
-    tool_name = os.path.basename(tool_path)
-
-    try:
-        # Build command with DNS wrapper using tool name for detection
-        dns_cmd = build_command_with_dns(tool_name, args, domain=domain)
-
-        # Replace tool name back with original path in the first element
-        if dns_cmd and dns_cmd[0] == tool_name:
-            dns_cmd[0] = tool_path
-
-        new_cmd = " ".join(dns_cmd)
-
-        if new_cmd != cmd:
-            logger.info(f"DNS wrapper applied: {tool_name} → added DNS {', '.join(domain.get_dns_servers())}")
-
-        return new_cmd
-    except Exception:
-        # Use logger.exception() to capture full traceback for debugging
-        logger.exception(f"Error building DNS command for '{cmd}'. Returning original command.")
-        return cmd

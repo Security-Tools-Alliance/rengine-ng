@@ -55,9 +55,9 @@ services:
       - gf_patterns:/home/rengine/.gf
       - wordlist:/home/rengine/wordlists
     healthcheck:
-      test: ["CMD", "celery","-A","secator.celery.app","status"]
+      test: ["CMD", "pgrep", "-f", "celery.*worker"]
       interval: 10s
-      timeout: 10s
+      timeout: 5s
       retries: 60
     depends_on:
       db:

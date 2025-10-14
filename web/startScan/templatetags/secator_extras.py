@@ -94,6 +94,8 @@ def workflow_icon(workflow_name):
         'url fuzz': 'bomb',                      # URL fuzzing
         'url parameters fuzz': 'cogs',           # Parameter fuzzing
         'url vulnerability': 'exclamation-triangle', # Vulnerability scanning
+        'user hunt': 'users',                    # User hunting
+        'wordpress': 'wordpress',                # WordPress scanning
         'domain recon': 'search-location',       # Domain reconnaissance
         'ip recon': 'map-marked-alt',            # IP reconnaissance
         'port scan': 'plug',                     # Port scanning

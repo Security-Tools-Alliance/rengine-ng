@@ -64,7 +64,7 @@ RUN nala install -y     \
     fonts-terminus      \
     # Install python 3 and development tools
     python3 python3-venv \
-    python3-dev pipx
+    python3-dev pipx python3-watchdog
 
 # Secator tools dependencies
 RUN nala install -y     \
@@ -157,6 +157,7 @@ RUN mkdir -p $WORDLISTPATH && \
 RUN secator --version && \
     ln -s /home/$USERNAME/.local/share/pipx/venvs/secator/bin/celery /home/$USERNAME/.local/bin/celery
 COPY ./entrypoint.sh /entrypoint.sh
+COPY ./smart_reload.py /home/$USERNAME/smart_reload.py
 RUN mkdir -p /home/$USERNAME/rengine /home/$USERNAME/scan_results \
     && chown -R $USERNAME:$USERNAME /home/$USERNAME/rengine \
     && chown -R $USERNAME:$USERNAME /home/$USERNAME/scan_results

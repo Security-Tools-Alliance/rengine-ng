@@ -379,7 +379,7 @@ class ScanActivitySerializer(serializers.ModelSerializer):
         """Get elapsed time since task started"""
         from django.utils import timezone
 
-        from reNgine.utilities.time import get_time_taken
+        from reNgine.core.time import get_time_taken
 
         return get_time_taken(timezone.now(), scan_activity.time)
 

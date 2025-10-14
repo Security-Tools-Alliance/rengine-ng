@@ -11,7 +11,7 @@ from django.utils import timezone
 
 from reNgine.definitions import CELERY_TASK_STATUSES, ENGINE_DISPLAY_NAMES, NUCLEI_REVERSE_SEVERITY_MAP
 from reNgine.llm.utils import convert_markdown_to_html
-from reNgine.utilities.time import get_time_taken
+from reNgine.core.time import get_time_taken
 from scanEngine.models import EngineType
 from targetApp.models import Domain
 

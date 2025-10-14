@@ -2,7 +2,7 @@ from celery.utils.log import get_task_logger
 import validators
 
 from reNgine.celery import app
-from reNgine.utilities.data import geoiplookup
+from reNgine.core.data import geoiplookup
 from startScan.models import CountryISO, IpAddress
 
 
@@ -71,7 +71,7 @@ def geo_localize_batch(ip_addresses):
                 continue
 
             # Skip private/internal IP addresses
-            from reNgine.utilities.data import get_ip_info
+            from reNgine.core.data import get_ip_info
 
             ip_info = get_ip_info(ip_address)
             if ip_info and ip_info.is_private:

@@ -6,8 +6,10 @@ ensuring compatibility with the existing database structure.
 """
 
 import logging
-from typing import Dict, Any, List, Optional
+from typing import Any, Dict, List, Optional
+
 from django.db import transaction
+
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +17,7 @@ logger = logging.getLogger(__name__)
 class SecatorParser:
     """
     Parse Secator results and convert to Django models.
-    
+
     This class handles the conversion of Secator output to reNgine's Django models,
     ensuring compatibility with the existing database structure.
     """
@@ -27,10 +29,10 @@ class SecatorParser:
     def parse(self, result: Dict[str, Any]) -> Optional[Any]:
         """
         Parse a Secator result and convert to appropriate Django model.
-        
+
         Args:
             result: Secator result dictionary
-            
+
         Returns:
             Django model instance or None if parsing fails
         """
@@ -59,10 +61,10 @@ class SecatorParser:
     def _parse_subdomain(self, result: Dict[str, Any]) -> Optional[Any]:
         """
         Parse subdomain result and create Subdomain model instance.
-        
+
         Args:
             result: Secator subdomain result
-            
+
         Returns:
             Subdomain model instance or None
         """
@@ -83,10 +85,10 @@ class SecatorParser:
     def _parse_url(self, result: Dict[str, Any]) -> Optional[Any]:
         """
         Parse URL result and create EndPoint model instance.
-        
+
         Args:
             result: Secator URL result
-            
+
         Returns:
             EndPoint model instance or None
         """
@@ -107,10 +109,10 @@ class SecatorParser:
     def _parse_vulnerability(self, result: Dict[str, Any]) -> Optional[Any]:
         """
         Parse vulnerability result and create Vulnerability model instance.
-        
+
         Args:
             result: Secator vulnerability result
-            
+
         Returns:
             Vulnerability model instance or None
         """
@@ -121,7 +123,9 @@ class SecatorParser:
             valid_severities = {"critical", "high", "medium", "low", "info"}
             raw_severity = result.get("severity", "").lower()
             if raw_severity not in valid_severities:
-                logger.warning(f"Unknown or missing severity '{raw_severity}' in vulnerability result, defaulting to 'medium'")
+                logger.warning(
+                    f"Unknown or missing severity '{raw_severity}' in vulnerability result, defaulting to 'medium'"
+                )
                 severity = "medium"
             else:
                 severity = raw_severity
@@ -144,10 +148,10 @@ class SecatorParser:
     def _parse_port(self, result: Dict[str, Any]) -> Optional[Any]:
         """
         Parse port result and create Port model instance.
-        
+
         Args:
             result: Secator port result
-            
+
         Returns:
             Port model instance or None
         """
@@ -159,7 +163,7 @@ class SecatorParser:
             if port_number is None:
                 logger.warning(f"Port result missing port number: {result}")
                 return None
-            
+
             # Check for boolean values (True/False)
             if isinstance(port_number, bool):
                 logger.warning(f"Port number '{port_number}' is a boolean value: {result}")
@@ -202,10 +206,10 @@ class SecatorParser:
     def _parse_technology(self, result: Dict[str, Any]) -> Optional[Any]:
         """
         Parse technology result and create Technology model instance.
-        
+
         Args:
             result: Secator technology result
-            
+
         Returns:
             Technology model instance or None
         """
@@ -227,10 +231,10 @@ class SecatorParser:
     def _parse_email(self, result: Dict[str, Any]) -> Optional[Any]:
         """
         Parse email result and create Email model instance.
-        
+
         Args:
             result: Secator email result
-            
+
         Returns:
             Email model instance or None
         """
@@ -251,10 +255,10 @@ class SecatorParser:
     def _parse_ip(self, result: Dict[str, Any]) -> Optional[Any]:
         """
         Parse IP result and create IPAddress model instance.
-        
+
         Args:
             result: Secator IP result
-            
+
         Returns:
             IPAddress model instance or None
         """
@@ -275,10 +279,10 @@ class SecatorParser:
     def parse_batch(self, results: List[Dict[str, Any]]) -> List[Any]:
         """
         Parse a batch of Secator results.
-        
+
         Args:
             results: List of Secator result dictionaries
-            
+
         Returns:
             List of Django model instances
         """
@@ -293,35 +297,35 @@ class SecatorParser:
     def save_results(self, results: List[Any], scan_history_id: int) -> int:
         """
         Save parsed results to database with transaction.
-        
+
         Args:
             results: List of Django model instances
             scan_history_id: Scan history ID for association
-            
+
         Returns:
             Number of results saved
         """
         saved_count = 0
-        
+
         try:
             with transaction.atomic():
                 for result in results:
                     if result:
                         # Set appropriate association based on model type
                         self._set_model_association(result, scan_history_id)
-                        
+
                         result.save()
                         saved_count += 1
-                        
+
         except Exception as e:
             logger.error(f"Error saving results: {e}")
-            
+
         return saved_count
-    
+
     def _set_model_association(self, model_instance: Any, scan_history_id: int) -> None:
         """
         Set appropriate association for model instance based on its type.
-        
+
         Args:
             model_instance: Django model instance
             scan_history_id: Scan history ID for association
@@ -354,28 +358,20 @@ class SecatorParser:
                 # We need to find or create the associated IP address
                 # For now, we'll skip setting association for Port
                 # as it requires more complex logic to determine the IP
-                logger.debug(
-                    "Port model doesn't have scan_history field, skipping association"
-                )
+                logger.debug("Port model doesn't have scan_history field, skipping association")
 
             elif model_class == "Technology":
                 # Technology doesn't have scan_history field
                 # It's associated through subdomain relationships
-                logger.debug(
-                    "Technology model doesn't have scan_history field, skipping association"
-                )
+                logger.debug("Technology model doesn't have scan_history field, skipping association")
 
             elif model_class == "Email":
                 # Email doesn't have scan_history field
-                logger.debug(
-                    "Email model doesn't have scan_history field, skipping association"
-                )
+                logger.debug("Email model doesn't have scan_history field, skipping association")
 
             elif model_class == "IpAddress":
                 # IpAddress doesn't have scan_history field
-                logger.debug(
-                    "IpAddress model doesn't have scan_history field, skipping association"
-                )
+                logger.debug("IpAddress model doesn't have scan_history field, skipping association")
 
             elif hasattr(model_instance, "scan_history"):
                 model_instance.scan_history = scan_history

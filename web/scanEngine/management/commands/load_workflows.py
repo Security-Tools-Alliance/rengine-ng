@@ -54,7 +54,8 @@ class Command(BaseCommand):
         
         builtin_workflows = [
             {
-                "name": "cidr_recon",
+                "name": "CIDR Recon",
+                "alias": "cidr_recon",
                 "description": "Local network reconnaissance",
                 "scan_type": "internal",
                 "yaml_config": """
@@ -67,7 +68,8 @@ tasks:
 """,
             },
             {
-                "name": "code_scan",
+                "name": "Code Scan",
+                "alias": "code_scan",
                 "description": "Code vulnerability scanning",
                 "scan_type": "internet",
                 "yaml_config": """
@@ -79,7 +81,8 @@ tasks:
 """,
             },
             {
-                "name": "host_recon",
+                "name": "Host Recon",
+                "alias": "host_recon",
                 "description": "Host reconnaissance",
                 "scan_type": "internal",
                 "yaml_config": """
@@ -92,7 +95,8 @@ tasks:
 """,
             },
             {
-                "name": "subdomain_recon",
+                "name": "Subdomain Recon",
+                "alias": "subdomain_recon",
                 "description": "Subdomain discovery",
                 "scan_type": "internet",
                 "yaml_config": """
@@ -104,7 +108,8 @@ tasks:
 """,
             },
             {
-                "name": "url_bypass",
+                "name": "URL Bypass",
+                "alias": "url_bypass",
                 "description": "Try bypass techniques for 4xx URLs",
                 "scan_type": "internet",
                 "yaml_config": """
@@ -115,7 +120,8 @@ tasks:
 """,
             },
             {
-                "name": "url_crawl",
+                "name": "URL Crawl",
+                "alias": "url_crawl",
                 "description": "URL crawl (fast)",
                 "scan_type": "internet",
                 "yaml_config": """
@@ -128,7 +134,8 @@ tasks:
 """,
             },
             {
-                "name": "url_dirsearch",
+                "name": "URL Directory Search",
+                "alias": "url_dirsearch",
                 "description": "URL directory search",
                 "scan_type": "internet",
                 "yaml_config": """
@@ -140,7 +147,8 @@ tasks:
 """,
             },
             {
-                "name": "url_fuzz",
+                "name": "URL Fuzz",
+                "alias": "url_fuzz",
                 "description": "URL fuzz (slow)",
                 "scan_type": "internet",
                 "yaml_config": """
@@ -152,7 +160,8 @@ tasks:
 """,
             },
             {
-                "name": "url_params_fuzz",
+                "name": "URL Parameters Fuzz",
+                "alias": "url_params_fuzz",
                 "description": "Extract parameters from an URL and fuzz them",
                 "scan_type": "internet",
                 "yaml_config": """
@@ -164,7 +173,8 @@ tasks:
 """,
             },
             {
-                "name": "url_vuln",
+                "name": "URL Vulnerability",
+                "alias": "url_vuln",
                 "description": "URL vulnerability scan (gf, dalfox)",
                 "scan_type": "internet",
                 "yaml_config": """
@@ -177,7 +187,8 @@ tasks:
 """,
             },
             {
-                "name": "user_hunt",
+                "name": "User Hunt",
+                "alias": "user_hunt",
                 "description": "User account search",
                 "scan_type": "internet",
                 "yaml_config": """
@@ -189,7 +200,8 @@ tasks:
 """,
             },
             {
-                "name": "wordpress",
+                "name": "WordPress",
+                "alias": "wordpress",
                 "description": "WordPress vulnerability scan",
                 "scan_type": "internet",
                 "yaml_config": """
@@ -211,6 +223,7 @@ tasks:
                     "workflow_type": "builtin",
                     "yaml_configuration": workflow_data["yaml_config"],
                     "scan_type": workflow_data["scan_type"],
+                    "alias": workflow_data.get("alias"),
                     "is_active": True,
                 }
             )
@@ -219,11 +232,16 @@ tasks:
                 created_count += 1
                 self.stdout.write(f"Created built-in workflow: {workflow_data['name']}")
             elif force:
-                workflow.description = workflow_data["description"]
-                workflow.yaml_configuration = workflow_data["yaml_config"]
-                workflow.scan_type = workflow_data["scan_type"]
-                workflow.save()
-                self.stdout.write(f"Updated built-in workflow: {workflow_data['name']}")
+                # Only update if the workflow is not builtin to avoid permission errors
+                if workflow.workflow_type != 'builtin':
+                    workflow.description = workflow_data["description"]
+                    workflow.yaml_configuration = workflow_data["yaml_config"]
+                    workflow.scan_type = workflow_data["scan_type"]
+                    workflow.alias = workflow_data.get("alias")
+                    workflow.save()
+                    self.stdout.write(f"Updated workflow: {workflow_data['name']}")
+                else:
+                    self.stdout.write(f"Built-in workflow already exists: {workflow_data['name']} (skipped update)")
 
         self.stdout.write(f"Loaded {created_count} built-in workflows")
 
@@ -314,7 +332,7 @@ tasks:
                 "name": "Internet Passive",
                 "description": "Passive reconnaissance for Internet targets",
                 "scan_type": "internet",
-                "workflow_name": "subdomain_recon",
+                "workflow_name": "Subdomain Recon",
                 "execution_mode": "workflow",
                 "scan_config_type": "builtin",
             },
@@ -322,7 +340,7 @@ tasks:
                 "name": "Internet Active",
                 "description": "Active reconnaissance with vulnerability scanning",
                 "scan_type": "internet",
-                "workflow_name": "url_vuln",
+                "workflow_name": "URL Vulnerability",
                 "execution_mode": "workflow",
                 "scan_config_type": "builtin",
             },
@@ -330,7 +348,7 @@ tasks:
                 "name": "Internal Network",
                 "description": "Internal network reconnaissance",
                 "scan_type": "internal",
-                "workflow_name": "host_recon",
+                "workflow_name": "Host Recon",
                 "execution_mode": "workflow",
                 "scan_config_type": "builtin",
             },
@@ -338,7 +356,7 @@ tasks:
                 "name": "WordPress Security",
                 "description": "WordPress-specific vulnerability scanning",
                 "scan_type": "internet",
-                "workflow_name": "wordpress",
+                "workflow_name": "WordPress",
                 "execution_mode": "workflow",
                 "scan_config_type": "builtin",
             },
@@ -375,13 +393,17 @@ tasks:
                     created_count += 1
                     self.stdout.write(f"Created scan config: {config_data['name']}")
                 elif force:
-                    scan_config.description = config_data["description"]
-                    scan_config.scan_type = config_data["scan_type"]
-                    scan_config.workflow = workflow
-                    scan_config.execution_mode = config_data["execution_mode"]
-                    scan_config.scan_config_type = config_data["scan_config_type"]
-                    scan_config.save()
-                    self.stdout.write(f"Updated scan config: {config_data['name']}")
+                    # Only update if the scan config is not builtin to avoid permission errors
+                    if scan_config.scan_config_type != 'builtin':
+                        scan_config.description = config_data["description"]
+                        scan_config.scan_type = config_data["scan_type"]
+                        scan_config.workflow = workflow
+                        scan_config.execution_mode = config_data["execution_mode"]
+                        scan_config.scan_config_type = config_data["scan_config_type"]
+                        scan_config.save()
+                        self.stdout.write(f"Updated scan config: {config_data['name']}")
+                    else:
+                        self.stdout.write(f"Built-in scan config already exists: {config_data['name']} (skipped update)")
 
             except SecatorWorkflow.DoesNotExist:
                 missing_workflows.append({
