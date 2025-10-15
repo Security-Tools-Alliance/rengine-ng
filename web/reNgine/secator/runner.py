@@ -299,13 +299,18 @@ class SecatorRunner:
             if "threads" in config or "concurrency" in config:
                 # Priority: 'threads' takes precedence over 'concurrency' when both are set
                 # If 'threads' is explicitly set and not None/empty/false, use it; otherwise use 'concurrency'
-                if "threads" in config and config["threads"] is not None and config["threads"] != "" and config["threads"] is not False:
+                if (
+                    "threads" in config
+                    and config["threads"] is not None
+                    and config["threads"] != ""
+                    and config["threads"] is not False
+                ):
                     secator_config["global"]["concurrency"] = config["threads"]
                 else:
                     secator_config["global"]["concurrency"] = config.get("concurrency", 20)
             if "timeout" in config:
                 secator_config["global"]["timeout"] = config["timeout"]
-            
+
             # Merge all other config keys directly
             for key, value in config.items():
                 if key not in ["rate_limit", "threads", "concurrency", "timeout"]:
@@ -318,7 +323,7 @@ class SecatorRunner:
                 secator_config["speed_profile"] = profiles["speed"]
             if "stealth" in profiles:
                 secator_config["stealth_profile"] = profiles["stealth"]
-            
+
             # Merge all other profile keys directly
             for key, value in profiles.items():
                 if key not in ["speed", "stealth"]:

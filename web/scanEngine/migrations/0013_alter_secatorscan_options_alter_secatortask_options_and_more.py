@@ -4,22 +4,21 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('scanEngine', '0012_add_secator_enhanced_fields'),
+        ("scanEngine", "0012_add_secator_enhanced_fields"),
     ]
 
     operations = [
         migrations.AlterModelOptions(
-            name='secatorscan',
-            options={'ordering': ['scan_config_type', 'name']},
+            name="secatorscan",
+            options={"ordering": ["scan_config_type", "name"]},
         ),
         migrations.AlterModelOptions(
-            name='secatortask',
-            options={'ordering': ['category', 'name']},
+            name="secatortask",
+            options={"ordering": ["category", "name"]},
         ),
         migrations.AlterModelOptions(
-            name='secatorworkflow',
-            options={'ordering': ['workflow_type', 'name']},
+            name="secatorworkflow",
+            options={"ordering": ["workflow_type", "name"]},
         ),
     ]

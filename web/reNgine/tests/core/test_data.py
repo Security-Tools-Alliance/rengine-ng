@@ -5,12 +5,12 @@ Tests for core data utilities.
 from django.test import TestCase
 
 from reNgine.core.data import (
-    return_iterable,
-    replace_nulls,
-    is_iterable,
-    safe_int_cast,
     get_ip_info,
     get_ips_from_cidr_range,
+    is_iterable,
+    replace_nulls,
+    return_iterable,
+    safe_int_cast,
 )
 
 
@@ -41,53 +41,38 @@ class TestDataUtils(TestCase):
         """Test replace_nulls with dictionary."""
         result = replace_nulls({"key\x00": "value\x00"})
         self.assertEqual(result, {"key": "value"})
-    
+
     def test_replace_nulls_nested(self):
         """Test replace_nulls with nested dictionaries and lists."""
         nested = {
             "key\x00": [
                 "val\x00ue",
                 {"inner\x00key": "inn\x00ervalue"},
-                ["li\x00st", {"deep\x00key": "deep\x00value"}]
+                ["li\x00st", {"deep\x00key": "deep\x00value"}],
             ],
-            "plain": "no\x00null"
+            "plain": "no\x00null",
         }
-        expected = {
-            "key": [
-                "value",
-                {"innerkey": "innervalue"},
-                ["list", {"deepkey": "deepvalue"}]
-            ],
-            "plain": "nonull"
-        }
+        expected = {"key": ["value", {"innerkey": "innervalue"}, ["list", {"deepkey": "deepvalue"}]], "plain": "nonull"}
         result = replace_nulls(nested)
         self.assertEqual(result, expected)
 
     def test_replace_nulls_key_collision_raises_error(self):
         """Test that replace_nulls raises ValueError when key collision would occur."""
-        collision_dict = {
-            "key\x00": "value1",
-            "key": "value2"
-        }
-        
+        collision_dict = {"key\x00": "value1", "key": "value2"}
+
         with self.assertRaises(ValueError) as context:
             replace_nulls(collision_dict)
-        
+
         self.assertIn("Key collision detected", str(context.exception))
         self.assertIn("key", str(context.exception))
 
     def test_replace_nulls_multiple_collisions(self):
         """Test that replace_nulls reports all colliding keys."""
-        collision_dict = {
-            "key\x00": "value1",
-            "key": "value2",
-            "another\x00key": "value3",
-            "anotherkey": "value4"
-        }
-        
+        collision_dict = {"key\x00": "value1", "key": "value2", "another\x00key": "value3", "anotherkey": "value4"}
+
         with self.assertRaises(ValueError) as context:
             replace_nulls(collision_dict)
-        
+
         error_msg = str(context.exception)
         self.assertIn("Key collision detected", error_msg)
         self.assertIn("key", error_msg)
@@ -95,18 +80,10 @@ class TestDataUtils(TestCase):
 
     def test_replace_nulls_no_collision_success(self):
         """Test that replace_nulls works when no key collisions occur."""
-        safe_dict = {
-            "key1": "value1",
-            "key2\x00": "value2",
-            "key3": "value3\x00"
-        }
-        
+        safe_dict = {"key1": "value1", "key2\x00": "value2", "key3": "value3\x00"}
+
         result = replace_nulls(safe_dict)
-        expected = {
-            "key1": "value1",
-            "key2": "value2",
-            "key3": "value3"
-        }
+        expected = {"key1": "value1", "key2": "value2", "key3": "value3"}
         self.assertEqual(result, expected)
 
     def test_replace_nulls_nested_collision_raises_error(self):
@@ -114,14 +91,14 @@ class TestDataUtils(TestCase):
         nested_collision = {
             "level1": {
                 "key\x00": "value1",
-                "key": "value2"  # This will collide with "key\x00"
+                "key": "value2",  # This will collide with "key\x00"
             },
-            "level2": "safe"
+            "level2": "safe",
         }
-        
+
         with self.assertRaises(ValueError) as context:
             replace_nulls(nested_collision)
-        
+
         self.assertIn("Key collision detected", str(context.exception))
         self.assertIn("key", str(context.exception))
 
@@ -132,15 +109,15 @@ class TestDataUtils(TestCase):
                 "level2": {
                     "level3": {
                         "key\x00": "value1",
-                        "key": "value2"  # Collision at level 3
+                        "key": "value2",  # Collision at level 3
                     }
                 }
             }
         }
-        
+
         with self.assertRaises(ValueError) as context:
             replace_nulls(deeply_nested)
-        
+
         self.assertIn("Key collision detected", str(context.exception))
         self.assertIn("key", str(context.exception))
 
@@ -152,12 +129,12 @@ class TestDataUtils(TestCase):
             "items": [
                 {"name\x00": "item1"},
                 {"name": "item2"},  # No collision - different dicts
-                {"other": "item3"}
+                {"other": "item3"},
             ]
         }
-        
+
         result = replace_nulls(list_with_dicts)
-        
+
         # Verify structure is preserved and nulls are removed
         self.assertEqual(len(result["items"]), 3)
         self.assertEqual(result["items"][0]["name"], "item1")
@@ -170,14 +147,14 @@ class TestDataUtils(TestCase):
             "items": [
                 {
                     "name\x00": "item1",
-                    "name": "item2"  # This WILL collide within the same dict
+                    "name": "item2",  # This WILL collide within the same dict
                 }
             ]
         }
-        
+
         with self.assertRaises(ValueError) as context:
             replace_nulls(list_with_single_dict_collision)
-        
+
         self.assertIn("Key collision detected", str(context.exception))
         self.assertIn("name", str(context.exception))
 
@@ -188,32 +165,25 @@ class TestDataUtils(TestCase):
                 "database": {
                     "host": "localhost",
                     "port": 5432,
-                    "name\x00": "test_db"  # No collision
+                    "name\x00": "test_db",  # No collision
                 },
-                "cache": {
-                    "redis\x00": "redis://localhost:6379",
-                    "ttl": 3600
-                }
+                "cache": {"redis\x00": "redis://localhost:6379", "ttl": 3600},
             },
             "features": [
                 {"name": "feature1", "enabled": True},
                 {"name\x00": "feature2", "enabled": False},  # No collision
-                {"description": "feature3", "enabled": True}
+                {"description": "feature3", "enabled": True},
             ],
-            "metadata": {
-                "version": "1.0.0",
-                "author\x00": "team",
-                "tags": ["production", "stable"]
-            }
+            "metadata": {"version": "1.0.0", "author\x00": "team", "tags": ["production", "stable"]},
         }
-        
+
         result = replace_nulls(complex_nested)
-        
+
         # Verify structure is preserved
         self.assertIn("config", result)
         self.assertIn("features", result)
         self.assertIn("metadata", result)
-        
+
         # Verify nulls are removed
         self.assertEqual(result["config"]["database"]["name"], "test_db")
         self.assertEqual(result["config"]["cache"]["redis"], "redis://localhost:6379")
@@ -228,15 +198,15 @@ class TestDataUtils(TestCase):
             "dict": {
                 "key1": "value1\x00",
                 "key2": ["list\x00item", {"deep\x00key": "deep\x00value"}],
-                "key3": 123  # Non-string value
+                "key3": 123,  # Non-string value
             },
             "number": 42,
             "boolean": True,
-            "none": None
+            "none": None,
         }
-        
+
         result = replace_nulls(mixed_nested)
-        
+
         # Verify string nulls are removed
         self.assertEqual(result["string"], "testvalue")
         self.assertEqual(result["list"][0], "item1")
@@ -244,7 +214,7 @@ class TestDataUtils(TestCase):
         self.assertEqual(result["dict"]["key1"], "value1")
         self.assertEqual(result["dict"]["key2"][0], "listitem")
         self.assertEqual(result["dict"]["key2"][1]["deepkey"], "deepvalue")
-        
+
         # Verify non-string values are preserved
         self.assertEqual(result["dict"]["key3"], 123)
         self.assertEqual(result["number"], 42)
@@ -316,13 +286,13 @@ class TestDataUtils(TestCase):
         result = get_ips_from_cidr_range("192.168.1.1/32")
         self.assertEqual(len(result), 1)
         self.assertEqual(result, ["192.168.1.1"])
-        
+
         # Test /31 (2 IPs - network and broadcast)
         result = get_ips_from_cidr_range("192.168.1.0/31")
         self.assertEqual(len(result), 2)
         self.assertIn("192.168.1.0", result)
         self.assertIn("192.168.1.1", result)
-        
+
         # Test /24 (256 IPs)
         result = get_ips_from_cidr_range("192.168.1.0/24")
         self.assertEqual(len(result), 256)
@@ -330,7 +300,7 @@ class TestDataUtils(TestCase):
         self.assertIn("192.168.1.1", result)  # First usable
         self.assertIn("192.168.1.254", result)  # Last usable
         self.assertIn("192.168.1.255", result)  # Broadcast address
-        
+
         # Test /16 (65536 IPs)
         result = get_ips_from_cidr_range("192.168.0.0/16")
         self.assertEqual(len(result), 65536)
@@ -341,19 +311,19 @@ class TestDataUtils(TestCase):
         """Test get_ips_from_cidr_range with IPv6 CIDR ranges (currently not supported)."""
         # Note: The current implementation only supports IPv4 using IPv4Network
         # IPv6 addresses should return empty list
-        
+
         # Test IPv6 /128 (single IP) - should return empty list
         result = get_ips_from_cidr_range("2001:db8::1/128")
         self.assertEqual(result, [])
-        
+
         # Test IPv6 /127 (2 IPs) - should return empty list
         result = get_ips_from_cidr_range("2001:db8::/127")
         self.assertEqual(result, [])
-        
+
         # Test IPv6 /64 - should return empty list
         result = get_ips_from_cidr_range("2001:db8::/64")
         self.assertEqual(result, [])
-        
+
         # Test mixed IPv6 format - should return empty list
         result = get_ips_from_cidr_range("::1/128")
         self.assertEqual(result, [])
@@ -364,13 +334,13 @@ class TestDataUtils(TestCase):
         result = get_ips_from_cidr_range("127.0.0.0/8")
         self.assertEqual(len(result), 16777216)  # 2^24
         self.assertIn("127.0.0.1", result)
-        
+
         # Test private network
         result = get_ips_from_cidr_range("10.0.0.0/8")
         self.assertEqual(len(result), 16777216)  # 2^24
         self.assertIn("10.0.0.1", result)
         self.assertIn("10.255.255.254", result)
-        
+
         # Test link-local network
         result = get_ips_from_cidr_range("169.254.0.0/16")
         self.assertEqual(len(result), 65536)  # 2^16
@@ -382,33 +352,32 @@ class TestDataUtils(TestCase):
         # Test empty string
         result = get_ips_from_cidr_range("")
         self.assertEqual(result, [])
-        
+
         # Test None
         result = get_ips_from_cidr_range(None)
         self.assertEqual(result, [])
-        
+
         # Test invalid IP format
         result = get_ips_from_cidr_range("999.999.999.999/24")
         self.assertEqual(result, [])
-        
+
         # Test IP without slash (treated as /32 by ipaddress module)
         result = get_ips_from_cidr_range("192.168.1.1")
         self.assertEqual(len(result), 1)
         self.assertEqual(result, ["192.168.1.1"])
-        
+
         # Test invalid prefix length
         result = get_ips_from_cidr_range("192.168.1.0/33")
         self.assertEqual(result, [])
-        
+
         # Test negative prefix length
         result = get_ips_from_cidr_range("192.168.1.0/-1")
         self.assertEqual(result, [])
-        
+
         # Test non-numeric prefix
         result = get_ips_from_cidr_range("192.168.1.0/abc")
         self.assertEqual(result, [])
-        
+
         # Test IPv6 with invalid prefix
         result = get_ips_from_cidr_range("2001:db8::/129")
         self.assertEqual(result, [])
-

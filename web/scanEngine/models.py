@@ -36,8 +36,7 @@ class EngineType(models.Model):
         help_text="Type of scan this engine is designed for",
     )
     is_legacy = models.BooleanField(
-        default=True,
-        help_text="Whether this is a legacy scan engine (deprecated in favor of Secator)"
+        default=True, help_text="Whether this is a legacy scan engine (deprecated in favor of Secator)"
     )
 
     def __str__(self):
@@ -261,8 +260,7 @@ class InstalledExternalTool(models.Model):
     github_clone_path = models.CharField(max_length=1500, null=True, blank=True)
     subdomain_gathering_command = models.CharField(max_length=300, null=True, blank=True)
     is_legacy = models.BooleanField(
-        default=True,
-        help_text="Whether this is a legacy scan engine (deprecated in favor of Secator)"
+        default=True, help_text="Whether this is a legacy scan engine (deprecated in favor of Secator)"
     )
 
     def __str__(self):
@@ -271,14 +269,15 @@ class InstalledExternalTool(models.Model):
 
 # Secator Integration Models
 
+
 class SecatorWorkflow(models.Model):
     """Secator workflow configuration (built-in or custom)"""
-    
+
     WORKFLOW_TYPE_CHOICES = [
         ("builtin", "Built-in"),
         ("custom", "Custom"),
     ]
-    
+
     WORKFLOW_ALIAS_CHOICES = [
         ("cidr_recon", "CIDR Recon"),
         ("code_scan", "Code Scan"),
@@ -293,7 +292,7 @@ class SecatorWorkflow(models.Model):
         ("user_hunt", "User Hunt"),
         ("wordpress", "WordPress"),
     ]
-    
+
     id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=200, unique=True)
     alias = models.CharField(
@@ -301,14 +300,14 @@ class SecatorWorkflow(models.Model):
         choices=WORKFLOW_ALIAS_CHOICES,
         blank=True,
         null=True,
-        help_text="Built-in workflow alias from Secator"
+        help_text="Built-in workflow alias from Secator",
     )
     description = models.TextField(blank=True, null=True)
     workflow_type = models.CharField(
         max_length=20,
         choices=WORKFLOW_TYPE_CHOICES,
         default="custom",
-        help_text="Type of workflow: built-in from Secator or custom"
+        help_text="Type of workflow: built-in from Secator or custom",
     )
     yaml_configuration = models.TextField()
     is_active = models.BooleanField(default=True)
@@ -318,7 +317,7 @@ class SecatorWorkflow(models.Model):
         max_length=20,
         choices=EngineType.SCAN_TYPE_CHOICES,
         default="internet",
-        help_text="Type of scan this workflow is designed for"
+        help_text="Type of scan this workflow is designed for",
     )
 
     def __str__(self):
@@ -342,11 +341,11 @@ class SecatorWorkflow(models.Model):
 
     def can_modify(self):
         """Check if this workflow can be modified"""
-        return self.workflow_type != 'builtin'
+        return self.workflow_type != "builtin"
 
     def can_delete(self):
         """Check if this workflow can be deleted"""
-        return self.workflow_type != 'builtin'
+        return self.workflow_type != "builtin"
 
     def save(self, *args, **kwargs):
         """Override save to prevent modification of built-in workflows"""
@@ -354,13 +353,16 @@ class SecatorWorkflow(models.Model):
             # This is an update operation
             try:
                 orig = SecatorWorkflow.objects.get(pk=self.pk)
-                if orig.workflow_type == 'builtin':
+                if orig.workflow_type == "builtin":
                     # Check if this is a bulk operation (admin actions)
-                    if kwargs.get('update_fields'):
+                    if kwargs.get("update_fields"):
                         # For bulk operations, log the attempt but don't raise exception
                         import logging
+
                         logger = logging.getLogger(__name__)
-                        logger.warning(f"Attempted to modify built-in workflow '{self.name}' (ID: {self.pk}) - operation blocked")
+                        logger.warning(
+                            f"Attempted to modify built-in workflow '{self.name}' (ID: {self.pk}) - operation blocked"
+                        )
                         return  # Skip the save operation silently
                     else:
                         # For regular operations, raise exception with clear message
@@ -372,17 +374,17 @@ class SecatorWorkflow(models.Model):
 
     def delete(self, *args, **kwargs):
         """Override delete to prevent deletion of built-in workflows"""
-        if self.workflow_type == 'builtin':
+        if self.workflow_type == "builtin":
             raise PermissionError("Built-in workflows cannot be deleted!")
         super().delete(*args, **kwargs)
 
     class Meta:
-        ordering = ['workflow_type', 'name']
+        ordering = ["workflow_type", "name"]
 
 
 class SecatorTask(models.Model):
     """Secator individual task configuration"""
-    
+
     TASK_CATEGORY_CHOICES = [
         ("url/fuzz/params", "URL/Fuzz/Params"),
         ("vuln/scan", "Vulnerability Scan"),
@@ -404,16 +406,12 @@ class SecatorTask(models.Model):
         ("waf/scan", "WAF Scan"),
         ("vuln/scan/wordpress", "Vulnerability Scan/WordPress"),
     ]
-    
+
     id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=200, unique=True)
     task_type = models.CharField(max_length=100, help_text="Secator task type (e.g., subfinder, nuclei)")
     category = models.CharField(
-        max_length=50,
-        choices=TASK_CATEGORY_CHOICES,
-        blank=True,
-        null=True,
-        help_text="Category of the task"
+        max_length=50, choices=TASK_CATEGORY_CHOICES, blank=True, null=True, help_text="Category of the task"
     )
     description = models.TextField(blank=True, null=True)
     is_builtin = models.BooleanField(default=True, help_text="Whether this is a built-in Secator task")
@@ -426,23 +424,23 @@ class SecatorTask(models.Model):
         return f"{self.name} ({self.task_type})"
 
     class Meta:
-        ordering = ['category', 'name']
+        ordering = ["category", "name"]
 
 
 class SecatorScan(models.Model):
     """Scan configuration using Secator workflows/tasks (replaces EngineType for new scans)"""
-    
+
     EXECUTION_MODE_CHOICES = [
         ("workflow", "Workflow"),
         ("tasks", "Individual Tasks"),
         ("scan", "Scan Type"),
     ]
-    
+
     SCAN_CONFIG_TYPE_CHOICES = [
         ("builtin", "Built-in"),
         ("custom", "Custom"),
     ]
-    
+
     SCAN_TYPE_CHOICES = [
         ("domain", "Domain Scan"),
         ("host", "Host Scan"),
@@ -450,7 +448,7 @@ class SecatorScan(models.Model):
         ("subdomain", "Subdomain Scan"),
         ("url", "URL Scan"),
     ]
-    
+
     id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=200)
     description = models.TextField(blank=True, null=True)
@@ -458,38 +456,36 @@ class SecatorScan(models.Model):
         max_length=20,
         choices=EngineType.SCAN_TYPE_CHOICES,
         default="internet",
-        help_text="Type of scan this configuration is designed for"
+        help_text="Type of scan this configuration is designed for",
     )
     secator_scan_type = models.CharField(
         max_length=20,
         choices=SCAN_TYPE_CHOICES,
         blank=True,
         null=True,
-        help_text="Secator scan type (domain, host, network, subdomain, url)"
+        help_text="Secator scan type (domain, host, network, subdomain, url)",
     )
     workflow = models.ForeignKey(
-        SecatorWorkflow, 
-        on_delete=models.CASCADE, 
-        null=True, 
+        SecatorWorkflow,
+        on_delete=models.CASCADE,
+        null=True,
         blank=True,
-        help_text="Secator workflow to use (if execution_mode is 'workflow')"
+        help_text="Secator workflow to use (if execution_mode is 'workflow')",
     )
     tasks = models.ManyToManyField(
-        SecatorTask, 
-        blank=True,
-        help_text="Individual Secator tasks to run (if execution_mode is 'tasks')"
+        SecatorTask, blank=True, help_text="Individual Secator tasks to run (if execution_mode is 'tasks')"
     )
     execution_mode = models.CharField(
         max_length=20,
         choices=EXECUTION_MODE_CHOICES,
         default="workflow",
-        help_text="Whether to run a workflow, individual tasks, or a scan type"
+        help_text="Whether to run a workflow, individual tasks, or a scan type",
     )
     scan_config_type = models.CharField(
         max_length=20,
         choices=SCAN_CONFIG_TYPE_CHOICES,
         default="custom",
-        help_text="Type of scan configuration: built-in or custom"
+        help_text="Type of scan configuration: built-in or custom",
     )
     is_default = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True, help_text="Whether this scan configuration is available for use")
@@ -524,11 +520,11 @@ class SecatorScan(models.Model):
 
     def can_modify(self):
         """Check if this scan configuration can be modified"""
-        return self.scan_config_type != 'builtin'
+        return self.scan_config_type != "builtin"
 
     def can_delete(self):
         """Check if this scan configuration can be deleted"""
-        return self.scan_config_type != 'builtin'
+        return self.scan_config_type != "builtin"
 
     def save(self, *args, **kwargs):
         """Override save to prevent modification of built-in scan configurations"""
@@ -536,13 +532,16 @@ class SecatorScan(models.Model):
             # This is an update operation
             try:
                 orig = SecatorScan.objects.get(pk=self.pk)
-                if orig.scan_config_type == 'builtin':
+                if orig.scan_config_type == "builtin":
                     # Check if this is a bulk operation (admin actions)
-                    if kwargs.get('update_fields'):
+                    if kwargs.get("update_fields"):
                         # For bulk operations, log the attempt but don't raise exception
                         import logging
+
                         logger = logging.getLogger(__name__)
-                        logger.warning(f"Attempted to modify built-in scan configuration '{self.name}' (ID: {self.pk}) - operation blocked")
+                        logger.warning(
+                            f"Attempted to modify built-in scan configuration '{self.name}' (ID: {self.pk}) - operation blocked"
+                        )
                         return  # Skip the save operation silently
                     else:
                         # For regular operations, raise exception with clear message
@@ -554,9 +553,9 @@ class SecatorScan(models.Model):
 
     def delete(self, *args, **kwargs):
         """Override delete to prevent deletion of built-in scan configurations"""
-        if self.scan_config_type == 'builtin':
+        if self.scan_config_type == "builtin":
             raise PermissionError("Built-in scan configurations cannot be deleted!")
         super().delete(*args, **kwargs)
 
     class Meta:
-        ordering = ['scan_config_type', 'name']
+        ordering = ["scan_config_type", "name"]

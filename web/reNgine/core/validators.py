@@ -41,15 +41,15 @@ def is_valid_url(url: str) -> bool:
     """
     if not url:
         return False
-    
+
     # Use validators library for standard schemes
     if validators.url(url):
         return True
-    
+
     # Check for custom schemes manually
-    if re.match(r'^[a-zA-Z][a-zA-Z0-9+.-]*://', url):
+    if re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", url):
         return True
-    
+
     return False
 
 
@@ -87,11 +87,11 @@ def is_valid_email(email: str) -> bool:
     """
     if not email:
         return False
-    
+
     # Reject emails with leading/trailing spaces
     if email != email.strip():
         return False
-    
+
     return bool(validators.email(email))
 
 
@@ -109,7 +109,7 @@ def is_valid_port(port: Any) -> bool:
         # Reject float values
         if isinstance(port, float):
             return False
-        
+
         port_num = int(port)
         return 1 <= port_num <= 65535
     except (ValueError, TypeError):
@@ -161,7 +161,7 @@ def sanitize_filename(filename: str) -> str:
 
     # Strip leading/trailing whitespace first
     filename = filename.strip()
-    
+
     if not filename:
         return "unnamed"
 

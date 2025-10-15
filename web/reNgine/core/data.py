@@ -34,7 +34,7 @@ def return_iterable(string):
 def replace_nulls(obj):
     """
     Replace null characters in strings, recursively for lists and dicts.
-    
+
     For dictionaries, this function processes both keys and values. If processing keys
     would result in key collisions (multiple keys becoming identical after null removal),
     a ValueError is raised to prevent data loss.
@@ -44,7 +44,7 @@ def replace_nulls(obj):
 
     Returns:
         Cleaned object with null characters removed
-        
+
     Raises:
         ValueError: If dictionary key processing would result in collisions
     """
@@ -55,12 +55,13 @@ def replace_nulls(obj):
     elif isinstance(obj, dict):
         # Process keys and values
         cleaned_items = [(replace_nulls(key), replace_nulls(value)) for key, value in obj.items()]
-        
+
         # Check for key collisions
         cleaned_keys = [key for key, _ in cleaned_items]
         if len(cleaned_keys) != len(set(cleaned_keys)):
             # Find and report the colliding keys
             from collections import Counter
+
             key_counts = Counter(cleaned_keys)
             colliding_keys = [key for key, count in key_counts.items() if count > 1]
             raise ValueError(
@@ -68,7 +69,7 @@ def replace_nulls(obj):
                 f"Multiple keys would become identical: {colliding_keys}. "
                 f"This would result in data loss. Please check your data source."
             )
-        
+
         return dict(cleaned_items)
     else:
         return obj
@@ -169,7 +170,7 @@ def get_ip_info(ip_address):
     # Handle None or empty input
     if not ip_address:
         return None
-    
+
     is_ipv4 = bool(validators.ipv4(ip_address))
     is_ipv6 = bool(validators.ipv6(ip_address))
     ip_data = None

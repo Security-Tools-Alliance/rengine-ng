@@ -156,15 +156,15 @@ def _is_safe_pattern(pattern: str) -> bool:
 def _atomic_validate_and_delete(target_path: Path, base_path: Path) -> bool:
     """
     Atomically validate and delete a file/directory to prevent TOCTOU attacks.
-    
+
     This function performs security validation immediately before deletion
     to prevent race conditions where an attacker might modify the file system
     between validation and deletion.
-    
+
     Args:
         target_path: Path to the file/directory to delete
         base_path: Base directory for security validation
-        
+
     Returns:
         bool: True if successfully deleted, False if validation failed or deletion error
     """
@@ -174,22 +174,22 @@ def _atomic_validate_and_delete(target_path: Path, base_path: Path) -> bool:
         if not is_safe:
             logger.error(f"TOCTOU protection: Security validation failed for '{target_path}': {error_msg}")
             return False
-        
+
         # Re-validate that target is within base directory
         if not _is_safe_path(base_path, target_path):
             logger.error(f"TOCTOU protection: Target '{target_path}' is outside base directory '{base_path}'")
             return False
-        
+
         # Check if file still exists (might have been deleted by another process)
         if not target_path.exists():
             logger.debug(f"Target '{target_path}' no longer exists - skipping deletion")
             return True
-        
+
         # Re-check file type (might have been changed by attacker)
         if target_path.is_symlink():
             logger.error(f"TOCTOU protection: Target '{target_path}' is a symlink - refusing to delete")
             return False
-        
+
         # Perform deletion
         if target_path.is_file():
             target_path.unlink()
@@ -200,9 +200,9 @@ def _atomic_validate_and_delete(target_path: Path, base_path: Path) -> bool:
         else:
             logger.error(f"TOCTOU protection: Unknown file type for '{target_path}' - refusing to delete")
             return False
-        
+
         return True
-        
+
     except OSError as e:
         logger.error(f"TOCTOU protection: Failed to delete '{target_path}': {e}")
         return False
@@ -215,7 +215,7 @@ def remove_file_or_pattern(path: Union[str, Path], pattern: Optional[str] = None
     """
     Safely removes a file/directory or pattern matching files.
     Uses pathlib for robust path handling and comprehensive security checks.
-    
+
     Security features:
     - TOCTOU (Time-of-Check-Time-of-Use) protection with atomic validation
     - Symlink attack prevention
@@ -285,7 +285,7 @@ def remove_file_or_pattern(path: Union[str, Path], pattern: Optional[str] = None
             if not _atomic_validate_and_delete(path_obj, path_obj.parent):
                 logger.error(f"Atomic validation failed for '{path}' - skipping deletion")
                 return False
-            
+
             return True
 
     except (OSError, ValueError, RuntimeError) as e:
@@ -296,7 +296,7 @@ def remove_file_or_pattern(path: Union[str, Path], pattern: Optional[str] = None
 def is_nuclei_config_valid(config_path):
     """
     Check if the Nuclei configuration file contains valid configuration content.
-    
+
     A valid Nuclei config file should contain at least one non-empty, non-comment line
     that appears to be a valid configuration directive (contains '=' or starts with a valid
     Nuclei configuration keyword).
@@ -315,11 +315,11 @@ def is_nuclei_config_valid(config_path):
         with open(config_path, "r", encoding="utf-8") as f:
             for line_num, line in enumerate(f, 1):
                 line = line.strip()
-                
+
                 # Skip empty lines and comments
                 if not line or line.startswith("#"):
                     continue
-                
+
                 # Check if line contains a configuration directive
                 # Nuclei config typically uses key=value format or specific keywords
                 if "=" in line or _is_nuclei_config_keyword(line):
@@ -328,12 +328,12 @@ def is_nuclei_config_valid(config_path):
                 else:
                     # Log suspicious content for debugging
                     logger.debug(f"Nuclei config line {line_num} doesn't appear to be valid config: '{line}'")
-        
+
         if not valid_config_found:
             logger.warning(f"Nuclei config file {config_path} contains no valid configuration directives")
-        
+
         return valid_config_found
-        
+
     except Exception as e:
         logger.warning(f"Could not read Nuclei config file {config_path}: {e}")
         return False
@@ -342,41 +342,60 @@ def is_nuclei_config_valid(config_path):
 def _is_nuclei_config_keyword(line):
     """
     Check if a line contains a valid Nuclei configuration keyword.
-    
+
     Args:
         line (str): Line to check
-        
+
     Returns:
         bool: True if line contains a valid Nuclei config keyword
     """
     # Common Nuclei configuration keywords (case-insensitive)
     nuclei_keywords = {
-        "include", "exclude", "severity", "tags", "author", "description",
-        "reference", "classification", "metadata", "info", "requests",
-        "variables", "payloads", "matchers", "extractors", "conditions",
-        "name", "template", "id", "version", "type", "protocol", "port"
+        "include",
+        "exclude",
+        "severity",
+        "tags",
+        "author",
+        "description",
+        "reference",
+        "classification",
+        "metadata",
+        "info",
+        "requests",
+        "variables",
+        "payloads",
+        "matchers",
+        "extractors",
+        "conditions",
+        "name",
+        "template",
+        "id",
+        "version",
+        "type",
+        "protocol",
+        "port",
     }
-    
+
     # Remove leading whitespace and get the first word
     stripped_line = line.strip()
     if not stripped_line:
         return False
-    
+
     # Get the first word (before any space, colon, or special character)
     first_word = stripped_line.split()[0].lower() if stripped_line.split() else ""
-    
+
     # Also check if the line contains a colon (YAML format) with a valid keyword
     if ":" in stripped_line:
         key_part = stripped_line.split(":")[0].strip().lower()
         return key_part in nuclei_keywords
-    
+
     return first_word in nuclei_keywords
 
 
 def read_file_lines(file_path, skip_empty=True, skip_comments=True):
     """
     Read lines from a file with optional filtering and security validation.
-    
+
     Security features:
     - Path validation to prevent directory traversal attacks
     - Symlink detection to prevent reading from unintended locations
@@ -393,18 +412,18 @@ def read_file_lines(file_path, skip_empty=True, skip_comments=True):
     try:
         # Convert to Path object for robust handling
         path_obj = Path(file_path)
-        
+
         # Validate path security
         is_safe, error_msg = _validate_path_security(path_obj)
         if not is_safe:
             logger.error(f"Security validation failed for file path '{file_path}': {error_msg}")
             return []
-        
+
         # Check if file exists
         if not path_obj.exists():
             logger.warning(f"File {file_path} does not exist")
             return []
-        
+
         # Ensure it's a file, not a directory or symlink
         if not path_obj.is_file():
             if path_obj.is_dir():
@@ -429,7 +448,7 @@ def read_file_lines(file_path, skip_empty=True, skip_comments=True):
 
         logger.debug(f"Successfully read {len(lines)} lines from {file_path}")
         return lines
-        
+
     except Exception as e:
         logger.error(f"Error reading file {file_path}: {e}")
         return []
@@ -438,7 +457,7 @@ def read_file_lines(file_path, skip_empty=True, skip_comments=True):
 def write_file_lines(file_path, lines, mode="w"):
     """
     Write lines to a file with security validation.
-    
+
     Security features:
     - Path validation to prevent directory traversal attacks
     - Symlink detection to prevent writing to unintended locations
@@ -455,13 +474,13 @@ def write_file_lines(file_path, lines, mode="w"):
     try:
         # Convert to Path object for robust handling
         path_obj = Path(file_path)
-        
+
         # Validate path security
         is_safe, error_msg = _validate_path_security(path_obj)
         if not is_safe:
             logger.error(f"Security validation failed for file path '{file_path}': {error_msg}")
             return False
-        
+
         # Ensure parent directory exists with safe permissions
         parent_dir = path_obj.parent
         if not parent_dir.exists():
@@ -471,21 +490,21 @@ def write_file_lines(file_path, lines, mode="w"):
             except OSError as e:
                 logger.error(f"Failed to create parent directory '{parent_dir}': {e}")
                 return False
-        
+
         # Validate parent directory security
         is_parent_safe, parent_error_msg = _validate_path_security(parent_dir)
         if not is_parent_safe:
             logger.error(f"Parent directory security validation failed for '{parent_dir}': {parent_error_msg}")
             return False
-        
+
         # Write file with atomic operation
         with open(path_obj, mode, encoding="utf-8") as f:
             for line in lines:
                 f.write(f"{line}\n")
-        
+
         logger.debug(f"Successfully wrote {len(lines)} lines to {file_path}")
         return True
-        
+
     except Exception as e:
         logger.error(f"Error writing to file {file_path}: {e}")
         return False
@@ -494,7 +513,7 @@ def write_file_lines(file_path, lines, mode="w"):
 def ensure_directory_exists(directory_path, mode=0o755):
     """
     Ensure a directory exists, creating it if necessary with security validation.
-    
+
     Security features:
     - Path validation to prevent directory traversal attacks
     - Symlink detection to prevent creation in unintended locations
@@ -510,13 +529,13 @@ def ensure_directory_exists(directory_path, mode=0o755):
     try:
         # Convert to Path object for robust handling
         path_obj = Path(directory_path)
-        
+
         # Validate path security
         is_safe, error_msg = _validate_path_security(path_obj)
         if not is_safe:
             logger.error(f"Security validation failed for directory path '{directory_path}': {error_msg}")
             return False
-        
+
         # Check if directory already exists
         if path_obj.exists():
             if path_obj.is_dir():
@@ -525,7 +544,7 @@ def ensure_directory_exists(directory_path, mode=0o755):
             else:
                 logger.error(f"Path exists but is not a directory: {directory_path}")
                 return False
-        
+
         # Create directory with safe permissions
         try:
             path_obj.mkdir(parents=True, mode=mode, exist_ok=True)
@@ -534,7 +553,7 @@ def ensure_directory_exists(directory_path, mode=0o755):
         except OSError as e:
             logger.error(f"Failed to create directory '{directory_path}': {e}")
             return False
-        
+
     except Exception as e:
         logger.error(f"Error ensuring directory exists {directory_path}: {e}")
         return False

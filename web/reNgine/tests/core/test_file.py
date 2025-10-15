@@ -272,7 +272,7 @@ class TestFileOperations(unittest.TestCase):
         file_path = os.path.join(self.test_dir, "existing_file.txt")
         with open(file_path, "w") as f:
             f.write("test content")
-        
+
         result = ensure_directory_exists(file_path)
         self.assertFalse(result)
 
@@ -288,7 +288,7 @@ class TestFileOperations(unittest.TestCase):
         # Verify all parent directories were created
         level1_dir = os.path.join(self.test_dir, "level1")
         level2_dir = os.path.join(level1_dir, "level2")
-        
+
         self.assertTrue(os.path.exists(level1_dir))
         self.assertTrue(os.path.exists(level2_dir))
 
@@ -298,7 +298,7 @@ class TestFileOperations(unittest.TestCase):
         result = ensure_directory_exists(custom_dir, mode=0o700)
         self.assertTrue(result)
         self.assertTrue(os.path.exists(custom_dir))
-        
+
         # Verify permissions (may not work on all systems)
         try:
             stat_info = os.stat(custom_dir)
@@ -363,11 +363,11 @@ class TestFileOperations(unittest.TestCase):
         test_file = os.path.join(self.test_dir, "test_file.txt")
         with open(test_file, "w") as f:
             f.write("test content\n")
-        
+
         # Test reading from regular file (should work)
         result = read_file_lines(test_file)
         self.assertEqual(result, ["test content"])
-        
+
         # Test reading from directory (should fail)
         result = read_file_lines(self.test_dir)
         self.assertEqual(result, [])
@@ -378,7 +378,7 @@ class TestFileOperations(unittest.TestCase):
         unicode_file = os.path.join(self.test_dir, "unicode_file.txt")
         with open(unicode_file, "w", encoding="utf-8") as f:
             f.write("Hello 世界\nCafé\nnaïve\n")
-        
+
         result = read_file_lines(unicode_file)
         expected = ["Hello 世界", "Café", "naïve"]
         self.assertEqual(result, expected)
@@ -450,7 +450,7 @@ class TestFileOperations(unittest.TestCase):
         level1_dir = os.path.join(self.test_dir, "level1")
         level2_dir = os.path.join(level1_dir, "level2")
         level3_dir = os.path.join(level2_dir, "level3")
-        
+
         self.assertTrue(os.path.exists(level1_dir))
         self.assertTrue(os.path.exists(level2_dir))
         self.assertTrue(os.path.exists(level3_dir))
@@ -460,10 +460,10 @@ class TestFileOperations(unittest.TestCase):
         # Test with Unicode content
         unicode_file = os.path.join(self.test_dir, "unicode_file.txt")
         unicode_lines = ["Hello 世界", "Café", "naïve", "résumé"]
-        
+
         result = write_file_lines(unicode_file, unicode_lines)
         self.assertTrue(result)
-        
+
         # Verify content was written correctly
         with open(unicode_file, "r", encoding="utf-8") as f:
             content = f.read()

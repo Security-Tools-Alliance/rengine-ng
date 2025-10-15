@@ -1,6 +1,7 @@
 """
 Tests for scan repository progress functionality.
 """
+
 import unittest
 
 from reNgine.services.repositories.scan_repository import ScanRepository
@@ -15,8 +16,8 @@ class TestScanRepositoryProgress(unittest.TestCase):
 
     def test_update_progress_method_exists(self):
         """Test that update_progress method exists."""
-        self.assertTrue(hasattr(self.scan_repo, 'update_progress'))
+        self.assertTrue(hasattr(self.scan_repo, "update_progress"))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

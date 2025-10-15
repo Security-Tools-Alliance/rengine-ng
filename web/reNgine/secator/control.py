@@ -43,13 +43,13 @@ class SecatorScanController:
                 logger.warning(f"No Celery task IDs found for scan {self.scan_history_id}")
                 self.scan_repo.update_status(self.scan_history_id, ABORTED_TASK)
                 return True
-            
+
             from reNgine.celery import app
 
             # Revoke all Celery tasks associated with this scan
             revoked_count = 0
             failed_count = 0
-            
+
             for celery_task_id in celery_task_ids:
                 try:
                     app.control.revoke(celery_task_id, terminate=True)

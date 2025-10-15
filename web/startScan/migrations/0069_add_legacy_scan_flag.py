@@ -4,15 +4,16 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('startScan', '0068_auto_20250824_2131'),
+        ("startScan", "0068_auto_20250824_2131"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='scanhistory',
-            name='is_legacy_scan',
-            field=models.BooleanField(default=False, help_text='Whether this scan uses legacy EngineType (True) or new SecatorScan (False)'),
+            model_name="scanhistory",
+            name="is_legacy_scan",
+            field=models.BooleanField(
+                default=False, help_text="Whether this scan uses legacy EngineType (True) or new SecatorScan (False)"
+            ),
         ),
     ]

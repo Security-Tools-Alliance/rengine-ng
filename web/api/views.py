@@ -31,6 +31,11 @@ import validators
 from dashboard.models import OllamaSettings, OpenAiAPIKey, Project, SearchHistory
 from recon_note.models import TodoNote
 from reNgine.celery import app
+
+# NOTE: Legacy tasks removed (query_ip_history, query_reverse_whois, query_whois,
+# run_cmseek, run_command, run_gf_list, run_wafw00f) - functionality now in Secator
+from reNgine.core.data import get_data_from_post_request, safe_int_cast
+from reNgine.core.path import is_safe_path, remove_lead_and_trail_slash
 from reNgine.definitions import ABORTED_TASK, FAILED_TASK, NUCLEI_SEVERITY_MAP, RUNNING_TASK, SUCCESS_TASK
 from reNgine.llm.config import DEFAULT_GPT_MODELS, MODEL_REQUIREMENTS, OLLAMA_INSTANCE, RECOMMENDED_MODELS
 from reNgine.llm.llm import LLMAttackSuggestionGenerator
@@ -41,17 +46,13 @@ from reNgine.tasks import (
     llm_vulnerability_report,
     send_hackerone_report,
 )
-# NOTE: Legacy tasks removed (query_ip_history, query_reverse_whois, query_whois, 
-# run_cmseek, run_command, run_gf_list, run_wafw00f) - functionality now in Secator
-from reNgine.core.data import get_data_from_post_request, safe_int_cast
 from reNgine.utilities.database import create_scan_activity
 from reNgine.utilities.dns import check_host_alive, get_current_dns_servers
 from reNgine.utilities.endpoint import get_interesting_endpoints
 from reNgine.utilities.external import get_open_ai_key
 from reNgine.utilities.lookup import get_lookup_keywords
-from reNgine.core.path import is_safe_path, remove_lead_and_trail_slash
 from reNgine.utilities.subdomain import get_interesting_subdomains
-from scanEngine.models import EngineType, InstalledExternalTool, SecatorWorkflow, SecatorTask, SecatorScan
+from scanEngine.models import EngineType, InstalledExternalTool, SecatorScan, SecatorTask, SecatorWorkflow
 from startScan.models import (
     Command,
     DirectoryFile,
@@ -3398,523 +3399,396 @@ class GetCSRFToken(APIView):
 # Workflow API Views
 # =============================================================================
 
+
 class CreateSecatorWorkflow(APIView):
     """Create a new workflow."""
+
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
         try:
             data = request.data
-            
+
             workflow = SecatorWorkflow.objects.create(
-                name=data['name'],
-                description=data.get('description', ''),
-                workflow_type=data.get('workflow_type', 'custom'),
-                yaml_configuration=data['yaml_configuration'],
-                scan_type=data.get('scan_type', 'bug_bounty'),
-                is_active=data.get('is_active', True),
+                name=data["name"],
+                description=data.get("description", ""),
+                workflow_type=data.get("workflow_type", "custom"),
+                yaml_configuration=data["yaml_configuration"],
+                scan_type=data.get("scan_type", "bug_bounty"),
+                is_active=data.get("is_active", True),
             )
-            
-            return Response({
-                'status': 'success',
-                'workflow_id': workflow.id,
-                'message': 'Workflow created successfully'
-            })
-            
+
+            return Response(
+                {"status": "success", "workflow_id": workflow.id, "message": "Workflow created successfully"}
+            )
+
         except Exception as e:
-            return Response({
-                'status': 'error',
-                'message': str(e)
-            }, status=400)
+            return Response({"status": "error", "message": str(e)}, status=400)
 
 
 class CreateSecatorTask(APIView):
     """Create a new task."""
+
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
         try:
             data = request.data
-            
+
             task = SecatorTask.objects.create(
-                name=data['name'],
-                task_type=data['task_type'],
-                description=data.get('description', ''),
-                is_builtin=data.get('is_builtin', False),
-                yaml_configuration=data.get('yaml_configuration', ''),
+                name=data["name"],
+                task_type=data["task_type"],
+                description=data.get("description", ""),
+                is_builtin=data.get("is_builtin", False),
+                yaml_configuration=data.get("yaml_configuration", ""),
             )
-            
-            return Response({
-                'status': 'success',
-                'task_id': task.id,
-                'message': 'Task created successfully'
-            })
-            
+
+            return Response({"status": "success", "task_id": task.id, "message": "Task created successfully"})
+
         except Exception as e:
-            return Response({
-                'status': 'error',
-                'message': str(e)
-            }, status=400)
+            return Response({"status": "error", "message": str(e)}, status=400)
 
 
 class CreateSecatorScan(APIView):
     """Create a new scan configuration."""
+
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
         try:
             data = request.data
-            
+
             scan = SecatorScan.objects.create(
-                name=data['name'],
-                description=data.get('description', ''),
-                scan_type=data.get('scan_type', 'bug_bounty'),
-                execution_mode=data['execution_mode'],
-                scan_config_type=data.get('scan_config_type', 'custom'),
-                is_default=data.get('is_default', False),
+                name=data["name"],
+                description=data.get("description", ""),
+                scan_type=data.get("scan_type", "bug_bounty"),
+                execution_mode=data["execution_mode"],
+                scan_config_type=data.get("scan_config_type", "custom"),
+                is_default=data.get("is_default", False),
             )
-            
+
             # Set workflow or tasks based on execution mode
-            if data['execution_mode'] == 'workflow' and data.get('workflow_id'):
-                scan.workflow_id = data['workflow_id']
-            elif data['execution_mode'] == 'tasks' and data.get('task_ids'):
-                scan.tasks.set(data['task_ids'])
-            
+            if data["execution_mode"] == "workflow" and data.get("workflow_id"):
+                scan.workflow_id = data["workflow_id"]
+            elif data["execution_mode"] == "tasks" and data.get("task_ids"):
+                scan.tasks.set(data["task_ids"])
+
             scan.save()
-            
-            return Response({
-                'status': 'success',
-                'scan_id': scan.id,
-                'message': 'Scan configuration created successfully'
-            })
-            
+
+            return Response(
+                {"status": "success", "scan_id": scan.id, "message": "Scan configuration created successfully"}
+            )
+
         except Exception as e:
-            return Response({
-                'status': 'error',
-                'message': str(e)
-            }, status=400)
+            return Response({"status": "error", "message": str(e)}, status=400)
 
 
 class LoadBuiltinWorkflows(APIView):
     """Load built-in workflows."""
+
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
         try:
             from reNgine.tasks.secator_tasks import load_secator_workflows
-            
+
             # Start the task
             task = load_secator_workflows.delay()
-            
-            return Response({
-                'status': 'success',
-                'task_id': task.id,
-                'message': 'Loading built-in workflows started'
-            })
-            
+
+            return Response({"status": "success", "task_id": task.id, "message": "Loading built-in workflows started"})
+
         except Exception as e:
-            return Response({
-                'status': 'error',
-                'message': str(e)
-            }, status=400)
+            return Response({"status": "error", "message": str(e)}, status=400)
 
 
 class LoadBuiltinTasks(APIView):
     """Load built-in tasks."""
+
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
         try:
             from reNgine.tasks.secator_tasks import load_secator_tasks
-            
+
             # Start the task
             task = load_secator_tasks.delay()
-            
-            return Response({
-                'status': 'success',
-                'task_id': task.id,
-                'message': 'Loading built-in tasks started'
-            })
-            
+
+            return Response({"status": "success", "task_id": task.id, "message": "Loading built-in tasks started"})
+
         except Exception as e:
-            return Response({
-                'status': 'error',
-                'message': str(e)
-            }, status=400)
+            return Response({"status": "error", "message": str(e)}, status=400)
 
 
 class GetWorkflowTasks(APIView):
     """Get tasks for a specific workflow."""
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request, workflow_id):
         try:
             workflow = get_object_or_404(SecatorWorkflow, id=workflow_id)
             tasks = workflow.get_tasks()
-            
-            return Response({
-                'status': 'success',
-                'tasks': tasks
-            })
-            
+
+            return Response({"status": "success", "tasks": tasks})
+
         except Exception as e:
-            return Response({
-                'status': 'error',
-                'message': str(e)
-            }, status=400)
+            return Response({"status": "error", "message": str(e)}, status=400)
 
 
 class GetAvailableTasks(APIView):
     """Get all available tasks for selection."""
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
         try:
-            tasks = SecatorTask.objects.all().values('id', 'name', 'task_type', 'description')
-            
-            return Response({
-                'status': 'success',
-                'tasks': list(tasks)
-            })
-            
+            tasks = SecatorTask.objects.all().values("id", "name", "task_type", "description")
+
+            return Response({"status": "success", "tasks": list(tasks)})
+
         except Exception as e:
-            return Response({
-                'status': 'error',
-                'message': str(e)
-            }, status=400)
+            return Response({"status": "error", "message": str(e)}, status=400)
 
 
 class GetAvailableWorkflows(APIView):
     """Get all available workflows for selection."""
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
         try:
             workflows = SecatorWorkflow.objects.filter(is_active=True).values(
-                'id', 'name', 'description', 'workflow_type', 'scan_type'
+                "id", "name", "description", "workflow_type", "scan_type"
             )
-            
-            return Response({
-                'status': 'success',
-                'workflows': list(workflows)
-            })
-            
+
+            return Response({"status": "success", "workflows": list(workflows)})
+
         except Exception as e:
-            return Response({
-                'status': 'error',
-                'message': str(e)
-            }, status=400)
+            return Response({"status": "error", "message": str(e)}, status=400)
 
 
 class GetWorkflowDetail(APIView):
     """Get workflow detail by ID."""
-    
+
     def get(self, request, workflow_id):
         try:
             workflow = SecatorWorkflow.objects.get(id=workflow_id)
-            
+
             workflow_data = {
-                'id': workflow.id,
-                'name': workflow.name,
-                'description': workflow.description,
-                'workflow_type': workflow.workflow_type,
-                'yaml_configuration': workflow.yaml_configuration,
-                'is_active': workflow.is_active,
-                'scan_type': workflow.scan_type,
-                'created_at': workflow.created_at.isoformat(),
-                'updated_at': workflow.updated_at.isoformat(),
+                "id": workflow.id,
+                "name": workflow.name,
+                "description": workflow.description,
+                "workflow_type": workflow.workflow_type,
+                "yaml_configuration": workflow.yaml_configuration,
+                "is_active": workflow.is_active,
+                "scan_type": workflow.scan_type,
+                "created_at": workflow.created_at.isoformat(),
+                "updated_at": workflow.updated_at.isoformat(),
             }
-            
-            return Response({
-                'status': 'success',
-                'workflow': workflow_data
-            })
-            
+
+            return Response({"status": "success", "workflow": workflow_data})
+
         except SecatorWorkflow.DoesNotExist:
-            return Response({
-                'status': 'error',
-                'message': 'Workflow not found'
-            }, status=404)
+            return Response({"status": "error", "message": "Workflow not found"}, status=404)
         except Exception as e:
-            return Response({
-                'status': 'error',
-                'message': str(e)
-            }, status=400)
+            return Response({"status": "error", "message": str(e)}, status=400)
 
 
 class UpdateSecatorWorkflow(APIView):
     """Update an existing workflow."""
-    
+
     def put(self, request, workflow_id):
         try:
             workflow = SecatorWorkflow.objects.get(id=workflow_id)
-            
+
             # Update fields
-            workflow.name = request.data.get('name', workflow.name)
-            workflow.description = request.data.get('description', workflow.description)
-            workflow.workflow_type = request.data.get('workflow_type', workflow.workflow_type)
-            workflow.yaml_configuration = request.data.get('yaml_configuration', workflow.yaml_configuration)
-            workflow.is_active = request.data.get('is_active', workflow.is_active)
-            workflow.scan_type = request.data.get('scan_type', workflow.scan_type)
-            
+            workflow.name = request.data.get("name", workflow.name)
+            workflow.description = request.data.get("description", workflow.description)
+            workflow.workflow_type = request.data.get("workflow_type", workflow.workflow_type)
+            workflow.yaml_configuration = request.data.get("yaml_configuration", workflow.yaml_configuration)
+            workflow.is_active = request.data.get("is_active", workflow.is_active)
+            workflow.scan_type = request.data.get("scan_type", workflow.scan_type)
+
             workflow.save()
-            
-            return Response({
-                'status': 'success',
-                'message': 'Workflow updated successfully'
-            })
-            
+
+            return Response({"status": "success", "message": "Workflow updated successfully"})
+
         except SecatorWorkflow.DoesNotExist:
-            return Response({
-                'status': 'error',
-                'message': 'Workflow not found'
-            }, status=404)
+            return Response({"status": "error", "message": "Workflow not found"}, status=404)
         except Exception as e:
-            return Response({
-                'status': 'error',
-                'message': str(e)
-            }, status=400)
+            return Response({"status": "error", "message": str(e)}, status=400)
 
 
 class DeleteSecatorWorkflow(APIView):
     """Delete a workflow."""
-    
+
     def delete(self, request, workflow_id):
         try:
             workflow = SecatorWorkflow.objects.get(id=workflow_id)
             workflow_name = workflow.name
             workflow.delete()
-            
-            return Response({
-                'status': 'success',
-                'message': f'Workflow "{workflow_name}" deleted successfully'
-            })
-            
+
+            return Response({"status": "success", "message": f'Workflow "{workflow_name}" deleted successfully'})
+
         except SecatorWorkflow.DoesNotExist:
-            return Response({
-                'status': 'error',
-                'message': 'Workflow not found'
-            }, status=404)
+            return Response({"status": "error", "message": "Workflow not found"}, status=404)
         except Exception as e:
-            return Response({
-                'status': 'error',
-                'message': str(e)
-            }, status=400)
+            return Response({"status": "error", "message": str(e)}, status=400)
 
 
 class GetTaskDetail(APIView):
     """Get task detail by ID."""
-    
+
     def get(self, request, task_id):
         try:
             task = SecatorTask.objects.get(id=task_id)
-            
+
             task_data = {
-                'id': task.id,
-                'name': task.name,
-                'task_type': task.task_type,
-                'description': task.description,
-                'is_builtin': task.is_builtin,
-                'yaml_configuration': task.yaml_configuration,
-                'created_at': task.created_at.isoformat(),
-                'updated_at': task.updated_at.isoformat(),
+                "id": task.id,
+                "name": task.name,
+                "task_type": task.task_type,
+                "description": task.description,
+                "is_builtin": task.is_builtin,
+                "yaml_configuration": task.yaml_configuration,
+                "created_at": task.created_at.isoformat(),
+                "updated_at": task.updated_at.isoformat(),
             }
-            
-            return Response({
-                'status': 'success',
-                'task': task_data
-            })
-            
+
+            return Response({"status": "success", "task": task_data})
+
         except SecatorTask.DoesNotExist:
-            return Response({
-                'status': 'error',
-                'message': 'Task not found'
-            }, status=404)
+            return Response({"status": "error", "message": "Task not found"}, status=404)
         except Exception as e:
-            return Response({
-                'status': 'error',
-                'message': str(e)
-            }, status=400)
+            return Response({"status": "error", "message": str(e)}, status=400)
 
 
 class UpdateSecatorTask(APIView):
     """Update an existing task."""
-    
+
     def put(self, request, task_id):
         try:
             task = SecatorTask.objects.get(id=task_id)
-            
+
             # Update fields
-            task.name = request.data.get('name', task.name)
-            task.task_type = request.data.get('task_type', task.task_type)
-            task.description = request.data.get('description', task.description)
-            task.yaml_configuration = request.data.get('yaml_configuration', task.yaml_configuration)
-            
+            task.name = request.data.get("name", task.name)
+            task.task_type = request.data.get("task_type", task.task_type)
+            task.description = request.data.get("description", task.description)
+            task.yaml_configuration = request.data.get("yaml_configuration", task.yaml_configuration)
+
             task.save()
-            
-            return Response({
-                'status': 'success',
-                'message': 'Task updated successfully'
-            })
-            
+
+            return Response({"status": "success", "message": "Task updated successfully"})
+
         except SecatorTask.DoesNotExist:
-            return Response({
-                'status': 'error',
-                'message': 'Task not found'
-            }, status=404)
+            return Response({"status": "error", "message": "Task not found"}, status=404)
         except Exception as e:
-            return Response({
-                'status': 'error',
-                'message': str(e)
-            }, status=400)
+            return Response({"status": "error", "message": str(e)}, status=400)
 
 
 class DeleteSecatorTask(APIView):
     """Delete a task."""
-    
+
     def delete(self, request, task_id):
         try:
             task = SecatorTask.objects.get(id=task_id)
             task_name = task.name
             task.delete()
-            
-            return Response({
-                'status': 'success',
-                'message': f'Task "{task_name}" deleted successfully'
-            })
-            
+
+            return Response({"status": "success", "message": f'Task "{task_name}" deleted successfully'})
+
         except SecatorTask.DoesNotExist:
-            return Response({
-                'status': 'error',
-                'message': 'Task not found'
-            }, status=404)
+            return Response({"status": "error", "message": "Task not found"}, status=404)
         except Exception as e:
-            return Response({
-                'status': 'error',
-                'message': str(e)
-            }, status=400)
+            return Response({"status": "error", "message": str(e)}, status=400)
 
 
 class GetScanDetail(APIView):
     """Get scan configuration detail by ID."""
-    
+
     def get(self, request, scan_id):
         try:
             scan = SecatorScan.objects.get(id=scan_id)
-            
+
             scan_data = {
-                'id': scan.id,
-                'name': scan.name,
-                'description': scan.description,
-                'scan_type': scan.scan_type,
-                'execution_mode': scan.execution_mode,
-                'scan_config_type': scan.scan_config_type,
-                'is_default': scan.is_default,
-                'workflow_id': scan.workflow.id if scan.workflow else None,
-                'workflow_name': scan.workflow.name if scan.workflow else None,
-                'task_ids': [task.id for task in scan.tasks.all()],
-                'task_names': [task.name for task in scan.tasks.all()],
-                'created_at': scan.created_at.isoformat(),
-                'updated_at': scan.updated_at.isoformat(),
+                "id": scan.id,
+                "name": scan.name,
+                "description": scan.description,
+                "scan_type": scan.scan_type,
+                "execution_mode": scan.execution_mode,
+                "scan_config_type": scan.scan_config_type,
+                "is_default": scan.is_default,
+                "workflow_id": scan.workflow.id if scan.workflow else None,
+                "workflow_name": scan.workflow.name if scan.workflow else None,
+                "task_ids": [task.id for task in scan.tasks.all()],
+                "task_names": [task.name for task in scan.tasks.all()],
+                "created_at": scan.created_at.isoformat(),
+                "updated_at": scan.updated_at.isoformat(),
             }
-            
-            return Response({
-                'status': 'success',
-                'scan': scan_data
-            })
-            
+
+            return Response({"status": "success", "scan": scan_data})
+
         except SecatorScan.DoesNotExist:
-            return Response({
-                'status': 'error',
-                'message': 'Scan configuration not found'
-            }, status=404)
+            return Response({"status": "error", "message": "Scan configuration not found"}, status=404)
         except Exception as e:
-            return Response({
-                'status': 'error',
-                'message': str(e)
-            }, status=400)
+            return Response({"status": "error", "message": str(e)}, status=400)
 
 
 class UpdateSecatorScan(APIView):
     """Update an existing scan configuration."""
-    
+
     def put(self, request, scan_id):
         try:
             scan = SecatorScan.objects.get(id=scan_id)
-            
+
             # Update fields
-            scan.name = request.data.get('name', scan.name)
-            scan.description = request.data.get('description', scan.description)
-            scan.scan_type = request.data.get('scan_type', scan.scan_type)
-            scan.execution_mode = request.data.get('execution_mode', scan.execution_mode)
-            scan.is_default = request.data.get('is_default', scan.is_default)
-            
+            scan.name = request.data.get("name", scan.name)
+            scan.description = request.data.get("description", scan.description)
+            scan.scan_type = request.data.get("scan_type", scan.scan_type)
+            scan.execution_mode = request.data.get("execution_mode", scan.execution_mode)
+            scan.is_default = request.data.get("is_default", scan.is_default)
+
             # Handle workflow/tasks based on execution mode
-            if scan.execution_mode == 'workflow':
-                workflow_id = request.data.get('workflow_id')
+            if scan.execution_mode == "workflow":
+                workflow_id = request.data.get("workflow_id")
                 if workflow_id:
                     try:
                         workflow = SecatorWorkflow.objects.get(id=workflow_id)
                         scan.workflow = workflow
                     except SecatorWorkflow.DoesNotExist:
-                        return Response({
-                            'status': 'error',
-                            'message': 'Workflow not found'
-                        }, status=400)
+                        return Response({"status": "error", "message": "Workflow not found"}, status=400)
                 scan.tasks.clear()
             else:  # tasks mode
-                task_ids = request.data.get('task_ids', [])
+                task_ids = request.data.get("task_ids", [])
                 if task_ids:
                     try:
                         tasks = SecatorTask.objects.filter(id__in=task_ids)
                         scan.tasks.set(tasks)
                     except SecatorTask.DoesNotExist:
-                        return Response({
-                            'status': 'error',
-                            'message': 'One or more tasks not found'
-                        }, status=400)
+                        return Response({"status": "error", "message": "One or more tasks not found"}, status=400)
                 scan.workflow = None
-            
+
             scan.save()
-            
-            return Response({
-                'status': 'success',
-                'message': 'Scan configuration updated successfully'
-            })
-            
+
+            return Response({"status": "success", "message": "Scan configuration updated successfully"})
+
         except SecatorScan.DoesNotExist:
-            return Response({
-                'status': 'error',
-                'message': 'Scan configuration not found'
-            }, status=404)
+            return Response({"status": "error", "message": "Scan configuration not found"}, status=404)
         except Exception as e:
-            return Response({
-                'status': 'error',
-                'message': str(e)
-            }, status=400)
+            return Response({"status": "error", "message": str(e)}, status=400)
 
 
 class DeleteSecatorScan(APIView):
     """Delete a scan configuration."""
-    
+
     def delete(self, request, scan_id):
         try:
             scan = SecatorScan.objects.get(id=scan_id)
             scan_name = scan.name
             scan.delete()
-            
-            return Response({
-                'status': 'success',
-                'message': f'Scan configuration "{scan_name}" deleted successfully'
-            })
-            
+
+            return Response({"status": "success", "message": f'Scan configuration "{scan_name}" deleted successfully'})
+
         except SecatorScan.DoesNotExist:
-            return Response({
-                'status': 'error',
-                'message': 'Scan configuration not found'
-            }, status=404)
+            return Response({"status": "error", "message": "Scan configuration not found"}, status=404)
         except Exception as e:
-            return Response({
-                'status': 'error',
-                'message': str(e)
-            }, status=400)
+            return Response({"status": "error", "message": str(e)}, status=400)

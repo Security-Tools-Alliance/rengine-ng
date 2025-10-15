@@ -154,7 +154,7 @@ class TestValidators(TestCase):
         self.assertEqual(validate_severity("low"), "low")
         self.assertEqual(validate_severity("info"), "info")
         self.assertEqual(validate_severity("unknown"), "unknown")
-        
+
         # Test case variations
         self.assertEqual(validate_severity("CRITICAL"), "critical")
         self.assertEqual(validate_severity("HIGH"), "high")
@@ -162,7 +162,7 @@ class TestValidators(TestCase):
         self.assertEqual(validate_severity("LOW"), "low")
         self.assertEqual(validate_severity("INFO"), "info")
         self.assertEqual(validate_severity("UNKNOWN"), "unknown")
-        
+
         # Test mixed case
         self.assertEqual(validate_severity("CrItIcAl"), "critical")
         self.assertEqual(validate_severity("HiGh"), "high")
@@ -170,7 +170,7 @@ class TestValidators(TestCase):
         self.assertEqual(validate_severity("LoW"), "low")
         self.assertEqual(validate_severity("InFo"), "info")
         self.assertEqual(validate_severity("UnKnOwN"), "unknown")
-        
+
         # Test whitespace variations
         self.assertEqual(validate_severity(" critical "), "critical")
         self.assertEqual(validate_severity("  high  "), "high")
@@ -178,7 +178,7 @@ class TestValidators(TestCase):
         self.assertEqual(validate_severity("\nlow\n"), "low")
         self.assertEqual(validate_severity(" info "), "info")
         self.assertEqual(validate_severity(" unknown "), "unknown")
-        
+
         # Test mixed case with whitespace
         self.assertEqual(validate_severity(" Critical "), "critical")
         self.assertEqual(validate_severity("  HIGH  "), "high")
@@ -186,7 +186,7 @@ class TestValidators(TestCase):
         self.assertEqual(validate_severity("\nLOW\n"), "low")
         self.assertEqual(validate_severity(" INFO "), "info")
         self.assertEqual(validate_severity(" UNKNOWN "), "unknown")
-        
+
         # Test complex mixed case with whitespace
         self.assertEqual(validate_severity(" CrItIcAl "), "critical")
         self.assertEqual(validate_severity("  HiGh  "), "high")
@@ -194,7 +194,7 @@ class TestValidators(TestCase):
         self.assertEqual(validate_severity("\nLoW\n"), "low")
         self.assertEqual(validate_severity(" InFo "), "info")
         self.assertEqual(validate_severity(" UnKnOwN "), "unknown")
-        
+
         # Test invalid cases
         self.assertIsNone(validate_severity("invalid"))
         self.assertIsNone(validate_severity(""))
@@ -206,4 +206,3 @@ class TestValidators(TestCase):
         self.assertIsNone(validate_severity("criticality"))  # Partial match
         self.assertIsNone(validate_severity("high-level"))  # Contains valid but not exact
         self.assertIsNone(validate_severity("medium_risk"))  # Contains valid but not exact
-

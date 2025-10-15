@@ -2,7 +2,7 @@
 Integration tests for Secator components.
 """
 
-from unittest.mock import patch, call
+from unittest.mock import call, patch
 
 from reNgine.secator.drivers.rengine_driver import ReNgineDriver
 from reNgine.secator.hooks.database_hooks import DatabaseHooks
@@ -38,17 +38,15 @@ class TestSecatorIntegration(BaseTestCase):
     def test_database_hooks_on_item_subdomain(self):
         """Test DatabaseHooks on_item with subdomain item."""
         hooks = DatabaseHooks(scan_history_id=self.scan_history.id, domain_id=self.domain.id)
-        
+
         # Mock the repository method
-        with patch('reNgine.services.repositories.subdomain_repository.SubdomainRepository.save_from_secator') as mock_save:
-            item = {
-                "_type": "subdomain",
-                "target": "subdomain.example.com",
-                "ip": "192.168.1.1"
-            }
-            
+        with patch(
+            "reNgine.services.repositories.subdomain_repository.SubdomainRepository.save_from_secator"
+        ) as mock_save:
+            item = {"_type": "subdomain", "target": "subdomain.example.com", "ip": "192.168.1.1"}
+
             result = hooks.on_item(item)
-            
+
             # Verify the item is returned unchanged
             self.assertEqual(result, item)
             # Verify the repository method was called with correct parameters
@@ -57,17 +55,15 @@ class TestSecatorIntegration(BaseTestCase):
     def test_database_hooks_on_item_url(self):
         """Test DatabaseHooks on_item with URL item."""
         hooks = DatabaseHooks(scan_history_id=self.scan_history.id, domain_id=self.domain.id)
-        
+
         # Mock the repository method
-        with patch('reNgine.services.repositories.endpoint_repository.EndpointRepository.save_from_secator') as mock_save:
-            item = {
-                "_type": "url",
-                "target": "https://example.com/path",
-                "status_code": 200
-            }
-            
+        with patch(
+            "reNgine.services.repositories.endpoint_repository.EndpointRepository.save_from_secator"
+        ) as mock_save:
+            item = {"_type": "url", "target": "https://example.com/path", "status_code": 200}
+
             result = hooks.on_item(item)
-            
+
             # Verify the item is returned unchanged
             self.assertEqual(result, item)
             # Verify the repository method was called with correct parameters
@@ -76,18 +72,20 @@ class TestSecatorIntegration(BaseTestCase):
     def test_database_hooks_on_item_vulnerability(self):
         """Test DatabaseHooks on_item with vulnerability item."""
         hooks = DatabaseHooks(scan_history_id=self.scan_history.id, domain_id=self.domain.id)
-        
+
         # Mock the repository method
-        with patch('reNgine.services.repositories.vulnerability_repository.VulnerabilityRepository.save_from_secator') as mock_save:
+        with patch(
+            "reNgine.services.repositories.vulnerability_repository.VulnerabilityRepository.save_from_secator"
+        ) as mock_save:
             item = {
                 "_type": "vulnerability",
                 "name": "SQL Injection",
                 "severity": "high",
-                "target": "https://example.com"
+                "target": "https://example.com",
             }
-            
+
             result = hooks.on_item(item)
-            
+
             # Verify the item is returned unchanged
             self.assertEqual(result, item)
             # Verify the repository method was called with correct parameters
@@ -96,16 +94,13 @@ class TestSecatorIntegration(BaseTestCase):
     def test_database_hooks_on_item_unknown_type(self):
         """Test DatabaseHooks on_item with unknown item type."""
         hooks = DatabaseHooks(scan_history_id=self.scan_history.id, domain_id=self.domain.id)
-        
+
         # Mock logger to verify debug message
-        with patch('reNgine.secator.hooks.database_hooks.logger') as mock_logger:
-            item = {
-                "_type": "unknown_type",
-                "data": "some data"
-            }
-            
+        with patch("reNgine.secator.hooks.database_hooks.logger") as mock_logger:
+            item = {"_type": "unknown_type", "data": "some data"}
+
             result = hooks.on_item(item)
-            
+
             # Verify the item is returned unchanged
             self.assertEqual(result, item)
             # Verify debug message was logged
@@ -114,20 +109,19 @@ class TestSecatorIntegration(BaseTestCase):
     def test_database_hooks_on_item_repository_error(self):
         """Test DatabaseHooks on_item with repository error."""
         hooks = DatabaseHooks(scan_history_id=self.scan_history.id, domain_id=self.domain.id)
-        
+
         # Mock repository to raise an exception
-        with patch('reNgine.services.repositories.subdomain_repository.SubdomainRepository.save_from_secator') as mock_save:
+        with patch(
+            "reNgine.services.repositories.subdomain_repository.SubdomainRepository.save_from_secator"
+        ) as mock_save:
             mock_save.side_effect = Exception("Database connection failed")
-            
+
             # Mock logger to verify error message
-            with patch('reNgine.secator.hooks.database_hooks.logger') as mock_logger:
-                item = {
-                    "_type": "subdomain",
-                    "target": "subdomain.example.com"
-                }
-                
+            with patch("reNgine.secator.hooks.database_hooks.logger") as mock_logger:
+                item = {"_type": "subdomain", "target": "subdomain.example.com"}
+
                 result = hooks.on_item(item)
-                
+
                 # Verify the item is still returned unchanged
                 self.assertEqual(result, item)
                 # Verify error was logged
@@ -136,16 +130,13 @@ class TestSecatorIntegration(BaseTestCase):
     def test_database_hooks_on_duplicate(self):
         """Test DatabaseHooks on_duplicate method."""
         hooks = DatabaseHooks(scan_history_id=self.scan_history.id, domain_id=self.domain.id)
-        
+
         # Mock logger to verify debug message
-        with patch('reNgine.secator.hooks.database_hooks.logger') as mock_logger:
-            item = {
-                "_type": "subdomain",
-                "target": "duplicate.example.com"
-            }
-            
+        with patch("reNgine.secator.hooks.database_hooks.logger") as mock_logger:
+            item = {"_type": "subdomain", "target": "duplicate.example.com"}
+
             result = hooks.on_duplicate(item)
-            
+
             # Verify the item is returned unchanged
             self.assertEqual(result, item)
             # Verify debug message was logged
@@ -154,17 +145,13 @@ class TestSecatorIntegration(BaseTestCase):
     def test_database_hooks_on_error(self):
         """Test DatabaseHooks on_error method."""
         hooks = DatabaseHooks(scan_history_id=self.scan_history.id, domain_id=self.domain.id)
-        
+
         # Mock logger to verify error message
-        with patch('reNgine.secator.hooks.database_hooks.logger') as mock_logger:
-            item = {
-                "_type": "error",
-                "message": "Connection timeout",
-                "target": "example.com"
-            }
-            
+        with patch("reNgine.secator.hooks.database_hooks.logger") as mock_logger:
+            item = {"_type": "error", "message": "Connection timeout", "target": "example.com"}
+
             result = hooks.on_error(item)
-            
+
             # Verify the item is returned unchanged
             self.assertEqual(result, item)
             # Verify error was logged
@@ -181,32 +168,31 @@ class TestSecatorIntegration(BaseTestCase):
     def test_progress_hooks_on_init(self):
         """Test ProgressHooks on_init lifecycle method."""
         hooks = ProgressHooks(scan_history_id=self.scan_history.id)
-        
+
         # Mock logger to verify info message
-        with patch('reNgine.secator.hooks.progress_hooks.logger') as mock_logger:
+        with patch("reNgine.secator.hooks.progress_hooks.logger") as mock_logger:
             hooks.on_init()
-            
+
             # Verify info message was logged
             mock_logger.info.assert_called_once_with(f"Scan {self.scan_history.id} initialized")
 
     def test_progress_hooks_on_start(self):
         """Test ProgressHooks on_start lifecycle method."""
         hooks = ProgressHooks(scan_history_id=self.scan_history.id)
-        
+
         # Mock the repository methods
-        with patch.object(hooks.scan_repo, 'update_status') as mock_update_status, \
-             patch.object(hooks.scan_repo, 'create_scan_activity') as mock_create_activity, \
-             patch('reNgine.secator.hooks.progress_hooks.logger') as mock_logger:
-            
+        with (
+            patch.object(hooks.scan_repo, "update_status") as mock_update_status,
+            patch.object(hooks.scan_repo, "create_scan_activity") as mock_create_activity,
+            patch("reNgine.secator.hooks.progress_hooks.logger") as mock_logger,
+        ):
             from reNgine.definitions import RUNNING_TASK
-            
+
             hooks.on_start()
-            
+
             # Verify repository methods were called with correct parameters
             mock_update_status.assert_called_once_with(self.scan_history.id, status=RUNNING_TASK)
-            mock_create_activity.assert_called_once_with(
-                self.scan_history.id, "Secator scan started", RUNNING_TASK
-            )
+            mock_create_activity.assert_called_once_with(self.scan_history.id, "Secator scan started", RUNNING_TASK)
             # Verify info message was logged
             mock_logger.info.assert_called_once_with(f"Scan {self.scan_history.id} started")
 
@@ -214,18 +200,18 @@ class TestSecatorIntegration(BaseTestCase):
         """Test ProgressHooks on_iter lifecycle method increments item_count."""
         hooks = ProgressHooks(scan_history_id=self.scan_history.id)
         initial_count = hooks.item_count
-        
+
         # Mock logger to verify debug message
-        with patch('reNgine.secator.hooks.progress_hooks.logger') as mock_logger:
+        with patch("reNgine.secator.hooks.progress_hooks.logger") as mock_logger:
             # Test first iteration (should not log)
             hooks.on_iter()
             self.assertEqual(hooks.item_count, initial_count + 1)
             mock_logger.debug.assert_not_called()
-            
+
             # Test multiple iterations to trigger logging (every 10 items)
             for _ in range(9):  # 9 more iterations to reach 10 total
                 hooks.on_iter()
-            
+
             # Verify item count is now 10
             self.assertEqual(hooks.item_count, 10)
             # Verify debug message was logged
@@ -234,18 +220,18 @@ class TestSecatorIntegration(BaseTestCase):
     def test_progress_hooks_on_iter_multiple_logging(self):
         """Test ProgressHooks on_iter logs every 10 items."""
         hooks = ProgressHooks(scan_history_id=self.scan_history.id)
-        
-        with patch('reNgine.secator.hooks.progress_hooks.logger') as mock_logger:
+
+        with patch("reNgine.secator.hooks.progress_hooks.logger") as mock_logger:
             # Test 25 iterations to trigger logging at 10 and 20
             for _ in range(25):
                 hooks.on_iter()
-            
+
             # Verify item count is 25
             self.assertEqual(hooks.item_count, 25)
             # Verify debug messages were logged at 10 and 20
             expected_calls = [
                 call(f"Scan {self.scan_history.id} - 10 items processed"),
-                call(f"Scan {self.scan_history.id} - 20 items processed")
+                call(f"Scan {self.scan_history.id} - 20 items processed"),
             ]
             mock_logger.debug.assert_has_calls(expected_calls, any_order=False)
 
@@ -254,16 +240,17 @@ class TestSecatorIntegration(BaseTestCase):
         hooks = ProgressHooks(scan_history_id=self.scan_history.id)
         # Set some item count to test the completion message
         hooks.item_count = 42
-        
+
         # Mock the repository methods
-        with patch.object(hooks.scan_repo, 'mark_scan_complete') as mock_mark_complete, \
-             patch.object(hooks.scan_repo, 'create_scan_activity') as mock_create_activity, \
-             patch('reNgine.secator.hooks.progress_hooks.logger') as mock_logger:
-            
+        with (
+            patch.object(hooks.scan_repo, "mark_scan_complete") as mock_mark_complete,
+            patch.object(hooks.scan_repo, "create_scan_activity") as mock_create_activity,
+            patch("reNgine.secator.hooks.progress_hooks.logger") as mock_logger,
+        ):
             from reNgine.definitions import SUCCESS_TASK
-            
+
             hooks.on_end()
-            
+
             # Verify repository methods were called with correct parameters
             mock_mark_complete.assert_called_once_with(self.scan_history.id)
             mock_create_activity.assert_called_once_with(
@@ -277,16 +264,17 @@ class TestSecatorIntegration(BaseTestCase):
         hooks = ProgressHooks(scan_history_id=self.scan_history.id)
         # Ensure item_count is 0
         hooks.item_count = 0
-        
+
         # Mock the repository methods
-        with patch.object(hooks.scan_repo, 'mark_scan_complete') as mock_mark_complete, \
-             patch.object(hooks.scan_repo, 'create_scan_activity') as mock_create_activity, \
-             patch('reNgine.secator.hooks.progress_hooks.logger') as mock_logger:
-            
+        with (
+            patch.object(hooks.scan_repo, "mark_scan_complete") as mock_mark_complete,
+            patch.object(hooks.scan_repo, "create_scan_activity") as mock_create_activity,
+            patch("reNgine.secator.hooks.progress_hooks.logger") as mock_logger,
+        ):
             from reNgine.definitions import SUCCESS_TASK
-            
+
             hooks.on_end()
-            
+
             # Verify completion message includes zero items
             mock_create_activity.assert_called_once_with(
                 self.scan_history.id, "Secator scan completed - 0 items processed", SUCCESS_TASK

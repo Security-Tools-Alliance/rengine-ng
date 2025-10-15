@@ -1,6 +1,7 @@
 """
 Tests for Secator tasks functionality.
 """
+
 import unittest
 
 from reNgine.tasks.secator_tasks import initiate_secator_scan
@@ -14,5 +15,5 @@ class TestSecatorTasks(unittest.TestCase):
         self.assertTrue(callable(initiate_secator_scan))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

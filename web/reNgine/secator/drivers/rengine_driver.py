@@ -73,84 +73,112 @@ class ReNgineDriver:
 
     def _create_workflow_init_hook(self):
         """Create workflow init hook."""
+
         def hook(_secator_runner):
             self.progress_hooks.on_init()
+
         return hook
 
     def _create_workflow_start_hook(self):
         """Create workflow start hook."""
+
         def hook(_secator_runner):
             self.progress_hooks.on_start()
+
         return hook
 
     def _create_workflow_iter_hook(self):
         """Create workflow iteration hook."""
+
         def hook(_secator_runner):
             self.progress_hooks.on_iter()
+
         return hook
 
     def _create_workflow_end_hook(self):
         """Create workflow end hook."""
+
         def hook(_secator_runner):
             self.progress_hooks.on_end()
+
         return hook
 
     def _create_task_init_hook(self):
         """Create task init hook."""
+
         def hook(_secator_runner):
             self.progress_hooks.on_init()
+
         return hook
 
     def _create_task_item_hook(self):
         """Create task item hook."""
+
         def hook(_secator_runner, item):
             return self.db_hooks.on_item(item)
+
         return hook
 
     def _create_task_duplicate_hook(self):
         """Create task duplicate hook."""
+
         def hook(_secator_runner, item):
             return self.db_hooks.on_duplicate(item)
+
         return hook
 
     def _create_task_iter_hook(self):
         """Create task iteration hook."""
+
         def hook(_secator_runner):
             self.progress_hooks.on_iter()
+
         return hook
 
     def _create_task_end_hook(self):
         """Create task end hook."""
+
         def hook(_secator_runner):
             self.progress_hooks.on_end()
+
         return hook
 
     def _create_task_error_hook(self):
         """Create task error hook."""
+
         def hook(_secator_runner, item):
             return self.db_hooks.on_error(item)
+
         return hook
 
     def _create_scan_init_hook(self):
         """Create scan init hook."""
+
         def hook(_secator_runner):
             self.progress_hooks.on_init()
+
         return hook
 
     def _create_scan_start_hook(self):
         """Create scan start hook."""
+
         def hook(_secator_runner):
             self.progress_hooks.on_start()
+
         return hook
 
     def _create_scan_iter_hook(self):
         """Create scan iteration hook."""
+
         def hook(_secator_runner):
             self.progress_hooks.on_iter()
+
         return hook
 
     def _create_scan_end_hook(self):
         """Create scan end hook."""
+
         def hook(_secator_runner):
             self.progress_hooks.on_end()
+
         return hook

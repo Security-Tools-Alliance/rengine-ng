@@ -3,10 +3,12 @@ Django management command to load Secator workflows (built-in and custom).
 """
 
 import os
-import yaml
-from django.core.management.base import BaseCommand
+
 from django.conf import settings
-from scanEngine.models import SecatorWorkflow, SecatorTask, SecatorScan
+from django.core.management.base import BaseCommand
+import yaml
+
+from scanEngine.models import SecatorScan, SecatorWorkflow
 
 
 class Command(BaseCommand):
@@ -38,20 +40,18 @@ class Command(BaseCommand):
 
         if not custom_only:
             self.load_builtin_workflows(force)
-        
+
         if not builtin_only:
             self.load_custom_workflows(force)
-        
+
         self.create_default_scan_configs(force)
 
-        self.stdout.write(
-            self.style.SUCCESS("Workflow loading completed successfully!")
-        )
+        self.stdout.write(self.style.SUCCESS("Workflow loading completed successfully!"))
 
     def load_builtin_workflows(self, force):
         """Load built-in Secator workflows"""
         self.stdout.write("Loading built-in Secator workflows...")
-        
+
         builtin_workflows = [
             {
                 "name": "CIDR Recon",
@@ -225,15 +225,15 @@ tasks:
                     "scan_type": workflow_data["scan_type"],
                     "alias": workflow_data.get("alias"),
                     "is_active": True,
-                }
+                },
             )
-            
+
             if created:
                 created_count += 1
                 self.stdout.write(f"Created built-in workflow: {workflow_data['name']}")
             elif force:
                 # Only update if the workflow is not builtin to avoid permission errors
-                if workflow.workflow_type != 'builtin':
+                if workflow.workflow_type != "builtin":
                     workflow.description = workflow_data["description"]
                     workflow.yaml_configuration = workflow_data["yaml_config"]
                     workflow.scan_type = workflow_data["scan_type"]
@@ -248,13 +248,11 @@ tasks:
     def load_custom_workflows(self, force):
         """Load custom workflows from config/workflows/ directory"""
         self.stdout.write("Loading custom workflows...")
-        
+
         workflows_dir = os.path.join(settings.BASE_DIR, "config", "workflows")
-        
+
         if not os.path.exists(workflows_dir):
-            self.stdout.write(
-                self.style.WARNING(f"Workflows directory not found: {workflows_dir}")
-            )
+            self.stdout.write(self.style.WARNING(f"Workflows directory not found: {workflows_dir}"))
             return
 
         created_count = 0
@@ -263,15 +261,13 @@ tasks:
                 continue
 
             filepath = os.path.join(workflows_dir, filename)
-            
+
             try:
                 with open(filepath, "r") as f:
                     workflow_data = yaml.safe_load(f)
-                
+
                 if not workflow_data or "name" not in workflow_data:
-                    self.stdout.write(
-                        self.style.WARNING(f"Invalid workflow file: {filename}")
-                    )
+                    self.stdout.write(self.style.WARNING(f"Invalid workflow file: {filename}"))
                     continue
 
                 workflow_name = workflow_data["name"]
@@ -283,9 +279,9 @@ tasks:
                         "yaml_configuration": yaml.dump(workflow_data),
                         "scan_type": workflow_data.get("scan_type", "internet"),
                         "is_active": True,
-                    }
+                    },
                 )
-                
+
                 if created:
                     created_count += 1
                     self.stdout.write(f"Created custom workflow: {workflow_name}")
@@ -297,36 +293,24 @@ tasks:
                     self.stdout.write(f"Updated custom workflow: {workflow_name}")
 
             except FileNotFoundError:
-                self.stdout.write(
-                    self.style.ERROR(f"Workflow file not found: {filename}")
-                )
+                self.stdout.write(self.style.ERROR(f"Workflow file not found: {filename}"))
             except PermissionError:
-                self.stdout.write(
-                    self.style.ERROR(f"Permission denied reading workflow file: {filename}")
-                )
+                self.stdout.write(self.style.ERROR(f"Permission denied reading workflow file: {filename}"))
             except yaml.YAMLError as e:
-                self.stdout.write(
-                    self.style.ERROR(f"Invalid YAML syntax in workflow file {filename}: {e}")
-                )
+                self.stdout.write(self.style.ERROR(f"Invalid YAML syntax in workflow file {filename}: {e}"))
             except UnicodeDecodeError as e:
-                self.stdout.write(
-                    self.style.ERROR(f"Encoding error in workflow file {filename}: {e}")
-                )
+                self.stdout.write(self.style.ERROR(f"Encoding error in workflow file {filename}: {e}"))
             except KeyError as e:
-                self.stdout.write(
-                    self.style.ERROR(f"Missing required field in workflow file {filename}: {e}")
-                )
+                self.stdout.write(self.style.ERROR(f"Missing required field in workflow file {filename}: {e}"))
             except Exception as e:
-                self.stdout.write(
-                    self.style.ERROR(f"Unexpected error loading workflow {filename}: {e}")
-                )
+                self.stdout.write(self.style.ERROR(f"Unexpected error loading workflow {filename}: {e}"))
 
         self.stdout.write(f"Loaded {created_count} custom workflows")
 
     def create_default_scan_configs(self, force):
         """Create default SecatorScan configurations"""
         self.stdout.write("Creating default SecatorScan configurations...")
-        
+
         default_configs = [
             {
                 "name": "Internet Passive",
@@ -372,11 +356,11 @@ tasks:
 
         created_count = 0
         missing_workflows = []
-        
+
         for config_data in default_configs:
             try:
                 workflow = SecatorWorkflow.objects.get(name=config_data["workflow_name"])
-                
+
                 scan_config, created = SecatorScan.objects.get_or_create(
                     name=config_data["name"],
                     defaults={
@@ -386,15 +370,15 @@ tasks:
                         "execution_mode": config_data["execution_mode"],
                         "scan_config_type": config_data["scan_config_type"],
                         "is_default": True,
-                    }
+                    },
                 )
-                
+
                 if created:
                     created_count += 1
                     self.stdout.write(f"Created scan config: {config_data['name']}")
                 elif force:
                     # Only update if the scan config is not builtin to avoid permission errors
-                    if scan_config.scan_config_type != 'builtin':
+                    if scan_config.scan_config_type != "builtin":
                         scan_config.description = config_data["description"]
                         scan_config.scan_type = config_data["scan_type"]
                         scan_config.workflow = workflow
@@ -403,13 +387,14 @@ tasks:
                         scan_config.save()
                         self.stdout.write(f"Updated scan config: {config_data['name']}")
                     else:
-                        self.stdout.write(f"Built-in scan config already exists: {config_data['name']} (skipped update)")
+                        self.stdout.write(
+                            f"Built-in scan config already exists: {config_data['name']} (skipped update)"
+                        )
 
             except SecatorWorkflow.DoesNotExist:
-                missing_workflows.append({
-                    "workflow_name": config_data["workflow_name"],
-                    "scan_config_name": config_data["name"]
-                })
+                missing_workflows.append(
+                    {"workflow_name": config_data["workflow_name"], "scan_config_name": config_data["name"]}
+                )
                 self.stdout.write(
                     self.style.ERROR(
                         f"ERROR: Workflow '{config_data['workflow_name']}' not found for scan config '{config_data['name']}'"
@@ -425,11 +410,11 @@ tasks:
             )
             unique_missing_workflows = set(item["workflow_name"] for item in missing_workflows)
             for workflow_name in sorted(unique_missing_workflows):
-                affected_configs = [item["scan_config_name"] for item in missing_workflows if item["workflow_name"] == workflow_name]
+                affected_configs = [
+                    item["scan_config_name"] for item in missing_workflows if item["workflow_name"] == workflow_name
+                ]
                 self.stdout.write(
-                    self.style.WARNING(
-                        f"  - Missing workflow '{workflow_name}' affects: {', '.join(affected_configs)}"
-                    )
+                    self.style.WARNING(f"  - Missing workflow '{workflow_name}' affects: {', '.join(affected_configs)}")
                 )
             self.stdout.write(
                 self.style.WARNING(

@@ -9,9 +9,9 @@ from django.db.models import Count, Q
 from django.db.models.functions import TruncDay
 from django.utils import timezone
 
+from reNgine.core.time import get_time_taken
 from reNgine.definitions import CELERY_TASK_STATUSES, ENGINE_DISPLAY_NAMES, NUCLEI_REVERSE_SEVERITY_MAP
 from reNgine.llm.utils import convert_markdown_to_html
-from reNgine.core.time import get_time_taken
 from scanEngine.models import EngineType
 from targetApp.models import Domain
 
@@ -56,8 +56,7 @@ class ScanHistory(models.Model):
     )
     aborted_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="aborted_scans")
     is_legacy_scan = models.BooleanField(
-        default=False,
-        help_text="Whether this scan uses legacy EngineType (True) or new SecatorScan (False)"
+        default=False, help_text="Whether this scan uses legacy EngineType (True) or new SecatorScan (False)"
     )
 
     def __str__(self):

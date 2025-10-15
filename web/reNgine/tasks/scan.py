@@ -7,6 +7,8 @@ from django.utils import timezone
 import yaml
 
 from reNgine.celery import app
+from reNgine.core.data import is_iterable
+from reNgine.core.path import SafePath
 from reNgine.definitions import (
     CELERY_TASK_STATUS_MAP,
     FAILED_TASK,
@@ -20,7 +22,6 @@ from reNgine.settings import (
 )
 from reNgine.tasks.notification import send_scan_notif
 from reNgine.tasks.reporting import report
-from reNgine.core.data import is_iterable
 from reNgine.utilities.database import (
     create_default_endpoint_for_subdomain,
     create_scan_object,
@@ -28,7 +29,6 @@ from reNgine.utilities.database import (
     validate_and_save_subdomain,
 )
 from reNgine.utilities.misc import determine_target_type
-from reNgine.core.path import SafePath
 from scanEngine.models import EngineType
 from startScan.models import IpAddress, ScanHistory, Subdomain, SubScan
 from targetApp.models import Domain

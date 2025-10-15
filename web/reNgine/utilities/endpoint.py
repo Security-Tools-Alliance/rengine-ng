@@ -7,10 +7,7 @@ Functions using http_crawl task are deprecated and will not work with Secator-ba
 For new code, use Secator workflows/tasks directly via SecatorRunner.
 """
 
-from copy import deepcopy
-import time
 from urllib.parse import urlparse
-import warnings
 
 from celery.utils.log import get_task_logger
 from django.db.models import Q
@@ -197,7 +194,7 @@ def get_interesting_endpoints(scan_history=None, target=None):
 def ensure_endpoints_crawled_and_execute(task_function, ctx, description=None, max_wait_time=300):
     """
     DEPRECATED: Ensure endpoints are crawled before executing a task that needs alive endpoints.
-    
+
     This function is deprecated and will raise NotImplementedError.
     Use Secator workflows for endpoint crawling and task execution.
 
@@ -209,7 +206,7 @@ def ensure_endpoints_crawled_and_execute(task_function, ctx, description=None, m
 
     Returns:
         Task result or None if no alive endpoints available
-        
+
     Raises:
         NotImplementedError: Always raised as this function is deprecated
     """
@@ -221,12 +218,13 @@ def ensure_endpoints_crawled_and_execute(task_function, ctx, description=None, m
         "Use Secator workflows for endpoint crawling and task execution."
     )
 
+
 def smart_http_crawl_if_needed(
     urls, ctx, wait_for_completion=False, max_wait_time=120, is_default=False, update_subdomain_metadatas=False
 ):
     """
     DEPRECATED: Intelligently launch http_crawl only if endpoints need to be crawled.
-    
+
     This function is deprecated and will raise NotImplementedError.
     Use Secator workflows for HTTP crawling functionality.
 
@@ -240,7 +238,7 @@ def smart_http_crawl_if_needed(
 
     Returns:
         True if crawl was launched/completed, False otherwise
-        
+
     Raises:
         NotImplementedError: Always raised as this function is deprecated
     """

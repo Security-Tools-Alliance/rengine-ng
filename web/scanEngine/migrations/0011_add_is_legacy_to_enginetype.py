@@ -4,18 +4,16 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('scanEngine', '0010_add_secator_models'),
+        ("scanEngine", "0010_add_secator_models"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='enginetype',
-            name='is_legacy',
+            model_name="enginetype",
+            name="is_legacy",
             field=models.BooleanField(
-                default=True,
-                help_text='Whether this is a legacy scan engine (deprecated in favor of Secator)'
+                default=True, help_text="Whether this is a legacy scan engine (deprecated in favor of Secator)"
             ),
         ),
     ]

@@ -5,7 +5,6 @@ Handles ScanHistory and ScanActivity database operations.
 
 from celery.utils.log import get_task_logger
 from django.core.exceptions import ObjectDoesNotExist
-from django.db import IntegrityError
 from django.utils import timezone
 
 from startScan.models import ScanActivity, ScanHistory
@@ -72,7 +71,7 @@ class ScanRepository:
         if not isinstance(progress, (int, float)):
             logger.error(f"Progress must be a number, got: {type(progress).__name__}")
             return False
-        
+
         if progress < 0 or progress > 100:
             logger.error(f"Progress must be between 0 and 100, got: {progress}")
             return False

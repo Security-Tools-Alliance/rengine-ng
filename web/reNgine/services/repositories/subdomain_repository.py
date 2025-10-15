@@ -8,7 +8,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError
 
 from reNgine.core.validators import is_valid_domain
-from startScan.models import Subdomain, ScanHistory
+from startScan.models import ScanHistory, Subdomain
 from targetApp.models import Domain
 
 

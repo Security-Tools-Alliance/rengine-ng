@@ -4,8 +4,8 @@ from pathlib import Path
 
 import environ
 
-from reNgine.init import first_run
 from reNgine.core.logging import RengineTaskFormatter
+from reNgine.init import first_run
 
 
 env = environ.FileAwareEnv()

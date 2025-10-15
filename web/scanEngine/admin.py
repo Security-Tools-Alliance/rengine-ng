@@ -6,9 +6,9 @@ from scanEngine.models import (
     InstalledExternalTool,
     InterestingLookupModel,
     Notification,
-    SecatorWorkflow,
-    SecatorTask,
     SecatorScan,
+    SecatorTask,
+    SecatorWorkflow,
     VulnerabilityReportSetting,
     Wordlist,
 )
@@ -16,10 +16,11 @@ from scanEngine.models import (
 
 # Register your models here.
 
+
 @admin.register(EngineType)
 class EngineTypeAdmin(admin.ModelAdmin):
     """Admin interface for EngineType model with legacy support."""
-    
+
     list_display = [
         "engine_name",
         "scan_type",
@@ -33,14 +34,17 @@ class EngineTypeAdmin(admin.ModelAdmin):
         "engine_name",
     ]
     fieldsets = (
-        ("Basic Information", {
-            "fields": ("engine_name", "scan_type", "default_engine")
-        }),
-        ("Configuration", {
-            "fields": ("yaml_configuration",),
-            "classes": ("wide",),
-        }),
+        ("Basic Information", {"fields": ("engine_name", "scan_type", "default_engine")}),
+        (
+            "Configuration",
+            {
+                "fields": ("yaml_configuration",),
+                "classes": ("wide",),
+            },
+        ),
     )
+
+
 admin.site.register(Wordlist)
 admin.site.register(Configuration)
 admin.site.register(InterestingLookupModel)
@@ -51,10 +55,11 @@ admin.site.register(InstalledExternalTool)
 
 # Secator Integration Admin Classes
 
+
 @admin.register(SecatorWorkflow)
 class SecatorWorkflowAdmin(admin.ModelAdmin):
     """Admin interface for SecatorWorkflow model."""
-    
+
     list_display = [
         "name",
         "workflow_type",
@@ -78,24 +83,28 @@ class SecatorWorkflowAdmin(admin.ModelAdmin):
         "updated_at",
     ]
     fieldsets = (
-        ("Basic Information", {
-            "fields": ("name", "description", "workflow_type", "scan_type", "is_active")
-        }),
-        ("Configuration", {
-            "fields": ("yaml_configuration",),
-            "classes": ("wide",),
-        }),
-        ("Timestamps", {
-            "fields": ("created_at", "updated_at"),
-            "classes": ("collapse",),
-        }),
+        ("Basic Information", {"fields": ("name", "description", "workflow_type", "scan_type", "is_active")}),
+        (
+            "Configuration",
+            {
+                "fields": ("yaml_configuration",),
+                "classes": ("wide",),
+            },
+        ),
+        (
+            "Timestamps",
+            {
+                "fields": ("created_at", "updated_at"),
+                "classes": ("collapse",),
+            },
+        ),
     )
 
 
 @admin.register(SecatorTask)
 class SecatorTaskAdmin(admin.ModelAdmin):
     """Admin interface for SecatorTask model."""
-    
+
     list_display = [
         "name",
         "task_type",
@@ -118,24 +127,28 @@ class SecatorTaskAdmin(admin.ModelAdmin):
         "updated_at",
     ]
     fieldsets = (
-        ("Basic Information", {
-            "fields": ("name", "task_type", "description", "is_builtin")
-        }),
-        ("Configuration", {
-            "fields": ("yaml_configuration",),
-            "classes": ("wide",),
-        }),
-        ("Timestamps", {
-            "fields": ("created_at", "updated_at"),
-            "classes": ("collapse",),
-        }),
+        ("Basic Information", {"fields": ("name", "task_type", "description", "is_builtin")}),
+        (
+            "Configuration",
+            {
+                "fields": ("yaml_configuration",),
+                "classes": ("wide",),
+            },
+        ),
+        (
+            "Timestamps",
+            {
+                "fields": ("created_at", "updated_at"),
+                "classes": ("collapse",),
+            },
+        ),
     )
 
 
 @admin.register(SecatorScan)
 class SecatorScanAdmin(admin.ModelAdmin):
     """Admin interface for SecatorScan model."""
-    
+
     list_display = [
         "name",
         "scan_type",
@@ -165,23 +178,26 @@ class SecatorScanAdmin(admin.ModelAdmin):
         "tasks",
     ]
     fieldsets = (
-        ("Basic Information", {
-            "fields": ("name", "description", "scan_type", "is_default")
-        }),
-        ("Execution Configuration", {
-            "fields": ("execution_mode", "scan_config_type", "workflow", "tasks")
-        }),
-        ("Statistics", {
-            "fields": ("get_tasks_count_display",),
-            "classes": ("collapse",),
-        }),
-        ("Timestamps", {
-            "fields": ("created_at", "updated_at"),
-            "classes": ("collapse",),
-        }),
+        ("Basic Information", {"fields": ("name", "description", "scan_type", "is_default")}),
+        ("Execution Configuration", {"fields": ("execution_mode", "scan_config_type", "workflow", "tasks")}),
+        (
+            "Statistics",
+            {
+                "fields": ("get_tasks_count_display",),
+                "classes": ("collapse",),
+            },
+        ),
+        (
+            "Timestamps",
+            {
+                "fields": ("created_at", "updated_at"),
+                "classes": ("collapse",),
+            },
+        ),
     )
 
     def get_tasks_count_display(self, obj):
         """Display the number of tasks in this scan configuration."""
         return obj.get_tasks_count()
+
     get_tasks_count_display.short_description = "Tasks Count"
