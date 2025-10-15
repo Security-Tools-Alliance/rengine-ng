@@ -23,7 +23,8 @@ RENGINE_VERSION := $(shell cat web/reNgine/version.txt)
 export RENGINE_VERSION
 
 # Define RENGINE_FOLDER
-RENGINE_FOLDER := /home/rengine/rengine
+RENGINE_HOME_FOLDER := /home/rengine
+RENGINE_FOLDER := ${RENGINE_HOME_FOLDER}/rengine
 export RENGINE_FOLDER
 
 # Credits: https://github.com/sherifabdlnaby/elastdocker/
@@ -94,7 +95,7 @@ define gpu_config
 	$(eval export DOCKER_RUNTIME)
 endef
 
-.PHONY: certs up dev_up build_up build build-service pull superuser_create superuser_delete superuser_changepassword migrate down stop restart remove_images test logs images prune help
+.PHONY: certs up dev_up build_up build build-service pull superuser_create superuser_delete superuser_changepassword migrate down stop restart remove_images test test-app test-verbose test-app-verbose ruff-format ruff-check ruff-fix ruff-unsafe-fix logs images prune help
 
 pull:			## Pull pre-built Docker images from repository.
 	${DOCKER_COMPOSE_FILE_CMD} pull
@@ -236,8 +237,41 @@ remove_images:	## Remove all Docker images for reNgine-ng services.
 		echo "No images found for ghcr.io/security-tools-alliance/rengine-ng"; \
 	fi
 
-test:
-	${DOCKER_COMPOSE_FILE_CMD} exec celery poetry -C ${RENGINE_FOLDER} run python3 -m unittest tests/test_scan.py
+# Ruff commands for code quality
+ruff-format:		## Format code using ruff formatter.
+	${DOCKER_COMPOSE_FILE_CMD} exec web poetry -C ${RENGINE_FOLDER} run ruff format --config ${RENGINE_HOME_FOLDER}/pyproject.toml ${RENGINE_FOLDER}
+
+ruff-check:		## Check code quality using ruff linter.
+	${DOCKER_COMPOSE_FILE_CMD} exec web poetry -C ${RENGINE_FOLDER} run ruff check --config ${RENGINE_HOME_FOLDER}/pyproject.toml ${RENGINE_FOLDER}
+
+ruff-fix:		## Fix code issues using ruff linter.
+	${DOCKER_COMPOSE_FILE_CMD} exec web poetry -C ${RENGINE_FOLDER} run ruff check --fix --config ${RENGINE_HOME_FOLDER}/pyproject.toml ${RENGINE_FOLDER}
+
+ruff-unsafe-fix:	## Fix code issues using ruff linter with unsafe fixes.
+	${DOCKER_COMPOSE_FILE_CMD} exec web poetry -C ${RENGINE_FOLDER} run ruff check --fix --unsafe-fixes --config ${RENGINE_HOME_FOLDER}/pyproject.toml ${RENGINE_FOLDER}
+
+# Test commands
+test:			## Run all unit tests for all apps.
+	${DOCKER_COMPOSE_FILE_CMD} exec web poetry -C ${RENGINE_FOLDER} run python3 manage.py test --no-input --keepdb
+
+test-app:		## Run unit tests for specific app(s). Usage: make test-app APPS=app1,app2
+	@if [ -z "$(APPS)" ]; then \
+		echo "Error: APPS parameter is required. Usage: make test-app APPS=app1,app2"; \
+		echo "Available apps: api, dashboard, recon_note, reNgine, scanEngine, startScan, targetApp"; \
+		exit 1; \
+	fi
+	${DOCKER_COMPOSE_FILE_CMD} exec web poetry -C ${RENGINE_FOLDER} run python3 manage.py test $(APPS) --no-input --keepdb
+
+test-verbose:		## Run all unit tests with verbose output.
+	${DOCKER_COMPOSE_FILE_CMD} exec web poetry -C ${RENGINE_FOLDER} run python3 manage.py test --no-input --keepdb --verbosity 2
+
+test-app-verbose:	## Run unit tests for specific app(s) with verbose output. Usage: make test-app-verbose APPS=app1,app2
+	@if [ -z "$(APPS)" ]; then \
+		echo "Error: APPS parameter is required. Usage: make test-app-verbose APPS=app1,app2"; \
+		echo "Available apps: api, dashboard, recon_note, reNgine, scanEngine, startScan, targetApp"; \
+		exit 1; \
+	fi
+	${DOCKER_COMPOSE_FILE_CMD} exec web poetry -C ${RENGINE_FOLDER} run python3 manage.py test $(APPS) --no-input --keepdb --verbosity 2
 
 logs:			## Tail all containers logs with -n 1000 (useful for debug).
 	${DOCKER_COMPOSE_FILE_CMD} logs --follow --tail=1000 ${SERVICES}
@@ -267,6 +301,18 @@ help:			## Show this help.
 	@echo "  make restart COLD=1                     				Cold restart (recreate containers) all services in production mode"
 	@echo "  make restart DEV=1 COLD=1               				Cold restart (recreate containers) all services in development mode"
 	@echo ""
+	@echo "Code Quality (Ruff):"
+	@echo "  make ruff-format                        				Format code using ruff formatter"
+	@echo "  make ruff-check                         				Check code quality using ruff linter"
+	@echo "  make ruff-fix                           				Fix code issues using ruff linter"
+	@echo "  make ruff-unsafe-fix                    				Fix code issues using ruff linter with unsafe fixes"
+	@echo ""
+	@echo "Testing:"
+	@echo "  make test                               				Run all unit tests for all apps"
+	@echo "  make test-app APPS=app1,app2            				Run unit tests for specific app(s)"
+	@echo "  make test-verbose                       				Run all unit tests with verbose output"
+	@echo "  make test-app-verbose APPS=app1,app2    				Run unit tests for specific app(s) with verbose output"
+	@echo ""
 	@echo "Examples:"
 	@echo "  make up GPU=1                          				Start all services with GPU support"
 	@echo "  make dev_up GPU=1                      				Start development environment with GPU support"
@@ -276,6 +322,8 @@ help:			## Show this help.
 	@echo "  make build-service SERVICE=celery GPU=1				Build only the celery service with GPU support"
 	@echo "  make build-service SERVICE=web REBUILD=1				Build web service after removing its image"
 	@echo "  make build-service SERVICE=redis REBUILD=1 GPU=1		Build redis service after removing image with GPU support"
+	@echo "  make test-app APPS=api,scanEngine      				Run tests for api and scanEngine apps"
+	@echo "  make ruff-fix                           				Fix code quality issues automatically"
 
 %:
 	@:
