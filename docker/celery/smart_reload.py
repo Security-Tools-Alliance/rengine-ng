@@ -62,6 +62,7 @@ class DebouncedReloadHandler(FileSystemEventHandler):
             '.git',
             '.svn',
             '.hg',
+            'tests',
             'node_modules',
             '.DS_Store',
             'Thumbs.db',

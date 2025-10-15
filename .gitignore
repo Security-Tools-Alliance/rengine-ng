@@ -70,3 +70,6 @@ get-docker.sh
 
 # Environment variables
 .env
+
+# Celery
+*.pid

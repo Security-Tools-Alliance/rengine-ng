@@ -8,9 +8,6 @@ print_msg() {
 }
 
 RENGINE_FOLDER="/home/$USERNAME/rengine"
-MAX_CONCURRENCY=${MAX_CONCURRENCY:-20}
-MIN_CONCURRENCY=${MIN_CONCURRENCY:-5}
-CELERY_LOGLEVEL=${CELERY_LOGLEVEL:-info}
 
 print_msg "Generate Django migrations files"
 poetry run -C $RENGINE_FOLDER python3 manage.py makemigrations
@@ -40,7 +37,7 @@ secator config set celery.result_backend redis://redis:6379/0
 print_msg "Starting Secator worker"
 
 # Validate required environment variables for Secator worker
-REQUIRED_ENV_VARS=("SECATOR_QUEUE" "SECATOR_LOG_LEVEL" "SECATOR_BROKER_URL")
+REQUIRED_ENV_VARS=("SECATOR_LOG_LEVEL" "SECATOR_BROKER_URL" "SECATOR_CONCURRENCY")
 for VAR in "${REQUIRED_ENV_VARS[@]}"; do
     if [ -z "${!VAR}" ]; then
         echo "Error: Required environment variable $VAR is not set."
@@ -49,18 +46,17 @@ for VAR in "${REQUIRED_ENV_VARS[@]}"; do
 done
 
 # Provide defaults for optional environment variables
-: "${SECATOR_CONCURRENCY:=1}"
-: "${SECATOR_PREFETCH_MULTIPLIER:=4}"
+SECATOR_PREFETCH_MULTIPLIER=${SECATOR_PREFETCH_MULTIPLIER:-4}
 
-# Build Secator worker command with appropriate options
-SECATOR_CMD="secator worker --queue $SECATOR_QUEUE --loglevel $SECATOR_LOG_LEVEL --broker $SECATOR_BROKER_URL --concurrency $SECATOR_CONCURRENCY --prefetch-multiplier $SECATOR_PREFETCH_MULTIPLIER"
-
-# Add concurrency (use SECATOR_CONCURRENCY if set, otherwise MAX_CONCURRENCY)
+# Add concurrency
+MAX_CONCURRENCY=${MAX_CONCURRENCY:-20}
 CONCURRENCY=${SECATOR_CONCURRENCY:-$MAX_CONCURRENCY}
-SECATOR_CMD="$SECATOR_CMD --concurrency=$CONCURRENCY"
 
 # Add log level
-SECATOR_CMD="$SECATOR_CMD --loglevel=$CELERY_LOGLEVEL"
+SECATOR_LOG_LEVEL=${SECATOR_LOG_LEVEL:-info}
+
+# Build Secator worker command with appropriate options
+SECATOR_CMD="secator worker --loglevel $SECATOR_LOG_LEVEL --broker $SECATOR_BROKER_URL --concurrency $CONCURRENCY --prefetch-multiplier $SECATOR_PREFETCH_MULTIPLIER"
 
 # Development mode options
 if [ "$SECATOR_DEV_MODE" = "1" ]; then
@@ -106,7 +102,7 @@ if [ -n "$SECATOR_POOL" ]; then
 fi
 
 # Check if custom reload is requested
-if [ "$USE_CUSTOM_RELOAD" = "1" ]; then
+if [ "$SECATOR_USE_CUSTOM_RELOAD" = "1" ]; then
     echo "Using smart reload script for development..."
     echo "Starting reNgine development worker with smart reload..."
     
@@ -118,7 +114,7 @@ if [ "$USE_CUSTOM_RELOAD" = "1" ]; then
 else
     # Display final command
     echo "Executing: $SECATOR_CMD"
-    echo "Concurrency: $CONCURRENCY | Log level: $CELERY_LOGLEVEL"
+    echo "Concurrency: $CONCURRENCY | Log level: $SECATOR_LOG_LEVEL"
     
     # Execute Secator worker
     eval $SECATOR_CMD

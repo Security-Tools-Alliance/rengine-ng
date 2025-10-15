@@ -13,6 +13,16 @@ services:
       - CELERY_DEBUG=1
       - CELERY_REMOTE_DEBUG=0
       - CELERY_REMOTE_DEBUG_PORT=5679
+      - SECATOR_CONCURRENCY=3
+      - SECATOR_DEV_MODE=1
+      - SECATOR_LOG_LEVEL=debug
+      - SECATOR_PREFETCH_MULTIPLIER=4
+      - SECATOR_QUIET=0
+      - SECATOR_USE_CUSTOM_RELOAD=1
+      - SECATOR_WITHOUT_GOSSIP=1
+      - SECATOR_WITHOUT_MINGLE=1
+      - SECATOR_WITHOUT_HEARTBEAT=1
+      - FLOWER_UNAUTHENTICATED_API=1
     volumes:
       - ./celery/entrypoint-dev.sh:/entrypoint-dev.sh:ro
     ports:
