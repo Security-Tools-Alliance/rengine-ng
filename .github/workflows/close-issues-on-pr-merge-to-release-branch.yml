@@ -56,18 +56,29 @@ jobs:
           
           echo "GraphQL Response: $response"
           
-          # Extract issue numbers
+          # Extract issue numbers from GraphQL closingIssuesReferences
           issue_numbers=$(echo "$response" | jq -r '.data.repository.pullRequest.closingIssuesReferences.nodes[]?.number // empty' 2>/dev/null | sort -u)
           
-          if [ -z "$issue_numbers" ]; then
+          # Also parse PR body for manual issue references as fallback
+          echo "Fetching PR body for manual parsing..."
+          pr_body=$(gh pr view $PR_NUMBER --repo $REPO --json body -q .body)
+          echo "PR Body: $pr_body"
+          
+          # Extract issue numbers from patterns like "fix #123", "fixes #123", "close #123", "closes #123", "resolve #123", "resolves #123"
+          manual_issues=$(echo "$pr_body" | grep -oiE '(fix(es)?|close(s)?|resolve(s)?)\s+#[0-9]+' | grep -oE '[0-9]+' | sort -u)
+          
+          # Combine both sources
+          all_issues=$(echo -e "$issue_numbers\n$manual_issues" | grep -v '^$' | sort -u)
+          
+          if [ -z "$all_issues" ]; then
             echo "No linked issues found. This PR will not automatically close any issues."
             exit 0
           fi
           
-          echo "Found linked issues: $(echo $issue_numbers | tr '\n' ' ')"
+          echo "Found linked issues: $(echo $all_issues | tr '\n' ' ')"
           
           # Close each issue
-          for issue_number in $issue_numbers; do
+          for issue_number in $all_issues; do
             echo "Closing issue #$issue_number..."
             
             # Close the issue
