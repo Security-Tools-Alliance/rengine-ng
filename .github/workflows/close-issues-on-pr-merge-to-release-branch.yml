@@ -12,6 +12,7 @@ jobs:
     permissions:
       issues: write
       contents: read
+      pull-requests: read
     steps:
       - name: Extract and close all linked issues
         env:
