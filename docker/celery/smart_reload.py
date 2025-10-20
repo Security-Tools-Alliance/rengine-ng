@@ -128,20 +128,12 @@ def start_smart_reload():
             "/home/rengine/.local/share/pipx/venvs/secator/bin/secator", 
             "worker",
             "--concurrency=3",
-            "--dev"
         ]
         
         logger.info(f"▶️  Starting: {' '.join(cmd)}")
         
-        # Pass environment variables to Secator
+        # Use environment variables from docker-compose
         env = os.environ.copy()
-        env.update({
-            'SECATOR_QUIET': '0',
-            'SECATOR_WITHOUT_GOSSIP': '1',
-            'SECATOR_CONCURRENCY': '3',
-            'SECATOR_WITHOUT_MINGLE': '1',
-            'SECATOR_DEV_MODE': '1'
-        })
         
         # Use shell=False and proper process handling
         try:
@@ -175,17 +167,6 @@ def start_smart_reload():
     
     def stop_workers():
         """Stop all Celery workers."""
-        try:
-            # First, try to stop celery multi workers gracefully
-            subprocess.run([
-                "/home/rengine/.local/share/pipx/venvs/secator/bin/secator",
-                "worker", "--stop"
-            ], capture_output=True, timeout=5)
-            logger.info("🛑 Stopped existing workers gracefully")
-        except Exception as e:
-            logger.warning(f"⚠️  Error stopping workers gracefully: {e}")
-        
-        # Always force kill any remaining celery processes to ensure clean state
         try:
             logger.info("🧹 Force killing any remaining Celery processes...")
             subprocess.run(['pkill', '-f', 'celery.*worker'], timeout=5)
@@ -223,7 +204,7 @@ def start_smart_reload():
             logger.debug(f"✅ Found {worker_count} Celery worker processes")
             
             # Only restart if we have too few workers (less than 3)
-            if worker_count < 3:
+            if worker_count < 2:
                 logger.warning(f"⚠️  Only {worker_count} workers found, restarting...")
                 restart_worker()
             else:

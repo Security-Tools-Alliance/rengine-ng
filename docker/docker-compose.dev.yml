@@ -14,7 +14,7 @@ services:
       - CELERY_REMOTE_DEBUG=0
       - CELERY_REMOTE_DEBUG_PORT=5679
       - SECATOR_CONCURRENCY=3
-      - SECATOR_DEV_MODE=1
+      - SECATOR_DEV_MODE=0
       - SECATOR_LOG_LEVEL=debug
       - SECATOR_PREFETCH_MULTIPLIER=4
       - SECATOR_QUIET=0
@@ -25,6 +25,7 @@ services:
       - FLOWER_UNAUTHENTICATED_API=1
     volumes:
       - ./celery/entrypoint-dev.sh:/entrypoint-dev.sh:ro
+      - ./celery/smart_reload.py:/home/rengine/smart_reload.py:ro
     ports:
       - "127.0.0.1:5679:5679"
       - "127.0.0.1:5555:5555"

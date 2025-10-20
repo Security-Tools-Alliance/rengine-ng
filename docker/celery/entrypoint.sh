@@ -56,18 +56,20 @@ CONCURRENCY=${SECATOR_CONCURRENCY:-$MAX_CONCURRENCY}
 SECATOR_LOG_LEVEL=${SECATOR_LOG_LEVEL:-info}
 
 # Build Secator worker command with appropriate options
-SECATOR_CMD="secator worker --loglevel $SECATOR_LOG_LEVEL --broker $SECATOR_BROKER_URL --concurrency $CONCURRENCY --prefetch-multiplier $SECATOR_PREFETCH_MULTIPLIER"
+SECATOR_CMD="secator worker --loglevel $SECATOR_LOG_LEVEL --concurrency $CONCURRENCY"
 
 # Development mode options
-if [ "$SECATOR_DEV_MODE" = "1" ]; then
-    echo "Starting Secator worker in DEVELOPMENT mode"
-    SECATOR_CMD="$SECATOR_CMD --dev"
+if [ "$SECATOR_DEV_MODE" = "1" ] || [ "$SECATOR_USE_CUSTOM_RELOAD" = "1" ]; then
+    # Cause high CPU usage
+    # echo "Starting Secator worker in DEVELOPMENT mode"
+    # SECATOR_CMD="$SECATOR_CMD --dev"
     
     # Add reload for auto-restart on code changes
-    if [ "$SECATOR_RELOAD" = "1" ]; then
-        SECATOR_CMD="$SECATOR_CMD --reload"
-        echo "  - Autoreload enabled"
-    fi
+    # if [ "$SECATOR_RELOAD" = "1" ]; then
+    #     SECATOR_CMD="$SECATOR_CMD --reload"
+    #     echo "  - Autoreload enabled"
+    # fi
+    echo "Starting Secator worker in DEVELOPMENT mode"
 else
     echo "Starting Secator worker in PRODUCTION mode"
 fi
