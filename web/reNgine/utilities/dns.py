@@ -2,11 +2,16 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import contextlib
 import socket
 import subprocess
+import threading
 
 from celery.utils.log import get_task_logger
 import validators
 
 from reNgine.settings import DEFAULT_THREADS
+
+
+# Thread-local storage for geolocalization collection
+_thread_local = threading.local()
 
 
 try:
@@ -46,6 +51,88 @@ def resolve_subdomain_ips(subdomain_name):
         logger.warning(f"Unexpected error resolving {subdomain_name}: {e}")
 
     return ips
+
+
+def collect_ip_for_geolocalization(ip_address):
+    """Collect IP address for batch geolocalization.
+
+    This function adds the IP to a thread-local collection that will be
+    processed in batch at the end of the current task.
+
+    Args:
+        ip_address (str): IP address to collect
+    """
+    from reNgine.core.data import get_ip_info
+
+    # Check if this is a private/internal IP address
+    ip_info = get_ip_info(ip_address)
+    if ip_info and ip_info.is_private:
+        logger.debug(f"Skipping geolocalization for private IP: {ip_address}")
+        return
+
+    # Get or create thread-local storage
+    if not hasattr(_thread_local, "geo_ip_collection"):
+        _thread_local.geo_ip_collection = set()
+
+    # Add IP to collection (set automatically handles duplicates)
+    _thread_local.geo_ip_collection.add(ip_address)
+    logger.debug(f"Collected IP {ip_address} for batch geolocalization")
+
+
+def trigger_batch_geolocalization():
+    """Trigger batch geolocalization for collected IP addresses.
+
+    This function should be called at the end of tasks that collect IPs
+    to process them in a single batch operation.
+
+    Returns:
+        str: Task ID of the batch geolocalization task, or None if no IPs collected
+    """
+    from reNgine.tasks.geo import geo_localize_batch
+
+    # Get collected IPs from thread-local storage
+    if not hasattr(_thread_local, "geo_ip_collection"):
+        logger.debug("No IPs collected for geolocalization")
+        return None
+
+    collected_ips = list(_thread_local.geo_ip_collection)
+
+    if not collected_ips:
+        logger.debug("No IPs collected for geolocalization")
+        return None
+
+    # Clear the collection
+    _thread_local.geo_ip_collection.clear()
+
+    # Trigger batch geolocalization
+    logger.info(f"Triggering batch geolocalization for {len(collected_ips)} IP addresses")
+    task = geo_localize_batch.delay(collected_ips)
+
+    return task.id
+
+
+def with_batch_geolocalization(func):
+    """Decorator to automatically trigger batch geolocalization at the end of tasks.
+
+    This decorator wraps a function and automatically triggers batch geolocalization
+    after the function completes, processing all IPs collected during execution.
+
+    Args:
+        func: Function to wrap
+
+    Returns:
+        Wrapped function
+    """
+
+    def wrapper(*args, **kwargs):
+        try:
+            result = func(*args, **kwargs)
+            return result
+        finally:
+            # Always trigger batch geolocalization, even if function fails
+            trigger_batch_geolocalization()
+
+    return wrapper
 
 
 def get_reverse_dns(ip_address):

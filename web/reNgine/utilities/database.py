@@ -32,10 +32,8 @@ import validators
 
 from dashboard.models import User
 from reNgine.core.data import is_iterable, replace_nulls
-from reNgine.settings import RENGINE_RESULTS, RENGINE_TASK_IGNORE_CACHE_KWARGS
 from reNgine.utilities.distributed_lock import DistributedLock, get_redis_connection
 from reNgine.utilities.url import (
-    get_domain_from_subdomain,
     is_target_allowed_for_domain,
     is_valid_url,
     sanitize_url,
@@ -44,7 +42,6 @@ from startScan.models import (
     CveId,
     CweId,
     DirectoryFile,
-    Email,
     Employee,
     EndPoint,
     IpAddress,
@@ -584,22 +581,6 @@ def save_vulnerability(**vuln_data):
     return vuln, created
 
 
-def save_email(email_address, scan_history=None):
-    if not validators.email(email_address):
-        logger.info(f"Email {email_address} is invalid. Skipping.")
-        return None, False
-    email, created = Email.objects.get_or_create(address=email_address)
-    if created:
-        logger.info(f"Found new email address {email_address}")
-
-    # Add email to ScanHistory
-    if scan_history:
-        scan_history.emails.add(email)
-        scan_history.save()
-
-    return email, created
-
-
 def save_employee(name, designation, scan_history=None):
     employee, created = Employee.objects.get_or_create(name=name, designation=designation)
     if created:
@@ -653,88 +634,6 @@ def create_scan_activity(scan_history_id, message, status):
     scan_activity.status = status
     scan_activity.save()
     return scan_activity.id
-
-
-def save_imported_subdomains(subdomains, ctx=None):
-    """Take a list of subdomains imported and write them to from_imported.txt.
-
-    This function processes imported subdomains, saving them to the database and
-    recording successfully imported ones to a text file. The file is written using
-    atomic operations to prevent corruption.
-
-    Args:
-        subdomains (list): List of subdomain names.
-        ctx (dict): Context dict with domain_id, results_dir, etc.
-    """
-    import os
-    import tempfile
-
-    if ctx is None:
-        ctx = {}
-    domain_id = ctx["domain_id"]
-    domain = Domain.objects.get(pk=domain_id)
-    results_dir = ctx.get("results_dir", RENGINE_RESULTS)
-
-    # Validate each subdomain and de-duplicate entries
-    subdomains = list({subdomain for subdomain in subdomains if domain.name == get_domain_from_subdomain(subdomain)})
-    if not subdomains:
-        return
-
-    logger.warning(f"Found {len(subdomains)} imported subdomains.")
-
-    # Track statistics for reporting
-    success_count = 0
-    failed_count = 0
-    failed_subdomains = []
-    successfully_imported = []
-
-    # Process all subdomains first (DB operations)
-    for subdomain in subdomains:
-        subdomain_name = subdomain.strip()
-        subdomain_obj, _ = validate_and_save_subdomain(subdomain_name, ctx=ctx)
-        if subdomain_obj is None:
-            failed_count += 1
-            failed_subdomains.append(subdomain_name)
-            logger.warning(f"Failed to import subdomain: {subdomain_name}")
-            continue
-
-        subdomain_obj.is_imported_subdomain = True
-        subdomain_obj.save()
-        successfully_imported.append(subdomain_name)
-        success_count += 1
-
-        # Create base endpoint (for scan)
-        create_default_endpoint_for_subdomain(subdomain_obj, ctx)
-
-    # Write results to file atomically using temporary file + rename
-    # This ensures the file is never in a partially written state
-    final_path = f"{results_dir}/from_imported.txt"
-    try:
-        # Create temp file in same directory for atomic rename
-        fd, temp_path = tempfile.mkstemp(dir=results_dir, prefix=".from_imported_", suffix=".tmp")
-        try:
-            with os.fdopen(fd, "w") as output_file:
-                for subdomain_name in successfully_imported:
-                    output_file.write(f"{subdomain_name}\n")
-            # Atomic rename - file appears complete or not at all
-            os.replace(temp_path, final_path)
-        except Exception:
-            # Clean up temp file if write/rename fails
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
-            raise
-    except Exception as e:
-        logger.error(f"Failed to write imported subdomains file: {e}", exc_info=True)
-        # Don't propagate - DB operations already succeeded
-        # File can be regenerated from DB if needed
-
-    # Report import statistics
-    logger.info(f"Imported subdomains: {success_count} succeeded, {failed_count} failed")
-    if failed_subdomains:
-        logger.warning(
-            f"Failed imported subdomains: {', '.join(failed_subdomains[:10])}"
-            f"{' and ' + str(len(failed_subdomains) - 10) + ' more...' if len(failed_subdomains) > 10 else ''}"
-        )
 
 
 def create_default_endpoint_for_subdomain(subdomain_obj, ctx=None):
@@ -891,9 +790,3 @@ def _update_directory_file_fields(directory_file, full_data):
         directory_file.save(update_fields=fields_to_update)
 
     return directory_file
-
-
-def get_task_cache_key(func_name, *args, **kwargs):
-    args_str = "_".join([str(arg) for arg in args])
-    kwargs_str = "_".join([f"{k}={v}" for k, v in kwargs.items() if k not in RENGINE_TASK_IGNORE_CACHE_KWARGS])
-    return f"{func_name}__{args_str}__{kwargs_str}"

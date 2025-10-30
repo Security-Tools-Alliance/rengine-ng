@@ -2,7 +2,6 @@
 This file contains the test cases for the API views.
 """
 
-import json
 from unittest.mock import patch
 
 from django.urls import reverse
@@ -112,26 +111,7 @@ class TestStopScan(BaseTestCase):
         self.assertTrue(response.data["status"])
 
 
-class TestInitiateSubTask(BaseTestCase):
-    """Tests for the InitiateSubTask class."""
-
-    def setUp(self):
-        """Set up test environment."""
-        super().setUp()
-
-    @patch("api.views.initiate_subscan")
-    def test_initiate_subtask(self, mock_initiate_subscan):
-        """Test initiating a subtask."""
-        mock_initiate_subscan.return_value = True
-        url = reverse("api:initiate_subscan")
-        data = {
-            "subdomain_ids": [self.data_generator.subdomain.id, self.data_generator.subdomain.id],
-            "tasks": ["httpcrawl", "osint"],
-            "engine_id": "1",
-        }
-        response = self.client.post(url, data=json.dumps(data), content_type="application/json")
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertTrue(response.data["status"])
+# TestInitiateSubTask removed - functionality migrated to Secator
 
 
 class TestListEngines(BaseTestCase):

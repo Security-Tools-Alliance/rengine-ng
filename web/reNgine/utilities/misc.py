@@ -61,7 +61,7 @@ def get_and_save_emails(scan_history, activity_id, results_dir):
     Returns:
         list: List of emails found.
     """
-    from reNgine.tasks.command import run_command
+    from reNgine.utilities.command import run_command
     from reNgine.utilities.database import save_email
 
     emails = []

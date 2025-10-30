@@ -64,6 +64,8 @@ SECRET_KEY = first_run(SECRET_FILE, BASE_DIR)
 CSRF_TRUSTED_ORIGINS = [
     f"http://{DOMAIN_NAME}",
     f"https://{DOMAIN_NAME}",
+    "https://localhost",
+    "https://127.0.0.1",
     "http://localhost:8000",
     "https://localhost:8000",
     "http://127.0.0.1:8000",
@@ -232,14 +234,17 @@ LOGIN_URL = "login"
 LOGIN_REDIRECT_URL = "onboarding"
 LOGOUT_REDIRECT_URL = "login"
 
+# IP service timeout in seconds
+IP_SERVICE_TIMEOUT = env.int("IP_SERVICE_TIMEOUT", default=5)
+
 # Number of endpoints that have the same content_length
 DELETE_DUPLICATES_THRESHOLD = 10
 
 """
 CELERY settings
 """
-CELERY_BROKER_URL = env("CELERY_BROKER", default="redis://redis:6379/0")
-CELERY_RESULT_BACKEND = env("CELERY_BROKER", default="redis://redis:6379/0")
+SECATOR_CELERY_BROKER_URL = env("SECATOR_CELERY_BROKER_URL", default="redis://redis:6379/0")
+SECATOR_CELERY_RESULT_BACKEND = env("SECATOR_CELERY_RESULT_BACKEND", default="redis://redis:6379/0")
 CELERY_ENABLE_UTC = False
 CELERY_TIMEZONE = "UTC"
 CELERY_IGNORE_RESULTS = False
@@ -278,7 +283,7 @@ else:
     CACHES = {
         "default": {
             "BACKEND": "django_redis.cache.RedisCache",
-            "LOCATION": CELERY_BROKER_URL,
+            "LOCATION": SECATOR_CELERY_BROKER_URL,
             "OPTIONS": {
                 "CLIENT_CLASS": "django_redis.client.DefaultClient",
             },

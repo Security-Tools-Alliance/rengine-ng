@@ -31,9 +31,6 @@
                                 <option value="all">All Configurations</option>
                                 <option value="builtin">Built-in</option>
                                 <option value="custom">Custom</option>
-                                <option value="workflow">Workflow Mode</option>
-                                <option value="tasks">Tasks Mode</option>
-                                <option value="scan">Scan Mode</option>
                             </select>
                         </div>
                         <div class="col-md-6">
@@ -52,8 +49,9 @@
                             <thead>
                                 <tr>
                                     <th>Name</th>
+                                    <th>Alias</th>
                                     <th>Type</th>
-                                    <th>Execution Mode</th>
+                                    <th>Config Type</th>
                                     <th>Description</th>
                                     <th>Status</th>
                                     <th>Default</th>
@@ -66,21 +64,21 @@
                                 <tr>
                                     <td>
                                         <strong>{{ scan.name }}</strong>
-                                        {% if scan.secator_scan_type %}
-                                        <br><small class="text-info"><i class="fas fa-search"></i> {{ scan.secator_scan_type }}</small>
+                                    </td>
+                                    <td>
+                                        {% if scan.alias %}
+                                            <span class="badge badge-soft-info">{{ scan.alias }}</span>
+                                        {% else %}
+                                            <span class="text-muted">-</span>
                                         {% endif %}
                                     </td>
                                     <td>
                                         <span class="badge badge-soft-info">{{ scan.get_scan_type_display }}</span>
                                     </td>
                                     <td>
-                                        {% if scan.execution_mode == 'workflow' %}
-                                            <span class="badge badge-soft-primary">Workflow</span>
-                                        {% elif scan.execution_mode == 'tasks' %}
-                                            <span class="badge badge-soft-secondary">Tasks</span>
-                                        {% elif scan.execution_mode == 'scan' %}
-                                            <span class="badge badge-soft-success">Scan</span>
-                                        {% endif %}
+                                        <span class="badge badge-soft-{% if scan.scan_config_type == 'builtin' %}success{% else %}secondary{% endif %}">
+                                            {{ scan.get_scan_config_type_display }}
+                                        </span>
                                     </td>
                                     <td>{{ scan.description|truncatechars:100 }}</td>
                                     <td>
@@ -116,7 +114,7 @@
                                 </tr>
                                 {% empty %}
                                 <tr>
-                                    <td colspan="8" class="text-center text-muted">
+                                    <td colspan="9" class="text-center text-muted">
                                         <i class="fas fa-inbox fa-2x mb-2"></i><br>
                                         No scan configurations found. Create your first configuration.
                                     </td>

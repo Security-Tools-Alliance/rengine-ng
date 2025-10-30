@@ -6,7 +6,7 @@ authors = ["Talanor <q.poirier@astar.services>"]
 package-mode = false
 
 [tool.poetry.dependencies]
-python = "^3.13"
+python = "^3.12"
 aiodns = "3.0.0"
 argh = "0.26.2"
 beautifulsoup4 = "4.9.3"
@@ -41,7 +41,7 @@ langchain-community = "0.3.29"
 langchain-ollama = "0.2.0"
 markdown = "3.6"
 netaddr = "0.8.0"
-secator = "^0.7.0"
+secator = {version = "^0.19.0", extras = ["redis"]}
 openai = "1.51.0"
 pyyaml = "6.0.1"
 pysocks = "1.7.1"
@@ -52,7 +52,7 @@ requests = "2.32.5"
 scapy = "2.5.0"
 tldextract = "3.5.0"
 uvicorn = { extras = ["standard"], version = "0.35.0" }
-validators = "0.18.2"
+validators = "^0.35"
 watchdog = "4.0.0"
 weasyprint = "62.3"
 xmltodict = "0.13.0"
@@ -65,7 +65,7 @@ ruff = "0.12.11"
 line-length = 120
 
 # Target Python version
-target-version = "py313"
+target-version = "py312"
 
 [tool.ruff.lint]
 # Select the rule sets to enforce:

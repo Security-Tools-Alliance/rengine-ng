@@ -26,9 +26,7 @@ from reNgine.definitions import (
     PERM_MODIFY_SYSTEM_CONFIGURATIONS,
     PERM_MODIFY_WORDLISTS,
 )
-from reNgine.settings import RENGINE_HOME, RENGINE_TOOL_GITHUB_PATH, RENGINE_WORDLISTS
-
-# NOTE: run_command and run_gf_list removed - legacy tasks, functionality now in Secator
+from reNgine.settings import RENGINE_HOME, RENGINE_WORDLISTS
 from reNgine.utilities.notification import (
     send_discord_message,
     send_lark_message,
@@ -38,7 +36,6 @@ from reNgine.utilities.notification import (
 from scanEngine.forms import (
     AddEngineForm,
     AddWordlistForm,
-    ExternalToolForm,
     HackeroneForm,
     InterestingLookupForm,
     NotificationForm,
@@ -51,7 +48,6 @@ from scanEngine.forms import (
 from scanEngine.models import (
     EngineType,
     Hackerone,
-    InstalledExternalTool,
     InterestingLookupModel,
     Notification,
     Proxy,
@@ -321,10 +317,8 @@ def update_config(request, tool_name, display_name, file_name="config", file_ext
 
 def get_gf_patterns(request):
     try:
-        gf_result = run_gf_list.delay().get(timeout=30)
-        if gf_result["status"]:
-            return sorted(gf_result["output"])
-        messages.error(request, f"Error fetching GF patterns: {gf_result['message']}")
+        # NOTE: GF patterns functionality moved to Secator
+        return []
     except Exception as e:
         messages.error(request, f"Error fetching GF patterns: {str(e)}")
     return []
@@ -456,15 +450,6 @@ def report_settings(request):
 
 
 @has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
-def tool_arsenal_section(request):
-    return render(
-        request,
-        "scanEngine/settings/tool_arsenal.html",
-        {"installed_tools": InstalledExternalTool.objects.all().order_by("id")},
-    )
-
-
-@has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
 def api_vault_delete(request):
     response = {"status": "error"}
     if request.method == "POST":
@@ -530,53 +515,6 @@ def api_vault(request):
         ]
     }
     return render(request, "scanEngine/settings/api.html", context)
-
-
-@has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
-def add_tool(request):
-    form = ExternalToolForm()
-    if request.method == "POST":
-        form = ExternalToolForm(request.POST)
-        if form.is_valid():
-            # add tool
-            install_command = form.data["install_command"]
-            github_clone_path = None
-
-            # Only modify install_command if it contains 'git clone'
-            if "git clone" in install_command:
-                project_name = install_command.split("/")[-1]
-                install_command = f"{install_command} {RENGINE_TOOL_GITHUB_PATH}/{project_name} && pip install -r {RENGINE_TOOL_GITHUB_PATH}/{project_name}/requirements.txt"
-                github_clone_path = f"{RENGINE_TOOL_GITHUB_PATH}/{project_name}"
-
-            run_command(install_command)
-            run_command.apply_async(args=(install_command,))
-            saved_form = form.save()
-
-            if github_clone_path:
-                tool = InstalledExternalTool.objects.get(id=saved_form.pk)
-                tool.github_clone_path = github_clone_path
-                tool.save()
-
-            messages.add_message(request, messages.INFO, "External Tool Successfully Added!")
-            return http.HttpResponseRedirect(reverse("tool_arsenal"))
-    context = {"settings_nav_active": "active", "form": form}
-    return render(request, "scanEngine/settings/add_tool.html", context)
-
-
-@has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
-def modify_tool_in_arsenal(request, id):
-    external_tool = get_object_or_404(InstalledExternalTool, id=id)
-    form = ExternalToolForm()
-    if request.method == "POST":
-        form = ExternalToolForm(request.POST, instance=external_tool)
-        if form.is_valid():
-            form.save()
-            messages.add_message(request, messages.INFO, "Tool modified successfully")
-            return http.HttpResponseRedirect(reverse("tool_arsenal"))
-    else:
-        form.set_value(external_tool)
-    context = {"scan_engine_nav_active": "active", "form": form}
-    return render(request, "scanEngine/settings/update_tool.html", context)
 
 
 # =============================================================================
@@ -667,12 +605,11 @@ def secator_task_detail(request, task_id):
     """Detail view for a task."""
     task = get_object_or_404(SecatorTask, id=task_id)
 
-    # Get related scans
-    related_scans = SecatorScan.objects.filter(tasks=task)
+    # Note: No longer showing related scans since we removed the M2M relationship
+    # Scans now use YAML configuration instead of direct task relationships
 
     context = {
         "task": task,
-        "related_scans": related_scans,
     }
 
     return render(request, "scanEngine/task_detail.html", context)
@@ -691,12 +628,6 @@ def secator_scans(request):
         scans = scans.filter(scan_config_type="builtin")
     elif filter_type == "custom":
         scans = scans.filter(scan_config_type="custom")
-    elif filter_type == "workflow":
-        scans = scans.filter(execution_mode="workflow")
-    elif filter_type == "tasks":
-        scans = scans.filter(execution_mode="tasks")
-    elif filter_type == "scan":
-        scans = scans.filter(execution_mode="scan")
 
     # Apply search
     if search_query:
@@ -723,8 +654,16 @@ def secator_workflow_detail(request, workflow_id):
     """Detail view for a workflow."""
     workflow = get_object_or_404(SecatorWorkflow, id=workflow_id)
 
-    # Get related scans
-    related_scans = SecatorScan.objects.filter(workflow=workflow)
+    # Find scans that use this workflow in their YAML configuration
+    related_scans = []
+    for scan in SecatorScan.objects.all():
+        try:
+            workflows = scan.get_workflows()
+            if workflow.alias in workflows:
+                related_scans.append(scan)
+        except Exception:
+            # Skip scans with invalid YAML
+            continue
 
     context = {
         "workflow": workflow,
@@ -874,12 +813,11 @@ def update_scan(request, scan_id):
     form = SecatorScanForm(
         initial={
             "name": scan.name,
+            "alias": scan.alias,
             "description": scan.description,
             "scan_type": scan.scan_type,
-            "secator_scan_type": scan.secator_scan_type,
-            "execution_mode": scan.execution_mode,
-            "workflow": scan.workflow,
-            "tasks": scan.tasks.all(),
+            "scan_config_type": scan.scan_config_type,
+            "yaml_configuration": scan.yaml_configuration,
             "is_default": scan.is_default,
             "is_active": scan.is_active,
         }

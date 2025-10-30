@@ -1,14 +1,18 @@
 """
 Endpoint Repository - Data access for endpoint operations.
-Handles EndPoint database operations.
+Handles EndPoint database operations with enriched Secator integration.
 """
+
+from datetime import datetime
+from typing import Any, Dict, List, Optional
+from urllib.parse import urlparse
 
 from celery.utils.log import get_task_logger
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError
 
-from reNgine.core.validators import is_valid_url
-from startScan.models import EndPoint, ScanHistory
+from reNgine.core.validators import is_valid_domain, is_valid_url
+from startScan.models import EndPoint, ScanHistory, Subdomain, Technology
 from targetApp.models import Domain
 
 
@@ -18,9 +22,9 @@ logger = get_task_logger(__name__)
 class EndpointRepository:
     """Repository for endpoint-related database operations."""
 
-    def save_from_secator(self, item, scan_history_id, domain_id):
+    def save_from_secator(self, item: Dict[str, Any], scan_history_id: int, domain_id: int) -> Optional[EndPoint]:
         """
-        Save endpoint from Secator result.
+        Save endpoint from Secator result with enriched data.
 
         Args:
             item: Secator URL item
@@ -44,19 +48,66 @@ class EndpointRepository:
             scan_history = ScanHistory.objects.get(id=scan_history_id)
             domain = Domain.objects.get(id=domain_id)
 
-            http_status = item.get("status_code") or item.get("status") or 0
+            # Prepare enriched defaults with all Secator URL fields
+            defaults = {
+                "target_domain": domain,
+                "http_status": item.get("status_code") or item.get("status") or 0,
+                "content_length": item.get("content_length", 0),
+                "page_title": item.get("title", ""),
+                "content_type": item.get("content_type", ""),
+                "webserver": item.get("webserver", ""),
+                "discovered_date": datetime.now(),
+            }
+
+            # Convert response time from milliseconds to seconds if provided
+            response_time = item.get("time")
+            if response_time:
+                if isinstance(response_time, str) and response_time.endswith("ms"):
+                    try:
+                        response_time = float(response_time[:-2]) / 1000.0
+                    except ValueError:
+                        response_time = None
+                elif isinstance(response_time, (int, float)):
+                    # Assume it's already in seconds if numeric
+                    response_time = float(response_time)
+                else:
+                    response_time = None
+
+                if response_time is not None:
+                    defaults["response_time"] = response_time
+
+            # Add additional fields if available
+            if "method" in item:
+                # Store HTTP method in extra_data since it's not a direct field
+                extra_data = {"method": item["method"]}
+                if "words" in item:
+                    extra_data["words"] = item["words"]
+                if "lines" in item:
+                    extra_data["lines"] = item["lines"]
+                if "headers" in item:
+                    extra_data["headers"] = item["headers"]
+                defaults["extra_data"] = extra_data
+
+            # Add screenshot and stored response paths if available
+            if "screenshot_path" in item:
+                defaults["screenshot_path"] = item["screenshot_path"]
+            if "stored_response_path" in item:
+                # Store in extra_data since it's not a direct field
+                if "extra_data" not in defaults:
+                    defaults["extra_data"] = {}
+                defaults["extra_data"]["stored_response_path"] = item["stored_response_path"]
 
             endpoint, created = EndPoint.objects.get_or_create(
                 http_url=http_url,
                 scan_history=scan_history,
-                defaults={
-                    "target_domain": domain,
-                    "http_status": http_status,
-                    "content_length": item.get("content_length", 0),
-                    "page_title": item.get("title", ""),
-                    "content_type": item.get("content_type", ""),
-                },
+                defaults=defaults,
             )
+
+            # Associate with subdomain if hostname can be extracted
+            self._associate_with_subdomain(endpoint, http_url, scan_history_id)
+
+            # Associate with technologies if available
+            self._associate_technologies(endpoint, item)
 
             if created:
                 logger.info(f"Created endpoint: {http_url}")
@@ -178,3 +229,74 @@ class EndpointRepository:
         except Exception as e:
             logger.error(f"Error updating endpoint HTTP status: {e}")
             return False
+
+    def _associate_with_subdomain(self, endpoint: EndPoint, http_url: str, scan_history_id: int) -> None:
+        """
+        Associate endpoint with subdomain based on URL hostname.
+
+        Args:
+            endpoint: Endpoint object
+            http_url: Endpoint URL
+            scan_history_id: Scan history ID
+        """
+        try:
+            hostname = urlparse(http_url).hostname
+            if hostname and is_valid_domain(hostname):
+                subdomain = Subdomain.objects.filter(name=hostname, scan_history_id=scan_history_id).first()
+
+                if subdomain:
+                    endpoint.subdomain = subdomain
+                    endpoint.save(update_fields=["subdomain"])
+                    logger.debug(f"Associated endpoint {http_url} with subdomain {hostname}")
+                else:
+                    logger.debug(f"Subdomain {hostname} not found in scan {scan_history_id}")
+
+        except Exception as e:
+            logger.error(f"Error associating endpoint with subdomain: {e}")
+
+    def _associate_technologies(self, endpoint: EndPoint, item: Dict[str, Any]) -> None:
+        """
+        Associate technologies with endpoint.
+
+        Args:
+            endpoint: Endpoint object
+            item: Secator item
+        """
+        try:
+            # Check if there are technologies in the 'tech' field
+            technologies = item.get("tech", [])
+
+            if not technologies or not isinstance(technologies, list):
+                return
+
+            for tech_name in technologies:
+                if tech_name and isinstance(tech_name, str):
+                    tech_obj, _ = Technology.objects.get_or_create(name=tech_name.strip())
+                    endpoint.techs.add(tech_obj)
+                    logger.debug(f"Associated technology {tech_name} with endpoint {endpoint.http_url}")
+
+        except Exception as e:
+            logger.error(f"Error associating technologies with endpoint: {e}")
+
+    def extract_technologies_from_list(self, tech_list: List[str]) -> List[Technology]:
+        """
+        Extract and create technologies from a list of technology names.
+
+        Args:
+            tech_list: List of technology names
+
+        Returns:
+            list: List of Technology objects
+        """
+        try:
+            technologies = []
+            for tech_name in tech_list:
+                if tech_name and tech_name.strip():
+                    tech_obj, _ = Technology.objects.get_or_create(name=tech_name.strip())
+                    technologies.append(tech_obj)
+
+            return technologies
+
+        except Exception as e:
+            logger.error(f"Error extracting technologies from list: {e}")
+            return []

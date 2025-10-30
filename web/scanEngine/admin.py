@@ -3,7 +3,6 @@ from django.contrib import admin
 from scanEngine.models import (
     Configuration,
     EngineType,
-    InstalledExternalTool,
     InterestingLookupModel,
     Notification,
     SecatorScan,
@@ -50,7 +49,6 @@ admin.site.register(Configuration)
 admin.site.register(InterestingLookupModel)
 admin.site.register(Notification)
 admin.site.register(VulnerabilityReportSetting)
-admin.site.register(InstalledExternalTool)
 
 
 # Secator Integration Admin Classes
@@ -62,6 +60,7 @@ class SecatorWorkflowAdmin(admin.ModelAdmin):
 
     list_display = [
         "name",
+        "alias",
         "workflow_type",
         "scan_type",
         "is_active",
@@ -76,6 +75,7 @@ class SecatorWorkflowAdmin(admin.ModelAdmin):
     ]
     search_fields = [
         "name",
+        "alias",
         "description",
     ]
     readonly_fields = [
@@ -83,7 +83,7 @@ class SecatorWorkflowAdmin(admin.ModelAdmin):
         "updated_at",
     ]
     fieldsets = (
-        ("Basic Information", {"fields": ("name", "description", "workflow_type", "scan_type", "is_active")}),
+        ("Basic Information", {"fields": ("name", "alias", "description", "workflow_type", "scan_type", "is_active")}),
         (
             "Configuration",
             {
@@ -99,6 +99,15 @@ class SecatorWorkflowAdmin(admin.ModelAdmin):
             },
         ),
     )
+
+    def formfield_for_dbfield(self, db_field, request, **kwargs):
+        """Override form field for alias to use TextInput instead of Select."""
+        if db_field.name == "alias":
+            from django import forms
+
+            kwargs["widget"] = forms.TextInput(attrs={"placeholder": "e.g., subdomain_recon, cidr_recon"})
+            kwargs["help_text"] = "Enter the workflow alias from Secator (optional)"
+        return super().formfield_for_dbfield(db_field, request, **kwargs)
 
 
 @admin.register(SecatorTask)
@@ -151,18 +160,18 @@ class SecatorScanAdmin(admin.ModelAdmin):
 
     list_display = [
         "name",
+        "alias",
         "scan_type",
-        "execution_mode",
         "scan_config_type",
         "is_default",
-        "get_tasks_count_display",
+        "is_active",
         "created_at",
     ]
     list_filter = [
         "scan_type",
-        "execution_mode",
         "scan_config_type",
         "is_default",
+        "is_active",
         "created_at",
     ]
     search_fields = [
@@ -172,21 +181,10 @@ class SecatorScanAdmin(admin.ModelAdmin):
     readonly_fields = [
         "created_at",
         "updated_at",
-        "get_tasks_count_display",
-    ]
-    filter_horizontal = [
-        "tasks",
     ]
     fieldsets = (
-        ("Basic Information", {"fields": ("name", "description", "scan_type", "is_default")}),
-        ("Execution Configuration", {"fields": ("execution_mode", "scan_config_type", "workflow", "tasks")}),
-        (
-            "Statistics",
-            {
-                "fields": ("get_tasks_count_display",),
-                "classes": ("collapse",),
-            },
-        ),
+        ("Basic Information", {"fields": ("name", "alias", "description", "scan_type", "is_default")}),
+        ("Configuration", {"fields": ("scan_config_type", "yaml_configuration", "is_active")}),
         (
             "Timestamps",
             {
@@ -196,8 +194,11 @@ class SecatorScanAdmin(admin.ModelAdmin):
         ),
     )
 
-    def get_tasks_count_display(self, obj):
-        """Display the number of tasks in this scan configuration."""
-        return obj.get_tasks_count()
+    def formfield_for_dbfield(self, db_field, request, **kwargs):
+        """Override form field for alias to use TextInput instead of Select."""
+        if db_field.name == "alias":
+            from django import forms
 
-    get_tasks_count_display.short_description = "Tasks Count"
+            kwargs["widget"] = forms.TextInput(attrs={"placeholder": "e.g., domain, host, network, subdomain, url"})
+            kwargs["help_text"] = "Enter the scan alias from Secator (optional)"
+        return super().formfield_for_dbfield(db_field, request, **kwargs)

@@ -9,7 +9,7 @@ from django.core.serializers.json import DjangoJSONEncoder
 from django.db.models import Count
 from django.db.models.functions import Lower
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import get_template
 from django.urls import reverse
 from django.utils import timezone
@@ -20,12 +20,10 @@ from rolepermissions.decorators import has_permission_decorator
 from weasyprint import CSS, HTML
 
 from api.serializers import IpSerializer
-from reNgine.celery import app
 from reNgine.core.data import safe_int_cast
 from reNgine.definitions import (
     ABORTED_TASK,
     FOUR_OH_FOUR_URL,
-    LIVE_SCAN,
     PERM_INITATE_SCANS_SUBSCANS,
     PERM_MODIFY_SCAN_REPORT,
     PERM_MODIFY_SCAN_RESULTS,
@@ -34,13 +32,12 @@ from reNgine.definitions import (
     SCHEDULED_SCAN,
     SUCCESS_TASK,
 )
+from reNgine.services.repositories.scan_repository import ScanRepository
 from reNgine.settings import RENGINE_RESULTS
-from reNgine.tasks import initiate_scan
-
-# NOTE: run_command removed - legacy task, functionality now in Secator
-from reNgine.utilities.database import create_scan_activity, create_scan_object
+from reNgine.tasks import initiate_secator_scan
+from reNgine.utilities.command import run_command
 from reNgine.utilities.subdomain import get_interesting_subdomains
-from scanEngine.models import EngineType, VulnerabilityReportSetting
+from scanEngine.models import EngineType, SecatorScan, SecatorTask, SecatorWorkflow, VulnerabilityReportSetting
 from startScan.models import (
     CountryISO,
     CveId,
@@ -233,55 +230,17 @@ def all_endpoints(request, slug):
 def start_scan_ui(request, slug, domain_id):
     domain = get_object_or_404(Domain, id=domain_id)
     if request.method == "POST":
-        # Get imported and out-of-scope subdomains
-        subdomains_in = request.POST["importSubdomainTextArea"].split()
+        # Collect all parameters from form
+        subdomains_in = request.POST.get("importSubdomainTextArea", "").split()
         subdomains_in = [s.rstrip() for s in subdomains_in if s]
-        subdomains_out = request.POST["outOfScopeSubdomainTextarea"].split()
+        subdomains_out = request.POST.get("outOfScopeSubdomainTextarea", "").split()
         subdomains_out = [s.rstrip() for s in subdomains_out if s]
-        paths = request.POST["filterPath"].split()
-        filter_path = [s.rstrip() for s in paths if s]
-        if len(filter_path) > 0:
-            filter_path = filter_path[0]
-        else:
-            filter_path = ""
+        paths = request.POST.get("filterPath", "").split()
+        filter_path = paths[0].rstrip() if paths else ""
 
-        # Get scan type and execution mode
-        scan_type = request.POST.get("scan_type", "bug_bounty")
         execution_mode = request.POST.get("execution_mode")
-
-        # Handle different execution modes
-        if execution_mode == "workflow":
-            # For workflow mode, get workflow_id
-            workflow_id = request.POST.get("workflow_id")
-            if not workflow_id:
-                messages.error(request, "Please select a workflow.")
-                return redirect("start_scan_ui", slug=domain.subdomain, domain_id=domain_id)
-            # For now, use a default engine_id for workflows
-            engine_id = 1  # TODO: Map workflow to appropriate engine
-        elif execution_mode == "tasks":
-            # For tasks mode, get task_ids
-            task_ids = request.POST.getlist("task_ids")
-            if not task_ids:
-                messages.error(request, "Please select at least one task.")
-                return redirect("start_scan_ui", slug=domain.subdomain, domain_id=domain_id)
-            # For now, use a default engine_id for tasks
-            engine_id = 1  # TODO: Map tasks to appropriate engine
-        elif execution_mode == "scan":
-            # For scan mode, get secator_scan_type
-            secator_scan_type = request.POST.get("secator_scan_type")
-            if not secator_scan_type:
-                messages.error(request, "Please select a scan type.")
-                return redirect("start_scan_ui", slug=domain.subdomain, domain_id=domain_id)
-            # For now, use a default engine_id for scan types
-            engine_id = 1  # TODO: Map scan type to appropriate engine
-        else:
-            # Fallback to legacy scan_mode
-            engine_id = safe_int_cast(request.POST.get("scan_mode", 1))
-
-        # Get scan existing elements option
         scan_existing_elements = request.POST.get("scan_existing_elements") == "true"
 
-        # Get Secator configuration with validation
         secator_config = {
             "proxy": request.POST.get("proxy", ""),
             "rate_limit": max(1, min(10000, safe_int_cast(request.POST.get("rate_limit", 150), 150))),
@@ -290,85 +249,83 @@ def start_scan_ui(request, slug, domain_id):
             "delay": max(0, min(60, safe_int_cast(request.POST.get("delay", 0), 0))),
         }
 
-        # Get Secator profiles
         speed_profile = request.POST.get("speed_profile")
         stealth_profile = request.POST.get("stealth_profile")
-
-        # Get expert mode
         expert_mode = request.POST.get("expert_mode") in ["true", "on", "1", True]
 
-        # Create ScanHistory object
-        scan_history_id = create_scan_object(host_id=domain_id, engine_id=engine_id, initiated_by_id=request.user.id)
-        scan = ScanHistory.objects.get(pk=scan_history_id)
-
-        # Start the celery task
-        kwargs = {
-            "scan_history_id": scan.id,
+        # Prepare API payload
+        api_data = {
             "domain_id": domain.id,
-            "engine_id": engine_id,
-            "scan_type": LIVE_SCAN,
-            "results_dir": RENGINE_RESULTS,
+            "execution_mode": execution_mode,
             "imported_subdomains": subdomains_in,
             "out_of_scope_subdomains": subdomains_out,
             "url_filter": filter_path,
-            "initiated_by_id": request.user.id,
             "scan_existing_elements": scan_existing_elements,
-            # Secator configuration
-            "execution_mode": execution_mode,
             "secator_config": secator_config,
             "speed_profile": speed_profile,
             "stealth_profile": stealth_profile,
             "expert_mode": expert_mode,
         }
 
-        # Add specific Secator data based on execution mode with validation
+        # Add mode-specific parameters
         if execution_mode == "workflow":
-            # Validate workflow_id exists
-            if workflow_id and SecatorWorkflow.objects.filter(id=workflow_id).exists():
-                kwargs["workflow_id"] = workflow_id
-            else:
-                messages.add_message(request, messages.ERROR, "Invalid workflow selected.")
-                return HttpResponseRedirect(reverse("start_scan_ui", kwargs={"slug": slug, "domain_id": domain_id}))
+            workflow_id = request.POST.get("workflow_id")
+            if not workflow_id:
+                messages.error(request, "Please select a workflow.")
+                return redirect("start_scan", slug=slug, domain_id=domain_id)
+            api_data["workflow_id"] = safe_int_cast(workflow_id)
         elif execution_mode == "tasks":
-            # Validate task_ids exist and convert to integers
-            if task_ids:
-                try:
-                    # Convert to list of integers if it's a string
-                    if isinstance(task_ids, str):
-                        task_ids = [int(x.strip()) for x in task_ids.split(",") if x.strip()]
-                    elif isinstance(task_ids, list):
-                        task_ids = [int(x) for x in task_ids if x]
-
-                    # Validate all task IDs exist
-                    existing_tasks = SecatorTask.objects.filter(id__in=task_ids).values_list("id", flat=True)
-                    if len(existing_tasks) == len(task_ids):
-                        kwargs["task_ids"] = task_ids
-                    else:
-                        missing_ids = set(task_ids) - set(existing_tasks)
-                        messages.add_message(request, messages.ERROR, f"Invalid task IDs: {missing_ids}")
-                        return HttpResponseRedirect(
-                            reverse("start_scan_ui", kwargs={"slug": slug, "domain_id": domain_id})
-                        )
-                except (ValueError, TypeError):
-                    messages.add_message(request, messages.ERROR, "Invalid task IDs format.")
-                    return HttpResponseRedirect(reverse("start_scan_ui", kwargs={"slug": slug, "domain_id": domain_id}))
-            else:
-                messages.add_message(request, messages.ERROR, "No tasks selected.")
-                return HttpResponseRedirect(reverse("start_scan_ui", kwargs={"slug": slug, "domain_id": domain_id}))
+            task_ids = request.POST.getlist("task_ids")
+            if not task_ids:
+                messages.error(request, "Please select at least one task.")
+                return redirect("start_scan", slug=slug, domain_id=domain_id)
+            api_data["task_ids"] = [int(tid) for tid in task_ids]
         elif execution_mode == "scan":
-            # Validate scan type
-            valid_scan_types = ["domain", "host", "network", "subdomain", "url"]
-            if secator_scan_type in valid_scan_types:
-                kwargs["secator_scan_type"] = secator_scan_type
-            else:
-                messages.add_message(request, messages.ERROR, f"Invalid scan type: {secator_scan_type}")
-                return HttpResponseRedirect(reverse("start_scan_ui", kwargs={"slug": slug, "domain_id": domain_id}))
-        initiate_scan.apply_async(kwargs=kwargs)
-        scan.save()
+            secator_scan_type = request.POST.get("secator_scan_type")
+            if not secator_scan_type:
+                messages.error(request, "Please select a scan type.")
+                return redirect("start_scan", slug=slug, domain_id=domain_id)
+            api_data["secator_scan_type"] = secator_scan_type
+        else:
+            messages.error(request, "Please select an execution mode.")
+            return redirect("start_scan", slug=slug, domain_id=domain_id)
 
-        # Send start notif
-        messages.add_message(request, messages.INFO, f"Scan Started for {domain.name}")
-        return HttpResponseRedirect(reverse("scan_history", kwargs={"slug": slug}))
+        # Use common scan initiation logic
+        from reNgine.tasks.scan import start_secator_scan
+
+        result = start_secator_scan(
+            domain_id=domain.id,
+            execution_mode=execution_mode,
+            user_id=request.user.id,
+            workflow_id=api_data.get("workflow_id") if execution_mode == "workflow" else None,
+            task_ids=api_data.get("task_ids") if execution_mode == "tasks" else None,
+            secator_scan_type=api_data.get("secator_scan_type") if execution_mode == "scan" else None,
+            imported_subdomains=api_data["imported_subdomains"],
+            out_of_scope_subdomains=api_data["out_of_scope_subdomains"],
+            url_filter=api_data["url_filter"],
+            scan_existing_elements=api_data["scan_existing_elements"],
+            secator_config=api_data["secator_config"],
+            speed_profile=api_data["speed_profile"],
+            stealth_profile=api_data["stealth_profile"],
+            expert_mode=api_data["expert_mode"],
+            scan_type="bug_bounty",
+        )
+
+        # Check result
+        if result.get("status") == "success":
+            response_status = 200
+            response_data = {"status": True, "scan_id": result.get("scan_id")}
+        else:
+            response_status = 400
+            response_data = {"status": False, "error": result.get("error", "Unknown error")}
+
+        if response_status == 200 and response_data.get("status"):
+            messages.add_message(request, messages.INFO, f"Scan Started for {domain.name}")
+            return HttpResponseRedirect(reverse("scan_history", kwargs={"slug": slug}))
+        else:
+            error_msg = response_data.get("error", "Unknown error")
+            messages.add_message(request, messages.ERROR, f"Failed to start scan: {error_msg}")
+            return HttpResponseRedirect(reverse("start_scan", kwargs={"slug": slug, "domain_id": domain_id}))
 
     # GET request
     # Get engines based on scan type (default to bug_bounty for backward compatibility)
@@ -411,8 +368,6 @@ def start_scan_ui(request, slug, domain_id):
         if request.GET.get("ajax") == "true":
             from django.template.loader import render_to_string
 
-            from scanEngine.models import SecatorScan, SecatorTask, SecatorWorkflow
-
             execution_mode = request.GET.get("execution_mode")
 
             context = {}
@@ -427,7 +382,7 @@ def start_scan_ui(request, slug, domain_id):
                 context["tasks"] = tasks
                 template = "startScan/_items/secator_task_select.html"
             elif execution_mode == "scan":
-                context["scan_types"] = SecatorScan.SCAN_TYPE_CHOICES
+                context["scan_types"] = SecatorScan.SCAN_ALIAS_CHOICES
                 template = "startScan/_items/secator_scan_select.html"
             else:
                 return JsonResponse({"html": '<div class="alert alert-warning">Invalid execution mode</div>'})
@@ -475,7 +430,8 @@ def start_multiple_scan(request, slug):
 
             for domain_id in list_of_domains.split(","):
                 # Start the celery task
-                scan_history_id = create_scan_object(
+                scan_repo = ScanRepository()
+                scan_history_id = scan_repo.create_scan(
                     host_id=domain_id, engine_id=engine_id, initiated_by_id=request.user.id
                 )
                 # domain = get_object_or_404(Domain, id=domain_id)
@@ -484,8 +440,6 @@ def start_multiple_scan(request, slug):
                     "scan_history_id": scan_history_id,
                     "domain_id": domain_id,
                     "engine_id": engine_id,
-                    "scan_type": LIVE_SCAN,
-                    "results_dir": RENGINE_RESULTS,
                     "initiated_by_id": request.user.id,
                     "scan_existing_elements": scan_existing_elements,
                     # TODO: Add this to multiple scan view
@@ -493,7 +447,7 @@ def start_multiple_scan(request, slug):
                     # 'out_of_scope_subdomains': subdomains_out
                 }
 
-                _scan_task = initiate_scan.si(**kwargs)
+                _scan_task = initiate_secator_scan.si(**kwargs)
                 grouped_scans.append(_scan_task)
 
             celery_group = group(grouped_scans)
@@ -607,7 +561,8 @@ def stop_scan(request, slug, id):
                 task.status = ABORTED_TASK
                 task.time = timezone.now()
                 task.save()
-            create_scan_activity(scan.id, "Scan aborted", SUCCESS_TASK)
+            scan_repo = ScanRepository()
+            scan_repo.create_activity(scan.id, "Scan aborted", SUCCESS_TASK)
             response = {"status": True}
             messages.add_message(request, messages.INFO, "Scan successfully stopped!")
         except Exception as e:
@@ -661,7 +616,7 @@ def schedule_scan(request, host_id, slug):
                 "initiated_by_id": request.user.id,
             }
             PeriodicTask.objects.create(
-                interval=schedule, name=task_name, task="initiate_scan", kwargs=json.dumps(kwargs)
+                interval=schedule, name=task_name, task="initiate_secator_scan", kwargs=json.dumps(kwargs)
             )
         elif scheduled_mode == "clocked":
             schedule_time = request.POST["scheduled_time"]
@@ -683,7 +638,7 @@ def schedule_scan(request, host_id, slug):
                 "initiated_by_id": request.user.id,
             }
             PeriodicTask.objects.create(
-                clocked=clock, one_off=True, name=task_name, task="initiate_scan", kwargs=json.dumps(kwargs)
+                clocked=clock, one_off=True, name=task_name, task="initiate_secator_scan", kwargs=json.dumps(kwargs)
             )
         messages.add_message(request, messages.INFO, f"Scan Scheduled for {domain.name}")
         return HttpResponseRedirect(reverse("scheduled_scan_view", kwargs={"slug": slug}))
@@ -776,8 +731,6 @@ def start_organization_scan(request, id, slug):
     if request.GET.get("ajax") == "true":
         from django.template.loader import render_to_string
 
-        from scanEngine.models import SecatorScan, SecatorTask, SecatorWorkflow
-
         execution_mode = request.GET.get("execution_mode")
 
         context = {}
@@ -792,7 +745,7 @@ def start_organization_scan(request, id, slug):
             context["tasks"] = tasks
             template = "startScan/_items/secator_task_select.html"
         elif execution_mode == "scan":
-            context["scan_types"] = SecatorScan.SCAN_TYPE_CHOICES
+            context["scan_types"] = SecatorScan.SCAN_ALIAS_CHOICES
             template = "startScan/_items/secator_scan_select.html"
         else:
             return JsonResponse({"html": '<div class="alert alert-warning">Invalid execution mode</div>'})
@@ -801,102 +754,85 @@ def start_organization_scan(request, id, slug):
         return JsonResponse({"html": html})
 
     if request.method == "POST":
-        # Retrieve Secator form data
+        # Collect parameters (même logique que start_scan_ui)
         execution_mode = request.POST.get("execution_mode")
-        scan_type = request.POST.get("scan_type", "internet")
+        scan_existing_elements = request.POST.get("scan_existing_elements") == "true"
 
-        # Configuration Secator with validation
         secator_config = {
             "proxy": request.POST.get("proxy", ""),
             "rate_limit": max(1, min(10000, safe_int_cast(request.POST.get("rate_limit", 150), 150))),
             "threads": max(1, min(1000, safe_int_cast(request.POST.get("threads", 20), 20))),
             "timeout": max(1, min(3600, safe_int_cast(request.POST.get("timeout", 300), 300))),
+            "delay": max(0, min(60, safe_int_cast(request.POST.get("delay", 0), 0))),
         }
 
-        # Selected profiles
         speed_profile = request.POST.get("speed_profile")
         stealth_profile = request.POST.get("stealth_profile")
-
-        # Mode expert
         expert_mode = request.POST.get("expert_mode") == "true"
 
-        # Get scan existing elements option
-        scan_existing_elements = request.POST.get("scan_existing_elements") == "true"
+        domain_list = organization.get_domains()
+        scan_count = 0
+        failed_count = 0
 
-        # Launch scan according to execution mode with validation
-        if execution_mode == "workflow":
-            workflow_id = request.POST.get("workflow_id")
-            if workflow_id:
-                try:
-                    # Validate workflow_id exists
-                    workflow_id = safe_int_cast(workflow_id)
-                    if workflow_id and SecatorWorkflow.objects.filter(id=workflow_id).exists():
-                        workflow = SecatorWorkflow.objects.get(id=workflow_id)
-                        # TODO: Implement Secator launch logic
-                        messages.add_message(request, messages.INFO, f"Workflow scan started: {workflow.name}")
-                    else:
-                        messages.add_message(request, messages.ERROR, "Invalid workflow selected.")
-                        return HttpResponseRedirect(reverse("start_scan", kwargs={"slug": slug}))
-                except (ValueError, TypeError):
-                    messages.add_message(request, messages.ERROR, "Invalid workflow ID format.")
-                    return HttpResponseRedirect(reverse("start_scan", kwargs={"slug": slug}))
-            else:
-                messages.add_message(request, messages.ERROR, "No workflow selected.")
-                return HttpResponseRedirect(reverse("start_scan", kwargs={"slug": slug}))
-        elif execution_mode == "tasks":
-            task_ids = request.POST.getlist("task_ids")
-            if task_ids:
-                try:
-                    # Convert and validate task IDs
-                    task_ids = [safe_int_cast(task_id) for task_id in task_ids if task_id]
-                    task_ids = [tid for tid in task_ids if tid is not None]
+        for domain in domain_list:
+            # Prepare API payload for each domain
+            api_data = {
+                "domain_id": domain.id,
+                "execution_mode": execution_mode,
+                "scan_existing_elements": scan_existing_elements,
+                "secator_config": secator_config,
+                "speed_profile": speed_profile,
+                "stealth_profile": stealth_profile,
+                "expert_mode": expert_mode,
+            }
 
-                    if task_ids:
-                        # Validate all task IDs exist
-                        existing_tasks = SecatorTask.objects.filter(id__in=task_ids)
-                        if existing_tasks.count() == len(task_ids):
-                            # TODO: Implement Secator launch logic
-                            messages.add_message(
-                                request, messages.INFO, f"Task scan started with {len(existing_tasks)} tasks"
-                            )
-                        else:
-                            missing_count = len(task_ids) - existing_tasks.count()
-                            messages.add_message(request, messages.ERROR, f"{missing_count} invalid task(s) selected.")
-                            return HttpResponseRedirect(reverse("start_scan", kwargs={"slug": slug}))
-                    else:
-                        messages.add_message(request, messages.ERROR, "No valid tasks selected.")
-                        return HttpResponseRedirect(reverse("start_scan", kwargs={"slug": slug}))
-                except (ValueError, TypeError):
-                    messages.add_message(request, messages.ERROR, "Invalid task IDs format.")
-                    return HttpResponseRedirect(reverse("start_scan", kwargs={"slug": slug}))
-            else:
-                messages.add_message(request, messages.ERROR, "No tasks selected.")
-                return HttpResponseRedirect(reverse("start_scan", kwargs={"slug": slug}))
-        elif execution_mode == "scan":
-            secator_scan_type = request.POST.get("secator_scan_type")
-            if secator_scan_type:
-                # Validate scan type
-                valid_scan_types = ["domain", "host", "network", "subdomain", "url"]
-                if secator_scan_type in valid_scan_types:
-                    # TODO: Implement Secator launch logic
-                    messages.add_message(request, messages.INFO, f"Scan type started: {secator_scan_type}")
-                else:
-                    messages.add_message(request, messages.ERROR, f"Invalid scan type: {secator_scan_type}")
-                    return HttpResponseRedirect(reverse("start_scan", kwargs={"slug": slug}))
-            else:
-                messages.add_message(request, messages.ERROR, "No scan type selected.")
-                return HttpResponseRedirect(reverse("start_scan", kwargs={"slug": slug}))
+            # Add mode-specific parameters
+            if execution_mode == "workflow":
+                api_data["workflow_id"] = safe_int_cast(request.POST.get("workflow_id"))
+            elif execution_mode == "tasks":
+                api_data["task_ids"] = [int(tid) for tid in request.POST.getlist("task_ids")]
+            elif execution_mode == "scan":
+                api_data["secator_scan_type"] = request.POST.get("secator_scan_type")
 
-        # Pour l'instant, rediriger vers l'historique des scans
-        return HttpResponseRedirect(reverse("scan_history", kwargs={"slug": slug}))
+            # Call API
+            import json
+
+            from django.http import HttpRequest
+            from rest_framework.request import Request
+
+            from api.views import StartScan
+
+            api_view = StartScan()
+            mock_request = HttpRequest()
+            mock_request.method = "POST"
+            mock_request.user = request.user
+            mock_request._body = json.dumps(api_data).encode()
+            mock_request.content_type = "application/json"
+            api_request = Request(mock_request)
+            api_request._data = api_data
+
+            response = api_view.post(api_request)
+
+            if response.status_code == 200 and response.data.get("status"):
+                scan_count += 1
+            else:
+                failed_count += 1
+                logger.error(f"Failed to start scan for {domain.name}: {response.data.get('error')}")
+
+        if scan_count > 0:
+            messages.add_message(
+                request, messages.INFO, f"Started {scan_count} scans for organization {organization.name}"
+            )
+        if failed_count > 0:
+            messages.add_message(request, messages.WARNING, f"Failed to start {failed_count} scans")
+
+        return HttpResponseRedirect(reverse("list_organization", kwargs={"slug": slug}))
 
     # GET request
     scan_type = request.GET.get("scan_type", "internet")
 
     # No longer use old EngineType, only for backward compatibility
     # New scans use only Secator
-    from scanEngine.models import SecatorScan
-
     secator_scans = SecatorScan.objects.filter(scan_type=scan_type, is_active=True)
 
     # Optimize domain list query
@@ -953,7 +889,7 @@ def schedule_organization_scan(request, slug, id):
                         "initiated_by_id": request.user.id,
                     }
                 )
-                PeriodicTask.objects.create(interval=schedule, name=task_name, task="initiate_scan", kwargs=_kwargs)
+                PeriodicTask.objects.create(interval=schedule, name=task_name, task="initiate_secator_scan", kwargs=_kwargs)
 
             # Clocked task
             elif scheduled_mode == "clocked":
@@ -964,13 +900,12 @@ def schedule_organization_scan(request, slug, id):
                         "domain_id": domain.id,
                         "engine_id": engine.id,
                         "scan_history_id": 0,
-                        "scan_type": LIVE_SCAN,
                         "imported_subdomains": None,
                         "initiated_by_id": request.user.id,
                     }
                 )
                 PeriodicTask.objects.create(
-                    clocked=clock, one_off=True, name=task_name, task="initiate_scan", kwargs=_kwargs
+                    clocked=clock, one_off=True, name=task_name, task="initiate_secator_scan", kwargs=_kwargs
                 )
 
         # Send start notif

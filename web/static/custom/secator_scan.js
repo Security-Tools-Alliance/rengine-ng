@@ -33,6 +33,9 @@
       
       // Remove individual task
       $(document).on('click', '.remove-task', this.removeTask.bind(this));
+      
+      // Handle form submission
+      $(document).on('submit', '#start-scan-form', this.handleFormSubmission.bind(this));
     },
     
     handleModeSelection: function(e) {
@@ -40,6 +43,9 @@
       $('.execution-mode-card').removeClass('selected');
       $card.addClass('selected');
       this.selectedMode = $card.data('mode');
+      
+      // Update hidden input field
+      $('#execution_mode').val(this.selectedMode);
       
       // Remove all execution mode classes from body
       $('body').removeClass('execution-mode-workflow execution-mode-tasks execution-mode-scan');
@@ -50,6 +56,114 @@
       }
       
       this.loadSelectionOptions(this.selectedMode);
+    },
+    
+    handleFormSubmission: function(e) {
+      e.preventDefault();
+      
+      const executionMode = $('#execution_mode').val();
+      
+      if (!executionMode) {
+        alert('Please select an execution mode before submitting.');
+        return false;
+      }
+      
+      // Disable submit button
+      const $submitBtn = $('#start-scan-btn');
+      $submitBtn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin me-2"></i>Starting Scan...');
+      
+      // Gather form data
+      const formData = this.collectFormData();
+      
+      // Make asynchronous AJAX call to API
+      $.ajax({
+        url: window.SECATOR_START_SCAN_URL || '/api/action/start/scan/',
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify(formData),
+        headers: {
+          'X-CSRFToken': $('input[name="csrfmiddlewaretoken"]').val()
+        },
+        success: function(response) {
+          if (response.status) {
+            // Show success message
+            Swal.fire({
+              icon: 'success',
+              title: 'Scan Started',
+              text: response.message || 'Scan has been initiated successfully',
+              timer: 2000,
+              showConfirmButton: false
+            }).then(() => {
+              // Redirect to scan history (prefer server-provided URL)
+              if (window.SCAN_HISTORY_URL) {
+                window.location.href = window.SCAN_HISTORY_URL;
+              } else if (window.PROJECT_SLUG) {
+                window.location.href = `/scan/${window.PROJECT_SLUG}/history`;
+              } else {
+                const projectSlug = window.location.pathname.split('/')[2];
+                window.location.href = `/scan/${projectSlug}/history`;
+              }
+            });
+          } else {
+            // Show error message
+            Swal.fire({
+              icon: 'error',
+              title: 'Error',
+              text: response.error || 'Failed to start scan'
+            });
+            $submitBtn.prop('disabled', false).html('<i class="fas fa-play me-2"></i>Start Scan');
+          }
+        },
+        error: function(xhr) {
+          const errorMessage = xhr.responseJSON?.error || 'Failed to start scan. Please try again.';
+          Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: errorMessage
+          });
+          $submitBtn.prop('disabled', false).html('<i class="fas fa-play me-2"></i>Start Scan');
+        }
+      });
+      
+      return false;
+    },
+    
+    collectFormData: function() {
+      const executionMode = $('#execution_mode').val();
+      const domainId = $('#domain_id').val();
+      
+      const formData = {
+        domain_id: parseInt(domainId),
+        execution_mode: executionMode,
+        scan_existing_elements: $('#scan_existing_elements').is(':checked'),
+        imported_subdomains: $('#importSubdomainFormControlTextarea').val().split('\n').filter(s => s.trim()),
+        out_of_scope_subdomains: $('#outOfScopeSubdomainTextarea').val().split('\n').filter(s => s.trim()),
+        url_filter: $('#filterPath').val(),
+        secator_config: {
+          proxy: $('#useRandomProxy').is(':checked') ? null : $('#proxy-input').val(),
+          use_random_proxy: $('#useRandomProxy').is(':checked'),
+          rate_limit: parseInt($('input[name="rate_limit"]').val()) || 150,
+          threads: parseInt($('input[name="threads"]').val()) || 20,
+          timeout: parseInt($('input[name="timeout"]').val()) || 300,
+          delay: parseInt($('input[name="delay"]').val()) || 0
+        },
+        speed_profile: $('.btn[data-profile-type="speed"].active').data('profile-value') || 'rabbit',
+        stealth_profile: $('.btn[data-profile-type="stealth"].active').data('profile-value') || 'chameleon',
+        expert_mode: $('#expertMode').is(':checked')
+      };
+      
+      // Add mode-specific parameters
+      if (executionMode === 'workflow') {
+        formData.workflow_id = parseInt($('input[name="workflow_id"]:checked').val());
+      } else if (executionMode === 'tasks') {
+        formData.task_ids = $('input[name="task_ids"]:checked').map(function() {
+          return parseInt($(this).val());
+        }).get();
+      } else if (executionMode === 'scan') {
+        formData.secator_scan_type = $('input[name="secator_scan_type"]:checked').val();
+      }
+      
+      return formData;
     },
     
     loadSelectionOptions: function(mode) {
@@ -155,6 +269,17 @@
         });
         SecatorScan.updateTaskSelection();
       });
+      
+      // Handle direct checkbox changes (fallback)
+      $('#selection-container input[name="task_ids"]').off('change').on('change', function() {
+        const $tile = $(this).closest('.task-tile');
+        if ($(this).is(':checked')) {
+          $tile.addClass('selected');
+        } else {
+          $tile.removeClass('selected');
+        }
+        SecatorScan.updateTaskSelection();
+      });
     },
     
     updateTaskSelection: function() {
@@ -177,6 +302,9 @@
       
       // Update selected tasks display
       this.updateSelectedTasksDisplay();
+      
+      // Trigger button state update
+      $(document).trigger('secator:contentLoaded');
     },
     
     updateCategoryHeaders: function() {
@@ -223,6 +351,9 @@
       // Deselect other buttons of the same type
       $(`[data-profile-type="${type}"]`).removeClass('active');
       $btn.addClass('active');
+      
+      // Update hidden input field
+      $(`#${type}_profile`).val(value);
       
       // Apply profile values
       this.applyProfile(type, value);

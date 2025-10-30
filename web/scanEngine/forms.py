@@ -8,7 +8,6 @@ from scanEngine.models import (
     Configuration,
     EngineType,
     Hackerone,
-    InstalledExternalTool,
     InterestingLookupModel,
     Notification,
     Proxy,
@@ -715,113 +714,6 @@ The breakdown of the Vulnerabilities Identified in **{target_name}** by severity
 """
 
 
-class ExternalToolForm(forms.ModelForm):
-    class Meta:
-        model = InstalledExternalTool
-        fields = "__all__"
-
-    name = forms.CharField(
-        required=True,
-        widget=forms.TextInput(attrs={"class": "form-control", "id": "tool_name", "placeholder": "My Awesome Tool"}),
-    )
-
-    github_url = forms.CharField(
-        required=True,
-        widget=forms.TextInput(
-            attrs={"class": "form-control", "id": "github_url", "placeholder": "https://github.com/"}
-        ),
-    )
-
-    license_url = forms.CharField(
-        required=False,
-        widget=forms.TextInput(
-            attrs={
-                "class": "form-control",
-                "id": "license_url",
-                "placeholder": "https://github.com/user/tool/blob/master/LICENSE.md",
-            }
-        ),
-    )
-
-    logo_url = forms.CharField(
-        required=False,
-        widget=forms.TextInput(
-            attrs={"class": "form-control", "id": "logo_url", "placeholder": "http://example.com/logo.png"}
-        ),
-    )
-
-    description = forms.CharField(
-        required=True,
-        widget=forms.Textarea(
-            attrs={
-                "class": "form-control",
-                "id": "tool_description",
-                "placeholder": "Explain what this tool is used for.",
-                "rows": 2,
-            }
-        ),
-    )
-
-    install_command = forms.CharField(
-        required=True,
-        widget=forms.TextInput(
-            attrs={"class": "form-control", "id": "install_command", "placeholder": "Tool Installation Command"}
-        ),
-    )
-
-    update_command = forms.CharField(
-        required=False,
-        widget=forms.TextInput(
-            attrs={"class": "form-control", "id": "update_command", "placeholder": "Tool Update Command"}
-        ),
-    )
-
-    version_match_regex = forms.CharField(
-        required=False,
-        widget=forms.TextInput(
-            attrs={"class": "form-control", "id": "version_match_regex", "value": r"[vV]*(\d+\.)?(\d+\.)?(\*|\d+)"}
-        ),
-    )
-
-    version_lookup_command = forms.CharField(
-        required=False, widget=forms.TextInput(attrs={"class": "form-control", "id": "version_lookup_command"})
-    )
-
-    is_subdomain_gathering = forms.BooleanField(
-        required=False,
-        widget=forms.CheckboxInput(
-            attrs={
-                "id": "is_subdomain_gathering",
-                "class": "switch",
-            }
-        ),
-    )
-
-    subdomain_gathering_command = forms.CharField(
-        required=False,
-        widget=forms.TextInput(
-            attrs={
-                "class": "form-control",
-                "id": "subdomain_gathering_command",
-                "placeholder": "Subdomain Gathering Command",
-                "value": "tool_name -d {TARGET} -o {OUTPUT}",
-            }
-        ),
-    )
-
-    def set_value(self, key):
-        self.initial["name"] = key.name
-        self.initial["github_url"] = key.github_url
-        self.initial["license_url"] = key.license_url
-        self.initial["logo_url"] = key.logo_url
-        self.initial["description"] = key.description
-        self.initial["install_command"] = key.install_command
-        self.initial["update_command"] = key.update_command
-        self.initial["version_match_regex"] = key.version_match_regex
-        self.initial["version_lookup_command"] = key.version_lookup_command
-        self.initial["subdomain_gathering_command"] = key.subdomain_gathering_command
-
-
 # =============================================================================
 # SECATOR INTEGRATION FORMS
 # =============================================================================
@@ -840,11 +732,16 @@ class SecatorWorkflowForm(forms.ModelForm):
             attrs={"class": "form-control form-control-lg", "id": "workflow_name", "placeholder": "Workflow Name"}
         ),
     )
-    alias = forms.ChoiceField(
-        choices=[("", "Select an alias (optional)")] + list(SecatorWorkflow.WORKFLOW_ALIAS_CHOICES),
+    alias = forms.CharField(
         required=False,
-        widget=forms.Select(attrs={"class": "form-control form-control-lg", "id": "workflow_alias"}),
-        help_text="Select a built-in workflow alias from Secator (optional)",
+        widget=forms.TextInput(
+            attrs={
+                "class": "form-control form-control-lg",
+                "id": "workflow_alias",
+                "placeholder": "Workflow alias (e.g., subdomain_recon)",
+            }
+        ),
+        help_text="Workflow alias from Secator (e.g., subdomain_recon, cidr_recon). See <a href='https://docs.freelabz.com/for-developers/writing-workflows' target='_blank'>Secator workflows documentation</a>",
     )
     description = forms.CharField(
         required=False,
@@ -873,7 +770,8 @@ class SecatorWorkflowForm(forms.ModelForm):
             fontsize="17px",
             showinvisibles=True,
             attrs={"id": "editor"},
-        )
+        ),
+        help_text="Define the workflow structure and tasks. See <a href='https://docs.freelabz.com/for-developers/writing-workflows' target='_blank'>Secator documentation</a>"
     )
     is_active = forms.BooleanField(
         required=False,
@@ -1056,26 +954,32 @@ class SecatorScanForm(forms.ModelForm):
         model = SecatorScan
         fields = [
             "name",
+            "alias",
             "description",
             "scan_type",
-            "secator_scan_type",
-            "execution_mode",
-            "workflow",
-            "tasks",
+            "scan_config_type",
+            "yaml_configuration",
             "is_default",
             "is_active",
         ]
         widgets = {
             "name": forms.TextInput(attrs={"class": "form-control", "placeholder": "Enter scan configuration name"}),
+            "alias": forms.TextInput(attrs={"class": "form-control", "placeholder": "e.g., domain, host, network, subdomain, url"}),
             "description": forms.Textarea(
                 attrs={"class": "form-control", "rows": 3, "placeholder": "Enter scan description"}
             ),
             "scan_type": forms.Select(attrs={"class": "form-control"}),
-            "secator_scan_type": forms.Select(attrs={"class": "form-control", "id": "secator-scan-type"}),
-            "execution_mode": forms.Select(attrs={"class": "form-control", "onchange": "toggleExecutionMode()"}),
             "scan_config_type": forms.Select(attrs={"class": "form-control"}),
-            "workflow": forms.Select(attrs={"class": "form-control", "id": "workflow-select"}),
-            "tasks": forms.SelectMultiple(attrs={"class": "form-control", "id": "tasks-select", "size": 10}),
+            "yaml_configuration": AceWidget(
+                mode="yaml",
+                theme="tomorrow_night_eighties",
+                width="100%",
+                height="450px",
+                tabsize=2,
+                fontsize="17px",
+                showinvisibles=True,
+                attrs={"id": "scan-yaml-editor"},
+            ),
             "is_default": forms.CheckboxInput(attrs={"class": "form-check-input"}),
             "is_active": forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
@@ -1083,33 +987,51 @@ class SecatorScanForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        # Set querysets for workflow and tasks
-        self.fields["workflow"].queryset = SecatorWorkflow.objects.filter(is_active=True)
-        self.fields["tasks"].queryset = SecatorTask.objects.all()
+        # Make alias not required for custom scans
+        self.fields["alias"].required = False
+        
+        # Add help text with documentation links
+        self.fields["alias"].help_text = "Scan alias from Secator (e.g., domain, host, network). See <a href='https://docs.freelabz.com/for-developers/writing-scans-wip' target='_blank'>Secator scans documentation</a>"
+        self.fields["yaml_configuration"].help_text = "Define the scan structure. See <a href='https://docs.freelabz.com/for-developers/writing-scans-wip' target='_blank'>Secator documentation</a>"
 
-        # Make workflow and tasks not required initially
-        self.fields["workflow"].required = False
-        self.fields["tasks"].required = False
+    def clean_yaml_configuration(self):
+        """Validate YAML configuration."""
+        yaml_config = self.cleaned_data.get("yaml_configuration")
+
+        if not yaml_config:
+            return yaml_config
+
+        try:
+            import yaml
+
+            parsed_yaml = yaml.safe_load(yaml_config)
+
+            if not isinstance(parsed_yaml, dict):
+                raise ValidationError("YAML configuration must be a dictionary.")
+
+            # Required top-level fields
+            required_fields = ["name", "description", "type"]
+            missing_fields = [field for field in required_fields if field not in parsed_yaml]
+            if missing_fields:
+                raise ValidationError(f"Missing required fields in YAML: {', '.join(missing_fields)}")
+
+            # Validate type field
+            valid_types = ["scan"]
+            scan_type = parsed_yaml.get("type")
+            if not isinstance(scan_type, str) or scan_type not in valid_types:
+                raise ValidationError(f"Field 'type' must be one of: {', '.join(valid_types)}")
+
+        except yaml.YAMLError as e:
+            raise ValidationError(f"Invalid YAML syntax: {e}")
+
+        return yaml_config
 
     def clean(self):
-        """Validate execution mode and required fields."""
+        """Validate scan configuration."""
         cleaned_data = super().clean()
-        execution_mode = cleaned_data.get("execution_mode")
-        workflow = cleaned_data.get("workflow")
-        tasks = cleaned_data.get("tasks")
-        secator_scan_type = cleaned_data.get("secator_scan_type")
 
         # Check if this is an update operation on a built-in scan configuration
         if self.instance.pk and self.instance.scan_config_type == "builtin":
             raise ValidationError("Built-in scan configurations cannot be modified.")
-
-        if execution_mode == "workflow" and not workflow:
-            raise ValidationError("Workflow is required when execution mode is 'Workflow'.")
-
-        if execution_mode == "tasks" and not tasks:
-            raise ValidationError("At least one task is required when execution mode is 'Individual Tasks'.")
-
-        if execution_mode == "scan" and not secator_scan_type:
-            raise ValidationError("Secator scan type is required when execution mode is 'Scan Type'.")
 
         return cleaned_data

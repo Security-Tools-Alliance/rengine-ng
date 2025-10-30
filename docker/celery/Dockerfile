@@ -109,6 +109,7 @@ ENV PATH="${PATH}:${BINPATH}"
 
 # Install Secator and all its supported tools
 RUN pipx install secator && \
+    pipx inject secator twisted && \
     pipx install watchdog
 
 # Install python tools

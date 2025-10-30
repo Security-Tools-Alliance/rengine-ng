@@ -193,16 +193,16 @@ def workflow_icon(workflow_name):
 @register.simple_tag
 def get_task_info(task_name):
     """Get task information by task name"""
-    try:
-        task = SecatorTask.objects.get(task_type=task_name, is_active=True)
-        return {
-            "name": task.name,
-            "category": task.category,
-            "description": task.description,
-            "icon": category_icon(task.category),
-        }
-    except SecatorTask.DoesNotExist:
+    task = SecatorTask.objects.filter(task_type=task_name, is_active=True).first()
+    if not task:
         return {"name": task_name, "category": "Unknown", "description": f"Secator task: {task_name}", "icon": "tools"}
+    
+    return {
+        "name": task.name,
+        "category": task.category,
+        "description": task.description,
+        "icon": category_icon(task.category),
+    }
 
 
 @register.filter

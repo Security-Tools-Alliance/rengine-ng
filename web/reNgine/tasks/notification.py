@@ -4,7 +4,6 @@ from celery.utils.log import get_task_logger
 from discord_webhook import DiscordWebhook
 import requests
 
-from reNgine.celery import app
 from reNgine.definitions import NUCLEI_SEVERITY_MAP, STATUS_TO_SEVERITIES
 from reNgine.utilities.notification import (
     enrich_notification,
@@ -24,7 +23,8 @@ from startScan.models import ScanActivity, ScanHistory, SubScan, Vulnerability
 logger = get_task_logger(__name__)
 
 
-@app.task(name="send_notif", bind=False, queue="send_notif_queue")
+# TODO Use secator to launch this task
+# @app.task(name="send_notif", bind=False, queue="io")
 def send_notif(message, scan_history_id=None, subscan_id=None, **options):
     if "title" not in options:
         message = enrich_notification(message, scan_history_id, subscan_id)
@@ -34,7 +34,8 @@ def send_notif(message, scan_history_id=None, subscan_id=None, **options):
     send_telegram_message(message)
 
 
-@app.task(name="send_scan_notif", bind=False, queue="send_notif_queue")
+# TODO Use secator to launch this task
+# @app.task(name="send_scan_notif", bind=False, queue="io")
 def send_scan_notif(scan_history_id, subscan_id=None, engine_id=None, status="RUNNING"):
     """Send scan status notification. Works for scan or a subscan if subscan_id
     is passed.
@@ -70,7 +71,8 @@ def send_scan_notif(scan_history_id, subscan_id=None, engine_id=None, status="RU
     send_notif(msg, scan_history_id, subscan_id, **opts)
 
 
-@app.task(name="send_task_notif", bind=False, queue="send_notif_queue")
+# TODO Use secator to launch this task
+# @app.task(name="send_task_notif", bind=False, queue="io")
 def send_task_notif(
     task_name,
     status=None,
@@ -156,7 +158,8 @@ def send_task_notif(
     send_notif(msg, scan_history_id=scan_history_id, subscan_id=subscan_id, **opts)
 
 
-@app.task(name="send_file_to_discord", bind=False, queue="send_notif_queue")
+# TODO Use secator to launch this task
+# @app.task(name="send_file_to_discord", bind=False, queue="io")
 def send_file_to_discord(file_path, title=None):
     notif = Notification.objects.first()
     do_send = notif and notif.send_to_discord and notif.discord_hook_url
@@ -172,7 +175,8 @@ def send_file_to_discord(file_path, title=None):
     webhook.execute()
 
 
-@app.task(name="send_hackerone_report", bind=False, queue="send_notif_queue")
+# TODO Use secator to launch this task
+# @app.task(name="send_hackerone_report", bind=False, queue="io")
 def send_hackerone_report(vulnerability_id):
     """Send HackerOne vulnerability report.
 

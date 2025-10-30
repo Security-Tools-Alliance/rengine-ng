@@ -403,6 +403,34 @@ window.SecatorTasks = {
     // Get available tasks
     getAvailable: function() {
         return Secator.makeRequest(Secator.config.apiBaseUrl + 'tasks/available/');
+    },
+    
+    // Create task
+    create: function(formData) {
+        return Secator.makeRequest(Secator.config.apiBaseUrl + 'tasks/create/', {
+            method: 'POST',
+            body: JSON.stringify(formData),
+        });
+    },
+    
+    // Edit task
+    edit: function(taskId, formData) {
+        return Secator.makeRequest(Secator.config.apiBaseUrl + 'tasks/' + taskId + '/edit/', {
+            method: 'PUT',
+            body: JSON.stringify(formData),
+        });
+    },
+    
+    // Delete task
+    delete: function(taskId) {
+        return Secator.makeRequest(Secator.config.apiBaseUrl + 'tasks/' + taskId + '/delete/', {
+            method: 'DELETE',
+        });
+    },
+    
+    // Get task details
+    get: function(taskId) {
+        return Secator.makeRequest(Secator.config.apiBaseUrl + 'tasks/' + taskId + '/');
     }
 };
 

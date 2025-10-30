@@ -10,12 +10,12 @@ import redis
 import requests
 
 from reNgine.definitions import DISCORD_SEVERITY_COLORS
-from reNgine.settings import CELERY_BROKER_URL, DOMAIN_NAME
+from reNgine.settings import DOMAIN_NAME, SECATOR_CELERY_BROKER_URL
 from scanEngine.models import Notification
 
 
 logger = get_task_logger(__name__)
-DISCORD_WEBHOOKS_CACHE = redis.Redis.from_url(CELERY_BROKER_URL)
+DISCORD_WEBHOOKS_CACHE = redis.Redis.from_url(SECATOR_CELERY_BROKER_URL)
 
 
 # --------------------#

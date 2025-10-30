@@ -1,32 +1,139 @@
 <div id="subscan-modal" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="standard-modalLabel" aria-hidden="true">
-	<div class="modal-dialog modal-dialog-centered">
+	<div class="modal-dialog modal-dialog-centered modal-lg">
 		<div class="modal-content">
 			<div class="modal-header">
-				<h4 class="modal-title" id="standard-modalLabel">Initiate subscan</h4>
+				<h4 class="modal-title" id="standard-modalLabel">Initiate Subscan</h4>
 				<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
 			</div>
 			<div class="modal-body">
-				<div class="mt-2">
-					<h5>Select the scan engine <small>(default engine Selected)</small></h5>
-					<select class="form-select" id="subtaskScanEngine" name="subtaskScanEngine">
-					{% for engine in scan_engines %}
-						{% if engine.engine_name == history.scan_type.engine_name %}
-							<option value="{{engine.id}}" selected>{{engine}}</option>
-							{% else %}
-							<option value="{{engine.id}}">{{engine}}</option>
-						{% endif %}
-					{% endfor %}
-					</select>
+				<!-- Mode Selection -->
+				<div class="mb-4">
+					<div class="form-check form-switch">
+						<input class="form-check-input" type="checkbox" id="secatorMode" checked>
+						<label class="form-check-label" for="secatorMode">
+							<strong>Use Secator (Recommended)</strong>
+						</label>
+					</div>
+					<small class="text-muted">Secator provides modern workflows and tasks. Legacy mode is for backward compatibility only.</small>
 				</div>
-				<h5>Select the engine's subtasks to perform</h5>
-				<div id="engineTasks" name="engineTasks">
-				<!-- dynamically populated based on engine input -->
+
+				<!-- Secator Mode -->
+				<div id="secatorModeContent">
+					<!-- Workflow Selection -->
+					<div class="mb-3">
+						<h5>Select Secator Workflow (Optional)</h5>
+						<select class="form-select" id="secatorWorkflow" name="secatorWorkflow">
+							<option value="">Choose a workflow...</option>
+							<option value="subdomain_recon">Subdomain Reconnaissance</option>
+							<option value="url_vuln">URL Vulnerability Scan</option>
+							<option value="host_recon">Host Reconnaissance</option>
+							<option value="url_crawl">URL Crawling</option>
+							<option value="wordpress">WordPress Scan</option>
+						</select>
+						<small class="text-muted">Select a predefined workflow, or choose individual tasks below.</small>
+					</div>
+
+					<!-- Individual Tasks -->
+					<div class="mb-3">
+						<h5>Or Select Individual Secator Tasks</h5>
+						<div id="secatorTasks" class="row">
+							<div class="col-md-6">
+								<div class="form-check">
+									<input class="form-check-input" type="checkbox" value="subfinder" id="task_subfinder">
+									<label class="form-check-label" for="task_subfinder">Subfinder (Subdomain Discovery)</label>
+								</div>
+								<div class="form-check">
+									<input class="form-check-input" type="checkbox" value="naabu" id="task_naabu">
+									<label class="form-check-label" for="task_naabu">Naabu (Port Scan)</label>
+								</div>
+								<div class="form-check">
+									<input class="form-check-input" type="checkbox" value="httpx" id="task_httpx">
+									<label class="form-check-label" for="task_httpx">HTTPx (HTTP Probe)</label>
+								</div>
+								<div class="form-check">
+									<input class="form-check-input" type="checkbox" value="nuclei" id="task_nuclei">
+									<label class="form-check-label" for="task_nuclei">Nuclei (Vulnerability Scan)</label>
+								</div>
+							</div>
+							<div class="col-md-6">
+								<div class="form-check">
+									<input class="form-check-input" type="checkbox" value="ffuf" id="task_ffuf">
+									<label class="form-check-label" for="task_ffuf">FFuF (Directory Fuzzing)</label>
+								</div>
+								<div class="form-check">
+									<input class="form-check-input" type="checkbox" value="aquatone" id="task_aquatone">
+									<label class="form-check-label" for="task_aquatone">Aquatone (Screenshot)</label>
+								</div>
+								<div class="form-check">
+									<input class="form-check-input" type="checkbox" value="wafw00f" id="task_wafw00f">
+									<label class="form-check-label" for="task_wafw00f">WAFW00F (WAF Detection)</label>
+								</div>
+								<div class="form-check">
+									<input class="form-check-input" type="checkbox" value="gobuster" id="task_gobuster">
+									<label class="form-check-label" for="task_gobuster">Gobuster (Directory Brute Force)</label>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+
+				<!-- Legacy Mode -->
+				<div id="legacyModeContent" style="display: none;">
+					<div class="alert alert-warning">
+						<i class="fe-alert-triangle me-2"></i>
+						<strong>Legacy Mode:</strong> This mode is deprecated and will be removed in future versions. Please use Secator mode instead.
+					</div>
+					<div class="mt-2">
+						<h5>Select the scan engine <small>(default engine Selected)</small></h5>
+						<select class="form-select" id="subtaskScanEngine" name="subtaskScanEngine">
+						{% for engine in scan_engines %}
+							{% if engine.engine_name == history.scan_type.engine_name %}
+								<option value="{{engine.id}}" selected>{{engine}}</option>
+								{% else %}
+								<option value="{{engine.id}}">{{engine}}</option>
+							{% endif %}
+						{% endfor %}
+						</select>
+					</div>
+					<h5>Select the engine's subtasks to perform</h5>
+					<div id="engineTasks" name="engineTasks">
+					<!-- dynamically populated based on engine input -->
+					</div>
 				</div>
 			</div>
 			<div class="modal-footer">
 				<button type="button" class="btn btn-light" data-bs-dismiss="modal">Close</button>
-				<button type="button" class="btn btn-primary" id="btn-initiate-subtask"><i class="fe-zap ms-1 me-1"></i>Initiate subscan</button>
+				<button type="button" class="btn btn-primary" id="btn-initiate-subtask">
+					<i class="fe-zap ms-1 me-1"></i>Initiate Subscan
+				</button>
 			</div>
 		</div>
 	</div>
 </div>
+
+<script>
+// Toggle between Secator and Legacy modes
+$('#secatorMode').on('change', function() {
+	if ($(this).is(':checked')) {
+		$('#secatorModeContent').show();
+		$('#legacyModeContent').hide();
+	} else {
+		$('#secatorModeContent').hide();
+		$('#legacyModeContent').show();
+	}
+});
+
+// Clear workflow selection when tasks are selected
+$('#secatorTasks input').on('change', function() {
+	if ($(this).is(':checked')) {
+		$('#secatorWorkflow').val('');
+	}
+});
+
+// Clear task selections when workflow is selected
+$('#secatorWorkflow').on('change', function() {
+	if ($(this).val() !== '') {
+		$('#secatorTasks input').prop('checked', false);
+	}
+});
+</script>

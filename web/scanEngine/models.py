@@ -241,32 +241,6 @@ class VulnerabilityReportSetting(models.Model):
     footer_text = models.CharField(max_length=200, null=True, blank=True)
 
 
-class InstalledExternalTool(models.Model):
-    id = models.AutoField(primary_key=True)
-    logo_url = models.CharField(max_length=200, null=True, blank=True)
-    name = models.CharField(max_length=100)
-    description = models.CharField(max_length=2000)
-    github_url = models.CharField(max_length=500)
-    license_url = models.CharField(max_length=500, null=True, blank=True)
-    version_lookup_command = models.CharField(max_length=200, null=True, blank=True)
-    update_command = models.CharField(max_length=200, null=True, blank=True)
-    install_command = models.CharField(max_length=200)
-    version_match_regex = models.CharField(
-        max_length=100, default=r"[vV]*(\d+\.)?(\d+\.)?(\*|\d+)", null=True, blank=True
-    )
-    is_default = models.BooleanField(default=False)
-    is_subdomain_gathering = models.BooleanField(default=False)
-    is_github_cloned = models.BooleanField(default=False)
-    github_clone_path = models.CharField(max_length=1500, null=True, blank=True)
-    subdomain_gathering_command = models.CharField(max_length=300, null=True, blank=True)
-    is_legacy = models.BooleanField(
-        default=True, help_text="Whether this is a legacy scan engine (deprecated in favor of Secator)"
-    )
-
-    def __str__(self):
-        return self.name
-
-
 # Secator Integration Models
 
 
@@ -349,6 +323,11 @@ class SecatorWorkflow(models.Model):
 
     def save(self, *args, **kwargs):
         """Override save to prevent modification of built-in workflows"""
+        # Allow modification if explicitly bypassing constraints (for management commands)
+        if kwargs.pop('bypass_builtin_constraints', False):
+            super().save(*args, **kwargs)
+            return
+            
         if self.pk is not None:
             # This is an update operation
             try:
@@ -374,6 +353,11 @@ class SecatorWorkflow(models.Model):
 
     def delete(self, *args, **kwargs):
         """Override delete to prevent deletion of built-in workflows"""
+        # Allow deletion if explicitly bypassing constraints (for management commands)
+        if kwargs.pop('bypass_builtin_constraints', False):
+            super().delete(*args, **kwargs)
+            return
+            
         if self.workflow_type == "builtin":
             raise PermissionError("Built-in workflows cannot be deleted!")
         super().delete(*args, **kwargs)
@@ -423,25 +407,68 @@ class SecatorTask(models.Model):
     def __str__(self):
         return f"{self.name} ({self.task_type})"
 
+    def can_modify(self):
+        """Check if this task can be modified"""
+        return not self.is_builtin
+
+    def can_delete(self):
+        """Check if this task can be deleted"""
+        return not self.is_builtin
+
+    def save(self, *args, **kwargs):
+        """Override save to prevent modification of built-in tasks"""
+        # Allow modification if explicitly bypassing constraints (for management commands)
+        if kwargs.pop('bypass_builtin_constraints', False):
+            super().save(*args, **kwargs)
+            return
+            
+        if self.pk is not None:
+            # This is an update operation
+            try:
+                orig = SecatorTask.objects.get(pk=self.pk)
+                if orig.is_builtin:
+                    # Check if this is a bulk operation (admin actions)
+                    if kwargs.get("update_fields"):
+                        # For bulk operations, log the attempt but don't raise exception
+                        import logging
+
+                        logger = logging.getLogger(__name__)
+                        logger.warning(
+                            f"Attempted to modify built-in task '{self.name}' (ID: {self.pk}) - operation blocked"
+                        )
+                        return  # Skip the save operation silently
+                    else:
+                        # For regular operations, raise exception with clear message
+                        raise PermissionError("Built-in tasks cannot be modified!")
+            except SecatorTask.DoesNotExist:
+                # If original doesn't exist, allow save (shouldn't happen in normal cases)
+                pass
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        """Override delete to prevent deletion of built-in tasks"""
+        # Allow deletion if explicitly bypassing constraints (for management commands)
+        if kwargs.pop('bypass_builtin_constraints', False):
+            super().delete(*args, **kwargs)
+            return
+            
+        if self.is_builtin:
+            raise PermissionError("Built-in tasks cannot be deleted!")
+        super().delete(*args, **kwargs)
+
     class Meta:
         ordering = ["category", "name"]
 
 
 class SecatorScan(models.Model):
-    """Scan configuration using Secator workflows/tasks (replaces EngineType for new scans)"""
-
-    EXECUTION_MODE_CHOICES = [
-        ("workflow", "Workflow"),
-        ("tasks", "Individual Tasks"),
-        ("scan", "Scan Type"),
-    ]
+    """Secator scan configuration (built-in or custom)"""
 
     SCAN_CONFIG_TYPE_CHOICES = [
         ("builtin", "Built-in"),
         ("custom", "Custom"),
     ]
 
-    SCAN_TYPE_CHOICES = [
+    SCAN_ALIAS_CHOICES = [
         ("domain", "Domain Scan"),
         ("host", "Host Scan"),
         ("network", "Internal Network Scan"),
@@ -450,73 +477,56 @@ class SecatorScan(models.Model):
     ]
 
     id = models.AutoField(primary_key=True)
-    name = models.CharField(max_length=200)
+    name = models.CharField(max_length=200, unique=True)
+    alias = models.CharField(
+        max_length=50,
+        choices=SCAN_ALIAS_CHOICES,
+        blank=True,
+        null=True,
+        help_text="Built-in scan alias from Secator",
+    )
     description = models.TextField(blank=True, null=True)
+    scan_config_type = models.CharField(
+        max_length=20,
+        choices=SCAN_CONFIG_TYPE_CHOICES,
+        default="builtin",
+        help_text="Type of scan configuration: built-in or custom",
+    )
+    yaml_configuration = models.TextField(default="")
+    is_default = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True, help_text="Whether this scan configuration is available for use")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
     scan_type = models.CharField(
         max_length=20,
         choices=EngineType.SCAN_TYPE_CHOICES,
         default="internet",
         help_text="Type of scan this configuration is designed for",
     )
-    secator_scan_type = models.CharField(
-        max_length=20,
-        choices=SCAN_TYPE_CHOICES,
-        blank=True,
-        null=True,
-        help_text="Secator scan type (domain, host, network, subdomain, url)",
-    )
-    workflow = models.ForeignKey(
-        SecatorWorkflow,
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        help_text="Secator workflow to use (if execution_mode is 'workflow')",
-    )
-    tasks = models.ManyToManyField(
-        SecatorTask, blank=True, help_text="Individual Secator tasks to run (if execution_mode is 'tasks')"
-    )
-    execution_mode = models.CharField(
-        max_length=20,
-        choices=EXECUTION_MODE_CHOICES,
-        default="workflow",
-        help_text="Whether to run a workflow, individual tasks, or a scan type",
-    )
-    scan_config_type = models.CharField(
-        max_length=20,
-        choices=SCAN_CONFIG_TYPE_CHOICES,
-        default="custom",
-        help_text="Type of scan configuration: built-in or custom",
-    )
-    is_default = models.BooleanField(default=False)
-    is_active = models.BooleanField(default=True, help_text="Whether this scan configuration is available for use")
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        if self.execution_mode == "workflow" and self.workflow:
-            return f"{self.name} (Workflow: {self.workflow.name})"
-        elif self.execution_mode == "tasks":
-            task_count = self.tasks.count()
-            return f"{self.name} ({task_count} tasks)"
-        elif self.execution_mode == "scan" and self.secator_scan_type:
-            return f"{self.name} (Scan: {self.get_secator_scan_type_display()})"
-        return self.name
+        return f"{self.name} ({self.scan_config_type})"
 
-    def get_tasks_count(self):
-        """Get the count of tasks in this scan configuration"""
-        if self.execution_mode == "workflow" and self.workflow:
-            return len(self.workflow.get_tasks())
-        elif self.execution_mode == "scan":
-            return 1  # Scan types are single operations
-        return self.tasks.count()
+    def _parse_yaml_config(self):
+        """Parse YAML configuration safely"""
+        if not self.yaml_configuration:
+            return {}
 
-    def get_scan_type_display(self):
-        """Get human-readable scan type"""
-        return dict(EngineType.SCAN_TYPE_CHOICES).get(self.scan_type, self.scan_type)
+        try:
+            config = yaml.safe_load(self.yaml_configuration)
+            return config if isinstance(config, dict) else {}
+        except Exception:
+            return {}
 
-    def get_secator_scan_type_display(self):
-        """Get human-readable Secator scan type"""
-        return dict(self.SCAN_TYPE_CHOICES).get(self.secator_scan_type, self.secator_scan_type)
+    def get_workflows(self):
+        """Return list of workflows in this scan"""
+        config = self._parse_yaml_config()
+        return config.get("workflows", {})
+
+    def get_input_types(self):
+        """Return list of input types for this scan"""
+        config = self._parse_yaml_config()
+        return config.get("input_types", [])
 
     def can_modify(self):
         """Check if this scan configuration can be modified"""
@@ -528,6 +538,11 @@ class SecatorScan(models.Model):
 
     def save(self, *args, **kwargs):
         """Override save to prevent modification of built-in scan configurations"""
+        # Allow modification if explicitly bypassing constraints (for management commands)
+        if kwargs.pop('bypass_builtin_constraints', False):
+            super().save(*args, **kwargs)
+            return
+            
         if self.pk is not None:
             # This is an update operation
             try:
@@ -553,9 +568,15 @@ class SecatorScan(models.Model):
 
     def delete(self, *args, **kwargs):
         """Override delete to prevent deletion of built-in scan configurations"""
+        # Allow deletion if explicitly bypassing constraints (for management commands)
+        if kwargs.pop('bypass_builtin_constraints', False):
+            super().delete(*args, **kwargs)
+            return
+            
         if self.scan_config_type == "builtin":
             raise PermissionError("Built-in scan configurations cannot be deleted!")
         super().delete(*args, **kwargs)
+
 
     class Meta:
         ordering = ["scan_config_type", "name"]

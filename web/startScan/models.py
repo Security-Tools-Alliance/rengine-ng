@@ -1047,6 +1047,53 @@ class Employee(models.Model):
     id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=1000, null=True, blank=True)
     designation = models.CharField(max_length=1000, null=True, blank=True)
+    # Secator UserAccount fields
+    username = models.CharField(max_length=500, null=True, blank=True)
+    site_name = models.CharField(max_length=500, null=True, blank=True)
+    url = models.CharField(max_length=10000, null=True, blank=True)
+    # Associations
+    scan_history = models.ForeignKey(ScanHistory, on_delete=models.CASCADE, null=True, blank=True)
+    target_domain = models.ForeignKey(Domain, on_delete=models.CASCADE, null=True, blank=True)
+    subdomain = models.ForeignKey(Subdomain, on_delete=models.CASCADE, null=True, blank=True)
+    endpoint = models.ForeignKey(EndPoint, on_delete=models.CASCADE, null=True, blank=True)
+    discovered_date = models.DateTimeField(null=True, blank=True)
+    extra_data = models.JSONField(null=True, blank=True)
+    # Email association
+    emails = models.ManyToManyField(Email, related_name="employees", blank=True)
+
+    def __str__(self):
+        return self.username or self.name or str(self.id)
+
+
+class Exploit(models.Model):
+    """Model for storing exploit information from Secator."""
+
+    id = models.AutoField(primary_key=True)
+    name = models.CharField(max_length=1000)
+    exploit_id = models.CharField(max_length=200, null=True, blank=True)
+    provider = models.CharField(max_length=200, null=True, blank=True)
+    matched_at = models.CharField(max_length=10000, null=True, blank=True)
+    reference = models.CharField(max_length=10000, null=True, blank=True)
+    # Associations - primary link to IP as per Secator design
+    ip_address = models.ForeignKey(IpAddress, on_delete=models.CASCADE, null=True, blank=True)
+    # Optional links to subdomain/endpoint for additional context
+    subdomain = models.ForeignKey(Subdomain, on_delete=models.CASCADE, null=True, blank=True)
+    endpoint = models.ForeignKey(EndPoint, on_delete=models.CASCADE, null=True, blank=True)
+    target_domain = models.ForeignKey(Domain, on_delete=models.CASCADE, null=True, blank=True)
+    scan_history = models.ForeignKey(ScanHistory, on_delete=models.CASCADE, null=True, blank=True)
+    # Additional data
+    discovered_date = models.DateTimeField(null=True, blank=True)
+    extra_data = models.JSONField(null=True, blank=True)
+    # CVE associations
+    cve_ids = models.ManyToManyField("CveId", related_name="exploit_cves", blank=True)
+    # Tags
+    tags = models.ManyToManyField("VulnerabilityTags", related_name="exploit_tags", blank=True)
+
+    def __str__(self):
+        return f"{self.name} ({self.exploit_id or 'N/A'})"
+
+    class Meta:
+        ordering = ["-discovered_date", "name"]
 
 
 class Dork(models.Model):

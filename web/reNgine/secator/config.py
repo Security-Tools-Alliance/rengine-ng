@@ -8,8 +8,6 @@ to Secator-compatible configuration format.
 import logging
 from typing import Any, Dict
 
-from django.conf import settings
-
 
 logger = logging.getLogger(__name__)
 
@@ -144,10 +142,7 @@ class SecatorConfigConverter:
                 "format": "json",
                 "save_results": True,
                 "stream_results": True,
-            },
-            "celery": {
-                "broker_url": getattr(settings, "CELERY_BROKER_URL", "redis://redis:6379/0"),
-                "result_backend": getattr(settings, "CELERY_RESULT_BACKEND", "redis://redis:6379/0"),
+                "output_dir": None,  # Will be set dynamically per scan
             },
         }
 

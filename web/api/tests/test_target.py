@@ -31,8 +31,8 @@ class TestAddTarget(BaseTestCase):
         response = self.client.post(api_url, data)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data["status"])
-        self.assertEqual(response.data["domain_name"], self.data_generator.domain.name)
-        self.assertTrue(Domain.objects.filter(name=self.data_generator.domain.name).exists())
+        self.assertEqual(response.data["domain_name"], "example.com")
+        self.assertTrue(Domain.objects.filter(name="example.com").exists())
 
         # Test adding duplicate target
         response = self.client.post(api_url, data)

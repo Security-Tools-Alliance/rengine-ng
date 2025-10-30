@@ -1,19 +1,18 @@
 from celery.utils.log import get_task_logger
 from django.utils import timezone
 
-from reNgine.celery import app
 from reNgine.definitions import (
     FAILED_TASK,
     SUCCESS_TASK,
 )
-from reNgine.tasks.notification import send_scan_notif
 from startScan.models import ScanActivity, ScanHistory, SubScan
 
 
 logger = get_task_logger(__name__)
 
 
-@app.task(name="report", bind=False, queue="report_queue")
+# TODO Use secator to launch this task
+# @app.task(name="report", bind=False, queue="report_queue")
 def report(ctx=None, description=None):
     """Report task running after all other tasks.
     Mark ScanHistory or SubScan object as completed and update with final
@@ -27,7 +26,7 @@ def report(ctx=None, description=None):
     # Get objects
     subscan_id = ctx.get("subscan_id")
     scan_id = ctx.get("scan_history_id")
-    engine_id = ctx.get("engine_id")
+    # engine_id = ctx.get("engine_id")  # Temporarily unused due to notification commenting
     scan = ScanHistory.objects.filter(pk=scan_id).first()
     subscan = SubScan.objects.filter(pk=subscan_id).first()
 
@@ -68,6 +67,9 @@ def report(ctx=None, description=None):
     scan.save()
 
     # Send scan status notif
-    send_scan_notif.delay(scan_history_id=scan_id, subscan_id=subscan_id, engine_id=engine_id, status=status_h)
+    # TODO: Temporarily commented out due to Celery worker queue issue
+    # The send_scan_notif task is not registered in the Secator worker
+    # send_scan_notif.delay(scan_history_id=scan_id, subscan_id=subscan_id, engine_id=engine_id, status=status_h)
+    logger.info(f"Scan notification temporarily disabled - report completed for scan {scan_id} with status {status_h}")
 
     logger.info(f"Report completed for scan {scan_id} with status {status_h}")

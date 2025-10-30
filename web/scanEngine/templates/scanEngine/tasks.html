@@ -16,6 +16,11 @@
                     <h3 class="card-title">
                         <i class="fas fa-tasks"></i> Tasks
                     </h3>
+                    <div class="card-tools">
+                        <button type="button" class="btn btn-primary btn-sm" onclick="loadBuiltinTasks()">
+                            <i class="fas fa-download"></i> Load Built-in Tasks
+                        </button>
+                    </div>
                 </div>
                 
                 <div class="card-body">
@@ -84,14 +89,6 @@
                                         <a href="{% url 'task_detail' task.id %}" class="btn btn-sm btn-info">
                                             <i class="fas fa-eye"></i> View
                                         </a>
-                                        {% if not task.is_builtin %}
-                                        <button class="btn btn-sm btn-warning" onclick="editTask({{ task.id }})">
-                                            <i class="fas fa-edit"></i> Edit
-                                        </button>
-                                        <button class="btn btn-sm btn-danger" onclick="deleteTask({{ task.id }})">
-                                            <i class="fas fa-trash"></i> Delete
-                                        </button>
-                                        {% endif %}
                                     </td>
                                 </tr>
                                 {% empty %}
@@ -111,6 +108,8 @@
         </div>
     </div>
 </div>
+
+
 {% endblock %}
 
 {% block page_level_script %}
@@ -140,103 +139,8 @@ function clearFilters() {
 }
 
 function loadBuiltinTasks() {
-    if (confirm('This will load built-in tasks from Secator. Continue?')) {
-        Secator.loadBuiltinTasks();
-    }
+    SecatorTasks.loadBuiltin();
 }
 
-function createTask() {
-    const formData = {
-        name: document.getElementById('taskName').value,
-        task_type: document.getElementById('taskType').value,
-        description: document.getElementById('taskDescription').value,
-        yaml_configuration: document.getElementById('taskYamlConfig').value,
-        is_builtin: false
-    };
-    
-    Secator.createTask(formData);
-}
-
-function deleteTask(taskId) {
-    // Fetch task name for confirmation
-    fetch(`/api/tasks/${taskId}/`)
-        .then(response => response.json())
-        .then(data => {
-            if (data.status === 'success') {
-                const taskName = data.task.name;
-                document.getElementById('deleteTaskName').textContent = taskName;
-                document.getElementById('confirmDeleteTask').onclick = function() {
-                    Secator.deleteTask(taskId)
-                        .then(response => response.json())
-                        .then(data => {
-                            if (data.status === 'success') {
-                                Secator.showSuccess('Task deleted successfully!');
-                                $('#deleteTaskModal').modal('hide');
-                                location.reload();
-                            } else {
-                                Secator.showError(data.message);
-                            }
-                        })
-                        .catch(error => {
-                            Secator.showError('Error deleting task: ' + error);
-                        });
-                };
-                
-                $('#deleteTaskModal').modal('show');
-            } else {
-                Secator.showError('Error loading task data');
-            }
-        })
-        .catch(error => {
-            Secator.showError('Error loading task: ' + error);
-        });
-}
-
-// Edit task
-function editTask(taskId) {
-    // Fetch task data
-    fetch(`/api/tasks/${taskId}/`)
-        .then(response => response.json())
-        .then(data => {
-            if (data.status === 'success') {
-                const task = data.task;
-                document.getElementById('editTaskId').value = task.id;
-                document.getElementById('editTaskName').value = task.name;
-                document.getElementById('editTaskType').value = task.task_type;
-                document.getElementById('editTaskDescription').value = task.description || '';
-                document.getElementById('editTaskYamlConfig').value = task.yaml_configuration || '';
-                
-                $('#editTaskModal').modal('show');
-            } else {
-                Secator.showError('Error loading task data');
-            }
-        })
-        .catch(error => {
-            Secator.showError('Error loading task: ' + error);
-        });
-}
-
-// Update task
-function updateTask() {
-    const form = document.getElementById('editTaskForm');
-    const formData = new FormData(form);
-    const data = Object.fromEntries(formData.entries());
-    const taskId = data.id;
-    
-    Secator.editTask(taskId, data)
-        .then(response => response.json())
-        .then(data => {
-            if (data.status === 'success') {
-                Secator.showSuccess('Task updated successfully!');
-                $('#editTaskModal').modal('hide');
-                location.reload();
-            } else {
-                Secator.showError(data.message);
-            }
-        })
-        .catch(error => {
-            Secator.showError('Error updating task: ' + error);
-        });
-}
 </script>
 {% endblock %}

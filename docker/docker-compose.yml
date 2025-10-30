@@ -34,66 +34,79 @@ services:
     networks:
       - rengine_network
 
-  celery:
-    image: ghcr.io/security-tools-alliance/rengine-ng:rengine-celery-v${RENGINE_VERSION}
-    env_file:
-      - ../.env
-    user: rengine
+  worker:
+    image: freelabz/secator:latest
+    container_name: secator-worker
     restart: unless-stopped
-    container_name: rengine-celery-1
-    entrypoint: /entrypoint.sh
+    command: ['worker']
     environment:
-      - SECATOR_BROKER_URL=redis://redis:6379/0
-      - SECATOR_RESULT_BACKEND=redis://redis:6379/0
-      - SECATOR_LOG_LEVEL=info
-      #- SECATOR_QUIET=1
-    volumes:
-      - ../web:/home/rengine/rengine:rw,z
-      - ./celery/entrypoint.sh:/entrypoint.sh:ro
-      - scan_results:/home/rengine/scan_results
-      - github_repos:/home/rengine/github_repos
-      - tool_config:/home/rengine/.config
-      - nuclei_templates:/home/rengine/nuclei-templates
-      - gf_patterns:/home/rengine/.gf
-      - wordlist:/home/rengine/wordlists
-    healthcheck:
-      test: ["CMD", "pgrep", "-f", "celery.*worker"]
-      interval: 10s
-      timeout: 5s
-      retries: 60
+    - SECATOR_CELERY_BROKER_URL=redis://redis:6379/0
+    - SECATOR_CELERY_RESULT_BACKEND=redis://redis:6379/0
     depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+      - redis
     networks:
       - rengine_network
 
-  celery-beat:
-    image: ghcr.io/security-tools-alliance/rengine-ng:rengine-celery-v${RENGINE_VERSION}
-    env_file:
-      - ../.env
-    user: rengine
-    restart: unless-stopped
-    container_name: rengine-celery-beat-1
-    entrypoint: /entrypoint.sh
-    environment:
-      - CELERY_BROKER=redis://redis:6379/0
-      - CELERY_BACKEND=redis://redis:6379/0
-    depends_on:
-      celery:
-        condition: service_healthy
-    volumes:
-      - ../web:/home/rengine/rengine:rw,z
-      - ./beat/entrypoint.sh:/entrypoint.sh:ro
-      - scan_results:/home/rengine/scan_results
-      - github_repos:/home/rengine/github_repos
-      - tool_config:/home/rengine/.config
-      - nuclei_templates:/home/rengine/nuclei-templates
-      - gf_patterns:/home/rengine/.gf
-      - wordlist:/home/rengine/wordlists
-    networks:
-      - rengine_network
+  # celery:
+  #   image: ghcr.io/security-tools-alliance/rengine-ng:rengine-celery-v${RENGINE_VERSION}
+  #   env_file:
+  #     - ../.env
+  #   user: rengine
+  #   restart: unless-stopped
+  #   container_name: rengine-celery-1
+  #   entrypoint: /entrypoint.sh
+  #   environment:
+  #     - SECATOR_CELERY_BROKER_URL=redis://redis:6379/0
+  #     - SECATOR_CELERY_RESULT_BACKEND=redis://redis:6379/0
+  #     - SECATOR_LOG_LEVEL=info
+  #     #- SECATOR_QUIET=1
+  #   volumes:
+  #     - ../web:/home/rengine/rengine:rw,z
+  #     - ./celery/entrypoint.sh:/entrypoint.sh:ro
+  #     - scan_results:/home/rengine/scan_results
+  #     - github_repos:/home/rengine/github_repos
+  #     - tool_config:/home/rengine/.config
+  #     - nuclei_templates:/home/rengine/nuclei-templates
+  #     - gf_patterns:/home/rengine/.gf
+  #     - wordlist:/home/rengine/wordlists
+  #   healthcheck:
+  #     test: ["CMD", "pgrep", "-f", "celery.*worker"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 60
+  #   depends_on:
+  #     db:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+  #   networks:
+  #     - rengine_network
+
+  # celery-beat:
+  #   image: ghcr.io/security-tools-alliance/rengine-ng:rengine-celery-v${RENGINE_VERSION}
+  #   env_file:
+  #     - ../.env
+  #   user: rengine
+  #   restart: unless-stopped
+  #   container_name: rengine-celery-beat-1
+  #   entrypoint: /entrypoint.sh
+  #   environment:
+  #     - SECATOR_CELERY_BROKER_URL=redis://redis:6379/0
+  #     - SECATOR_CELERY_RESULT_BACKEND=redis://redis:6379/0
+  #   depends_on:
+  #     celery:
+  #       condition: service_healthy
+  #   volumes:
+  #     - ../web:/home/rengine/rengine:rw,z
+  #     - ./beat/entrypoint.sh:/entrypoint.sh:ro
+  #     - scan_results:/home/rengine/scan_results
+  #     - github_repos:/home/rengine/github_repos
+  #     - tool_config:/home/rengine/.config
+  #     - nuclei_templates:/home/rengine/nuclei-templates
+  #     - gf_patterns:/home/rengine/.gf
+  #     - wordlist:/home/rengine/wordlists
+  #   networks:
+  #     - rengine_network
 
   web:
     image: ghcr.io/security-tools-alliance/rengine-ng:rengine-web-v${RENGINE_VERSION}
@@ -105,8 +118,8 @@ services:
     entrypoint: /entrypoint.sh
     environment:
       - RENGINE_HOME=/home/rengine/rengine
-      - CELERY_BROKER=redis://redis:6379/0
-      - CELERY_BACKEND=redis://redis:6379/0
+      - SECATOR_CELERY_BROKER_URL=redis://redis:6379/0
+      - SECATOR_CELERY_RESULT_BACKEND=redis://redis:6379/0
       - UI_ERROR_LOGGING=0
     volumes:
       - ../web:/home/rengine/rengine:rw,z
@@ -123,10 +136,10 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      celery:
-        condition: service_healthy
-      celery-beat:
+      worker:
         condition: service_started
+      # celery-beat:
+      #   condition: service_started
     networks:
       rengine_network:
         aliases:

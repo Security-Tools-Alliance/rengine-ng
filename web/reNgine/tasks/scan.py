@@ -1,114 +1,254 @@
-import json
-import uuid
-
-from celery import chain
 from celery.utils.log import get_task_logger
-from django.utils import timezone
-import yaml
 
-from reNgine.celery import app
-from reNgine.core.data import is_iterable
-from reNgine.core.path import SafePath
-from reNgine.definitions import (
-    CELERY_TASK_STATUS_MAP,
-    FAILED_TASK,
-    GF_PATTERNS,
-    LIVE_SCAN,
-    RUNNING_TASK,
-    SCHEDULED_SCAN,
-)
-from reNgine.settings import (
-    RENGINE_RESULTS,
-)
-from reNgine.tasks.notification import send_scan_notif
-from reNgine.tasks.reporting import report
-from reNgine.utilities.database import (
-    create_default_endpoint_for_subdomain,
-    create_scan_object,
-    save_imported_subdomains,
-    validate_and_save_subdomain,
-)
-from reNgine.utilities.misc import determine_target_type
-from scanEngine.models import EngineType
-from startScan.models import IpAddress, ScanHistory, Subdomain, SubScan
+from startScan.models import ScanHistory, Subdomain
 from targetApp.models import Domain
 
 
 logger = get_task_logger(__name__)
 
 
-@app.task(name="initiate_scan", bind=False, queue="orchestrator_queue")
-def initiate_scan(
+def start_secator_scan(
+    domain_id,
+    execution_mode,
+    user_id,
+    workflow_id=None,
+    task_ids=None,
+    secator_scan_type=None,
+    imported_subdomains=None,
+    out_of_scope_subdomains=None,
+    url_filter="",
+    scan_existing_elements=False,
+    secator_config=None,
+    speed_profile=None,
+    stealth_profile=None,
+    expert_mode=False,
+    scan_type="bug_bounty",
+):
+    """Start a Secator scan with common logic for both UI and API.
+
+    Args:
+        domain_id (int): ID of the target domain
+        execution_mode (str): workflow|tasks|scan
+        user_id (int): ID of the user initiating the scan
+        workflow_id (int): Required for workflow mode
+        task_ids (list): Required for tasks mode
+        secator_scan_type (str): Required for scan mode
+        imported_subdomains (list): List of subdomains to import
+        out_of_scope_subdomains (list): List of subdomains to exclude
+        url_filter (str): URL filter/path to scan
+        scan_existing_elements (bool): Whether to scan existing elements
+        secator_config (dict): Configuration parameters
+        speed_profile (str): Speed profile
+        stealth_profile (str): Stealth profile
+        expert_mode (bool): Enable expert mode
+        scan_type (str): Scan type
+
+    Returns:
+        dict: Result with status, scan_id, and error message if any
+    """
+    try:
+        from reNgine.services.repositories.scan_repository import ScanRepository
+
+        # Validate domain exists
+        try:
+            domain = Domain.objects.get(id=domain_id)
+        except Domain.DoesNotExist:
+            return {"status": "error", "error": f"Domain with ID {domain_id} not found"}
+
+        # Ensure lists are properly formatted
+        if imported_subdomains is None:
+            imported_subdomains = []
+        if out_of_scope_subdomains is None:
+            out_of_scope_subdomains = []
+        if secator_config is None:
+            secator_config = {}
+
+        # Create scan object (always use engine_id=1 for Secator)
+        scan_repo = ScanRepository()
+        scan_history_id = scan_repo.create_scan(
+            host_id=domain_id,
+            engine_id=1,  # Fixed engine ID for all Secator scans
+            initiated_by_id=user_id,
+        )
+        scan = ScanHistory.objects.get(pk=scan_history_id)
+
+        # Start the scan directly with parameters
+        result = initiate_secator_scan(
+            scan_history_id=scan.id,
+            domain_id=domain_id,
+            execution_mode=execution_mode,
+            workflow_id=workflow_id,
+            task_ids=task_ids,
+            secator_scan_type=secator_scan_type,
+            imported_subdomains=imported_subdomains,
+            out_of_scope_subdomains=out_of_scope_subdomains,
+            url_filter=url_filter,
+            scan_existing_elements=scan_existing_elements,
+            secator_config=secator_config,
+            speed_profile=speed_profile,
+            stealth_profile=stealth_profile,
+            expert_mode=expert_mode,
+        )
+        scan.save()
+
+        # Check result
+        if result.get("status") == "success":
+            return {
+                "status": "success",
+                "scan_id": scan.id,
+                "scan_status": scan.scan_status,
+                "domain_id": domain.id,
+                "domain_name": domain.name,
+                "secator_scan_id": None,
+                "execution_mode": execution_mode,
+                "message": f"Scan started successfully for {domain.name}",
+            }
+        else:
+            return {"status": "error", "error": result.get("error", "Unknown error")}
+
+    except Exception as e:
+        logger.error(f"Error starting Secator scan: {str(e)}")
+        return {"status": "error", "error": str(e)}
+
+
+def initiate_secator_scan(
     scan_history_id,
     domain_id,
-    engine_id=None,
-    secator_scan_id=None,
-    scan_type=LIVE_SCAN,
-    results_dir=RENGINE_RESULTS,
+    execution_mode,
+    workflow_id=None,
+    task_ids=None,
+    secator_scan_type=None,
     imported_subdomains=[],
     out_of_scope_subdomains=[],
     initiated_by_id=None,
     url_filter="",
     scan_existing_elements=False,
+    # Secator parameters
+    secator_config=None,
+    speed_profile=None,
+    stealth_profile=None,
+    expert_mode=False,
 ):
-    """Initiate a new scan.
+    """Initiate a new Secator scan.
 
     Args:
         scan_history_id (int): ScanHistory id.
         domain_id (int): Domain id.
-        engine_id (int): Engine ID (for legacy scans).
-        secator_scan_id (int): SecatorScan ID (for new Secator scans).
-        scan_type (int): Scan type (periodic, live).
-        results_dir (str): Results directory.
+        execution_mode (str): workflow|tasks|scan
+        workflow_id (int): Required for workflow mode
+        task_ids (list): Required for tasks mode
+        secator_scan_type (str): Required for scan mode
         imported_subdomains (list): Imported subdomains.
         out_of_scope_subdomains (list): Out-of-scope subdomains.
         url_filter (str): URL path. Default: ''.
         initiated_by (int): User ID initiating the scan.
         scan_existing_elements (bool): Whether to scan existing hostnames and IPs in the target. Default: False.
+        secator_config (dict): Secator configuration parameters. Default: None.
+        speed_profile (str): Speed profile (jaguar, rabbit, turtle). Default: None.
+        stealth_profile (str): Stealth profile (ninja, chameleon, mouse). Default: None.
+        expert_mode (bool): Enable expert mode. Default: False.
     """
     try:
-        # Check if this is a Secator scan or legacy scan
-        if secator_scan_id:
-            # New Secator-based scan
-            logger.info(f"Starting Secator scan with SecatorScan ID: {secator_scan_id}")
-            return initiate_secator_scan_task(scan_history_id, secator_scan_id, domain_id)
-        else:
-            # Legacy EngineType-based scan
-            logger.info(f"Starting legacy scan with Engine ID: {engine_id}")
-            return initiate_legacy_scan_task(
-                scan_history_id,
-                domain_id,
-                engine_id,
-                scan_type,
-                results_dir,
-                imported_subdomains,
-                out_of_scope_subdomains,
-                initiated_by_id,
-                url_filter,
-                scan_existing_elements,
-            )
-    except Exception as e:
-        logger.error(f"Error in initiate_scan: {e}")
-        return {"status": "error", "error": str(e)}
-
-
-def initiate_secator_scan_task(scan_history_id, secator_scan_id, domain_id):
-    """Initiate a Secator-based scan."""
-    try:
-        from reNgine.tasks.secator_tasks import initiate_secator_scan
+        from reNgine.services.scan.scan_orchestrator import ScanOrchestrator
 
         domain = Domain.objects.get(id=domain_id)
-        targets = [domain.name]
-
         scan_history = ScanHistory.objects.get(id=scan_history_id)
         scan_history.is_legacy_scan = False
         scan_history.save()
 
-        task = initiate_secator_scan.delay(scan_history_id, secator_scan_id, targets, domain_id)
+        # Build enriched targets list
+        targets = _build_enriched_targets(
+            domain=domain,
+            imported_subdomains=imported_subdomains or [],
+            out_of_scope_subdomains=out_of_scope_subdomains or [],
+            url_filter=url_filter,
+            scan_existing_elements=scan_existing_elements,
+        )
+
+        # Create domain-specific results directory
+        import os
+
+        from reNgine.settings import RENGINE_RESULTS
+
+        domain_results_dir = os.path.join(RENGINE_RESULTS, domain.name)
+        os.makedirs(domain_results_dir, exist_ok=True)
+
+        logger.info(f"Built targets list: {len(targets)} targets (domain + imported + existing)")
+
+        # Validate execution mode parameters
+        if execution_mode == "workflow" and not workflow_id:
+            raise ValueError("workflow_id required for workflow mode")
+        elif execution_mode == "tasks" and not task_ids:
+            raise ValueError("task_ids required for tasks mode")
+        elif execution_mode == "scan" and not secator_scan_type:
+            raise ValueError("secator_scan_type required for scan mode")
+        elif execution_mode not in ["workflow", "tasks", "scan"]:
+            raise ValueError(f"Invalid execution_mode: {execution_mode}")
+
+        # Build configuration from secator_config and profiles
+        config = secator_config or {}
+        profiles = {}
+
+        # Apply speed profile
+        if speed_profile:
+            profiles["speed"] = speed_profile
+            logger.info(f"Applied speed profile: {speed_profile}")
+
+        # Apply stealth profile
+        if stealth_profile:
+            profiles["stealth"] = stealth_profile
+            logger.info(f"Applied stealth profile: {stealth_profile}")
+
+        # Apply expert mode settings
+        if expert_mode:
+            config["expert_mode"] = True
+            logger.info("Expert mode enabled")
+
+        # Set execution mode and configuration based on parameters
+        if execution_mode == "workflow":
+            # Get workflow alias/name from database
+            from scanEngine.models import SecatorWorkflow
+            try:
+                workflow = SecatorWorkflow.objects.get(id=workflow_id)
+                config["workflow_name"] = workflow.alias or workflow.name
+            except SecatorWorkflow.DoesNotExist:
+                raise ValueError(f"SecatorWorkflow with ID {workflow_id} not found")
+        elif execution_mode == "tasks":
+            # Get task types from database
+            from scanEngine.models import SecatorTask
+            tasks = SecatorTask.objects.filter(id__in=task_ids)
+            if len(tasks) != len(task_ids):
+                raise ValueError("Invalid task IDs")
+            config["tasks"] = [task.task_type for task in tasks]
+        elif execution_mode == "scan":
+            config["scan_type"] = secator_scan_type
+
+        # Add reNgine context to config for hooks
+        config["rengine_context"] = {
+            "imported_subdomains": imported_subdomains or [],
+            "out_of_scope_subdomains": out_of_scope_subdomains or [],
+            "url_filter": url_filter,
+            "scan_existing_elements": scan_existing_elements,
+            "initiated_by_id": initiated_by_id,
+        }
+
+        # Add output directory to config
+        config["output_dir"] = domain_results_dir
+
+        # Call ScanOrchestrator directly
+        orchestrator = ScanOrchestrator()
+        result = orchestrator.execute_scan(
+            scan_history_id=scan_history_id,
+            domain_id=domain_id,
+            execution_mode=execution_mode,
+            targets=targets,
+            config=config,
+            profiles=profiles,
+        )
 
         return {
             "status": "success",
-            "task_id": task.id,
+            "result": result,
             "scan_type": "secator",
         }
 
@@ -117,429 +257,86 @@ def initiate_secator_scan_task(scan_history_id, secator_scan_id, domain_id):
         return {"status": "error", "error": str(e)}
 
 
-def initiate_legacy_scan_task(
-    scan_history_id,
-    domain_id,
-    engine_id,
-    scan_type,
-    results_dir,
-    imported_subdomains,
-    out_of_scope_subdomains,
-    initiated_by_id,
-    url_filter,
-    scan_existing_elements,
+def _build_enriched_targets(
+    domain,
+    imported_subdomains=None,
+    out_of_scope_subdomains=None,
+    url_filter="",
+    scan_existing_elements=False,
 ):
-    """Initiate a legacy EngineType-based scan."""
-    # Get all available tasks dynamically from the tasks module
-    from reNgine.tasks import get_scan_tasks
-
-    # Get all tasks
-    available_tasks = get_scan_tasks()
-
-    scan = None
-    try:
-        # Get scan engine
-        engine_id = engine_id or scan.scan_type.id  # scan history engine_id
-        logger.info(f"Engine ID: {engine_id}")
-        engine = EngineType.objects.get(pk=engine_id)
-
-        # Get YAML config
-        config = yaml.safe_load(engine.yaml_configuration)
-        gf_patterns = config.get(GF_PATTERNS, [])
-
-        # Get domain and set last_scan_date
-        domain = Domain.objects.get(pk=domain_id)
-        domain.last_scan_date = timezone.now()
-        domain.save()
-
-        # Determine target type and adapt tasks accordingly
-        target_type = determine_target_type(domain.name)
-        logger.info(f"Target type detected: {target_type} for {domain.name}")
-
-        if target_type == "ip_address":
-            # Filter out irrelevant tasks for an IP
-            allowed_tasks = [
-                "port_scan",
-                "fetch_url",
-                "dir_file_fuzz",
-                "vulnerability_scan",
-                "screenshot",
-                "waf_detection",
-            ]
-            engine.tasks = [task for task in engine.tasks if task in allowed_tasks]
-            logger.info(f"IP scan detected - Limited available tasks to: {engine.tasks}")
-        elif target_type == "ip_range":
-            # For IP ranges, focus on network scanning tasks
-            allowed_tasks = [
-                "port_scan",
-                "vulnerability_scan",
-            ]
-            engine.tasks = [task for task in engine.tasks if task in allowed_tasks]
-            logger.info(f"IP range scan detected - Limited available tasks to: {engine.tasks}")
-        elif target_type == "custom_text":
-            # For custom text targets, use all available tasks
-            logger.info(f"Custom text target detected - Using all available tasks: {engine.tasks}")
-        else:  # domain or subdomain
-            # Standard domain/subdomain scanning
-            logger.info(f"Domain/Subdomain target detected - Using all available tasks: {engine.tasks}")
-
-        logger.warning(f"Initiating scan for {target_type} target '{domain.name}' on celery")
-
-        # for live scan scan history id is passed as scan_history_id
-        # and no need to create scan_history object
-
-        if scan_type == SCHEDULED_SCAN:  # scheduled
-            # we need to create scan_history object for each scheduled scan
-            scan_history_id = create_scan_object(
-                host_id=domain_id,
-                engine_id=engine_id,
-                initiated_by_id=initiated_by_id,
-            )
-        scan = ScanHistory.objects.get(pk=scan_history_id)
-        scan.scan_status = RUNNING_TASK
-
-        scan.scan_type = engine
-        scan.celery_ids = [initiate_scan.request.id]
-        scan.domain = domain
-        scan.start_scan_date = timezone.now()
-        scan.tasks = engine.tasks
-
-        # Create results directory
-        try:
-            uuid_scan = uuid.uuid1()
-            scan.results_dir = SafePath.create_safe_path(
-                base_dir=RENGINE_RESULTS, components=[domain.name, "scans", str(uuid_scan)]
-            )
-        except (ValueError, OSError) as e:
-            logger.error(f"Failed to create results directory: {str(e)}")
-            scan.scan_status = FAILED_TASK
-            scan.error_message = "Failed to create results directory, scan failed"
-            scan.save()
-            return {"success": False, "error": scan.error_message}
-
-        add_gf_patterns = gf_patterns and "fetch_url" in engine.tasks
-        if add_gf_patterns and is_iterable(gf_patterns):
-            scan.used_gf_patterns = ",".join(gf_patterns)
-        scan.save()
-
-        # Build task context
-        ctx = {
-            "scan_history_id": scan_history_id,
-            "engine_id": engine_id,
-            "domain_id": domain.id,
-            "results_dir": scan.results_dir,
-            "url_filter": url_filter,
-            "yaml_configuration": config,
-            "out_of_scope_subdomains": out_of_scope_subdomains,
-        }
-        ctx_str = json.dumps(ctx, indent=2)
-
-        # Send start notif
-        logger.warning(f"Starting scan {scan_history_id} with context:\n{ctx_str}")
-        send_scan_notif.delay(
-            scan_history_id, subscan_id=None, engine_id=engine_id, status=CELERY_TASK_STATUS_MAP[scan.scan_status]
-        )
-
-        # Save imported subdomains in DB
-        save_imported_subdomains(imported_subdomains, ctx=ctx)
-
-        # Create initial subdomain in DB based on target type
-        subdomain_name = domain.name
-        subdomain = None
-
-        # Create subdomain and endpoints based on target type
-        if target_type in ["domain", "subdomain"]:
-            # For domains/subdomains, create subdomain and default HTTP/HTTPS endpoints
-            subdomain, _ = validate_and_save_subdomain(subdomain_name, ctx=ctx)
-            if subdomain is not None:
-                create_default_endpoint_for_subdomain(subdomain, ctx)
-                logger.info(f"Created default endpoints for domain/subdomain: {subdomain_name}")
-            else:
-                logger.warning(f"Failed to create subdomain for domain/subdomain: {subdomain_name}")
-        elif target_type == "ip_address":
-            # For IP addresses, create subdomain and default endpoints
-            subdomain, _ = validate_and_save_subdomain(subdomain_name, ctx=ctx)
-            if subdomain is not None:
-                create_default_endpoint_for_subdomain(subdomain, ctx)
-                logger.info(f"Created default endpoints for IP address: {subdomain_name}")
-            else:
-                logger.warning(f"Failed to create subdomain for IP address: {subdomain_name}")
-        elif target_type == "ip_range":
-            # For IP ranges, we'll handle this differently - no subdomain creation
-            logger.info(f"IP range target detected: {subdomain_name} - No subdomain created")
-        elif target_type == "custom_text":
-            # For custom text, don't create subdomain as it's not a valid domain
-            logger.info(f"Custom text target detected: {subdomain_name} - No subdomain created (custom text)")
-        else:
-            # Fallback - try to create subdomain and endpoints
-            subdomain, _ = validate_and_save_subdomain(subdomain_name, ctx=ctx)
-            if subdomain is not None:
-                create_default_endpoint_for_subdomain(subdomain, ctx)
-                logger.info(f"Created default endpoints for unknown target type: {subdomain_name}")
-            else:
-                logger.warning(f"Failed to create subdomain for unknown target type: {subdomain_name}")
-
-        # Handle scanning of existing elements if requested
-        if scan_existing_elements:
-            logger.info(f"Scan existing elements enabled for {target_type} target: {domain.name}")
-
-            # Get existing hostnames and IPs for this domain
-            existing_subdomains = Subdomain.objects.filter(target_domain=domain)
-            existing_ips = IpAddress.objects.filter(ip_addresses__target_domain=domain)
-
-            logger.info(
-                f"Found {existing_subdomains.count()} existing hostnames and {existing_ips.count()} existing IPs"
-            )
-
-            # Track processed subdomains to avoid duplicates
-            processed_subdomains = set()
-
-            # Create subdomains for existing hostnames
-            for existing_subdomain in existing_subdomains:
-                if existing_subdomain.name != domain.name:  # Skip the main target
-                    # Check if we've already processed this subdomain
-                    if existing_subdomain.name in processed_subdomains:
-                        logger.info(f"Skipping duplicate subdomain: {existing_subdomain.name}")
-                        continue
-
-                    processed_subdomains.add(existing_subdomain.name)
-                    subdomain_obj, _ = validate_and_save_subdomain(existing_subdomain.name, ctx=ctx)
-
-                    if subdomain_obj is not None:
-                        create_default_endpoint_for_subdomain(subdomain_obj, ctx)
-                        logger.info(f"Added existing hostname to scan: {existing_subdomain.name}")
-                    else:
-                        logger.warning(f"Failed to create subdomain for existing hostname: {existing_subdomain.name}")
-
-            # Create subdomains for existing IPs
-            for existing_ip in existing_ips:
-                if existing_ip.address != domain.name:  # Skip if IP is the main target
-                    # Check if we've already processed this IP
-                    if existing_ip.address in processed_subdomains:
-                        logger.info(f"Skipping duplicate IP: {existing_ip.address}")
-                        continue
-
-                    processed_subdomains.add(existing_ip.address)
-                    subdomain_obj, _ = validate_and_save_subdomain(existing_ip.address, ctx=ctx)
-
-                    if subdomain_obj is not None:
-                        # Create endpoints for IP addresses
-                        create_default_endpoint_for_subdomain(subdomain_obj, ctx)
-                        logger.info(f"Added existing IP to scan: {existing_ip.address}")
-                    else:
-                        logger.warning(f"Failed to create subdomain for existing IP: {existing_ip.address}")
-        else:
-            logger.info(f"Scan existing elements disabled for {target_type} target: {domain.name}")
-
-        # Create initial host
-        host = domain.name
-        logger.info(f"Creating scan for {host} - web service detection will be handled by port_scan or pre_crawl")
-
-        # Build new workflow structure based on enabled tasks:
-        # 1. Initial discovery (subdomain_discovery, osint)
-        # 2. pre_crawl (crawl existing subdomains)
-        # 3. port_scan (if enabled)
-        # 4. fetch_url (discover new endpoints)
-        # 5. intermediate_crawl (crawl new endpoints)
-        # 6. Final tasks (dir_file_fuzz, vulnerability_scan, screenshot, waf_detection)
-        # 7. post_crawl (final endpoint verification)
-
-        workflow_tasks = []
-
-        # Phase 1: Initial discovery - Use chord to wait for all tasks
-        from celery import chord, group
-
-        initial_tasks = []
-
-        if "subdomain_discovery" in engine.tasks and "subdomain_discovery" in available_tasks:
-            initial_tasks.append(available_tasks["subdomain_discovery"].si(ctx=ctx, description="Subdomain discovery"))
-        if "osint" in engine.tasks and "osint" in available_tasks:
-            initial_tasks.append(available_tasks["osint"].si(ctx=ctx, description="OS Intelligence"))
-
-        if initial_tasks:
-            # Create a chord: run initial_tasks in parallel, then execute pre_crawl when all are done
-            if "pre_crawl" in available_tasks:
-                initial_chord = chord(
-                    initial_tasks, available_tasks["pre_crawl"].si(ctx=ctx, description="Pre-crawl endpoints")
-                )
-                workflow_tasks.append(initial_chord)
-            else:
-                # If no pre_crawl, just use group
-                workflow_tasks.append(group(initial_tasks))
-        elif "pre_crawl" in available_tasks:
-            # Only pre_crawl, no initial tasks
-            workflow_tasks.append(available_tasks["pre_crawl"].si(ctx=ctx, description="Pre-crawl endpoints"))
-
-        # Phase 2: Port scan (if enabled)
-        reconnaissance_tasks = []
-        if "port_scan" in engine.tasks and "port_scan" in available_tasks:
-            reconnaissance_tasks.append("port_scan")
-            workflow_tasks.append(available_tasks["port_scan"].si(ctx=ctx, description="Port scan"))
-
-        # Phase 3: Fetch URLs (if enabled)
-        if "fetch_url" in engine.tasks and "fetch_url" in available_tasks:
-            reconnaissance_tasks.append("fetch_url")
-            workflow_tasks.append(available_tasks["fetch_url"].si(ctx=ctx, description="Fetch URLs"))
-
-        if reconnaissance_tasks and "intermediate_crawl" in available_tasks:
-            workflow_tasks.append(available_tasks["intermediate_crawl"].si(ctx=ctx, description="Intermediate crawl"))
-
-        # Phase 4: Final tasks
-        final_tasks = []
-        if "dir_file_fuzz" in engine.tasks and "dir_file_fuzz" in available_tasks:
-            final_tasks.append(available_tasks["dir_file_fuzz"].si(ctx=ctx, description="Directory & file fuzzing"))
-        if "vulnerability_scan" in engine.tasks and "vulnerability_scan" in available_tasks:
-            final_tasks.append(available_tasks["vulnerability_scan"].si(ctx=ctx, description="Vulnerability scan"))
-        if "screenshot" in engine.tasks and "screenshot" in available_tasks:
-            final_tasks.append(available_tasks["screenshot"].si(ctx=ctx, description="Screenshot"))
-        if "waf_detection" in engine.tasks and "waf_detection" in available_tasks:
-            final_tasks.append(available_tasks["waf_detection"].si(ctx=ctx, description="WAF detection"))
-
-        if final_tasks:
-            workflow_tasks.append(group(final_tasks))
-
-        # Add post_crawl after all final tasks (including vulnerability scans) are completed
-        if "post_crawl" in available_tasks:
-            workflow_tasks.append(available_tasks["post_crawl"].si(ctx=ctx, description="Post-crawl verification"))
-
-        # Create workflow chain
-        workflow = chain(*workflow_tasks) if workflow_tasks else None
-
-        if not workflow:
-            logger.error("No tasks to execute in workflow")
-            scan.scan_status = FAILED_TASK
-            scan.error_message = "No tasks configured for this engine"
-            scan.save()
-            return {"success": False, "error": scan.error_message}
-
-        # Build callback
-        callback = report.si(ctx=ctx).set(link_error=[report.si(ctx=ctx)])
-
-        # Run Celery chord
-        logger.info(f"Running Celery workflow with {len(workflow.tasks) + 1} tasks")
-        task = chain(workflow, callback).on_error(callback).delay()
-        scan.celery_ids.append(task.id)
-        scan.save()
-
-        return {"success": True, "task_id": task.id}
-
-    except Exception as e:
-        logger.exception(e)
-        if scan:
-            scan.scan_status = FAILED_TASK
-            scan.error_message = str(e)
-            scan.save()
-        return {"success": False, "error": str(e)}
-
-
-@app.task(name="initiate_subscan", bind=False, queue="orchestrator_queue")
-def initiate_subscan(subdomain_id, engine_id=None, scan_type=None, results_dir=RENGINE_RESULTS, url_filter=""):
-    """Initiate a new subscan.
+    """Build enriched targets list for Secator scan.
 
     Args:
-        subdomain_id (int): Subdomain id.
-        engine_id (int): Engine ID.
-        scan_type (int): Scan type (port_scan, subdomain_discovery, vulnerability_scan...).
-        results_dir (str): Results directory.
-        url_filter (str): URL path. Default: ''
+        domain: Domain object
+        imported_subdomains: List of imported subdomains
+        out_of_scope_subdomains: List of out-of-scope subdomains to exclude
+        url_filter: URL filter to append to targets
+        scan_existing_elements: Whether to include existing subdomains
+
+    Returns:
+        List of target strings for Secator
     """
-    from reNgine.tasks import get_scan_tasks
-    from reNgine.tasks.reporting import report
+    if imported_subdomains is None:
+        imported_subdomains = []
+    if out_of_scope_subdomains is None:
+        out_of_scope_subdomains = []
 
-    # Get all available tasks
-    available_tasks = get_scan_tasks()
+    # Start with main domain
+    targets = [domain.name]
+    logger.info(f"Added main domain to targets: {domain.name}")
 
-    subscan = None
-    try:
-        # Get Subdomain, Domain and ScanHistory
-        subdomain = Subdomain.objects.get(pk=subdomain_id)
-        scan = ScanHistory.objects.get(pk=subdomain.scan_history.id)
-        domain = Domain.objects.get(pk=subdomain.target_domain.id)
+    # Add imported subdomains
+    if imported_subdomains:
+        logger.info(f"Adding {len(imported_subdomains)} imported subdomains to targets")
+        for subdomain in imported_subdomains:
+            if subdomain and subdomain.strip():
+                clean_subdomain = subdomain.strip().lower()
+                # Validate that it's a subdomain of the main domain
+                if clean_subdomain.endswith(f".{domain.name}") or clean_subdomain == domain.name:
+                    targets.append(clean_subdomain)
+                    logger.debug(f"Added imported subdomain: {clean_subdomain}")
+                else:
+                    logger.warning(
+                        f"Skipping invalid imported subdomain: {clean_subdomain} (not a subdomain of {domain.name})"
+                    )
 
-        logger.info(f"Initiating subscan for subdomain {subdomain.name} on celery")
+    # Add existing subdomains if requested
+    if scan_existing_elements:
+        existing_subdomains = Subdomain.objects.filter(target_domain=domain).values_list("name", flat=True).distinct()
 
-        # Get EngineType
-        engine_id = engine_id or scan.scan_type.id
-        engine = EngineType.objects.get(pk=engine_id)
+        logger.info(f"Adding {len(existing_subdomains)} existing subdomains to targets")
+        for subdomain in existing_subdomains:
+            if subdomain and subdomain not in targets:
+                targets.append(subdomain)
+                logger.debug(f"Added existing subdomain: {subdomain}")
 
-        # Get YAML config
-        config = yaml.safe_load(engine.yaml_configuration)
-        config_subscan = config.get(scan_type)
+    # Remove out-of-scope subdomains
+    if out_of_scope_subdomains:
+        out_of_scope_clean = [s.strip().lower() for s in out_of_scope_subdomains if s and s.strip()]
+        original_count = len(targets)
+        targets = [t for t in targets if t not in out_of_scope_clean]
+        removed_count = original_count - len(targets)
+        if removed_count > 0:
+            logger.info(f"Removed {removed_count} out-of-scope subdomains from targets")
 
-        # Create scan activity of SubScan Model
-        subscan = SubScan(
-            start_scan_date=timezone.now(),
-            celery_ids=[initiate_subscan.request.id],
-            scan_history=scan,
-            subdomain=subdomain,
-            type=scan_type,
-            status=RUNNING_TASK,
-            engine=engine,
-        )
-        subscan.save()
+    # Apply URL filter if specified
+    if url_filter and url_filter.strip():
+        url_filter_clean = url_filter.strip()
+        # Ensure URL filter starts with /
+        if not url_filter_clean.startswith("/"):
+            url_filter_clean = f"/{url_filter_clean}"
 
-        # Create results directory
-        try:
-            uuid_scan = uuid.uuid1()
-            results_dir = SafePath.create_safe_path(
-                base_dir=RENGINE_RESULTS, components=[domain.name, "subscans", str(uuid_scan)]
-            )
-        except (ValueError, OSError) as e:
-            logger.error(f"Failed to create results directory: {str(e)}")
-            subscan.scan_status = FAILED_TASK
-            subscan.error_message = "Failed to create results directory, scan failed"
-            subscan.save()
-            return {"success": False, "error": subscan.error_message}
+        logger.info(f"Applying URL filter: {url_filter_clean}")
+        targets = [f"{target}{url_filter_clean}" for target in targets]
+        logger.info(f"Applied URL filter to {len(targets)} targets")
 
-        # Get task method from available tasks
-        method = available_tasks.get(scan_type)
-        if not method:
-            logger.warning(
-                f"Task {scan_type} is not supported by reNgine-ng. Available tasks: {list(available_tasks.keys())}"
-            )
-            subscan.status = FAILED_TASK
-            subscan.error_message = f"Unsupported task type: {scan_type}"
-            subscan.save()
-            return {"success": False, "error": f"Task {scan_type} is not supported by reNgine-ng"}
+    # Remove duplicates while preserving order
+    seen = set()
+    unique_targets = []
+    for target in targets:
+        if target not in seen:
+            seen.add(target)
+            unique_targets.append(target)
 
-        # Add task to scan history
-        if scan_type not in scan.tasks:
-            scan.tasks.append(scan_type)
-            scan.save()
-
-        # Send start notif
-        send_scan_notif.delay(scan.id, subscan_id=subscan.id, engine_id=engine_id, status="RUNNING")
-
-        # Build context
-        ctx = {
-            "scan_history_id": scan.id,
-            "subscan_id": subscan.id,
-            "engine_id": engine_id,
-            "domain_id": domain.id,
-            "subdomain_id": subdomain.id,
-            "yaml_configuration": config,
-            "yaml_configuration_subscan": config_subscan,
-            "results_dir": results_dir,
-            "url_filter": url_filter,
-        }
-
-        ctx_str = json.dumps(ctx, indent=2)
-        logger.warning(f"Starting subscan {subscan.id} with context:\n{ctx_str}")
-
-        # Build header + callback
-        workflow = method.si(ctx=ctx)
-        callback = report.si(ctx=ctx).set(link_error=[report.si(ctx=ctx)])
-
-        # Run Celery tasks
-        task = chain(workflow, callback).on_error(callback).delay()
-        subscan.celery_ids.append(task.id)
-        subscan.save()
-
-        return {"success": True, "task_id": task.id}
-    except Exception as e:
-        logger.exception(e)
-        if subscan:
-            subscan.scan_status = FAILED_TASK
-            subscan.error_message = str(e)
-            subscan.save()
-        return {"success": False, "error": str(e)}
+    logger.info(f"Final targets list: {len(unique_targets)} unique targets")
+    return unique_targets

@@ -91,18 +91,6 @@
             <span>Organization</span>
           </a>
           {% endif %}
-          {% if user|can:'modify_scan_configurations' %}
-          <a href="{% url 'add_engine' %}" class="dropdown-item">
-            <i class="fe-cpu me-1"></i>
-            <span>Scan Engine</span>
-          </a>
-          {% endif %}
-          {% if user|can:'modify_system_configurations' %}
-          <a href="{% url 'add_tool' %}" class="dropdown-item">
-            <i class="mdi mdi-hammer-wrench me-1"></i>
-            <span>External Tool</span>
-          </a>
-          {% endif %}
           {% if user|can:'modify_wordlists' %}
           <a href="{% url 'add_wordlist' %}" class="dropdown-item">
             <i class="fe-list me-1"></i>
@@ -305,7 +293,6 @@
       {% if user|can:'modify_system_configurations' %}
       <a href="{% url 'api_vault' %}" class="dropdown-item">API Vault</a>
       <a href="{% url 'llm_toolkit' %}" class="dropdown-item">LLM Toolkit</a>
-      <a href="{% url 'tool_arsenal' %}" class="dropdown-item">Tools Arsenal</a>
       {% endif %}
       {% if user|can:'modify_scan_report' %}
       <a href="{% url 'report_settings' %}" class="dropdown-item">Report Settings</a>

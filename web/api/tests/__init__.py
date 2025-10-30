@@ -6,13 +6,10 @@ from .test_endpoint import (
     TestInterestingEndpointViewSet,
 )
 from .test_ip import (
-    TestDomainIPHistory,
     TestIpAddressViewSet,
     TestIPToDomain,
     TestListIPs,
     TestListPorts,
-    TestReverseWhois,
-    TestWhois,
 )
 from .test_organization import (
     TestListOrganizations,
@@ -35,7 +32,6 @@ from .test_project import (
 from .test_scan import (
     TestDirectoryViewSet,
     TestFetchSubscanResults,
-    TestInitiateSubTask,
     TestListActivityLogsViewSet,
     TestListEngines,
     TestListInterestingKeywords,
@@ -66,17 +62,10 @@ from .test_target import (
     TestListTargetsDatatableViewSet,
 )
 from .test_tools import (
-    TestCMSDetector,
     TestDeleteMultipleRows,
-    TestGetExternalToolCurrentVersion,
     TestGetFileContents,
-    TestGfList,
-    TestGithubToolCheckGetLatestRelease,
     TestOllamaManager,
     TestRengineUpdateCheck,
-    TestUninstallTool,
-    TestUpdateTool,
-    TestWafDetector,
 )
 from .test_vulnerability import (
     TestCVEDetails,
@@ -97,13 +86,10 @@ __all__ = [
     "TestEndPointViewSet",
     "TestInterestingEndpointViewSet",
     # test_ip
-    "TestDomainIPHistory",
     "TestIpAddressViewSet",
     "TestIPToDomain",
     "TestListIPs",
     "TestListPorts",
-    "TestReverseWhois",
-    "TestWhois",
     # test_organization
     "TestListOrganizations",
     "TestListTargetsInOrganization",
@@ -122,7 +108,6 @@ __all__ = [
     # test_scan
     "TestDirectoryViewSet",
     "TestFetchSubscanResults",
-    "TestInitiateSubTask",
     "TestListActivityLogsViewSet",
     "TestListEngines",
     "TestListInterestingKeywords",
@@ -149,17 +134,10 @@ __all__ = [
     "TestAddTarget",
     "TestListTargetsDatatableViewSet",
     # test_tools
-    "TestCMSDetector",
     "TestDeleteMultipleRows",
-    "TestGetExternalToolCurrentVersion",
     "TestGetFileContents",
-    "TestGfList",
-    "TestGithubToolCheckGetLatestRelease",
     "TestOllamaManager",
     "TestRengineUpdateCheck",
-    "TestUninstallTool",
-    "TestUpdateTool",
-    "TestWafDetector",
     # test_vulnerability
     "TestCVEDetails",
     "TestDeleteVulnerability",

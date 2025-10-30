@@ -133,7 +133,7 @@ class Command(BaseCommand):
                     created_count += 1
             else:
                 # In dry run mode, check if the scan configuration would actually be created
-                workflow_exists = SecatorWorkflow.objects.filter(name=scan_config["workflow_name"]).exists()
+                SecatorWorkflow.objects.filter(name=scan_config["workflow_name"]).exists()
 
                 scan_exists = SecatorScan.objects.filter(name=scan_config["name"]).exists()
 

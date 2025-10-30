@@ -1,6 +1,5 @@
 from collections import defaultdict
 from datetime import datetime
-from ipaddress import AddressValueError, IPv4Network
 import json
 import logging
 import os.path
@@ -30,30 +29,29 @@ import validators
 
 from dashboard.models import OllamaSettings, OpenAiAPIKey, Project, SearchHistory
 from recon_note.models import TodoNote
-from reNgine.celery import app
 
 # NOTE: Legacy tasks removed (query_ip_history, query_reverse_whois, query_whois,
 # run_cmseek, run_command, run_gf_list, run_wafw00f) - functionality now in Secator
 from reNgine.core.data import get_data_from_post_request, safe_int_cast
-from reNgine.core.path import is_safe_path, remove_lead_and_trail_slash
-from reNgine.definitions import ABORTED_TASK, FAILED_TASK, LIVE_SCAN, NUCLEI_SEVERITY_MAP, RUNNING_TASK, SUCCESS_TASK
+from reNgine.core.path import is_safe_path
+from reNgine.definitions import ABORTED_TASK, FAILED_TASK, NUCLEI_SEVERITY_MAP, RUNNING_TASK, SUCCESS_TASK
 from reNgine.llm.config import DEFAULT_GPT_MODELS, MODEL_REQUIREMENTS, OLLAMA_INSTANCE, RECOMMENDED_MODELS
 from reNgine.llm.llm import LLMAttackSuggestionGenerator
 from reNgine.llm.utils import convert_markdown_to_html, get_default_llm_model, is_empty_attack_surface
-from reNgine.settings import RENGINE_CURRENT_VERSION, RENGINE_RESULTS, RENGINE_TOOL_GITHUB_PATH
+from reNgine.services.repositories.scan_repository import ScanRepository
+from reNgine.settings import RENGINE_CURRENT_VERSION
 from reNgine.tasks import (
-    initiate_scan,
-    initiate_subscan,
     llm_vulnerability_report,
     send_hackerone_report,
 )
-from reNgine.utilities.database import create_scan_activity, create_scan_object
-from reNgine.utilities.dns import check_host_alive, get_current_dns_servers
+from reNgine.utilities.command import run_command
 from reNgine.utilities.endpoint import get_interesting_endpoints
 from reNgine.utilities.external import get_open_ai_key
 from reNgine.utilities.lookup import get_lookup_keywords
+
+# NOTE: Legacy task functions removed - functionality now in Secator
 from reNgine.utilities.subdomain import get_interesting_subdomains
-from scanEngine.models import EngineType, InstalledExternalTool, SecatorScan, SecatorTask, SecatorWorkflow
+from scanEngine.models import EngineType, SecatorScan, SecatorTask, SecatorWorkflow
 from startScan.models import (
     Command,
     DirectoryFile,
@@ -776,17 +774,8 @@ class WafDetector(APIView):
             return Response(response)
 
         try:
-            logger.debug(f"Initiating WAF detection for URL: {url}")
-            result = run_wafw00f.delay(url).get(timeout=30)
-
-            if result.startswith("Unexpected error"):
-                response["message"] = result
-            elif result != "No WAF detected":
-                response["status"] = True
-                response["results"] = result
-            else:
-                response["message"] = "Could not detect any WAF!"
-
+            logger.debug(f"WAF detection for URL: {url} - Legacy function disabled, use Secator instead")
+            response["message"] = "WAF detection is now handled by Secator. Please use the Secator scan interface."
             logger.debug(f"WAF detection result: {response}")
         except Exception as e:
             logger.error(f"Error during WAF detection: {str(e)}")
@@ -1268,7 +1257,8 @@ class StopScan(APIView):
                 subscan.status = ABORTED_TASK
                 subscan.stop_scan_date = timezone.now()
                 subscan.save()
-                create_scan_activity(subscan.scan_history.id, f"Subscan {subscan_id} aborted", SUCCESS_TASK)
+                scan_repo = ScanRepository()
+                scan_repo.create_activity(subscan.scan_history.id, f"Subscan {subscan_id} aborted", SUCCESS_TASK)
                 response["status"] = True
             except Exception as e:
                 logger.error(e)
@@ -1281,15 +1271,17 @@ class StopScan(APIView):
                 scan.stop_scan_date = timezone.now()
                 scan.aborted_by = request.user
                 scan.save()
-                create_scan_activity(scan.id, "Scan aborted", SUCCESS_TASK)
+                scan_repo = ScanRepository()
+                scan_repo.create_activity(scan.id, "Scan aborted", SUCCESS_TASK)
                 response["status"] = True
             except Exception as e:
                 logger.error(e)
                 response = {"status": False, "message": str(e)}
 
         logger.warning(f"Revoking tasks {task_ids}")
-        for task_id in task_ids:
-            app.control.revoke(task_id, terminate=True, signal="SIGKILL")
+        # TODO Use secator control to stop the scan
+        # for task_id in task_ids:
+        #     app.control.revoke(task_id, terminate=True, signal="SIGKILL")
 
         # Abort running tasks
         tasks = ScanActivity.objects.filter(scan_of=scan).filter(status=RUNNING_TASK).order_by("-pk")
@@ -1306,9 +1298,9 @@ class StopScan(APIView):
 
 class StartScan(APIView):
     """
-    API endpoint to start a new scan.
+    API endpoint to start a new Secator scan.
 
-    This endpoint creates a scan history object and initiates a scan task
+    This endpoint creates a scan history object and initiates a Secator scan task
     using Celery for asynchronous execution.
     """
 
@@ -1316,13 +1308,26 @@ class StartScan(APIView):
 
     def post(self, request):
         """
-        Start a new scan.
+        Start a new Secator scan.
 
         Required parameters:
             - domain_id (int): ID of the target domain
-            - engine_id (int): ID of the scan engine to use
+            - Either secator_scan_id OR execution_mode with associated parameters
 
-        Optional parameters:
+        Secator parameters:
+            - secator_scan_id (int): ID of existing SecatorScan configuration
+            - execution_mode (str): workflow|tasks|scan
+            - workflow_id (int): Required for workflow mode
+            - task_ids (list): Required for tasks mode
+            - secator_scan_type (str): Required for scan mode (domain|host|network|subdomain|url)
+
+        Secator configuration:
+            - secator_config (dict): Configuration parameters (proxy, rate_limit, threads, timeout, delay)
+            - speed_profile (str): jaguar|rabbit|turtle
+            - stealth_profile (str): ninja|chameleon|mouse
+            - expert_mode (bool): Enable expert mode
+
+        reNgine parameters:
             - imported_subdomains (list): List of subdomains to import
             - out_of_scope_subdomains (list): List of subdomains to exclude
             - url_filter (str): URL filter/path to scan
@@ -1332,30 +1337,58 @@ class StartScan(APIView):
             JSON response with scan details or error message
         """
         data = request.data
-        domain_id = safe_int_cast(data.get("domain_id"))
-        engine_id = safe_int_cast(data.get("engine_id"))
+        if hasattr(data, "get"):
+            domain_id = safe_int_cast(data.get("domain_id"), default=None)
+        else:
+            # Handle case where data is Empty or not a dict-like object
+            domain_id = None
+
+        # Secator parameters
+        if hasattr(data, "get"):
+            execution_mode = data.get("execution_mode")
+            workflow_id = safe_int_cast(data.get("workflow_id"))
+            task_ids = data.get("task_ids", [])
+            secator_scan_type = data.get("secator_scan_type")
+            secator_scan_id = safe_int_cast(data.get("secator_scan_id"))
+        else:
+            execution_mode = None
+            workflow_id = None
+            task_ids = []
+            secator_scan_type = None
+            secator_scan_id = None
+
+        # Secator configuration
+        if hasattr(data, "get"):
+            secator_config = data.get("secator_config", {})
+            speed_profile = data.get("speed_profile")
+            stealth_profile = data.get("stealth_profile")
+        else:
+            secator_config = {}
+            speed_profile = None
+            stealth_profile = None
+        if hasattr(data, "get"):
+            expert_mode = data.get("expert_mode", False)
+            # reNgine parameters
+            imported_subdomains = data.get("imported_subdomains", [])
+            out_of_scope_subdomains = data.get("out_of_scope_subdomains", [])
+            url_filter = data.get("url_filter", "")
+            scan_existing_elements = data.get("scan_existing_elements", False)
+        else:
+            expert_mode = False
+            imported_subdomains = []
+            out_of_scope_subdomains = []
+            url_filter = ""
+            scan_existing_elements = False
 
         # Validate required parameters
-        if not domain_id or not engine_id:
-            return Response({"status": False, "error": "domain_id and engine_id are required"}, status=400)
+        if not domain_id:
+            return Response({"status": False, "error": "domain_id is required"}, status=400)
 
         # Verify domain exists
         try:
-            domain = get_object_or_404(Domain, id=domain_id)
-        except Exception:
+            domain = Domain.objects.get(id=domain_id)
+        except Domain.DoesNotExist:
             return Response({"status": False, "error": f"Domain with ID {domain_id} not found"}, status=404)
-
-        # Verify engine exists
-        try:
-            engine = get_object_or_404(EngineType, id=engine_id)
-        except Exception:
-            return Response({"status": False, "error": f"Engine with ID {engine_id} not found"}, status=404)
-
-        # Get optional parameters with defaults
-        imported_subdomains = data.get("imported_subdomains", [])
-        out_of_scope_subdomains = data.get("out_of_scope_subdomains", [])
-        url_filter = data.get("url_filter", "")
-        scan_existing_elements = data.get("scan_existing_elements", False)
 
         # Ensure lists are properly formatted
         if isinstance(imported_subdomains, str):
@@ -1364,46 +1397,128 @@ class StartScan(APIView):
             out_of_scope_subdomains = [s.strip() for s in out_of_scope_subdomains.split("\n") if s.strip()]
 
         try:
-            # Create scan object
-            scan_history_id = create_scan_object(
-                host_id=domain_id, engine_id=engine_id, initiated_by_id=request.user.id
-            )
-            scan = ScanHistory.objects.get(pk=scan_history_id)
+            # Handle existing SecatorScan ID
+            if secator_scan_id:
+                # Use existing SecatorScan - this is a special case for API
+                try:
+                    secator_scan = SecatorScan.objects.get(id=secator_scan_id)
+                except SecatorScan.DoesNotExist:
+                    return Response(
+                        {"status": False, "error": f"SecatorScan with ID {secator_scan_id} not found"}, status=404
+                    )
 
-            # Prepare celery task kwargs
-            kwargs = {
-                "scan_history_id": scan.id,
-                "domain_id": domain_id,
-                "engine_id": engine_id,
-                "scan_type": LIVE_SCAN,
-                "results_dir": RENGINE_RESULTS,
-                "imported_subdomains": imported_subdomains,
-                "out_of_scope_subdomains": out_of_scope_subdomains,
-                "url_filter": url_filter,
-                "initiated_by_id": request.user.id,
-                "scan_existing_elements": scan_existing_elements,
-            }
+                # Use the existing scan configuration
+                from reNgine.services.repositories.scan_repository import ScanRepository
+                from reNgine.tasks.scan import initiate_scan
 
-            # Start the celery task
-            initiate_scan.apply_async(kwargs=kwargs)
-            scan.save()
+                # Create scan object
+                scan_repo = ScanRepository()
+                scan_history_id = scan_repo.create_scan(
+                    host_id=domain_id,
+                    engine_id=1,
+                    initiated_by_id=request.user.id,
+                )
+                scan = ScanHistory.objects.get(pk=scan_history_id)
 
-            # Log scan initiation
-            sanitized_username = request.user.username.replace("\r", "").replace("\n", "")
-            logger.info(f"Scan {scan.id} initiated for domain {domain.name} by user {sanitized_username}")
-
-            return Response(
-                {
-                    "status": True,
-                    "scan_id": scan.id,
-                    "scan_status": scan.scan_status,
-                    "domain_id": domain.id,
-                    "domain_name": domain.name,
-                    "engine_id": engine.id,
-                    "engine_name": engine.engine_name,
-                    "message": f"Scan started successfully for {domain.name}",
+                # Prepare kwargs for initiate_scan
+                kwargs = {
+                    "scan_history_id": scan.id,
+                    "domain_id": domain_id,
+                    "secator_scan_id": secator_scan.id,
+                    "imported_subdomains": imported_subdomains,
+                    "out_of_scope_subdomains": out_of_scope_subdomains,
+                    "url_filter": url_filter,
+                    "initiated_by_id": request.user.id,
+                    "scan_existing_elements": scan_existing_elements,
+                    "secator_config": secator_config,
+                    "speed_profile": speed_profile,
+                    "stealth_profile": stealth_profile,
+                    "expert_mode": expert_mode,
                 }
-            )
+
+                # Start the scan
+                result = initiate_scan(**kwargs)
+                scan.save()
+
+                if result.get("status") == "success":
+                    return Response(
+                        {
+                            "status": True,
+                            "scan_id": scan.id,
+                            "scan_status": scan.scan_status,
+                            "domain_id": domain.id,
+                            "domain_name": domain.name,
+                            "secator_scan_id": secator_scan.id,
+                            "execution_mode": "scan",
+                            "message": f"Scan started successfully for {domain.name}",
+                        }
+                    )
+                else:
+                    return Response({"status": False, "error": result.get("error", "Unknown error")}, status=400)
+
+            elif execution_mode:
+                # Create scan object first (synchronously)
+                from reNgine.services.repositories.scan_repository import ScanRepository
+
+                scan_repo = ScanRepository()
+                scan_history_id = scan_repo.create_scan(
+                    host_id=domain_id,
+                    engine_id=1,  # Fixed engine ID for all Secator scans
+                    initiated_by_id=request.user.id,
+                )
+                scan = ScanHistory.objects.get(pk=scan_history_id)
+
+                # Launch scan asynchronously in a separate thread
+                # Secator will handle Celery tasks internally
+                import threading
+
+                from reNgine.tasks.scan import initiate_secator_scan
+
+                def launch_scan():
+                    try:
+                        initiate_secator_scan(
+                            scan_history_id=scan.id,
+                            domain_id=domain_id,
+                            execution_mode=execution_mode,
+                            workflow_id=workflow_id,
+                            task_ids=task_ids,
+                            secator_scan_type=secator_scan_type,
+                            imported_subdomains=imported_subdomains,
+                            out_of_scope_subdomains=out_of_scope_subdomains,
+                            url_filter=url_filter,
+                            scan_existing_elements=scan_existing_elements,
+                            secator_config=secator_config,
+                            speed_profile=speed_profile,
+                            stealth_profile=stealth_profile,
+                            expert_mode=expert_mode,
+                            initiated_by_id=request.user.id,
+                        )
+                        scan.save()
+                    except Exception as e:
+                        logger.error(f"Error in scan thread: {str(e)}")
+                        scan.scan_status = -1  # FAILED
+                        scan.save()
+
+                scan_thread = threading.Thread(target=launch_scan, daemon=True)
+                scan_thread.start()
+
+                # Return immediately without waiting for scan completion
+                return Response(
+                    {
+                        "status": True,
+                        "scan_id": scan.id,
+                        "scan_status": scan.scan_status,
+                        "domain_id": domain.id,
+                        "domain_name": domain.name,
+                        "execution_mode": execution_mode,
+                        "message": f"Scan started successfully for {domain.name}",
+                    }
+                )
+            else:
+                return Response(
+                    {"status": False, "error": "Must provide either secator_scan_id or execution_mode with parameters"},
+                    status=400,
+                )
 
         except Exception as e:
             logger.error(f"Error starting scan: {str(e)}")
@@ -1411,26 +1526,158 @@ class StartScan(APIView):
 
 
 class InitiateSubTask(APIView):
+    """
+    API endpoint to initiate Secator subscans on specific subdomains.
+
+    This endpoint allows launching Secator workflows or tasks on individual subdomains
+    for targeted scanning operations.
+    """
+
     parser_classes = [JSONParser]
 
     def post(self, request):
         data = request.data
-        engine_id = safe_int_cast(data.get("engine_id"))
-        scan_types = data.get("tasks", [])
         subdomain_ids = safe_int_cast(data.get("subdomain_ids", []))
 
-        if not scan_types or not subdomain_ids:
-            return Response({"status": False, "error": "Missing tasks or subdomain_ids"}, status=400)
+        # New Secator parameters
+        workflow_id = safe_int_cast(data.get("workflow_id"))
+        workflow_name = data.get("workflow_name")
+        task_names = data.get("task_names", [])
+
+        # Legacy parameters (for backward compatibility)
+        scan_types = data.get("tasks", [])
+
+        if not subdomain_ids:
+            return Response({"status": False, "error": "Missing subdomain_ids"}, status=400)
 
         if isinstance(subdomain_ids, int):
             subdomain_ids = [subdomain_ids]
 
-        for subdomain_id in subdomain_ids:
-            logger.info(f'Running subscans {scan_types} on subdomain "{subdomain_id}" ...')
-            for stype in scan_types:
-                ctx = {"subdomain_id": subdomain_id, "scan_type": stype, "engine_id": engine_id}
-                initiate_subscan.apply_async(kwargs=ctx)
-        return Response({"status": True})
+        # Determine execution mode
+        execution_mode = None
+        config = {}
+
+        if workflow_id or workflow_name:
+            # Secator workflow mode
+            execution_mode = "workflow"
+            if workflow_id:
+                try:
+                    workflow = SecatorWorkflow.objects.get(id=workflow_id)
+                    config["workflow_name"] = workflow.name
+                except SecatorWorkflow.DoesNotExist:
+                    return Response({"status": False, "error": f"Workflow with ID {workflow_id} not found"}, status=404)
+            elif workflow_name:
+                config["workflow_name"] = workflow_name
+
+        elif task_names:
+            # Secator tasks mode
+            execution_mode = "tasks"
+            config["tasks"] = task_names
+
+        elif scan_types:
+            # Legacy mode - convert to Secator tasks
+            execution_mode = "tasks"
+            # Map legacy task names to Secator task names
+            task_mapping = {
+                "subdomain_discovery": "subfinder",
+                "port_scan": "naabu",
+                "fetch_url": "httpx",
+                "dir_file_fuzz": "ffuf",
+                "vulnerability_scan": "nuclei",
+                "screenshot": "aquatone",
+                "waf_detection": "wafw00f",
+            }
+            config["tasks"] = [task_mapping.get(task, task) for task in scan_types if task in task_mapping]
+
+        else:
+            return Response(
+                {
+                    "status": False,
+                    "error": "Must provide either workflow_id/workflow_name, task_names, or legacy tasks",
+                },
+                status=400,
+            )
+
+        # Get subdomains and validate
+        from startScan.models import Subdomain
+
+        try:
+            subdomains = Subdomain.objects.filter(id__in=subdomain_ids)
+            if not subdomains.exists():
+                return Response({"status": False, "error": "No valid subdomains found"}, status=404)
+
+            # Get unique domains from subdomains
+            domains = subdomains.values_list("target_domain", flat=True).distinct()
+            if len(domains) > 1:
+                return Response({"status": False, "error": "All subdomains must belong to the same domain"}, status=400)
+
+            domain_id = domains[0]
+
+        except Exception as e:
+            return Response({"status": False, "error": f"Error retrieving subdomains: {str(e)}"}, status=400)
+
+        # Create scan history for each subdomain
+        scan_results = []
+
+        for subdomain in subdomains:
+            try:
+                # Create scan history
+                scan_repo = ScanRepository()
+                scan_history_id = scan_repo.create_scan(
+                    host_id=domain_id,
+                    engine_id=1,  # Fixed engine ID for Secator scans
+                    initiated_by_id=request.user.id,
+                )
+                # scan = ScanHistory.objects.get(pk=scan_history_id)  # Not used in current implementation
+
+                # Prepare targets (just the subdomain)
+                targets = [subdomain.name]
+
+                # Add reNgine context for hooks
+                config["rengine_context"] = {
+                    "subdomain_id": subdomain.id,
+                    "domain_id": domain_id,
+                    "scan_type": "subscan",
+                    "initiated_by_id": request.user.id,
+                }
+
+                # Call SecatorRunner
+                from reNgine.services.scan.scan_orchestrator import ScanOrchestrator
+
+                orchestrator = ScanOrchestrator()
+                result = orchestrator.execute_scan(
+                    scan_history_id=scan_history_id,
+                    domain_id=domain_id,
+                    execution_mode=execution_mode,
+                    targets=targets,
+                    config=config,
+                )
+
+                scan_results.append(
+                    {
+                        "subdomain_id": subdomain.id,
+                        "subdomain_name": subdomain.name,
+                        "scan_history_id": scan_history_id,
+                        "status": "success",
+                        "result": result,
+                    }
+                )
+
+                logger.info(f"Secator subscan initiated for subdomain {subdomain.name} (ID: {subdomain.id})")
+
+            except Exception as e:
+                logger.error(f"Error initiating subscan for subdomain {subdomain.name}: {e}")
+                scan_results.append(
+                    {"subdomain_id": subdomain.id, "subdomain_name": subdomain.name, "status": "error", "error": str(e)}
+                )
+
+        return Response(
+            {
+                "status": True,
+                "message": f"Subscans initiated for {len(subdomain_ids)} subdomain(s)",
+                "results": scan_results,
+            }
+        )
 
 
 class DeleteSubdomain(APIView):
@@ -1511,161 +1758,6 @@ class RengineUpdateCheck(APIView):
         return Response(return_response)
 
 
-class UninstallTool(APIView):
-    def get(self, request):
-        req = self.request
-        tool_id = safe_int_cast(req.query_params.get("tool_id"))
-        tool_name = req.query_params.get("name")
-
-        if tool_id:
-            tool = InstalledExternalTool.objects.get(id=tool_id)
-        elif tool_name:
-            tool = InstalledExternalTool.objects.get(name=tool_name)
-
-        if tool.is_default:
-            return Response({"status": False, "message": "Default tools can not be uninstalled"})
-
-        # check install instructions, if it is installed using go, then remove from go bin path,
-        # else try to remove from github clone path
-
-        # getting tool name is tricky!
-
-        if "go install" in tool.install_command:
-            tool_name = tool.install_command.split("/")[-1].split("@")[0]
-            uninstall_command = "rm /go/bin/" + tool_name
-        elif "git clone" in tool.install_command:
-            tool_name = tool.install_command[:-1] if tool.install_command[-1] == "/" else tool.install_command
-            tool_name = tool_name.split("/")[-1]
-            uninstall_command = "rm -rf " + tool.github_clone_path
-        else:
-            return Response({"status": False, "message": "Cannot uninstall tool!"})
-
-        run_command(uninstall_command)
-        run_command.apply_async(args=(uninstall_command,))
-
-        tool.delete()
-
-        return Response({"status": True, "message": "Uninstall Tool Success"})
-
-
-class UpdateTool(APIView):
-    def get(self, request):
-        req = self.request
-        tool_id = safe_int_cast(req.query_params.get("tool_id"))
-        tool_name = req.query_params.get("name")
-
-        if tool_id:
-            tool = InstalledExternalTool.objects.get(id=tool_id)
-        elif tool_name:
-            tool = InstalledExternalTool.objects.get(name=tool_name)
-
-        # if git clone was used for installation, then we must use git pull inside project directory,
-        # otherwise use the same command as given
-
-        update_command = tool.update_command.lower()
-
-        if not update_command:
-            return Response(
-                {"status": False, "message": tool.name + "has missing update command! Cannot update the tool."}
-            )
-        elif update_command == "git pull":
-            tool_name = tool.install_command[:-1] if tool.install_command[-1] == "/" else tool.install_command
-            tool_name = tool_name.split("/")[-1]
-            update_command = "cd " + str(Path(RENGINE_TOOL_GITHUB_PATH) / tool_name) + " && git pull && cd -"
-
-        run_command(update_command)
-        run_command.apply_async(args=(update_command,))
-        return Response({"status": True, "message": tool.name + " updated successfully."})
-
-
-class GetExternalToolCurrentVersion(APIView):
-    def get(self, request):
-        req = self.request
-        # toolname is also the command
-        tool_id = safe_int_cast(req.query_params.get("tool_id"))
-        tool_name = req.query_params.get("name")
-        # can supply either tool id or tool_name
-
-        tool = None
-
-        if tool_id:
-            if not InstalledExternalTool.objects.filter(id=tool_id).exists():
-                return Response({"status": False, "message": "Tool Not found"})
-            tool = InstalledExternalTool.objects.get(id=tool_id)
-        elif tool_name:
-            if not InstalledExternalTool.objects.filter(name=tool_name).exists():
-                return Response({"status": False, "message": "Tool Not found"})
-            tool = InstalledExternalTool.objects.get(name=tool_name)
-
-        if not tool.version_lookup_command:
-            return Response({"status": False, "message": "Version Lookup command not provided."})
-
-        version_number = None
-        try:
-            # Execute command in Celery container and wait for result
-            # Use combine_output=True for version commands that output to stderr
-            task_result = run_command.delay(tool.version_lookup_command, combine_output=True)
-            return_code, stdout = task_result.get(timeout=30)  # Wait max 30 seconds for command execution
-
-            # Debug logs
-            logger.debug(f"Command: {tool.version_lookup_command}")
-            logger.debug(f"Return code: {return_code}")
-            logger.debug(f"Output: {stdout}")
-
-            version_number = re.search(re.compile(tool.version_match_regex), str(stdout))
-        except Exception as e:
-            return Response({"status": False, "message": f"Error executing version command: {str(e)}"})
-
-        if not version_number:
-            return Response({"status": False, "message": "Invalid version lookup command."})
-
-        return Response({"status": True, "version_number": version_number.group(0), "tool_name": tool.name})
-
-
-class GithubToolCheckGetLatestRelease(APIView):
-    def get(self, request):
-        req = self.request
-
-        tool_id = safe_int_cast(req.query_params.get("tool_id"))
-        tool_name = req.query_params.get("name")
-
-        if not InstalledExternalTool.objects.filter(id=tool_id).exists():
-            return Response({"status": False, "message": "Tool Not found"})
-
-        if tool_id:
-            tool = InstalledExternalTool.objects.get(id=tool_id)
-        elif tool_name:
-            tool = InstalledExternalTool.objects.get(name=tool_name)
-
-        if not tool.github_url:
-            return Response({"status": False, "message": "Github URL is not provided, Cannot check updates"})
-
-        # if tool_github_url has https://github.com/ remove and also remove trailing /
-        tool_github_url = tool.github_url.replace("http://github.com/", "").replace("https://github.com/", "")
-        tool_github_url = remove_lead_and_trail_slash(tool_github_url)
-        github_api = f"https://api.github.com/repos/{tool_github_url}/releases"
-        response = requests.get(github_api).json()
-        # check if api rate limit exceeded
-        if "message" in response and response["message"] == "RateLimited":
-            return Response({"status": False, "message": "RateLimited"})
-        elif "message" in response and response["message"] == "Not Found":
-            return Response({"status": False, "message": "Not Found"})
-        elif not response:
-            return Response({"status": False, "message": "Not Found"})
-
-        # only send latest release
-        response = response[0]
-
-        api_response = {
-            "status": True,
-            "url": response["url"],
-            "id": response["id"],
-            "name": response["name"],
-            "changelog": response["body"],
-        }
-        return Response(api_response)
-
-
 class ScanStatus(APIView):
     def get(self, request):
         slug = self.request.GET.get("project", None)
@@ -1719,27 +1811,20 @@ class Whois(APIView):
             return Response({"status": False, "message": "Invalid domain or IP"})
         is_force_update = req.query_params.get("is_reload")
         is_force_update = True if is_force_update and "true" == is_force_update.lower() else False
-        task = query_whois.apply_async(args=(ip_domain, is_force_update))
-        response = task.wait()
-        return Response(response)
+        # NOTE: WHOIS functionality moved to Secator
+        return Response({"status": False, "message": "WHOIS functionality moved to Secator"})
 
 
 class ReverseWhois(APIView):
     def get(self, request):
-        req = self.request
-        lookup_keyword = req.query_params.get("lookup_keyword")
-        task = query_reverse_whois.apply_async(args=(lookup_keyword,))
-        response = task.wait()
-        return Response(response)
+        # NOTE: Reverse WHOIS functionality moved to Secator
+        return Response({"status": False, "message": "Reverse WHOIS functionality moved to Secator"})
 
 
 class DomainIPHistory(APIView):
     def get(self, request):
-        req = self.request
-        domain = req.query_params.get("domain")
-        task = query_ip_history.apply_async(args=(domain,))
-        response = task.wait()
-        return Response(response)
+        # NOTE: IP history functionality moved to Secator
+        return Response({"status": False, "message": "IP history functionality moved to Secator"})
 
 
 class CMSDetector(APIView):
@@ -1749,101 +1834,11 @@ class CMSDetector(APIView):
             return Response({"status": False, "message": "URL parameter is missing"})
 
         try:
-            task = run_cmseek.delay(url)
-            result = task.get(timeout=300)  # 5 minutes timeout
-
-            if result["status"]:
-                return Response(result)
-            else:
-                return Response({"status": False, "message": "Could not detect CMS!"})
+            # NOTE: CMS detection functionality moved to Secator
+            return Response({"status": False, "message": "CMS detection functionality moved to Secator"})
         except Exception as e:
             logger.error(f"Error in CMSDetector: {str(e)}")
             return Response({"status": False, "message": "An unexpected error occurred."}, status=500)
-
-
-class IPToDomain(APIView):
-    def get(self, request):
-        import uuid
-
-        from reNgine.tasks.dns import ip_range_discovery
-
-        req = self.request
-        ip_address = req.query_params.get("ip_address")
-        custom_dns = req.query_params.get("dns_servers", "").strip()
-        use_system_fallback = req.query_params.get("use_system_fallback", "false").lower() == "true"
-        scan_id = req.query_params.get("scan_id", str(uuid.uuid4()))
-
-        if not ip_address:
-            return Response({"status": False, "message": "IP Address Required", "scan_id": scan_id})
-
-        try:
-            logger.info(f"Starting IP range discovery for {ip_address} with scan_id {scan_id}")
-
-            # Determine chunk size based on range size
-            try:
-                # Try to parse as network (CIDR)
-                ip_list = list(IPv4Network(ip_address, False))
-            except AddressValueError:
-                # Single IP address, convert to /32 network
-                ip_list = list(IPv4Network(f"{ip_address}/32", False))
-
-            total_ips = len(ip_list)
-
-            # Adapt chunk size according to range size
-            chunk_size = self._calculate_optimal_chunk_size(total_ips)
-
-            # Launch Celery task
-            task = ip_range_discovery.delay(
-                ip_address=ip_address,
-                scan_id=scan_id,
-                custom_dns=custom_dns,
-                use_system_fallback=use_system_fallback,
-                chunk_size=chunk_size,
-            )
-
-            # Wait for task result
-            try:
-                response = task.get(timeout=300)  # 5 minutes timeout
-
-                # Add fields compatible with existing interface
-                if response.get("status"):
-                    response["current_dns_servers"] = self._get_current_dns_servers()
-
-                return Response(response)
-
-            except Exception as e:
-                logger.error(f"Task execution failed: {e}")
-                return Response(
-                    {
-                        "status": False,
-                        "ip_address": ip_address,
-                        "message": f"Task execution failed: {e}",
-                        "scan_id": scan_id,
-                    }
-                )
-
-        except Exception as e:
-            logger.exception(f"Error in IPToDomain: {e}")
-            return Response(
-                {"status": False, "ip_address": ip_address, "message": f"Exception: {e}", "scan_id": scan_id}
-            )
-
-    def _calculate_optimal_chunk_size(self, total_ips):
-        """Calculate optimal chunk size based on IP range size"""
-        if total_ips > 1000:
-            return 500  # Very large chunks for large ranges
-        elif total_ips > 100:
-            return 200  # Large chunks for medium ranges
-        else:
-            return total_ips  # Process entire range at once for small ranges
-
-    def _get_current_dns_servers(self):
-        """Get current system DNS servers using centralized function"""
-        return get_current_dns_servers()
-
-    def _check_host_alive(self, ip):
-        """Quick ping check to see if host is alive using centralized function"""
-        return check_host_alive(ip)
 
 
 class VulnerabilityReport(APIView):
@@ -1953,13 +1948,8 @@ class GetFileContents(APIView):
 class GfList(APIView):
     def get(self, request):
         try:
-            task = run_gf_list.delay()
-            result = task.get(timeout=30)  # 30 seconds timeout
-
-            if result["status"]:
-                return Response(result["output"])
-            else:
-                return Response({"error": result["message"]}, status=500)
+            # NOTE: GF patterns functionality moved to Secator
+            return Response({"status": False, "message": "GF patterns functionality moved to Secator"})
         except Exception as e:
             logger.error(f"Error in GfList: {str(e)}")  # Log the exception for internal tracking
             return Response({"error": "An unexpected error occurred. Please try again later."}, status=500)
@@ -3502,70 +3492,6 @@ class FetchScreenshots(APIView):
         return Response(screenshots_data)
 
 
-class PingHosts(APIView):
-    def post(self, request):
-        """
-        Launch ping task for discovered hosts
-        """
-        import uuid
-
-        from reNgine.tasks.dns import ping_hosts_task
-
-        req = self.request
-        ip_list = req.data.get("ip_list", [])
-        scan_id = req.data.get("scan_id", str(uuid.uuid4()))
-
-        if not ip_list:
-            return Response({"status": False, "message": "No IP addresses provided"}, status=400)
-
-        try:
-            logger.info(f"Starting ping task for {len(ip_list)} hosts with scan_id {scan_id}")
-
-            # Launch ping task
-            task = ping_hosts_task.delay(ip_list, scan_id)
-
-            return Response(
-                {
-                    "status": True,
-                    "message": "Ping task launched successfully",
-                    "task_id": task.id,
-                    "scan_id": scan_id,
-                    "total_hosts": len(ip_list),
-                }
-            )
-
-        except Exception as e:
-            logger.error(f"Failed to launch ping task: {e}")
-            return Response({"status": False, "message": f"Failed to launch ping task: {e}"}, status=500)
-
-    def get(self, request):
-        """
-        Get ping task results
-        """
-        from celery.result import AsyncResult
-
-        task_id = request.query_params.get("task_id")
-        if not task_id:
-            return Response({"status": False, "message": "Task ID required"}, status=400)
-
-        try:
-            # Get task result
-            task_result = AsyncResult(task_id)
-
-            if task_result.ready():
-                if task_result.successful():
-                    result = task_result.result
-                    return Response({"status": True, "task_status": "completed", "result": result})
-                else:
-                    return Response({"status": False, "task_status": "failed", "error": str(task_result.result)})
-            else:
-                return Response({"status": True, "task_status": "pending", "message": "Task is still running"})
-
-        except Exception as e:
-            logger.error(f"Failed to get task result: {e}")
-            return Response({"status": False, "message": f"Failed to get task result: {e}"}, status=500)
-
-
 class GetCSRFToken(APIView):
     def get(self, request):
         """
@@ -3653,16 +3579,13 @@ class CreateSecatorScan(APIView):
                 name=data["name"],
                 description=data.get("description", ""),
                 scan_type=data.get("scan_type", "bug_bounty"),
-                execution_mode=data["execution_mode"],
                 scan_config_type=data.get("scan_config_type", "custom"),
                 is_default=data.get("is_default", False),
+                yaml_configuration=data.get("yaml_configuration", ""),
             )
 
-            # Set workflow or tasks based on execution mode
-            if data["execution_mode"] == "workflow" and data.get("workflow_id"):
-                scan.workflow_id = data["workflow_id"]
-            elif data["execution_mode"] == "tasks" and data.get("task_ids"):
-                scan.tasks.set(data["task_ids"])
+            # Note: execution_mode, workflow, and tasks are no longer used
+            # Scans now use YAML configuration instead
 
             scan.save()
 
@@ -3681,13 +3604,17 @@ class LoadBuiltinWorkflows(APIView):
 
     def post(self, request):
         try:
-            from reNgine.tasks.secator_tasks import load_secator_workflows
+            from io import StringIO
 
-            # Start the task
-            task = load_secator_workflows.delay()
+            from django.core.management import call_command
 
-            return Response({"status": "success", "task_id": task.id, "message": "Loading built-in workflows started"})
+            # Capture output
+            out = StringIO()
+            call_command("load_workflows", "--builtin-only", "--force", stdout=out)
 
+            return Response(
+                {"status": "success", "message": "Built-in workflows loaded successfully", "output": out.getvalue()}
+            )
         except Exception as e:
             return Response({"status": "error", "message": str(e)}, status=400)
 
@@ -3699,13 +3626,17 @@ class LoadBuiltinTasks(APIView):
 
     def post(self, request):
         try:
-            from reNgine.tasks.secator_tasks import load_secator_tasks
+            from io import StringIO
 
-            # Start the task
-            task = load_secator_tasks.delay()
+            from django.core.management import call_command
 
-            return Response({"status": "success", "task_id": task.id, "message": "Loading built-in tasks started"})
+            # Capture output
+            out = StringIO()
+            call_command("load_secator_defaults", stdout=out)
 
+            return Response(
+                {"status": "success", "message": "Built-in tasks loaded successfully", "output": out.getvalue()}
+            )
         except Exception as e:
             return Response({"status": "error", "message": str(e)}, status=400)
 
@@ -3905,13 +3836,13 @@ class GetScanDetail(APIView):
                 "name": scan.name,
                 "description": scan.description,
                 "scan_type": scan.scan_type,
-                "execution_mode": scan.execution_mode,
+                "execution_mode": "scan",
                 "scan_config_type": scan.scan_config_type,
                 "is_default": scan.is_default,
-                "workflow_id": scan.workflow.id if scan.workflow else None,
-                "workflow_name": scan.workflow.name if scan.workflow else None,
-                "task_ids": [task.id for task in scan.tasks.all()],
-                "task_names": [task.name for task in scan.tasks.all()],
+                "workflow_id": None,
+                "workflow_name": None,
+                "task_ids": [],
+                "task_names": [],
                 "created_at": scan.created_at.isoformat(),
                 "updated_at": scan.updated_at.isoformat(),
             }
@@ -3935,28 +3866,10 @@ class UpdateSecatorScan(APIView):
             scan.name = request.data.get("name", scan.name)
             scan.description = request.data.get("description", scan.description)
             scan.scan_type = request.data.get("scan_type", scan.scan_type)
-            scan.execution_mode = request.data.get("execution_mode", scan.execution_mode)
             scan.is_default = request.data.get("is_default", scan.is_default)
 
-            # Handle workflow/tasks based on execution mode
-            if scan.execution_mode == "workflow":
-                workflow_id = request.data.get("workflow_id")
-                if workflow_id:
-                    try:
-                        workflow = SecatorWorkflow.objects.get(id=workflow_id)
-                        scan.workflow = workflow
-                    except SecatorWorkflow.DoesNotExist:
-                        return Response({"status": "error", "message": "Workflow not found"}, status=400)
-                scan.tasks.clear()
-            else:  # tasks mode
-                task_ids = request.data.get("task_ids", [])
-                if task_ids:
-                    try:
-                        tasks = SecatorTask.objects.filter(id__in=task_ids)
-                        scan.tasks.set(tasks)
-                    except SecatorTask.DoesNotExist:
-                        return Response({"status": "error", "message": "One or more tasks not found"}, status=400)
-                scan.workflow = None
+            # Note: execution_mode, workflow, and tasks are no longer used
+            # Scans now use YAML configuration instead
 
             scan.save()
 
@@ -3983,3 +3896,344 @@ class DeleteSecatorScan(APIView):
             return Response({"status": "error", "message": "Scan configuration not found"}, status=404)
         except Exception as e:
             return Response({"status": "error", "message": str(e)}, status=400)
+
+
+# =============================================================================
+# Secator API Hooks Endpoints
+# =============================================================================
+
+
+class SecatorIPSave(APIView):
+    """API endpoint to save IP addresses from Secator results."""
+
+    def post(self, request):
+        try:
+            data = request.data
+            item = data.get("item", {})
+            scan_history_id = safe_int_cast(data.get("scan_history_id"))
+            domain_id = safe_int_cast(data.get("domain_id"))
+            rengine_context = data.get("rengine_context", {})
+
+            if not scan_history_id or not domain_id:
+                return Response({"status": False, "error": "scan_history_id and domain_id are required"}, status=400)
+
+            from reNgine.services.repositories.ip_repository import IpRepository
+
+            ip_repo = IpRepository()
+            result = ip_repo.save_from_secator(item, scan_history_id, domain_id)
+
+            if result:
+                return Response({"status": True, "id": result.id})
+            else:
+                return Response({"status": False, "error": "Failed to save IP address"}, status=500)
+
+        except Exception as e:
+            logger.error(f"Error saving IP address: {str(e)}")
+            return Response({"status": False, "error": str(e)}, status=500)
+
+
+class SecatorSubdomainSave(APIView):
+    """API endpoint to save subdomains from Secator results."""
+
+    def post(self, request):
+        try:
+            data = request.data
+            item = data.get("item", {})
+            scan_history_id = safe_int_cast(data.get("scan_history_id"))
+            domain_id = safe_int_cast(data.get("domain_id"))
+            rengine_context = data.get("rengine_context", {})
+
+            if not scan_history_id or not domain_id:
+                return Response({"status": False, "error": "scan_history_id and domain_id are required"}, status=400)
+
+            from reNgine.services.repositories.subdomain_repository import SubdomainRepository
+
+            subdomain_repo = SubdomainRepository()
+            result = subdomain_repo.save_from_secator(item, scan_history_id, domain_id, rengine_context=rengine_context)
+
+            if result:
+                return Response({"status": True, "id": result.id})
+            else:
+                return Response({"status": False, "error": "Failed to save subdomain"}, status=500)
+
+        except Exception as e:
+            logger.error(f"Error saving subdomain: {str(e)}")
+            return Response({"status": False, "error": str(e)}, status=500)
+
+
+class SecatorPortSave(APIView):
+    """API endpoint to save ports from Secator results."""
+
+    def post(self, request):
+        try:
+            data = request.data
+            item = data.get("item", {})
+            scan_history_id = safe_int_cast(data.get("scan_history_id"))
+            domain_id = safe_int_cast(data.get("domain_id"))
+            rengine_context = data.get("rengine_context", {})
+
+            if not scan_history_id or not domain_id:
+                return Response({"status": False, "error": "scan_history_id and domain_id are required"}, status=400)
+
+            from reNgine.services.repositories.port_repository import PortRepository
+
+            port_repo = PortRepository()
+            result = port_repo.save_from_secator(item, scan_history_id, domain_id)
+
+            if result:
+                return Response({"status": True, "id": result.id})
+            else:
+                return Response({"status": False, "error": "Failed to save port"}, status=500)
+
+        except Exception as e:
+            logger.error(f"Error saving port: {str(e)}")
+            return Response({"status": False, "error": str(e)}, status=500)
+
+
+class SecatorEndpointSave(APIView):
+    """API endpoint to save endpoints/URLs from Secator results."""
+
+    def post(self, request):
+        try:
+            data = request.data
+            item = data.get("item", {})
+            scan_history_id = safe_int_cast(data.get("scan_history_id"))
+            domain_id = safe_int_cast(data.get("domain_id"))
+            rengine_context = data.get("rengine_context", {})
+
+            if not scan_history_id or not domain_id:
+                return Response({"status": False, "error": "scan_history_id and domain_id are required"}, status=400)
+
+            from reNgine.services.repositories.endpoint_repository import EndpointRepository
+
+            endpoint_repo = EndpointRepository()
+            result = endpoint_repo.save_from_secator(item, scan_history_id, domain_id)
+
+            if result:
+                return Response({"status": True, "id": result.id})
+            else:
+                return Response({"status": False, "error": "Failed to save endpoint"}, status=500)
+
+        except Exception as e:
+            logger.error(f"Error saving endpoint: {str(e)}")
+            return Response({"status": False, "error": str(e)}, status=500)
+
+
+class SecatorTechnologySave(APIView):
+    """API endpoint to save technologies from Secator results."""
+
+    def post(self, request):
+        try:
+            data = request.data
+            item = data.get("item", {})
+            scan_history_id = safe_int_cast(data.get("scan_history_id"))
+            domain_id = safe_int_cast(data.get("domain_id"))
+            rengine_context = data.get("rengine_context", {})
+
+            if not scan_history_id or not domain_id:
+                return Response({"status": False, "error": "scan_history_id and domain_id are required"}, status=400)
+
+            from reNgine.services.repositories.technology_repository import TechnologyRepository
+
+            technology_repo = TechnologyRepository()
+            result = technology_repo.save_from_secator(item, scan_history_id, domain_id)
+
+            if result:
+                return Response({"status": True, "id": result.id})
+            else:
+                return Response({"status": False, "error": "Failed to save technology"}, status=500)
+
+        except Exception as e:
+            logger.error(f"Error saving technology: {str(e)}")
+            return Response({"status": False, "error": str(e)}, status=500)
+
+
+class SecatorVulnerabilitySave(APIView):
+    """API endpoint to save vulnerabilities from Secator results."""
+
+    def post(self, request):
+        try:
+            data = request.data
+            item = data.get("item", {})
+            scan_history_id = safe_int_cast(data.get("scan_history_id"))
+            domain_id = safe_int_cast(data.get("domain_id"))
+            rengine_context = data.get("rengine_context", {})
+
+            if not scan_history_id or not domain_id:
+                return Response({"status": False, "error": "scan_history_id and domain_id are required"}, status=400)
+
+            from reNgine.services.repositories.vulnerability_repository import VulnerabilityRepository
+
+            vulnerability_repo = VulnerabilityRepository()
+            result = vulnerability_repo.save_from_secator(item, scan_history_id, domain_id)
+
+            if result:
+                return Response({"status": True, "id": result.id})
+            else:
+                return Response({"status": False, "error": "Failed to save vulnerability"}, status=500)
+
+        except Exception as e:
+            logger.error(f"Error saving vulnerability: {str(e)}")
+            return Response({"status": False, "error": str(e)}, status=500)
+
+
+class SecatorDNSRecordSave(APIView):
+    """API endpoint to save DNS records from Secator results."""
+
+    def post(self, request):
+        try:
+            data = request.data
+            item = data.get("item", {})
+            scan_history_id = safe_int_cast(data.get("scan_history_id"))
+            domain_id = safe_int_cast(data.get("domain_id"))
+            rengine_context = data.get("rengine_context", {})
+
+            if not scan_history_id or not domain_id:
+                return Response({"status": False, "error": "scan_history_id and domain_id are required"}, status=400)
+
+            from reNgine.services.repositories.dns_repository import DnsRepository
+
+            dns_repo = DnsRepository()
+            result = dns_repo.save_from_secator(item, scan_history_id, domain_id)
+
+            if result:
+                return Response({"status": True, "id": result.id})
+            else:
+                return Response({"status": False, "error": "Failed to save DNS record"}, status=500)
+
+        except Exception as e:
+            logger.error(f"Error saving DNS record: {str(e)}")
+            return Response({"status": False, "error": str(e)}, status=500)
+
+
+class SecatorExploitSave(APIView):
+    """API endpoint to save exploits from Secator results."""
+
+    def post(self, request):
+        try:
+            data = request.data
+            item = data.get("item", {})
+            scan_history_id = safe_int_cast(data.get("scan_history_id"))
+            domain_id = safe_int_cast(data.get("domain_id"))
+            rengine_context = data.get("rengine_context", {})
+
+            if not scan_history_id or not domain_id:
+                return Response({"status": False, "error": "scan_history_id and domain_id are required"}, status=400)
+
+            from reNgine.services.repositories.exploit_repository import ExploitRepository
+
+            exploit_repo = ExploitRepository()
+            result = exploit_repo.save_from_secator(item, scan_history_id, domain_id)
+
+            if result:
+                return Response({"status": True, "id": result.id})
+            else:
+                return Response({"status": False, "error": "Failed to save exploit"}, status=500)
+
+        except Exception as e:
+            logger.error(f"Error saving exploit: {str(e)}")
+            return Response({"status": False, "error": str(e)}, status=500)
+
+
+class SecatorEmployeeSave(APIView):
+    """API endpoint to save employee/user accounts from Secator results."""
+
+    def post(self, request):
+        try:
+            data = request.data
+            item = data.get("item", {})
+            scan_history_id = safe_int_cast(data.get("scan_history_id"))
+            domain_id = safe_int_cast(data.get("domain_id"))
+            rengine_context = data.get("rengine_context", {})
+
+            if not scan_history_id or not domain_id:
+                return Response({"status": False, "error": "scan_history_id and domain_id are required"}, status=400)
+
+            from reNgine.services.repositories.employee_repository import EmployeeRepository
+
+            employee_repo = EmployeeRepository()
+            result = employee_repo.save_from_secator(item, scan_history_id, domain_id)
+
+            if result:
+                return Response({"status": True, "id": result.id})
+            else:
+                return Response({"status": False, "error": "Failed to save employee"}, status=500)
+
+        except Exception as e:
+            logger.error(f"Error saving employee: {str(e)}")
+            return Response({"status": False, "error": str(e)}, status=500)
+
+
+class SecatorScanStatusUpdate(APIView):
+    """API endpoint to update scan status from Secator progress hooks."""
+
+    def put(self, request, scan_id):
+        try:
+            scan_id = safe_int_cast(scan_id)
+            if not scan_id:
+                return Response({"status": False, "error": "Invalid scan_id"}, status=400)
+
+            data = request.data
+            status = safe_int_cast(data.get("status"))
+            stop_scan_date = data.get("stop_scan_date")
+
+            if status is None:
+                return Response({"status": False, "error": "status is required"}, status=400)
+
+            from reNgine.services.repositories.scan_repository import ScanRepository
+
+            scan_repo = ScanRepository()
+
+            # Update scan status
+            scan_repo.update_status(scan_id, status=status)
+
+            # Update stop_scan_date if provided
+            if stop_scan_date:
+                from django.utils.dateparse import parse_datetime
+
+                from startScan.models import ScanHistory
+
+                try:
+                    scan = ScanHistory.objects.get(id=scan_id)
+                    parsed_date = parse_datetime(stop_scan_date)
+                    if parsed_date:
+                        scan.stop_scan_date = parsed_date
+                        scan.save(update_fields=["stop_scan_date"])
+                except Exception as e:
+                    logger.warning(f"Failed to update stop_scan_date: {e}")
+
+            return Response({"status": True, "message": "Scan status updated successfully"})
+
+        except Exception as e:
+            logger.error(f"Error updating scan status: {str(e)}")
+            return Response({"status": False, "error": str(e)}, status=500)
+
+
+class SecatorScanActivityCreate(APIView):
+    """API endpoint to create scan activity from Secator progress hooks."""
+
+    def post(self, request, scan_id):
+        try:
+            scan_id = safe_int_cast(scan_id)
+            if not scan_id:
+                return Response({"status": False, "error": "Invalid scan_id"}, status=400)
+
+            data = request.data
+            message = data.get("message")
+            status = safe_int_cast(data.get("status"))
+
+            if not message or status is None:
+                return Response({"status": False, "error": "message and status are required"}, status=400)
+
+            from reNgine.services.repositories.scan_repository import ScanRepository
+
+            scan_repo = ScanRepository()
+
+            # Create scan activity
+            scan_repo.create_scan_activity(scan_id, message, status)
+
+            return Response({"status": True, "message": "Scan activity created successfully"})
+
+        except Exception as e:
+            logger.error(f"Error creating scan activity: {str(e)}")
+            return Response({"status": False, "error": str(e)}, status=500)

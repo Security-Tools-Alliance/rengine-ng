@@ -1589,32 +1589,63 @@ function download_endpoints(scan_id=null, domain_id=null, domain_name='', patter
 }
 
 function initiate_subscan(subdomain_ids){
-	var engine_id = $('#subtaskScanEngine').val();
-	var tasks = []
-	var $engine_tasks = $('#engineTasks').find('input')
-	$engine_tasks.each(function(i){
-		if ($(this).is(':checked')){
-			tasks.push(this.id)
-		}
-	})
-	if (tasks.length === 0) {
-		Swal.fire({
-			title: 'Oops!',
-			text: 'No subtasks selected. Please choose at least one subtask !',
-			icon: 'error'
-		});
-		return;
-	}
+	// Check if using Secator mode or legacy mode
+	var secatorMode = $('#secatorMode').is(':checked');
 	var data = {
 		'subdomain_ids': subdomain_ids,
-		'tasks': tasks,
-		'engine_id': engine_id,
 	};
+	
+	if (secatorMode) {
+		// Secator mode - use workflows or tasks
+		var workflowId = $('#secatorWorkflow').val();
+		var taskNames = [];
+		
+		// Get selected Secator tasks
+		$('#secatorTasks input:checked').each(function(){
+			taskNames.push($(this).val());
+		});
+		
+		if (workflowId && workflowId !== '') {
+			data['workflow_id'] = parseInt(workflowId);
+		} else if (taskNames.length > 0) {
+			data['task_names'] = taskNames;
+		} else {
+			Swal.fire({
+				title: 'Oops!',
+				text: 'Please select either a Secator workflow or at least one Secator task!',
+				icon: 'error'
+			});
+			return;
+		}
+	} else {
+		// Legacy mode - for backward compatibility
+		var engine_id = $('#subtaskScanEngine').val();
+		var tasks = []
+		var $engine_tasks = $('#engineTasks').find('input')
+		$engine_tasks.each(function(i){
+			if ($(this).is(':checked')){
+				tasks.push(this.id)
+			}
+		})
+		if (tasks.length === 0) {
+			Swal.fire({
+				title: 'Oops!',
+				text: 'No subtasks selected. Please choose at least one subtask !',
+				icon: 'error'
+			});
+			return;
+		}
+		data['tasks'] = tasks;
+		data['engine_id'] = engine_id;
+	}
+	
 	Swal.fire({
-		title: 'Initiating subtask...',
+		title: 'Initiating subscan...',
+		text: secatorMode ? 'Using Secator workflows/tasks' : 'Using legacy scan engine',
 		allowOutsideClick: false
 	});
 	swal.showLoading();
+	
 	fetch('/api/action/initiate/subtask/', {
 		method: 'POST',
 		credentials: "same-origin",
@@ -1627,20 +1658,43 @@ function initiate_subscan(subdomain_ids){
 	.then(function (response) {
 		swal.close();
 		if (response['status']) {
+			var message = response['message'] || 'Subscan initiated successfully!';
 			Snackbar.show({
-				text: 'Subtask initiated successfully!',
+				text: message,
 				pos: 'top-right',
-				duration: 2500
+				duration: 3000
 			});
+			
+			// Show detailed results if available
+			if (response['results'] && response['results'].length > 0) {
+				var successCount = response['results'].filter(r => r.status === 'success').length;
+				var errorCount = response['results'].filter(r => r.status === 'error').length;
+				
+				if (errorCount > 0) {
+					Swal.fire({
+						title: 'Subscan Results',
+						html: `Successfully initiated: ${successCount}<br/>Errors: ${errorCount}`,
+						icon: 'warning'
+					});
+				}
+			}
 		}
 		else{
 			Swal.fire({
-				title:  'Could not initiate subtask!',
-				icon: 'fail',
+				title: 'Could not initiate subscan!',
+				text: response['error'] || 'Unknown error occurred',
+				icon: 'error',
 			});
 		}
+	})
+	.catch(function(error) {
+		swal.close();
+		Swal.fire({
+			title: 'Network Error',
+			text: 'Failed to communicate with server',
+			icon: 'error'
+		});
 	});
-
 }
 
 

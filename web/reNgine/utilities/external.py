@@ -133,7 +133,7 @@ def get_and_save_dork_results(
         scan_history (startScan.ScanHistory): Scan History Object
     """
     from reNgine.definitions import GOFUZZ_EXEC_PATH
-    from reNgine.tasks.command import run_command
+    from reNgine.utilities.command import run_command
     from startScan.models import Dork
 
     results = []

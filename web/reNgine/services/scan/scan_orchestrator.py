@@ -107,8 +107,10 @@ class ScanOrchestrator:
         if not tasks:
             raise ValueError("tasks list is required in config")
 
+        logger.info(f"Executing {len(tasks)} Secator tasks")
+
         return self.secator_runner.run_tasks(
-            tasks=tasks,
+            task_names=tasks,
             targets=targets,
             scan_history_id=scan_history_id,
             domain_id=domain_id,
@@ -130,8 +132,11 @@ class ScanOrchestrator:
             raise ValueError("scan_type is required in config")
 
         logger.info(f"Executing Secator scan type: {scan_type}")
-        return {
-            "status": "success",
-            "message": f"Scan type {scan_type} executed (not yet fully implemented)",
-            "scan_history_id": scan_history_id,
-        }
+        return self.secator_runner.run_scan(
+            scan_type=scan_type,
+            targets=targets,
+            scan_history_id=scan_history_id,
+            domain_id=domain_id,
+            config=config,
+            profiles=profiles,
+        )

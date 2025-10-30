@@ -5,13 +5,14 @@ Django management command to load Secator workflows (built-in and custom).
 import os
 
 from django.conf import settings
-from django.core.management.base import BaseCommand
 import yaml
 
-from scanEngine.models import SecatorScan, SecatorWorkflow
+from scanEngine.models import SecatorWorkflow
+
+from .secator_loader_base import SecatorLoaderBase
 
 
-class Command(BaseCommand):
+class Command(SecatorLoaderBase):
     help = "Load Secator workflows (built-in and custom) into the database"
 
     def add_arguments(self, parser):
@@ -44,206 +45,87 @@ class Command(BaseCommand):
         if not builtin_only:
             self.load_custom_workflows(force)
 
-        self.create_default_scan_configs(force)
-
         self.stdout.write(self.style.SUCCESS("Workflow loading completed successfully!"))
+
+    def get_secator_workflow_yaml(self, workflow_alias: str) -> str:
+        """Get YAML configuration for a Secator workflow"""
+        return self._get_secator_yaml_config(["w", workflow_alias, "--yaml"], workflow_alias)
 
     def load_builtin_workflows(self, force):
         """Load built-in Secator workflows"""
         self.stdout.write("Loading built-in Secator workflows...")
 
-        builtin_workflows = [
-            {
-                "name": "CIDR Recon",
-                "alias": "cidr_recon",
-                "description": "Local network reconnaissance",
-                "scan_type": "internal",
-                "yaml_config": """
-name: cidr_recon
-description: Local network reconnaissance
-tasks:
-  - naabu
-  - nmap
-  - nuclei
-""",
-            },
-            {
-                "name": "Code Scan",
-                "alias": "code_scan",
-                "description": "Code vulnerability scanning",
-                "scan_type": "internet",
-                "yaml_config": """
-name: code_scan
-description: Code vulnerability scanning
-tasks:
-  - gitleaks
-  - nuclei
-""",
-            },
-            {
-                "name": "Host Recon",
-                "alias": "host_recon",
-                "description": "Host reconnaissance",
-                "scan_type": "internal",
-                "yaml_config": """
-name: host_recon
-description: Host reconnaissance
-tasks:
-  - naabu
-  - nmap
-  - nuclei
-""",
-            },
-            {
-                "name": "Subdomain Recon",
-                "alias": "subdomain_recon",
-                "description": "Subdomain discovery",
-                "scan_type": "internet",
-                "yaml_config": """
-name: subdomain_recon
-description: Subdomain discovery
-tasks:
-  - subfinder
-  - dnsx
-""",
-            },
-            {
-                "name": "URL Bypass",
-                "alias": "url_bypass",
-                "description": "Try bypass techniques for 4xx URLs",
-                "scan_type": "internet",
-                "yaml_config": """
-name: url_bypass
-description: Try bypass techniques for 4xx URLs
-tasks:
-  - bup
-""",
-            },
-            {
-                "name": "URL Crawl",
-                "alias": "url_crawl",
-                "description": "URL crawl (fast)",
-                "scan_type": "internet",
-                "yaml_config": """
-name: url_crawl
-description: URL crawl (fast)
-tasks:
-  - katana
-  - gospider
-  - httpx
-""",
-            },
-            {
-                "name": "URL Directory Search",
-                "alias": "url_dirsearch",
-                "description": "URL directory search",
-                "scan_type": "internet",
-                "yaml_config": """
-name: url_dirsearch
-description: URL directory search
-tasks:
-  - dirsearch
-  - ffuf
-""",
-            },
-            {
-                "name": "URL Fuzz",
-                "alias": "url_fuzz",
-                "description": "URL fuzz (slow)",
-                "scan_type": "internet",
-                "yaml_config": """
-name: url_fuzz
-description: URL fuzz (slow)
-tasks:
-  - ffuf
-  - arjun
-""",
-            },
-            {
-                "name": "URL Parameters Fuzz",
-                "alias": "url_params_fuzz",
-                "description": "Extract parameters from an URL and fuzz them",
-                "scan_type": "internet",
-                "yaml_config": """
-name: url_params_fuzz
-description: Extract parameters from an URL and fuzz them
-tasks:
-  - arjun
-  - ffuf
-""",
-            },
-            {
-                "name": "URL Vulnerability",
-                "alias": "url_vuln",
-                "description": "URL vulnerability scan (gf, dalfox)",
-                "scan_type": "internet",
-                "yaml_config": """
-name: url_vuln
-description: URL vulnerability scan
-tasks:
-  - nuclei
-  - dalfox
-  - bbot
-""",
-            },
-            {
-                "name": "User Hunt",
-                "alias": "user_hunt",
-                "description": "User account search",
-                "scan_type": "internet",
-                "yaml_config": """
-name: user_hunt
-description: User account search
-tasks:
-  - h8mail
-  - maigret
-""",
-            },
-            {
-                "name": "WordPress",
-                "alias": "wordpress",
-                "description": "WordPress vulnerability scan",
-                "scan_type": "internet",
-                "yaml_config": """
-name: wordpress
-description: WordPress vulnerability scan
-tasks:
-  - wpscan
-  - wpprobe
-""",
-            },
-        ]
-
         created_count = 0
-        for workflow_data in builtin_workflows:
-            workflow, created = SecatorWorkflow.objects.get_or_create(
-                name=workflow_data["name"],
-                defaults={
-                    "description": workflow_data["description"],
-                    "workflow_type": "builtin",
-                    "yaml_configuration": workflow_data["yaml_config"],
-                    "scan_type": workflow_data["scan_type"],
-                    "alias": workflow_data.get("alias"),
-                    "is_active": True,
-                },
-            )
+        failed_count = 0
 
-            if created:
-                created_count += 1
-                self.stdout.write(f"Created built-in workflow: {workflow_data['name']}")
-            elif force:
-                # Only update if the workflow is not builtin to avoid permission errors
-                if workflow.workflow_type != "builtin":
-                    workflow.description = workflow_data["description"]
-                    workflow.yaml_configuration = workflow_data["yaml_config"]
-                    workflow.scan_type = workflow_data["scan_type"]
-                    workflow.alias = workflow_data.get("alias")
-                    workflow.save()
-                    self.stdout.write(f"Updated workflow: {workflow_data['name']}")
+        # Get workflow aliases from the model choices
+        workflow_aliases = [choice[0] for choice in SecatorWorkflow.WORKFLOW_ALIAS_CHOICES]
+
+        for alias in workflow_aliases:
+            self.stdout.write(f"Loading workflow: {alias}")
+
+            # Get YAML configuration from Secator
+            yaml_config = self.get_secator_workflow_yaml(alias)
+
+            if not yaml_config:
+                self.stdout.write(self.style.WARNING(f"Failed to get YAML for workflow: {alias}"))
+                failed_count += 1
+                continue
+
+            try:
+                # Parse YAML to extract metadata
+                workflow_data = yaml.safe_load(yaml_config)
+
+                if not workflow_data:
+                    self.stdout.write(self.style.WARNING(f"Empty YAML for workflow: {alias}"))
+                    failed_count += 1
+                    continue
+
+                # Extract workflow information
+                # Use the display name from WORKFLOW_ALIAS_CHOICES instead of the technical name
+                display_name = dict(SecatorWorkflow.WORKFLOW_ALIAS_CHOICES).get(alias, alias.replace("_", " ").title())
+                description = workflow_data.get("description", f"Built-in {display_name} workflow")
+
+                # Determine scan type based on workflow content
+                scan_type = self._determine_scan_type_from_yaml(workflow_data)
+
+                # Create or update workflow
+                workflow, created = SecatorWorkflow.objects.get_or_create(
+                    alias=alias,
+                    workflow_type="builtin",
+                    defaults={
+                        "name": display_name,
+                        "description": description,
+                        "yaml_configuration": yaml_config,
+                        "scan_type": scan_type,
+                        "is_active": True,
+                    },
+                )
+
+                if created:
+                    created_count += 1
+                    self.stdout.write(f"Created built-in workflow: {display_name}")
+                elif force:
+                    # Update existing workflow
+                    workflow.name = display_name
+                    workflow.description = description
+                    workflow.yaml_configuration = yaml_config
+                    workflow.scan_type = scan_type
+                    workflow.save(bypass_builtin_constraints=True)
+                    self.stdout.write(f"Updated built-in workflow: {display_name}")
                 else:
-                    self.stdout.write(f"Built-in workflow already exists: {workflow_data['name']} (skipped update)")
+                    self.stdout.write(f"Built-in workflow already exists: {display_name} (skipped)")
+
+            except yaml.YAMLError as e:
+                self.stdout.write(self.style.ERROR(f"Invalid YAML for workflow {alias}: {e}"))
+                failed_count += 1
+            except Exception as e:
+                self.stdout.write(self.style.ERROR(f"Error processing workflow {alias}: {e}"))
+                failed_count += 1
 
         self.stdout.write(f"Loaded {created_count} built-in workflows")
+        if failed_count > 0:
+            self.stdout.write(self.style.WARNING(f"Failed to load {failed_count} workflows"))
 
     def load_custom_workflows(self, force):
         """Load custom workflows from config/workflows/ directory"""
@@ -306,124 +188,3 @@ tasks:
                 self.stdout.write(self.style.ERROR(f"Unexpected error loading workflow {filename}: {e}"))
 
         self.stdout.write(f"Loaded {created_count} custom workflows")
-
-    def create_default_scan_configs(self, force):
-        """Create default SecatorScan configurations"""
-        self.stdout.write("Creating default SecatorScan configurations...")
-
-        default_configs = [
-            {
-                "name": "Internet Passive",
-                "description": "Passive reconnaissance for Internet targets",
-                "scan_type": "internet",
-                "workflow_name": "Subdomain Recon",
-                "execution_mode": "workflow",
-                "scan_config_type": "builtin",
-            },
-            {
-                "name": "Internet Active",
-                "description": "Active reconnaissance with vulnerability scanning",
-                "scan_type": "internet",
-                "workflow_name": "URL Vulnerability",
-                "execution_mode": "workflow",
-                "scan_config_type": "builtin",
-            },
-            {
-                "name": "Internal Network",
-                "description": "Internal network reconnaissance",
-                "scan_type": "internal",
-                "workflow_name": "Host Recon",
-                "execution_mode": "workflow",
-                "scan_config_type": "builtin",
-            },
-            {
-                "name": "WordPress Security",
-                "description": "WordPress-specific vulnerability scanning",
-                "scan_type": "internet",
-                "workflow_name": "WordPress",
-                "execution_mode": "workflow",
-                "scan_config_type": "builtin",
-            },
-            {
-                "name": "Full Reconnaissance",
-                "description": "Complete reconnaissance workflow",
-                "scan_type": "internet",
-                "workflow_name": "full_recon",
-                "execution_mode": "workflow",
-                "scan_config_type": "custom",
-            },
-        ]
-
-        created_count = 0
-        missing_workflows = []
-
-        for config_data in default_configs:
-            try:
-                workflow = SecatorWorkflow.objects.get(name=config_data["workflow_name"])
-
-                scan_config, created = SecatorScan.objects.get_or_create(
-                    name=config_data["name"],
-                    defaults={
-                        "description": config_data["description"],
-                        "scan_type": config_data["scan_type"],
-                        "workflow": workflow,
-                        "execution_mode": config_data["execution_mode"],
-                        "scan_config_type": config_data["scan_config_type"],
-                        "is_default": True,
-                    },
-                )
-
-                if created:
-                    created_count += 1
-                    self.stdout.write(f"Created scan config: {config_data['name']}")
-                elif force:
-                    # Only update if the scan config is not builtin to avoid permission errors
-                    if scan_config.scan_config_type != "builtin":
-                        scan_config.description = config_data["description"]
-                        scan_config.scan_type = config_data["scan_type"]
-                        scan_config.workflow = workflow
-                        scan_config.execution_mode = config_data["execution_mode"]
-                        scan_config.scan_config_type = config_data["scan_config_type"]
-                        scan_config.save()
-                        self.stdout.write(f"Updated scan config: {config_data['name']}")
-                    else:
-                        self.stdout.write(
-                            f"Built-in scan config already exists: {config_data['name']} (skipped update)"
-                        )
-
-            except SecatorWorkflow.DoesNotExist:
-                missing_workflows.append(
-                    {"workflow_name": config_data["workflow_name"], "scan_config_name": config_data["name"]}
-                )
-                self.stdout.write(
-                    self.style.ERROR(
-                        f"ERROR: Workflow '{config_data['workflow_name']}' not found for scan config '{config_data['name']}'"
-                    )
-                )
-
-        # Summary of missing workflows
-        if missing_workflows:
-            self.stdout.write(
-                self.style.WARNING(
-                    f"\nSummary: {len(missing_workflows)} scan configuration(s) could not be created due to missing workflows:"
-                )
-            )
-            unique_missing_workflows = set(item["workflow_name"] for item in missing_workflows)
-            for workflow_name in sorted(unique_missing_workflows):
-                affected_configs = [
-                    item["scan_config_name"] for item in missing_workflows if item["workflow_name"] == workflow_name
-                ]
-                self.stdout.write(
-                    self.style.WARNING(f"  - Missing workflow '{workflow_name}' affects: {', '.join(affected_configs)}")
-                )
-            self.stdout.write(
-                self.style.WARNING(
-                    "\nThese missing workflows may indicate:\n"
-                    "  - Failed workflow loading (check workflow files)\n"
-                    "  - Misconfiguration in scan config definitions\n"
-                    "  - Workflow dependencies not properly loaded\n"
-                    "  - Database synchronization issues"
-                )
-            )
-
-        self.stdout.write(f"Created {created_count} default scan configurations")

@@ -50,7 +50,7 @@ class TestSecatorIntegration(BaseTestCase):
             # Verify the item is returned unchanged
             self.assertEqual(result, item)
             # Verify the repository method was called with correct parameters
-            mock_save.assert_called_once_with(item, self.scan_history.id, self.domain.id)
+            mock_save.assert_called_once_with(item, self.scan_history.id, self.domain.id, rengine_context={})
 
     def test_database_hooks_on_item_url(self):
         """Test DatabaseHooks on_item with URL item."""
@@ -243,7 +243,6 @@ class TestSecatorIntegration(BaseTestCase):
 
         # Mock the repository methods
         with (
-            patch.object(hooks.scan_repo, "mark_scan_complete") as mock_mark_complete,
             patch.object(hooks.scan_repo, "create_scan_activity") as mock_create_activity,
             patch("reNgine.secator.hooks.progress_hooks.logger") as mock_logger,
         ):
@@ -252,12 +251,13 @@ class TestSecatorIntegration(BaseTestCase):
             hooks.on_end()
 
             # Verify repository methods were called with correct parameters
-            mock_mark_complete.assert_called_once_with(self.scan_history.id)
+            # Note: mark_scan_complete is no longer called, direct save is used
             mock_create_activity.assert_called_once_with(
-                self.scan_history.id, "Secator scan completed - 42 items processed", SUCCESS_TASK
+                self.scan_history.id, "Secator scan completed - 42 items processed, 0 failed tasks", SUCCESS_TASK
             )
-            # Verify info message was logged
-            mock_logger.info.assert_called_once_with(f"Scan {self.scan_history.id} completed with 42 items")
+            # Verify info message was logged (there are 2 info calls)
+            calls = [str(call) for call in mock_logger.info.call_args_list]
+            self.assertTrue(any("completed with status SUCCESS" in call for call in calls))
 
     def test_progress_hooks_on_end_zero_items(self):
         """Test ProgressHooks on_end with zero items processed."""
@@ -267,7 +267,6 @@ class TestSecatorIntegration(BaseTestCase):
 
         # Mock the repository methods
         with (
-            patch.object(hooks.scan_repo, "mark_scan_complete") as mock_mark_complete,
             patch.object(hooks.scan_repo, "create_scan_activity") as mock_create_activity,
             patch("reNgine.secator.hooks.progress_hooks.logger") as mock_logger,
         ):
@@ -275,11 +274,13 @@ class TestSecatorIntegration(BaseTestCase):
 
             hooks.on_end()
 
-            # Verify completion message includes zero items
+            # Verify completion message includes zero items and failed tasks
             mock_create_activity.assert_called_once_with(
-                self.scan_history.id, "Secator scan completed - 0 items processed", SUCCESS_TASK
+                self.scan_history.id, "Secator scan completed - 0 items processed, 0 failed tasks", SUCCESS_TASK
             )
-            mock_logger.info.assert_called_once_with(f"Scan {self.scan_history.id} completed with 0 items")
+            # Verify info message was logged (there are 2 info calls)
+            calls = [str(call) for call in mock_logger.info.call_args_list]
+            self.assertTrue(any("completed with status SUCCESS" in call for call in calls))
 
     def test_rengine_driver_initialization(self):
         """Test ReNgineDriver initialization."""

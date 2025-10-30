@@ -27,6 +27,35 @@ Initiating Scan for Organization
   overflow: hidden;
 }
 
+/* Styles for execution mode selection cards */
+.execution-mode-card {
+  border: 3px solid #e9ecef;
+  border-radius: 12px;
+  padding: 25px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  background: #fff;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.execution-mode-card:hover {
+  border-color: #007bff;
+  box-shadow: 0 8px 25px rgba(0, 123, 255, 0.15);
+  transform: translateY(-2px);
+}
+
+.execution-mode-card.selected {
+  border-color: #007bff;
+  background: linear-gradient(135deg, rgba(0, 123, 255, 0.05) 0%, rgba(0, 123, 255, 0.1) 100%);
+  box-shadow: 0 8px 25px rgba(0, 123, 255, 0.2);
+}
+
 .scan-type-card:hover {
   border-color: #007bff;
   box-shadow: 0 8px 25px rgba(0, 123, 255, 0.15);
@@ -164,6 +193,9 @@ Initiating scan for {{organization.name}}
         {% endfor %}
         <form method="POST">
           {% csrf_token %}
+          <input type="hidden" name="execution_mode" id="execution_mode" value="">
+          <input type="hidden" name="speed_profile" id="speed_profile" value="">
+          <input type="hidden" name="stealth_profile" id="stealth_profile" value="">
           <div class="form-row">
             <div class="col-md-12 mb-4">
               <h4>Choose Execution Mode</h4>
@@ -265,7 +297,7 @@ Initiating scan for {{organization.name}}
                         
                         <!-- Simplified/Expert Mode -->
                         <div class="form-check form-switch mt-3">
-                          <input class="form-check-input" type="checkbox" id="expertMode">
+                          <input class="form-check-input" type="checkbox" id="expertMode" name="expert_mode">
                           <label class="form-check-label" for="expertMode">Expert Mode</label>
                         </div>
                         

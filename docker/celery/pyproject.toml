@@ -6,7 +6,7 @@ authors = ["Talanor <q.poirier@astar.services>"]
 package-mode = false
 
 [tool.poetry.dependencies]
-python = "^3.13"
+python = "^3.12"
 aiodns = "3.0.0"
 argh = "0.26.2"
 beautifulsoup4 = "4.9.3"
@@ -49,6 +49,7 @@ redis = "5.0.3"
 requests = "2.32.5"
 scapy = "2.5.0"
 tldextract = "3.5.0"
+twisted = "^24.1.0"
 validators = "0.18.2"
 watchdog = "4.0.0"
 weasyprint = "62.3"

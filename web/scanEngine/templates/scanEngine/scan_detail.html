@@ -5,6 +5,19 @@
 
 {% block custom_js_css_link %}
 <link rel="stylesheet" href="{% static 'scanEngine/css/secator.css' %}">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/ace.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/mode-yaml.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/theme-tomorrow_night_eighties.min.js"></script>
+<style media="screen">
+.ace_editor {
+  width:100%;
+  height:450px;
+  border:1px solid #CCC;
+}
+.django-ace-toolbar{
+  display: none;
+}
+</style>
 {% endblock %}
 
 {% block main_content %}
@@ -29,24 +42,9 @@
                             <h5>Description</h5>
                             <p>{{ scan.description|default:"No description available." }}</p>
                             
-                            <h5>Configuration Details</h5>
+                            <h5>YAML Configuration</h5>
                             <div class="bg-light p-3 rounded">
-                                <p><strong>Execution Mode:</strong> {{ scan.execution_mode|title }}</p>
-                                {% if scan.execution_mode == 'workflow' and scan.workflow %}
-                                    <p><strong>Workflow:</strong> 
-                                        <a href="{% url 'workflow_detail' scan.workflow.id %}">{{ scan.workflow.name }}</a>
-                                    </p>
-                                {% elif scan.execution_mode == 'tasks' %}
-                                    <p><strong>Tasks:</strong></p>
-                                    <ul>
-                                        {% for task in scan.tasks.all %}
-                                        <li>
-                                            <a href="{% url 'task_detail' task.id %}">{{ task.name }}</a> 
-                                            <span class="badge badge-soft-info">{{ task.task_type }}</span>
-                                        </li>
-                                        {% endfor %}
-                                    </ul>
-                                {% endif %}
+                                <div id="yaml-editor-readonly">{{ scan.yaml_configuration }}</div>
                             </div>
                         </div>
                         
@@ -56,17 +54,29 @@
                                     <h6>Configuration Information</h6>
                                 </div>
                                 <div class="card-body">
+                                    <p><strong>Alias:</strong> 
+                                        {% if scan.alias %}
+                                            <span class="badge badge-soft-info">{{ scan.alias }}</span>
+                                        {% else %}
+                                            <span class="text-muted">None</span>
+                                        {% endif %}
+                                    </p>
                                     <p><strong>Type:</strong> 
-                                        <span class="badge badge-soft-info">{{ scan.scan_type|title }}</span>
+                                        <span class="badge badge-soft-info">{{ scan.get_scan_type_display }}</span>
                                     </p>
                                     <p><strong>Config Type:</strong> 
                                         <span class="badge badge-soft-{% if scan.scan_config_type == 'builtin' %}success{% else %}secondary{% endif %}">
-                                            {{ scan.scan_config_type|title }}
+                                            {{ scan.get_scan_config_type_display }}
                                         </span>
                                     </p>
                                     <p><strong>Default:</strong> 
                                         <span class="badge badge-soft-{% if scan.is_default %}success{% else %}light{% endif %}">
                                             {{ scan.is_default|yesno:"Yes,No" }}
+                                        </span>
+                                    </p>
+                                    <p><strong>Status:</strong> 
+                                        <span class="badge badge-soft-{% if scan.is_active %}success{% else %}danger{% endif %}">
+                                            {{ scan.is_active|yesno:"Active,Inactive" }}
                                         </span>
                                     </p>
                                     <p><strong>Created:</strong> {{ scan.created_at|date:"M d, Y H:i" }}</p>
@@ -80,4 +90,22 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block page_level_script %}
+<script type="text/javascript">
+$(document).ready(function() {
+    // Initialize ACE editor for YAML display (read-only)
+    const editor = ace.edit("yaml-editor-readonly");
+    editor.setTheme("ace/theme/tomorrow_night_eighties");
+    editor.session.setMode("ace/mode/yaml");
+    editor.setReadOnly(true);
+    editor.setOptions({
+        fontSize: "14px",
+        showInvisibles: true,
+        highlightActiveLine: false,
+        highlightGutterLine: false
+    });
+});
+</script>
 {% endblock %}

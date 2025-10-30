@@ -19,8 +19,6 @@ poetry run -C $RENGINE_FOLDER python3 manage.py collectstatic --no-input --clear
 # Load default engines, keywords, and external tools
 print_msg "Load default keywords"
 poetry run -C $RENGINE_FOLDER python3 manage.py loaddata fixtures/default_keywords.yaml --app scanEngine.InterestingLookupModel
-print_msg "Load default external tools"
-poetry run -C $RENGINE_FOLDER python3 manage.py loaddata fixtures/external_tools.yaml --app scanEngine.InstalledExternalTool
 
 # Load Secator workflows and tasks
 print_msg "Load Secator workflows"
@@ -28,16 +26,11 @@ poetry run -C $RENGINE_FOLDER python3 manage.py load_workflows --force
 print_msg "Migrate engines to Secator"
 poetry run -C $RENGINE_FOLDER python3 manage.py migrate_engines_to_secator
 
-# Configure Secator to use Redis
-print_msg "Configure Secator with Redis"
-secator config set celery.broker_url redis://redis:6379/0
-secator config set celery.result_backend redis://redis:6379/0
-
 # Start Secator worker
 print_msg "Starting Secator worker"
 
 # Validate required environment variables for Secator worker
-REQUIRED_ENV_VARS=("SECATOR_LOG_LEVEL" "SECATOR_BROKER_URL" "SECATOR_CONCURRENCY")
+REQUIRED_ENV_VARS=("SECATOR_LOG_LEVEL" "SECATOR_CELERY_BROKER_URL" "SECATOR_CONCURRENCY")
 for VAR in "${REQUIRED_ENV_VARS[@]}"; do
     if [ -z "${!VAR}" ]; then
         echo "Error: Required environment variable $VAR is not set."

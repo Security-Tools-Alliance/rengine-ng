@@ -79,12 +79,6 @@ Scheduling scan for {{organization.name}}
             <h4>Choose Scan Engine</h4>
             <div class="">
               <h4>Select Scan Engine</h4>
-              {% if custom_engine_count == 0 %}
-              <div class="alert bg-soft-primary border-0 mb-4" role="alert">
-                <span><b>Tips! </b> You do not have any custom scan engines. Would you like to create your own scan engine?</span>
-                <a href="{% url 'add_engine' %}" class="text-primary">Create Custom Scan Engine</a>
-              </div>
-              {% endif %}
               {% include "startScan/_items/scanEngine_select.html" %}
             </div>
           </div>

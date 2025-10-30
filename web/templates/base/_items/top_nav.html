@@ -89,7 +89,6 @@
               {% if user|can:'modify_system_configurations' %}
               <a href="{% url 'api_vault' %}" class="dropdown-item">API Vault</a>
               <a href="{% url 'llm_toolkit' %}" class="dropdown-item">LLM Toolkit</a>
-              <a href="{% url 'tool_arsenal' %}" class="dropdown-item">Tools Arsenal</a>
               {% endif %}
               {% if user|can:'modify_scan_report' %}
               <a href="{% url 'report_settings' %}" class="dropdown-item">Report Settings</a>

@@ -28,6 +28,8 @@ Initiating scan for {{domain.name}}
       <div class="card-body">
         <form method="POST" id="start-scan-form">
           {% csrf_token %}
+          <input type="hidden" id="domain_id" name="domain_id" value="{{ domain.id }}">
+          <input type="hidden" id="execution_mode" name="execution_mode" value="">
           <div id="select_engine">
             
             <h4>Choose Execution Mode</h4>
@@ -272,7 +274,7 @@ Initiating scan for {{domain.name}}
           <div class="row mt-4">
             <div class="col-12">
               <div class="d-flex justify-content-center">
-                <button type="submit" class="btn btn-primary btn-lg px-5" id="start-scan-btn">
+                <button type="submit" class="btn btn-secondary btn-lg px-5" id="start-scan-btn" disabled>
                   <i class="fas fa-play me-2"></i>Start Scan
                 </button>
               </div>
@@ -287,99 +289,25 @@ Initiating scan for {{domain.name}}
 
 
 {% block page_level_script %}
+<script>
+  // Provide Django-generated API route to JS (no hardcoded URLs)
+  window.SECATOR_START_SCAN_URL = "{% url 'api:start_scan' %}";
+  // Project slug is needed for redirect after starting scan
+  window.PROJECT_SLUG = "{{ current_project.slug|default:domain.project.slug }}";
+  // History URL for redirect can also be provided explicitly
+  window.SCAN_HISTORY_URL = "{% url 'scan_history' current_project.slug %}";
+</script>
 <script src="{% static 'custom/secator_scan.js' %}"></script>
 <script type="text/javascript">
-var buttonEnabled = true;
-var globalTimeout = 0;
-
-function initTimer() {
-  if (globalTimeout) clearTimeout(globalTimeout);
-  globalTimeout = setTimeout(updateButton, 400);
-}
-
-function disableNext(){
-  var nextButton = $(".actions ul li:nth-child(2) a");
-  nextButton.attr("href", "#");
-  buttonEnabled = $(".actions ul li:nth-child(2)").addClass("disabled").attr("aria-disabled", "true");
-}
-
-function enableNext(){
-  var nextButton = $(".actions ul li:nth-child(2) a");
-  nextButton.attr("href", "#next");
-  buttonEnabled = $(".actions ul li:nth-child(2)").removeClass("disabled").attr("aria-disabled", "false");
-}
-
-function updateButton(){
-  $('a[role="menuitem"]').addClass('btn btn-primary waves-effect waves-light');
-  var scanType = $("input[name='scan_type']:checked").val();
-  var scanEngine = $("input[type=radio][name=scan_mode]:checked").val();
-  
-  // Get current step index
-  var currentStep = $('.wizard .current').index();
-  
-  // For step 0 (Choose Scan Type), only check scan type
-  if (currentStep === 0) {
-    if(scanType){
-      enableNext();
-      return true;
-    }else{
-      disableNext();
-      return false;
-    }
-  }
-  // For step 1 (Choose Scan Engine), check both scan type and scan engine
-  else if (currentStep === 1) {
-    if(scanType && scanEngine){
-      enableNext();
-      return true;
-    }else{
-      disableNext();
-      return false;
-    }
-  }
-  // For other steps, allow progression
-  else {
-    enableNext();
-    return true;
-  }
-}
-
-function updateScanEngines() {
-  var scanType = $("input[name='scan_type']:checked").val();
-  
-  // Show loading state
-  $('.scan-engine-container').html('<div class="text-center"><i class="fas fa-spinner fa-spin"></i> Loading scan engines...</div>');
-  
-  // Fetch engines for selected scan type via AJAX
-  $.ajax({
-    url: '{% url "start_scan" current_project.slug domain.id %}',
-    type: 'GET',
-    data: {
-      'scan_type': scanType
-    },
-    headers: {
-      'X-Requested-With': 'XMLHttpRequest'
-    },
-    success: function(data) {
-      if (data.engine_html) {
-        $('.scan-engine-container').html(data.engine_html);
-      } else {
-        $('.scan-engine-container').html('<div class="alert alert-warning">No scan engines available for this scan type.</div>');
-      }
-      
-      // Re-bind events
-      $("input[type=radio][name=scan_mode]").change(function() {
-        initTimer();
-        updateButton();
-      }).keyup(initTimer);
-      // Update button state after loading engines
-      updateButton();
-    },
-    error: function() {
-      $('.scan-engine-container').html('<div class="alert alert-danger">Error loading scan engines.</div>');
-    }
+$(function(){
+  // Handle existing elements checkbox
+  $('#scan_existing_elements').change(function() {
+    updateExistingElementsInfo();
   });
-}
+  
+  // Load existing elements count on page load
+  loadExistingElementsCount();
+});
 
 function updateExistingElementsInfo() {
   // Show/hide the existing elements info based on checkbox state
@@ -415,41 +343,5 @@ function loadExistingElementsCount() {
     }
   });
 }
-
-$(function(){
-  // Handle scan type card clicks
-  $('.scan-type-card').click(function() {
-    // Remove selected state from all cards
-    $('.scan-type-card').removeAttr('data-selected');
-    $('.scan-type-card input[type="radio"]').prop('checked', false);
-    
-    // Add selected state to clicked card
-    $(this).attr('data-selected', 'true');
-    $(this).find('input[type="radio"]').prop('checked', true);
-  });
-  
-  // Handle scan type change (fallback for radio buttons)
-  $("input[name='scan_type']").change(function() {
-    var scanType = $(this).val();
-    
-    // Update card selection state
-    $('.scan-type-card').removeAttr('data-selected');
-    $('.scan-type-card[data-scan-type="' + scanType + '"]').attr('data-selected', 'true');
-  });
-  
-  // Handle existing elements checkbox
-  $('#scan_existing_elements').change(function() {
-    updateExistingElementsInfo();
-  });
-  
-  // Load existing elements count on page load
-  loadExistingElementsCount();
-  
-  // Initialize button state based on current selections
-  updateButton();
-  $('a[role="menuitem"]').addClass('text-white');
-});
-
-
 </script>
 {% endblock page_level_script %}

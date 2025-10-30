@@ -30,6 +30,7 @@ Initiate Scan for Multiple Targets
         {% endfor %}
         <form method="POST">
           {% csrf_token %}
+          <input type="hidden" id="execution_mode" name="execution_mode" value="">
           <h4 class="header-title mt-4">Choose Execution Mode</h4>
           <div class="execution-mode-selector mb-4">
             <div class="row">

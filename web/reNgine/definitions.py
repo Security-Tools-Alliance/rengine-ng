@@ -544,6 +544,8 @@ OLLAMA_INSTANCE = os.getenv("OLLAMA_INSTANCE", DEFAULT_OLLAMA_INSTANCE)
 # SCAN ENGINES DEFINITIONS
 ###############################################################################
 
+# ⚠️ LEGACY: These definitions are kept for backward compatibility with old scans
+# New scans use Secator workflows and tasks instead
 ENGINE_DISPLAY_NAMES = [
     ("subdomain_discovery", "Subdomain Discovery"),
     ("port_scan", "Port Scan"),
@@ -555,5 +557,5 @@ ENGINE_DISPLAY_NAMES = [
     ("waf_detection", "WAF Detection"),
 ]
 
-# Engine names for internal use
+# Engine names for internal use (LEGACY - kept for backward compatibility)
 ENGINE_NAMES = [engine[0] for engine in ENGINE_DISPLAY_NAMES]
