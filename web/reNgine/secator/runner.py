@@ -16,8 +16,7 @@ from typing import Any, Dict, List
 from secator.runners import Scan, Task, Workflow
 from secator.template import TemplateLoader
 
-from reNgine.secator.drivers.rengine_driver import ReNgineDriver
-from reNgine.settings import RENGINE_RESULTS
+from reNgine.settings import SECATOR_RESULTS
 from targetApp.models import Domain
 
 
@@ -39,11 +38,11 @@ class SecatorRunner:
 
     def _load_secator_config(self) -> Dict[str, Any]:
         """Load Secator configuration from settings."""
-        from reNgine.settings import RENGINE_RESULTS
+        from reNgine.settings import SECATOR_RESULTS
 
         return {
             "workflows_location": "/home/rengine/.secator/workflows",
-            "reports_folder": RENGINE_RESULTS,
+            "reports_folder": SECATOR_RESULTS,
             "sync": False,  # Force async mode for Celery workers
             "global": {
                 "timeout": 300,
@@ -78,7 +77,9 @@ class SecatorRunner:
             return template
         except Exception as e:
             logger.error(f"Failed to load workflow template '{workflow_name}': {e}")
-            raise Exception(f"Could not load workflow template '{workflow_name}': {e}")
+            raise Exception(
+                f"Could not load workflow template '{workflow_name}': {e}"
+            ) from e
 
     def _load_scan_template(self, scan_name_or_alias: str):
         """
@@ -105,7 +106,9 @@ class SecatorRunner:
             return template
         except Exception as e:
             logger.error(f"Failed to load scan template '{scan_name_or_alias}': {e}")
-            raise Exception(f"Could not load scan template '{scan_name_or_alias}': {e}")
+            raise Exception(
+                f"Could not load scan template '{scan_name_or_alias}': {e}"
+            ) from e
 
     def _execute_runner(
         self,
@@ -138,7 +141,21 @@ class SecatorRunner:
 
             # Get domain and setup results directory
             domain = Domain.objects.get(id=domain_id)
-            domain_results_dir = os.path.join(RENGINE_RESULTS, domain.name)
+
+            # Get project and create workspace path
+            from reNgine.core.validators import sanitize_path_component
+
+            domain_name_sanitized = sanitize_path_component(domain.name)
+            if project := domain.project:
+                project_slug_sanitized = sanitize_path_component(project.slug)
+                workspace = f"{project_slug_sanitized}/{domain_name_sanitized}"
+                logger.info(f"🔧 Workspace: {workspace}")
+            else:
+                # Fallback if no project (should not happen in normal operation)
+                workspace = domain_name_sanitized
+                logger.warning(f"⚠️  No project for domain {domain.name}, using domain name as workspace")
+
+            domain_results_dir = os.path.join(SECATOR_RESULTS, domain_name_sanitized)
             os.makedirs(domain_results_dir, exist_ok=True)
 
             # Prepare configuration
@@ -146,14 +163,7 @@ class SecatorRunner:
                 run_config = {}
             run_config.setdefault("output_dir", domain_results_dir)
             run_config["domain_name"] = domain.name
-
-            # Create driver for hooks
-            driver = ReNgineDriver(
-                scan_history_id=scan_history_id,
-                domain_id=domain_id,
-                notification_config=run_config.get("notifications", {}),
-                rengine_context=run_config.get("rengine_context", {}),
-            )
+            run_config["workspace"] = workspace  # Add workspace to config
 
             # Prepare Secator config
             secator_config = self._prepare_secator_config(run_config, profiles)
@@ -163,9 +173,15 @@ class SecatorRunner:
             logger.info(f"🔧 Secator config sync value: {secator_config.get('sync', 'NOT SET')}")
             logger.info(f"🔧 Full secator config: {secator_config}")
 
-            # Get hooks configuration before creating runner
-            hooks_config = driver.get_hooks_config()
-            logger.info(f"🔧 Hooks configuration: {list(hooks_config.keys())}")
+            # Import and activate Secator API hooks
+            try:
+                from secator.hooks.api import HOOKS as API_HOOKS
+                logger.info("🔧 Secator API hooks imported successfully")
+                logger.info(f"🔧 API hooks available for: {list(API_HOOKS.keys())}")
+            except ImportError as e:
+                logger.warning(f"⚠️  Could not import Secator API hooks: {e}")
+                logger.warning("⚠️  API hooks will not be available")
+                API_HOOKS = {}
 
             # Create runner with hooks
             try:
@@ -176,14 +192,28 @@ class SecatorRunner:
                 run_opts["sync"] = False
                 logger.info(f"🔧 Final run_opts sync: {run_opts.get('sync')}")
 
-                runner = runner_class(config, inputs=targets, run_opts=run_opts)
+                # Prepare context with scan_history_id and domain_id for Secator API hooks
+                context = {
+                    "scan_history_id": scan_history_id,
+                    "domain_id": domain_id,
+                }
+                logger.info(f"🔧 Runner context: {context}")
+
+                # Pass API hooks to runner if available
+                if API_HOOKS:
+                    hooks = API_HOOKS
+                    logger.info("🔧 API hooks passed to runner")
+
+                runner = runner_class(config, inputs=targets, hooks=hooks, run_opts=run_opts, context=context)
                 logger.info("🔧 Runner created successfully with hooks")
                 logger.info(f"🔧 Runner hooks: {runner.hooks if hasattr(runner, 'hooks') else 'No hooks attribute'}")
                 logger.info(f"🔧 Runner sync mode: {getattr(runner, 'sync', 'NOT SET')}")
 
             except Exception as e:
                 logger.error(f"Error creating runner with hooks: {e}")
-                raise Exception(f"Could not create runner: {e}")
+                raise Exception(
+                    f"Could not create runner: {e}"
+                ) from e
 
             try:
                 result = runner.run()
@@ -191,7 +221,9 @@ class SecatorRunner:
 
             except Exception as e:
                 logger.error(f"Error running runner: {e}")
-                raise Exception(f"Could not run runner: {e}")
+                raise Exception(
+                    f"Could not run runner: {e}"
+                ) from e
 
             logger.info(f"Secator {runner_class.__name__} executed successfully")
 

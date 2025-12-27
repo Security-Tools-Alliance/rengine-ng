@@ -324,7 +324,6 @@ class TestDataGenerator:
         """Create and return a test employee with customizable parameters."""
         import uuid
 
-
         # Use provided values or defaults
         if name is None:
             unique_id = str(uuid.uuid4())[:8]

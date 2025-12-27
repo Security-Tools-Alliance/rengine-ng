@@ -15,7 +15,7 @@ logger = get_task_logger(__name__)
 class SecatorScanController:
     """Controls Secator scan lifecycle."""
 
-    def __init__(self, scan_history_id):
+    def __init__(self, scan_history_id: int):
         """
         Initialize scan controller.
 
@@ -25,14 +25,16 @@ class SecatorScanController:
         self.scan_history_id = scan_history_id
         self.scan_repo = ScanRepository()
 
-    def stop_scan(self):
+    def stop_scan(self) -> bool:
         """
-        Stop a running Secator scan.
+        Stop a running Secator scan by revoking all associated Celery tasks.
 
         Returns:
             bool: True if successful, False otherwise
         """
         try:
+            from secator.celery import revoke_task
+
             scan = self.scan_repo.get_by_id(self.scan_history_id)
             if not scan:
                 logger.error(f"Scan {self.scan_history_id} not found")
@@ -50,8 +52,7 @@ class SecatorScanController:
 
             for celery_task_id in celery_task_ids:
                 try:
-                    # TODO Use secator control to stop the scan
-                    # app.control.revoke(celery_task_id, terminate=True)
+                    revoke_task(celery_task_id, task_name=f"scan_{self.scan_history_id}")
                     revoked_count += 1
                     logger.debug(f"Successfully revoked Celery task {celery_task_id} for scan {self.scan_history_id}")
                 except Exception as e:
@@ -65,7 +66,6 @@ class SecatorScanController:
                 logger.warning(f"Failed to revoke {failed_count} Celery task(s) for scan {self.scan_history_id}")
 
             # Update scan status regardless of individual task revocation results
-            # The scan should be marked as aborted even if some tasks couldn't be revoked
             self.scan_repo.update_status(self.scan_history_id, ABORTED_TASK)
             self.scan_repo.create_scan_activity(self.scan_history_id, "Scan stopped by user", ABORTED_TASK)
 

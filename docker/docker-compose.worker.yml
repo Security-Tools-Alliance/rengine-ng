@@ -1,0 +1,46 @@
+version: '3.8'
+
+# Docker Compose for deploying remote Secator workers
+# This file is designed to be used on remote machines (VPS, internal networks, etc.)
+# to deploy Secator workers that connect to a central reNgine-ng instance.
+#
+# Prerequisites:
+# 1. Copy this file and the .env-dist.worker to your remote machine
+# 2. Rename .env-dist.worker to .env and configure the variables
+# 3. Run: docker-compose -f docker-compose.worker.yml up -d
+#
+# The worker will:
+# - Connect to the Redis broker (reNgine-ng instance)
+# - Execute scan tasks
+# - Report results back to reNgine-ng via API
+
+services:
+  secator-worker:
+    image: freelabz/secator:latest
+    container_name: secator-worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      # Volume for scan results (optional, for local storage)
+      - secator_reports:/home/secator/.secator/reports
+    
+    networks:
+      - secator_network
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "celery", "-A", "secator", "inspect", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  secator_network:
+    driver: bridge
+
+volumes:
+  secator_reports:
+    driver: local
+

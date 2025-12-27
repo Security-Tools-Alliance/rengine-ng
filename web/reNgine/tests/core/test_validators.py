@@ -12,6 +12,7 @@ from reNgine.core.validators import (
     is_valid_port,
     is_valid_url,
     sanitize_filename,
+    sanitize_path_component,
     validate_severity,
 )
 
@@ -144,6 +145,60 @@ class TestValidators(TestCase):
         # Mixed unicode and special characters
         self.assertEqual(sanitize_filename("файл<>.txt"), "файл__.txt")
         self.assertEqual(sanitize_filename("  文件/<>.txt  "), "文件___.txt")  # / becomes _ too
+
+    def test_sanitize_path_component(self):
+        """Test path component sanitization."""
+        # Basic valid path components
+        self.assertEqual(sanitize_path_component("project-name"), "project-name")
+        self.assertEqual(sanitize_path_component("domain_name"), "domain_name")
+        self.assertEqual(sanitize_path_component("example.com"), "example.com")
+
+        # Test forbidden characters are replaced (note: consecutive underscores are collapsed)
+        self.assertEqual(sanitize_path_component("path/component"), "path_component")
+        self.assertEqual(sanitize_path_component("path\\component"), "path_component")
+        self.assertEqual(sanitize_path_component("path<>component"), "path_component")
+        self.assertEqual(sanitize_path_component("path:component"), "path_component")
+        self.assertEqual(sanitize_path_component("path*component"), "path_component")
+        self.assertEqual(sanitize_path_component("path?component"), "path_component")
+        self.assertEqual(sanitize_path_component("path|component"), "path_component")
+        self.assertEqual(sanitize_path_component('path"component'), "path_component")
+
+        # Test empty and whitespace-only inputs
+        self.assertEqual(sanitize_path_component(""), "unnamed")
+        self.assertEqual(sanitize_path_component("   "), "unnamed")
+        self.assertEqual(sanitize_path_component("\t\n"), "unnamed")
+
+        # Test leading/trailing whitespace and dots
+        self.assertEqual(sanitize_path_component("  project  "), "project")
+        self.assertEqual(sanitize_path_component("..project.."), "project")
+        self.assertEqual(sanitize_path_component(". project ."), "project")
+
+        # Test multiple consecutive underscores are collapsed
+        self.assertEqual(sanitize_path_component("path__component"), "path_component")
+        self.assertEqual(sanitize_path_component("path___component"), "path_component")
+        self.assertEqual(sanitize_path_component("path////component"), "path_component")
+
+        # Test length limit (100 characters)
+        long_name = "a" * 150
+        sanitized = sanitize_path_component(long_name)
+        self.assertEqual(len(sanitized), 100)
+        self.assertEqual(sanitized, "a" * 100)
+
+        # Test Unicode characters are preserved
+        self.assertEqual(sanitize_path_component("проект"), "проект")
+        self.assertEqual(sanitize_path_component("项目"), "项目")
+        self.assertEqual(sanitize_path_component("مشروع"), "مشروع")
+
+        # Test real-world examples
+        self.assertEqual(sanitize_path_component("my-project"), "my-project")
+        self.assertEqual(sanitize_path_component("example.com"), "example.com")
+        self.assertEqual(sanitize_path_component("sub.example.com"), "sub.example.com")
+        self.assertEqual(sanitize_path_component("project_v2.0"), "project_v2.0")
+
+        # Test edge cases with special characters
+        self.assertEqual(sanitize_path_component("///"), "_")  # Becomes _ after replacement and consolidation
+        self.assertEqual(sanitize_path_component("..."), "unnamed")  # Dots are stripped
+        self.assertEqual(sanitize_path_component("   ...   "), "unnamed")  # Whitespace and dots stripped
 
     def test_validate_severity(self):
         """Test severity validation."""

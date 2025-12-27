@@ -27,6 +27,7 @@ from rest_framework.status import HTTP_400_BAD_REQUEST
 from rest_framework.views import APIView
 import validators
 
+from api.permissions import HasAPIKeyOrIsAuthenticated
 from dashboard.models import OllamaSettings, OpenAiAPIKey, Project, SearchHistory
 from recon_note.models import TodoNote
 
@@ -1240,25 +1241,29 @@ class DeleteMultipleRows(APIView):
 
 
 class StopScan(APIView):
+    """
+    API endpoint to stop a running scan or subscan.
+    Uses SecatorScanController to revoke Celery tasks.
+    """
+
     def post(self, request):
-        req = self.request
-        data = req.data
+        from reNgine.secator.control import SecatorScanController
+
+        data = request.data
         scan_id = safe_int_cast(data.get("scan_id"))
         subscan_id = safe_int_cast(data.get("subscan_id"))
         response = {}
-        task_ids = []
         scan = None
-        subscan = None
+
         if subscan_id:
             try:
                 subscan = get_object_or_404(SubScan, id=subscan_id)
                 scan = subscan.scan_history
-                task_ids = subscan.celery_ids
                 subscan.status = ABORTED_TASK
                 subscan.stop_scan_date = timezone.now()
                 subscan.save()
                 scan_repo = ScanRepository()
-                scan_repo.create_activity(subscan.scan_history.id, f"Subscan {subscan_id} aborted", SUCCESS_TASK)
+                scan_repo.create_activity(scan.id, f"Subscan {subscan_id} aborted", SUCCESS_TASK)
                 response["status"] = True
             except Exception as e:
                 logger.error(e)
@@ -1266,29 +1271,31 @@ class StopScan(APIView):
         elif scan_id:
             try:
                 scan = get_object_or_404(ScanHistory, id=scan_id)
-                task_ids = scan.celery_ids
-                scan.scan_status = ABORTED_TASK
-                scan.stop_scan_date = timezone.now()
-                scan.aborted_by = request.user
-                scan.save()
-                scan_repo = ScanRepository()
-                scan_repo.create_activity(scan.id, "Scan aborted", SUCCESS_TASK)
-                response["status"] = True
+
+                # Use SecatorScanController to stop the scan
+                controller = SecatorScanController(scan_id)
+                success = controller.stop_scan()
+
+                if success:
+                    scan.refresh_from_db()
+                    scan.aborted_by = request.user
+                    scan.stop_scan_date = timezone.now()
+                    scan.save()
+                    response["status"] = True
+                else:
+                    response = {"status": False, "message": "Failed to stop scan"}
             except Exception as e:
                 logger.error(e)
                 response = {"status": False, "message": str(e)}
 
-        logger.warning(f"Revoking tasks {task_ids}")
-        # TODO Use secator control to stop the scan
-        # for task_id in task_ids:
-        #     app.control.revoke(task_id, terminate=True, signal="SIGKILL")
-
-        # Abort running tasks
-        tasks = ScanActivity.objects.filter(scan_of=scan).filter(status=RUNNING_TASK).order_by("-pk")
-        if tasks.exists():
+        # Abort running scan activities
+        if scan:
+            tasks = ScanActivity.objects.filter(scan_of=scan).filter(status=RUNNING_TASK).order_by("-pk")
             for task in tasks:
-                if subscan_id and task.id not in subscan.celery_ids:
-                    continue
+                if subscan_id:
+                    subscan = get_object_or_404(SubScan, id=subscan_id)
+                    if task.id not in subscan.celery_ids:
+                        continue
                 task.status = ABORTED_TASK
                 task.time = timezone.now()
                 task.save()
@@ -3898,342 +3905,206 @@ class DeleteSecatorScan(APIView):
             return Response({"status": "error", "message": str(e)}, status=400)
 
 
-# =============================================================================
-# Secator API Hooks Endpoints
-# =============================================================================
+class SecatorRunnerCreate(APIView):
+    """
+    API endpoint to create a runner from Secator hooks.
+    This endpoint is called by Secator workers to register new runners.
+    """
 
-
-class SecatorIPSave(APIView):
-    """API endpoint to save IP addresses from Secator results."""
+    permission_classes = [HasAPIKeyOrIsAuthenticated]
 
     def post(self, request):
         try:
-            data = request.data
-            item = data.get("item", {})
-            scan_history_id = safe_int_cast(data.get("scan_history_id"))
-            domain_id = safe_int_cast(data.get("domain_id"))
-            rengine_context = data.get("rengine_context", {})
+            from startScan.models import SecatorRunner, ScanHistory, Domain
 
-            if not scan_history_id or not domain_id:
-                return Response({"status": False, "error": "scan_history_id and domain_id are required"}, status=400)
+            runner_data = request.data
+            runner_type = runner_data.get("config", {}).get("type")
+            runner_name = runner_data.get("config", {}).get("name")
+            scan_history_id = runner_data.get("context", {}).get("scan_history_id")
+            domain_id = runner_data.get("context", {}).get("domain_id")
 
-            from reNgine.services.repositories.ip_repository import IpRepository
+            logger.info(f"Creating runner: type={runner_type}, name={runner_name}, scan_history_id={scan_history_id}")
+            logger.debug(f"Runner data: {runner_data}")
 
-            ip_repo = IpRepository()
-            result = ip_repo.save_from_secator(item, scan_history_id, domain_id)
+            # Create runner object in database
+            secator_runner = SecatorRunner(
+                runner_type=runner_type or "unknown",
+                runner_name=runner_name,
+                runner_data=runner_data,
+            )
 
-            if result:
-                return Response({"status": True, "id": result.id})
-            else:
-                return Response({"status": False, "error": "Failed to save IP address"}, status=500)
+            # Link to scan history if available
+            if scan_history_id:
+                try:
+                    scan_history = ScanHistory.objects.get(id=scan_history_id)
+                    secator_runner.scan_history = scan_history
+                except ScanHistory.DoesNotExist:
+                    logger.warning(f"ScanHistory {scan_history_id} not found, skipping link")
 
+            # Link to domain if available
+            if domain_id:
+                try:
+                    domain = Domain.objects.get(id=domain_id)
+                    secator_runner.domain = domain
+                except Domain.DoesNotExist:
+                    logger.warning(f"Domain {domain_id} not found, skipping link")
+
+            # Save runner and get its ID
+            secator_runner.save()
+            runner_id = str(secator_runner.id)
+
+            logger.info(f"Runner created with ID: {runner_id}")
+
+            return Response({"status": True, "id": runner_id})
         except Exception as e:
-            logger.error(f"Error saving IP address: {str(e)}")
+            logger.error(f"Error creating runner: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return Response({"status": False, "error": str(e)}, status=500)
 
 
-class SecatorSubdomainSave(APIView):
-    """API endpoint to save subdomains from Secator results."""
+class SecatorRunnerUpdate(APIView):
+    """
+    API endpoint to update a runner from Secator hooks.
+    This endpoint is called by Secator workers to update runner state.
+    """
 
-    def post(self, request):
+    permission_classes = [HasAPIKeyOrIsAuthenticated]
+
+    def put(self, request, runner_id):
         try:
-            data = request.data
-            item = data.get("item", {})
-            scan_history_id = safe_int_cast(data.get("scan_history_id"))
-            domain_id = safe_int_cast(data.get("domain_id"))
-            rengine_context = data.get("rengine_context", {})
+            from startScan.models import SecatorRunner
 
-            if not scan_history_id or not domain_id:
-                return Response({"status": False, "error": "scan_history_id and domain_id are required"}, status=400)
+            runner_data = request.data
 
-            from reNgine.services.repositories.subdomain_repository import SubdomainRepository
+            logger.info(f"Updating runner: runner_id={runner_id}")
+            logger.debug(f"Runner data: {runner_data}")
 
-            subdomain_repo = SubdomainRepository()
-            result = subdomain_repo.save_from_secator(item, scan_history_id, domain_id, rengine_context=rengine_context)
+            # Update runner data in database
+            try:
+                secator_runner = SecatorRunner.objects.get(id=runner_id)
+                secator_runner.runner_data = runner_data
+                
+                # Update runner name if provided
+                runner_name = runner_data.get("config", {}).get("name")
+                if runner_name:
+                    secator_runner.runner_name = runner_name
+                
+                secator_runner.save()
+                logger.info(f"Runner {runner_id} updated successfully")
+            except SecatorRunner.DoesNotExist:
+                logger.warning(f"Runner {runner_id} not found, cannot update")
+                return Response({"status": False, "error": f"Runner {runner_id} not found"}, status=404)
 
-            if result:
-                return Response({"status": True, "id": result.id})
-            else:
-                return Response({"status": False, "error": "Failed to save subdomain"}, status=500)
-
+            return Response({"status": True, "id": runner_id})
         except Exception as e:
-            logger.error(f"Error saving subdomain: {str(e)}")
+            logger.error(f"Error updating runner {runner_id}: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return Response({"status": False, "error": str(e)}, status=500)
 
 
-class SecatorPortSave(APIView):
-    """API endpoint to save ports from Secator results."""
+class SecatorFindingCreate(APIView):
+    """
+    API endpoint to create a finding from Secator hooks.
+    This endpoint is called by Secator workers to save new findings.
+    """
+
+    permission_classes = [HasAPIKeyOrIsAuthenticated]
 
     def post(self, request):
         try:
-            data = request.data
-            item = data.get("item", {})
-            scan_history_id = safe_int_cast(data.get("scan_history_id"))
-            domain_id = safe_int_cast(data.get("domain_id"))
-            rengine_context = data.get("rengine_context", {})
-
-            if not scan_history_id or not domain_id:
-                return Response({"status": False, "error": "scan_history_id and domain_id are required"}, status=400)
-
-            from reNgine.services.repositories.port_repository import PortRepository
-
-            port_repo = PortRepository()
-            result = port_repo.save_from_secator(item, scan_history_id, domain_id)
-
-            if result:
-                return Response({"status": True, "id": result.id})
-            else:
-                return Response({"status": False, "error": "Failed to save port"}, status=500)
-
-        except Exception as e:
-            logger.error(f"Error saving port: {str(e)}")
-            return Response({"status": False, "error": str(e)}, status=500)
-
-
-class SecatorEndpointSave(APIView):
-    """API endpoint to save endpoints/URLs from Secator results."""
-
-    def post(self, request):
-        try:
-            data = request.data
-            item = data.get("item", {})
-            scan_history_id = safe_int_cast(data.get("scan_history_id"))
-            domain_id = safe_int_cast(data.get("domain_id"))
-            rengine_context = data.get("rengine_context", {})
-
-            if not scan_history_id or not domain_id:
-                return Response({"status": False, "error": "scan_history_id and domain_id are required"}, status=400)
-
+            from reNgine.services.repositories.dns_repository import DnsRepository
+            from reNgine.services.repositories.employee_repository import EmployeeRepository
             from reNgine.services.repositories.endpoint_repository import EndpointRepository
-
-            endpoint_repo = EndpointRepository()
-            result = endpoint_repo.save_from_secator(item, scan_history_id, domain_id)
-
-            if result:
-                return Response({"status": True, "id": result.id})
-            else:
-                return Response({"status": False, "error": "Failed to save endpoint"}, status=500)
-
-        except Exception as e:
-            logger.error(f"Error saving endpoint: {str(e)}")
-            return Response({"status": False, "error": str(e)}, status=500)
-
-
-class SecatorTechnologySave(APIView):
-    """API endpoint to save technologies from Secator results."""
-
-    def post(self, request):
-        try:
-            data = request.data
-            item = data.get("item", {})
-            scan_history_id = safe_int_cast(data.get("scan_history_id"))
-            domain_id = safe_int_cast(data.get("domain_id"))
-            rengine_context = data.get("rengine_context", {})
-
-            if not scan_history_id or not domain_id:
-                return Response({"status": False, "error": "scan_history_id and domain_id are required"}, status=400)
-
+            from reNgine.services.repositories.exploit_repository import ExploitRepository
+            from reNgine.services.repositories.ip_repository import IpRepository
+            from reNgine.services.repositories.port_repository import PortRepository
+            from reNgine.services.repositories.subdomain_repository import SubdomainRepository
             from reNgine.services.repositories.technology_repository import TechnologyRepository
-
-            technology_repo = TechnologyRepository()
-            result = technology_repo.save_from_secator(item, scan_history_id, domain_id)
-
-            if result:
-                return Response({"status": True, "id": result.id})
-            else:
-                return Response({"status": False, "error": "Failed to save technology"}, status=500)
-
-        except Exception as e:
-            logger.error(f"Error saving technology: {str(e)}")
-            return Response({"status": False, "error": str(e)}, status=500)
-
-
-class SecatorVulnerabilitySave(APIView):
-    """API endpoint to save vulnerabilities from Secator results."""
-
-    def post(self, request):
-        try:
-            data = request.data
-            item = data.get("item", {})
-            scan_history_id = safe_int_cast(data.get("scan_history_id"))
-            domain_id = safe_int_cast(data.get("domain_id"))
-            rengine_context = data.get("rengine_context", {})
-
-            if not scan_history_id or not domain_id:
-                return Response({"status": False, "error": "scan_history_id and domain_id are required"}, status=400)
-
             from reNgine.services.repositories.vulnerability_repository import VulnerabilityRepository
 
-            vulnerability_repo = VulnerabilityRepository()
-            result = vulnerability_repo.save_from_secator(item, scan_history_id, domain_id)
+            finding_data = request.data
+            finding_type = finding_data.get("_type")
+            context = finding_data.get("_context", {})
+            scan_history_id = context.get("scan_history_id")
+            domain_id = context.get("domain_id")
 
-            if result:
-                return Response({"status": True, "id": result.id})
+            logger.info(f"Creating finding: type={finding_type}, scan_history_id={scan_history_id}, domain_id={domain_id}")
+            logger.debug(f"Finding data: {finding_data}")
+
+            if not finding_type:
+                return Response({"status": False, "error": "Missing _type in finding data"}, status=400)
+
+            # Map finding type to repository class
+            repository_mapping = {
+                "ip": IpRepository,
+                "subdomain": SubdomainRepository,
+                "port": PortRepository,
+                "url": EndpointRepository,
+                "tag": TechnologyRepository,
+                "vulnerability": VulnerabilityRepository,
+                "record": DnsRepository,
+                "exploit": ExploitRepository,
+                "user_account": EmployeeRepository,
+            }
+
+            repository_class = repository_mapping.get(finding_type)
+            if not repository_class:
+                logger.warning(f"Unknown finding type: {finding_type}")
+                import time
+                finding_id = f"{finding_type}_{int(time.time() * 1000)}"
+                return Response({"status": True, "id": finding_id})
+
+            # Instantiate repository and save finding
+            repository = repository_class()
+            saved_object = None
+
+            if scan_history_id and domain_id:
+                if finding_type == "subdomain":
+                    saved_object = repository.save_from_secator(
+                        finding_data, scan_history_id, domain_id, rengine_context=context
+                    )
+                else:
+                    saved_object = repository.save_from_secator(finding_data, scan_history_id, domain_id)
+
+            # Generate finding ID from saved object or timestamp
+            if saved_object and hasattr(saved_object, "id"):
+                finding_id = str(saved_object.id)
             else:
-                return Response({"status": False, "error": "Failed to save vulnerability"}, status=500)
+                import time
+                finding_id = f"{finding_type}_{int(time.time() * 1000)}"
 
+            logger.info(f"Finding created: type={finding_type}, id={finding_id}")
+            return Response({"status": True, "id": finding_id})
         except Exception as e:
-            logger.error(f"Error saving vulnerability: {str(e)}")
+            logger.error(f"Error creating finding: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return Response({"status": False, "error": str(e)}, status=500)
 
 
-class SecatorDNSRecordSave(APIView):
-    """API endpoint to save DNS records from Secator results."""
+class SecatorFindingUpdate(APIView):
+    """
+    API endpoint to update a finding from Secator hooks.
+    This endpoint is called by Secator workers to update finding state.
+    """
 
-    def post(self, request):
+    permission_classes = [HasAPIKeyOrIsAuthenticated]
+
+    def put(self, request, finding_id):
         try:
-            data = request.data
-            item = data.get("item", {})
-            scan_history_id = safe_int_cast(data.get("scan_history_id"))
-            domain_id = safe_int_cast(data.get("domain_id"))
-            rengine_context = data.get("rengine_context", {})
+            finding_data = request.data
 
-            if not scan_history_id or not domain_id:
-                return Response({"status": False, "error": "scan_history_id and domain_id are required"}, status=400)
+            logger.info(f"Updating finding: finding_id={finding_id}")
+            logger.debug(f"Finding data: {finding_data}")
 
-            from reNgine.services.repositories.dns_repository import DnsRepository
+            # Update finding data (for now, just log it)
+            # TODO: Update finding in database
 
-            dns_repo = DnsRepository()
-            result = dns_repo.save_from_secator(item, scan_history_id, domain_id)
-
-            if result:
-                return Response({"status": True, "id": result.id})
-            else:
-                return Response({"status": False, "error": "Failed to save DNS record"}, status=500)
-
+            return Response({"status": True, "id": finding_id})
         except Exception as e:
-            logger.error(f"Error saving DNS record: {str(e)}")
-            return Response({"status": False, "error": str(e)}, status=500)
-
-
-class SecatorExploitSave(APIView):
-    """API endpoint to save exploits from Secator results."""
-
-    def post(self, request):
-        try:
-            data = request.data
-            item = data.get("item", {})
-            scan_history_id = safe_int_cast(data.get("scan_history_id"))
-            domain_id = safe_int_cast(data.get("domain_id"))
-            rengine_context = data.get("rengine_context", {})
-
-            if not scan_history_id or not domain_id:
-                return Response({"status": False, "error": "scan_history_id and domain_id are required"}, status=400)
-
-            from reNgine.services.repositories.exploit_repository import ExploitRepository
-
-            exploit_repo = ExploitRepository()
-            result = exploit_repo.save_from_secator(item, scan_history_id, domain_id)
-
-            if result:
-                return Response({"status": True, "id": result.id})
-            else:
-                return Response({"status": False, "error": "Failed to save exploit"}, status=500)
-
-        except Exception as e:
-            logger.error(f"Error saving exploit: {str(e)}")
-            return Response({"status": False, "error": str(e)}, status=500)
-
-
-class SecatorEmployeeSave(APIView):
-    """API endpoint to save employee/user accounts from Secator results."""
-
-    def post(self, request):
-        try:
-            data = request.data
-            item = data.get("item", {})
-            scan_history_id = safe_int_cast(data.get("scan_history_id"))
-            domain_id = safe_int_cast(data.get("domain_id"))
-            rengine_context = data.get("rengine_context", {})
-
-            if not scan_history_id or not domain_id:
-                return Response({"status": False, "error": "scan_history_id and domain_id are required"}, status=400)
-
-            from reNgine.services.repositories.employee_repository import EmployeeRepository
-
-            employee_repo = EmployeeRepository()
-            result = employee_repo.save_from_secator(item, scan_history_id, domain_id)
-
-            if result:
-                return Response({"status": True, "id": result.id})
-            else:
-                return Response({"status": False, "error": "Failed to save employee"}, status=500)
-
-        except Exception as e:
-            logger.error(f"Error saving employee: {str(e)}")
-            return Response({"status": False, "error": str(e)}, status=500)
-
-
-class SecatorScanStatusUpdate(APIView):
-    """API endpoint to update scan status from Secator progress hooks."""
-
-    def put(self, request, scan_id):
-        try:
-            scan_id = safe_int_cast(scan_id)
-            if not scan_id:
-                return Response({"status": False, "error": "Invalid scan_id"}, status=400)
-
-            data = request.data
-            status = safe_int_cast(data.get("status"))
-            stop_scan_date = data.get("stop_scan_date")
-
-            if status is None:
-                return Response({"status": False, "error": "status is required"}, status=400)
-
-            from reNgine.services.repositories.scan_repository import ScanRepository
-
-            scan_repo = ScanRepository()
-
-            # Update scan status
-            scan_repo.update_status(scan_id, status=status)
-
-            # Update stop_scan_date if provided
-            if stop_scan_date:
-                from django.utils.dateparse import parse_datetime
-
-                from startScan.models import ScanHistory
-
-                try:
-                    scan = ScanHistory.objects.get(id=scan_id)
-                    parsed_date = parse_datetime(stop_scan_date)
-                    if parsed_date:
-                        scan.stop_scan_date = parsed_date
-                        scan.save(update_fields=["stop_scan_date"])
-                except Exception as e:
-                    logger.warning(f"Failed to update stop_scan_date: {e}")
-
-            return Response({"status": True, "message": "Scan status updated successfully"})
-
-        except Exception as e:
-            logger.error(f"Error updating scan status: {str(e)}")
-            return Response({"status": False, "error": str(e)}, status=500)
-
-
-class SecatorScanActivityCreate(APIView):
-    """API endpoint to create scan activity from Secator progress hooks."""
-
-    def post(self, request, scan_id):
-        try:
-            scan_id = safe_int_cast(scan_id)
-            if not scan_id:
-                return Response({"status": False, "error": "Invalid scan_id"}, status=400)
-
-            data = request.data
-            message = data.get("message")
-            status = safe_int_cast(data.get("status"))
-
-            if not message or status is None:
-                return Response({"status": False, "error": "message and status are required"}, status=400)
-
-            from reNgine.services.repositories.scan_repository import ScanRepository
-
-            scan_repo = ScanRepository()
-
-            # Create scan activity
-            scan_repo.create_scan_activity(scan_id, message, status)
-
-            return Response({"status": True, "message": "Scan activity created successfully"})
-
-        except Exception as e:
-            logger.error(f"Error creating scan activity: {str(e)}")
+            logger.error(f"Error updating finding {finding_id}: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return Response({"status": False, "error": str(e)}, status=500)

@@ -643,6 +643,39 @@ main() {
   log "Creating an account..." $COLOR_CYAN
   make superuser_create isNonInteractive=$isNonInteractive
 
+  log "Generating Secator API key..." $COLOR_CYAN
+  # Generate Secator API key using Django management command
+  SECATOR_API_KEY=$(docker exec rengine-web-1 bash -c 'poetry run python3 manage.py generate_secator_api_key --recreate --show-key 2>&1 | grep -A1 "API Key" | tail -n1' | tr -d ' ')
+  
+  if [ -n "$SECATOR_API_KEY" ]; then
+    log "Secator API key generated successfully" $COLOR_GREEN
+    
+    # Remove existing Secator API configuration from .env
+    sed -i '/^SECATOR_ADDONS_API_ENABLED=/d' .env
+    sed -i '/^SECATOR_ADDONS_API_KEY=/d' .env
+    sed -i '/^SECATOR_ADDONS_API_URL=/d' .env
+    sed -i '/^SECATOR_ADDONS_API_FORCE_SSL=/d' .env
+    # Also remove legacy variable names if present
+    sed -i '/^RENGINE_API_KEY=/d' .env
+    sed -i '/^RENGINE_API_URL=/d' .env
+    
+    # Add Secator API configuration to .env
+    {
+      echo ""
+      echo "# Secator Worker API Configuration (auto-generated)"
+      echo "SECATOR_ADDONS_API_ENABLED=true"
+      echo "SECATOR_ADDONS_API_KEY=$SECATOR_API_KEY"
+      echo "SECATOR_ADDONS_API_URL=http://web:8000/api/secator"
+      echo "SECATOR_ADDONS_API_FORCE_SSL=false"
+    } >> .env
+    
+    log "Secator API key has been added to .env file" $COLOR_GREEN
+  else
+    log "Warning: Failed to generate Secator API key. This may affect Secator worker functionality." $COLOR_YELLOW
+    log "You can manually generate the key later using: make shell" $COLOR_YELLOW
+    log "Then run: python3 manage.py generate_secator_api_key --recreate --show-key" $COLOR_YELLOW
+  fi
+
   log "reNgine-ng is successfully installed and started!" $COLOR_GREEN
   log "\r\nThank you for installing reNgine-ng, happy recon!" $COLOR_GREEN
 

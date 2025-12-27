@@ -889,7 +889,9 @@ def schedule_organization_scan(request, slug, id):
                         "initiated_by_id": request.user.id,
                     }
                 )
-                PeriodicTask.objects.create(interval=schedule, name=task_name, task="initiate_secator_scan", kwargs=_kwargs)
+                PeriodicTask.objects.create(
+                    interval=schedule, name=task_name, task="initiate_secator_scan", kwargs=_kwargs
+                )
 
             # Clocked task
             elif scheduled_mode == "clocked":

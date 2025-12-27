@@ -168,9 +168,9 @@ def initiate_secator_scan(
         # Create domain-specific results directory
         import os
 
-        from reNgine.settings import RENGINE_RESULTS
+        from reNgine.settings import SECATOR_RESULTS
 
-        domain_results_dir = os.path.join(RENGINE_RESULTS, domain.name)
+        domain_results_dir = os.path.join(SECATOR_RESULTS, domain.name)
         os.makedirs(domain_results_dir, exist_ok=True)
 
         logger.info(f"Built targets list: {len(targets)} targets (domain + imported + existing)")
@@ -208,6 +208,7 @@ def initiate_secator_scan(
         if execution_mode == "workflow":
             # Get workflow alias/name from database
             from scanEngine.models import SecatorWorkflow
+
             try:
                 workflow = SecatorWorkflow.objects.get(id=workflow_id)
                 config["workflow_name"] = workflow.alias or workflow.name
@@ -216,6 +217,7 @@ def initiate_secator_scan(
         elif execution_mode == "tasks":
             # Get task types from database
             from scanEngine.models import SecatorTask
+
             tasks = SecatorTask.objects.filter(id__in=task_ids)
             if len(tasks) != len(task_ids):
                 raise ValueError("Invalid task IDs")

@@ -2,7 +2,6 @@
 This file contains the test cases for the API views.
 """
 
-
 from django.urls import reverse
 from rest_framework import status
 

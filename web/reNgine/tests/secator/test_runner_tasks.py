@@ -24,10 +24,9 @@ class TestSecatorRunnerTasks(BaseTestCase):
         super().tearDown()
 
     @patch("reNgine.secator.runner.os.makedirs")
-    @patch("reNgine.secator.runner.ReNgineDriver")
     @patch("reNgine.secator.runner.Task")
     @patch("reNgine.secator.runner.TemplateLoader")
-    def test_run_tasks_multiple_success(self, mock_template_loader, mock_task_class, mock_driver, mock_makedirs):
+    def test_run_tasks_multiple_success(self, mock_template_loader, mock_task_class, mock_makedirs):
         """Test successful execution of multiple tasks."""
         mock_template = MagicMock()
         mock_template_loader.return_value = mock_template
@@ -36,10 +35,6 @@ class TestSecatorRunnerTasks(BaseTestCase):
         mock_task_instance.run.return_value = {"items": [], "stats": {}}
         mock_task_class.return_value = mock_task_instance
         mock_task_class.__name__ = "Task"
-
-        mock_driver_instance = MagicMock()
-        mock_driver_instance.get_hooks_config.return_value = {}
-        mock_driver.return_value = mock_driver_instance
 
         task_names = ["subfinder", "httpx", "nuclei"]
         result = self.runner.run_tasks(
@@ -63,20 +58,15 @@ class TestSecatorRunnerTasks(BaseTestCase):
             self.assertIn(config_dict["name"], task_names)
 
     @patch("reNgine.secator.runner.os.makedirs")
-    @patch("reNgine.secator.runner.ReNgineDriver")
     @patch("reNgine.secator.runner.Task")
     @patch("reNgine.secator.runner.TemplateLoader")
-    def test_run_tasks_partial_failure(self, mock_template_loader, mock_task_class, mock_driver, mock_makedirs):
+    def test_run_tasks_partial_failure(self, mock_template_loader, mock_task_class, mock_makedirs):
         """Test execution with some tasks failing."""
         mock_template = MagicMock()
         mock_template_loader.return_value = mock_template
 
         mock_task_instance = MagicMock()
         mock_task_class.__name__ = "Task"
-
-        mock_driver_instance = MagicMock()
-        mock_driver_instance.get_hooks_config.return_value = {}
-        mock_driver.return_value = mock_driver_instance
 
         call_count = [0]
 
@@ -104,11 +94,10 @@ class TestSecatorRunnerTasks(BaseTestCase):
         self.assertEqual(result["results"][1]["result"]["status"], "error")
 
     @patch("reNgine.secator.runner.os.makedirs")
-    @patch("reNgine.secator.runner.ReNgineDriver")
     @patch("reNgine.secator.runner.Task")
     @patch("reNgine.secator.runner.TemplateLoader")
     def test_run_task_single_delegates_to_run_tasks(
-        self, mock_template_loader, mock_task_class, mock_driver, mock_makedirs
+        self, mock_template_loader, mock_task_class, mock_makedirs
     ):
         """Test that run_task delegates to run_tasks."""
         mock_template = MagicMock()
@@ -118,10 +107,6 @@ class TestSecatorRunnerTasks(BaseTestCase):
         mock_task_instance.run.return_value = {"items": [], "stats": {}}
         mock_task_class.return_value = mock_task_instance
         mock_task_class.__name__ = "Task"
-
-        mock_driver_instance = MagicMock()
-        mock_driver_instance.get_hooks_config.return_value = {}
-        mock_driver.return_value = mock_driver_instance
 
         result = self.runner.run_task(
             task_name="subfinder",
@@ -157,11 +142,10 @@ class TestSecatorRunnerTasks(BaseTestCase):
         self.assertEqual(result["results"], [])
 
     @patch("reNgine.secator.runner.os.makedirs")
-    @patch("reNgine.secator.runner.ReNgineDriver")
     @patch("reNgine.secator.runner.Task")
     @patch("reNgine.secator.runner.TemplateLoader")
     def test_run_tasks_template_loader_dict_format(
-        self, mock_template_loader, mock_task_class, mock_driver, mock_makedirs
+        self, mock_template_loader, mock_task_class, mock_makedirs
     ):
         """Test that TemplateLoader is called with correct dict format."""
         mock_template = MagicMock()
@@ -171,10 +155,6 @@ class TestSecatorRunnerTasks(BaseTestCase):
         mock_task_instance.run.return_value = {"items": [], "stats": {}}
         mock_task_class.return_value = mock_task_instance
         mock_task_class.__name__ = "Task"
-
-        mock_driver_instance = MagicMock()
-        mock_driver_instance.get_hooks_config.return_value = {}
-        mock_driver.return_value = mock_driver_instance
 
         self.runner.run_tasks(
             task_names=["httpx"],

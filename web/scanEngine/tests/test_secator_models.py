@@ -4,8 +4,6 @@ test_secator_models.py
 This file contains unit tests for the Secator models (SecatorScan, SecatorWorkflow, SecatorTask).
 """
 
-import yaml
-from django.test import TestCase
 
 from scanEngine.models import SecatorScan, SecatorTask, SecatorWorkflow
 from utils.test_base import BaseTestCase
@@ -37,30 +35,21 @@ tasks:
 
     def test_create_builtin_workflow(self):
         """Test creating a built-in workflow."""
-        workflow = SecatorWorkflow.objects.create(
-            workflow_type="builtin",
-            **self.workflow_data
-        )
+        workflow = SecatorWorkflow.objects.create(workflow_type="builtin", **self.workflow_data)
         self.assertEqual(workflow.workflow_type, "builtin")
         self.assertFalse(workflow.can_modify())
         self.assertFalse(workflow.can_delete())
 
     def test_create_custom_workflow(self):
         """Test creating a custom workflow."""
-        workflow = SecatorWorkflow.objects.create(
-            workflow_type="custom",
-            **self.workflow_data
-        )
+        workflow = SecatorWorkflow.objects.create(workflow_type="custom", **self.workflow_data)
         self.assertEqual(workflow.workflow_type, "custom")
         self.assertTrue(workflow.can_modify())
         self.assertTrue(workflow.can_delete())
 
     def test_parse_yaml_config(self):
         """Test YAML configuration parsing."""
-        workflow = SecatorWorkflow.objects.create(
-            workflow_type="custom",
-            **self.workflow_data
-        )
+        workflow = SecatorWorkflow.objects.create(workflow_type="custom", **self.workflow_data)
         config = workflow._parse_yaml_config()
         self.assertIsInstance(config, dict)
         self.assertEqual(config.get("type"), "workflow")
@@ -68,10 +57,7 @@ tasks:
 
     def test_get_tasks(self):
         """Test getting tasks from YAML configuration."""
-        workflow = SecatorWorkflow.objects.create(
-            workflow_type="custom",
-            **self.workflow_data
-        )
+        workflow = SecatorWorkflow.objects.create(workflow_type="custom", **self.workflow_data)
         tasks = workflow.get_tasks()
         self.assertIsInstance(tasks, dict)
         self.assertIn("subfinder", tasks)
@@ -79,11 +65,8 @@ tasks:
 
     def test_builtin_workflow_modification_blocked(self):
         """Test that built-in workflows cannot be modified."""
-        workflow = SecatorWorkflow.objects.create(
-            workflow_type="builtin",
-            **self.workflow_data
-        )
-        
+        workflow = SecatorWorkflow.objects.create(workflow_type="builtin", **self.workflow_data)
+
         # Try to modify
         workflow.name = "Modified Name"
         with self.assertRaises(PermissionError):
@@ -91,27 +74,21 @@ tasks:
 
     def test_builtin_workflow_deletion_blocked(self):
         """Test that built-in workflows cannot be deleted."""
-        workflow = SecatorWorkflow.objects.create(
-            workflow_type="builtin",
-            **self.workflow_data
-        )
-        
+        workflow = SecatorWorkflow.objects.create(workflow_type="builtin", **self.workflow_data)
+
         with self.assertRaises(PermissionError):
             workflow.delete()
 
     def test_builtin_workflow_bypass_constraints(self):
         """Test that management commands can bypass constraints."""
-        workflow = SecatorWorkflow.objects.create(
-            workflow_type="builtin",
-            **self.workflow_data
-        )
-        
+        workflow = SecatorWorkflow.objects.create(workflow_type="builtin", **self.workflow_data)
+
         # Should work with bypass
         workflow.name = "Modified Name"
         workflow.save(bypass_builtin_constraints=True)
         workflow.refresh_from_db()
         self.assertEqual(workflow.name, "Modified Name")
-        
+
         # Should work with bypass for deletion
         workflow.delete(bypass_builtin_constraints=True)
         self.assertFalse(SecatorWorkflow.objects.filter(id=workflow.id).exists())
@@ -151,7 +128,7 @@ class TestSecatorTask(BaseTestCase):
     def test_builtin_task_modification_blocked(self):
         """Test that built-in tasks cannot be modified."""
         task = SecatorTask.objects.create(**self.task_data)
-        
+
         # Try to modify
         task.name = "Modified Name"
         with self.assertRaises(PermissionError):
@@ -160,20 +137,20 @@ class TestSecatorTask(BaseTestCase):
     def test_builtin_task_deletion_blocked(self):
         """Test that built-in tasks cannot be deleted."""
         task = SecatorTask.objects.create(**self.task_data)
-        
+
         with self.assertRaises(PermissionError):
             task.delete()
 
     def test_builtin_task_bypass_constraints(self):
         """Test that management commands can bypass constraints."""
         task = SecatorTask.objects.create(**self.task_data)
-        
+
         # Should work with bypass
         task.name = "Modified Name"
         task.save(bypass_builtin_constraints=True)
         task.refresh_from_db()
         self.assertEqual(task.name, "Modified Name")
-        
+
         # Should work with bypass for deletion
         task.delete(bypass_builtin_constraints=True)
         self.assertFalse(SecatorTask.objects.filter(id=task.id).exists())
@@ -249,7 +226,7 @@ input_types:
     def test_builtin_scan_modification_blocked(self):
         """Test that built-in scans cannot be modified."""
         scan = SecatorScan.objects.create(**self.scan_data)
-        
+
         # Try to modify
         scan.name = "Modified Name"
         with self.assertRaises(PermissionError):
@@ -258,20 +235,20 @@ input_types:
     def test_builtin_scan_deletion_blocked(self):
         """Test that built-in scans cannot be deleted."""
         scan = SecatorScan.objects.create(**self.scan_data)
-        
+
         with self.assertRaises(PermissionError):
             scan.delete()
 
     def test_builtin_scan_bypass_constraints(self):
         """Test that management commands can bypass constraints."""
         scan = SecatorScan.objects.create(**self.scan_data)
-        
+
         # Should work with bypass
         scan.name = "Modified Name"
         scan.save(bypass_builtin_constraints=True)
         scan.refresh_from_db()
         self.assertEqual(scan.name, "Modified Name")
-        
+
         # Should work with bypass for deletion
         scan.delete(bypass_builtin_constraints=True)
         self.assertFalse(SecatorScan.objects.filter(id=scan.id).exists())
@@ -281,13 +258,13 @@ input_types:
         scan_data = self.scan_data.copy()
         scan_data["yaml_configuration"] = "invalid: yaml: content: ["
         scan = SecatorScan.objects.create(**scan_data)
-        
+
         # Should return empty dict for invalid YAML
         config = scan._parse_yaml_config()
         self.assertEqual(config, {})
-        
+
         workflows = scan.get_workflows()
         self.assertEqual(workflows, {})
-        
+
         input_types = scan.get_input_types()
         self.assertEqual(input_types, [])

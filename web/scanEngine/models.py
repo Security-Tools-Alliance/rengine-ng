@@ -324,10 +324,10 @@ class SecatorWorkflow(models.Model):
     def save(self, *args, **kwargs):
         """Override save to prevent modification of built-in workflows"""
         # Allow modification if explicitly bypassing constraints (for management commands)
-        if kwargs.pop('bypass_builtin_constraints', False):
+        if kwargs.pop("bypass_builtin_constraints", False):
             super().save(*args, **kwargs)
             return
-            
+
         if self.pk is not None:
             # This is an update operation
             try:
@@ -354,10 +354,10 @@ class SecatorWorkflow(models.Model):
     def delete(self, *args, **kwargs):
         """Override delete to prevent deletion of built-in workflows"""
         # Allow deletion if explicitly bypassing constraints (for management commands)
-        if kwargs.pop('bypass_builtin_constraints', False):
+        if kwargs.pop("bypass_builtin_constraints", False):
             super().delete(*args, **kwargs)
             return
-            
+
         if self.workflow_type == "builtin":
             raise PermissionError("Built-in workflows cannot be deleted!")
         super().delete(*args, **kwargs)
@@ -418,10 +418,10 @@ class SecatorTask(models.Model):
     def save(self, *args, **kwargs):
         """Override save to prevent modification of built-in tasks"""
         # Allow modification if explicitly bypassing constraints (for management commands)
-        if kwargs.pop('bypass_builtin_constraints', False):
+        if kwargs.pop("bypass_builtin_constraints", False):
             super().save(*args, **kwargs)
             return
-            
+
         if self.pk is not None:
             # This is an update operation
             try:
@@ -448,10 +448,10 @@ class SecatorTask(models.Model):
     def delete(self, *args, **kwargs):
         """Override delete to prevent deletion of built-in tasks"""
         # Allow deletion if explicitly bypassing constraints (for management commands)
-        if kwargs.pop('bypass_builtin_constraints', False):
+        if kwargs.pop("bypass_builtin_constraints", False):
             super().delete(*args, **kwargs)
             return
-            
+
         if self.is_builtin:
             raise PermissionError("Built-in tasks cannot be deleted!")
         super().delete(*args, **kwargs)
@@ -539,10 +539,10 @@ class SecatorScan(models.Model):
     def save(self, *args, **kwargs):
         """Override save to prevent modification of built-in scan configurations"""
         # Allow modification if explicitly bypassing constraints (for management commands)
-        if kwargs.pop('bypass_builtin_constraints', False):
+        if kwargs.pop("bypass_builtin_constraints", False):
             super().save(*args, **kwargs)
             return
-            
+
         if self.pk is not None:
             # This is an update operation
             try:
@@ -569,14 +569,13 @@ class SecatorScan(models.Model):
     def delete(self, *args, **kwargs):
         """Override delete to prevent deletion of built-in scan configurations"""
         # Allow deletion if explicitly bypassing constraints (for management commands)
-        if kwargs.pop('bypass_builtin_constraints', False):
+        if kwargs.pop("bypass_builtin_constraints", False):
             super().delete(*args, **kwargs)
             return
-            
+
         if self.scan_config_type == "builtin":
             raise PermissionError("Built-in scan configurations cannot be deleted!")
         super().delete(*args, **kwargs)
-
 
     class Meta:
         ordering = ["scan_config_type", "name"]

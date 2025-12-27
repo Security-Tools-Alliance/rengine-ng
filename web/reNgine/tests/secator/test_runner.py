@@ -49,9 +49,10 @@ tasks:
     def test_run_workflow_with_database_template_success(self):
         """Test workflow execution when loading template from database succeeds."""
         # Mock the _load_workflow_template and _execute_runner methods
-        with patch.object(self.runner, "_load_workflow_template") as mock_load_template, \
-             patch.object(self.runner, "_execute_runner") as mock_execute:
-            
+        with (
+            patch.object(self.runner, "_load_workflow_template") as mock_load_template,
+            patch.object(self.runner, "_execute_runner") as mock_execute,
+        ):
             mock_template = MagicMock()
             mock_load_template.return_value = mock_template
             mock_execute.return_value = {"status": "success", "result": "test_result"}
@@ -62,7 +63,7 @@ tasks:
 
             # Verify template was loaded
             mock_load_template.assert_called_once_with("test_subdomain_recon")
-            
+
             # Verify _execute_runner was called with template
             mock_execute.assert_called_once()
             call_args = mock_execute.call_args
@@ -75,9 +76,10 @@ tasks:
     def test_run_workflow_with_database_template_detailed(self):
         """Test workflow execution with detailed template validation from database."""
         # Mock the _load_workflow_template and _execute_runner methods
-        with patch.object(self.runner, "_load_workflow_template") as mock_load_template, \
-             patch.object(self.runner, "_execute_runner") as mock_execute:
-            
+        with (
+            patch.object(self.runner, "_load_workflow_template") as mock_load_template,
+            patch.object(self.runner, "_execute_runner") as mock_execute,
+        ):
             mock_template = MagicMock()
             mock_load_template.return_value = mock_template
             mock_execute.return_value = {"status": "success", "result": "test_result"}
@@ -88,7 +90,7 @@ tasks:
 
             # Verify template was loaded
             mock_load_template.assert_called_once_with("test_subdomain_recon")
-            
+
             # Verify _execute_runner was called with template
             mock_execute.assert_called_once()
             call_args = mock_execute.call_args

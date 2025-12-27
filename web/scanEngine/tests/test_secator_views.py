@@ -4,7 +4,6 @@ test_secator_views.py
 This file contains unit tests for the Secator views and forms.
 """
 
-from django.test import TestCase
 from django.urls import reverse
 
 from scanEngine.forms import SecatorScanForm, SecatorWorkflowForm
@@ -18,7 +17,7 @@ class TestSecatorViews(BaseTestCase):
     def setUp(self):
         """Set up test data."""
         super().setUp()
-        
+
         # Create test workflow
         self.workflow = SecatorWorkflow.objects.create(
             name="Test Workflow",
@@ -34,9 +33,9 @@ tasks:
   subfinder:
     description: Find subdomains
 """,
-            is_active=True
+            is_active=True,
         )
-        
+
         # Create test task
         self.task = SecatorTask.objects.create(
             name="Test Task",
@@ -44,9 +43,9 @@ tasks:
             category="dns/recon",
             description="A test task",
             is_builtin=True,
-            is_active=True
+            is_active=True,
         )
-        
+
         # Create test scan
         self.scan = SecatorScan.objects.create(
             name="Test Scan",
@@ -65,50 +64,50 @@ input_types:
   - domain
 """,
             is_default=True,
-            is_active=True
+            is_active=True,
         )
 
     def test_secator_workflows_view(self):
         """Test the secator workflows list view."""
-        response = self.client.get(reverse('workflows'))
+        response = self.client.get(reverse("workflows"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Test Workflow")
 
     def test_secator_workflow_detail_view(self):
         """Test the secator workflow detail view."""
-        response = self.client.get(reverse('workflow_detail', args=[self.workflow.id]))
+        response = self.client.get(reverse("workflow_detail", args=[self.workflow.id]))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Test Workflow")
         self.assertContains(response, "test_workflow")
 
     def test_secator_tasks_view(self):
         """Test the secator tasks list view."""
-        response = self.client.get(reverse('tasks'))
+        response = self.client.get(reverse("tasks"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Test Task")
 
     def test_secator_task_detail_view(self):
         """Test the secator task detail view."""
-        response = self.client.get(reverse('task_detail', args=[self.task.id]))
+        response = self.client.get(reverse("task_detail", args=[self.task.id]))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Test Task")
 
     def test_secator_scans_view(self):
         """Test the secator scans list view."""
-        response = self.client.get(reverse('scans'))
+        response = self.client.get(reverse("scans"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Test Scan")
 
     def test_secator_scan_detail_view(self):
         """Test the secator scan detail view."""
-        response = self.client.get(reverse('scan_detail', args=[self.scan.id]))
+        response = self.client.get(reverse("scan_detail", args=[self.scan.id]))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Test Scan")
         self.assertContains(response, "domain")
 
     def test_secator_scans_filter_builtin(self):
         """Test filtering scans by builtin type."""
-        response = self.client.get(reverse('scans') + '?filter=builtin')
+        response = self.client.get(reverse("scans") + "?filter=builtin")
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Test Scan")
 
@@ -122,34 +121,34 @@ input_types:
             scan_config_type="custom",
             yaml_configuration="type: scan\nname: custom",
             is_default=False,
-            is_active=True
+            is_active=True,
         )
-        
-        response = self.client.get(reverse('scans') + '?filter=custom')
+
+        response = self.client.get(reverse("scans") + "?filter=custom")
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Custom Scan")
 
     def test_secator_scans_search(self):
         """Test searching scans."""
-        response = self.client.get(reverse('scans') + '?search=Test')
+        response = self.client.get(reverse("scans") + "?search=Test")
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Test Scan")
 
     def test_add_scan_view(self):
         """Test the add scan view."""
-        response = self.client.get(reverse('add_scan'))
+        response = self.client.get(reverse("add_scan"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Add Scan")
 
     def test_add_workflow_view(self):
         """Test the add workflow view."""
-        response = self.client.get(reverse('add_workflow'))
+        response = self.client.get(reverse("add_workflow"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Add Workflow")
 
     def test_update_scan_builtin_blocked(self):
         """Test that updating built-in scans is blocked."""
-        response = self.client.get(reverse('update_scan', args=[self.scan.id]))
+        response = self.client.get(reverse("update_scan", args=[self.scan.id]))
         self.assertEqual(response.status_code, 302)  # Redirected
 
     def test_update_scan_custom_allowed(self):
@@ -162,21 +161,22 @@ input_types:
             scan_config_type="custom",
             yaml_configuration="type: scan\nname: custom",
             is_default=False,
-            is_active=True
+            is_active=True,
         )
-        
-        response = self.client.get(reverse('update_scan', args=[custom_scan.id]))
+
+        response = self.client.get(reverse("update_scan", args=[custom_scan.id]))
         self.assertEqual(response.status_code, 200)
 
     def test_delete_scan_builtin_blocked(self):
         """Test that deleting built-in scans is blocked."""
-        response = self.client.post(reverse('delete_scan', args=[self.scan.id]))
+        response = self.client.post(reverse("delete_scan", args=[self.scan.id]))
         self.assertEqual(response.status_code, 200)
         # Should return JSON with error
         import json
+
         data = json.loads(response.content)
-        self.assertFalse(data['status'])
-        self.assertIn("cannot be deleted", data['message'])
+        self.assertFalse(data["status"])
+        self.assertIn("cannot be deleted", data["message"])
 
     def test_delete_scan_custom_allowed(self):
         """Test that deleting custom scans is allowed."""
@@ -188,19 +188,20 @@ input_types:
             scan_config_type="custom",
             yaml_configuration="type: scan\nname: custom",
             is_default=False,
-            is_active=True
+            is_active=True,
         )
-        
-        response = self.client.post(reverse('delete_scan', args=[custom_scan.id]))
+
+        response = self.client.post(reverse("delete_scan", args=[custom_scan.id]))
         self.assertEqual(response.status_code, 200)
         # Should return JSON with success
         import json
+
         data = json.loads(response.content)
-        self.assertTrue(data['status'])
+        self.assertTrue(data["status"])
 
     def test_workflow_detail_related_scans(self):
         """Test that workflow detail shows related scans."""
-        response = self.client.get(reverse('workflow_detail', args=[self.workflow.id]))
+        response = self.client.get(reverse("workflow_detail", args=[self.workflow.id]))
         self.assertEqual(response.status_code, 200)
         # Should show the scan that uses this workflow
         self.assertContains(response, "Test Scan")
@@ -216,12 +217,12 @@ class TestSecatorForms(BaseTestCase):
     def test_secator_scan_form_valid(self):
         """Test SecatorScanForm with valid data."""
         form_data = {
-            'name': 'Test Scan',
-            'alias': 'domain',
-            'description': 'A test scan',
-            'scan_type': 'internet',
-            'scan_config_type': 'custom',
-            'yaml_configuration': """
+            "name": "Test Scan",
+            "alias": "domain",
+            "description": "A test scan",
+            "scan_type": "internet",
+            "scan_config_type": "custom",
+            "yaml_configuration": """
 type: scan
 name: domain
 description: A test scan
@@ -231,53 +232,53 @@ workflows:
 input_types:
   - domain
 """,
-            'is_default': False,
-            'is_active': True
+            "is_default": False,
+            "is_active": True,
         }
-        
+
         form = SecatorScanForm(data=form_data)
         self.assertTrue(form.is_valid())
 
     def test_secator_scan_form_invalid_yaml(self):
         """Test SecatorScanForm with invalid YAML."""
         form_data = {
-            'name': 'Test Scan',
-            'alias': 'domain',
-            'description': 'A test scan',
-            'scan_type': 'internet',
-            'scan_config_type': 'custom',
-            'yaml_configuration': 'invalid: yaml: content: [',
-            'is_default': False,
-            'is_active': True
+            "name": "Test Scan",
+            "alias": "domain",
+            "description": "A test scan",
+            "scan_type": "internet",
+            "scan_config_type": "custom",
+            "yaml_configuration": "invalid: yaml: content: [",
+            "is_default": False,
+            "is_active": True,
         }
-        
+
         form = SecatorScanForm(data=form_data)
         self.assertFalse(form.is_valid())
-        self.assertIn('yaml_configuration', form.errors)
+        self.assertIn("yaml_configuration", form.errors)
 
     def test_secator_scan_form_missing_required_fields(self):
         """Test SecatorScanForm with missing required fields."""
         form_data = {
-            'name': 'Test Scan',
-            'yaml_configuration': """
+            "name": "Test Scan",
+            "yaml_configuration": """
 type: scan
 name: domain
 # Missing description and workflows
 """,
         }
-        
+
         form = SecatorScanForm(data=form_data)
         self.assertFalse(form.is_valid())
-        self.assertIn('yaml_configuration', form.errors)
+        self.assertIn("yaml_configuration", form.errors)
 
     def test_secator_workflow_form_valid(self):
         """Test SecatorWorkflowForm with valid data."""
         form_data = {
-            'name': 'Test Workflow',
-            'alias': 'subdomain_recon',  # Use a valid choice
-            'description': 'A test workflow',
-            'scan_type': 'internet',
-            'yaml_configuration': """
+            "name": "Test Workflow",
+            "alias": "subdomain_recon",  # Use a valid choice
+            "description": "A test workflow",
+            "scan_type": "internet",
+            "yaml_configuration": """
 type: workflow
 name: test_workflow
 description: A test workflow
@@ -288,26 +289,26 @@ tasks:
     type: subfinder
     description: Find subdomains
 """,
-            'is_active': True
+            "is_active": True,
         }
-        
+
         form = SecatorWorkflowForm(data=form_data)
         self.assertTrue(form.is_valid())
 
     def test_secator_workflow_form_invalid_yaml(self):
         """Test SecatorWorkflowForm with invalid YAML."""
         form_data = {
-            'name': 'Test Workflow',
-            'alias': 'test_workflow',
-            'description': 'A test workflow',
-            'scan_type': 'internet',
-            'yaml_configuration': 'invalid: yaml: content: [',
-            'is_active': True
+            "name": "Test Workflow",
+            "alias": "test_workflow",
+            "description": "A test workflow",
+            "scan_type": "internet",
+            "yaml_configuration": "invalid: yaml: content: [",
+            "is_active": True,
         }
-        
+
         form = SecatorWorkflowForm(data=form_data)
         self.assertFalse(form.is_valid())
-        self.assertIn('yaml_configuration', form.errors)
+        self.assertIn("yaml_configuration", form.errors)
 
     def test_secator_scan_form_builtin_modification_blocked(self):
         """Test that built-in scan modification is blocked in form."""
@@ -320,20 +321,20 @@ tasks:
             scan_config_type="builtin",
             yaml_configuration="type: scan\nname: domain",
             is_default=True,
-            is_active=True
+            is_active=True,
         )
-        
+
         form_data = {
-            'name': 'Modified Scan',
-            'alias': 'domain',
-            'description': 'Modified description',
-            'scan_type': 'internet',
-            'scan_config_type': 'builtin',
-            'yaml_configuration': 'type: scan\nname: domain',
-            'is_default': True,
-            'is_active': True
+            "name": "Modified Scan",
+            "alias": "domain",
+            "description": "Modified description",
+            "scan_type": "internet",
+            "scan_config_type": "builtin",
+            "yaml_configuration": "type: scan\nname: domain",
+            "is_default": True,
+            "is_active": True,
         }
-        
+
         form = SecatorScanForm(data=form_data, instance=scan)
         self.assertFalse(form.is_valid())
-        self.assertIn('__all__', form.errors)
+        self.assertIn("__all__", form.errors)

@@ -771,7 +771,7 @@ class SecatorWorkflowForm(forms.ModelForm):
             showinvisibles=True,
             attrs={"id": "editor"},
         ),
-        help_text="Define the workflow structure and tasks. See <a href='https://docs.freelabz.com/for-developers/writing-workflows' target='_blank'>Secator documentation</a>"
+        help_text="Define the workflow structure and tasks. See <a href='https://docs.freelabz.com/for-developers/writing-workflows' target='_blank'>Secator documentation</a>",
     )
     is_active = forms.BooleanField(
         required=False,
@@ -964,7 +964,9 @@ class SecatorScanForm(forms.ModelForm):
         ]
         widgets = {
             "name": forms.TextInput(attrs={"class": "form-control", "placeholder": "Enter scan configuration name"}),
-            "alias": forms.TextInput(attrs={"class": "form-control", "placeholder": "e.g., domain, host, network, subdomain, url"}),
+            "alias": forms.TextInput(
+                attrs={"class": "form-control", "placeholder": "e.g., domain, host, network, subdomain, url"}
+            ),
             "description": forms.Textarea(
                 attrs={"class": "form-control", "rows": 3, "placeholder": "Enter scan description"}
             ),
@@ -989,10 +991,14 @@ class SecatorScanForm(forms.ModelForm):
 
         # Make alias not required for custom scans
         self.fields["alias"].required = False
-        
+
         # Add help text with documentation links
-        self.fields["alias"].help_text = "Scan alias from Secator (e.g., domain, host, network). See <a href='https://docs.freelabz.com/for-developers/writing-scans-wip' target='_blank'>Secator scans documentation</a>"
-        self.fields["yaml_configuration"].help_text = "Define the scan structure. See <a href='https://docs.freelabz.com/for-developers/writing-scans-wip' target='_blank'>Secator documentation</a>"
+        self.fields[
+            "alias"
+        ].help_text = "Scan alias from Secator (e.g., domain, host, network). See <a href='https://docs.freelabz.com/for-developers/writing-scans-wip' target='_blank'>Secator scans documentation</a>"
+        self.fields[
+            "yaml_configuration"
+        ].help_text = "Define the scan structure. See <a href='https://docs.freelabz.com/for-developers/writing-scans-wip' target='_blank'>Secator documentation</a>"
 
     def clean_yaml_configuration(self):
         """Validate YAML configuration."""

@@ -22,6 +22,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # Root env vars
 RENGINE_HOME = env("RENGINE_HOME", default=str(Path.home() / "rengine"))
 RENGINE_RESULTS = env("RENGINE_RESULTS", default=str(Path.home() / "scan_results"))
+SECATOR_RESULTS = env("SECATOR_RESULTS", default=str(Path.home() / ".secator" / "reports"))
 RENGINE_CUSTOM_ENGINES = env("RENGINE_CUSTOM_ENGINES", default=str(Path.home() / "custom_engines"))
 RENGINE_WORDLISTS = env("RENGINE_WORDLISTS", default=str(Path.home() / "wordlists"))
 RENGINE_TOOL_PATH = env("RENGINE_TOOL_PATH", default=str(Path.home() / "tools"))

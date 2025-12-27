@@ -47,6 +47,13 @@ from .test_search import (
     TestSearchHistoryView,
     TestUniversalSearch,
 )
+from .test_secator_api import (
+    TestSecatorAPIAuthentication,
+    TestSecatorFindingCreate,
+    TestSecatorFindingUpdate,
+    TestSecatorRunnerCreate,
+    TestSecatorRunnerUpdate,
+)
 from .test_subdomain import (
     TestDeleteSubdomain,
     TestInterestingSubdomainViewSet,
@@ -121,6 +128,12 @@ __all__ = [
     # test_search
     "TestSearchHistoryView",
     "TestUniversalSearch",
+    # test_secator_api
+    "TestSecatorAPIAuthentication",
+    "TestSecatorFindingCreate",
+    "TestSecatorFindingUpdate",
+    "TestSecatorRunnerCreate",
+    "TestSecatorRunnerUpdate",
     # test_subdomain
     "TestDeleteSubdomain",
     "TestInterestingSubdomainViewSet",

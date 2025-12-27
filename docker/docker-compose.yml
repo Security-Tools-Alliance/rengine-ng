@@ -38,14 +38,33 @@ services:
     image: freelabz/secator:latest
     container_name: secator-worker
     restart: unless-stopped
+    entrypoint: /entrypoint.sh
     command: ['worker']
-    environment:
-    - SECATOR_CELERY_BROKER_URL=redis://redis:6379/0
-    - SECATOR_CELERY_RESULT_BACKEND=redis://redis:6379/0
+    env_file:
+      - ../.env
+    volumes:
+      - scan_results:/home/secator/.secator/reports
+      - ./worker/entrypoint.sh:/entrypoint.sh:ro
+      # Temporary for debug: Mount Secator repo for local development
+      - ${SECATOR_REPO_PATH:-../../secator}:/opt/secator:rw,z
     depends_on:
       - redis
     networks:
       - rengine_network
+    # =========================================================================
+    # Remote Worker Deployment
+    # =========================================================================
+    # For deploying workers on remote machines (VPS, internal networks, etc.),
+    # use docker-compose.worker.yml with a configured .env file.
+    #
+    # Quick setup on remote machine:
+    #   1. Copy docker-compose.worker.yml and .env-dist.worker
+    #   2. Rename .env-dist.worker to .env
+    #   3. Configure Redis and API URLs in .env
+    #   4. Run: docker-compose -f docker-compose.worker.yml up -d
+    #
+    # See docker-compose.worker.yml and .env-dist.worker for full documentation.
+    # =========================================================================
 
   # celery:
   #   image: ghcr.io/security-tools-alliance/rengine-ng:rengine-celery-v${RENGINE_VERSION}
@@ -118,8 +137,6 @@ services:
     entrypoint: /entrypoint.sh
     environment:
       - RENGINE_HOME=/home/rengine/rengine
-      - SECATOR_CELERY_BROKER_URL=redis://redis:6379/0
-      - SECATOR_CELERY_RESULT_BACKEND=redis://redis:6379/0
       - UI_ERROR_LOGGING=0
     volumes:
       - ../web:/home/rengine/rengine:rw,z
@@ -128,6 +145,8 @@ services:
       - nuclei_templates:/home/rengine/nuclei-templates
       - gf_patterns:/home/rengine/.gf
       - wordlist:/home/rengine/wordlists
+      # Temporary for debug: Mount Secator repo for local development
+      - ${SECATOR_REPO_PATH:-../../secator}:/opt/secator:rw,z
     healthcheck:
       test: ["CMD", "curl", "-f", "-k", "http://localhost:8000"]
       interval: 10s

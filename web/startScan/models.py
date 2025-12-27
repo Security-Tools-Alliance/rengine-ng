@@ -1121,3 +1121,22 @@ class S3Bucket(models.Model):
     perm_all_users_full_control = models.IntegerField(default=0)
     num_objects = models.IntegerField(default=0)
     size = models.IntegerField(default=0)
+
+
+class SecatorRunner(models.Model):
+    """Model for storing Secator runner data from API hooks."""
+
+    id = models.AutoField(primary_key=True)
+    runner_type = models.CharField(max_length=50, help_text="Type of runner: workflow, scan, or task")
+    runner_name = models.CharField(max_length=500, null=True, blank=True)
+    scan_history = models.ForeignKey(ScanHistory, on_delete=models.CASCADE, null=True, blank=True)
+    domain = models.ForeignKey(Domain, on_delete=models.CASCADE, null=True, blank=True)
+    runner_data = models.JSONField(default=dict, help_text="Full runner data from Secator")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.runner_type} - {self.runner_name or 'N/A'} (ID: {self.id})"
+
+    class Meta:
+        ordering = ["-created_at"]

@@ -196,7 +196,7 @@ def get_task_info(task_name):
     task = SecatorTask.objects.filter(task_type=task_name, is_active=True).first()
     if not task:
         return {"name": task_name, "category": "Unknown", "description": f"Secator task: {task_name}", "icon": "tools"}
-    
+
     return {
         "name": task.name,
         "category": task.category,

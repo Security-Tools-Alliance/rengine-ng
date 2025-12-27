@@ -60,6 +60,9 @@ class UserAPIKey(AbstractAPIKey):
     created_at = models.DateTimeField(auto_now_add=True)
     last_used = models.DateTimeField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
+    is_system = models.BooleanField(
+        default=False, help_text="System keys cannot be deleted through the UI and are managed by reNgine internally"
+    )
 
     def get_url_id(self):
         """Return a URL-safe integer ID for this API key."""

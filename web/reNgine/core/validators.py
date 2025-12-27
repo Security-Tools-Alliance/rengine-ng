@@ -174,6 +174,43 @@ def sanitize_filename(filename: str) -> str:
     return sanitized[:255]
 
 
+def sanitize_path_component(component: str) -> str:
+    """
+    Sanitize a path component (directory or folder name) for safe filesystem usage.
+    More permissive than sanitize_filename, allows more characters typical in paths.
+
+    Args:
+        component: Path component to sanitize
+
+    Returns:
+        str: Sanitized path component
+    """
+    if not component:
+        return "unnamed"
+
+    # Strip leading/trailing whitespace
+    component = component.strip()
+
+    if not component:
+        return "unnamed"
+
+    # Replace forbidden characters and path separators with underscore
+    # Keep: alphanumeric, dash, underscore, dot
+    sanitized = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", component)
+
+    # Remove leading/trailing dots and spaces to avoid issues
+    sanitized = sanitized.strip(". ")
+
+    # Replace multiple consecutive underscores with single underscore
+    sanitized = re.sub(r"_{2,}", "_", sanitized)
+
+    if not sanitized:
+        return "unnamed"
+
+    # Limit length to 100 characters for path components
+    return sanitized[:100]
+
+
 def validate_severity(severity: str) -> Optional[str]:
     """
     Validate and normalize severity level.

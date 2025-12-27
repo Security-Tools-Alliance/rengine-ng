@@ -54,10 +54,9 @@ workflows:
         super().tearDown()
 
     @patch("reNgine.secator.runner.os.makedirs")
-    @patch("reNgine.secator.runner.ReNgineDriver")
     @patch("reNgine.secator.runner.Scan")
     @patch("reNgine.secator.runner.TemplateLoader")
-    def test_run_scan_builtin_success(self, mock_template_loader, mock_scan_class, mock_driver, mock_makedirs):
+    def test_run_scan_builtin_success(self, mock_template_loader, mock_scan_class, mock_makedirs):
         """Test successful execution of builtin scan."""
         mock_template = MagicMock()
         mock_template_loader.return_value = mock_template
@@ -66,10 +65,6 @@ workflows:
         mock_scan_instance.run.return_value = {"items": [], "stats": {}}
         mock_scan_class.return_value = mock_scan_instance
         mock_scan_class.__name__ = "Scan"
-
-        mock_driver_instance = MagicMock()
-        mock_driver_instance.get_hooks_config.return_value = {}
-        mock_driver.return_value = mock_driver_instance
 
         result = self.runner.run_scan(
             scan_type="domain",
@@ -88,10 +83,9 @@ workflows:
         mock_scan_instance.run.assert_called_once()
 
     @patch("reNgine.secator.runner.os.makedirs")
-    @patch("reNgine.secator.runner.ReNgineDriver")
     @patch("reNgine.secator.runner.Scan")
     @patch("reNgine.secator.runner.TemplateLoader")
-    def test_run_scan_custom_success(self, mock_template_loader, mock_scan_class, mock_driver, mock_makedirs):
+    def test_run_scan_custom_success(self, mock_template_loader, mock_scan_class, mock_makedirs):
         """Test successful execution of custom scan."""
         mock_template = MagicMock()
         mock_template_loader.return_value = mock_template
@@ -100,10 +94,6 @@ workflows:
         mock_scan_instance.run.return_value = {"items": [], "stats": {}}
         mock_scan_class.return_value = mock_scan_instance
         mock_scan_class.__name__ = "Scan"
-
-        mock_driver_instance = MagicMock()
-        mock_driver_instance.get_hooks_config.return_value = {}
-        mock_driver.return_value = mock_driver_instance
 
         result = self.runner.run_scan(
             scan_type="custom_test",
