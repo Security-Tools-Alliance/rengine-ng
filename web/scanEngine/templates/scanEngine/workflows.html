@@ -279,7 +279,7 @@ function deleteWorkflow(workflowId, workflowName) {
     
     Swal.fire({
         title: 'Are you sure?',
-        text: `Are you sure you want to delete the workflow "${workflowName}"?\n\nThis action cannot be undone. All related scan configurations will be affected.`,
+        html: `Are you sure you want to delete the workflow<br><strong>"${workflowName}"</strong>?<br><br>This action cannot be undone.<br>All related scan configurations will be affected.`,
         icon: 'warning',
         showCancelButton: true,
         confirmButtonColor: '#3085d6',
