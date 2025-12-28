@@ -1,6 +1,6 @@
-name: bug_bounty_active
+name: internet_active
 description: Active reconnaissance with vulnerability scanning for bug bounty programs
-scan_type: bug_bounty
+scan_type: internet
 workflow_type: custom
 
 tasks:

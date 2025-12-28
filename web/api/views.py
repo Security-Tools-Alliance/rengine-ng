@@ -3538,7 +3538,7 @@ class CreateSecatorWorkflow(APIView):
                 description=data.get("description", ""),
                 workflow_type=data.get("workflow_type", "custom"),
                 yaml_configuration=data["yaml_configuration"],
-                scan_type=data.get("scan_type", "bug_bounty"),
+                scan_type=data.get("scan_type", "internet"),
                 is_active=data.get("is_active", True),
             )
 
@@ -3585,7 +3585,7 @@ class CreateSecatorScan(APIView):
             scan = SecatorScan.objects.create(
                 name=data["name"],
                 description=data.get("description", ""),
-                scan_type=data.get("scan_type", "bug_bounty"),
+                scan_type=data.get("scan_type", "internet"),
                 scan_config_type=data.get("scan_config_type", "custom"),
                 is_default=data.get("is_default", False),
                 yaml_configuration=data.get("yaml_configuration", ""),

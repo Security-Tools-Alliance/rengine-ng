@@ -163,15 +163,15 @@ def determine_scan_type_from_engine_name(engine_name):
         engine_name (str): The name of the scan engine
 
     Returns:
-        str: Scan type - 'bug_bounty' or 'internal_network'
+        str: Scan type - 'internet' or 'internal_network'
 
     Examples:
         >>> determine_scan_type_from_engine_name("Internal Network - Port Scan")
         'internal_network'
         >>> determine_scan_type_from_engine_name("Initial Scan - reNgine recommended")
-        'bug_bounty'
+        'internet'
         >>> determine_scan_type_from_engine_name("Custom Engine")
-        'bug_bounty'
+        'internet'
     """
     try:
         # Look for the engine's YAML file in default_scan_engines directory
@@ -194,8 +194,8 @@ def determine_scan_type_from_engine_name(engine_name):
             logger.warning(f"Engine file not found: {yaml_file_path}, using default")
 
         # Fallback to default
-        return "bug_bounty"
+        return "internet"
 
     except Exception as e:
         logger.error(f"Error determining scan type for engine '{engine_name}': {e}")
-        return "bug_bounty"  # Safe fallback
+        return "internet"  # Safe fallback

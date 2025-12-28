@@ -1,6 +1,6 @@
-name: bug_bounty_passive
+name: internet_passive
 description: Passive reconnaissance workflow for bug bounty programs
-scan_type: bug_bounty
+scan_type: internet
 workflow_type: custom
 
 tasks:

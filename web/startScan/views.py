@@ -308,7 +308,7 @@ def start_scan_ui(request, slug, domain_id):
             speed_profile=api_data["speed_profile"],
             stealth_profile=api_data["stealth_profile"],
             expert_mode=api_data["expert_mode"],
-            scan_type="bug_bounty",
+            scan_type="internet",
         )
 
         # Check result
@@ -329,7 +329,7 @@ def start_scan_ui(request, slug, domain_id):
 
     # GET request
     # Get engines based on scan type (default to bug_bounty for backward compatibility)
-    scan_type = request.GET.get("scan_type", "bug_bounty")
+    scan_type = request.GET.get("scan_type", "internet")
 
     # Get engines based on scan type
     engine = (
@@ -420,7 +420,7 @@ def start_multiple_scan(request, slug):
             # if scan mode is available, then start the scan
             # get engine type and scan type
             engine_id = safe_int_cast(request.POST["scan_mode"])
-            scan_type = request.POST.get("scan_type", "bug_bounty")
+            scan_type = request.POST.get("scan_type", "internet")
             list_of_domains = request.POST["list_of_domain_id"]
 
             # Get scan existing elements option
@@ -474,7 +474,7 @@ def start_multiple_scan(request, slug):
             domain_ids = ",".join(list_of_domain_id)
 
     # GET request
-    scan_type = request.GET.get("scan_type", "bug_bounty")
+    scan_type = request.GET.get("scan_type", "internet")
 
     # Get engines based on scan type
     engines = EngineType.objects.filter(scan_type=scan_type)

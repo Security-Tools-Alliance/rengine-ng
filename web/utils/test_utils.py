@@ -697,7 +697,7 @@ http_crawl: {}
             description="Test SecatorScan for unit tests",
             execution_mode="workflow",
             workflow=self.secator_workflow,
-            scan_type="bug_bounty",
+            scan_type="internet",
             scan_config_type="custom",
             is_active=True,
         )

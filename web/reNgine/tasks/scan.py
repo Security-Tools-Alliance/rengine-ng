@@ -22,7 +22,7 @@ def start_secator_scan(
     speed_profile=None,
     stealth_profile=None,
     expert_mode=False,
-    scan_type="bug_bounty",
+    scan_type="internet",
 ):
     """Start a Secator scan with common logic for both UI and API.
 

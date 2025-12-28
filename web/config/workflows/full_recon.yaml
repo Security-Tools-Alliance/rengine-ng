@@ -1,6 +1,6 @@
 name: full_recon
 description: Complete reconnaissance workflow combining all techniques
-scan_type: bug_bounty
+scan_type: internet
 workflow_type: custom
 
 tasks:

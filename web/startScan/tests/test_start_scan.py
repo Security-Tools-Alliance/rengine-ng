@@ -26,7 +26,7 @@ class TestStartScanViews(BaseTestCase):
         data = {
             "domain_name": self.data_generator.domain.name,
             "scan_mode": self.data_generator.engine_type.id,
-            "scan_type": "bug_bounty",
+            "scan_type": "internet",
             "execution_mode": "workflow",  # Required parameter
             "workflow_id": "1",  # Required for workflow mode
             "importSubdomainTextArea": "www.example.com\nmail.example.com",

@@ -818,7 +818,7 @@ class SecatorWorkflowForm(forms.ModelForm):
             raise ValidationError("Field 'description' must be a non-empty string.")
 
         # Validate scan_type field
-        valid_scan_types = ["domain", "host", "network", "subdomain", "url", "internet", "internal"]
+        valid_scan_types = ["internet", "internal"]
         scan_type = parsed_yaml.get("scan_type")
         if not isinstance(scan_type, str) or scan_type not in valid_scan_types:
             raise ValidationError(f"Field 'scan_type' must be one of: {', '.join(valid_scan_types)}")

@@ -106,7 +106,7 @@ Quick Scan History
               <td class="">
                 <span class="badge badge-soft-primary">{{ scan_history.scan_type.engine_name }}</span>
                 <br>
-                {% if scan_history.scan_type.scan_type == 'bug_bounty' %}
+                {% if scan_history.scan_type.scan_type == 'internet' %}
                 <span class="badge badge-soft-info mt-1">Bug Bounty</span>
                 {% elif scan_history.scan_type.scan_type == 'internal_network' %}
                 <span class="badge badge-soft-warning mt-1">Internal Network</span>
