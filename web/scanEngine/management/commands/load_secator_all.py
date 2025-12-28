@@ -12,11 +12,6 @@ class Command(SecatorLoaderBase):
 
     def add_arguments(self, parser):
         parser.add_argument(
-            "--force",
-            action="store_true",
-            help="Force reload even if components already exist",
-        )
-        parser.add_argument(
             "--tasks-only",
             action="store_true",
             help="Load only tasks",
@@ -33,7 +28,6 @@ class Command(SecatorLoaderBase):
         )
 
     def handle(self, *args, **options):
-        force = options["force"]
         tasks_only = options["tasks_only"]
         workflows_only = options["workflows_only"]
         scans_only = options["scans_only"]
@@ -47,17 +41,17 @@ class Command(SecatorLoaderBase):
 
         if load_tasks:
             self.stdout.write("Loading tasks...")
-            call_command("load_tasks", force=force)
+            call_command("load_tasks")
             self.stdout.write("")
 
         if load_workflows:
             self.stdout.write("Loading workflows...")
-            call_command("load_workflows", force=force)
+            call_command("load_workflows")
             self.stdout.write("")
 
         if load_scans:
             self.stdout.write("Loading scans...")
-            call_command("load_scans", force=force)
+            call_command("load_scans")
             self.stdout.write("")
 
         self.stdout.write(self.style.SUCCESS("All Secator components loaded successfully!"))
