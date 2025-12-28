@@ -4,6 +4,8 @@ test_secator_commands.py
 This file contains unit tests for the Secator management commands.
 """
 
+
+import contextlib
 from io import StringIO
 import sys
 from unittest.mock import MagicMock, mock_open, patch
@@ -23,21 +25,15 @@ def get_test_stdout():
     verbosity = 1
     for arg in sys.argv:
         if arg.startswith("--verbosity="):
-            try:
+            with contextlib.suppress(ValueError, IndexError):
                 verbosity = int(arg.split("=", 1)[1])
-            except (ValueError, IndexError):
-                pass
             break
         elif arg == "--verbosity" and sys.argv.index(arg) + 1 < len(sys.argv):
-            try:
+            with contextlib.suppress(ValueError, IndexError):
                 verbosity = int(sys.argv[sys.argv.index(arg) + 1])
-            except (ValueError, IndexError):
-                pass
             break
 
-    if verbosity >= 2:
-        return sys.stdout
-    return StringIO()
+    return sys.stdout if verbosity >= 2 else StringIO()
 
 
 class TestSecatorCommands(BaseTestCase):
@@ -111,7 +107,11 @@ tasks:
         call_command("load_workflows", "--builtin-only", stdout=out)
 
         # Check that workflow was created (using name as key, not alias)
-        self.assertTrue(SecatorWorkflow.objects.filter(name="Subdomain Recon").exists())
+        workflow = SecatorWorkflow.objects.get(name="subdomain_recon")
+        self.assertEqual(workflow.name, "subdomain_recon")
+        self.assertEqual(workflow.alias, "subdomain_recon")
+        self.assertEqual(workflow.display_name, "Subdomain Recon")
+        self.assertEqual(workflow.get_display_name(), "Subdomain Recon")
 
     @patch("scanEngine.management.commands.load_scans.get_configs_by_type")
     @patch("builtins.open", new_callable=mock_open)
@@ -391,7 +391,9 @@ tasks:
 
         # Verify workflow was updated
         existing_workflow.refresh_from_db()
-        self.assertEqual(existing_workflow.name, "Subdomain Recon")
+        self.assertEqual(existing_workflow.name, "subdomain_recon")
+        self.assertEqual(existing_workflow.display_name, "Subdomain Recon")
+        self.assertEqual(existing_workflow.get_display_name(), "Subdomain Recon")
         self.assertEqual(existing_workflow.description, "Subdomain discovery")
         self.assertEqual(existing_workflow.scan_type, "internet")
         self.assertIn("subfinder", existing_workflow.yaml_configuration)

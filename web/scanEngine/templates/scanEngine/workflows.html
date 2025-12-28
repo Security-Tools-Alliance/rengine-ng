@@ -63,7 +63,7 @@
                                 {% for workflow in page_obj %}
                                 <tr>
                                     <td>
-                                        <strong>{{ workflow.name }}</strong>
+                                        <strong>{{ workflow.get_display_name }}</strong>
                                         {% if workflow.alias %}
                                         <br><small class="text-info"><i class="fas fa-tag"></i> {{ workflow.alias }}</small>
                                         {% endif %}
@@ -96,7 +96,7 @@
                                             <a href="{% url 'update_workflow' workflow.id %}" class="btn btn-warning btn-sm">
                                                 <i class="fas fa-edit"></i>
                                             </a>
-                                            <button type="button" class="btn btn-danger btn-sm" onclick="deleteWorkflow({{ workflow.id }}, '{{ workflow.name }}')">
+                                            <button type="button" class="btn btn-danger btn-sm" onclick="deleteWorkflow({{ workflow.id }}, '{{ workflow.get_display_name }}')">
                                                 <i class="fas fa-trash"></i>
                                             </button>
                                             {% endif %}

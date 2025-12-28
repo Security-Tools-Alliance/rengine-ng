@@ -305,7 +305,7 @@ class ScanHistorySerializer(serializers.ModelSerializer):
             return scan_history.scan_type.scan_type
         else:
             # Fallback to default
-            return "bug_bounty"
+            return "internet"
 
 
 class ScanActivitySerializer(serializers.ModelSerializer):

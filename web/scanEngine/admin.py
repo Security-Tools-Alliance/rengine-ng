@@ -60,6 +60,7 @@ class SecatorWorkflowAdmin(admin.ModelAdmin):
 
     list_display = [
         "name",
+        "display_name_formatted",
         "alias",
         "workflow_type",
         "scan_type",
@@ -76,6 +77,7 @@ class SecatorWorkflowAdmin(admin.ModelAdmin):
     search_fields = [
         "name",
         "alias",
+        "display_name",
         "description",
     ]
     readonly_fields = [
@@ -83,7 +85,7 @@ class SecatorWorkflowAdmin(admin.ModelAdmin):
         "updated_at",
     ]
     fieldsets = (
-        ("Basic Information", {"fields": ("name", "alias", "description", "workflow_type", "scan_type", "is_active")}),
+        ("Basic Information", {"fields": ("name", "alias", "display_name", "description", "workflow_type", "scan_type", "is_active")}),
         (
             "Configuration",
             {
@@ -99,6 +101,11 @@ class SecatorWorkflowAdmin(admin.ModelAdmin):
             },
         ),
     )
+
+    def display_name_formatted(self, obj):
+        """Display the formatted display name."""
+        return obj.get_display_name()
+    display_name_formatted.short_description = "Display Name"
 
     def formfield_for_dbfield(self, db_field, request, **kwargs):
         """Override form field for alias to use TextInput instead of Select."""
@@ -183,7 +190,7 @@ class SecatorScanAdmin(admin.ModelAdmin):
         "updated_at",
     ]
     fieldsets = (
-        ("Basic Information", {"fields": ("name", "alias", "description", "scan_type", "is_default")}),
+        ("Basic Information", {"fields": ("name", "alias", "display_name", "description", "scan_type", "is_default")}),
         ("Configuration", {"fields": ("scan_config_type", "yaml_configuration", "is_active")}),
         (
             "Timestamps",

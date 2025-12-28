@@ -252,9 +252,10 @@ class SecatorWorkflow(models.Model):
         ("custom", "Custom"),
     ]
 
-    WORKFLOW_ALIAS_CHOICES = [
+    WORKFLOW_NAME_CHOICES = [
         ("cidr_recon", "CIDR Recon"),
         ("code_scan", "Code Scan"),
+        ("domain_recon", "Domain Recon"),
         ("host_recon", "Host Recon"),
         ("subdomain_recon", "Subdomain Recon"),
         ("url_bypass", "URL Bypass"),
@@ -271,10 +272,9 @@ class SecatorWorkflow(models.Model):
     name = models.CharField(max_length=200, unique=True)
     alias = models.CharField(
         max_length=50,
-        choices=WORKFLOW_ALIAS_CHOICES,
         blank=True,
         null=True,
-        help_text="Built-in workflow alias from Secator",
+        help_text="Built-in workflow alias from Secator (for CLI usage only, not used by reNgine-ng)",
     )
     description = models.TextField(blank=True, null=True)
     workflow_type = models.CharField(
@@ -293,9 +293,22 @@ class SecatorWorkflow(models.Model):
         default="internet",
         help_text="Type of scan this workflow is designed for",
     )
+    display_name = models.CharField(
+        max_length=200,
+        blank=True,
+        null=True,
+        help_text="User-friendly display name for the workflow",
+    )
+
+    def get_display_name(self):
+        """Return display_name if available, otherwise format name"""
+        if self.display_name:
+            return self.display_name
+        return self.name.replace("_", " ").title()
+
 
     def __str__(self):
-        return f"{self.name} ({self.workflow_type})"
+        return f"{self.get_display_name()} ({self.workflow_type})"
 
     def _parse_yaml_config(self):
         """Parse YAML configuration safely"""

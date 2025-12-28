@@ -1,7 +1,7 @@
 {% extends "base/base.html" %}
 {% load static %}
 
-{% block title %}{{ workflow.name }} - Workflow Detail{% endblock %}
+{% block title %}{{ workflow.get_display_name }} - Workflow Detail{% endblock %}
 
 {% block custom_js_css_link %}
 <link rel="stylesheet" href="{% static 'scanEngine/css/secator.css' %}">
@@ -27,7 +27,7 @@
             <div class="card">
                 <div class="card-header">
                     <h3 class="card-title">
-                        <i class="fas fa-project-diagram"></i> {{ workflow.name }}
+                        <i class="fas fa-project-diagram"></i> {{ workflow.get_display_name }}
                     </h3>
                     <div class="card-tools">
                         <a href="{% url 'workflows' %}" class="btn btn-secondary btn-sm">

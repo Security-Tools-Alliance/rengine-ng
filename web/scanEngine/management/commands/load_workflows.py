@@ -103,19 +103,16 @@ class Command(SecatorLoaderBase):
                     # Determine scan type based on workflow content
                     scan_type = self._determine_scan_type_from_yaml(workflow_data)
 
-                    # Use display name from WORKFLOW_ALIAS_CHOICES if alias exists, otherwise use name
-                    if workflow_alias:
-                        display_name = dict(SecatorWorkflow.WORKFLOW_ALIAS_CHOICES).get(
-                            workflow_alias, workflow_name.replace("_", " ").title()
-                        )
-                    else:
-                        display_name = workflow_name.replace("_", " ").title()
+                    # Get display name from WORKFLOW_NAME_CHOICES using workflow_name (TemplateLoader name)
+                    # (will be formatted automatically via get_display_name() if empty)
+                    display_name = dict(SecatorWorkflow.WORKFLOW_NAME_CHOICES).get(workflow_name)
 
-                    # Use name as unique key (not alias) - alias is secondary information for Secator CLI
+                    # Use name (TemplateLoader name) as unique key - this is the only identifier for Secator
                     workflow, created = SecatorWorkflow.objects.get_or_create(
-                        name=display_name,
+                        name=workflow_name,
                         defaults={
                             "alias": workflow_alias,
+                            "display_name": display_name,
                             "description": description,
                             "yaml_configuration": yaml_config,
                             "scan_type": scan_type,
@@ -128,17 +125,18 @@ class Command(SecatorLoaderBase):
                         # For built-in workflows, use bypass_builtin_constraints to allow save
                         workflow.save(bypass_builtin_constraints=True)
                         created_count += 1
-                        self.stdout.write(f"Created built-in workflow: {display_name}")
+                        self.stdout.write(f"Created built-in workflow: {workflow.get_display_name()}")
                     else:
                         # Update existing workflow using update() to bypass save() constraints
                         SecatorWorkflow.objects.filter(pk=workflow.pk).update(
                             alias=workflow_alias,
+                            display_name=display_name,
                             description=description,
                             yaml_configuration=yaml_config,
                             scan_type=scan_type,
                         )
                         updated_count += 1
-                        self.stdout.write(f"Updated built-in workflow: {display_name}")
+                        self.stdout.write(f"Updated built-in workflow: {workflow.get_display_name()}")
 
                 except Exception as e:
                     self.stdout.write(

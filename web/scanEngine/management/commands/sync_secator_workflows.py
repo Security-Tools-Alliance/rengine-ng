@@ -38,9 +38,6 @@ class Command(BaseCommand):
         synced_count = 0
 
         for workflow in workflows:
-            if not workflow.alias:
-                self.stdout.write(self.style.WARNING(f"Skipping workflow '{workflow.name}' - no alias defined"))
-                continue
 
             try:
                 # Parse YAML configuration
@@ -52,7 +49,7 @@ class Command(BaseCommand):
                     continue
 
                 # Create filename
-                filename = f"{workflow.alias}.yaml"
+                filename = f"{workflow.name}.yaml"
 
                 # Write to Secator configs directory
                 configs_file = secator_configs_dir / filename

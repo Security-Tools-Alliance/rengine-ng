@@ -23,7 +23,7 @@
                     
                     <div class="workflow-tile-body">
                       <div class="workflow-tile-title-row">
-                        <h6 class="workflow-tile-title">{{ workflow.name }}</h6>
+                        <h6 class="workflow-tile-title">{{ workflow.get_display_name }}</h6>
                         <div class="workflow-tasks-inline">
                           <span class="workflow-tasks-count">{{ workflow.get_tasks|length }} tasks</span>
                         </div>

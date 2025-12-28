@@ -211,7 +211,7 @@ def initiate_secator_scan(
 
             try:
                 workflow = SecatorWorkflow.objects.get(id=workflow_id)
-                config["workflow_name"] = workflow.alias or workflow.name
+                config["workflow_name"] = workflow.name
             except SecatorWorkflow.DoesNotExist:
                 raise ValueError(f"SecatorWorkflow with ID {workflow_id} not found")
         elif execution_mode == "tasks":

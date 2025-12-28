@@ -74,6 +74,15 @@ class Command(SecatorLoaderBase):
                     try:
                         with open(scan_path, "r", encoding="utf-8") as f:
                             yaml_config = f.read()
+                    except (OSError, IOError) as e:
+                        # I/O-related issues (missing file, permission error, etc.) are expected
+                        self.stdout.write(
+                            self.style.ERROR(
+                                f"Failed to read YAML file for scan {scan_name} at {scan_path}: {e}"
+                            )
+                        )
+                        failed_count += 1
+                        continue
                     except Exception as e:
                         self.stdout.write(self.style.ERROR(f"Failed to read YAML file for scan {scan_name}: {e}"))
                         failed_count += 1
