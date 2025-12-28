@@ -64,8 +64,8 @@
                                 <tr>
                                     <td>
                                         <strong>{{ workflow.get_display_name }}</strong>
-                                        {% if workflow.alias %}
-                                        <br><small class="text-info"><i class="fas fa-tag"></i> {{ workflow.alias }}</small>
+                                        {% if workflow.name %}
+                                        <br><small class="text-info"><i class="fas fa-tag"></i> {{ workflow.name }}</small>
                                         {% endif %}
                                         {% if workflow.description %}
                                         <br><small class="text-muted">{{ workflow.description|truncatechars:100 }}</small>
@@ -221,46 +221,116 @@ function clearFilters() {
 
 // Load built-in workflows
 function loadBuiltinWorkflows() {
-    if (confirm('This will load built-in Secator workflows. Continue?')) {
-        fetch('{% url "api:load_builtin_workflows" %}', {
-            method: 'POST',
-            headers: {
-                'X-CSRFToken': getCookie('csrftoken'),
-                'Content-Type': 'application/json',
-            },
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.status === 'success') {
-                showAlert('success', 'Built-in workflows loading started. Please refresh the page in a few moments.');
-            } else {
-                showAlert('error', data.message);
-            }
-        })
-        .catch(error => {
-            showAlert('error', 'Error loading built-in workflows: ' + error);
-        });
-    }
+    Swal.fire({
+        title: 'Load Built-in Workflows?',
+        text: 'This will load built-in Secator workflows. Continue?',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#3085d6',
+        cancelButtonColor: '#d33',
+        confirmButtonText: 'Yes, load them!'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            Swal.fire({
+                title: 'Loading...',
+                text: 'Please wait while we load the workflows',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+
+            fetch('{% url "api:load_builtin_workflows" %}', {
+                method: 'POST',
+                credentials: "same-origin",
+                headers: {
+                    'X-CSRFToken': getCookie('csrftoken'),
+                    'Content-Type': 'application/json',
+                },
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    Swal.fire({
+                        title: 'Success!',
+                        text: 'Built-in workflows loading started. Please refresh the page in a few moments.',
+                        icon: 'success'
+                    }).then(() => {
+                        window.location.reload();
+                    });
+                } else {
+                    throw new Error(data.message || 'Failed to load built-in workflows');
+                }
+            })
+            .catch(error => {
+                Swal.fire({
+                    title: 'Error!',
+                    text: error.message || 'Error loading built-in workflows',
+                    icon: 'error'
+                });
+            });
+        }
+    });
 }
 
 // Delete workflow
 function deleteWorkflow(workflowId, workflowName) {
-    if (confirm(`Are you sure you want to delete the workflow "${workflowName}"?\n\nThis action cannot be undone. All related scan configurations will be affected.`)) {
-        // Create a form to submit POST request
-        const form = document.createElement('form');
-        form.method = 'POST';
-        form.action = `{% url 'delete_workflow' 0 %}`.replace('0', workflowId);
-        
-        // Add CSRF token
-        const csrfToken = document.createElement('input');
-        csrfToken.type = 'hidden';
-        csrfToken.name = 'csrfmiddlewaretoken';
-        csrfToken.value = getCookie('csrftoken');
-        form.appendChild(csrfToken);
-        
-        document.body.appendChild(form);
-        form.submit();
-    }
+    const url = `{% url 'delete_workflow' 0 %}`.replace('0', workflowId);
+    
+    Swal.fire({
+        title: 'Are you sure?',
+        text: `Are you sure you want to delete the workflow "${workflowName}"?\n\nThis action cannot be undone. All related scan configurations will be affected.`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#3085d6',
+        cancelButtonColor: '#d33',
+        confirmButtonText: 'Yes, delete it!'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            Swal.fire({
+                title: 'Deleting...',
+                text: 'Please wait while we delete the workflow',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+
+            fetch(url, {
+                method: 'POST',
+                credentials: "same-origin",
+                headers: {
+                    "X-CSRFToken": getCookie("csrftoken"),
+                    "Content-Type": "application/json"
+                }
+            })
+            .then(response => response.json().then(data => ({
+                ok: response.ok,
+                status: response.status,
+                data: data
+            })))
+            .then(({ok, status, data}) => {
+                if (ok && data.status) {
+                    Swal.fire({
+                        title: 'Deleted!',
+                        text: 'The workflow has been deleted.',
+                        icon: 'success'
+                    }).then(() => {
+                        location.reload();
+                    });
+                } else {
+                    throw new Error(data.message || 'Failed to delete workflow');
+                }
+            })
+            .catch(error => {
+                Swal.fire({
+                    title: 'Error!',
+                    text: error.message || 'Failed to delete workflow',
+                    icon: 'error'
+                });
+            });
+        }
+    });
 }
 
 // Utility functions

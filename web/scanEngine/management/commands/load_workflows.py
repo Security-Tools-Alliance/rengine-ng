@@ -136,7 +136,7 @@ class Command(SecatorLoaderBase):
                             scan_type=scan_type,
                         )
                         updated_count += 1
-                        self.stdout.write(f"Updated built-in workflow: {workflow.get_display_name()}")
+                        self.stdout.write(f"Updated built-in workflow: {display_name}")
 
                 except Exception as e:
                     self.stdout.write(
