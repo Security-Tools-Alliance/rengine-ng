@@ -99,6 +99,8 @@ class Command(SecatorLoaderBase):
                     description = (
                         workflow_data.get("description", workflow_description) or f"Built-in {workflow_name} workflow"
                     )
+                    # Get long_description from YAML or TemplateLoader
+                    long_description = workflow_data.get("long_description") or getattr(workflow_loader, "long_description", None)
 
                     # Determine scan type based on workflow content
                     scan_type = self._determine_scan_type_from_yaml(workflow_data)
@@ -113,6 +115,7 @@ class Command(SecatorLoaderBase):
                         defaults={
                             "alias": workflow_alias,
                             "display_name": display_name,
+                            "long_description": long_description,
                             "description": description,
                             "yaml_configuration": yaml_config,
                             "scan_type": scan_type,
@@ -132,6 +135,7 @@ class Command(SecatorLoaderBase):
                             alias=workflow_alias,
                             display_name=display_name,
                             description=description,
+                            long_description=long_description,
                             yaml_configuration=yaml_config,
                             scan_type=scan_type,
                         )
@@ -186,6 +190,7 @@ class Command(SecatorLoaderBase):
                     name=workflow_name,
                     defaults={
                         "description": workflow_data.get("description", ""),
+                        "long_description": workflow_data.get("long_description", None),
                         "workflow_type": "custom",
                         "yaml_configuration": yaml.dump(workflow_data),
                         "scan_type": workflow_data.get("scan_type", "internet"),
@@ -202,6 +207,7 @@ class Command(SecatorLoaderBase):
                     # Always update existing custom workflows using update()
                     SecatorWorkflow.objects.filter(pk=workflow.pk).update(
                         description=workflow_data.get("description", ""),
+                        long_description=workflow_data.get("long_description", None),
                         yaml_configuration=yaml.dump(workflow_data),
                         scan_type=workflow_data.get("scan_type", "internet"),
                     )

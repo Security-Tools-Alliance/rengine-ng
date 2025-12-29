@@ -52,7 +52,7 @@
                                     <th>Alias</th>
                                     <th>Type</th>
                                     <th>Config Type</th>
-                                    <th>Description</th>
+                                    <th>Long Description</th>
                                     <th>Status</th>
                                     <th>Default</th>
                                     <th>Created</th>
@@ -80,7 +80,13 @@
                                             {{ scan.get_scan_config_type_display }}
                                         </span>
                                     </td>
-                                    <td>{{ scan.description|truncatechars:100 }}</td>
+                                    <td>
+                                        {% if scan.long_description %}
+                                            {{ scan.long_description }}
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
                                     <td>
                                         {% if scan.is_active %}
                                         <span class="badge badge-soft-success">Active</span>

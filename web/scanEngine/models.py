@@ -277,6 +277,11 @@ class SecatorWorkflow(models.Model):
         help_text="Built-in workflow alias from Secator (for CLI usage only, not used by reNgine-ng)",
     )
     description = models.TextField(blank=True, null=True)
+    long_description = models.TextField(
+        blank=True,
+        null=True,
+        help_text="Long description for the workflow",
+    )
     workflow_type = models.CharField(
         max_length=20,
         choices=WORKFLOW_TYPE_CHOICES,
@@ -325,6 +330,67 @@ class SecatorWorkflow(models.Model):
         """Return list of tasks in this workflow"""
         config = self._parse_yaml_config()
         return config.get("tasks", [])
+
+    def get_structured_tasks(self):
+        """
+        Return structured list of tasks with group information.
+        
+        Returns a list of dictionaries:
+        - For groups: {"type": "group", "name": "_group/discover", "display_name": "discover", "tasks": ["netdetect", "arp"]}
+        - For individual tasks: {"type": "task", "name": "prompt", "group": None}
+        """
+        tasks_dict = self.get_tasks()
+        if not isinstance(tasks_dict, dict):
+            return []
+        
+        structured = []
+        
+        for key, value in tasks_dict.items():
+            # Check if this is a group (starts with _group, with or without suffix)
+            if key.startswith("_group"):
+                # This is a group
+                group_tasks = []
+                if isinstance(value, dict):
+                    # Extract task names from the group
+                    group_tasks = list(value.keys())
+                
+                # Extract display name: remove "_group" prefix and any following "/" or ":"
+                display_name = key.replace("_group", "", 1).lstrip("/:").strip()
+                if not display_name:
+                    display_name = "tasks"
+                
+                structured.append({
+                    "type": "group",
+                    "name": key,
+                    "display_name": display_name,
+                    "tasks": group_tasks
+                })
+            else:
+                # This is an individual task
+                structured.append({
+                    "type": "task",
+                    "name": key,
+                    "group": None
+                })
+        
+        return structured
+
+    def get_tasks_count(self):
+        """
+        Return total count of individual tasks (including tasks within groups).
+        
+        This counts all individual tasks, not groups.
+        """
+        structured = self.get_structured_tasks()
+        count = 0
+        
+        for item in structured:
+            if item["type"] == "group":
+                count += len(item["tasks"])
+            else:
+                count += 1
+        
+        return count
 
     def can_modify(self):
         """Check if this workflow can be modified"""
@@ -499,6 +565,11 @@ class SecatorScan(models.Model):
         help_text="Built-in scan alias from Secator",
     )
     description = models.TextField(blank=True, null=True)
+    long_description = models.TextField(
+        blank=True,
+        null=True,
+        help_text="Long description for the scan",
+    )
     scan_config_type = models.CharField(
         max_length=20,
         choices=SCAN_CONFIG_TYPE_CHOICES,

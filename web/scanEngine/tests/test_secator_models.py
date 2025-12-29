@@ -63,6 +63,190 @@ tasks:
         self.assertIn("subfinder", tasks)
         self.assertIn("httpx", tasks)
 
+    def test_get_structured_tasks_without_groups(self):
+        """Test getting structured tasks from workflow without groups."""
+        workflow = SecatorWorkflow.objects.create(workflow_type="custom", **self.workflow_data)
+        structured = workflow.get_structured_tasks()
+        
+        self.assertIsInstance(structured, list)
+        self.assertEqual(len(structured), 2)
+        
+        # Check that both items are tasks (not groups)
+        for item in structured:
+            self.assertEqual(item["type"], "task")
+            self.assertIn(item["name"], ["subfinder", "httpx"])
+            self.assertIsNone(item["group"])
+
+    def test_get_structured_tasks_with_groups(self):
+        """Test getting structured tasks from workflow with groups."""
+        workflow_data = {
+            "name": "Test Workflow with Groups",
+            "alias": "test_workflow_groups",
+            "description": "A test workflow with groups",
+            "scan_type": "internet",
+            "yaml_configuration": """
+type: workflow
+name: test_workflow_groups
+description: A test workflow with groups
+tasks:
+  _group/discover:
+    netdetect:
+      description: Discover network
+    arp:
+      description: ARP scan
+  prompt:
+    description: Manual prompt
+  _group/probe:
+    arpscan:
+      description: ARP scan
+    fping:
+      description: ICMP ping
+  search_vulns:
+    description: Search vulnerabilities
+""",
+            "is_active": True,
+        }
+        workflow = SecatorWorkflow.objects.create(workflow_type="custom", **workflow_data)
+        structured = workflow.get_structured_tasks()
+        
+        self.assertIsInstance(structured, list)
+        self.assertEqual(len(structured), 4)
+        
+        # Check first group
+        self.assertEqual(structured[0]["type"], "group")
+        self.assertEqual(structured[0]["name"], "_group/discover")
+        self.assertEqual(structured[0]["display_name"], "discover")
+        self.assertEqual(len(structured[0]["tasks"]), 2)
+        self.assertIn("netdetect", structured[0]["tasks"])
+        self.assertIn("arp", structured[0]["tasks"])
+        
+        # Check individual task
+        self.assertEqual(structured[1]["type"], "task")
+        self.assertEqual(structured[1]["name"], "prompt")
+        self.assertIsNone(structured[1]["group"])
+        
+        # Check second group
+        self.assertEqual(structured[2]["type"], "group")
+        self.assertEqual(structured[2]["name"], "_group/probe")
+        self.assertEqual(structured[2]["display_name"], "probe")
+        self.assertEqual(len(structured[2]["tasks"]), 2)
+        self.assertIn("arpscan", structured[2]["tasks"])
+        self.assertIn("fping", structured[2]["tasks"])
+        
+        # Check second individual task
+        self.assertEqual(structured[3]["type"], "task")
+        self.assertEqual(structured[3]["name"], "search_vulns")
+        self.assertIsNone(structured[3]["group"])
+
+    def test_get_tasks_count(self):
+        """Test getting total count of individual tasks."""
+        workflow_data = {
+            "name": "Test Workflow Count",
+            "alias": "test_workflow_count",
+            "description": "A test workflow for counting",
+            "scan_type": "internet",
+            "yaml_configuration": """
+type: workflow
+name: test_workflow_count
+description: A test workflow for counting
+tasks:
+  _group/discover:
+    netdetect:
+      description: Discover network
+    arp:
+      description: ARP scan
+  prompt:
+    description: Manual prompt
+  _group/probe:
+    arpscan:
+      description: ARP scan
+    fping:
+      description: ICMP ping
+    nmap:
+      description: Port scan
+  search_vulns:
+    description: Search vulnerabilities
+""",
+            "is_active": True,
+        }
+        workflow = SecatorWorkflow.objects.create(workflow_type="custom", **workflow_data)
+        
+        # Should count: 2 (from _group/discover) + 1 (prompt) + 3 (from _group/probe) + 1 (search_vulns) = 7
+        count = workflow.get_tasks_count()
+        self.assertEqual(count, 7)
+
+    def test_get_structured_tasks_empty(self):
+        """Test getting structured tasks from workflow with no tasks."""
+        workflow_data = {
+            "name": "Test Workflow Empty",
+            "alias": "test_workflow_empty",
+            "description": "A test workflow with no tasks",
+            "scan_type": "internet",
+            "yaml_configuration": """
+type: workflow
+name: test_workflow_empty
+description: A test workflow with no tasks
+tasks: {}
+""",
+            "is_active": True,
+        }
+        workflow = SecatorWorkflow.objects.create(workflow_type="custom", **workflow_data)
+        structured = workflow.get_structured_tasks()
+        
+        self.assertIsInstance(structured, list)
+        self.assertEqual(len(structured), 0)
+        
+        count = workflow.get_tasks_count()
+        self.assertEqual(count, 0)
+
+    def test_get_structured_tasks_with_group_no_suffix(self):
+        """Test getting structured tasks from workflow with _group without suffix."""
+        workflow_data = {
+            "name": "Test Workflow Group No Suffix",
+            "alias": "test_workflow_group_no_suffix",
+            "description": "A test workflow with _group without suffix",
+            "scan_type": "internet",
+            "yaml_configuration": """
+type: workflow
+name: test_workflow_group_no_suffix
+description: A test workflow with _group without suffix
+tasks:
+  _group:
+    jswhois:
+      description: Get WHOIS information
+    httpx:
+      description: Run HTTP probe
+    getasn:
+      description: Get ASN from domain
+  wafw00f:
+    description: Check WAF
+""",
+            "is_active": True,
+        }
+        workflow = SecatorWorkflow.objects.create(workflow_type="custom", **workflow_data)
+        structured = workflow.get_structured_tasks()
+        
+        self.assertIsInstance(structured, list)
+        self.assertEqual(len(structured), 2)
+        
+        # Check group without suffix
+        self.assertEqual(structured[0]["type"], "group")
+        self.assertEqual(structured[0]["name"], "_group")
+        self.assertEqual(structured[0]["display_name"], "tasks")
+        self.assertEqual(len(structured[0]["tasks"]), 3)
+        self.assertIn("jswhois", structured[0]["tasks"])
+        self.assertIn("httpx", structured[0]["tasks"])
+        self.assertIn("getasn", structured[0]["tasks"])
+        
+        # Check individual task
+        self.assertEqual(structured[1]["type"], "task")
+        self.assertEqual(structured[1]["name"], "wafw00f")
+        self.assertIsNone(structured[1]["group"])
+        
+        # Check count
+        count = workflow.get_tasks_count()
+        self.assertEqual(count, 4)  # 3 from group + 1 individual
+
     def test_builtin_workflow_modification_blocked(self):
         """Test that built-in workflows cannot be modified."""
         workflow = SecatorWorkflow.objects.create(workflow_type="builtin", **self.workflow_data)

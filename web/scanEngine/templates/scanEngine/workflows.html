@@ -54,6 +54,7 @@
                                     <th>Name</th>
                                     <th>Type</th>
                                     <th>Scan Type</th>
+                                    <th>Long Description</th>
                                     <th>Status</th>
                                     <th>Created</th>
                                     <th>Actions</th>
@@ -78,6 +79,13 @@
                                     </td>
                                     <td>
                                         <span class="badge badge-soft-info">{{ workflow.get_scan_type_display }}</span>
+                                    </td>
+                                    <td>
+                                        {% if workflow.long_description %}
+                                            <small class="text-muted">{{ workflow.long_description }}</small>
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
                                     </td>
                                     <td>
                                         {% if workflow.is_active %}
@@ -105,7 +113,7 @@
                                 </tr>
                                 {% empty %}
                                 <tr>
-                                    <td colspan="6" class="text-center text-muted">
+                                    <td colspan="8" class="text-center text-muted">
                                         <i class="fas fa-inbox fa-2x mb-2"></i><br>
                                         No workflows found. Create one or load built-in workflows.
                                     </td>

@@ -103,6 +103,8 @@ class Command(SecatorLoaderBase):
 
                     # Use description from YAML if available, otherwise use loader description
                     description = scan_data.get("description", scan_description) or f"Built-in {scan_name}"
+                    # Get long_description from YAML or TemplateLoader
+                    long_description = scan_data.get("long_description") or getattr(scan_loader, "long_description", None)
 
                     # Determine scan type based on scan content
                     scan_type = self._determine_scan_type_from_yaml(scan_data)
@@ -123,6 +125,7 @@ class Command(SecatorLoaderBase):
                         defaults={
                             "alias": scan_alias,
                             "description": description,
+                            "long_description": long_description,
                             "yaml_configuration": yaml_config,
                             "scan_type": scan_type,
                             "scan_config_type": "builtin",
@@ -141,6 +144,7 @@ class Command(SecatorLoaderBase):
                         SecatorScan.objects.filter(pk=scan.pk).update(
                             alias=scan_alias,
                             description=description,
+                            long_description=long_description,
                             yaml_configuration=yaml_config,
                             scan_type=scan_type,
                             is_default=scan_alias == "domain" if scan_alias else False,  # Domain scan is default
@@ -193,6 +197,7 @@ class Command(SecatorLoaderBase):
                     scan_config_type="custom",
                     defaults={
                         "description": scan_data.get("description", ""),
+                        "long_description": scan_data.get("long_description", None),
                         "yaml_configuration": yaml.dump(scan_data),
                         "scan_type": scan_data.get("scan_type", "internet"),
                         "is_default": False,
@@ -209,6 +214,7 @@ class Command(SecatorLoaderBase):
                     # Always update existing custom scans using update()
                     SecatorScan.objects.filter(pk=scan.pk).update(
                         description=scan_data.get("description", ""),
+                        long_description=scan_data.get("long_description", None),
                         yaml_configuration=yaml.dump(scan_data),
                         scan_type=scan_data.get("scan_type", "internet"),
                     )

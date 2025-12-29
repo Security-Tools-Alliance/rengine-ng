@@ -214,3 +214,11 @@ def parent_category(category):
     # Split by '/' and take the first part
     parts = category.split("/")
     return parts[0].lower()
+
+
+@register.filter
+def get_structured_tasks(workflow):
+    """Get structured tasks from workflow (with group information)"""
+    if not hasattr(workflow, "get_structured_tasks"):
+        return []
+    return workflow.get_structured_tasks()
