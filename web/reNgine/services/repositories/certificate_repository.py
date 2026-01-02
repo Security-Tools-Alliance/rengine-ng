@@ -1,0 +1,167 @@
+"""
+Certificate Repository - Data access for certificate operations.
+Handles Certificate database operations from Secator Certificate output type.
+"""
+
+from datetime import datetime
+from typing import Any, Dict, Optional
+
+from celery.utils.log import get_task_logger
+from django.core.exceptions import ObjectDoesNotExist
+from django.db import IntegrityError
+from django.utils import timezone
+
+from startScan.models import Certificate, IpAddress, ScanHistory, Subdomain
+from targetApp.models import Domain
+
+
+logger = get_task_logger(__name__)
+
+
+class CertificateRepository:
+    """Repository for certificate-related database operations."""
+
+    def save_from_secator(self, item: Dict[str, Any], scan_history_id: int, domain_id: int) -> Optional[Certificate]:
+        """
+        Save certificate from Secator certificate result.
+
+        Args:
+            item: Secator certificate item
+            scan_history_id: ID of the scan history
+            domain_id: ID of the domain
+
+        Returns:
+            Certificate: Saved certificate object or None
+        """
+        try:
+            host = item.get("host")
+            fingerprint_sha256 = item.get("fingerprint_sha256", "")
+
+            if not host:
+                logger.warning("Certificate item missing host field")
+                return None
+
+            # Validate scan_history and domain exist
+            scan_history = ScanHistory.objects.get(id=scan_history_id)
+            domain = Domain.objects.get(id=domain_id)
+
+            # Parse datetime fields
+            not_before = self._parse_datetime(item.get("not_before"))
+            not_after = self._parse_datetime(item.get("not_after"))
+
+            # Get or create subdomain if host is provided
+            subdomain = None
+            if host:
+                try:
+                    subdomain = Subdomain.objects.filter(
+                        name=host,
+                        target_domain=domain
+                    ).first()
+                except Exception:
+                    pass
+
+            # Get or create IP address if ip is provided
+            ip_address = None
+            ip_str = item.get("ip", "")
+            if ip_str:
+                try:
+                    ip_address = IpAddress.objects.filter(
+                        address=ip_str,
+                        domain=domain
+                    ).first()
+                except Exception:
+                    pass
+
+            # Prepare defaults
+            defaults = {
+                "scan_history": scan_history,
+                "subdomain": subdomain,
+                "ip_address": ip_address,
+                "domain": domain,
+                "fingerprint_sha256": fingerprint_sha256,
+                "ip": ip_str,
+                "raw_value": item.get("raw_value", ""),
+                "subject_cn": item.get("subject_cn", ""),
+                "subject_an": item.get("subject_an", []),
+                "not_before": not_before,
+                "not_after": not_after,
+                "issuer_dn": item.get("issuer_dn", ""),
+                "issuer_cn": item.get("issuer_cn", ""),
+                "issuer": item.get("issuer", ""),
+                "self_signed": item.get("self_signed", False),
+                "trusted": item.get("trusted", False),
+                "status": item.get("status", ""),
+                "keysize": item.get("keysize"),
+                "serial_number": item.get("serial_number", ""),
+                "ciphers": item.get("ciphers", []),
+            }
+
+            # Get or create certificate
+            certificate, created = Certificate.objects.get_or_create(
+                host=host,
+                fingerprint_sha256=fingerprint_sha256,
+                scan_history=scan_history,
+                defaults=defaults
+            )
+
+            if not created:
+                # Update existing certificate
+                for key, value in defaults.items():
+                    setattr(certificate, key, value)
+                certificate.save()
+
+            if created:
+                logger.info(f"Created certificate: {host} - {certificate.subject_cn or 'N/A'}")
+            else:
+                logger.debug(f"Updated certificate: {host} - {certificate.subject_cn or 'N/A'}")
+
+            return certificate
+
+        except ObjectDoesNotExist as e:
+            logger.error(f"Object not found when saving certificate: {e}")
+            return None
+        except IntegrityError as e:
+            logger.error(f"Integrity error saving certificate: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Error saving certificate from Secator: {e}")
+            return None
+
+    def _parse_datetime(self, value: Any) -> Optional[datetime]:
+        """
+        Parse datetime value from Secator.
+
+        Args:
+            value: Datetime value (can be datetime, string, timestamp, or None)
+
+        Returns:
+            datetime or None
+        """
+        if value is None:
+            return None
+
+        if isinstance(value, datetime):
+            return value
+
+        if isinstance(value, str):
+            try:
+                # Try ISO format
+                return datetime.fromisoformat(value.replace('Z', '+00:00'))
+            except Exception:
+                try:
+                    # Try common formats
+                    for fmt in ['%Y-%m-%d %H:%M:%S', '%Y-%m-%d', '%d/%m/%Y']:
+                        try:
+                            return datetime.strptime(value, fmt)
+                        except ValueError:
+                            continue
+                except Exception:
+                    pass
+
+        if isinstance(value, (int, float)):
+            try:
+                return datetime.fromtimestamp(value, tz=timezone.utc)
+            except Exception:
+                pass
+
+        return None

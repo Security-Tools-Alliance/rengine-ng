@@ -108,7 +108,15 @@ class ScanHistory(models.Model):
     def get_progress(self):
         """Calculate scan progress percentage based on completed steps vs total steps."""
         from reNgine.definitions import SUCCESS_TASK
+        from reNgine.services.secator.progress_sync import SecatorProgressSync
 
+        # Check if this is a Secator scan (has SecatorRunner)
+        secator_runners = SecatorRunner.objects.filter(scan_history=self)
+        if secator_runners.exists():
+            # Use Secator progress calculation
+            return SecatorProgressSync.calculate_workflow_progress(self.id)
+
+        # Legacy scan: calculate based on completed steps vs total steps
         number_of_steps = len(self.tasks) if self.tasks else 0
         if number_of_steps == 0:
             return 0
@@ -126,8 +134,26 @@ class ScanHistory(models.Model):
     def get_current_task(self):
         """Get the current running task name, formatted for display."""
         from reNgine.definitions import RUNNING_TASK
+        from reNgine.services.secator.progress_sync import SecatorProgressSync
 
-        # Get the most recent running task
+        # Check if this is a Secator scan (has SecatorRunner)
+        # Import here to avoid circular import
+        from startScan.models import SecatorRunner
+
+        secator_runners = SecatorRunner.objects.filter(scan_history=self)
+        if secator_runners.exists():
+            # Get current running Secator runner
+            current_runner = SecatorProgressSync.get_current_running_runner(self.id)
+            if current_runner:
+                runner_name = current_runner.runner_name or current_runner.runner_data.get("name", "Unknown")
+                runner_type = current_runner.runner_type or current_runner.runner_data.get("config", {}).get("type", "task")
+                # Format for display
+                if runner_type in ["workflow", "scan"]:
+                    return f"{runner_type.title()}: {runner_name}"
+                else:
+                    return f"Task: {runner_name}"
+
+        # Legacy scan: get the most recent running task from ScanActivity
         current_activity = self.scanactivity_set.filter(status=RUNNING_TASK).order_by("-time").first()
 
         if current_activity:
@@ -255,6 +281,8 @@ class Subdomain(models.Model):
     directories = models.ManyToManyField("DirectoryScan", related_name="directories", blank=True)
     waf = models.ManyToManyField("Waf", related_name="waf", blank=True)
     attack_surface = models.TextField(null=True, blank=True)
+    verified = models.BooleanField(default=False, null=True, blank=True)
+    sources = ArrayField(models.CharField(max_length=200), null=True, blank=True)
 
     def __str__(self):
         return str(self.name)
@@ -565,6 +593,11 @@ class EndPoint(models.Model):
     techs = models.ManyToManyField("Technology", related_name="techs", blank=True)
     # used for subscans
     endpoint_subscan_ids = models.ManyToManyField("SubScan", related_name="endpoint_subscan_ids", blank=True)
+    # Secator fields
+    method = models.CharField(max_length=10, null=True, blank=True, help_text="HTTP method: GET, POST, etc.")
+    words = models.IntegerField(default=0, null=True, blank=True, help_text="Number of words in the response")
+    lines = models.IntegerField(default=0, null=True, blank=True, help_text="Number of lines in the response")
+    headers = models.JSONField(null=True, blank=True, help_text="HTTP headers (response_headers and request_headers)")
 
     def __str__(self):
         return self.http_url
@@ -747,6 +780,12 @@ class Vulnerability(models.Model):
     is_llm_used = models.BooleanField(null=True, blank=True, default=False)
     # used for subscans
     vuln_subscan_ids = models.ManyToManyField("SubScan", related_name="vuln_subscan_ids", blank=True)
+    cvss_vec = models.CharField(max_length=200, null=True, blank=True)
+    epss_score = models.FloatField(null=True, blank=True)
+    confidence_nb = models.IntegerField(default=0, null=True, blank=True)
+    severity_nb = models.IntegerField(default=0, null=True, blank=True)
+    ip = models.CharField(max_length=100, null=True, blank=True)
+    reference = models.CharField(max_length=10000, null=True, blank=True)
 
     def __str__(self):
         cve_str = ", ".join(f"`{cve.name}`" for cve in self.cve_ids.all())
@@ -875,6 +914,9 @@ class Waf(models.Model):
 class Technology(models.Model):
     id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=500, blank=True, null=True)
+    value = models.CharField(max_length=500, null=True, blank=True)
+    category = models.CharField(max_length=200, null=True, blank=True)
+    stored_response_path = models.CharField(max_length=1000, null=True, blank=True)
 
     def __str__(self):
         return str(self.name)
@@ -935,6 +977,7 @@ class IpAddress(models.Model):
     reverse_pointer = models.CharField(max_length=100, blank=True, null=True)
     # this is used for querying which ip was discovered during subcan
     ip_subscan_ids = models.ManyToManyField("SubScan", related_name="ip_subscan_ids")
+    alive = models.BooleanField(default=False, null=True, blank=True)
 
     def __str__(self):
         return str(self.address)
@@ -963,6 +1006,10 @@ class Port(models.Model):
     service_name = models.CharField(max_length=255, blank=True, null=True)
     description = models.CharField(max_length=1000, blank=True, null=True)
     ip_address = models.ForeignKey("IpAddress", on_delete=models.CASCADE, related_name="ports", null=True, blank=True)
+    state = models.CharField(max_length=50, null=True, blank=True)
+    cpes = ArrayField(models.CharField(max_length=500), null=True, blank=True)
+    protocol = models.CharField(max_length=10, null=True, blank=True)
+    host = models.CharField(max_length=1000, null=True, blank=True)
 
     class Meta:
         unique_together = ("ip_address", "number")
@@ -1140,3 +1187,55 @@ class SecatorRunner(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+
+
+class Certificate(models.Model):
+    """
+    Model to store SSL/TLS certificates discovered by Secator.
+    """
+    id = models.AutoField(primary_key=True)
+    scan_history = models.ForeignKey(ScanHistory, on_delete=models.CASCADE, null=True, blank=True)
+    subdomain = models.ForeignKey(Subdomain, on_delete=models.CASCADE, null=True, blank=True)
+    ip_address = models.ForeignKey(IpAddress, on_delete=models.CASCADE, null=True, blank=True)
+    domain = models.ForeignKey(Domain, on_delete=models.CASCADE, null=True, blank=True)
+    
+    host = models.CharField(max_length=1000, help_text="Hostname for the certificate")
+    fingerprint_sha256 = models.CharField(max_length=64, null=True, blank=True, help_text="SHA256 fingerprint of the certificate")
+    ip = models.CharField(max_length=100, null=True, blank=True, help_text="IP address where certificate was found")
+    raw_value = models.TextField(null=True, blank=True, help_text="Raw certificate value")
+    subject_cn = models.CharField(max_length=500, null=True, blank=True, help_text="Subject Common Name")
+    subject_an = ArrayField(models.CharField(max_length=500), null=True, blank=True, help_text="Subject Alternative Names")
+    not_before = models.DateTimeField(null=True, blank=True, help_text="Certificate validity start date")
+    not_after = models.DateTimeField(null=True, blank=True, help_text="Certificate validity end date")
+    issuer_dn = models.CharField(max_length=1000, null=True, blank=True, help_text="Issuer Distinguished Name")
+    issuer_cn = models.CharField(max_length=500, null=True, blank=True, help_text="Issuer Common Name")
+    issuer = models.CharField(max_length=500, null=True, blank=True, help_text="Issuer name")
+    self_signed = models.BooleanField(default=False, null=True, blank=True, help_text="Whether the certificate is self-signed")
+    trusted = models.BooleanField(default=False, null=True, blank=True, help_text="Whether the certificate is trusted")
+    status = models.CharField(max_length=50, null=True, blank=True, help_text="Certificate status")
+    keysize = models.IntegerField(null=True, blank=True, help_text="Certificate key size in bits")
+    serial_number = models.CharField(max_length=200, null=True, blank=True, help_text="Certificate serial number")
+    ciphers = ArrayField(models.CharField(max_length=200), null=True, blank=True, help_text="Supported ciphers")
+    
+    discovered_date = models.DateTimeField(auto_now_add=True, help_text="Date when certificate was discovered")
+
+    class Meta:
+        db_table = "certificate"
+        ordering = ["-discovered_date"]
+        unique_together = [["host", "fingerprint_sha256", "scan_history"]]
+
+    def __str__(self):
+        return f"{self.host} - {self.subject_cn or 'N/A'}"
+
+    def is_expired(self):
+        """Check if certificate is expired."""
+        if self.not_after:
+            return self.not_after < timezone.now()
+        return False
+
+    def is_expired_soon(self, months=1):
+        """Check if certificate expires soon."""
+        if self.not_after:
+            from datetime import timedelta
+            return self.not_after < timezone.now() + timedelta(days=months * 30)
+        return False

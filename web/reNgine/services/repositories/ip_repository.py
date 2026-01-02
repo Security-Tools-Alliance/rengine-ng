@@ -54,6 +54,7 @@ class IpRepository:
                     "is_cdn": False,
                     "is_private": self._is_private_ip(ip_address),
                     "version": self._get_ip_version(ip_address),
+                    "alive": item.get("alive", False),
                 },
             )
 

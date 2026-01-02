@@ -35,7 +35,7 @@ from recon_note.models import TodoNote
 # run_cmseek, run_command, run_gf_list, run_wafw00f) - functionality now in Secator
 from reNgine.core.data import get_data_from_post_request, safe_int_cast
 from reNgine.core.path import is_safe_path
-from reNgine.definitions import ABORTED_TASK, FAILED_TASK, NUCLEI_SEVERITY_MAP, RUNNING_TASK, SUCCESS_TASK
+from reNgine.definitions import ABORTED_TASK, FAILED_TASK, INITIATED_TASK, NUCLEI_SEVERITY_MAP, RUNNING_TASK, SUCCESS_TASK
 from reNgine.llm.config import DEFAULT_GPT_MODELS, MODEL_REQUIREMENTS, OLLAMA_INSTANCE, RECOMMENDED_MODELS
 from reNgine.llm.llm import LLMAttackSuggestionGenerator
 from reNgine.llm.utils import convert_markdown_to_html, get_default_llm_model, is_empty_attack_surface
@@ -1564,17 +1564,18 @@ class InitiateSubTask(APIView):
         execution_mode = None
         config = {}
 
-        if workflow_id or workflow_name:
+        if workflow_id:
             # Secator workflow mode
             execution_mode = "workflow"
-            if workflow_id:
-                try:
-                    workflow = SecatorWorkflow.objects.get(id=workflow_id)
-                    config["workflow_name"] = workflow.name
-                except SecatorWorkflow.DoesNotExist:
-                    return Response({"status": False, "error": f"Workflow with ID {workflow_id} not found"}, status=404)
-            elif workflow_name:
-                config["workflow_name"] = workflow_name
+            try:
+                workflow = SecatorWorkflow.objects.get(id=workflow_id)
+                config["workflow_name"] = workflow.name
+            except SecatorWorkflow.DoesNotExist:
+                return Response({"status": False, "error": f"Workflow with ID {workflow_id} not found"}, status=404)
+        elif workflow_name:
+            # Secator workflow mode
+            execution_mode = "workflow"
+            config["workflow_name"] = workflow_name
 
         elif task_names:
             # Secator tasks mode
@@ -3923,8 +3924,13 @@ class SecatorRunnerCreate(APIView):
             scan_history_id = runner_data.get("context", {}).get("scan_history_id")
             domain_id = runner_data.get("context", {}).get("domain_id")
 
-            logger.info(f"Creating runner: type={runner_type}, name={runner_name}, scan_history_id={scan_history_id}")
-            logger.debug(f"Runner data: {runner_data}")
+            logger.info(f"[SECATOR API] Creating runner: type={runner_type}, name={runner_name}, scan_history_id={scan_history_id}")
+            logger.debug(f"[SECATOR API] Full runner data received: {json.dumps(runner_data, indent=2, default=str)}")
+            logger.debug(f"[SECATOR API] Runner data keys: {list(runner_data.keys())}")
+            if "config" in runner_data:
+                logger.debug(f"[SECATOR API] Config keys: {list(runner_data.get('config', {}).keys())}")
+            if "context" in runner_data:
+                logger.debug(f"[SECATOR API] Context: {runner_data.get('context', {})}")
 
             # Create runner object in database
             secator_runner = SecatorRunner(
@@ -3939,7 +3945,7 @@ class SecatorRunnerCreate(APIView):
                     scan_history = ScanHistory.objects.get(id=scan_history_id)
                     secator_runner.scan_history = scan_history
                 except ScanHistory.DoesNotExist:
-                    logger.warning(f"ScanHistory {scan_history_id} not found, skipping link")
+                    logger.warning(f"[SECATOR API] ScanHistory {scan_history_id} not found, skipping link")
 
             # Link to domain if available
             if domain_id:
@@ -3947,19 +3953,19 @@ class SecatorRunnerCreate(APIView):
                     domain = Domain.objects.get(id=domain_id)
                     secator_runner.domain = domain
                 except Domain.DoesNotExist:
-                    logger.warning(f"Domain {domain_id} not found, skipping link")
+                    logger.warning(f"[SECATOR API] Domain {domain_id} not found, skipping link")
 
             # Save runner and get its ID
             secator_runner.save()
             runner_id = str(secator_runner.id)
 
-            logger.info(f"Runner created with ID: {runner_id}")
+            logger.info(f"[SECATOR API] Runner created with ID: {runner_id}")
 
             return Response({"status": True, "id": runner_id})
         except Exception as e:
-            logger.error(f"Error creating runner: {e}")
+            logger.error(f"[SECATOR API] Error creating runner: {e}")
             import traceback
-            logger.error(f"Traceback: {traceback.format_exc()}")
+            logger.error(f"[SECATOR API] Traceback: {traceback.format_exc()}")
             return Response({"status": False, "error": str(e)}, status=500)
 
 
@@ -3973,12 +3979,19 @@ class SecatorRunnerUpdate(APIView):
 
     def put(self, request, runner_id):
         try:
-            from startScan.models import SecatorRunner
+            from startScan.models import ScanActivity, ScanHistory, SecatorRunner
+            from reNgine.services.repositories.scan_repository import ScanRepository
 
             runner_data = request.data
 
-            logger.info(f"Updating runner: runner_id={runner_id}")
-            logger.debug(f"Runner data: {runner_data}")
+            logger.info(f"[SECATOR API] Updating runner: runner_id={runner_id}")
+            logger.debug(f"[SECATOR API] Full runner update data received: {json.dumps(runner_data, indent=2, default=str)}")
+            logger.debug(f"[SECATOR API] Runner data keys: {list(runner_data.keys())}")
+            logger.debug(f"[SECATOR API] Runner status: {runner_data.get('status')}, progress: {runner_data.get('progress')}, done: {runner_data.get('done')}")
+            if "config" in runner_data:
+                logger.debug(f"[SECATOR API] Config: {runner_data.get('config', {})}")
+            if "context" in runner_data:
+                logger.debug(f"[SECATOR API] Context: {runner_data.get('context', {})}")
 
             # Update runner data in database
             try:
@@ -3986,22 +3999,105 @@ class SecatorRunnerUpdate(APIView):
                 secator_runner.runner_data = runner_data
                 
                 # Update runner name if provided
-                runner_name = runner_data.get("config", {}).get("name")
+                runner_name = runner_data.get("config", {}).get("name") or runner_data.get("name")
                 if runner_name:
                     secator_runner.runner_name = runner_name
                 
                 secator_runner.save()
-                logger.info(f"Runner {runner_id} updated successfully")
+                logger.info(f"[SECATOR API] Runner {runner_id} updated successfully")
+
+                # Sync with ScanHistory if scan_history is linked
+                if secator_runner.scan_history:
+                    self._sync_runner_with_scan_history(secator_runner, runner_data)
+
             except SecatorRunner.DoesNotExist:
-                logger.warning(f"Runner {runner_id} not found, cannot update")
+                logger.warning(f"[SECATOR API] Runner {runner_id} not found, cannot update")
                 return Response({"status": False, "error": f"Runner {runner_id} not found"}, status=404)
 
             return Response({"status": True, "id": runner_id})
         except Exception as e:
-            logger.error(f"Error updating runner {runner_id}: {e}")
+            logger.error(f"[SECATOR API] Error updating runner {runner_id}: {e}")
             import traceback
-            logger.error(f"Traceback: {traceback.format_exc()}")
+            logger.error(f"[SECATOR API] Traceback: {traceback.format_exc()}")
             return Response({"status": False, "error": str(e)}, status=500)
+
+    def _sync_runner_with_scan_history(self, secator_runner, runner_data):
+        """
+        Synchronize runner data with ScanHistory and create/update ScanActivity.
+
+        Args:
+            secator_runner: SecatorRunner instance
+            runner_data: Runner data from Secator
+        """
+        from startScan.models import ScanActivity, ScanHistory
+        from reNgine.services.repositories.scan_repository import ScanRepository
+        from django.utils import timezone
+
+        scan_history = secator_runner.scan_history
+        scan_repo = ScanRepository()
+
+        # Extract runner status and progress
+        runner_status = runner_data.get("status", "").upper()
+        runner_done = runner_data.get("done", False)
+        runner_progress = runner_data.get("progress", 0)
+        runner_name = runner_data.get("name") or secator_runner.runner_name or "Unknown"
+        runner_type = runner_data.get("config", {}).get("type", "") or secator_runner.runner_type
+
+        # Map Secator status to reNgine status
+        status_map = {
+            "RUNNING": RUNNING_TASK,
+            "SUCCESS": SUCCESS_TASK,
+            "FAILURE": FAILED_TASK,
+            "FAILED": FAILED_TASK,
+            "PENDING": INITIATED_TASK,
+        }
+        rengine_status = status_map.get(runner_status, INITIATED_TASK)
+
+        # Update ScanHistory status based on runner status
+        # Only update if this is the main workflow/scan runner, or if scan is not already completed
+        should_update_status = (
+            (runner_type in ["workflow", "scan"] or scan_history.scan_status not in [SUCCESS_TASK, FAILED_TASK])
+            and runner_status in ["RUNNING", "SUCCESS", "FAILURE", "FAILED"]
+        )
+        if should_update_status:
+            scan_history.scan_status = rengine_status
+            if runner_done and not scan_history.stop_scan_date:
+                scan_history.stop_scan_date = timezone.now()
+            scan_history.save(update_fields=["scan_status", "stop_scan_date"])
+            logger.debug(f"[SECATOR API] Updated ScanHistory {scan_history.id}: status={rengine_status}, stop_scan_date={scan_history.stop_scan_date}")
+
+        # Create or update ScanActivity
+        activity_title = f"{runner_type.title()}: {runner_name}"
+        
+        # Check if activity already exists for this runner
+        existing_activity = ScanActivity.objects.filter(
+            scan_of=scan_history,
+            name=runner_name,
+            celery_id=str(secator_runner.id)
+        ).order_by("-time").first()
+
+        if existing_activity:
+            # Update existing activity
+            existing_activity.status = rengine_status
+            existing_activity.time = timezone.now()
+            if runner_done and runner_status in ["SUCCESS", "FAILURE", "FAILED"]:
+                existing_activity.title = f"{activity_title} - Completed"
+            existing_activity.save(update_fields=["status", "time", "title"])
+            logger.debug(f"[SECATOR API] Updated ScanActivity {existing_activity.id} for runner {runner_name}")
+        else:
+            # Create new activity
+            activity_id = scan_repo.create_activity(scan_history.id, activity_title, rengine_status)
+            # Update the newly created activity with celery_id and name
+            try:
+                new_activity = ScanActivity.objects.get(id=activity_id)
+                new_activity.celery_id = str(secator_runner.id)
+                new_activity.name = runner_name
+                new_activity.save(update_fields=["celery_id", "name"])
+                logger.debug(f"[SECATOR API] Created ScanActivity {activity_id} for runner {runner_name}")
+            except ScanActivity.DoesNotExist:
+                logger.warning(f"[SECATOR API] Could not find newly created ScanActivity {activity_id}")
+
+        logger.info(f"[SECATOR API] Synchronized runner {runner_name} (status: {runner_status}) with scan {scan_history.id}")
 
 
 class SecatorFindingCreate(APIView):
@@ -4014,6 +4110,7 @@ class SecatorFindingCreate(APIView):
 
     def post(self, request):
         try:
+            from reNgine.services.repositories.certificate_repository import CertificateRepository
             from reNgine.services.repositories.dns_repository import DnsRepository
             from reNgine.services.repositories.employee_repository import EmployeeRepository
             from reNgine.services.repositories.endpoint_repository import EndpointRepository
@@ -4030,8 +4127,19 @@ class SecatorFindingCreate(APIView):
             scan_history_id = context.get("scan_history_id")
             domain_id = context.get("domain_id")
 
-            logger.info(f"Creating finding: type={finding_type}, scan_history_id={scan_history_id}, domain_id={domain_id}")
-            logger.debug(f"Finding data: {finding_data}")
+            logger.info(f"[SECATOR API] Creating finding: type={finding_type}, scan_history_id={scan_history_id}, domain_id={domain_id}")
+            logger.debug(f"[SECATOR API] Full finding data received: {json.dumps(finding_data, indent=2, default=str)}")
+            logger.debug(f"[SECATOR API] Finding data keys: {list(finding_data.keys())}")
+            logger.debug(f"[SECATOR API] Finding type: {finding_type}")
+            if "_context" in finding_data:
+                logger.debug(f"[SECATOR API] Context: {finding_data.get('_context', {})}")
+            # Log all fields specific to the finding type
+            for key, value in finding_data.items():
+                if key not in ["_type", "_context", "_uuid"]:
+                    if isinstance(value, (dict, list)):
+                        logger.debug(f"[SECATOR API] Finding field '{key}': {json.dumps(value, indent=2, default=str)}")
+                    else:
+                        logger.debug(f"[SECATOR API] Finding field '{key}': {value}")
 
             if not finding_type:
                 return Response({"status": False, "error": "Missing _type in finding data"}, status=400)
@@ -4047,11 +4155,12 @@ class SecatorFindingCreate(APIView):
                 "record": DnsRepository,
                 "exploit": ExploitRepository,
                 "user_account": EmployeeRepository,
+                "certificate": CertificateRepository,
             }
 
             repository_class = repository_mapping.get(finding_type)
             if not repository_class:
-                logger.warning(f"Unknown finding type: {finding_type}")
+                logger.warning(f"[SECATOR API] Unknown finding type: {finding_type}")
                 import time
                 finding_id = f"{finding_type}_{int(time.time() * 1000)}"
                 return Response({"status": True, "id": finding_id})
@@ -4060,13 +4169,24 @@ class SecatorFindingCreate(APIView):
             repository = repository_class()
             saved_object = None
 
+            logger.debug(f"[SECATOR API] Using repository: {repository_class.__name__}")
+            logger.debug(f"[SECATOR API] Calling save_from_secator with finding_data (keys: {list(finding_data.keys())})")
+
             if scan_history_id and domain_id:
                 if finding_type == "subdomain":
+                    logger.debug(f"[SECATOR API] Saving subdomain with context: {context}")
                     saved_object = repository.save_from_secator(
                         finding_data, scan_history_id, domain_id, rengine_context=context
                     )
                 else:
                     saved_object = repository.save_from_secator(finding_data, scan_history_id, domain_id)
+                
+                if saved_object:
+                    logger.debug(f"[SECATOR API] Finding saved successfully: {saved_object.__class__.__name__} (id={getattr(saved_object, 'id', 'N/A')})")
+                else:
+                    logger.warning(f"[SECATOR API] Repository returned None for finding type {finding_type}")
+            else:
+                logger.warning(f"[SECATOR API] Missing scan_history_id or domain_id: scan_history_id={scan_history_id}, domain_id={domain_id}")
 
             # Generate finding ID from saved object or timestamp
             if saved_object and hasattr(saved_object, "id"):
@@ -4075,12 +4195,12 @@ class SecatorFindingCreate(APIView):
                 import time
                 finding_id = f"{finding_type}_{int(time.time() * 1000)}"
 
-            logger.info(f"Finding created: type={finding_type}, id={finding_id}")
+            logger.info(f"[SECATOR API] Finding created: type={finding_type}, id={finding_id}")
             return Response({"status": True, "id": finding_id})
         except Exception as e:
-            logger.error(f"Error creating finding: {e}")
+            logger.error(f"[SECATOR API] Error creating finding: {e}")
             import traceback
-            logger.error(f"Traceback: {traceback.format_exc()}")
+            logger.error(f"[SECATOR API] Traceback: {traceback.format_exc()}")
             return Response({"status": False, "error": str(e)}, status=500)
 
 
@@ -4096,15 +4216,24 @@ class SecatorFindingUpdate(APIView):
         try:
             finding_data = request.data
 
-            logger.info(f"Updating finding: finding_id={finding_id}")
-            logger.debug(f"Finding data: {finding_data}")
+            logger.info(f"[SECATOR API] Updating finding: finding_id={finding_id}")
+            logger.debug(f"[SECATOR API] Full finding update data received: {json.dumps(finding_data, indent=2, default=str)}")
+            logger.debug(f"[SECATOR API] Finding data keys: {list(finding_data.keys())}")
+            finding_type = finding_data.get("_type")
+            logger.debug(f"[SECATOR API] Finding type: {finding_type}")
+            # Log all fields
+            for key, value in finding_data.items():
+                if isinstance(value, (dict, list)):
+                    logger.debug(f"[SECATOR API] Finding update field '{key}': {json.dumps(value, indent=2, default=str)}")
+                else:
+                    logger.debug(f"[SECATOR API] Finding update field '{key}': {value}")
 
             # Update finding data (for now, just log it)
             # TODO: Update finding in database
 
             return Response({"status": True, "id": finding_id})
         except Exception as e:
-            logger.error(f"Error updating finding {finding_id}: {e}")
+            logger.error(f"[SECATOR API] Error updating finding {finding_id}: {e}")
             import traceback
-            logger.error(f"Traceback: {traceback.format_exc()}")
+            logger.error(f"[SECATOR API] Traceback: {traceback.format_exc()}")
             return Response({"status": False, "error": str(e)}, status=500)

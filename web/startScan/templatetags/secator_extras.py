@@ -190,10 +190,25 @@ def workflow_icon(workflow_name):
     return "project-diagram"
 
 
-@register.simple_tag
-def get_task_info(task_name):
+@register.simple_tag(takes_context=True)
+def get_task_info(context, task_name):
     """Get task information by task name"""
-    task = SecatorTask.objects.filter(task_type=task_name, is_active=True).first()
+    # Check if tasks_dict is available in context (passed from view)
+    tasks_dict = context.get("tasks_dict")
+    if tasks_dict:
+        task = tasks_dict.get(task_name)
+        if task:
+            return {
+                "name": task.name,
+                "category": task.category,
+                "description": task.description,
+                "icon": category_icon(task.category),
+            }
+    
+    # Fallback to database query if not in context
+    task = SecatorTask.objects.filter(task_type=task_name, is_active=True).only(
+        "name", "category", "description"
+    ).first()
     if not task:
         return {"name": task_name, "category": "Unknown", "description": f"Secator task: {task_name}", "icon": "tools"}
 
@@ -219,6 +234,10 @@ def parent_category(category):
 @register.filter
 def get_structured_tasks(workflow):
     """Get structured tasks from workflow (with group information)"""
+    # Use pre-computed value if available (from view optimization)
+    if hasattr(workflow, "_precomputed_structured_tasks"):
+        return workflow._precomputed_structured_tasks
+    # Fallback to method call if not pre-computed
     if not hasattr(workflow, "get_structured_tasks"):
         return []
     return workflow.get_structured_tasks()

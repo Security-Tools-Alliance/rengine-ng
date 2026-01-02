@@ -65,7 +65,7 @@ class SecatorRunner:
         from scanEngine.models import SecatorWorkflow
 
         try:
-            workflow_obj = SecatorWorkflow.objects.get(alias=workflow_name)
+            workflow_obj = SecatorWorkflow.objects.get(name=workflow_name)
 
             if workflow_obj.workflow_type == "builtin":
                 template = TemplateLoader(name=f"workflows/{workflow_name}")
@@ -94,7 +94,7 @@ class SecatorRunner:
         from scanEngine.models import SecatorScan
 
         try:
-            scan_obj = SecatorScan.objects.get(alias=scan_name_or_alias)
+            scan_obj = SecatorScan.objects.get(name=scan_name_or_alias)
 
             if scan_obj.scan_config_type == "builtin":
                 template = TemplateLoader(name=f"scan/{scan_name_or_alias}")

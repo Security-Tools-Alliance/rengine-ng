@@ -81,7 +81,7 @@ class DnsRepository:
                 logger.debug(f"DNS record already exists: {record_name} ({record_type})")
 
             # Associate with domain info if available
-            self._associate_with_domain_info(dns_record, domain, host)
+            self._associate_with_domain_info(dns_record, domain, host, item)
 
             return dns_record
 
@@ -224,7 +224,7 @@ class DnsRepository:
             logger.error(f"Error getting DNS records by type: {e}")
             return []
 
-    def _associate_with_domain_info(self, dns_record: DNSRecord, domain: Domain, host: str = None) -> None:
+    def _associate_with_domain_info(self, dns_record: DNSRecord, domain: Domain, host: str = None, item: Dict[str, Any] = None) -> None:
         """
         Associate DNS record with domain info.
 
@@ -232,6 +232,7 @@ class DnsRepository:
             dns_record: DNS record object
             domain: Domain object
             host: Optional host information
+            item: Optional Secator item with extra_data
         """
         try:
             # Get or create domain info
@@ -239,6 +240,18 @@ class DnsRepository:
 
             if created:
                 logger.debug(f"Created domain info for domain {domain.name}")
+
+            # Store extra_data from Secator item in DomainInfo
+            if item and "extra_data" in item:
+                if domain_info.extra_data is None:
+                    domain_info.extra_data = {}
+                # Merge extra_data, using record name and type as key
+                record_key = f"{dns_record.name}_{dns_record.type}"
+                if record_key not in domain_info.extra_data:
+                    domain_info.extra_data[record_key] = {}
+                domain_info.extra_data[record_key].update(item["extra_data"])
+                domain_info.save(update_fields=["extra_data"])
+                logger.debug(f"Stored extra_data for DNS record {dns_record.name} ({dns_record.type}) in domain info")
 
             # Associate DNS record with domain info
             domain_info.dns_records.add(dns_record)

@@ -339,6 +339,10 @@ class SecatorWorkflow(models.Model):
         - For groups: {"type": "group", "name": "_group/discover", "display_name": "discover", "tasks": ["netdetect", "arp"]}
         - For individual tasks: {"type": "task", "name": "prompt", "group": None}
         """
+        # Use pre-computed value if available (from view optimization)
+        if hasattr(self, "_precomputed_structured_tasks"):
+            return self._precomputed_structured_tasks
+        
         tasks_dict = self.get_tasks()
         if not isinstance(tasks_dict, dict):
             return []
@@ -381,6 +385,10 @@ class SecatorWorkflow(models.Model):
         
         This counts all individual tasks, not groups.
         """
+        # Use pre-computed value if available (from view optimization)
+        if hasattr(self, "_precomputed_tasks_count"):
+            return self._precomputed_tasks_count
+        
         structured = self.get_structured_tasks()
         count = 0
         

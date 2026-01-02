@@ -76,17 +76,19 @@ class EndpointRepository:
                 if response_time is not None:
                     defaults["response_time"] = response_time
 
-            # Add additional fields if available
-            if "method" in item:
-                # Store HTTP method in extra_data since it's not a direct field
-                extra_data = {"method": item["method"]}
-                if "words" in item:
-                    extra_data["words"] = item["words"]
-                if "lines" in item:
-                    extra_data["lines"] = item["lines"]
-                if "headers" in item:
-                    extra_data["headers"] = item["headers"]
-                defaults["extra_data"] = extra_data
+            # Add method, words, lines, and headers fields
+            defaults["method"] = item.get("method", "")
+            defaults["words"] = item.get("words", 0)
+            defaults["lines"] = item.get("lines", 0)
+            
+            # Combine response_headers and request_headers into headers JSONField
+            headers_dict = {}
+            if "response_headers" in item:
+                headers_dict["response"] = item["response_headers"]
+            if "request_headers" in item:
+                headers_dict["request"] = item["request_headers"]
+            if headers_dict:
+                defaults["headers"] = headers_dict
 
             # Add screenshot and stored response paths if available
             if "screenshot_path" in item:

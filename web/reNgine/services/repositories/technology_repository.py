@@ -50,7 +50,14 @@ class TechnologyRepository:
             Domain.objects.get(id=domain_id)
 
             # Get or create technology
-            tech_obj, created = Technology.objects.get_or_create(name=tech_name)
+            tech_obj, created = Technology.objects.get_or_create(
+                name=tech_name,
+                defaults={
+                    "value": item.get("value", ""),
+                    "category": item.get("category", ""),
+                    "stored_response_path": item.get("stored_response_path", ""),
+                }
+            )
 
             if created:
                 logger.info(f"Created technology: {tech_name}")

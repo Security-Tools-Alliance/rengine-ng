@@ -114,6 +114,7 @@ class DomainInfo(models.Model):
     similar_domains = models.ManyToManyField(RelatedDomain, blank=True, related_name="similar_domains")
     # historical ips
     historical_ips = models.ManyToManyField(HistoricalIP, blank=True, related_name="similar_domains")
+    extra_data = models.JSONField(null=True, blank=True)
 
     def __str__(self):
         return str(self.id)

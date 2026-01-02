@@ -21,6 +21,19 @@ function render_ports(data)
 	Object.entries(JSON.parse(data)).forEach(([key, value]) => {
 		badge_color = value[3] ? 'danger' : 'info';
 		title = value[3] ? 'Uncommon Port - ' + value[2] : value[2];
+		// Add port details if available (state, protocol, host, cpes)
+		if (value[4]) { // state
+			title += `\nState: ${value[4]}`;
+		}
+		if (value[5]) { // protocol
+			title += `\nProtocol: ${value[5]}`;
+		}
+		if (value[6]) { // host
+			title += `\nHost: ${value[6]}`;
+		}
+		if (value[7] && Array.isArray(value[7]) && value[7].length > 0) { // cpes
+			title += `\nCPEs: ${value[7].join(', ')}`;
+		}
 		port_badge += `<span class='m-1 badge  badge-soft-${badge_color} bs-tooltip' title='${title}'>${value[0]}/${value[1]}</span>`
 	});
 	ip_address_content.innerHTML = port_badge;
@@ -34,6 +47,9 @@ function render_ips(data)
 	Object.entries(JSON.parse(data)).forEach(([key, value]) => {
 		badge_color = value[1] ? 'warning' : 'info';
 		title = value[1] ? 'CDN IP Address' : '';
+		if (value[2] !== undefined) { // alive field
+			title += value[2] ? '\nAlive: Yes' : '\nAlive: No';
+		}
 		ip_badge += `<span class='m-1 badge  badge-soft-${badge_color} bs-tooltip' title='${title}'>${value[0]}</span>`
 	});
 	content.innerHTML = ip_badge;
@@ -254,7 +270,11 @@ function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, s
 						return '-';
 					}
 				}
-        }
+        },
+        { 'data': 'method', 'title': 'Method', 'defaultContent': '', 'visible': false, 'className': 'dt-col-hidden' },
+        { 'data': 'words', 'title': 'Words', 'searchable': false, 'defaultContent': '', 'visible': false, 'className': 'dt-col-hidden' },
+        { 'data': 'lines', 'title': 'Lines', 'searchable': false, 'defaultContent': '', 'visible': false, 'className': 'dt-col-hidden' },
+        { 'data': 'headers', 'title': 'Headers', 'defaultContent': '', 'visible': false, 'className': 'dt-col-hidden', 'render': function ( data ) { return data ? JSON.stringify(data) : ""; } }
     ];
     // If already initialized, destroy cleanly to avoid index drift
     if ($.fn.DataTable.isDataTable('#endpoint_results')) {

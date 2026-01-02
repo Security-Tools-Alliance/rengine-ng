@@ -18,7 +18,13 @@ const vuln_datatable_columns = [
 	{'data': 'action', 'orderable': false, 'searchable': false}, // Action
 	{'data': 'extracted_results'},     // Extracted Results
 	{'data': 'curl_command'},          // CURL command
-	{'data': 'matcher_name'}           // Matcher Name
+	{'data': 'matcher_name'},          // Matcher Name
+	{'data': 'cvss_vec'},              // CVSS Vector
+	{'data': 'epss_score'},           // EPSS Score
+	{'data': 'confidence_nb'},        // Confidence Number
+	{'data': 'severity_nb'},           // Severity Number
+	{'data': 'ip'},                    // IP Address
+	{'data': 'reference'}              // Reference
 ];
 
 const vuln_datatable_page_length = 50;

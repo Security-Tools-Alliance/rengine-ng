@@ -66,6 +66,10 @@ class PortRepository:
                     "service_name": item.get("service_name", ""),
                     "description": item.get("description", ""),
                     "is_uncommon": self._is_uncommon_port(port_number),
+                    "state": item.get("state", ""),
+                    "cpes": item.get("cpes", []),
+                    "protocol": item.get("protocol", ""),
+                    "host": item.get("host", ""),
                 },
             )
 

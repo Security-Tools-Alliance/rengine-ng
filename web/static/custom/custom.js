@@ -533,10 +533,17 @@ function parse_technology(endpoint_url, data, color, scan_id = null, domain_id=n
 	var data_with_span = "";
 	for (var key in data) {
 		let onclick = '';
+		let tooltip = `Technology: ${data[key]['name']}`;
+		if (data[key]['value']) {
+			tooltip += `\nValue: ${data[key]['value']}`;
+		}
+		if (data[key]['category']) {
+			tooltip += `\nCategory: ${data[key]['category']}`;
+		}
 		if(link) {
 			onclick = ` onclick="get_tech_details('${endpoint_url}', '${data[key]['name']}', ${scan_id}, domain_id=null)"`
 		}
-		data_with_span += badge + onclick + `>` + data[key]['name'] + "</span>";
+		data_with_span += badge.replace('title="Technology"', `title="${tooltip}"`) + onclick + `>` + data[key]['name'] + "</span>";
 	}
 	return data_with_span;
 }

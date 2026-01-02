@@ -79,7 +79,13 @@ $(document).ready(function() {
 					get_datatable_col_index('discovered_date', vuln_datatable_columns),
 					get_datatable_col_index('extracted_results', vuln_datatable_columns),
 					get_datatable_col_index('curl_command', vuln_datatable_columns),
-					get_datatable_col_index('matcher_name', vuln_datatable_columns)
+					get_datatable_col_index('matcher_name', vuln_datatable_columns),
+					get_datatable_col_index('cvss_vec', vuln_datatable_columns),
+					get_datatable_col_index('epss_score', vuln_datatable_columns),
+					get_datatable_col_index('confidence_nb', vuln_datatable_columns),
+					get_datatable_col_index('severity_nb', vuln_datatable_columns),
+					get_datatable_col_index('ip', vuln_datatable_columns),
+					get_datatable_col_index('reference', vuln_datatable_columns)
 				],
 				"visible": false,
 				"searchable": true,
@@ -235,6 +241,58 @@ $(document).ready(function() {
 					}
 				},
 				"targets": get_datatable_col_index('action', vuln_datatable_columns),
+			},
+			// cvss_vec
+			{
+				"render": function ( data, type, row ) {
+					return data ? htmlEncode(data) : '';
+				},
+				"targets": get_datatable_col_index('cvss_vec', vuln_datatable_columns),
+			},
+			// epss_score
+			{
+				"render": function ( data, type, row ) {
+					if (data !== null && data !== undefined) {
+						const score = parseFloat(data);
+						let badge = 'info';
+						if (score > 0.5) badge = 'danger';
+						else if (score > 0.2) badge = 'warning';
+						return `<span class="badge badge-outline-${badge}" data-toggle="tooltip" data-placement="top" title="EPSS Score">${score.toFixed(4)}</span>`;
+					}
+					return '';
+				},
+				"targets": get_datatable_col_index('epss_score', vuln_datatable_columns),
+			},
+			// confidence_nb
+			{
+				"render": function ( data, type, row ) {
+					return data !== null && data !== undefined ? data : '';
+				},
+				"targets": get_datatable_col_index('confidence_nb', vuln_datatable_columns),
+			},
+			// severity_nb
+			{
+				"render": function ( data, type, row ) {
+					return data !== null && data !== undefined ? data : '';
+				},
+				"targets": get_datatable_col_index('severity_nb', vuln_datatable_columns),
+			},
+			// ip
+			{
+				"render": function ( data, type, row ) {
+					return data ? htmlEncode(data) : '';
+				},
+				"targets": get_datatable_col_index('ip', vuln_datatable_columns),
+			},
+			// reference
+			{
+				"render": function ( data, type, row ) {
+					if (data && data.includes('http')) {
+						return "<a href='"+htmlEncode(data)+"' target='_blank' class='text-primary'>"+split_into_lines(htmlEncode(data), 100)+"</a>";
+					}
+					return data ? htmlEncode(data) : '';
+				},
+				"targets": get_datatable_col_index('reference', vuln_datatable_columns),
 			},
 		],
 		"initComplete": function(settings, json) {

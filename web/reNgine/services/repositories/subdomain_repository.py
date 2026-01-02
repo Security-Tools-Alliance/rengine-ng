@@ -58,6 +58,8 @@ class SubdomainRepository:
                 "target_domain": domain,
                 "is_imported_subdomain": is_imported,
                 "discovered_date": datetime.now(),
+                "verified": item.get("verified", False),
+                "sources": item.get("sources", []),
             }
 
             # Add extra data if available

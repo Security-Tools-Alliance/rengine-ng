@@ -885,13 +885,13 @@ class DorkCountSerializer(serializers.Serializer):
 class TechnologySerializer(serializers.ModelSerializer):
     class Meta:
         model = Technology
-        fields = ["id", "name"]
+        fields = ["id", "name", "value", "category", "stored_response_path"]
 
 
 class PortSerializer(serializers.ModelSerializer):
     class Meta:
         model = Port
-        fields = ["id", "number", "service_name", "description", "is_uncommon", "ip_address"]
+        fields = ["id", "number", "service_name", "description", "is_uncommon", "ip_address", "state", "cpes", "protocol", "host"]
 
 
 class IpSerializer(serializers.ModelSerializer):
@@ -910,6 +910,7 @@ class IpSerializer(serializers.ModelSerializer):
             "geo_iso",
             "version",
             "is_private",
+            "alive",
             "ip_subscan_ids",
             "subdomain_count",
             "subdomain_names",
@@ -1014,6 +1015,8 @@ class SubdomainSerializer(serializers.ModelSerializer):
             "directories",
             "waf",
             "attack_surface",
+            "verified",
+            "sources",
             "vuln_count",
             "is_interesting",
             "endpoint_count",
@@ -1093,6 +1096,10 @@ class EndpointSerializer(serializers.ModelSerializer):
             "screenshot_path",
             "techs",
             "endpoint_subscan_ids",
+            "method",
+            "words",
+            "lines",
+            "headers",
             "subdomain_id",
             "scan_history_id",
             "target_domain_id",
@@ -1189,6 +1196,12 @@ class VulnerabilitySerializer(serializers.ModelSerializer):
             "response",
             "is_llm_used",
             "vuln_subscan_ids",
+            "cvss_vec",
+            "epss_score",
+            "confidence_nb",
+            "severity_nb",
+            "ip",
+            "reference",
         ]
         depth = 1
 

@@ -19,6 +19,25 @@ function renderBadge(data, settings) {
                     ? (element.is_cdn ? 'CDN IP Address' : 'IP Address')
                     : `Port ${element.number}`;
                 
+                if (is_ip && element.alive !== undefined) {
+                    title += `\nAlive: ${element.alive ? 'Yes' : 'No'}`;
+                }
+                
+                if (!is_ip) {
+                    if (element.state) {
+                        title += `\nState: ${element.state}`;
+                    }
+                    if (element.protocol) {
+                        title += `\nProtocol: ${element.protocol}`;
+                    }
+                    if (element.host) {
+                        title += `\nHost: ${element.host}`;
+                    }
+                    if (element.cpes && element.cpes.length > 0) {
+                        title += `\nCPEs: ${element.cpes.join(', ')}`;
+                    }
+                }
+                
                 if (element.description) {
                     title += ` - ${element.description}`;
                 }
@@ -656,7 +675,7 @@ function get_port_details(endpoint_ip_url, endpoint_subdomain_url, port, scan_id
             if (ips.length > 0) {
                 $('#modal_content_ip').append(`<p>${ips.length} IP Addresses have Port ${port} Open</p>`);
                 createDataTable('modal_content_ip', 
-                    ['IP Address', 'HTTP', 'HTTPS', 'Tags'], 
+                    ['IP Address', 'Alive', 'HTTP', 'HTTPS', 'Tags'], 
                     ips,
                     (ip) => {
                         const badge_color = ip.is_cdn ? 'warning' : 'primary';
@@ -670,9 +689,14 @@ function get_port_details(endpoint_ip_url, endpoint_subdomain_url, port, scan_id
                             `<a href="https://${ip.address}:${port}" target="_blank" class="badge badge-soft-primary">HTTPS</a>` : 
                             '-';
 
+                        const alive_badge = ip.alive !== undefined 
+                            ? (ip.alive ? '<span class="badge badge-soft-success ms-1">Alive</span>' : '<span class="badge badge-soft-secondary ms-1">Not Alive</span>')
+                            : '';
+                        
                         return `
                             <tr>
                                 <td><span class="text-${badge_color}">${ip.address}</span></td>
+                                <td>${alive_badge || '-'}</td>
                                 <td>${httpLink}</td>
                                 <td>${httpsLink}</td>
                                 <td>${tags}</td>

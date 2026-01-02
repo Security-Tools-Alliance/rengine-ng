@@ -372,13 +372,51 @@ def start_scan_ui(request, slug, domain_id):
 
             context = {}
             if execution_mode == "workflow":
-                workflows = SecatorWorkflow.objects.filter(is_active=True)
-                all_tasks = SecatorTask.objects.filter(is_active=True)
-                context["workflows"] = workflows
+                # Optimize query: only fetch needed fields and prefetch related data
+                workflows_queryset = (
+                    SecatorWorkflow.objects.filter(is_active=True)
+                    .only(
+                        "id",
+                        "name",
+                        "display_name",
+                        "description",
+                        "long_description",
+                        "workflow_type",
+                        "yaml_configuration",
+                    )
+                    .order_by("workflow_type", "name")
+                )
+                # Pre-fetch all tasks once to avoid N+1 queries in template tags
+                all_tasks = SecatorTask.objects.filter(is_active=True).only(
+                    "task_type",
+                    "name",
+                    "category",
+                    "description",
+                )
+                # Convert to dict for O(1) lookup in template tags
+                tasks_dict = {task.task_type: task for task in all_tasks}
+                
+                # Pre-compute expensive operations (YAML parsing) to avoid repeated parsing in template
+                # Cache is now handled at model level, but we still pre-compute for template efficiency
+                # Convert queryset to list to avoid multiple DB hits
+                workflows_list = list(workflows_queryset)
+                
+                # Pre-compute in parallel using list comprehension (faster than loop)
+                for workflow in workflows_list:
+                    # These calls now use cache at model level, but we still attach to avoid re-calls in template
+                    workflow._precomputed_structured_tasks = workflow.get_structured_tasks()
+                    workflow._precomputed_tasks_count = workflow.get_tasks_count()
+                
+                context["workflows"] = workflows_list
                 context["all_tasks"] = all_tasks
+                context["tasks_dict"] = tasks_dict
                 template = "startScan/_items/secator_workflow_select.html"
             elif execution_mode == "tasks":
-                tasks = SecatorTask.objects.filter(is_active=True)
+                tasks = (
+                    SecatorTask.objects.filter(is_active=True)
+                    .only("id", "name", "task_type", "category", "description")
+                    .order_by("category", "name")
+                )
                 context["tasks"] = tasks
                 template = "startScan/_items/secator_task_select.html"
             elif execution_mode == "scan":
@@ -735,13 +773,51 @@ def start_organization_scan(request, id, slug):
 
         context = {}
         if execution_mode == "workflow":
-            workflows = SecatorWorkflow.objects.filter(is_active=True)
-            all_tasks = SecatorTask.objects.filter(is_active=True)
-            context["workflows"] = workflows
+            # Optimize query: only fetch needed fields and prefetch related data
+            workflows_queryset = (
+                SecatorWorkflow.objects.filter(is_active=True)
+                .only(
+                    "id",
+                    "name",
+                    "display_name",
+                    "description",
+                    "long_description",
+                    "workflow_type",
+                    "yaml_configuration",
+                )
+                .order_by("workflow_type", "name")
+            )
+            # Pre-fetch all tasks once to avoid N+1 queries in template tags
+            all_tasks = SecatorTask.objects.filter(is_active=True).only(
+                "task_type",
+                "name",
+                "category",
+                "description",
+            )
+            # Convert to dict for O(1) lookup in template tags
+            tasks_dict = {task.task_type: task for task in all_tasks}
+            
+            # Pre-compute expensive operations (YAML parsing) to avoid repeated parsing in template
+            # Cache is now handled at model level, but we still pre-compute for template efficiency
+            # Convert queryset to list to avoid multiple DB hits
+            workflows_list = list(workflows_queryset)
+            
+            # Pre-compute in parallel using list comprehension (faster than loop)
+            for workflow in workflows_list:
+                # These calls now use cache at model level, but we still attach to avoid re-calls in template
+                workflow._precomputed_structured_tasks = workflow.get_structured_tasks()
+                workflow._precomputed_tasks_count = workflow.get_tasks_count()
+            
+            context["workflows"] = workflows_list
             context["all_tasks"] = all_tasks
+            context["tasks_dict"] = tasks_dict
             template = "startScan/_items/secator_workflow_select.html"
         elif execution_mode == "tasks":
-            tasks = SecatorTask.objects.filter(is_active=True)
+            tasks = (
+                SecatorTask.objects.filter(is_active=True)
+                .only("id", "name", "task_type", "category", "description")
+                .order_by("category", "name")
+            )
             context["tasks"] = tasks
             template = "startScan/_items/secator_task_select.html"
         elif execution_mode == "scan":

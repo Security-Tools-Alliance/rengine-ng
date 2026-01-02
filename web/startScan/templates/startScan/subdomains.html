@@ -323,6 +323,26 @@ $(document).ready(function() {
 					},
 					"targets": get_datatable_col_index('action', subdomain_datatable_columns),
 				},
+				// verified
+				{
+					"render": function ( data, type, row ) {
+						if (data === true || data === "true" || data === 1) {
+							return "<span class='badge bg-success'>Verified</span>";
+						}
+						return "<span class='badge bg-secondary'>Not Verified</span>";
+					},
+					"targets": get_datatable_col_index('verified', subdomain_datatable_columns),
+				},
+				// sources
+				{
+					"render": function ( data, type, row ) {
+						if (data && Array.isArray(data) && data.length > 0) {
+							return data.map(source => `<span class='badge badge-soft-info m-1'>${htmlEncode(source)}</span>`).join('');
+						}
+						return "";
+					},
+					"targets": get_datatable_col_index('sources', subdomain_datatable_columns),
+				},
 			],
 			"dom": "<'dt--top-section'<'row'<'col-12 mb-3 mb-sm-0 col-sm-4 col-md-3 col-lg-4 d-flex justify-content-sm-start justify-content-center'l><'dt--pages-count col-12 col-sm-6 col-md-4 col-lg-4 d-flex justify-content-sm-middle justify-content-center'i><'dt--pagination col-12 col-sm-2 col-md-5 col-lg-4 d-flex justify-content-sm-end justify-content-center'p>>>" +
 			"<'table-responsive'tr>" +
