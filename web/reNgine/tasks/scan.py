@@ -89,7 +89,10 @@ def start_secator_scan(
             stealth_profile=stealth_profile,
             expert_mode=expert_mode,
         )
-        scan.save()
+        # Do not save scan here - status is managed by Secator hooks via SecatorRunnerUpdate API
+        # Saving would overwrite the status updated by the hooks
+        # Refresh from DB to get current status for return value
+        scan.refresh_from_db()
 
         # Check result
         if result.get("status") == "success":

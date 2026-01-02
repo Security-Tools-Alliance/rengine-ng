@@ -374,6 +374,11 @@ LOGGING = {
             "level": "DEBUG" if CELERY_DEBUG else "INFO",
             "propagate": True,  # Allow log messages to propagate to root logger
         },
+        "api": {
+            "handlers": ["console"],
+            "level": "DEBUG" if (UI_DEBUG or CELERY_DEBUG) else "INFO",
+            "propagate": True,  # Allow log messages to propagate to root logger
+        },
         "kombu.pidbox": {
             "handlers": ["null"],
             "propagate": False,
@@ -404,7 +409,7 @@ LOGGING = {
     },
     "root": {
         "handlers": ["console"],
-        "level": "DEBUG" if CELERY_DEBUG else "INFO",
+        "level": "DEBUG" if (UI_DEBUG or CELERY_DEBUG) else "INFO",
     },
 }
 
