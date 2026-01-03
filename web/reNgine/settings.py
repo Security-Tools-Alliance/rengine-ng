@@ -379,6 +379,11 @@ LOGGING = {
             "level": "DEBUG" if (UI_DEBUG or CELERY_DEBUG) else "INFO",
             "propagate": True,  # Allow log messages to propagate to root logger
         },
+        "websocket": {
+            "handlers": ["console"],
+            "level": "DEBUG" if (UI_DEBUG or CELERY_DEBUG) else "INFO",
+            "propagate": True,  # Allow log messages to propagate to root logger
+        },
         "kombu.pidbox": {
             "handlers": ["null"],
             "propagate": False,

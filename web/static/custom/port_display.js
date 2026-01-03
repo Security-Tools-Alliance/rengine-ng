@@ -692,7 +692,7 @@ function get_port_details(endpoint_ip_url, endpoint_subdomain_url, port, scan_id
                         const alive_badge = ip.alive !== undefined 
                             ? (ip.alive ? '<span class="badge badge-soft-success ms-1">Alive</span>' : '<span class="badge badge-soft-secondary ms-1">Not Alive</span>')
                             : '';
-                        
+
                         return `
                             <tr>
                                 <td><span class="text-${badge_color}">${ip.address}</span></td>

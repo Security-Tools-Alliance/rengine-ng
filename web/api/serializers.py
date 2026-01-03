@@ -30,6 +30,7 @@ from startScan.models import (
     Port,
     ScanActivity,
     ScanHistory,
+    SecatorRunner,
     Subdomain,
     SubScan,
     Technology,
@@ -382,6 +383,100 @@ class ScanActivitySerializer(serializers.ModelSerializer):
         from reNgine.core.time import get_time_taken
 
         return get_time_taken(timezone.now(), scan_activity.time)
+
+
+class SecatorRunnerSerializer(serializers.ModelSerializer):
+    """Serializer for SecatorRunner model with computed fields."""
+    
+    elapsed = serializers.SerializerMethodField()
+    status = serializers.SerializerMethodField()
+    status_display = serializers.SerializerMethodField()
+    status_code = serializers.SerializerMethodField()
+    progress = serializers.SerializerMethodField()
+    done = serializers.SerializerMethodField()
+    start_time = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = SecatorRunner
+        fields = [
+            "id",
+            "runner_type",
+            "runner_name",
+            "status",
+            "status_display",
+            "status_code",
+            "progress",
+            "done",
+            "created_at",
+            "updated_at",
+            "elapsed",
+            "start_time",
+            "scan_history",
+            "domain",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at"]
+    
+    def get_status(self, obj):
+        """Get status from runner_data."""
+        if obj.runner_data:
+            return obj.runner_data.get("status", "PENDING")
+        return "PENDING"
+    
+    def get_status_display(self, obj):
+        """Get human-readable status."""
+        status = self.get_status(obj)
+        status_map = {
+            "RUNNING": "Running",
+            "SUCCESS": "Success",
+            "FAILURE": "Failed",
+            "FAILED": "Failed",
+            "PENDING": "Pending",
+        }
+        return status_map.get(status.upper(), "Unknown")
+    
+    def get_status_code(self, obj):
+        """Get reNgine status code from Secator status."""
+        from reNgine.services.secator.progress_sync import SecatorProgressSync
+        
+        status = self.get_status(obj)
+        return SecatorProgressSync.map_secator_status_to_rengine(status)
+    
+    def get_progress(self, obj):
+        """Get progress from runner_data."""
+        if obj.runner_data:
+            return obj.runner_data.get("progress", 0)
+        return 0
+    
+    def get_done(self, obj):
+        """Get done flag from runner_data."""
+        if obj.runner_data:
+            return obj.runner_data.get("done", False)
+        return False
+    
+    def get_start_time(self, obj):
+        """Get start time from runner_data or created_at."""
+        if obj.runner_data and "start_time" in obj.runner_data:
+            return obj.runner_data["start_time"]
+        return obj.created_at.isoformat() if obj.created_at else None
+    
+    def get_elapsed(self, obj):
+        """Calculate elapsed time since start."""
+        from django.utils import timezone
+        from reNgine.core.time import get_time_taken
+        
+        start_time = obj.created_at
+        if obj.runner_data and "start_time" in obj.runner_data:
+            try:
+                from datetime import datetime
+                start_time_str = obj.runner_data["start_time"]
+                if isinstance(start_time_str, str):
+                    start_time = datetime.fromisoformat(start_time_str.replace("Z", "+00:00"))
+            except (ValueError, TypeError):
+                pass
+        
+        if start_time:
+            return get_time_taken(timezone.now(), start_time)
+        return "0s"
 
 
 class OrganizationSerializer(serializers.ModelSerializer):

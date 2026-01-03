@@ -102,6 +102,7 @@
     <script src="{% static 'assets/js/app.min.js' %}"></script>
     <script src="{% static 'custom/custom.js' %}"></script>
     <script src="{% static 'custom/toolbox.js' %}"></script>
+    <script src="{% static 'custom/scan_status_websocket.js' %}"></script>
     <script src="{% static 'custom/right_sidebar.js' %}"></script>
     <script src="{% static 'custom/port_display.js' %}"></script>
     <script src="{% static 'plugins/snackbar/snackbar.min.js' %}"></script>
@@ -125,6 +126,13 @@
         checkForUpdates(false);
 
         getScanStatusSidebar('{% url 'api:scan_status' %}', '{% url 'api:stop_scan' %}', '{% url 'api:fetch_subscan_results' %}', project='{{current_project.slug}}', reload=false);
+        
+        // Connect to WebSocket for real-time right sidebar updates
+        if (typeof connectScanStatusWebSocket === 'function') {
+          connectScanStatusWebSocket(null, '{{current_project.slug}}', {
+            updateSidebar: true
+          });
+        }
         if (localStorage.getItem('rengine-theme') == "dark") {
           $('#dark-mode-check').prop("checked", true).change();
         }

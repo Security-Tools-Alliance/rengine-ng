@@ -28,6 +28,14 @@ def count(value):
     return len(value.split(","))
 
 
+@register.filter(name="get_item")
+def get_item(dictionary, key):
+    """Get item from dictionary by key"""
+    if dictionary is None:
+        return None
+    return dictionary.get(key)
+
+
 @register.filter(name="getpath")
 def getpath(value):
     parsed_url = urlparse(value)

@@ -1288,6 +1288,9 @@ class StopScan(APIView):
                     scan.aborted_by = request.user
                     scan.stop_scan_date = timezone.now()
                     scan.save()
+                    # Send WebSocket update
+                    from reNgine.utilities.websocket import send_scan_status_update
+                    send_scan_status_update(scan_id)
                     response["status"] = True
                 else:
                     response = {"status": False, "message": "Failed to stop scan"}
@@ -3422,6 +3425,8 @@ def websocket_status(request):
                 "websocket_enabled": bool(channel_layer),
                 "websocket_endpoints": {
                     "ollama_download": "/ws/ollama/download/{model_name}/",
+                    "scan_status": "/ws/scan-status/{scan_id}/",
+                    "scan_status_project": "/ws/scan-status/project/{project_slug}/",
                 },
             }
         )
@@ -4098,6 +4103,7 @@ class SecatorRunnerUpdate(APIView):
         from django.utils import timezone
 
         from reNgine.services.repositories.scan_repository import ScanRepository
+        from reNgine.utilities.websocket import send_scan_status_update
         from startScan.models import ScanActivity, SecatorRunner
 
         scan_history = secator_runner.scan_history
@@ -4179,6 +4185,8 @@ class SecatorRunnerUpdate(APIView):
                             f"from status {old_status} to {rengine_status} by runner {runner_name} "
                             f"(type={runner_type}). stop_scan_date: {scan_history.stop_scan_date}"
                         )
+                        # Send WebSocket update
+                        send_scan_status_update(scan_history.id)
                     else:
                         # Not all runners are completed yet, keep RUNNING
                         old_status = scan_history.scan_status
@@ -4189,6 +4197,8 @@ class SecatorRunnerUpdate(APIView):
                             f"Status changed from {old_status} to {RUNNING_TASK} by runner {runner_name} "
                             f"(type={runner_type})"
                         )
+                        # Send WebSocket update
+                        send_scan_status_update(scan_history.id)
                 else:
                     # Runner in SUCCESS but not yet done, keep RUNNING
                     old_status = scan_history.scan_status
@@ -4198,6 +4208,8 @@ class SecatorRunnerUpdate(APIView):
                         f"[SECATOR API STATUS SYNC] KEEP RUNNING - Runner {runner_name} (type={runner_type}) "
                         f"in SUCCESS but not done. Status changed from {old_status} to {RUNNING_TASK}"
                     )
+                    # Send WebSocket update
+                    send_scan_status_update(scan_history.id)
             # For RUNNING, FAILURE, FAILED
             elif runner_status in ["RUNNING", "FAILURE", "FAILED"]:
                 old_status = scan_history.scan_status
@@ -4211,6 +4223,8 @@ class SecatorRunnerUpdate(APIView):
                     f"(type={runner_type}, status={runner_status}, done={runner_done}). "
                     f"stop_scan_date: {scan_history.stop_scan_date}"
                 )
+                # Send WebSocket update
+                send_scan_status_update(scan_history.id)
         else:
             logger.debug(
                 f"[SECATOR API STATUS SYNC] SKIPPED - Runner {runner_name} (type={runner_type}) "
@@ -4251,6 +4265,9 @@ class SecatorRunnerUpdate(APIView):
         logger.info(
             f"[SECATOR API STATUS SYNC] Synchronized runner {runner_name} (status: {runner_status}) with scan {scan_history.id}"
         )
+        
+        # Send WebSocket update even if status didn't change (for runner updates)
+        send_scan_status_update(scan_history.id)
 
 
 class SecatorFindingCreate(APIView):

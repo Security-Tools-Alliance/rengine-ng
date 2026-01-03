@@ -17,8 +17,9 @@ function getScanStatusSidebar(endpoint_url, endpoint_stop_scan_url, endpoint_sca
     if (scans['pending'].length > 0){
       for (var scan in scans['pending']) {
         scan_object = scans['pending'][scan];
+        var scan_name = scan_object.scan_type && scan_object.scan_type.engine_name ? scan_object.scan_type.engine_name : 'Secator';
         $('#upcoming_scans').append(`
-          <div class="alert alert-warning" role="alert">${htmlEncode(scan_object.scan_type.engine_name)} on ${scan_object.domain.name}</div>
+          <div class="alert alert-warning" role="alert">${htmlEncode(scan_name)} on ${scan_object.domain.name}</div>
           `);
       }
     }
@@ -38,11 +39,22 @@ function getScanStatusSidebar(endpoint_url, endpoint_stop_scan_url, endpoint_sca
           currentTaskDisplay = `<br><small class="text-muted font-weight-bold">${scan_object.current_task}</small>`;
         }
         
+        // Get scan name (legacy or Secator)
+        var scan_name = scan_object.scan_type && scan_object.scan_type.engine_name ? scan_object.scan_type.engine_name : 'Secator';
+        if (scan_object.scan_type && scan_object.scan_type.engine_name) {
+          scan_name = scan_object.scan_type.engine_name;
+        } else if (scan_object.current_task) {
+          // For Secator scans, use current_task as name
+          scan_name = scan_object.current_task.split(':')[0] || 'Secator';
+        } else {
+          scan_name = 'Secator';
+        }
+        
         $('#currently_scanning').append(`
-          <div class="card border-primary border mini-card">
+          <div class="card border-primary border mini-card" id="scan-card-${scan_object.id}">
           <a href="/scan/${project}/${scan_object.id}" class="text-reset item-hovered">
           <div class="card-header bg-soft-primary text-primary mini-card-header">
-          ${htmlEncode(scan_object.scan_type.engine_name)} on ${scan_object.domain.name}
+          ${htmlEncode(scan_name)} on ${scan_object.domain.name}
           <span class="badge badge-soft-primary float-end">
           ${scan_object.current_progress}%
           </span>
@@ -63,7 +75,7 @@ function getScanStatusSidebar(endpoint_url, endpoint_stop_scan_url, endpoint_sca
           <span class="badge-vuln-count badge badge-soft-danger waves-effect waves-light">&nbsp;&nbsp;${scan_object.vulnerability_count}&nbsp;&nbsp;</span>
           </div>
           <div class="progress mt-2 progress-4px">
-          <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary" role="progressbar" aria-valuenow="${scan_object.current_progress}" aria-valuemin="0" aria-valuemax="100" style="width: ${scan_object.current_progress}%"></div>
+          <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary scan-progress-bar" role="progressbar" aria-valuenow="${scan_object.current_progress}" aria-valuemin="0" aria-valuemax="100" style="width: ${scan_object.current_progress}%"></div>
           </div>
           <a href="#" onclick="stop_scan('${endpoint_stop_scan_url}', scan_id=${scan_object.id}, subscan_id=null, reload_scan_bar=true, reload_location=false)" class="btn btn-xs btn-soft-danger waves-effect waves-light mt-1 float-end"><i class="fe-alert-triangle"></i> Stop</a>
           </div>
@@ -95,11 +107,14 @@ function getScanStatusSidebar(endpoint_url, endpoint_stop_scan_url, endpoint_sca
             status_badge = '<span class="float-end badge bg-success">Scan Completed</span>';
           }
 
+          // Get scan name (legacy or Secator)
+          var completed_scan_name = scan_object.scan_type && scan_object.scan_type.engine_name ? scan_object.scan_type.engine_name : 'Secator';
+          
           $('#completed').append(`
-            <div class="card border-${color} border mini-card">
+            <div class="card border-${color} border mini-card" id="scan-card-${scan_object.id}">
             <a href="/scan/${project}/${scan_object.id}" class="text-reset item-hovered float-end">
             <div class="card-header ${bg_color} text-${color} mini-card-header">
-            ${htmlEncode(scan_object.scan_type.engine_name)} on ${scan_object.domain.name}
+            ${htmlEncode(completed_scan_name)} on ${scan_object.domain.name}
             </div>
             <div class="card-body mini-card-body">
             <p class="card-text">
@@ -245,6 +260,15 @@ function getScanStatusSidebar(endpoint_url, endpoint_stop_scan_url, endpoint_sca
           pos: 'top-right',
           actionTextColor: '#42A5F5',
           duration: 1500
+        });
+      }
+      
+      // Connect to WebSocket for real-time updates if available
+      if (typeof connectScanStatusWebSocket === 'function') {
+        connectScanStatusWebSocket(null, project, {
+          updateSidebar: function(data) {
+            updateRightSidebar(data);
+          }
         });
       }
     });

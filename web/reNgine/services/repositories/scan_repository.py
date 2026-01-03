@@ -51,6 +51,9 @@ class ScanRepository:
             scan.scan_status = status
             scan.save()
             logger.info(f"Updated scan {scan_history_id} status to {status}")
+            # Send WebSocket update
+            from reNgine.utilities.websocket import send_scan_status_update
+            send_scan_status_update(scan_history_id)
             return True
         except ObjectDoesNotExist:
             logger.error(f"ScanHistory with ID {scan_history_id} not found")
@@ -188,6 +191,9 @@ class ScanRepository:
             scan.stop_scan_date = timezone.now()
             scan.save()
             logger.info(f"Marked scan {scan_history_id} as complete")
+            # Send WebSocket update
+            from reNgine.utilities.websocket import send_scan_status_update
+            send_scan_status_update(scan_history_id)
             return True
         except Exception as e:
             logger.error(f"Error marking scan {scan_history_id} as complete: {e}")
@@ -293,6 +299,9 @@ class ScanRepository:
                 scan.error_message = error_message
             scan.save()
             logger.info(f"Marked scan {scan_history_id} as failed")
+            # Send WebSocket update
+            from reNgine.utilities.websocket import send_scan_status_update
+            send_scan_status_update(scan_history_id)
             return True
         except ObjectDoesNotExist:
             logger.error(f"ScanHistory with ID {scan_history_id} not found")

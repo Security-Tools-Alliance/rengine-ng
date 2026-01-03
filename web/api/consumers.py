@@ -128,3 +128,53 @@ class IPScanProgressConsumer(WebsocketConsumer):
             self.send(text_data=json.dumps(message))
         except Exception as e:
             logger.error(f"Error in IP scan_progress: {e}")
+
+
+class ScanStatusConsumer(WebsocketConsumer):
+    def clean_channel_name(self, name):
+        """Clean channel name to only contain valid characters"""
+        return re.sub(CHANNEL_NAME_PATTERN, "-", name)
+
+    def connect(self):
+        try:
+            logger.info(f"Scan Status WebSocket connection attempt with scope: {self.scope}")
+            scan_id = self.scope["url_route"]["kwargs"].get("scan_id")
+            project_slug = self.scope["url_route"]["kwargs"].get("project_slug")
+
+            if scan_id:
+                self.room_group_name = f"scan-status-{self.clean_channel_name(str(scan_id))}"
+            elif project_slug:
+                self.room_group_name = f"scan-status-project-{self.clean_channel_name(project_slug)}"
+            else:
+                logger.error("No scan_id or project_slug provided in WebSocket connection")
+                self.close()
+                return
+
+            logger.info(f"Joining scan status group: {self.room_group_name}")
+
+            # Join room group
+            async_to_sync(self.channel_layer.group_add)(self.room_group_name, self.channel_name)
+
+            logger.info("Scan Status WebSocket connection accepted")
+            self.accept()
+
+        except Exception as e:
+            logger.error(f"Error in Scan Status WebSocket connect: {e}")
+            raise
+
+    def disconnect(self, close_code):
+        try:
+            logger.info(f"Scan Status WebSocket disconnecting with code: {close_code}")
+            # Leave room group
+            async_to_sync(self.channel_layer.group_discard)(self.room_group_name, self.channel_name)
+        except Exception as e:
+            logger.error(f"Error in Scan Status WebSocket disconnect: {e}")
+
+    def scan_status_update(self, event):
+        """Send scan status update to WebSocket client"""
+        try:
+            message = event["message"]
+            # Send message to WebSocket
+            self.send(text_data=json.dumps(message))
+        except Exception as e:
+            logger.error(f"Error in scan_status_update: {e}")

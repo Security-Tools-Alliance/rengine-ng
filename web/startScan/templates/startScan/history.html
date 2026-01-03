@@ -2,6 +2,7 @@
 {% load static %}
 {% load humanize %}
 {% load permission_tags %}
+{% load custom_filters %}
 
 {% block title %}
 Scan history
@@ -88,7 +89,7 @@ Quick Scan History
           </thead>
           <tbody>
             {% for scan_history in scan_history.all %}
-            <tr>
+            <tr id="scan-row-{{ scan_history.id }}" data-scan-id="{{ scan_history.id }}">
               <td class="checkbox-column"> {{ scan_history.id }} </td>
               <td class=""> {{ scan_history.id }} </td>
               <td class="">
@@ -103,7 +104,8 @@ Quick Scan History
                 <span class="badge badge-pills bg-warning mt-1" data-toggle="tooltip" data-placement="top" title="Endpoints">{{scan_history.get_endpoint_count}}</span>
                 <span class="badge badge-pills bg-danger mt-1" data-toggle="tooltip" data-placement="top" title="{{scan_history.get_critical_vulnerability_count}} Critical, {{scan_history.get_high_vulnerability_count}} High, {{scan_history.get_medium_vulnerability_count}} Medium Vulnerabilities">{{scan_history.get_vulnerability_count}}</span>
               </td>
-              <td class="">
+              <td class="scan-engine-cell">
+                {% if scan_history.is_legacy_scan %}
                 <span class="badge badge-soft-primary">{{ scan_history.scan_type.engine_name }}</span>
                 <br>
                 {% if scan_history.scan_type.scan_type == 'internet' %}
@@ -113,6 +115,17 @@ Quick Scan History
                 {% else %}
                 <span class="badge badge-soft-secondary mt-1">{{ scan_history.scan_type.scan_type|title }}</span>
                 {% endif %}
+                {% else %}
+                  {% if main_runner_by_scan|get_item:scan_history.id %}
+                    {% with runner=main_runner_by_scan|get_item:scan_history.id %}
+                      <span class="badge badge-soft-primary">Secator {{ runner.runner_type|title }}</span>
+                      <br>
+                      <span class="badge badge-soft-info mt-1">{{ runner.runner_name }}</span>
+                    {% endwith %}
+                  {% else %}
+                    <span class="badge badge-soft-primary">Secator</span>
+                  {% endif %}
+                {% endif %}
               </td>
               <td>
                 <span data-toggle="tooltip" data-placement="top" title="{{scan_history.start_scan_date}}">{{scan_history.start_scan_date|naturaltime}}</span>
@@ -120,7 +133,7 @@ Quick Scan History
               <td>
                 <span class="badge badge-soft-secondary">{{scan_history.initiated_by.username}}</span>
               </td>
-              <td class="text-center">
+              <td class="text-center scan-status-cell">
                 {% if scan_history.scan_status == -1 %}
                 <span class="badge badge-soft-warning" data-placement="top" data-toggle="tooltip" data-placement="top" title="Waiting for other scans to complete"><span class="spinner-border spinner-border-sm"></span> Pending</span>
                 {% elif scan_history.scan_status == 0 %}
@@ -146,7 +159,7 @@ Quick Scan History
                 <span class="badge badge-soft-danger">Unknown</span>
                 {% endif %}
               </td>
-              <td class="text-center">
+              <td class="text-center scan-progress-cell">
                 {% if scan_history.scan_status == -1 %}
                 <div class="progress progress-md mt-1">
                   <div class="progress-bar bg-warning" role="progressbar" style="width: 10%" aria-valuenow="10" aria-valuemin="0" aria-valuemax="100"></div>
@@ -208,13 +221,13 @@ Quick Scan History
                           {% endif %}
                           <div class="dropdown-divider"></div>
                         {% endif %}
-                        {% if scan.scan_status != -1%}
+                        {% if scan_history.scan_status != -1%}
                           <a href="#" class="dropdown-item text-dark" onclick="initiate_report(
                               '{% url 'create_report' current_project.slug scan_history.id %}',
                               {{scan_history.id}},
-                              '{% if 'subdomain_discovery' in scan_history.tasks %}True{% endif %}',
-                              '{% if 'vulnerability_scan' in scan_history.tasks %}True{% endif %}',
-                              '{% if 'port_scan' in scan_history.tasks %}True{% endif %}',
+                              '{% if scan_history.is_legacy_scan %}{% if 'subdomain_discovery' in scan_history.tasks %}True{% endif %}{% else %}True{% endif %}',
+                              '{% if scan_history.is_legacy_scan %}{% if 'vulnerability_scan' in scan_history.tasks %}True{% endif %}{% else %}True{% endif %}',
+                              '{% if scan_history.is_legacy_scan %}{% if 'port_scan' in scan_history.tasks %}True{% endif %}{% else %}True{% endif %}',
                               '{{ scan_history.domain.name }}'
                           )">
                           <i class="fe-download"></i>&nbsp;Scan Report</a>
@@ -264,6 +277,7 @@ Quick Scan History
 
 
 {% block page_level_script %}
+<script src="{% static 'custom/scan_status_websocket.js' %}"></script>
 <script>
   $(document).ready(function() {
     var table = $('#scan_history_table').DataTable({
@@ -434,6 +448,15 @@ Quick Scan History
     reset_filter.addEventListener('click', function() {
       resetFilters(table);
     }, false);
+
+    // Connect to WebSocket for real-time scan status updates
+    if (typeof connectScanStatusWebSocket === 'function') {
+      connectScanStatusWebSocket(null, '{{ current_project.slug }}', {
+        updateTable: function(data) {
+          updateScanRowInTable(table, data);
+        }
+      });
+    }
 
   });
 

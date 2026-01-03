@@ -19,6 +19,7 @@ Detailed Scan
 <script src="https://cdn.rawgit.com/eligrey/canvas-toBlob.js/f1a01896135ab378aa5c0118eadd81da55e698d8/canvas-toBlob.js"></script>
 <script src="https://cdn.rawgit.com/eligrey/FileSaver.js/e9d941381475b5df8b7d7691013401e171014e89/FileSaver.min.js"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/flag-icon-css/6.6.3/css/flag-icons.min.css" integrity="sha512-uvXdJud8WaOlQFjlz9B15Yy2Au/bMAvz79F7Xa6OakCl2jvQPdHD0hb3dEqZRdSwG4/sknePXlE7GiarwA/9Wg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+<script src="{% static 'custom/scan_status_websocket.js' %}"></script>
 {% endblock custom_js_css_link %}
 
 {% block breadcrumb_title %}
@@ -102,11 +103,14 @@ Scan Findings
 				<div class="card">
 					<div class="card-body">
 						<div class="d-flex align-items-start mb-3">
-							<div class="w-100">
+							<div class="w-100" data-scan-id="{{history.id}}">
 								<h5 class="mt-0 mb-0 font-15">
 									Scan Status for <span class="badge badge-soft-primary">{{history.domain.name}}</span>
+									{% if not history.is_legacy_scan %}
+									<span class="badge badge-soft-info ms-2">Secator</span>
+									{% endif %}
 								</h5>
-								<p class="mt-1 mb-0 text-muted font-14">
+								<p class="mt-1 mb-0 text-muted font-14 scan-status-badge">
 									{% if history.scan_status == -1 %}
 									<span class="mdi mdi-circle text-warning"></span>
 									<span class="badge badge-soft-warning">Pending</span>
@@ -117,7 +121,7 @@ Scan Findings
 									<span class="mdi mdi-circle text-warning"></span>
 									<span class="badge badge-soft-warning">In Progress</span>
 									{% if history.get_current_task %}
-									<br><small class="text-muted font-weight-bold">{{ history.get_current_task }}</small>
+									<br><small class="text-muted font-weight-bold scan-current-task">{{ history.get_current_task }}</small>
 									{% endif %}
 									{% elif history.scan_status == 2 %}
 									<span class="mdi mdi-circle text-success"></span>
@@ -129,7 +133,7 @@ Scan Findings
 									<span class="mdi mdi-circle text-info"></span>
 									<span class="badge badge-soft-info">Finalizing</span>
 									{% if history.get_current_task %}
-									<br><small class="text-muted font-weight-bold">{{ history.get_current_task }}</small>
+									<br><small class="text-muted font-weight-bold scan-current-task">{{ history.get_current_task }}</small>
 									{% endif %}
 									{% else %}
 									<span class="mdi mdi-circle text-danger"></span>
@@ -155,11 +159,29 @@ Scan Findings
 							<p class="text-danger">Scan failed due to ERROR: {{history.error_message}}</p>
 						{% endif %}
 						{% endif %}
-						<h6 class="font-13 text-muted text-uppercase">Scan Logs</h6>
-						<span><a href="javascript:get_logs_modal({{history.id}})"><i class="fe-file"></i> Logs</a></span>
-						<h6 class="font-13 text-muted text-uppercase">Scan Engine</h6>
+						
+						<h6 class="font-13 text-muted text-uppercase mt-3">{% if not is_secator_scan %}Scan Engine{% else %}Scan Name{% endif %}</h6>
+						{% if not is_secator_scan %}
 						<span class="badge badge-soft-primary">{{history.scan_type.engine_name}}</span>
-						<h6 class="font-13 text-muted text-uppercase mt-3">Scan Duration </h6>
+						{% else %}
+							{% if secator_runners %}
+								{% with main_runner=secator_runners|first %}
+									{% if main_runner.runner_type == 'workflow' or main_runner.runner_type == 'scan' %}
+										<span class="badge badge-soft-primary">Secator {{ main_runner.runner_type|title }}</span>
+										<br>
+										<span class="badge badge-soft-info mt-1" id="scan-name-display">{{ main_runner.runner_name }}</span>
+									{% else %}
+										<span class="badge badge-soft-primary">Secator Task</span>
+										<br>
+										<span class="badge badge-soft-info mt-1" id="scan-name-display">{{ main_runner.runner_name }}</span>
+									{% endif %}
+								{% endwith %}
+							{% else %}
+								<span class="badge badge-soft-primary">Secator</span>
+							{% endif %}
+						{% endif %}
+						
+						<h6 class="font-13 text-muted text-uppercase mt-3">Scan Duration</h6>
 						{% if history.scan_status == -1 %}
 						<p class="mt-1 mb-0 text-warning font-14"><small class="text-center text-muted">Scan not yet started.</small></p>
 						{% elif history.scan_status == 0 %}
@@ -178,68 +200,90 @@ Scan Findings
 						<span class="mt-1 mb-0 text-info font-14">Finalizing - {{ history.get_elapsed_time }}</span>
 						{% endif %}
 
-
-						<h3 class="font-13 text-muted text-uppercase mb-2">Scan Progress</h3>
+						<h3 class="font-13 text-muted text-uppercase mt-3 mb-2">Scan Progress</h3>
 						<div class="progress mb-2 progress-md">
 							{% if history.scan_status == -1 %}
-							<div class="progress-bar bg-warning" role="progressbar" style="width: 10%" aria-valuemin="0" aria-valuemax="100">
+							<div class="progress-bar bg-warning scan-progress-bar" role="progressbar" style="width: 10%" aria-valuemin="0" aria-valuemax="100" aria-valuenow="10">
 							</div>
 							{% elif history.scan_status == 0 %}
-							<div class="progress-bar bg-danger" role="progressbar" style="width: {{ history.get_progress }}%" aria-valuemin="0" aria-valuemax="100">
+							<div class="progress-bar bg-danger scan-progress-bar" role="progressbar" style="width: {{ history.get_progress }}%" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ history.get_progress }}">
 							</div>
 							{% elif history.scan_status == 1 %}
-							<div class="progress-bar bg-primary progress-bar-striped progress-bar-animated" role="progressbar" style="width: {{ history.get_progress }}%" aria-valuemin="0" aria-valuemax="100">
+							<div class="progress-bar bg-primary progress-bar-striped progress-bar-animated scan-progress-bar" role="progressbar" style="width: {{ history.get_progress }}%" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ history.get_progress }}">
 							</div>
 							{% elif history.scan_status == 2 %}
-							<div class="progress-bar bg-success" role="progressbar" style="width: 100%" aria-valuemin="0" aria-valuemax="100">
+							<div class="progress-bar bg-success scan-progress-bar" role="progressbar" style="width: 100%" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100">
 							</div>
 							{% elif history.scan_status == 3 %}
-							<div class="progress-bar bg-danger" role="progressbar" style="width: {{ history.get_progress }}%" aria-valuemin="0" aria-valuemax="100">
+							<div class="progress-bar bg-danger scan-progress-bar" role="progressbar" style="width: {{ history.get_progress }}%" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ history.get_progress }}">
 							</div>
 							{% elif history.scan_status == 4 %}
-							<div class="progress-bar bg-info progress-bar-striped progress-bar-animated" role="progressbar" style="width: 90%" aria-valuemin="0" aria-valuemax="100">
+							<div class="progress-bar bg-info progress-bar-striped progress-bar-animated scan-progress-bar" role="progressbar" style="width: 90%" aria-valuemin="0" aria-valuemax="100" aria-valuenow="90">
 							</div>
 							{% else %}
 							<div class="progress">
-								<div class="progress-bar bg-danger" role="progressbar" style="width: 100%" aria-valuemin="0" aria-valuemax="100">
+								<div class="progress-bar bg-danger scan-progress-bar" role="progressbar" style="width: 100%" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100">
 								</div>
 							</div>
 							{% endif %}
 						</div>
 
 						{% if  history.domain.get_organization %}
-						<h3 class="font-13 text-muted text-uppercase mb-2">Tagged to Organization</h3>
+						<h3 class="font-13 text-muted text-uppercase mt-3 mb-2">Tagged to Organization</h3>
 						{% for organization in history.domain.get_organization %}
 						<span class="badge badge-soft-dark m-1" data-toggle="tooltip" data-placement="top" title="Domain {{domain.name}} belongs to organization {{organization.name}}">{{ organization.name }}</span>
 						{% endfor %}
 						{% endif %}
 
 						<h6 class="font-13 text-muted text-uppercase mt-4 mb-2">Scan Timeline</h6>
-						<div data-simplebar style="max-height: 410px;" class="p-2">
+						<div data-simplebar style="max-height: 410px;" class="p-2 scan-timeline" data-scan-id="{{history.id}}">
 							<div class="track-order-list">
 								<ul class="list-unstyled">
-									{% for activity in scan_activity %}
-									<li class="completed">
-										<h5 class="mt-0 mb-1">{{activity.title}}
-											<span class="float-end badge {% if activity.status == 0 %}badge-soft-danger {% elif activity.status == 1 %}badge-soft-warning{% elif activity.status == 2 %}badge-soft-success{% endif %}">
-												{% if activity.status == 0 %}Failed
-												{% elif activity.status == 1 %}In progress<span class="active-dot dot"></span>
-												{% elif activity.status == 2 %}Completed
+									{% if history.is_legacy_scan %}
+										{% for activity in scan_activity %}
+										<li class="{% if activity.status == 2 %}completed{% elif activity.status == 1 %}running{% else %}pending{% endif %}">
+											<h5 class="mt-0 mb-1">{{activity.title}}
+												<span class="float-end badge {% if activity.status == 0 %}badge-soft-danger {% elif activity.status == 1 %}badge-soft-warning{% elif activity.status == 2 %}badge-soft-success{% endif %}">
+													{% if activity.status == 0 %}Failed
+													{% elif activity.status == 1 %}In progress<span class="active-dot dot"></span>
+													{% elif activity.status == 2 %}Completed
+													{% endif %}
+												</span>
+											</h5>
+											<p class="text-muted">{{activity.time|naturaltime}}<br><small class="text-muted">{{activity.time}}</small> </p>
+											{% if activity.status == 0 %}
+												{% if activity.error_message %}
+													<p class="badge badge-soft-danger">Error: {{activity.error_message}}</p>
 												{% endif %}
-											</span>
-										</h5>
-										<p class="text-muted">{{activity.time|naturaltime}}<br><small class="text-muted">{{activity.time}}</small> </p>
-										{% if activity.status == 0 %}
-											{% if activity.error_message %}
-												<p class="badge badge-soft-danger">Error: {{activity.error_message}}</p>
 											{% endif %}
-										{% endif %}
-										<span><a href="javascript:get_logs_modal(null, {{activity.id}})"><i class="fe-file"></i> Logs</a></span>
-									</li>
-									{% endfor %}
+											<span><a href="javascript:get_logs_modal(null, {{activity.id}})"><i class="fe-file"></i> Logs</a></span>
+										</li>
+										{% endfor %}
+									{% else %}
+										{% for runner in secator_runners %}
+										<li class="{% if runner.runner_data.status == 'SUCCESS' %}completed{% elif runner.runner_data.status == 'RUNNING' %}running{% else %}pending{% endif %}" data-runner-id="{{runner.id}}">
+											<h5 class="mt-0 mb-1">{{runner.runner_type|title}}: {{runner.runner_name}}
+												<span class="float-end badge {% if runner.runner_data.status == 'FAILURE' or runner.runner_data.status == 'FAILED' %}badge-soft-danger {% elif runner.runner_data.status == 'RUNNING' %}badge-soft-warning{% elif runner.runner_data.status == 'SUCCESS' %}badge-soft-success{% else %}badge-soft-secondary{% endif %}">
+													{% if runner.runner_data.status == 'FAILURE' or runner.runner_data.status == 'FAILED' %}Failed
+													{% elif runner.runner_data.status == 'RUNNING' %}In progress<span class="active-dot dot"></span>
+													{% elif runner.runner_data.status == 'SUCCESS' %}Completed
+													{% else %}Pending
+													{% endif %}
+												</span>
+											</h5>
+											<p class="text-muted">{{runner.created_at|naturaltime}}<br><small class="text-muted">{{runner.created_at}}</small></p>
+											{% if runner.runner_data.progress is not None %}
+												<p class="text-muted"><small>Progress: {{runner.runner_data.progress}}%</small></p>
+											{% endif %}
+										</li>
+										{% endfor %}
+									{% endif %}
 								</ul>
 							</div>
 						</div>
+						
+						<h6 class="font-13 text-muted text-uppercase mt-3">Scan Logs</h6>
+						<span><a href="javascript:get_logs_modal({{history.id}})"><i class="fe-file"></i> Logs</a></span>
 					</div>
 				</div>
 				<div class="card">
@@ -2722,6 +2766,15 @@ $(document).ready(function() {
 			}
 		}
 	});
+
+	// Connect to WebSocket for real-time scan status updates
+	if (typeof connectScanStatusWebSocket === 'function') {
+		connectScanStatusWebSocket({{history.id}}, null, {
+			updateDetail: function(data) {
+				updateScanDetailPage(data);
+			}
+		});
+	}
 
 	// s3buckets datatable
 	var s3_table = $('#s3-datatable').DataTable({

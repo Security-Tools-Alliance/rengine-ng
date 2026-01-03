@@ -43,6 +43,11 @@ class SecatorProgressSync:
         """
         Calculate overall progress for a workflow scan.
 
+        Rules:
+        - For workflow/scan: use the workflow/scan progress percentage if > 0
+        - If workflow/scan progress is 0, calculate based on tasks belonging to the workflow
+        - For tasks only (no workflow/scan): calculate based on number of completed tasks vs total tasks
+
         Args:
             scan_history_id: ID of the scan history
 
@@ -59,23 +64,51 @@ class SecatorProgressSync:
             # Get the main workflow/scan runner
             main_runner = runners.filter(runner_type__in=["workflow", "scan"]).first()
 
-            if main_runner and main_runner.runner_data:
-                progress = main_runner.runner_data.get("progress", 0)
-                return float(progress)
+            # Helper function to calculate progress from tasks
+            def calculate_task_progress(task_runners_list):
+                """Calculate progress based on completed tasks."""
+                if not task_runners_list:
+                    return 0.0
 
-            # If no main runner, calculate average of all task runners
-            task_runners = runners.filter(runner_type="task")
-            if task_runners.exists():
-                total_progress = 0
-                count = 0
-                for runner in task_runners:
+                total_tasks = len(task_runners_list)
+                completed_tasks = 0
+
+                for runner in task_runners_list:
                     if runner.runner_data:
-                        progress = runner.runner_data.get("progress", 0)
-                        total_progress += float(progress)
-                        count += 1
+                        status = runner.runner_data.get("status", "").upper()
+                        done = runner.runner_data.get("done", False)
+                        # Count as completed if status is SUCCESS or done is True
+                        if status == "SUCCESS" or done:
+                            completed_tasks += 1
 
-                if count > 0:
-                    return round(total_progress / count, 2)
+                if total_tasks > 0:
+                    progress = (completed_tasks / total_tasks) * 100
+                    return round(progress, 2)
+                return 0.0
+
+            # Get all task runners
+            task_runners = list(runners.filter(runner_type="task"))
+
+            if main_runner and main_runner.runner_data:
+                # For workflow/scan: check if progress is available and > 0
+                workflow_progress = main_runner.runner_data.get("progress", 0)
+                workflow_progress = float(workflow_progress)
+
+                # If workflow has a valid progress (> 0), use it
+                if workflow_progress > 0:
+                    return workflow_progress
+
+                # If workflow progress is 0 or not available, calculate from tasks
+                # This handles cases where Secator doesn't send intermediate progress updates
+                if task_runners:
+                    return calculate_task_progress(task_runners)
+
+                # If no tasks yet, return 0
+                return 0.0
+
+            # If no main runner, calculate based on number of completed tasks vs total tasks
+            if task_runners:
+                return calculate_task_progress(task_runners)
 
             return 0.0
 

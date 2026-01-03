@@ -48,6 +48,7 @@ from startScan.models import (
     IpAddress,
     ScanActivity,
     ScanHistory,
+    SecatorRunner,
     Subdomain,
     SubScan,
     Vulnerability,
@@ -61,7 +62,24 @@ logger = get_task_logger(__name__)
 
 def scan_history(request, slug):
     host = ScanHistory.objects.filter(domain__project__slug=slug).order_by("-start_scan_date")
-    context = {"scan_history_active": "active", "scan_history": host}
+    
+    # Preload SecatorRunner for all scans to avoid N+1 queries
+    secator_runners = SecatorRunner.objects.filter(scan_history__in=host).select_related("scan_history", "domain")
+    
+    # Build dictionary mapping scan_id to main runner (workflow/scan first, then task)
+    main_runner_by_scan = {}
+    for runner in secator_runners:
+        scan_id = runner.scan_history_id
+        if scan_id not in main_runner_by_scan:
+            main_runner_by_scan[scan_id] = runner
+        elif runner.runner_type in ["workflow", "scan"] and main_runner_by_scan[scan_id].runner_type not in ["workflow", "scan"]:
+            main_runner_by_scan[scan_id] = runner
+    
+    context = {
+        "scan_history_active": "active",
+        "scan_history": host,
+        "main_runner_by_scan": main_runner_by_scan,
+    }
     return render(request, "startScan/history.html", context)
 
 
@@ -148,11 +166,17 @@ def detail_scan(request, id, slug):
     # Emails
     exposed_count = emails.exclude(password__isnull=True).count()
 
+    # Preload SecatorRunner for this scan
+    secator_runners = SecatorRunner.objects.filter(scan_history=scan).order_by("-created_at")
+    is_secator_scan = secator_runners.exists()
+    
     # Build render context
     ctx = {
         "scan_history_id": id,
         "history": scan,
         "scan_activity": scan_activity,
+        "secator_runners": secator_runners,
+        "is_secator_scan": is_secator_scan,
         "ip_addresses": json.dumps(ip_serializer.data, cls=DjangoJSONEncoder),
         "subdomain_count": subdomain_count,
         "alive_count": alive_count,
