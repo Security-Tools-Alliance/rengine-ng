@@ -167,3 +167,45 @@ class TestTechnologyRepository(BaseTestCase):
         # Verify association
         subdomain.refresh_from_db()
         self.assertIn(result, subdomain.technologies.all())
+
+    def test_process_secator_technology_item_valid(self):
+        """Test _process_secator_technology_item with valid data."""
+        subdomain = self.data_generator.create_subdomain(name="test.example.com")
+
+        item = {
+            "name": "nginx",
+            "match": "test.example.com",
+            "value": "1.18.0",
+            "category": "webserver",
+        }
+
+        result = self.tech_repo._process_secator_technology_item(item, self.scan_history.id, self.domain.id)
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result.name, "nginx")
+        self.assertEqual(result.value, "1.18.0")
+        self.assertEqual(result.category, "webserver")
+
+        # Verify technology is associated with subdomain
+        subdomain.refresh_from_db()
+        self.assertIn(result, subdomain.technologies.all())
+
+    def test_process_secator_technology_item_missing_name(self):
+        """Test _process_secator_technology_item with missing name."""
+        item = {
+            "match": "test.example.com",
+        }
+
+        result = self.tech_repo._process_secator_technology_item(item, self.scan_history.id, self.domain.id)
+
+        self.assertIsNone(result)
+
+    def test_process_secator_technology_item_missing_match(self):
+        """Test _process_secator_technology_item with missing match."""
+        item = {
+            "name": "nginx",
+        }
+
+        result = self.tech_repo._process_secator_technology_item(item, self.scan_history.id, self.domain.id)
+
+        self.assertIsNone(result)

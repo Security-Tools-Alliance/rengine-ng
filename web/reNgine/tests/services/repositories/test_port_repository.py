@@ -90,14 +90,8 @@ class TestPortRepository(BaseTestCase):
 
     def test_get_or_create_valid_port(self):
         """Test get_or_create with valid port."""
-        # Create IP first (just to verify it exists)
-        ip_obj = self.data_generator.create_ip_address(
-            address="192.168.1.1",
-            is_private=True,
-            version=4,
-        )
-
         # FIX: Pass IP address as STRING, not object
+        # IP will be created automatically by get_or_create if it doesn't exist
         result, created = self.port_repo.get_or_create(
             port_number=80,
             ip_address="192.168.1.1",  # ← STRING au lieu de ip_obj
@@ -110,13 +104,8 @@ class TestPortRepository(BaseTestCase):
 
     def test_get_or_create_invalid_port(self):
         """Test get_or_create with invalid port."""
-        ip_obj = self.data_generator.create_ip_address(
-            address="192.168.1.1",
-            is_private=True,
-            version=4,
-        )
-
         # FIX: Pass IP as string
+        # IP will be created automatically by get_or_create if it doesn't exist
         result, created = self.port_repo.get_or_create(
             port_number=99999,  # Invalid port
             ip_address="192.168.1.1",
@@ -127,12 +116,7 @@ class TestPortRepository(BaseTestCase):
 
     def test_bulk_create_valid_ports(self):
         """Test bulk creation of valid ports."""
-        ip_obj = self.data_generator.create_ip_address(
-            address="192.168.1.1",
-            is_private=True,
-            version=4,
-        )
-
+        # IP will be created automatically by bulk_create if it doesn't exist
         ports_data = [
             {"port": 80, "ip": "192.168.1.1", "service_name": "http"},  # ← Ajouter "ip"
             {"port": 443, "ip": "192.168.1.1", "service_name": "https"},
@@ -149,12 +133,7 @@ class TestPortRepository(BaseTestCase):
 
     def test_bulk_create_mixed_ports(self):
         """Test bulk creation with mixed valid/invalid ports."""
-        ip_obj = self.data_generator.create_ip_address(
-            address="192.168.1.1",
-            is_private=True,
-            version=4,
-        )
-
+        # IP will be created automatically by bulk_create if it doesn't exist
         ports_data = [
             {"port": 80, "ip": "192.168.1.1", "service_name": "http"},  # ← Ajouter "ip"
             {"port": 99999, "ip": "192.168.1.1", "service_name": "invalid"},  # Invalid port
@@ -253,3 +232,70 @@ class TestPortRepository(BaseTestCase):
         self.assertIsNotNone(result1)
         self.assertIsNotNone(result2)
         self.assertEqual(result1.id, result2.id)  # Should be same object
+
+    def test_process_secator_port_item_valid(self):
+        """Test _process_secator_port_item with valid data."""
+        item = {
+            "port": 80,
+            "ip": "192.168.1.1",
+            "service_name": "http",
+            "description": "HTTP service",
+        }
+
+        result = self.port_repo._process_secator_port_item(item, self.scan_history.id, self.domain.id)
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result.number, 80)
+        self.assertEqual(result.ip_address.address, "192.168.1.1")
+        self.assertEqual(result.service_name, "http")
+
+    def test_process_secator_port_item_missing_port(self):
+        """Test _process_secator_port_item with missing port."""
+        item = {
+            "ip": "192.168.1.1",
+        }
+
+        result = self.port_repo._process_secator_port_item(item, self.scan_history.id, self.domain.id)
+
+        self.assertIsNone(result)
+
+    def test_process_secator_port_item_missing_ip(self):
+        """Test _process_secator_port_item with missing IP."""
+        item = {
+            "port": 80,
+        }
+
+        result = self.port_repo._process_secator_port_item(item, self.scan_history.id, self.domain.id)
+
+        self.assertIsNone(result)
+
+    def test_create_ports_in_bulk_valid(self):
+        """Test _create_ports_in_bulk with valid data."""
+        ports_data = [
+            {"port": 80, "ip": "192.168.1.1", "service_name": "http"},
+            {"port": 443, "ip": "192.168.1.1", "service_name": "https"},
+        ]
+
+        result = self.port_repo._create_ports_in_bulk(self.scan_history.id, self.domain.id, ports_data)
+
+        self.assertEqual(len(result), 2)
+        port_numbers = [port.number for port in result]
+        self.assertIn(80, port_numbers)
+        self.assertIn(443, port_numbers)
+
+    def test_create_ports_in_bulk_empty_list(self):
+        """Test _create_ports_in_bulk with empty list."""
+        result = self.port_repo._create_ports_in_bulk(self.scan_history.id, self.domain.id, [])
+
+        self.assertEqual(result, [])
+
+    def test_create_ports_in_bulk_invalid_ports(self):
+        """Test _create_ports_in_bulk with invalid ports."""
+        ports_data = [
+            {"port": 99999, "ip": "192.168.1.1"},  # Invalid port
+            {"port": 80, "ip": "invalid-ip"},  # Invalid IP
+        ]
+
+        result = self.port_repo._create_ports_in_bulk(self.scan_history.id, self.domain.id, ports_data)
+
+        self.assertEqual(result, [])

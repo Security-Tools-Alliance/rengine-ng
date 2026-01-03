@@ -3,13 +3,13 @@ Employee Repository - Data access for employee operations.
 Handles Employee database operations from Secator UserAccount type.
 """
 
-from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
 from celery.utils.log import get_task_logger
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError
+from django.utils import timezone
 
 from reNgine.core.validators import is_valid_domain, is_valid_email, is_valid_url
 from startScan.models import Email, Employee, EndPoint, ScanHistory, Subdomain
@@ -35,48 +35,7 @@ class EmployeeRepository:
             Employee: Saved employee object or None
         """
         try:
-            username = item.get("username")
-            email = item.get("email")
-            site_name = item.get("site_name")
-            url = item.get("url")
-
-            if not username and not email:
-                logger.warning("Employee item missing username and email fields")
-                return None
-
-            scan_history = ScanHistory.objects.get(id=scan_history_id)
-            domain = Domain.objects.get(id=domain_id)
-
-            # Get or create employee
-            employee, created = Employee.objects.get_or_create(
-                username=username or "",
-                scan_history=scan_history,
-                defaults={
-                    "name": username or email or "Unknown",
-                    "site_name": site_name or "",
-                    "url": url or "",
-                    "target_domain": domain,
-                    "discovered_date": datetime.now(),
-                    "extra_data": item.get("extra_data", {}),
-                },
-            )
-
-            # Associate email if provided
-            if email and is_valid_email(email):
-                email_obj, _ = Email.objects.get_or_create(address=email)
-                employee.emails.add(email_obj)
-
-            if created:
-                logger.info(f"Created employee: {username or email}")
-            else:
-                logger.debug(f"Employee already exists: {username or email}")
-
-            # Associate with subdomain/endpoint if URL is provided
-            if url:
-                self._associate_with_target(employee, url, scan_history_id)
-
-            return employee
-
+            return self._process_secator_employee_item(item, scan_history_id, domain_id)
         except ObjectDoesNotExist as e:
             logger.error(f"Object not found when saving employee: {e}")
             return None
@@ -86,6 +45,51 @@ class EmployeeRepository:
         except Exception as e:
             logger.error(f"Error saving employee from Secator: {e}")
             return None
+
+    def _process_secator_employee_item(
+        self, item: Dict[str, Any], scan_history_id: int, domain_id: int
+    ) -> Optional[Employee]:
+        username = item.get("username")
+        email = item.get("email")
+        site_name = item.get("site_name")
+        url = item.get("url")
+
+        if not username and not email:
+            logger.warning("Employee item missing username and email fields")
+            return None
+
+        scan_history = ScanHistory.objects.get(id=scan_history_id)
+        domain = Domain.objects.get(id=domain_id)
+
+        # Get or create employee
+        employee, created = Employee.objects.get_or_create(
+            username=username or "",
+            scan_history=scan_history,
+            defaults={
+                "name": username or email or "Unknown",
+                "site_name": site_name or "",
+                "url": url or "",
+                "target_domain": domain,
+                "discovered_date": timezone.now(),
+                "extra_data": item.get("extra_data", {}),
+            },
+        )
+
+        # Associate email if provided
+        if email and is_valid_email(email):
+            email_obj, _ = Email.objects.get_or_create(address=email)
+            employee.emails.add(email_obj)
+
+        if created:
+            logger.info(f"Created employee: {username or email}")
+        else:
+            logger.debug(f"Employee already exists: {username or email}")
+
+        # Associate with subdomain/endpoint if URL is provided
+        if url:
+            self._associate_with_target(employee, url, scan_history_id)
+
+        return employee
 
     def get_or_create(
         self, username: str, email: str, scan_history_id: int, **kwargs
@@ -107,11 +111,9 @@ class EmployeeRepository:
 
             defaults = {
                 "name": username or email or "Unknown",
-                "discovered_date": datetime.now(),
+                "discovered_date": timezone.now(),
                 "extra_data": {},
-            }
-            defaults.update(kwargs)
-
+            } | kwargs
             employee, created = Employee.objects.get_or_create(
                 username=username or "", scan_history=scan_history, defaults=defaults
             )
@@ -143,60 +145,62 @@ class EmployeeRepository:
             list: List of created Employee objects
         """
         try:
-            from startScan.models import Email
-
-            scan_history = ScanHistory.objects.get(id=scan_history_id)
-            domain = Domain.objects.get(id=domain_id)
-
-            created_employees = []
-            for employee_data in employees:
-                username = employee_data.get("username", "")
-
-                # Support both 'email' (string) and 'emails' (list)
-                email_addresses = []
-                if "emails" in employee_data:
-                    email_addresses = (
-                        employee_data["emails"]
-                        if isinstance(employee_data["emails"], list)
-                        else [employee_data["emails"]]
-                    )
-                elif "email" in employee_data:
-                    email_addresses = [employee_data["email"]]
-
-                if username or email_addresses:
-                    # Get or create employee (username is unique per domain)
-                    employee, created = Employee.objects.get_or_create(
-                        username=username,
-                        target_domain=domain,
-                        defaults={
-                            "name": username or (email_addresses[0] if email_addresses else "Unknown"),
-                            "site_name": employee_data.get("site_name", ""),
-                            "url": employee_data.get("url", ""),
-                            "scan_history": scan_history,
-                            "discovered_date": datetime.now(),
-                            "extra_data": employee_data.get("extra_data", {}),
-                        },
-                    )
-
-                    # Associate emails (ManyToMany)
-                    if email_addresses:
-                        for email_address in email_addresses:
-                            if email_address and email_address.strip():
-                                email_obj, _ = Email.objects.get_or_create(address=email_address.strip())
-                                employee.emails.add(email_obj)
-
-                    if created:
-                        created_employees.append(employee)
-
-            logger.info(f"Created {len(created_employees)} new employees")
-            return created_employees
-
+            return self._create_employees_in_bulk(scan_history_id, domain_id, employees)
         except ObjectDoesNotExist as e:
             logger.error(f"Object not found: {e}")
             return []
         except Exception as e:
             logger.error(f"Error in bulk create employees: {e}")
             return []
+
+    def _create_employees_in_bulk(
+        self, scan_history_id: int, domain_id: int, employees: List[Dict[str, Any]]
+    ) -> List[Employee]:
+        from startScan.models import Email
+
+        scan_history = ScanHistory.objects.get(id=scan_history_id)
+        domain = Domain.objects.get(id=domain_id)
+
+        created_employees = []
+        for employee_data in employees:
+            username = employee_data.get("username", "")
+
+            # Support both 'email' (string) and 'emails' (list)
+            email_addresses = []
+            if "emails" in employee_data:
+                email_addresses = (
+                    employee_data["emails"] if isinstance(employee_data["emails"], list) else [employee_data["emails"]]
+                )
+            elif "email" in employee_data:
+                email_addresses = [employee_data["email"]]
+
+            if username or email_addresses:
+                # Get or create employee (username is unique per domain)
+                employee, created = Employee.objects.get_or_create(
+                    username=username,
+                    target_domain=domain,
+                    defaults={
+                        "name": username or (email_addresses[0] if email_addresses else "Unknown"),
+                        "site_name": employee_data.get("site_name", ""),
+                        "url": employee_data.get("url", ""),
+                        "scan_history": scan_history,
+                        "discovered_date": timezone.now(),
+                        "extra_data": employee_data.get("extra_data", {}),
+                    },
+                )
+
+                # Associate emails (ManyToMany)
+                if email_addresses:
+                    for email_address in email_addresses:
+                        if email_address and email_address.strip():
+                            email_obj, _ = Email.objects.get_or_create(address=email_address.strip())
+                            employee.emails.add(email_obj)
+
+                if created:
+                    created_employees.append(employee)
+
+        logger.info(f"Created {len(created_employees)} new employees")
+        return created_employees
 
     def get_employees_for_domain(self, domain_id: int) -> List[Employee]:
         """
@@ -231,13 +235,10 @@ class EmployeeRepository:
             list: List of Employee objects
         """
         try:
-            subdomain = Subdomain.objects.filter(name=subdomain_name, scan_history_id=scan_history_id).first()
-
-            if subdomain:
+            if subdomain := Subdomain.objects.filter(name=subdomain_name, scan_history_id=scan_history_id).first():
                 return list(Employee.objects.filter(subdomain=subdomain))
-            else:
-                logger.warning(f"Subdomain {subdomain_name} not found in scan {scan_history_id}")
-                return []
+            logger.warning(f"Subdomain {subdomain_name} not found in scan {scan_history_id}")
+            return []
 
         except Exception as e:
             logger.error(f"Error getting employees for subdomain: {e}")
@@ -299,10 +300,7 @@ class EmployeeRepository:
                 logger.warning(f"Invalid URL for employee association: {url}")
                 return
 
-            # Try to associate with endpoint first
-            endpoint = EndPoint.objects.filter(http_url=url, scan_history_id=scan_history_id).first()
-
-            if endpoint:
+            if endpoint := EndPoint.objects.filter(http_url=url, scan_history_id=scan_history_id).first():
                 employee.endpoint = endpoint
                 employee.save(update_fields=["endpoint"])
                 logger.debug(f"Associated employee {employee.username or employee.email} with endpoint {url}")
@@ -311,9 +309,7 @@ class EmployeeRepository:
             # If no endpoint found, try subdomain association
             hostname = urlparse(url).hostname
             if hostname and is_valid_domain(hostname):
-                subdomain = Subdomain.objects.filter(name=hostname, scan_history_id=scan_history_id).first()
-
-                if subdomain:
+                if subdomain := Subdomain.objects.filter(name=hostname, scan_history_id=scan_history_id).first():
                     employee.subdomain = subdomain
                     employee.save(update_fields=["subdomain"])
                     logger.debug(f"Associated employee {employee.username or employee.email} with subdomain {hostname}")
@@ -341,24 +337,20 @@ class EmployeeRepository:
             if username:
                 validated_data["username"] = username
 
-            # Validate email
-            email = data.get("email", "").strip()
-            if email and is_valid_email(email):
-                validated_data["email"] = email
-            elif email:
-                logger.warning(f"Invalid email address: {email}")
+            if email := data.get("email", "").strip():
+                if is_valid_email(email):
+                    validated_data["email"] = email
+                else:
+                    logger.warning(f"Invalid email address: {email}")
 
-            # Validate site name
-            site_name = data.get("site_name", "").strip()
-            if site_name:
+            if site_name := data.get("site_name", "").strip():
                 validated_data["site_name"] = site_name
 
-            # Validate URL
-            url = data.get("url", "").strip()
-            if url and is_valid_url(url):
-                validated_data["url"] = url
-            elif url:
-                logger.warning(f"Invalid URL: {url}")
+            if url := data.get("url", "").strip():
+                if is_valid_url(url):
+                    validated_data["url"] = url
+                else:
+                    logger.warning(f"Invalid URL: {url}")
 
             # Validate extra data
             extra_data = data.get("extra_data")

@@ -338,9 +338,7 @@ class ScanActivitySerializer(serializers.ModelSerializer):
         return "Unknown"
 
     def get_scan_id(self, scan_activity):
-        if scan_activity.scan_of:
-            return scan_activity.scan_of.id
-        return None
+        return scan_activity.scan_of.id if scan_activity.scan_of else None
 
     def get_engine_name(self, scan_activity):
         if scan_activity.scan_of and scan_activity.scan_of.scan_type:
@@ -387,7 +385,7 @@ class ScanActivitySerializer(serializers.ModelSerializer):
 
 class SecatorRunnerSerializer(serializers.ModelSerializer):
     """Serializer for SecatorRunner model with computed fields."""
-    
+
     elapsed = serializers.SerializerMethodField()
     status = serializers.SerializerMethodField()
     status_display = serializers.SerializerMethodField()
@@ -395,7 +393,7 @@ class SecatorRunnerSerializer(serializers.ModelSerializer):
     progress = serializers.SerializerMethodField()
     done = serializers.SerializerMethodField()
     start_time = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = SecatorRunner
         fields = [
@@ -415,13 +413,13 @@ class SecatorRunnerSerializer(serializers.ModelSerializer):
             "domain",
         ]
         read_only_fields = ["id", "created_at", "updated_at"]
-    
+
     def get_status(self, obj):
         """Get status from runner_data."""
         if obj.runner_data:
             return obj.runner_data.get("status", "PENDING")
         return "PENDING"
-    
+
     def get_status_display(self, obj):
         """Get human-readable status."""
         status = self.get_status(obj)
@@ -433,37 +431,34 @@ class SecatorRunnerSerializer(serializers.ModelSerializer):
             "PENDING": "Pending",
         }
         return status_map.get(status.upper(), "Unknown")
-    
+
     def get_status_code(self, obj):
         """Get reNgine status code from Secator status."""
         from reNgine.services.secator.progress_sync import SecatorProgressSync
-        
+
         status = self.get_status(obj)
         return SecatorProgressSync.map_secator_status_to_rengine(status)
-    
+
     def get_progress(self, obj):
         """Get progress from runner_data."""
-        if obj.runner_data:
-            return obj.runner_data.get("progress", 0)
-        return 0
-    
+        return obj.runner_data.get("progress", 0) if obj.runner_data else 0
+
     def get_done(self, obj):
         """Get done flag from runner_data."""
-        if obj.runner_data:
-            return obj.runner_data.get("done", False)
-        return False
-    
+        return obj.runner_data.get("done", False) if obj.runner_data else False
+
     def get_start_time(self, obj):
         """Get start time from runner_data or created_at."""
         if obj.runner_data and "start_time" in obj.runner_data:
             return obj.runner_data["start_time"]
         return obj.created_at.isoformat() if obj.created_at else None
-    
+
     def get_elapsed(self, obj):
         """Calculate elapsed time since start."""
         from django.utils import timezone
+
         from reNgine.core.time import get_time_taken
-        
+
         start_time = obj.created_at
         if obj.runner_data and "start_time" in obj.runner_data:
             try:
@@ -473,10 +468,8 @@ class SecatorRunnerSerializer(serializers.ModelSerializer):
                     start_time = datetime.fromisoformat(start_time_str.replace("Z", "+00:00"))
             except (ValueError, TypeError):
                 pass
-        
-        if start_time:
-            return get_time_taken(timezone.now(), start_time)
-        return "0s"
+
+        return get_time_taken(timezone.now(), start_time) if start_time else "0s"
 
 
 class OrganizationSerializer(serializers.ModelSerializer):
@@ -634,8 +627,13 @@ class VisualiseSubdomainSerializer(serializers.ModelSerializer):
         )
         if endpoints_with_screenshots.exists():
             screenshot_data = []
-            for endpoint in endpoints_with_screenshots:
-                screenshot_data.append({"description": endpoint.http_url, "screenshot_path": endpoint.screenshot_path})
+            screenshot_data.extend(
+                {
+                    "description": endpoint.http_url,
+                    "screenshot_path": endpoint.screenshot_path,
+                }
+                for endpoint in endpoints_with_screenshots
+            )
             return_data.append({"description": "Screenshots", "children": screenshot_data})
 
         return return_data
@@ -761,14 +759,13 @@ class VisualiseDataSerializer(serializers.ModelSerializer):
             osint_data.append({"description": "Dorks", "children": processed_dorks})
 
         if metainfo:
-            self._extracted_from_get_children_(metainfo, osint_data, return_data)
+            self._process_metainfo_for_osint(metainfo, osint_data, return_data)
         if osint_data:
             return_data.append({"description": "OSINT", "children": osint_data})
 
         return return_data
 
-    # TODO Rename this here and in `get_children`
-    def _extracted_from_get_children_(self, metainfo, osint_data, return_data):
+    def _process_metainfo_for_osint(self, metainfo, osint_data, return_data):
         metainfo_data = []
         if usernames := (
             metainfo.annotate(description=F("author"))
@@ -1084,6 +1081,12 @@ class SubdomainSerializer(serializers.ModelSerializer):
     technologies = TechnologySerializer(many=True)
     directories = DirectoryScanSerializer(many=True)
 
+    # Use display properties for Secator scans (default endpoint values)
+    http_status = serializers.SerializerMethodField("get_display_http_status")
+    page_title = serializers.SerializerMethodField("get_display_page_title")
+    content_length = serializers.SerializerMethodField("get_display_content_length")
+    response_time = serializers.SerializerMethodField("get_display_response_time")
+
     class Meta:
         model = Subdomain
         fields = [
@@ -1161,6 +1164,45 @@ class SubdomainSerializer(serializers.ModelSerializer):
             return obj.vuln_count
         except Exception:
             return None
+
+    def _get_default_endpoint(self, obj):
+        """
+        Get the default endpoint for this subdomain from prefetched data.
+        Falls back to HybridProperty if prefetch was not used.
+        """
+        # Check if default_endpoint_list was prefetched
+        if hasattr(obj, "default_endpoint_list") and obj.default_endpoint_list:
+            return obj.default_endpoint_list[0]
+        # Fallback to HybridProperty for backward compatibility
+        return obj._default_endpoint
+
+    def get_display_http_status(self, obj):
+        """Return default endpoint http_status for Secator scans, otherwise subdomain http_status."""
+        if obj.scan_history and not obj.scan_history.is_legacy_scan:
+            if default_endpoint := self._get_default_endpoint(obj):
+                return default_endpoint.http_status
+        return obj.http_status
+
+    def get_display_page_title(self, obj):
+        """Return default endpoint page_title for Secator scans, otherwise subdomain page_title."""
+        if obj.scan_history and not obj.scan_history.is_legacy_scan:
+            if default_endpoint := self._get_default_endpoint(obj):
+                return default_endpoint.page_title
+        return obj.page_title
+
+    def get_display_content_length(self, obj):
+        """Return default endpoint content_length for Secator scans, otherwise subdomain content_length."""
+        if obj.scan_history and not obj.scan_history.is_legacy_scan:
+            if default_endpoint := self._get_default_endpoint(obj):
+                return default_endpoint.content_length
+        return obj.content_length
+
+    def get_display_response_time(self, obj):
+        """Return default endpoint response_time for Secator scans, otherwise subdomain response_time."""
+        if obj.scan_history and not obj.scan_history.is_legacy_scan:
+            if default_endpoint := self._get_default_endpoint(obj):
+                return default_endpoint.response_time
+        return obj.response_time
 
 
 class EndpointSerializer(serializers.ModelSerializer):

@@ -219,8 +219,8 @@ class TestDnsRepository(BaseTestCase):
             "host": "192.168.1.2",
         }
 
-        record1 = self.dns_repo.save_from_secator(item1, self.scan_history.id, self.domain.id)
-        record2 = self.dns_repo.save_from_secator(item2, self.scan_history.id, self.domain.id)
+        self.assertIsNotNone(self.dns_repo.save_from_secator(item1, self.scan_history.id, self.domain.id))
+        self.assertIsNotNone(self.dns_repo.save_from_secator(item2, self.scan_history.id, self.domain.id))
 
         records = self.dns_repo.get_records_for_domain(self.domain.id)
 
@@ -248,8 +248,8 @@ class TestDnsRepository(BaseTestCase):
             "host": "mail.example.com",
         }
 
-        record1 = self.dns_repo.save_from_secator(item1, self.scan_history.id, self.domain.id)
-        record2 = self.dns_repo.save_from_secator(item2, self.scan_history.id, self.domain.id)
+        self.assertIsNotNone(self.dns_repo.save_from_secator(item1, self.scan_history.id, self.domain.id))
+        self.assertIsNotNone(self.dns_repo.save_from_secator(item2, self.scan_history.id, self.domain.id))
 
         # FIX: Correct parameter order (record_type, domain_id)
         a_records = self.dns_repo.get_records_by_type("A", self.domain.id)
@@ -305,4 +305,103 @@ class TestDnsRepository(BaseTestCase):
         self.assertIsNotNone(result2)
         self.assertEqual(result1.id, result2.id)  # Should be same object
 
-    # Tests for private methods removed - testing private methods is not recommended
+    def test_process_secator_dns_record_item_valid(self):
+        """Test _process_secator_dns_record_item with valid data."""
+        item = {
+            "name": "www.example.com",
+            "type": "A",
+            "host": "192.168.1.1",
+        }
+
+        result = self.dns_repo._process_secator_dns_record_item(item, self.domain.id)
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result.name, "www.example.com")
+        self.assertEqual(result.type, "A")
+
+    def test_process_secator_dns_record_item_missing_name(self):
+        """Test _process_secator_dns_record_item with missing name."""
+        item = {
+            "type": "A",
+            "host": "192.168.1.1",
+        }
+
+        result = self.dns_repo._process_secator_dns_record_item(item, self.domain.id)
+
+        self.assertIsNone(result)
+
+    def test_process_secator_dns_record_item_missing_type(self):
+        """Test _process_secator_dns_record_item with missing type."""
+        item = {
+            "name": "www.example.com",
+            "host": "192.168.1.1",
+        }
+
+        result = self.dns_repo._process_secator_dns_record_item(item, self.domain.id)
+
+        self.assertIsNone(result)
+
+    def test_process_secator_dns_record_item_missing_host(self):
+        """Test _process_secator_dns_record_item with missing host."""
+        item = {
+            "name": "www.example.com",
+            "type": "A",
+        }
+
+        result = self.dns_repo._process_secator_dns_record_item(item, self.domain.id)
+
+        self.assertIsNone(result)
+
+    def test_store_extra_data_in_domain_info(self):
+        """Test _store_extra_data_in_domain_info method."""
+        from targetApp.models import DNSRecord, DomainInfo
+
+        domain_info = DomainInfo.objects.get_or_create(domain=self.domain)[0]
+        domain_info.extra_data = {}
+        domain_info.save()
+
+        dns_record = DNSRecord.objects.create(
+            name="www.example.com",
+            type="A",
+        )
+
+        item = {
+            "extra_data": {
+                "ttl": 3600,
+                "priority": 0,
+            }
+        }
+
+        self.dns_repo._store_extra_data_in_domain_info(domain_info, dns_record, item)
+
+        domain_info.refresh_from_db()
+        record_key = f"{dns_record.name}_{dns_record.type}"
+        self.assertIn(record_key, domain_info.extra_data)
+        self.assertEqual(domain_info.extra_data[record_key]["ttl"], 3600)
+        self.assertEqual(domain_info.extra_data[record_key]["priority"], 0)
+
+    def test_store_extra_data_in_domain_info_none_extra_data(self):
+        """Test _store_extra_data_in_domain_info when domain_info.extra_data is None."""
+        from targetApp.models import DNSRecord, DomainInfo
+
+        domain_info = DomainInfo.objects.get_or_create(domain=self.domain)[0]
+        domain_info.extra_data = None
+        domain_info.save()
+
+        dns_record = DNSRecord.objects.create(
+            name="www.example.com",
+            type="A",
+        )
+
+        item = {
+            "extra_data": {
+                "ttl": 3600,
+            }
+        }
+
+        self.dns_repo._store_extra_data_in_domain_info(domain_info, dns_record, item)
+
+        domain_info.refresh_from_db()
+        self.assertIsNotNone(domain_info.extra_data)
+        record_key = f"{dns_record.name}_{dns_record.type}"
+        self.assertIn(record_key, domain_info.extra_data)

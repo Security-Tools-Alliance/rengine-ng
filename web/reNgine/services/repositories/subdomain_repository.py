@@ -3,12 +3,12 @@ Subdomain Repository - Data access for subdomain operations.
 Handles Subdomain database operations with enriched Secator integration.
 """
 
-from datetime import datetime
 from typing import Any, Dict, Optional
 
 from celery.utils.log import get_task_logger
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError
+from django.utils import timezone
 
 from reNgine.core.validators import is_valid_domain, is_valid_ip
 from startScan.models import IpAddress, ScanHistory, Subdomain, Technology
@@ -37,75 +37,7 @@ class SubdomainRepository:
             Subdomain: Saved subdomain object or None
         """
         try:
-            subdomain_name = item.get("host") or item.get("target") or item.get("name")
-
-            if not subdomain_name:
-                logger.warning("Subdomain item missing name field")
-                return None
-
-            if not is_valid_domain(subdomain_name):
-                logger.warning(f"Invalid subdomain: {subdomain_name}")
-                return None
-
-            scan_history = ScanHistory.objects.get(id=scan_history_id)
-            domain = Domain.objects.get(id=domain_id)
-
-            # Check if this subdomain is in the imported list
-            is_imported = self._is_imported_subdomain(subdomain_name, rengine_context or {})
-
-            # Prepare enriched defaults
-            defaults = {
-                "target_domain": domain,
-                "is_imported_subdomain": is_imported,
-                "discovered_date": datetime.now(),
-                "verified": item.get("verified", False),
-                "sources": item.get("sources", []),
-            }
-
-            # Add extra data if available
-            extra_data = item.get("extra_data", {})
-            if extra_data:
-                # Map common extra data fields to subdomain fields
-                if "http_url" in extra_data:
-                    defaults["http_url"] = extra_data["http_url"]
-                if "http_status" in extra_data:
-                    defaults["http_status"] = extra_data["http_status"]
-                if "content_type" in extra_data:
-                    defaults["content_type"] = extra_data["content_type"]
-                if "content_length" in extra_data:
-                    defaults["content_length"] = extra_data["content_length"]
-                if "page_title" in extra_data:
-                    defaults["page_title"] = extra_data["page_title"]
-                if "webserver" in extra_data:
-                    defaults["webserver"] = extra_data["webserver"]
-                if "response_time" in extra_data:
-                    defaults["response_time"] = extra_data["response_time"]
-
-            subdomain, created = Subdomain.objects.get_or_create(
-                name=subdomain_name,
-                scan_history=scan_history,
-                defaults=defaults,
-            )
-
-            # If subdomain already exists but we need to update the imported flag
-            if not created and is_imported and not subdomain.is_imported_subdomain:
-                subdomain.is_imported_subdomain = True
-                subdomain.save(update_fields=["is_imported_subdomain"])
-                logger.info(f"Updated subdomain {subdomain_name} as imported")
-
-            # Associate with IP addresses if available
-            self._associate_ip_addresses(subdomain, item, scan_history_id)
-
-            # Associate with technologies if available
-            self._associate_technologies(subdomain, item)
-
-            if created:
-                logger.info(f"Created subdomain: {subdomain_name} (imported: {is_imported})")
-            else:
-                logger.debug(f"Subdomain already exists: {subdomain_name}")
-
-            return subdomain
-
+            return self._process_secator_subdomain_item(item, scan_history_id, domain_id, rengine_context)
         except ObjectDoesNotExist as e:
             logger.error(f"Object not found when saving subdomain: {e}")
             return None
@@ -115,6 +47,82 @@ class SubdomainRepository:
         except Exception as e:
             logger.error(f"Error saving subdomain from Secator: {e}")
             return None
+
+    def _process_secator_subdomain_item(
+        self,
+        item: Dict[str, Any],
+        scan_history_id: int,
+        domain_id: int,
+        rengine_context: Dict[str, Any] = None,
+    ) -> Optional[Subdomain]:
+        subdomain_name = item.get("host") or item.get("target") or item.get("name")
+
+        if not subdomain_name:
+            logger.warning("Subdomain item missing name field")
+            return None
+
+        if not is_valid_domain(subdomain_name):
+            logger.warning(f"Invalid subdomain: {subdomain_name}")
+            return None
+
+        scan_history = ScanHistory.objects.get(id=scan_history_id)
+        domain = Domain.objects.get(id=domain_id)
+
+        # Check if this subdomain is in the imported list
+        is_imported = self._is_imported_subdomain(subdomain_name, rengine_context or {})
+
+        # Prepare enriched defaults
+        defaults = {
+            "target_domain": domain,
+            "is_imported_subdomain": is_imported,
+            "discovered_date": timezone.now(),
+            "verified": item.get("verified", False),
+            "sources": item.get("sources", []),
+        }
+
+        if extra_data := item.get("extra_data", {}):
+            self._map_extra_data_to_subdomain_fields(extra_data, defaults)
+        subdomain, created = Subdomain.objects.get_or_create(
+            name=subdomain_name,
+            scan_history=scan_history,
+            defaults=defaults,
+        )
+
+        # If subdomain already exists but we need to update the imported flag
+        if not created and is_imported and not subdomain.is_imported_subdomain:
+            subdomain.is_imported_subdomain = True
+            subdomain.save(update_fields=["is_imported_subdomain"])
+            logger.info(f"Updated subdomain {subdomain_name} as imported")
+
+        # Associate with IP addresses if available
+        self._associate_ip_addresses(subdomain, item, scan_history_id)
+
+        # Associate with technologies if available
+        self._associate_technologies(subdomain, item)
+
+        if created:
+            logger.info(f"Created subdomain: {subdomain_name} (imported: {is_imported})")
+        else:
+            logger.debug(f"Subdomain already exists: {subdomain_name}")
+
+        return subdomain
+
+    def _map_extra_data_to_subdomain_fields(self, extra_data: Dict[str, Any], defaults: Dict[str, Any]) -> None:
+        # Map common extra data fields to subdomain fields
+        if "http_url" in extra_data:
+            defaults["http_url"] = extra_data["http_url"]
+        if "http_status" in extra_data:
+            defaults["http_status"] = extra_data["http_status"]
+        if "content_type" in extra_data:
+            defaults["content_type"] = extra_data["content_type"]
+        if "content_length" in extra_data:
+            defaults["content_length"] = extra_data["content_length"]
+        if "page_title" in extra_data:
+            defaults["page_title"] = extra_data["page_title"]
+        if "webserver" in extra_data:
+            defaults["webserver"] = extra_data["webserver"]
+        if "response_time" in extra_data:
+            defaults["response_time"] = extra_data["response_time"]
 
     def get_or_create(self, name, scan_history_id, domain_id, **kwargs):
         """
@@ -136,9 +144,7 @@ class SubdomainRepository:
             defaults = {
                 "target_domain": domain,
                 "is_imported_subdomain": False,
-            }
-            defaults.update(kwargs)
-
+            } | kwargs
             subdomain, created = Subdomain.objects.get_or_create(
                 name=name, scan_history=scan_history, defaults=defaults
             )
@@ -168,16 +174,16 @@ class SubdomainRepository:
             scan_history = ScanHistory.objects.get(id=scan_history_id)
             domain = Domain.objects.get(id=domain_id)
 
-            subdomain_objects = []
-            for name in subdomains:
-                if is_valid_domain(name):
-                    subdomain_objects.append(
-                        Subdomain(
-                            name=name, scan_history=scan_history, target_domain=domain, is_imported_subdomain=False
-                        )
-                    )
-
-            if subdomain_objects:
+            if subdomain_objects := [
+                Subdomain(
+                    name=name,
+                    scan_history=scan_history,
+                    target_domain=domain,
+                    is_imported_subdomain=False,
+                )
+                for name in subdomains
+                if is_valid_domain(name)
+            ]:
                 created = Subdomain.objects.bulk_create(subdomain_objects, ignore_conflicts=True)
                 logger.info(f"Bulk created {len(created)} subdomains")
                 return created

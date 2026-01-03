@@ -197,6 +197,27 @@ class TestSecatorFindingCreate(BaseTestCase):
         self.assertTrue(response.data["status"])
         self.assertIn("subdomain_", response.data["id"])
 
+    @patch("api.views.SubdomainRepository")
+    def test_create_finding_repository_returns_none(self, mock_repo_class):
+        """Test finding creation when repository returns None (validation error)."""
+        mock_repo = MagicMock()
+        mock_repo.save_from_secator.return_value = None
+        mock_repo_class.return_value = mock_repo
+
+        finding_data = {
+            "_type": "subdomain",
+            "name": "invalid_subdomain",
+            "_context": {
+                "scan_history_id": self.data_generator.scan_history.id,
+                "domain_id": self.data_generator.domain.id,
+            },
+        }
+        response = self.client.post(self.url, finding_data, content_type="application/json")
+        self.assertEqual(response.status_code, status.HTTP_422_UNPROCESSABLE_ENTITY)
+        self.assertFalse(response.data["status"])
+        self.assertIn("error", response.data)
+        mock_repo.save_from_secator.assert_called_once()
+
 
 class TestSecatorFindingUpdate(BaseTestCase):
     """Test cases for SecatorFindingUpdate endpoint."""

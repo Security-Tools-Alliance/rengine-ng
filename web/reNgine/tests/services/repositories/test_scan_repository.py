@@ -145,6 +145,192 @@ class TestScanRepository(BaseTestCase):
 
         self.assertFalse(result)
 
+    def test_create_scan_activity_success(self):
+        """Test creating scan activity."""
+        message = "Test activity message"
+        status = 1
+
+        result = self.scan_repo.create_scan_activity(self.scan_history.id, message, status)
+
+        self.assertIsNotNone(result)
+        from startScan.models import ScanActivity
+
+        activity = ScanActivity.objects.get(id=result)
+        self.assertEqual(activity.title, message)
+        self.assertEqual(activity.status, status)
+
+    def test_create_scan_activity_nonexistent_scan(self):
+        """Test creating scan activity for non-existent scan."""
+        # create_scan_activity catches ObjectDoesNotExist and returns None
+        result = self.scan_repo.create_scan_activity(99999, "Test message", 1)
+        self.assertIsNone(result)
+
+    def test_create_activity_success(self):
+        """Test creating activity (raises on error)."""
+        message = "Test activity"
+        status = 1
+
+        result = self.scan_repo.create_activity(self.scan_history.id, message, status)
+
+        self.assertIsNotNone(result)
+        from startScan.models import ScanActivity
+
+        activity = ScanActivity.objects.get(id=result)
+        self.assertEqual(activity.title, message)
+        self.assertEqual(activity.status, status)
+
+    def test_create_activity_nonexistent_scan(self):
+        """Test creating activity for non-existent scan (should raise)."""
+        from django.core.exceptions import ObjectDoesNotExist
+
+        with self.assertRaises(ObjectDoesNotExist):
+            self.scan_repo.create_activity(99999, "Test message", 1)
+
+    def test_create_scan_success(self):
+        """Test creating a new scan."""
+        engine = self.data_generator.engine_type
+        domain = self.data_generator.domain
+
+        result = self.scan_repo.create_scan(domain.id, engine.id)
+
+        self.assertIsNotNone(result)
+        from startScan.models import ScanHistory
+
+        scan = ScanHistory.objects.get(id=result)
+        self.assertEqual(scan.domain.id, domain.id)
+        self.assertEqual(scan.scan_type.id, engine.id)
+        from reNgine.definitions import INITIATED_TASK
+
+        self.assertEqual(scan.scan_status, INITIATED_TASK)
+
+    def test_create_scan_with_initiated_by(self):
+        """Test creating scan with initiated_by user."""
+        from dashboard.models import User
+
+        engine = self.data_generator.engine_type
+        domain = self.data_generator.domain
+        user = User.objects.create_user(
+            username="testuser",
+            email="test@example.com",
+            password="testpass123",
+        )
+
+        result = self.scan_repo.create_scan(domain.id, engine.id, user.id)
+
+        self.assertIsNotNone(result)
+        from startScan.models import ScanHistory
+
+        scan = ScanHistory.objects.get(id=result)
+        self.assertEqual(scan.initiated_by.id, user.id)
+
+    def test_update_scan_status_and_notify(self):
+        """Test _update_scan_status_and_notify method."""
+        from unittest.mock import patch
+
+        from reNgine.definitions import SUCCESS_TASK
+
+        with patch("reNgine.utilities.websocket.send_scan_status_update") as mock_notify:
+            result = self.scan_repo._update_scan_status_and_notify(self.scan_history.id, SUCCESS_TASK)
+
+            self.assertTrue(result)
+            self.scan_history.refresh_from_db()
+            self.assertEqual(self.scan_history.scan_status, SUCCESS_TASK)
+            mock_notify.assert_called_once_with(self.scan_history.id)
+
+    def test_create_scan_activity_entry(self):
+        """Test _create_scan_activity_entry method."""
+        message = "Test activity"
+        status = 1
+
+        result = self.scan_repo._create_scan_activity_entry(self.scan_history.id, message, status)
+
+        self.assertIsNotNone(result)
+        from startScan.models import ScanActivity
+
+        activity = ScanActivity.objects.get(id=result)
+        self.assertEqual(activity.title, message)
+        self.assertEqual(activity.status, status)
+        self.assertEqual(activity.scan_of.id, self.scan_history.id)
+
+    def test_build_scan_activity_entry(self):
+        """Test _build_scan_activity_entry method."""
+        message = "Test activity"
+        status = 1
+
+        result = self.scan_repo._build_scan_activity_entry(self.scan_history.id, message, status)
+
+        self.assertIsNotNone(result)
+        from startScan.models import ScanActivity
+
+        activity = ScanActivity.objects.get(id=result)
+        self.assertEqual(activity.title, message)
+        self.assertEqual(activity.status, status)
+
+    def test_create_scan_history_entry(self):
+        """Test _create_scan_history_entry method."""
+        engine = self.data_generator.engine_type
+        domain = self.data_generator.domain
+
+        result = self.scan_repo._create_scan_history_entry(engine.id, domain.id)
+
+        self.assertIsNotNone(result)
+        from startScan.models import ScanHistory
+
+        scan = ScanHistory.objects.get(id=result)
+        self.assertEqual(scan.domain.id, domain.id)
+        self.assertEqual(scan.scan_type.id, engine.id)
+
+    def test_create_scan_history_entry_with_user(self):
+        """Test _create_scan_history_entry with initiated_by user."""
+        from dashboard.models import User
+
+        engine = self.data_generator.engine_type
+        domain = self.data_generator.domain
+        user = User.objects.create_user(
+            username="testuser2",
+            email="test2@example.com",
+            password="testpass123",
+        )
+
+        result = self.scan_repo._create_scan_history_entry(engine.id, domain.id, user.id)
+
+        self.assertIsNotNone(result)
+        from startScan.models import ScanHistory
+
+        scan = ScanHistory.objects.get(id=result)
+        self.assertEqual(scan.initiated_by.id, user.id)
+
+    def test_mark_scan_failed_and_notify(self):
+        """Test _mark_scan_failed_and_notify method."""
+        error_message = "Test error"
+        from unittest.mock import patch
+
+        from reNgine.definitions import FAILED_TASK
+
+        with patch("reNgine.utilities.websocket.send_scan_status_update") as mock_notify:
+            result = self.scan_repo._mark_scan_failed_and_notify(self.scan_history.id, error_message)
+
+            self.assertTrue(result)
+            self.scan_history.refresh_from_db()
+            self.assertEqual(self.scan_history.scan_status, FAILED_TASK)
+            self.assertEqual(self.scan_history.error_message, error_message)
+            self.assertIsNotNone(self.scan_history.stop_scan_date)
+            mock_notify.assert_called_once_with(self.scan_history.id)
+
+    def test_mark_scan_failed_and_notify_no_error_message(self):
+        """Test _mark_scan_failed_and_notify without error message."""
+        from unittest.mock import patch
+
+        from reNgine.definitions import FAILED_TASK
+
+        with patch("reNgine.utilities.websocket.send_scan_status_update") as mock_notify:
+            result = self.scan_repo._mark_scan_failed_and_notify(self.scan_history.id, None)
+
+            self.assertTrue(result)
+            self.scan_history.refresh_from_db()
+            self.assertEqual(self.scan_history.scan_status, FAILED_TASK)
+            mock_notify.assert_called_once_with(self.scan_history.id)
+
     # Note: The following methods are not implemented in the current ScanRepository:
     # - delete_scan
     # - get_scan_statistics

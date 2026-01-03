@@ -47,20 +47,24 @@ class ScanRepository:
             bool: True if successful, False otherwise
         """
         try:
-            scan = ScanHistory.objects.get(id=scan_history_id)
-            scan.scan_status = status
-            scan.save()
-            logger.info(f"Updated scan {scan_history_id} status to {status}")
-            # Send WebSocket update
-            from reNgine.utilities.websocket import send_scan_status_update
-            send_scan_status_update(scan_history_id)
-            return True
+            return self._update_scan_status_and_notify(scan_history_id, status)
         except ObjectDoesNotExist:
             logger.error(f"ScanHistory with ID {scan_history_id} not found")
             return False
         except Exception as e:
             logger.error(f"Error updating scan status: {e}")
             return False
+
+    def _update_scan_status_and_notify(self, scan_history_id: int, status: int) -> bool:
+        scan = ScanHistory.objects.get(id=scan_history_id)
+        scan.scan_status = status
+        scan.save()
+        logger.info(f"Updated scan {scan_history_id} status to {status}")
+        # Send WebSocket update
+        from reNgine.utilities.websocket import send_scan_status_update
+
+        send_scan_status_update(scan_history_id)
+        return True
 
     def update_progress(self, scan_history_id, progress):
         """
@@ -111,19 +115,22 @@ class ScanRepository:
             int: Activity ID or None
         """
         try:
-            scan_activity = ScanActivity()
-            scan_activity.scan_of = ScanHistory.objects.get(id=scan_history_id)
-            scan_activity.title = message
-            scan_activity.time = timezone.now()
-            scan_activity.status = status
-            scan_activity.save()
-            return scan_activity.id
+            return self._create_scan_activity_entry(scan_history_id, message, status)
         except ObjectDoesNotExist:
             logger.error(f"ScanHistory with ID {scan_history_id} not found")
             return None
         except Exception as e:
             logger.error(f"Error creating scan activity: {e}")
             return None
+
+    def _create_scan_activity_entry(self, scan_history_id: int, message: str, status: int) -> int:
+        scan_activity = ScanActivity()
+        scan_activity.scan_of = ScanHistory.objects.get(id=scan_history_id)
+        scan_activity.title = message
+        scan_activity.time = timezone.now()
+        scan_activity.status = status
+        scan_activity.save()
+        return scan_activity.id
 
     def update_celery_task_id(self, scan_history_id, celery_task_id):
         """
@@ -193,6 +200,7 @@ class ScanRepository:
             logger.info(f"Marked scan {scan_history_id} as complete")
             # Send WebSocket update
             from reNgine.utilities.websocket import send_scan_status_update
+
             send_scan_status_update(scan_history_id)
             return True
         except Exception as e:
@@ -212,39 +220,41 @@ class ScanRepository:
             int: ID of the created scan history
         """
         try:
-            # Get current time
-            current_scan_time = timezone.now()
-
-            # Fetch engine and domain objects
-            engine = EngineType.objects.get(pk=engine_id)
-            domain = Domain.objects.get(pk=host_id)
-
-            # Create scan history
-            scan = ScanHistory()
-            scan.scan_status = INITIATED_TASK
-            scan.domain = domain
-            scan.scan_type = engine
-            scan.start_scan_date = current_scan_time
-
-            if initiated_by_id:
-                user = User.objects.get(pk=initiated_by_id)
-                scan.initiated_by = user
-
-            scan.save()
-
-            # Update domain's last scan date
-            domain.start_scan_date = current_scan_time
-            domain.save()
-
-            logger.info(f"Created scan {scan.id} for domain {domain.name} with engine {engine.engine_name}")
-            return scan.id
-
+            return self._create_scan_history_entry(engine_id, host_id, initiated_by_id)
         except ObjectDoesNotExist as e:
             logger.error(f"Object not found when creating scan: {e}")
             raise
         except Exception as e:
             logger.error(f"Error creating scan: {e}")
             raise
+
+    def _create_scan_history_entry(self, engine_id: int, host_id: int, initiated_by_id: int = None) -> int:
+        # Get current time
+        current_scan_time = timezone.now()
+
+        # Fetch engine and domain objects
+        engine = EngineType.objects.get(pk=engine_id)
+        domain = Domain.objects.get(pk=host_id)
+
+        # Create scan history
+        scan = ScanHistory()
+        scan.scan_status = INITIATED_TASK
+        scan.domain = domain
+        scan.scan_type = engine
+        scan.start_scan_date = current_scan_time
+
+        if initiated_by_id:
+            user = User.objects.get(pk=initiated_by_id)
+            scan.initiated_by = user
+
+        scan.save()
+
+        # Update domain's last scan date
+        domain.start_scan_date = current_scan_time
+        domain.save()
+
+        logger.info(f"Created scan {scan.id} for domain {domain.name} with engine {engine.engine_name}")
+        return scan.id
 
     def create_activity(self, scan_history_id, message, status):
         """
@@ -259,24 +269,26 @@ class ScanRepository:
             int: ID of the created scan activity
         """
         try:
-            scan = ScanHistory.objects.get(pk=scan_history_id)
-
-            scan_activity = ScanActivity()
-            scan_activity.scan_of = scan
-            scan_activity.title = message
-            scan_activity.time = timezone.now()
-            scan_activity.status = status
-            scan_activity.save()
-
-            logger.info(f"Created scan activity {scan_activity.id} for scan {scan_history_id}: {message}")
-            return scan_activity.id
-
+            return self._build_scan_activity_entry(scan_history_id, message, status)
         except ObjectDoesNotExist:
             logger.error(f"ScanHistory with ID {scan_history_id} not found")
             raise
         except Exception as e:
             logger.error(f"Error creating scan activity: {e}")
             raise
+
+    def _build_scan_activity_entry(self, scan_history_id: int, message: str, status: int) -> int:
+        scan = ScanHistory.objects.get(pk=scan_history_id)
+
+        scan_activity = ScanActivity()
+        scan_activity.scan_of = scan
+        scan_activity.title = message
+        scan_activity.time = timezone.now()
+        scan_activity.status = status
+        scan_activity.save()
+
+        logger.info(f"Created scan activity {scan_activity.id} for scan {scan_history_id}: {message}")
+        return scan_activity.id
 
     def mark_scan_failed(self, scan_history_id, error_message=None):
         """
@@ -290,22 +302,26 @@ class ScanRepository:
             bool: True if successful, False otherwise
         """
         try:
-            from reNgine.definitions import FAILED_TASK
-
-            scan = ScanHistory.objects.get(id=scan_history_id)
-            scan.scan_status = FAILED_TASK
-            scan.stop_scan_date = timezone.now()
-            if error_message:
-                scan.error_message = error_message
-            scan.save()
-            logger.info(f"Marked scan {scan_history_id} as failed")
-            # Send WebSocket update
-            from reNgine.utilities.websocket import send_scan_status_update
-            send_scan_status_update(scan_history_id)
-            return True
+            return self._mark_scan_failed_and_notify(scan_history_id, error_message)
         except ObjectDoesNotExist:
             logger.error(f"ScanHistory with ID {scan_history_id} not found")
             return False
         except Exception as e:
             logger.error(f"Error marking scan failed: {e}")
             return False
+
+    def _mark_scan_failed_and_notify(self, scan_history_id: int, error_message: str = None) -> bool:
+        from reNgine.definitions import FAILED_TASK
+
+        scan = ScanHistory.objects.get(id=scan_history_id)
+        scan.scan_status = FAILED_TASK
+        scan.stop_scan_date = timezone.now()
+        if error_message:
+            scan.error_message = error_message
+        scan.save()
+        logger.info(f"Marked scan {scan_history_id} as failed")
+        # Send WebSocket update
+        from reNgine.utilities.websocket import send_scan_status_update
+
+        send_scan_status_update(scan_history_id)
+        return True

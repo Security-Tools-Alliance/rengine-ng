@@ -393,6 +393,54 @@ class Subdomain(models.Model):
             for ip in self.ip_addresses.all()
         }
 
+    @HybridProperty
+    def display_http_status(self):
+        """Return default endpoint http_status for Secator scans, otherwise subdomain http_status."""
+        if self.scan_history and not self.scan_history.is_legacy_scan:
+            default_endpoint = EndPoint.objects.filter(
+                subdomain=self,
+                is_default=True
+            ).first()
+            if default_endpoint:
+                return default_endpoint.http_status
+        return self.http_status
+
+    @HybridProperty
+    def display_page_title(self):
+        """Return default endpoint page_title for Secator scans, otherwise subdomain page_title."""
+        if self.scan_history and not self.scan_history.is_legacy_scan:
+            default_endpoint = EndPoint.objects.filter(
+                subdomain=self,
+                is_default=True
+            ).first()
+            if default_endpoint:
+                return default_endpoint.page_title
+        return self.page_title
+
+    @HybridProperty
+    def display_content_length(self):
+        """Return default endpoint content_length for Secator scans, otherwise subdomain content_length."""
+        if self.scan_history and not self.scan_history.is_legacy_scan:
+            default_endpoint = EndPoint.objects.filter(
+                subdomain=self,
+                is_default=True
+            ).first()
+            if default_endpoint:
+                return default_endpoint.content_length
+        return self.content_length
+
+    @HybridProperty
+    def display_response_time(self):
+        """Return default endpoint response_time for Secator scans, otherwise subdomain response_time."""
+        if self.scan_history and not self.scan_history.is_legacy_scan:
+            default_endpoint = EndPoint.objects.filter(
+                subdomain=self,
+                is_default=True
+            ).first()
+            if default_endpoint:
+                return default_endpoint.response_time
+        return self.response_time
+
     @classmethod
     def get_counts(cls, queryset):
         """Get various subdomain counts in a single query"""
@@ -1198,7 +1246,7 @@ class Certificate(models.Model):
     subdomain = models.ForeignKey(Subdomain, on_delete=models.CASCADE, null=True, blank=True)
     ip_address = models.ForeignKey(IpAddress, on_delete=models.CASCADE, null=True, blank=True)
     domain = models.ForeignKey(Domain, on_delete=models.CASCADE, null=True, blank=True)
-    
+
     host = models.CharField(max_length=1000, help_text="Hostname for the certificate")
     fingerprint_sha256 = models.CharField(max_length=64, null=True, blank=True, help_text="SHA256 fingerprint of the certificate")
     ip = models.CharField(max_length=100, null=True, blank=True, help_text="IP address where certificate was found")
@@ -1216,7 +1264,7 @@ class Certificate(models.Model):
     keysize = models.IntegerField(null=True, blank=True, help_text="Certificate key size in bits")
     serial_number = models.CharField(max_length=200, null=True, blank=True, help_text="Certificate serial number")
     ciphers = ArrayField(models.CharField(max_length=200), null=True, blank=True, help_text="Supported ciphers")
-    
+
     discovered_date = models.DateTimeField(auto_now_add=True, help_text="Date when certificate was discovered")
 
     class Meta:

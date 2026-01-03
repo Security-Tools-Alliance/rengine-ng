@@ -33,45 +33,7 @@ class IpRepository:
             IpAddress: Saved IP address object or None
         """
         try:
-            ip_address = item.get("ip") or item.get("target") or item.get("host")
-
-            if not ip_address:
-                logger.warning("IP item missing IP address field")
-                return None
-
-            if not is_valid_ip(ip_address):
-                logger.warning(f"Invalid IP address: {ip_address}")
-                return None
-
-            # Validate scan_history and domain exist
-            ScanHistory.objects.get(id=scan_history_id)
-            Domain.objects.get(id=domain_id)
-
-            # Get or create IP address
-            ip_obj, created = IpAddress.objects.get_or_create(
-                address=ip_address,
-                defaults={
-                    "is_cdn": False,
-                    "is_private": self._is_private_ip(ip_address),
-                    "version": self._get_ip_version(ip_address),
-                    "alive": item.get("alive", False),
-                },
-            )
-
-            if created:
-                logger.info(f"Created IP address: {ip_address}")
-                # Collect for batch geolocalization
-                self._collect_ip_for_geolocalization(ip_address)
-            else:
-                logger.debug(f"IP address already exists: {ip_address}")
-
-            # Associate with subdomain if hostname provided
-            hostname = item.get("host")
-            if hostname and not is_valid_ip(hostname):  # hostname is not an IP
-                self._associate_with_subdomain(ip_obj, hostname, scan_history_id)
-
-            return ip_obj
-
+            return self._process_secator_ip_item(item, scan_history_id, domain_id)
         except ObjectDoesNotExist as e:
             logger.error(f"Object not found when saving IP address: {e}")
             return None
@@ -81,6 +43,48 @@ class IpRepository:
         except Exception as e:
             logger.error(f"Error saving IP address from Secator: {e}")
             return None
+
+    def _process_secator_ip_item(
+        self, item: Dict[str, Any], scan_history_id: int, domain_id: int
+    ) -> Optional[IpAddress]:
+        ip_address = item.get("ip") or item.get("target") or item.get("host")
+
+        if not ip_address:
+            logger.warning("IP item missing IP address field")
+            return None
+
+        if not is_valid_ip(ip_address):
+            logger.warning(f"Invalid IP address: {ip_address}")
+            return None
+
+        # Validate scan_history and domain exist
+        ScanHistory.objects.get(id=scan_history_id)
+        Domain.objects.get(id=domain_id)
+
+        # Get or create IP address
+        ip_obj, created = IpAddress.objects.get_or_create(
+            address=ip_address,
+            defaults={
+                "is_cdn": False,
+                "is_private": self._is_private_ip(ip_address),
+                "version": self._get_ip_version(ip_address),
+                "alive": item.get("alive", False),
+            },
+        )
+
+        if created:
+            logger.info(f"Created IP address: {ip_address}")
+            # Collect for batch geolocalization
+            self._collect_ip_for_geolocalization(ip_address)
+        else:
+            logger.debug(f"IP address already exists: {ip_address}")
+
+        # Associate with subdomain if hostname provided
+        hostname = item.get("host")
+        if hostname and not is_valid_ip(hostname):  # hostname is not an IP
+            self._associate_with_subdomain(ip_obj, hostname, scan_history_id)
+
+        return ip_obj
 
     def get_or_create(self, address: str, **kwargs) -> Tuple[Optional[IpAddress], bool]:
         """
@@ -102,9 +106,7 @@ class IpRepository:
                 "is_cdn": False,
                 "is_private": self._is_private_ip(address),
                 "version": self._get_ip_version(address),
-            }
-            defaults.update(kwargs)
-
+            } | kwargs
             ip_obj, created = IpAddress.objects.get_or_create(address=address, defaults=defaults)
 
             if created:
@@ -134,19 +136,16 @@ class IpRepository:
             ScanHistory.objects.get(id=scan_history_id)
             Domain.objects.get(id=domain_id)
 
-            ip_objects = []
-            for ip_address in ip_addresses:
-                if is_valid_ip(ip_address):
-                    ip_objects.append(
-                        IpAddress(
-                            address=ip_address,
-                            is_cdn=False,
-                            is_private=self._is_private_ip(ip_address),
-                            version=self._get_ip_version(ip_address),
-                        )
-                    )
-
-            if ip_objects:
+            if ip_objects := [
+                IpAddress(
+                    address=ip_address,
+                    is_cdn=False,
+                    is_private=self._is_private_ip(ip_address),
+                    version=self._get_ip_version(ip_address),
+                )
+                for ip_address in ip_addresses
+                if is_valid_ip(ip_address)
+            ]:
                 created = IpAddress.objects.bulk_create(ip_objects, ignore_conflicts=True)
                 logger.info(f"Bulk created {len(created)} IP addresses")
 
@@ -244,9 +243,7 @@ class IpRepository:
             scan_history_id: Scan history ID
         """
         try:
-            subdomain = Subdomain.objects.filter(name=hostname, scan_history_id=scan_history_id).first()
-
-            if subdomain:
+            if subdomain := Subdomain.objects.filter(name=hostname, scan_history_id=scan_history_id).first():
                 subdomain.ip_addresses.add(ip_obj)
                 logger.debug(f"Associated IP {ip_obj.address} with subdomain {hostname}")
             else:

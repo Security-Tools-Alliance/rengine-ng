@@ -3,7 +3,7 @@ Port Repository - Data access for port operations.
 Handles Port database operations with IP dependency from Secator.
 """
 
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from celery.utils.log import get_task_logger
 from django.core.exceptions import ObjectDoesNotExist
@@ -33,53 +33,7 @@ class PortRepository:
             Port: Saved port object or None
         """
         try:
-            port_number = item.get("port")
-            ip_address = item.get("ip") or item.get("host")
-
-            if not port_number:
-                logger.warning("Port item missing port number field")
-                return None
-
-            if not is_valid_port(port_number):
-                logger.warning(f"Invalid port number: {port_number}")
-                return None
-
-            if not ip_address:
-                logger.warning("Port item missing IP address field")
-                return None
-
-            if not is_valid_ip(ip_address):
-                logger.warning(f"Invalid IP address for port: {ip_address}")
-                return None
-
-            # Get or create IP address first
-            ip_obj = self._get_or_create_ip(ip_address, scan_history_id, domain_id)
-            if not ip_obj:
-                logger.error(f"Failed to get or create IP address: {ip_address}")
-                return None
-
-            # Get or create port
-            port_obj, created = Port.objects.get_or_create(
-                number=port_number,
-                ip_address=ip_obj,
-                defaults={
-                    "service_name": item.get("service_name", ""),
-                    "description": item.get("description", ""),
-                    "is_uncommon": self._is_uncommon_port(port_number),
-                    "state": item.get("state", ""),
-                    "cpes": item.get("cpes", []),
-                    "protocol": item.get("protocol", ""),
-                    "host": item.get("host", ""),
-                },
-            )
-
-            if created:
-                logger.info(f"Created port: {port_number} on {ip_address}")
-            else:
-                logger.debug(f"Port already exists: {port_number} on {ip_address}")
-
-            return port_obj
-
+            return self._process_secator_port_item(item, scan_history_id, domain_id)
         except ObjectDoesNotExist as e:
             logger.error(f"Object not found when saving port: {e}")
             return None
@@ -89,6 +43,54 @@ class PortRepository:
         except Exception as e:
             logger.error(f"Error saving port from Secator: {e}")
             return None
+
+    def _process_secator_port_item(self, item: Dict[str, Any], scan_history_id: int, domain_id: int) -> Optional[Port]:
+        port_number = item.get("port")
+        ip_address = item.get("ip") or item.get("host")
+
+        if not port_number:
+            logger.warning("Port item missing port number field")
+            return None
+
+        if not is_valid_port(port_number):
+            logger.warning(f"Invalid port number: {port_number}")
+            return None
+
+        if not ip_address:
+            logger.warning("Port item missing IP address field")
+            return None
+
+        if not is_valid_ip(ip_address):
+            logger.warning(f"Invalid IP address for port: {ip_address}")
+            return None
+
+        # Get or create IP address first
+        ip_obj = self._get_or_create_ip(ip_address, scan_history_id, domain_id)
+        if not ip_obj:
+            logger.error(f"Failed to get or create IP address: {ip_address}")
+            return None
+
+        # Get or create port
+        port_obj, created = Port.objects.get_or_create(
+            number=port_number,
+            ip_address=ip_obj,
+            defaults={
+                "service_name": item.get("service_name", ""),
+                "description": item.get("description", ""),
+                "is_uncommon": self._is_uncommon_port(port_number),
+                "state": item.get("state", ""),
+                "cpes": item.get("cpes", []),
+                "protocol": item.get("protocol", ""),
+                "host": item.get("host", ""),
+            },
+        )
+
+        if created:
+            logger.info(f"Created port: {port_number} on {ip_address}")
+        else:
+            logger.debug(f"Port already exists: {port_number} on {ip_address}")
+
+        return port_obj
 
     def get_or_create(self, port_number: int, ip_address: str, **kwargs) -> Tuple[Optional[Port], bool]:
         """
@@ -125,9 +127,7 @@ class PortRepository:
                 "service_name": "",
                 "description": "",
                 "is_uncommon": self._is_uncommon_port(port_number),
-            }
-            defaults.update(kwargs)
-
+            } | kwargs
             port_obj, created = Port.objects.get_or_create(number=port_number, ip_address=ip_obj, defaults=defaults)
 
             return port_obj, created
@@ -149,49 +149,51 @@ class PortRepository:
             list: List of created Port objects
         """
         try:
-            # Validate scan_history and domain exist
-            ScanHistory.objects.get(id=scan_history_id)
-            Domain.objects.get(id=domain_id)
-
-            port_objects = []
-            for port_data in ports:
-                port_number = port_data.get("port")
-                ip_address = port_data.get("ip")
-
-                if is_valid_port(port_number) and is_valid_ip(ip_address):
-                    # Get or create IP address
-                    ip_obj, _ = IpAddress.objects.get_or_create(
-                        address=ip_address,
-                        defaults={
-                            "is_cdn": False,
-                            "is_private": self._is_private_ip(ip_address),
-                            "version": self._get_ip_version(ip_address),
-                        },
-                    )
-
-                    port_objects.append(
-                        Port(
-                            number=port_number,
-                            ip_address=ip_obj,
-                            service_name=port_data.get("service_name", ""),
-                            description=port_data.get("description", ""),
-                            is_uncommon=self._is_uncommon_port(port_number),
-                        )
-                    )
-
-            if port_objects:
-                created = Port.objects.bulk_create(port_objects, ignore_conflicts=True)
-                logger.info(f"Bulk created {len(created)} ports")
-                return created
-
-            return []
-
+            return self._create_ports_in_bulk(scan_history_id, domain_id, ports)
         except ObjectDoesNotExist as e:
             logger.error(f"Object not found: {e}")
             return []
         except Exception as e:
             logger.error(f"Error in bulk create ports: {e}")
             return []
+
+    def _create_ports_in_bulk(self, scan_history_id: int, domain_id: int, ports: List[Dict[str, Any]]) -> List[Port]:
+        # Validate scan_history and domain exist
+        ScanHistory.objects.get(id=scan_history_id)
+        Domain.objects.get(id=domain_id)
+
+        port_objects = []
+        for port_data in ports:
+            port_number = port_data.get("port")
+            ip_address = port_data.get("ip")
+
+            if is_valid_port(port_number) and is_valid_ip(ip_address):
+                # Get or create IP address
+                ip_obj, _ = IpAddress.objects.get_or_create(
+                    address=ip_address,
+                    defaults={
+                        "is_cdn": False,
+                        "is_private": self._is_private_ip(ip_address),
+                        "version": self._get_ip_version(ip_address),
+                    },
+                )
+
+                port_objects.append(
+                    Port(
+                        number=port_number,
+                        ip_address=ip_obj,
+                        service_name=port_data.get("service_name", ""),
+                        description=port_data.get("description", ""),
+                        is_uncommon=self._is_uncommon_port(port_number),
+                    )
+                )
+
+        if port_objects:
+            created = Port.objects.bulk_create(port_objects, ignore_conflicts=True)
+            logger.info(f"Bulk created {len(created)} ports")
+            return created
+
+        return []
 
     def update_service_info(self, port_id: int, service_name: str = None, description: str = None) -> bool:
         """

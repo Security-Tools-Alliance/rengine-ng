@@ -6,11 +6,12 @@ import os.path
 from pathlib import Path
 import re
 import threading
+import traceback
 
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.core.cache import cache
-from django.db.models import CharField, Count, F, Q, Value
+from django.db.models import CharField, Count, F, Prefetch, Q, Value
 from django.shortcuts import get_object_or_404
 from django.template.defaultfilters import slugify
 from django.urls import reverse
@@ -2289,8 +2290,19 @@ class ListSubdomains(AdvancedSearchMixin, APIView):
             subdomain_query = self.apply_advanced_search(subdomain_query, search_value)
 
         # Optimize queries with select_related and prefetch_related to avoid N+1 queries
+        from startScan.models import EndPoint
+
         subdomain_query = subdomain_query.select_related("scan_history", "target_domain").prefetch_related(
-            "ip_addresses", "ip_addresses__ports", "technologies", "waf", "directories"
+            "ip_addresses",
+            "ip_addresses__ports",
+            "technologies",
+            "waf",
+            "directories",
+            Prefetch(
+                "endpoint_set",
+                queryset=EndPoint.objects.filter(is_default=True),
+                to_attr="default_endpoint_list",
+            ),
         )
 
         # Handle pagination
@@ -2432,6 +2444,8 @@ class SubdomainsViewSet(viewsets.ModelViewSet):
                 queryset = Subdomain.objects.filter(scan_history=scan_id)
 
             # Optimize queries with prefetch_related to avoid N+1 queries
+            from startScan.models import EndPoint
+
             queryset = queryset.prefetch_related(
                 "ip_addresses",
                 "ip_addresses__ports",
@@ -2440,6 +2454,11 @@ class SubdomainsViewSet(viewsets.ModelViewSet):
                 "directories",
                 "scan_history",
                 "target_domain",
+                Prefetch(
+                    "endpoint_set",
+                    queryset=EndPoint.objects.filter(is_default=True),
+                    to_attr="default_endpoint_list",
+                ),
             )
             return queryset
         return Subdomain.objects.none()
@@ -3981,8 +4000,6 @@ class SecatorRunnerCreate(APIView):
             return Response({"status": True, "id": runner_id})
         except Exception as e:
             logger.error(f"[SECATOR API STATUS SYNC] Error creating runner: {e}")
-            import traceback
-
             logger.error(f"[SECATOR API STATUS SYNC] Traceback: {traceback.format_exc()}")
             return Response({"status": False, "error": str(e)}, status=500)
 
@@ -3997,9 +4014,30 @@ class SecatorRunnerUpdate(APIView):
 
     def put(self, request, runner_id):
         try:
+            import json
+
             from startScan.models import SecatorRunner
 
-            runner_data = request.data
+            # Parse request data - handle potential parsing errors
+            try:
+                runner_data = request.data
+            except Exception as parse_error:
+                logger.error(
+                    f"[SECATOR API STATUS SYNC] Error parsing request data for runner_id={runner_id}: {parse_error}",
+                    exc_info=True,
+                )
+                return Response(
+                    {"status": False, "error": f"Error parsing request data: {str(parse_error)}"}, status=400
+                )
+
+            # Validate that runner_data is a dict
+            if not isinstance(runner_data, dict):
+                logger.error(
+                    f"[SECATOR API STATUS SYNC] runner_data is not a dict: {type(runner_data)}, runner_id={runner_id}"
+                )
+                return Response(
+                    {"status": False, "error": "Invalid request data format"}, status=400
+                )
 
             logger.info(f"[SECATOR API STATUS SYNC] Updating runner: runner_id={runner_id}")
             logger.debug(
@@ -4037,10 +4075,15 @@ class SecatorRunnerUpdate(APIView):
 
             return Response({"status": True, "id": runner_id})
         except Exception as e:
-            logger.error(f"[SECATOR API STATUS SYNC] Error updating runner {runner_id}: {e}")
-            import traceback
-
+            logger.error(
+                f"[SECATOR API STATUS SYNC] Error updating runner {runner_id}: {e}",
+                exc_info=True,
+            )
             logger.error(f"[SECATOR API STATUS SYNC] Traceback: {traceback.format_exc()}")
+            # Check if it's a validation error that should return 400
+            error_str = str(e).lower()
+            if "validation" in error_str or "invalid" in error_str or "required" in error_str:
+                return Response({"status": False, "error": str(e)}, status=400)
             return Response({"status": False, "error": str(e)}, status=500)
 
     def _is_all_runners_completed(self, scan_history_id: int) -> bool:
@@ -4265,7 +4308,7 @@ class SecatorRunnerUpdate(APIView):
         logger.info(
             f"[SECATOR API STATUS SYNC] Synchronized runner {runner_name} (status: {runner_status}) with scan {scan_history.id}"
         )
-        
+
         # Send WebSocket update even if status didn't change (for runner updates)
         send_scan_status_update(scan_history.id)
 
@@ -4356,6 +4399,7 @@ class SecatorFindingCreate(APIView):
             # Validate that ScanHistory and Domain exist
             from django.core.exceptions import ObjectDoesNotExist
             from django.db import IntegrityError
+
             from startScan.models import ScanHistory
             from targetApp.models import Domain
 
@@ -4397,7 +4441,7 @@ class SecatorFindingCreate(APIView):
 
                 # Check if save was successful
                 if saved_object is None:
-                    logger.error(
+                    logger.warning(
                         f"[SECATOR API FINDINGS] Repository returned None for finding type={finding_type}, "
                         f"scan_history_id={scan_history_id}, domain_id={domain_id}. "
                         f"This usually indicates a validation error or missing required fields."
@@ -4405,9 +4449,9 @@ class SecatorFindingCreate(APIView):
                     return Response(
                         {
                             "status": False,
-                            "error": f"Failed to save {finding_type} finding. Check logs for details.",
+                            "error": f"Failed to save {finding_type} finding. Validation error or missing required fields.",
                         },
-                        status=500,
+                        status=422,
                     )
 
                 # Generate finding ID from saved object
@@ -4452,8 +4496,6 @@ class SecatorFindingCreate(APIView):
                 )
         except Exception as e:
             logger.error(f"[SECATOR API FINDINGS] Error creating finding: {e}")
-            import traceback
-
             logger.error(f"[SECATOR API FINDINGS] Traceback: {traceback.format_exc()}")
             return Response({"status": False, "error": str(e)}, status=500)
 
@@ -4468,9 +4510,18 @@ class SecatorFindingUpdate(APIView):
 
     def put(self, request, finding_id):
         try:
-            finding_data = request.data
+            # Parse request data - handle potential parsing errors
+            try:
+                finding_data = request.data
+            except Exception as parse_error:
+                logger.error(
+                    f"[SECATOR API FINDINGS] Error parsing request data for finding_id={finding_id}: {parse_error}",
+                    exc_info=True,
+                )
+                return Response(
+                    {"status": False, "error": f"Error parsing request data: {str(parse_error)}"}, status=400
+                )
 
-            import json
 
             from reNgine.services.repositories.certificate_repository import CertificateRepository
             from reNgine.services.repositories.dns_repository import DnsRepository
@@ -4483,17 +4534,33 @@ class SecatorFindingUpdate(APIView):
             from reNgine.services.repositories.technology_repository import TechnologyRepository
             from reNgine.services.repositories.vulnerability_repository import VulnerabilityRepository
 
+            # Validate that finding_data is a dict
+            if not isinstance(finding_data, dict):
+                logger.error(
+                    f"[SECATOR API FINDINGS] finding_data is not a dict: {type(finding_data)}, finding_id={finding_id}"
+                )
+                return Response(
+                    {"status": False, "error": "Invalid request data format"}, status=400
+                )
+
             finding_type = finding_data.get("_type")
             context = finding_data.get("_context", {})
+
+            # Validate context is a dict
+            if not isinstance(context, dict):
+                logger.error(
+                    f"[SECATOR API FINDINGS] _context is not a dict: {type(context)}, finding_id={finding_id}"
+                )
+                return Response(
+                    {"status": False, "error": "Invalid _context format"}, status=400
+                )
+
             scan_history_id = context.get("scan_history_id")
             domain_id = context.get("domain_id")
 
             logger.info(
                 f"[SECATOR API FINDINGS] Updating finding: finding_id={finding_id}, "
                 f"type={finding_type}, scan_history_id={scan_history_id}, domain_id={domain_id}"
-            )
-            logger.debug(
-                f"[SECATOR API FINDINGS] Full finding update data received: {json.dumps(finding_data, indent=2, default=str)}"
             )
             logger.debug(f"[SECATOR API FINDINGS] Finding data keys: {list(finding_data.keys())}")
             logger.debug(f"[SECATOR API FINDINGS] Finding type: {finding_type}")
@@ -4503,16 +4570,6 @@ class SecatorFindingUpdate(APIView):
                     f"[SECATOR API FINDINGS] Missing _type in finding data for finding_id={finding_id}"
                 )
                 return Response({"status": False, "error": "Missing _type in finding data"}, status=400)
-
-            # Log all fields specific to the finding type
-            for key, value in finding_data.items():
-                if key not in ["_type", "_context", "_uuid"]:
-                    if isinstance(value, (dict, list)):
-                        logger.debug(
-                            f"[SECATOR API FINDINGS] Finding update field '{key}': {json.dumps(value, indent=2, default=str)}"
-                        )
-                    else:
-                        logger.debug(f"[SECATOR API FINDINGS] Finding update field '{key}': {value}")
 
             # Map finding type to repository class
             repository_mapping = {
@@ -4528,8 +4585,19 @@ class SecatorFindingUpdate(APIView):
                 "certificate": CertificateRepository,
             }
 
+            # Types that are metadata/logs and should not be saved to database
+            # These are informational and should return success without saving
+            metadata_types = {"warning", "stat", "target", "log", "debug", "info", "error"}
+
             repository_class = repository_mapping.get(finding_type)
             if not repository_class:
+                # Check if it's a metadata type that should be ignored
+                if finding_type in metadata_types:
+                    logger.debug(
+                        f"[SECATOR API FINDINGS] Ignoring metadata type: {finding_type} for finding_id={finding_id}"
+                    )
+                    return Response({"status": True, "message": f"Ignored metadata type: {finding_type}"}, status=200)
+
                 logger.warning(
                     f"[SECATOR API FINDINGS] Unknown finding type: {finding_type} for finding_id={finding_id}"
                 )
@@ -4555,6 +4623,7 @@ class SecatorFindingUpdate(APIView):
             # Validate that ScanHistory and Domain exist
             from django.core.exceptions import ObjectDoesNotExist
             from django.db import IntegrityError
+
             from startScan.models import ScanHistory
             from targetApp.models import Domain
 
@@ -4603,14 +4672,15 @@ class SecatorFindingUpdate(APIView):
                     logger.error(
                         f"[SECATOR API FINDINGS] Repository returned None for finding type={finding_type}, "
                         f"finding_id={finding_id}, scan_history_id={scan_history_id}, domain_id={domain_id}. "
-                        f"This usually indicates a validation error or missing required fields."
+                        f"This usually indicates a validation error or missing required fields. "
+                        f"Finding data keys: {list(finding_data.keys())}"
                     )
                     return Response(
                         {
                             "status": False,
-                            "error": f"Failed to save {finding_type} finding. Check logs for details.",
+                            "error": f"Failed to save {finding_type} finding. Validation error or missing required fields. Check logs for details.",
                         },
-                        status=500,
+                        status=400,
                     )
 
                 # Generate finding ID from saved object
@@ -4655,8 +4725,13 @@ class SecatorFindingUpdate(APIView):
                     {"status": False, "error": f"Error saving finding: {str(e)}"}, status=500
                 )
         except Exception as e:
-            logger.error(f"[SECATOR API FINDINGS] Error updating finding {finding_id}: {e}")
-            import traceback
-
+            logger.error(
+                f"[SECATOR API FINDINGS] Error updating finding {finding_id}: {e}",
+                exc_info=True,
+            )
             logger.error(f"[SECATOR API FINDINGS] Traceback: {traceback.format_exc()}")
+            # Check if it's a validation error that should return 400
+            error_str = str(e).lower()
+            if "validation" in error_str or "invalid" in error_str or "required" in error_str:
+                return Response({"status": False, "error": str(e)}, status=400)
             return Response({"status": False, "error": str(e)}, status=500)

@@ -34,41 +34,7 @@ class TechnologyRepository:
             Technology: Saved technology object or None
         """
         try:
-            tech_name = item.get("name")
-            match_target = item.get("match") or item.get("target")
-
-            if not tech_name:
-                logger.warning("Technology item missing name field")
-                return None
-
-            if not match_target:
-                logger.warning("Technology item missing match/target field")
-                return None
-
-            # Validate scan_history and domain exist
-            ScanHistory.objects.get(id=scan_history_id)
-            Domain.objects.get(id=domain_id)
-
-            # Get or create technology
-            tech_obj, created = Technology.objects.get_or_create(
-                name=tech_name,
-                defaults={
-                    "value": item.get("value", ""),
-                    "category": item.get("category", ""),
-                    "stored_response_path": item.get("stored_response_path", ""),
-                }
-            )
-
-            if created:
-                logger.info(f"Created technology: {tech_name}")
-            else:
-                logger.debug(f"Technology already exists: {tech_name}")
-
-            # Associate with subdomain or endpoint based on match target
-            self._associate_technology(tech_obj, match_target, scan_history_id)
-
-            return tech_obj
-
+            return self._process_secator_technology_item(item, scan_history_id, domain_id)
         except ObjectDoesNotExist as e:
             logger.error(f"Object not found when saving technology: {e}")
             return None
@@ -78,6 +44,45 @@ class TechnologyRepository:
         except Exception as e:
             logger.error(f"Error saving technology from Secator: {e}")
             return None
+
+    def _process_secator_technology_item(
+        self, item: Dict[str, Any], scan_history_id: int, domain_id: int
+    ) -> Optional[Technology]:
+        tech_name = item.get("name")
+        # Secator Tag type uses 'match' field for the target where technology was found
+        match_target = item.get("match")
+
+        if not tech_name:
+            logger.warning(f"Technology item missing name field. Available fields: {list(item.keys())}")
+            return None
+
+        if not match_target:
+            logger.warning(f"Technology item missing match field. Available fields: {list(item.keys())}")
+            return None
+
+        # Validate scan_history and domain exist
+        ScanHistory.objects.get(id=scan_history_id)
+        Domain.objects.get(id=domain_id)
+
+        # Get or create technology
+        tech_obj, created = Technology.objects.get_or_create(
+            name=tech_name,
+            defaults={
+                "value": item.get("value", ""),
+                "category": item.get("category", ""),
+                "stored_response_path": item.get("stored_response_path", ""),
+            },
+        )
+
+        if created:
+            logger.info(f"Created technology: {tech_name}")
+        else:
+            logger.debug(f"Technology already exists: {tech_name}")
+
+        # Associate with subdomain or endpoint based on match target
+        self._associate_technology(tech_obj, match_target, scan_history_id)
+
+        return tech_obj
 
     def get_or_create(self, name: str, **kwargs) -> Tuple[Optional[Technology], bool]:
         """
@@ -144,9 +149,7 @@ class TechnologyRepository:
         try:
             tech_obj, _ = Technology.objects.get_or_create(name=tech_name)
 
-            subdomain = Subdomain.objects.filter(name=subdomain_name, scan_history_id=scan_history_id).first()
-
-            if subdomain:
+            if subdomain := Subdomain.objects.filter(name=subdomain_name, scan_history_id=scan_history_id).first():
                 subdomain.technologies.add(tech_obj)
                 logger.debug(f"Associated technology {tech_name} with subdomain {subdomain_name}")
                 return True
@@ -173,9 +176,7 @@ class TechnologyRepository:
         try:
             tech_obj, _ = Technology.objects.get_or_create(name=tech_name)
 
-            endpoint = EndPoint.objects.filter(http_url=endpoint_url, scan_history_id=scan_history_id).first()
-
-            if endpoint:
+            if endpoint := EndPoint.objects.filter(http_url=endpoint_url, scan_history_id=scan_history_id).first():
                 endpoint.techs.add(tech_obj)
                 logger.debug(f"Associated technology {tech_name} with endpoint {endpoint_url}")
                 return True
@@ -199,13 +200,10 @@ class TechnologyRepository:
             list: List of Technology objects
         """
         try:
-            subdomain = Subdomain.objects.filter(name=subdomain_name, scan_history_id=scan_history_id).first()
-
-            if subdomain:
+            if subdomain := Subdomain.objects.filter(name=subdomain_name, scan_history_id=scan_history_id).first():
                 return list(subdomain.technologies.all())
-            else:
-                logger.warning(f"Subdomain {subdomain_name} not found in scan {scan_history_id}")
-                return []
+            logger.warning(f"Subdomain {subdomain_name} not found in scan {scan_history_id}")
+            return []
 
         except Exception as e:
             logger.error(f"Error getting technologies for subdomain: {e}")
@@ -223,13 +221,10 @@ class TechnologyRepository:
             list: List of Technology objects
         """
         try:
-            endpoint = EndPoint.objects.filter(http_url=endpoint_url, scan_history_id=scan_history_id).first()
-
-            if endpoint:
+            if endpoint := EndPoint.objects.filter(http_url=endpoint_url, scan_history_id=scan_history_id).first():
                 return list(endpoint.techs.all())
-            else:
-                logger.warning(f"Endpoint {endpoint_url} not found in scan {scan_history_id}")
-                return []
+            logger.warning(f"Endpoint {endpoint_url} not found in scan {scan_history_id}")
+            return []
 
         except Exception as e:
             logger.error(f"Error getting technologies for endpoint: {e}")
@@ -248,26 +243,21 @@ class TechnologyRepository:
             # Check if match_target is a URL
             if match_target.startswith(("http://", "https://")):
                 if is_valid_url(match_target):
-                    # Try to associate with endpoint
-                    endpoint = EndPoint.objects.filter(http_url=match_target, scan_history_id=scan_history_id).first()
-
-                    if endpoint:
+                    if endpoint := EndPoint.objects.filter(
+                        http_url=match_target, scan_history_id=scan_history_id
+                    ).first():
                         endpoint.techs.add(tech_obj)
                         logger.debug(f"Associated technology {tech_obj.name} with endpoint {match_target}")
                         return
                     else:
                         logger.debug(f"Endpoint {match_target} not found, trying subdomain association")
 
-                        # Extract hostname and try subdomain association
-                        hostname = urlparse(match_target).hostname
-                        if hostname:
+                        if hostname := urlparse(match_target).hostname:
                             self._associate_with_subdomain_by_hostname(tech_obj, hostname, scan_history_id)
+            elif is_valid_domain(match_target):
+                self._associate_with_subdomain_by_hostname(tech_obj, match_target, scan_history_id)
             else:
-                # Assume it's a hostname
-                if is_valid_domain(match_target):
-                    self._associate_with_subdomain_by_hostname(tech_obj, match_target, scan_history_id)
-                else:
-                    logger.warning(f"Invalid match target for technology association: {match_target}")
+                logger.warning(f"Invalid match target for technology association: {match_target}")
 
         except Exception as e:
             logger.error(f"Error associating technology: {e}")
@@ -282,9 +272,7 @@ class TechnologyRepository:
             scan_history_id: Scan history ID
         """
         try:
-            subdomain = Subdomain.objects.filter(name=hostname, scan_history_id=scan_history_id).first()
-
-            if subdomain:
+            if subdomain := Subdomain.objects.filter(name=hostname, scan_history_id=scan_history_id).first():
                 subdomain.technologies.add(tech_obj)
                 logger.debug(f"Associated technology {tech_obj.name} with subdomain {hostname}")
             else:

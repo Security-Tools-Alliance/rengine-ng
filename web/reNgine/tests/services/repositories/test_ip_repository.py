@@ -209,3 +209,57 @@ class TestIpRepository(BaseTestCase):
         # Verify association was made
         subdomain.refresh_from_db()
         self.assertIn(result, subdomain.ip_addresses.all())
+
+    def test_process_secator_ip_item_valid(self):
+        """Test _process_secator_ip_item with valid data."""
+        item = {
+            "ip": "192.168.1.1",
+            "host": "test.example.com",
+            "alive": True,
+        }
+
+        result = self.ip_repo._process_secator_ip_item(item, self.scan_history.id, self.domain.id)
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result.address, "192.168.1.1")
+        self.assertTrue(result.alive)
+        self.assertTrue(result.is_private)
+
+    def test_process_secator_ip_item_missing_ip(self):
+        """Test _process_secator_ip_item with missing IP."""
+        item = {
+            "host": "test.example.com",
+        }
+
+        result = self.ip_repo._process_secator_ip_item(item, self.scan_history.id, self.domain.id)
+
+        self.assertIsNone(result)
+
+    def test_process_secator_ip_item_invalid_ip(self):
+        """Test _process_secator_ip_item with invalid IP."""
+        item = {
+            "ip": "invalid-ip",
+        }
+
+        result = self.ip_repo._process_secator_ip_item(item, self.scan_history.id, self.domain.id)
+
+        self.assertIsNone(result)
+
+    def test_process_secator_ip_item_with_hostname(self):
+        """Test _process_secator_ip_item with hostname for subdomain association."""
+        subdomain = self.data_generator.create_subdomain(
+            name="test.example.com",
+            scan_history=self.scan_history,
+            target_domain=self.domain,
+        )
+
+        item = {
+            "ip": "192.168.1.1",
+            "host": "test.example.com",
+        }
+
+        result = self.ip_repo._process_secator_ip_item(item, self.scan_history.id, self.domain.id)
+
+        self.assertIsNotNone(result)
+        subdomain.refresh_from_db()
+        self.assertIn(result, subdomain.ip_addresses.all())

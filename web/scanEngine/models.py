@@ -342,13 +342,13 @@ class SecatorWorkflow(models.Model):
         # Use pre-computed value if available (from view optimization)
         if hasattr(self, "_precomputed_structured_tasks"):
             return self._precomputed_structured_tasks
-        
+
         tasks_dict = self.get_tasks()
         if not isinstance(tasks_dict, dict):
             return []
-        
+
         structured = []
-        
+
         for key, value in tasks_dict.items():
             # Check if this is a group (starts with _group, with or without suffix)
             if key.startswith("_group"):
@@ -357,12 +357,12 @@ class SecatorWorkflow(models.Model):
                 if isinstance(value, dict):
                     # Extract task names from the group
                     group_tasks = list(value.keys())
-                
+
                 # Extract display name: remove "_group" prefix and any following "/" or ":"
                 display_name = key.replace("_group", "", 1).lstrip("/:").strip()
                 if not display_name:
                     display_name = "tasks"
-                
+
                 structured.append({
                     "type": "group",
                     "name": key,
@@ -376,7 +376,7 @@ class SecatorWorkflow(models.Model):
                     "name": key,
                     "group": None
                 })
-        
+
         return structured
 
     def get_tasks_count(self):
@@ -388,16 +388,16 @@ class SecatorWorkflow(models.Model):
         # Use pre-computed value if available (from view optimization)
         if hasattr(self, "_precomputed_tasks_count"):
             return self._precomputed_tasks_count
-        
+
         structured = self.get_structured_tasks()
         count = 0
-        
+
         for item in structured:
             if item["type"] == "group":
                 count += len(item["tasks"])
             else:
                 count += 1
-        
+
         return count
 
     def can_modify(self):
