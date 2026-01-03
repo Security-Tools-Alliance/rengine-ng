@@ -173,22 +173,32 @@ def send_scan_status_update(
         if current_task is not None:
             message["current_task"] = current_task
 
+        logger.debug(
+            f"Sending WebSocket update for scan {scan_history_id} - "
+            f"status: {message.get('status')}, progress: {message.get('progress')}, "
+            f"current_task: {message.get('current_task')}"
+        )
+
         # Send to scan-specific group
+        scan_group = f"scan-status-{scan_history_id}"
         async_to_sync(channel_layer.group_send)(
-            f"scan-status-{scan_history_id}",
+            scan_group,
             {"type": "scan_status_update", "message": message},
         )
+        logger.debug(f"Sent WebSocket update to scan-specific group: {scan_group}")
 
         # Send to project-level group
         if scan.domain and scan.domain.project:
+            project_group = f"scan-status-project-{scan.domain.project.slug}"
             async_to_sync(channel_layer.group_send)(
-                f"scan-status-project-{scan.domain.project.slug}",
+                project_group,
                 {"type": "scan_status_update", "message": message},
             )
+            logger.debug(f"Sent WebSocket update to project-level group: {project_group}")
 
-        logger.debug(f"Sent WebSocket update for scan {scan_history_id}")
+        logger.debug(f"Successfully sent WebSocket update for scan {scan_history_id}")
 
     except ScanHistory.DoesNotExist:
         logger.error(f"ScanHistory {scan_history_id} not found for WebSocket update")
     except Exception as e:
-        logger.error(f"Error sending WebSocket update for scan {scan_history_id}: {e}")
+        logger.error(f"Error sending WebSocket update for scan {scan_history_id}: {e}", exc_info=True)

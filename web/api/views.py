@@ -4309,7 +4309,19 @@ class SecatorRunnerUpdate(APIView):
             f"[SECATOR API STATUS SYNC] Synchronized runner {runner_name} (status: {runner_status}) with scan {scan_history.id}"
         )
 
-        # Send WebSocket update even if status didn't change (for runner updates)
+        # Send WebSocket update for runner status/progress changes
+        # This ensures real-time updates even when status doesn't change
+        runner_progress = runner_data.get("progress")
+        if isinstance(runner_progress, (int, float)) and runner_progress >= 0:
+            logger.debug(
+                f"[SECATOR API STATUS SYNC] Sending progress update for scan {scan_history.id} - "
+                f"Runner: {runner_name}, Progress: {runner_progress}%, Status: {runner_status}"
+            )
+        else:
+            logger.debug(
+                f"[SECATOR API STATUS SYNC] Sending runner update for scan {scan_history.id} - "
+                f"Runner: {runner_name}, Status: {runner_status} (no progress data)"
+            )
         send_scan_status_update(scan_history.id)
 
 

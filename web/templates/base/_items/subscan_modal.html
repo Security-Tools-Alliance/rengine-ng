@@ -112,28 +112,67 @@
 </div>
 
 <script>
-// Toggle between Secator and Legacy modes
-$('#secatorMode').on('change', function() {
-	if ($(this).is(':checked')) {
-		$('#secatorModeContent').show();
-		$('#legacyModeContent').hide();
+// Wait for DOM and jQuery to be ready
+(function() {
+	let initialized = false;
+	
+	function initSecatorModeToggle() {
+		// Guard: prevent multiple initializations
+		if (initialized) {
+			return;
+		}
+		
+		// Check if jQuery is available
+		if (typeof $ === 'undefined') {
+			// Retry after a short delay if jQuery is not yet loaded
+			setTimeout(initSecatorModeToggle, 100);
+			return;
+		}
+
+		// Exit early if the Secator mode toggle is not present on this page
+		if (!$('#secatorMode').length) {
+			return;
+		}
+		
+		// Mark as initialized before attaching handlers
+		initialized = true;
+		
+		// Toggle between Secator and Legacy modes
+		$('#secatorMode').on('change', function() {
+			if ($(this).is(':checked')) {
+				$('#secatorModeContent').show();
+				$('#legacyModeContent').hide();
+			} else {
+				$('#secatorModeContent').hide();
+				$('#legacyModeContent').show();
+			}
+		});
+
+		// Clear workflow selection when tasks are selected
+		$('#secatorTasks input').on('change', function() {
+			if ($(this).is(':checked')) {
+				$('#secatorWorkflow').val('');
+			}
+		});
+
+		// Clear task selections when workflow is selected
+		$('#secatorWorkflow').on('change', function() {
+			if ($(this).val() !== '') {
+				$('#secatorTasks input').prop('checked', false);
+			}
+		});
+	}
+	
+	// Initialize when DOM is ready
+	if (document.readyState === 'loading') {
+		document.addEventListener('DOMContentLoaded', initSecatorModeToggle);
 	} else {
-		$('#secatorModeContent').hide();
-		$('#legacyModeContent').show();
+		// DOM is already ready, but wait for jQuery
+		if (typeof $ !== 'undefined' && typeof $.fn.ready === 'function') {
+			$(document).ready(initSecatorModeToggle);
+		} else {
+			initSecatorModeToggle();
+		}
 	}
-});
-
-// Clear workflow selection when tasks are selected
-$('#secatorTasks input').on('change', function() {
-	if ($(this).is(':checked')) {
-		$('#secatorWorkflow').val('');
-	}
-});
-
-// Clear task selections when workflow is selected
-$('#secatorWorkflow').on('change', function() {
-	if ($(this).val() !== '') {
-		$('#secatorTasks input').prop('checked', false);
-	}
-});
+})();
 </script>

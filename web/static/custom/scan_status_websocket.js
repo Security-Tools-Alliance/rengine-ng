@@ -3,11 +3,23 @@
  * Handles connections and updates for history.html, detail_scan.html, and right_bar.html
  */
 
-var scanStatusWebSockets = {};
-var scanStatusReconnectAttempts = {};
-var scanStatusReconnectTimeouts = {};
-var MAX_RECONNECT_ATTEMPTS = 10;
-var INITIAL_RECONNECT_DELAY = 1000; // 1 second
+// Prevent redeclaration if script is loaded multiple times
+(function() {
+    'use strict';
+    
+    // Check if already initialized
+    if (window.scanStatusWebSocketInitialized) {
+        return;
+    }
+    window.scanStatusWebSocketInitialized = true;
+    
+    const scanStatusWebSockets = {};
+    const scanStatusReconnectAttempts = {};
+    const scanStatusReconnectTimeouts = {};
+    const scanStatusOptions = {}; // Store options for each connection to share handlers
+    const scanStatusConnecting = {}; // Track connections being established to prevent duplicates
+    const MAX_RECONNECT_ATTEMPTS = 10;
+    const INITIAL_RECONNECT_DELAY = 1000; // 1 second
 
 /**
  * Connect to scan status WebSocket
@@ -18,10 +30,10 @@ var INITIAL_RECONNECT_DELAY = 1000; // 1 second
  * @param {function} options.updateDetail - Function to update detail page (for detail_scan.html)
  * @param {function} options.updateSidebar - Function to update sidebar (for right_bar.html)
  */
-function connectScanStatusWebSocket(scanId, projectSlug, options) {
-    var wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    var wsUrl;
-    var key;
+const connectScanStatusWebSocket = function(scanId, projectSlug, options) {
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    let wsUrl;
+    let key;
     
     if (scanId) {
         wsUrl = wsProtocol + '//' + window.location.host + '/ws/scan-status/' + scanId + '/';
@@ -34,66 +46,139 @@ function connectScanStatusWebSocket(scanId, projectSlug, options) {
         return;
     }
     
-    // Don't reconnect if already connected
-    if (scanStatusWebSockets[key] && scanStatusWebSockets[key].readyState === WebSocket.OPEN) {
+    // Check if connection already exists and is open or connecting
+    const existingSocket = scanStatusWebSockets[key];
+    if (existingSocket) {
+        const readyState = existingSocket.readyState;
+        // WebSocket.CONNECTING = 0, WebSocket.OPEN = 1, WebSocket.CLOSING = 2, WebSocket.CLOSED = 3
+        if (readyState === WebSocket.OPEN) {
+            // Merge options with existing connection
+            if (options) {
+                if (!scanStatusOptions[key]) {
+                    scanStatusOptions[key] = {};
+                }
+                // Merge update handlers
+                if (options.updateTable && !scanStatusOptions[key].updateTable) {
+                    scanStatusOptions[key].updateTable = options.updateTable;
+                }
+                if (options.updateDetail && !scanStatusOptions[key].updateDetail) {
+                    scanStatusOptions[key].updateDetail = options.updateDetail;
+                }
+                if (options.updateSidebar && !scanStatusOptions[key].updateSidebar) {
+                    scanStatusOptions[key].updateSidebar = options.updateSidebar;
+                }
+            }
+            return;
+        } else if (readyState === WebSocket.CONNECTING) {
+            // Connection is being established, merge options and wait for it to open
+            if (options) {
+                if (!scanStatusOptions[key]) {
+                    scanStatusOptions[key] = {};
+                }
+                // Merge update handlers
+                if (options.updateTable && !scanStatusOptions[key].updateTable) {
+                    scanStatusOptions[key].updateTable = options.updateTable;
+                }
+                if (options.updateDetail && !scanStatusOptions[key].updateDetail) {
+                    scanStatusOptions[key].updateDetail = options.updateDetail;
+                }
+                if (options.updateSidebar && !scanStatusOptions[key].updateSidebar) {
+                    scanStatusOptions[key].updateSidebar = options.updateSidebar;
+                }
+            }
+            return;
+        } else {
+            // Connection is CLOSING or CLOSED, close it properly
+            existingSocket.close();
+            scanStatusWebSockets[key] = null;
+        }
+    }
+    
+    // Check if a connection is being established (race condition protection)
+    if (scanStatusConnecting[key]) {
+        // Merge options and return
+        if (options) {
+            if (!scanStatusOptions[key]) {
+                scanStatusOptions[key] = {};
+            }
+            if (options.updateTable && !scanStatusOptions[key].updateTable) {
+                scanStatusOptions[key].updateTable = options.updateTable;
+            }
+            if (options.updateDetail && !scanStatusOptions[key].updateDetail) {
+                scanStatusOptions[key].updateDetail = options.updateDetail;
+            }
+            if (options.updateSidebar && !scanStatusOptions[key].updateSidebar) {
+                scanStatusOptions[key].updateSidebar = options.updateSidebar;
+            }
+        }
         return;
     }
     
-    // Close existing connection if any
-    if (scanStatusWebSockets[key]) {
-        scanStatusWebSockets[key].close();
-    }
+    // Mark that we're connecting
+    scanStatusConnecting[key] = true;
+    
+    // Store options for this connection
+    scanStatusOptions[key] = options || {};
     
     try {
-        var socket = new WebSocket(wsUrl);
+        const socket = new WebSocket(wsUrl);
         scanStatusWebSockets[key] = socket;
         scanStatusReconnectAttempts[key] = 0;
         
         socket.onopen = function(event) {
-            console.log('Scan status WebSocket connected: ' + key);
             scanStatusReconnectAttempts[key] = 0;
+            // Clear connecting flag
+            scanStatusConnecting[key] = false;
         };
         
         socket.onmessage = function(event) {
             try {
-                var data = JSON.parse(event.data);
-                handleScanStatusUpdate(data, options);
+                const data = JSON.parse(event.data);
+                // Use stored options for this connection
+                handleScanStatusUpdate(data, scanStatusOptions[key]);
             } catch (e) {
                 console.error('Error parsing WebSocket message:', e);
             }
         };
         
-        socket.onerror = function(error) {
-            console.error('Scan status WebSocket error:', error);
-        };
-        
         socket.onclose = function(event) {
-            console.log('Scan status WebSocket closed: ' + key);
             scanStatusWebSockets[key] = null;
+            // Clear connecting flag
+            scanStatusConnecting[key] = false;
             
             // Attempt to reconnect if not a normal closure
             if (event.code !== 1000 && scanStatusReconnectAttempts[key] < MAX_RECONNECT_ATTEMPTS) {
-                var delay = INITIAL_RECONNECT_DELAY * Math.pow(2, scanStatusReconnectAttempts[key]);
+                const delay = INITIAL_RECONNECT_DELAY * Math.pow(2, scanStatusReconnectAttempts[key]);
                 scanStatusReconnectAttempts[key]++;
                 
-                console.log('Reconnecting scan status WebSocket in ' + delay + 'ms (attempt ' + scanStatusReconnectAttempts[key] + ')');
-                
                 scanStatusReconnectTimeouts[key] = setTimeout(function() {
-                    connectScanStatusWebSocket(scanId, projectSlug, options);
+                    connectScanStatusWebSocket(scanId, projectSlug, scanStatusOptions[key]);
                 }, delay);
+            } else {
+                // Clean up options if connection is permanently closed
+                delete scanStatusOptions[key];
+                delete scanStatusConnecting[key];
             }
         };
+        
+        socket.onerror = function(error) {
+            console.error('Scan status WebSocket error for', key + ':', error);
+            // Clear connecting flag on error
+            scanStatusConnecting[key] = false;
+        };
     } catch (e) {
-        console.error('Error creating scan status WebSocket:', e);
+        console.error('Error creating scan status WebSocket for', key + ':', e);
+        // Clear connecting flag on exception
+        scanStatusConnecting[key] = false;
     }
-}
+};
 
 /**
  * Handle scan status update from WebSocket
  * @param {object} data - Update data from WebSocket
  * @param {object} options - Update handler options
  */
-function handleScanStatusUpdate(data, options) {
+const handleScanStatusUpdate = function(data, options) {
     if (!data || !data.scan_id) {
         return;
     }
@@ -128,21 +213,21 @@ function handleScanStatusUpdate(data, options) {
             updateRightSidebar(data);
         }
     }
-}
+};
 
 /**
  * Update a row in DataTable (for history.html)
  * @param {DataTable} table - DataTable instance
  * @param {object} data - Update data
  */
-function updateScanRowInTable(table, data) {
+const updateScanRowInTable = function(table, data) {
     if (!table || !data || !data.scan_id) {
         return;
     }
     
     try {
         // Find the row directly in the DOM by data-scan-id attribute
-        var rowNode = document.querySelector('tr[data-scan-id="' + data.scan_id + '"]');
+        const rowNode = document.querySelector('tr[data-scan-id="' + data.scan_id + '"]');
         
         if (!rowNode) {
             // Row not found, might be a new scan that's not yet in the table
@@ -153,7 +238,7 @@ function updateScanRowInTable(table, data) {
                 if (!window._scanTableReloadTimeout) {
                     window._scanTableReloadTimeout = {};
                 }
-                var timeoutKey = 'table_reload';
+                const timeoutKey = 'table_reload';
                 if (window._scanTableReloadTimeout[timeoutKey]) {
                     clearTimeout(window._scanTableReloadTimeout[timeoutKey]);
                 }
@@ -167,7 +252,7 @@ function updateScanRowInTable(table, data) {
                 if (!window._scanTablePageReloadTimeout) {
                     window._scanTablePageReloadTimeout = {};
                 }
-                var timeoutKey = 'page_reload';
+                const timeoutKey = 'page_reload';
                 if (window._scanTablePageReloadTimeout[timeoutKey]) {
                     clearTimeout(window._scanTablePageReloadTimeout[timeoutKey]);
                 }
@@ -180,29 +265,29 @@ function updateScanRowInTable(table, data) {
         }
         
         // Update status cell using class selector
-        var statusCell = $(rowNode).find('.scan-status-cell');
+        const statusCell = $(rowNode).find('.scan-status-cell');
         if (statusCell.length) {
             statusCell.html(getStatusBadgeHtml(data.status, data.current_task, data.scan_type));
         }
         
         // Update progress cell using class selector
-        var progressCell = $(rowNode).find('.scan-progress-cell');
+        const progressCell = $(rowNode).find('.scan-progress-cell');
         if (progressCell.length) {
             progressCell.html(getProgressBarHtml(data.status, data.progress));
         }
         
         // Update scan engine cell if Secator scan
         if (data.scan_type === 'secator' && data.runners && data.runners.length > 0) {
-            var engineCell = $(rowNode).find('.scan-engine-cell');
+            const engineCell = $(rowNode).find('.scan-engine-cell');
             if (engineCell.length) {
-                var mainRunner = data.runners.find(function(r) {
+                let mainRunner = data.runners.find(function(r) {
                     return r.runner_type === 'workflow' || r.runner_type === 'scan';
                 });
                 if (!mainRunner && data.runners.length > 0) {
                     mainRunner = data.runners[0];
                 }
                 if (mainRunner) {
-                    var engineHtml = '<span class="badge badge-soft-primary">Secator ' + 
+                    const engineHtml = '<span class="badge badge-soft-primary">Secator ' + 
                         escapeHtml(mainRunner.runner_type.charAt(0).toUpperCase() + mainRunner.runner_type.slice(1)) + 
                         '</span><br><span class="badge badge-soft-info mt-1">' + 
                         escapeHtml(mainRunner.runner_name || '') + '</span>';
@@ -213,19 +298,19 @@ function updateScanRowInTable(table, data) {
         
         // Update summary cell with findings counts
         if (data.subdomain_count !== undefined || data.endpoint_count !== undefined || data.vulnerability_count !== undefined) {
-            var summaryCell = $(rowNode).find('.scan-summary-cell');
+            const summaryCell = $(rowNode).find('.scan-summary-cell');
             if (summaryCell.length) {
-                var subdomainCount = data.subdomain_count !== undefined ? data.subdomain_count : 0;
-                var endpointCount = data.endpoint_count !== undefined ? data.endpoint_count : 0;
-                var vulnerabilityCount = data.vulnerability_count !== undefined ? data.vulnerability_count : 0;
+                const subdomainCount = data.subdomain_count !== undefined ? data.subdomain_count : 0;
+                const endpointCount = data.endpoint_count !== undefined ? data.endpoint_count : 0;
+                const vulnerabilityCount = data.vulnerability_count !== undefined ? data.vulnerability_count : 0;
                 
                 // Build tooltip for vulnerabilities if we have severity counts
-                var vulnTooltip = 'Vulnerabilities';
+                let vulnTooltip = 'Vulnerabilities';
                 if (data.critical_count !== undefined && data.high_count !== undefined && data.medium_count !== undefined) {
                     vulnTooltip = data.critical_count + ' Critical, ' + data.high_count + ' High, ' + data.medium_count + ' Medium Vulnerabilities';
                 }
                 
-                var summaryHtml = '<span class="badge badge-pills bg-info mt-1" data-toggle="tooltip" data-placement="top" title="Subdomains">' + 
+                const summaryHtml = '<span class="badge badge-pills bg-info mt-1" data-toggle="tooltip" data-placement="top" title="Subdomains">' + 
                     formatNumber(subdomainCount) + '</span>' +
                     '<span class="badge badge-pills bg-warning mt-1" data-toggle="tooltip" data-placement="top" title="Endpoints">' + 
                     formatNumber(endpointCount) + '</span>' +
@@ -242,37 +327,59 @@ function updateScanRowInTable(table, data) {
     } catch (e) {
         console.error('Error updating scan row in table:', e);
     }
-}
+};
 
 /**
  * Update detail scan page (for detail_scan.html)
  * @param {object} data - Update data
  */
-function updateScanDetailPage(data) {
+const updateScanDetailPage = function(data) {
     if (!data || !data.scan_id) {
         return;
     }
     
     try {
-        var scanContainer = document.querySelector('[data-scan-id="' + data.scan_id + '"]');
+        const scanContainer = document.querySelector('[data-scan-id="' + data.scan_id + '"]');
         if (!scanContainer) {
             return;
         }
         
         // Update status badge
-        var statusElement = scanContainer.querySelector('.scan-status-badge');
+        const statusElement = scanContainer.querySelector('.scan-status-badge');
         if (statusElement) {
-            var statusHtml = getStatusBadgeHtmlForDetail(data.status, data.current_task);
+            const statusHtml = getStatusBadgeHtmlForDetail(data.status, data.current_task);
             statusElement.innerHTML = statusHtml;
         }
         
-        // Update progress bar
-        var progressElement = scanContainer.querySelector('.scan-progress-bar');
+        // Update progress bar - search within scanContainer and its parent
+        let progressElement = scanContainer.querySelector('.scan-progress-bar');
+        if (!progressElement) {
+            // Fallback: search in the parent card-body
+            const cardBody = scanContainer.closest('.card-body');
+            if (cardBody) {
+                progressElement = cardBody.querySelector('.scan-progress-bar');
+            }
+        }
+        if (!progressElement) {
+            // Last fallback: search in the entire document for this scan's progress bar
+            const allProgressBars = document.querySelectorAll('.scan-progress-bar');
+            for (let i = 0; i < allProgressBars.length; i++) {
+                const bar = allProgressBars[i];
+                // Check if this progress bar is within the same card-body as scanContainer
+                const barCardBody = bar.closest('.card-body');
+                const scanCardBody = scanContainer.closest('.card-body');
+                if (barCardBody === scanCardBody) {
+                    progressElement = bar;
+                    break;
+                }
+            }
+        }
+        
         if (progressElement) {
-            var progress = data.progress || 0;
+            const progress = data.progress || 0;
             
             // Determine width and classes based on status (same logic as getProgressBarHtml)
-            var width = progress;
+            let width = progress;
             if (data.status === -1) {
                 width = 10;
             } else if (data.status === 2) {
@@ -305,7 +412,7 @@ function updateScanDetailPage(data) {
         }
         
         // Update current task
-        var taskElement = scanContainer.querySelector('.scan-current-task');
+        const taskElement = scanContainer.querySelector('.scan-current-task');
         if (taskElement) {
             if (data.current_task && (data.status === 1 || data.status === 4)) {
                 taskElement.textContent = data.current_task;
@@ -318,13 +425,13 @@ function updateScanDetailPage(data) {
         // Update stats panels
         // Subdomains panel
         if (data.subdomain_count !== undefined || data.alive_count !== undefined) {
-            var subdomainPanel = document.querySelector('[data-stats-panel="subdomains"]');
+            const subdomainPanel = document.querySelector('[data-stats-panel="subdomains"]');
             if (subdomainPanel) {
-                var subdomainCountElement = subdomainPanel.querySelector('[data-stat="subdomain-count"]');
+                const subdomainCountElement = subdomainPanel.querySelector('[data-stat="subdomain-count"]');
                 if (subdomainCountElement && data.subdomain_count !== undefined) {
                     updateCounterupElement(subdomainCountElement, data.subdomain_count);
                 }
-                var aliveCountElement = subdomainPanel.querySelector('[data-stat="alive-count"]');
+                const aliveCountElement = subdomainPanel.querySelector('[data-stat="alive-count"]');
                 if (aliveCountElement && data.alive_count !== undefined) {
                     aliveCountElement.textContent = 'Alive Subdomains: ' + formatNumber(data.alive_count);
                 }
@@ -333,13 +440,13 @@ function updateScanDetailPage(data) {
         
         // Endpoints panel
         if (data.endpoint_count !== undefined || data.endpoint_alive_count !== undefined) {
-            var endpointPanel = document.querySelector('[data-stats-panel="endpoints"]');
+            const endpointPanel = document.querySelector('[data-stats-panel="endpoints"]');
             if (endpointPanel) {
-                var endpointCountElement = endpointPanel.querySelector('[data-stat="endpoint-count"]');
+                const endpointCountElement = endpointPanel.querySelector('[data-stat="endpoint-count"]');
                 if (endpointCountElement && data.endpoint_count !== undefined) {
                     updateCounterupElement(endpointCountElement, data.endpoint_count);
                 }
-                var endpointAliveCountElement = endpointPanel.querySelector('[data-stat="endpoint-alive-count"]');
+                const endpointAliveCountElement = endpointPanel.querySelector('[data-stat="endpoint-alive-count"]');
                 if (endpointAliveCountElement && data.endpoint_alive_count !== undefined) {
                     endpointAliveCountElement.textContent = 'Alive Endpoints: ' + formatNumber(data.endpoint_alive_count);
                 }
@@ -348,26 +455,26 @@ function updateScanDetailPage(data) {
         
         // Vulnerabilities panel
         if (data.vulnerability_count !== undefined || data.critical_count !== undefined) {
-            var vulnPanel = document.querySelector('[data-stats-panel="vulnerabilities"]');
+            const vulnPanel = document.querySelector('[data-stats-panel="vulnerabilities"]');
             if (vulnPanel) {
-                var vulnCountElement = vulnPanel.querySelector('[data-stat="vulnerability-count"]');
+                const vulnCountElement = vulnPanel.querySelector('[data-stat="vulnerability-count"]');
                 if (vulnCountElement && data.vulnerability_count !== undefined) {
                     updateCounterupElement(vulnCountElement, data.vulnerability_count);
                 }
                 
                 // Update severity counts
-                var severityContainer = vulnPanel.querySelector('[data-stat="vulnerability-severity"]');
+                const severityContainer = vulnPanel.querySelector('[data-stat="vulnerability-severity"]');
                 if (severityContainer) {
-                    var totalVulnCount = data.vulnerability_count !== undefined ? data.vulnerability_count : 0;
+                    const totalVulnCount = data.vulnerability_count !== undefined ? data.vulnerability_count : 0;
                     if (totalVulnCount > 0) {
-                        var criticalCount = data.critical_count !== undefined ? data.critical_count : 0;
-                        var highCount = data.high_count !== undefined ? data.high_count : 0;
-                        var mediumCount = data.medium_count !== undefined ? data.medium_count : 0;
-                        var lowCount = data.low_count !== undefined ? data.low_count : 0;
-                        var infoCount = data.info_count !== undefined ? data.info_count : 0;
-                        var unknownCount = data.unknown_count !== undefined ? data.unknown_count : 0;
+                        const criticalCount = data.critical_count !== undefined ? data.critical_count : 0;
+                        const highCount = data.high_count !== undefined ? data.high_count : 0;
+                        const mediumCount = data.medium_count !== undefined ? data.medium_count : 0;
+                        const lowCount = data.low_count !== undefined ? data.low_count : 0;
+                        const infoCount = data.info_count !== undefined ? data.info_count : 0;
+                        const unknownCount = data.unknown_count !== undefined ? data.unknown_count : 0;
                         
-                        var severityHtml = '<p class="text-muted mb-0">' +
+                        const severityHtml = '<p class="text-muted mb-0">' +
                             '<span class="w-title text-danger" data-stat="critical-count">' + formatNumber(criticalCount) + '</span> Critical, ' +
                             '<span class="w-title text-danger" data-stat="high-count">' + formatNumber(highCount) + '</span> High, ' +
                             '<span class="w-title text-danger" data-stat="medium-count">' + formatNumber(mediumCount) + '</span> Medium</span>' +
@@ -386,31 +493,37 @@ function updateScanDetailPage(data) {
         
         // Update scan engine/name for Secator scans
         if (data.scan_type === 'secator' && data.runners && data.runners.length > 0) {
-            var mainRunner = data.runners.find(function(r) {
+            let mainRunner = data.runners.find(function(r) {
                 return r.runner_type === 'workflow' || r.runner_type === 'scan';
             });
             if (!mainRunner && data.runners.length > 0) {
                 mainRunner = data.runners[0];
             }
             if (mainRunner) {
-                // Find the scan engine element (h6 with "Scan Engine" text)
-                var scanEngineSection = scanContainer.parentElement;
+                // Find the scan engine element (h6 with "Scan Engine" or "Scan Name" text)
+                // scanContainer is the div with data-scan-id, its parent is the card-body
+                const scanEngineSection = scanContainer.parentElement;
                 if (scanEngineSection) {
-                    var scanEngineLabel = scanEngineSection.querySelector('h6:contains("Scan Engine")');
-                    if (!scanEngineLabel) {
-                        // Try to find by text content
-                        var h6Elements = scanEngineSection.querySelectorAll('h6');
-                        for (var i = 0; i < h6Elements.length; i++) {
-                            if (h6Elements[i].textContent.includes('Scan Engine')) {
-                                scanEngineLabel = h6Elements[i];
-                                break;
-                            }
+                    // querySelector doesn't support :contains(), so we need to search manually
+                    const h6Elements = scanEngineSection.querySelectorAll('h6');
+                    let scanEngineLabel = null;
+                    for (let i = 0; i < h6Elements.length; i++) {
+                        const text = h6Elements[i].textContent.trim();
+                        if (text.indexOf('Scan Engine') !== -1 || text.indexOf('Scan Name') !== -1) {
+                            scanEngineLabel = h6Elements[i];
+                            break;
                         }
                     }
                     if (scanEngineLabel) {
-                        // Change label to "Scan Name" or keep "Scan Engine"
-                        var nextElement = scanEngineLabel.nextElementSibling;
-                        if (nextElement && nextElement.tagName === 'SPAN') {
+                        // Find the next element after h6 (should be a span or p with the badge)
+                        const nextElement = scanEngineLabel.nextElementSibling;
+                        // Also check for the element with id="scan-name-display" if it exists
+                        const scanNameDisplay = scanEngineSection.querySelector('#scan-name-display');
+                        if (scanNameDisplay) {
+                            // Update the scan name display element
+                            scanNameDisplay.textContent = mainRunner.runner_name || '';
+                        } else if (nextElement && (nextElement.tagName === 'SPAN' || nextElement.tagName === 'P')) {
+                            // Update the next element (span or p)
                             nextElement.innerHTML = '<span class="badge badge-soft-primary">Secator ' + 
                                 escapeHtml(mainRunner.runner_type.charAt(0).toUpperCase() + mainRunner.runner_type.slice(1)) + 
                                 '</span><br><span class="badge badge-soft-info mt-1">' + 
@@ -421,92 +534,178 @@ function updateScanDetailPage(data) {
             }
         }
         
-        // Update timeline if runners are available
-        if (data.runners && data.runners.length > 0) {
+        // Update timeline if timeline data is available
+        if (data.timeline && data.timeline.length > 0) {
+            updateScanTimeline(data);
+        } else if (data.runners && data.runners.length > 0) {
             updateScanTimeline(data);
         }
     } catch (e) {
         console.error('Error updating scan detail page:', e);
     }
-}
+};
 
 /**
  * Update scan timeline with runners (for detail_scan.html)
- * @param {object} data - Update data with runners
+ * @param {object} data - Update data with runners or timeline
  */
-function updateScanTimeline(data) {
-    if (!data || !data.runners || !data.scan_id) {
+const updateScanTimeline = function(data) {
+    if (!data || !data.scan_id) {
         return;
     }
     
     try {
-        var timelineContainer = document.querySelector('[data-scan-id="' + data.scan_id + '"] .scan-timeline');
+        // Try to find timeline container by data-scan-id attribute
+        let timelineContainer = document.querySelector('.scan-timeline[data-scan-id="' + data.scan_id + '"]');
+        if (!timelineContainer) {
+            // Fallback: find by parent container with data-scan-id
+            const scanContainer = document.querySelector('[data-scan-id="' + data.scan_id + '"]');
+            if (scanContainer) {
+                timelineContainer = scanContainer.querySelector('.scan-timeline');
+            }
+        }
         if (!timelineContainer) {
             return;
         }
         
-        // Clear existing timeline items for this scan
-        var existingItems = timelineContainer.querySelectorAll('[data-runner-id]');
-        existingItems.forEach(function(item) {
-            item.remove();
-        });
+        // Find the ul element inside track-order-list
+        const trackOrderList = timelineContainer.querySelector('.track-order-list');
+        if (!trackOrderList) {
+            return;
+        }
         
-        // Add new timeline items
-        var timelineList = timelineContainer.querySelector('ul');
+        const timelineList = trackOrderList.querySelector('ul.list-unstyled');
         if (!timelineList) {
             return;
         }
         
-        data.runners.forEach(function(runner) {
-            var listItem = document.createElement('li');
-            listItem.setAttribute('data-runner-id', runner.id);
-            listItem.className = runner.status_code === 2 ? 'completed' : (runner.status_code === 1 ? 'running' : 'pending');
+        // Clear existing timeline items for Secator scans (those with data-runner-id)
+        const existingItems = timelineList.querySelectorAll('[data-runner-id]');
+        existingItems.forEach(function(item) {
+            item.remove();
+        });
+        
+        // Use timeline data if available (preferred), otherwise use runners
+        const itemsToRender = data.timeline || [];
+        
+        if (itemsToRender.length === 0 && data.runners) {
+            // Fallback: convert runners to timeline format
+            data.runners.forEach(function(runner) {
+                const timelineItem = {
+                    id: runner.id,
+                    title: (runner.runner_type.charAt(0).toUpperCase() + runner.runner_type.slice(1)) + ': ' + runner.runner_name,
+                    name: runner.runner_name,
+                    status: runner.status_code,
+                    time: runner.created_at || runner.updated_at,
+                    type: runner.runner_type
+                };
+                itemsToRender.push(timelineItem);
+            });
+        }
+        
+        // Sort by time (newest first)
+        itemsToRender.sort(function(a, b) {
+            const timeA = new Date(a.time || 0).getTime();
+            const timeB = new Date(b.time || 0).getTime();
+            return timeB - timeA;
+        });
+        
+        // Add new timeline items
+        itemsToRender.forEach(function(item) {
+            const listItem = document.createElement('li');
+            listItem.setAttribute('data-runner-id', item.id);
             
-            var statusClass = runner.status_code === 0 ? 'badge-soft-danger' : 
-                             (runner.status_code === 1 ? 'badge-soft-warning' : 'badge-soft-success');
-            var statusText = runner.status_code === 0 ? 'Failed' : 
-                            (runner.status_code === 1 ? 'In progress' : 'Completed');
+            // Determine class based on status
+            // status: -1 = PENDING, 0 = FAILURE, 1 = RUNNING, 2 = SUCCESS
+            if (item.status === 2) {
+                listItem.className = 'completed';
+            } else if (item.status === 1) {
+                listItem.className = 'running';
+            } else {
+                listItem.className = 'pending';
+            }
+            
+            // Determine badge class and text
+            let statusClass = 'badge-soft-secondary';
+            let statusText = 'Pending';
+            if (item.status === 0 || item.status === -1) {
+                statusClass = 'badge-soft-danger';
+                statusText = item.status === 0 ? 'Failed' : 'Pending';
+            } else if (item.status === 1) {
+                statusClass = 'badge-soft-warning';
+                statusText = 'In progress';
+            } else if (item.status === 2) {
+                statusClass = 'badge-soft-success';
+                statusText = 'Completed';
+            }
+            
+            // Format time
+            let timeText = '';
+            if (item.time) {
+                try {
+                    const timeDate = new Date(item.time);
+                    const now = new Date();
+                    const diffMs = now - timeDate;
+                    const diffSec = Math.floor(diffMs / 1000);
+                    const diffMin = Math.floor(diffSec / 60);
+                    const diffHour = Math.floor(diffMin / 60);
+                    
+                    if (diffSec < 60) {
+                        timeText = diffSec + ' seconds ago';
+                    } else if (diffMin < 60) {
+                        timeText = diffMin + ' minutes ago';
+                    } else if (diffHour < 24) {
+                        timeText = diffHour + ' hours ago';
+                    } else {
+                        timeText = timeDate.toLocaleString();
+                    }
+                } catch (e) {
+                    timeText = item.time;
+                }
+            }
             
             listItem.innerHTML = '<h5 class="mt-0 mb-1">' + 
-                escapeHtml(runner.runner_type + ': ' + runner.runner_name) +
+                escapeHtml(item.title || item.name) +
                 '<span class="float-end badge ' + statusClass + '">' + statusText + 
-                (runner.status_code === 1 ? '<span class="active-dot dot"></span>' : '') +
+                (item.status === 1 ? '<span class="active-dot dot"></span>' : '') +
                 '</span></h5>' +
-                '<p class="text-muted">' + (runner.elapsed || '0s') + ' ago</p>';
+                '<p class="text-muted">' + timeText + 
+                (item.time ? '<br><small class="text-muted">' + escapeHtml(item.time) + '</small>' : '') +
+                '</p>';
             
             timelineList.appendChild(listItem);
         });
     } catch (e) {
         console.error('Error updating scan timeline:', e);
     }
-}
+};
 
 /**
  * Update right sidebar (for right_bar.html)
  * @param {object} data - Update data
  */
-function updateRightSidebar(data) {
+const updateRightSidebar = function(data) {
     if (!data || !data.scan_id) {
         return;
     }
     
     try {
         // Check if scan is completed (status 2 = SUCCESS, 3 = ABORTED, 0 = FAILED)
-        var isCompleted = data.status === 2 || data.status === 3 || data.status === 0;
+        const isCompleted = data.status === 2 || data.status === 3 || data.status === 0;
         
         // Find scan card in sidebar
-        var scanCard = document.querySelector('#scan-card-' + data.scan_id);
+        const scanCard = document.querySelector('#scan-card-' + data.scan_id);
         
         // If scan card doesn't exist, it might be a new scan - reload sidebar immediately
         if (!scanCard && typeof getScanStatusSidebar === 'function') {
             // Get project slug from current URL
-            var projectSlug = null;
-            var urlMatch = window.location.pathname.match(/\/scan\/([^\/]+)\//);
+            let projectSlug = null;
+            const urlMatch = window.location.pathname.match(/\/scan\/([^\/]+)\//);
             if (urlMatch) {
                 projectSlug = urlMatch[1];
             } else {
                 // Try to get from data attribute if available
-                var projectElement = document.querySelector('[data-project-slug]');
+                const projectElement = document.querySelector('[data-project-slug]');
                 if (projectElement) {
                     projectSlug = projectElement.getAttribute('data-project-slug');
                 }
@@ -514,9 +713,9 @@ function updateRightSidebar(data) {
             
             if (projectSlug) {
                 // Reload sidebar immediately for new scans
-                var endpointUrl = '/api/scan_status/';
-                var stopScanUrl = '/api/stop_scan/';
-                var fetchSubscanUrl = '/api/fetch_subscan_results/';
+                const endpointUrl = '/api/scan_status/';
+                const stopScanUrl = '/api/stop_scan/';
+                const fetchSubscanUrl = '/api/fetch_subscan_results/';
                 getScanStatusSidebar(endpointUrl, stopScanUrl, fetchSubscanUrl, projectSlug, false);
             }
             return;
@@ -526,23 +725,23 @@ function updateRightSidebar(data) {
             // If scan is completed, remove it from "Currently Scanning" section
             if (isCompleted) {
                 // Check if the card is in the "Currently Scanning" section
-                var currentlyScanningContainer = document.getElementById('currently_scanning');
+                const currentlyScanningContainer = document.getElementById('currently_scanning');
                 if (currentlyScanningContainer && currentlyScanningContainer.contains(scanCard)) {
                     // Remove the card from "Currently Scanning"
                     scanCard.remove();
                     
                     // Update the count of currently scanning scans
                     // Count remaining scan cards (excluding alert messages)
-                    var remainingScanCards = currentlyScanningContainer.querySelectorAll('.mini-card');
-                    var remainingScans = remainingScanCards.length;
+                    const remainingScanCards = currentlyScanningContainer.querySelectorAll('.mini-card');
+                    const remainingScans = remainingScanCards.length;
                     
                     // Update current_scan_count text (the badge inside h5)
-                    var currentScanCountElement = document.getElementById('current_scan_count');
+                    const currentScanCountElement = document.getElementById('current_scan_count');
                     if (currentScanCountElement) {
                         if (remainingScans > 0) {
                             currentScanCountElement.textContent = remainingScans + ' Scans Currently Running';
                             // Make sure the parent h5 is visible
-                            var parentH5 = currentScanCountElement.closest('h5');
+                            const parentH5 = currentScanCountElement.closest('h5');
                             if (parentH5) {
                                 parentH5.style.display = '';
                             }
@@ -550,7 +749,7 @@ function updateRightSidebar(data) {
                             // Clear the count element when no scans are running
                             currentScanCountElement.textContent = '';
                             // Hide the parent h5 element
-                            var parentH5 = currentScanCountElement.closest('h5');
+                            const parentH5 = currentScanCountElement.closest('h5');
                             if (parentH5) {
                                 parentH5.style.display = 'none';
                             }
@@ -558,7 +757,7 @@ function updateRightSidebar(data) {
                     }
                     
                     // Update current_scan_counter badge if it exists (separate badge element)
-                    var currentScanCounterElement = document.getElementById('current_scan_counter');
+                    const currentScanCounterElement = document.getElementById('current_scan_counter');
                     if (currentScanCounterElement) {
                         // Always display the counter, set to 0 if no scans
                         currentScanCounterElement.textContent = remainingScans;
@@ -568,8 +767,8 @@ function updateRightSidebar(data) {
                     // Show "No Scans are currently running" message if container is empty
                     if (remainingScans === 0) {
                         // Check if there's already an alert or if container is empty
-                        var hasAlert = currentlyScanningContainer.querySelector('.alert');
-                        var hasH5 = currentlyScanningContainer.querySelector('h5');
+                        const hasAlert = currentlyScanningContainer.querySelector('.alert');
+                        const hasH5 = currentlyScanningContainer.querySelector('h5');
                         if (!hasAlert && (!hasH5 || currentlyScanningContainer.children.length <= 1)) {
                             currentlyScanningContainer.innerHTML = '<div class="alert alert-info" role="alert">No Scans are currently running.</div>';
                         }
@@ -579,10 +778,10 @@ function updateRightSidebar(data) {
                     // This ensures the scan appears in the completed section with all details
                     if (typeof getScanStatusSidebar === 'function') {
                         // Get project slug from current URL or from the scan card link
-                        var projectSlug = null;
-                        var cardLink = scanCard.querySelector('a[href*="/scan/"]');
+                        let projectSlug = null;
+                        const cardLink = scanCard.querySelector('a[href*="/scan/"]');
                         if (cardLink) {
-                            var hrefMatch = cardLink.getAttribute('href').match(/\/scan\/([^\/]+)\//);
+                            const hrefMatch = cardLink.getAttribute('href').match(/\/scan\/([^\/]+)\//);
                             if (hrefMatch) {
                                 projectSlug = hrefMatch[1];
                             }
@@ -590,11 +789,11 @@ function updateRightSidebar(data) {
                         
                         // Fallback: try to get from URL or data attribute
                         if (!projectSlug) {
-                            var urlMatch = window.location.pathname.match(/\/scan\/([^\/]+)\//);
+                            const urlMatch = window.location.pathname.match(/\/scan\/([^\/]+)\//);
                             if (urlMatch) {
                                 projectSlug = urlMatch[1];
                             } else {
-                                var projectElement = document.querySelector('[data-project-slug]');
+                                const projectElement = document.querySelector('[data-project-slug]');
                                 if (projectElement) {
                                     projectSlug = projectElement.getAttribute('data-project-slug');
                                 }
@@ -603,9 +802,9 @@ function updateRightSidebar(data) {
                         
                         if (projectSlug) {
                             // Reload sidebar immediately (no delay) to show completed scan
-                            var endpointUrl = '/api/scan_status/';
-                            var stopScanUrl = '/api/stop_scan/';
-                            var fetchSubscanUrl = '/api/fetch_subscan_results/';
+                            const endpointUrl = '/api/scan_status/';
+                            const stopScanUrl = '/api/stop_scan/';
+                            const fetchSubscanUrl = '/api/fetch_subscan_results/';
                             getScanStatusSidebar(endpointUrl, stopScanUrl, fetchSubscanUrl, projectSlug, false);
                         }
                     }
@@ -613,9 +812,9 @@ function updateRightSidebar(data) {
             } else {
                 // Scan is still running, update the card content
                 // Update status badge
-                var statusBadge = scanCard.querySelector('.scan-status');
+                const statusBadge = scanCard.querySelector('.scan-status');
                 if (statusBadge) {
-                    var statusText = '';
+                    let statusText = '';
                     if (data.status === 1) {
                         statusText = 'Scanning';
                     } else if (data.status === 4) {
@@ -627,14 +826,14 @@ function updateRightSidebar(data) {
                 }
                 
                 // Update progress bar
-                var progressBar = scanCard.querySelector('.scan-progress-bar');
+                const progressBar = scanCard.querySelector('.scan-progress-bar');
                 if (progressBar) {
-                    var progress = data.progress || 0;
+                    const progress = data.progress || 0;
                     progressBar.style.width = progress + '%';
                     progressBar.setAttribute('aria-valuenow', progress);
                     
                     // Update progress badge
-                    var progressBadge = scanCard.querySelector('.badge-soft-primary.float-end');
+                    const progressBadge = scanCard.querySelector('.badge-soft-primary.float-end');
                     if (progressBadge && progressBadge.textContent.includes('%')) {
                         progressBadge.textContent = progress + '%';
                     }
@@ -642,15 +841,15 @@ function updateRightSidebar(data) {
                 
                 // Update current task display
                 if (data.current_task) {
-                    var cardHeader = scanCard.querySelector('.card-header');
+                    const cardHeader = scanCard.querySelector('.card-header');
                     if (cardHeader) {
                         // Check if current task element exists
-                        var currentTaskElement = cardHeader.querySelector('small.text-muted.font-weight-bold');
+                        const currentTaskElement = cardHeader.querySelector('small.text-muted.font-weight-bold');
                         if (currentTaskElement) {
                             currentTaskElement.textContent = data.current_task;
                         } else {
                             // Add current task element if it doesn't exist
-                            var taskElement = document.createElement('small');
+                            const taskElement = document.createElement('small');
                             taskElement.className = 'text-muted font-weight-bold';
                             taskElement.textContent = data.current_task;
                             taskElement.style.display = 'block';
@@ -663,7 +862,7 @@ function updateRightSidebar(data) {
     } catch (e) {
         console.error('Error updating right sidebar:', e);
     }
-}
+};
 
 /**
  * Get HTML for status badge (for table)
@@ -672,10 +871,10 @@ function updateRightSidebar(data) {
  * @param {string} scanType - Scan type (legacy or secator)
  * @returns {string} HTML for status badge
  */
-function getStatusBadgeHtml(status, currentTask, scanType) {
-    var badgeClass = 'badge-soft-';
-    var badgeText = '';
-    var spinner = '';
+const getStatusBadgeHtml = function(status, currentTask, scanType) {
+    let badgeClass = 'badge-soft-';
+    let badgeText = '';
+    let spinner = '';
     
     if (status === -1) {
         badgeClass += 'warning';
@@ -703,14 +902,14 @@ function getStatusBadgeHtml(status, currentTask, scanType) {
         badgeText = 'Unknown';
     }
     
-    var html = '<span class="badge ' + badgeClass + '">' + spinner + badgeText + '</span>';
+    let html = '<span class="badge ' + badgeClass + '">' + spinner + badgeText + '</span>';
     
     if (currentTask && (status === 1 || status === 4)) {
         html += '<br><small class="text-muted font-weight-bold">' + escapeHtml(currentTask) + '</small>';
     }
     
     return html;
-}
+};
 
 /**
  * Get HTML for status badge (for detail page)
@@ -718,10 +917,10 @@ function getStatusBadgeHtml(status, currentTask, scanType) {
  * @param {string} currentTask - Current task name
  * @returns {string} HTML for status badge
  */
-function getStatusBadgeHtmlForDetail(status, currentTask) {
-    var iconClass = 'mdi mdi-circle text-';
-    var badgeClass = 'badge-soft-';
-    var badgeText = '';
+const getStatusBadgeHtmlForDetail = function(status, currentTask) {
+    let iconClass = 'mdi mdi-circle text-';
+    let badgeClass = 'badge-soft-';
+    let badgeText = '';
     
     if (status === -1) {
         iconClass += 'warning';
@@ -753,14 +952,14 @@ function getStatusBadgeHtmlForDetail(status, currentTask) {
         badgeText = 'Unknown';
     }
     
-    var html = '<span class="' + iconClass + '"></span> <span class="badge ' + badgeClass + '">' + badgeText + '</span>';
+    let html = '<span class="' + iconClass + '"></span> <span class="badge ' + badgeClass + '">' + badgeText + '</span>';
     
     if (currentTask && (status === 1 || status === 4)) {
         html += '<br><small class="text-muted font-weight-bold scan-current-task">' + escapeHtml(currentTask) + '</small>';
     }
     
     return html;
-}
+};
 
 /**
  * Get HTML for progress bar
@@ -768,9 +967,9 @@ function getStatusBadgeHtmlForDetail(status, currentTask) {
  * @param {number} progress - Progress percentage
  * @returns {string} HTML for progress bar
  */
-function getProgressBarHtml(status, progress) {
-    var barClass = 'progress-bar';
-    var width = progress || 0;
+const getProgressBarHtml = function(status, progress) {
+    let barClass = 'progress-bar';
+    let width = progress || 0;
     
     if (status === -1) {
         barClass += ' bg-warning';
@@ -796,7 +995,7 @@ function getProgressBarHtml(status, progress) {
            '<div class="' + barClass + '" role="progressbar" style="width: ' + width + '%" ' +
            'aria-valuenow="' + width + '" aria-valuemin="0" aria-valuemax="100"></div>' +
            '</div>';
-}
+};
 
 /**
  * Escape HTML to prevent XSS
@@ -808,25 +1007,25 @@ function getProgressBarHtml(status, progress) {
  * @param {number} num - Number to format
  * @returns {string} Formatted number
  */
-function formatNumber(num) {
+const formatNumber = function(num) {
     if (num === null || num === undefined) {
         return '0';
     }
     return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-}
+};
 
 /**
  * Update counterup element value and trigger animation if needed
  * @param {HTMLElement} element - Element with data-plugin="counterup"
  * @param {number} newValue - New value to set
  */
-function updateCounterupElement(element, newValue) {
+const updateCounterupElement = function(element, newValue) {
     if (!element) {
         return;
     }
     
-    var currentValue = parseInt(element.textContent.replace(/,/g, '')) || 0;
-    var formattedValue = formatNumber(newValue);
+    const currentValue = parseInt(element.textContent.replace(/,/g, '')) || 0;
+    const formattedValue = formatNumber(newValue);
     
     // If counterup plugin is available, use it to animate
     if (typeof $ !== 'undefined' && $.fn.counterUp) {
@@ -843,37 +1042,54 @@ function updateCounterupElement(element, newValue) {
         // Fallback: just update the text
         element.textContent = formattedValue;
     }
-}
+};
 
-function escapeHtml(text) {
+const escapeHtml = function(text) {
     if (!text) {
         return '';
     }
-    var div = document.createElement('div');
+    const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
-}
+};
 
 /**
  * Disconnect all scan status WebSockets
  */
-function disconnectAllScanStatusWebSockets() {
-    for (var key in scanStatusWebSockets) {
+const disconnectAllScanStatusWebSockets = function() {
+    for (const key in scanStatusWebSockets) {
         if (scanStatusWebSockets[key]) {
             scanStatusWebSockets[key].close();
             scanStatusWebSockets[key] = null;
         }
     }
     
-    for (var key in scanStatusReconnectTimeouts) {
+    for (const key in scanStatusReconnectTimeouts) {
         if (scanStatusReconnectTimeouts[key]) {
             clearTimeout(scanStatusReconnectTimeouts[key]);
             scanStatusReconnectTimeouts[key] = null;
         }
     }
-}
+    
+    // Clear options and connecting flags
+    for (const key in scanStatusOptions) {
+        delete scanStatusOptions[key];
+    }
+    for (const key in scanStatusConnecting) {
+        delete scanStatusConnecting[key];
+    }
+};
 
-// Clean up on page unload
-window.addEventListener('beforeunload', function() {
-    disconnectAllScanStatusWebSockets();
-});
+    // Clean up on page unload
+    window.addEventListener('beforeunload', function() {
+        disconnectAllScanStatusWebSockets();
+    });
+    
+    // Expose functions globally so they can be called from other scripts
+    window.connectScanStatusWebSocket = connectScanStatusWebSocket;
+    window.handleScanStatusUpdate = handleScanStatusUpdate;
+    window.updateScanRowInTable = updateScanRowInTable;
+    window.updateScanDetailPage = updateScanDetailPage;
+    window.updateRightSidebar = updateRightSidebar;
+    window.disconnectAllScanStatusWebSockets = disconnectAllScanStatusWebSockets;
+})();
