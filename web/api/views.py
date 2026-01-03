@@ -4338,6 +4338,45 @@ class SecatorFindingCreate(APIView):
                 finding_id = f"{finding_type}_{int(time.time() * 1000)}"
                 return Response({"status": True, "id": finding_id})
 
+            # Validate required parameters before saving
+            if not scan_history_id:
+                logger.warning(
+                    f"[SECATOR API FINDINGS] Missing scan_history_id for finding type={finding_type}"
+                )
+                return Response(
+                    {"status": False, "error": "Missing scan_history_id in _context"}, status=400
+                )
+
+            if not domain_id:
+                logger.warning(
+                    f"[SECATOR API FINDINGS] Missing domain_id for finding type={finding_type}"
+                )
+                return Response({"status": False, "error": "Missing domain_id in _context"}, status=400)
+
+            # Validate that ScanHistory and Domain exist
+            from django.core.exceptions import ObjectDoesNotExist
+            from django.db import IntegrityError
+            from startScan.models import ScanHistory
+            from targetApp.models import Domain
+
+            try:
+                scan_history = ScanHistory.objects.get(id=scan_history_id)
+                logger.debug(
+                    f"[SECATOR API FINDINGS] ScanHistory {scan_history_id} found: {scan_history.scan_type}"
+                )
+            except ObjectDoesNotExist:
+                logger.error(f"[SECATOR API FINDINGS] ScanHistory {scan_history_id} not found")
+                return Response(
+                    {"status": False, "error": f"ScanHistory {scan_history_id} not found"}, status=404
+                )
+
+            try:
+                domain = Domain.objects.get(id=domain_id)
+                logger.debug(f"[SECATOR API FINDINGS] Domain {domain_id} found: {domain.name}")
+            except ObjectDoesNotExist:
+                logger.error(f"[SECATOR API FINDINGS] Domain {domain_id} not found")
+                return Response({"status": False, "error": f"Domain {domain_id} not found"}, status=404)
+
             # Instantiate repository and save finding
             repository = repository_class()
             saved_object = None
@@ -4347,7 +4386,7 @@ class SecatorFindingCreate(APIView):
                 f"[SECATOR API FINDINGS] Calling save_from_secator with finding_data (keys: {list(finding_data.keys())})"
             )
 
-            if scan_history_id and domain_id:
+            try:
                 if finding_type == "subdomain":
                     logger.debug(f"[SECATOR API FINDINGS] Saving subdomain with context: {context}")
                     saved_object = repository.save_from_secator(
@@ -4356,27 +4395,61 @@ class SecatorFindingCreate(APIView):
                 else:
                     saved_object = repository.save_from_secator(finding_data, scan_history_id, domain_id)
 
-                if saved_object:
-                    logger.debug(
-                        f"[SECATOR API FINDINGS] Finding saved successfully: {saved_object.__class__.__name__} (id={getattr(saved_object, 'id', 'N/A')})"
+                # Check if save was successful
+                if saved_object is None:
+                    logger.error(
+                        f"[SECATOR API FINDINGS] Repository returned None for finding type={finding_type}, "
+                        f"scan_history_id={scan_history_id}, domain_id={domain_id}. "
+                        f"This usually indicates a validation error or missing required fields."
                     )
+                    return Response(
+                        {
+                            "status": False,
+                            "error": f"Failed to save {finding_type} finding. Check logs for details.",
+                        },
+                        status=500,
+                    )
+
+                # Generate finding ID from saved object
+                if hasattr(saved_object, "id"):
+                    finding_id = str(saved_object.id)
+                    logger.info(
+                        f"[SECATOR API FINDINGS] Finding saved successfully: type={finding_type}, "
+                        f"id={finding_id}, scan_history_id={scan_history_id}, domain_id={domain_id}"
+                    )
+                    return Response({"status": True, "id": finding_id})
                 else:
-                    logger.warning(f"[SECATOR API FINDINGS] Repository returned None for finding type {finding_type}")
-            else:
-                logger.warning(
-                    f"[SECATOR API FINDINGS] Missing scan_history_id or domain_id: scan_history_id={scan_history_id}, domain_id={domain_id}"
+                    logger.warning(
+                        f"[SECATOR API FINDINGS] Saved object has no 'id' attribute: {type(saved_object)}"
+                    )
+                    return Response(
+                        {"status": False, "error": "Saved object has no ID attribute"}, status=500
+                    )
+
+            except ObjectDoesNotExist as e:
+                logger.error(
+                    f"[SECATOR API FINDINGS] ObjectDoesNotExist error saving finding: {e}",
+                    exc_info=True,
                 )
-
-            # Generate finding ID from saved object or timestamp
-            if saved_object and hasattr(saved_object, "id"):
-                finding_id = str(saved_object.id)
-            else:
-                import time
-
-                finding_id = f"{finding_type}_{int(time.time() * 1000)}"
-
-            logger.info(f"[SECATOR API FINDINGS] Finding created: type={finding_type}, id={finding_id}")
-            return Response({"status": True, "id": finding_id})
+                return Response(
+                    {"status": False, "error": f"Required object not found: {str(e)}"}, status=404
+                )
+            except IntegrityError as e:
+                logger.error(
+                    f"[SECATOR API FINDINGS] IntegrityError saving finding: {e}",
+                    exc_info=True,
+                )
+                return Response(
+                    {"status": False, "error": f"Database integrity error: {str(e)}"}, status=409
+                )
+            except Exception as e:
+                logger.error(
+                    f"[SECATOR API FINDINGS] Error in repository.save_from_secator: {e}",
+                    exc_info=True,
+                )
+                return Response(
+                    {"status": False, "error": f"Error saving finding: {str(e)}"}, status=500
+                )
         except Exception as e:
             logger.error(f"[SECATOR API FINDINGS] Error creating finding: {e}")
             import traceback
@@ -4397,26 +4470,190 @@ class SecatorFindingUpdate(APIView):
         try:
             finding_data = request.data
 
-            logger.info(f"[SECATOR API FINDINGS] Updating finding: finding_id={finding_id}")
+            import json
+
+            from reNgine.services.repositories.certificate_repository import CertificateRepository
+            from reNgine.services.repositories.dns_repository import DnsRepository
+            from reNgine.services.repositories.employee_repository import EmployeeRepository
+            from reNgine.services.repositories.endpoint_repository import EndpointRepository
+            from reNgine.services.repositories.exploit_repository import ExploitRepository
+            from reNgine.services.repositories.ip_repository import IpRepository
+            from reNgine.services.repositories.port_repository import PortRepository
+            from reNgine.services.repositories.subdomain_repository import SubdomainRepository
+            from reNgine.services.repositories.technology_repository import TechnologyRepository
+            from reNgine.services.repositories.vulnerability_repository import VulnerabilityRepository
+
+            finding_type = finding_data.get("_type")
+            context = finding_data.get("_context", {})
+            scan_history_id = context.get("scan_history_id")
+            domain_id = context.get("domain_id")
+
+            logger.info(
+                f"[SECATOR API FINDINGS] Updating finding: finding_id={finding_id}, "
+                f"type={finding_type}, scan_history_id={scan_history_id}, domain_id={domain_id}"
+            )
             logger.debug(
                 f"[SECATOR API FINDINGS] Full finding update data received: {json.dumps(finding_data, indent=2, default=str)}"
             )
             logger.debug(f"[SECATOR API FINDINGS] Finding data keys: {list(finding_data.keys())}")
-            finding_type = finding_data.get("_type")
             logger.debug(f"[SECATOR API FINDINGS] Finding type: {finding_type}")
-            # Log all fields
+
+            if not finding_type:
+                logger.warning(
+                    f"[SECATOR API FINDINGS] Missing _type in finding data for finding_id={finding_id}"
+                )
+                return Response({"status": False, "error": "Missing _type in finding data"}, status=400)
+
+            # Log all fields specific to the finding type
             for key, value in finding_data.items():
-                if isinstance(value, (dict, list)):
+                if key not in ["_type", "_context", "_uuid"]:
+                    if isinstance(value, (dict, list)):
+                        logger.debug(
+                            f"[SECATOR API FINDINGS] Finding update field '{key}': {json.dumps(value, indent=2, default=str)}"
+                        )
+                    else:
+                        logger.debug(f"[SECATOR API FINDINGS] Finding update field '{key}': {value}")
+
+            # Map finding type to repository class
+            repository_mapping = {
+                "ip": IpRepository,
+                "subdomain": SubdomainRepository,
+                "port": PortRepository,
+                "url": EndpointRepository,
+                "tag": TechnologyRepository,
+                "vulnerability": VulnerabilityRepository,
+                "record": DnsRepository,
+                "exploit": ExploitRepository,
+                "user_account": EmployeeRepository,
+                "certificate": CertificateRepository,
+            }
+
+            repository_class = repository_mapping.get(finding_type)
+            if not repository_class:
+                logger.warning(
+                    f"[SECATOR API FINDINGS] Unknown finding type: {finding_type} for finding_id={finding_id}"
+                )
+                return Response(
+                    {"status": False, "error": f"Unknown finding type: {finding_type}"}, status=400
+                )
+
+            # Validate required parameters before saving
+            if not scan_history_id:
+                logger.warning(
+                    f"[SECATOR API FINDINGS] Missing scan_history_id for finding type={finding_type}, finding_id={finding_id}"
+                )
+                return Response(
+                    {"status": False, "error": "Missing scan_history_id in _context"}, status=400
+                )
+
+            if not domain_id:
+                logger.warning(
+                    f"[SECATOR API FINDINGS] Missing domain_id for finding type={finding_type}, finding_id={finding_id}"
+                )
+                return Response({"status": False, "error": "Missing domain_id in _context"}, status=400)
+
+            # Validate that ScanHistory and Domain exist
+            from django.core.exceptions import ObjectDoesNotExist
+            from django.db import IntegrityError
+            from startScan.models import ScanHistory
+            from targetApp.models import Domain
+
+            try:
+                scan_history = ScanHistory.objects.get(id=scan_history_id)
+                logger.debug(
+                    f"[SECATOR API FINDINGS] ScanHistory {scan_history_id} found: {scan_history.scan_type}"
+                )
+            except ObjectDoesNotExist:
+                logger.error(
+                    f"[SECATOR API FINDINGS] ScanHistory {scan_history_id} not found for finding_id={finding_id}"
+                )
+                return Response(
+                    {"status": False, "error": f"ScanHistory {scan_history_id} not found"}, status=404
+                )
+
+            try:
+                domain = Domain.objects.get(id=domain_id)
+                logger.debug(f"[SECATOR API FINDINGS] Domain {domain_id} found: {domain.name}")
+            except ObjectDoesNotExist:
+                logger.error(
+                    f"[SECATOR API FINDINGS] Domain {domain_id} not found for finding_id={finding_id}"
+                )
+                return Response({"status": False, "error": f"Domain {domain_id} not found"}, status=404)
+
+            # Instantiate repository and save finding (upsert: create or update)
+            repository = repository_class()
+            logger.debug(
+                f"[SECATOR API FINDINGS] Using repository: {repository_class.__name__} "
+                f"for finding type: {finding_type}, finding_id: {finding_id}"
+            )
+
+            try:
+                if finding_type == "subdomain":
                     logger.debug(
-                        f"[SECATOR API FINDINGS] Finding update field '{key}': {json.dumps(value, indent=2, default=str)}"
+                        f"[SECATOR API FINDINGS] Saving subdomain with context: {context}, finding_id: {finding_id}"
+                    )
+                    saved_object = repository.save_from_secator(
+                        finding_data, scan_history_id, domain_id, rengine_context=context
                     )
                 else:
-                    logger.debug(f"[SECATOR API FINDINGS] Finding update field '{key}': {value}")
+                    saved_object = repository.save_from_secator(finding_data, scan_history_id, domain_id)
 
-            # Update finding data (for now, just log it)
-            # TODO: Update finding in database
+                # Check if save was successful
+                if saved_object is None:
+                    logger.error(
+                        f"[SECATOR API FINDINGS] Repository returned None for finding type={finding_type}, "
+                        f"finding_id={finding_id}, scan_history_id={scan_history_id}, domain_id={domain_id}. "
+                        f"This usually indicates a validation error or missing required fields."
+                    )
+                    return Response(
+                        {
+                            "status": False,
+                            "error": f"Failed to save {finding_type} finding. Check logs for details.",
+                        },
+                        status=500,
+                    )
 
-            return Response({"status": True, "id": finding_id})
+                # Generate finding ID from saved object
+                if hasattr(saved_object, "id"):
+                    saved_finding_id = str(saved_object.id)
+                    logger.info(
+                        f"[SECATOR API FINDINGS] Finding saved successfully: type={finding_type}, "
+                        f"id={saved_finding_id}, finding_id={finding_id}, "
+                        f"scan_history_id={scan_history_id}, domain_id={domain_id}"
+                    )
+                    return Response({"status": True, "id": saved_finding_id})
+                else:
+                    logger.warning(
+                        f"[SECATOR API FINDINGS] Saved object has no 'id' attribute: {type(saved_object)}, finding_id: {finding_id}"
+                    )
+                    return Response(
+                        {"status": False, "error": "Saved object has no ID attribute"}, status=500
+                    )
+
+            except ObjectDoesNotExist as e:
+                logger.error(
+                    f"[SECATOR API FINDINGS] ObjectDoesNotExist error saving finding: {e}, finding_id: {finding_id}",
+                    exc_info=True,
+                )
+                return Response(
+                    {"status": False, "error": f"Required object not found: {str(e)}"}, status=404
+                )
+            except IntegrityError as e:
+                logger.error(
+                    f"[SECATOR API FINDINGS] IntegrityError saving finding: {e}, finding_id: {finding_id}",
+                    exc_info=True,
+                )
+                return Response(
+                    {"status": False, "error": f"Database integrity error: {str(e)}"}, status=409
+                )
+            except Exception as e:
+                logger.error(
+                    f"[SECATOR API FINDINGS] Error in repository.save_from_secator: {e}, finding_id: {finding_id}",
+                    exc_info=True,
+                )
+                return Response(
+                    {"status": False, "error": f"Error saving finding: {str(e)}"}, status=500
+                )
         except Exception as e:
             logger.error(f"[SECATOR API FINDINGS] Error updating finding {finding_id}: {e}")
             import traceback
