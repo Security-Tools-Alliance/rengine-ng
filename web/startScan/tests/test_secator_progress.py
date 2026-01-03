@@ -3,13 +3,12 @@ Test cases for Secator scan progress and data mapping.
 """
 
 from datetime import datetime, timedelta
-from unittest.mock import patch
 
 from django.utils import timezone
 
-from reNgine.services.secator.progress_sync import SecatorProgressSync
 from reNgine.services.repositories.certificate_repository import CertificateRepository
-from startScan.models import Certificate, ScanActivity, ScanHistory, SecatorRunner
+from reNgine.services.secator.progress_sync import SecatorProgressSync
+from startScan.models import Certificate, SecatorRunner
 from utils.test_base import BaseTestCase
 
 

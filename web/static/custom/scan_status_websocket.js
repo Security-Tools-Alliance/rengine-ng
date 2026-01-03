@@ -211,6 +211,30 @@ function updateScanRowInTable(table, data) {
             }
         }
         
+        // Update summary cell with findings counts
+        if (data.subdomain_count !== undefined || data.endpoint_count !== undefined || data.vulnerability_count !== undefined) {
+            var summaryCell = $(rowNode).find('.scan-summary-cell');
+            if (summaryCell.length) {
+                var subdomainCount = data.subdomain_count !== undefined ? data.subdomain_count : 0;
+                var endpointCount = data.endpoint_count !== undefined ? data.endpoint_count : 0;
+                var vulnerabilityCount = data.vulnerability_count !== undefined ? data.vulnerability_count : 0;
+                
+                // Build tooltip for vulnerabilities if we have severity counts
+                var vulnTooltip = 'Vulnerabilities';
+                if (data.critical_count !== undefined && data.high_count !== undefined && data.medium_count !== undefined) {
+                    vulnTooltip = data.critical_count + ' Critical, ' + data.high_count + ' High, ' + data.medium_count + ' Medium Vulnerabilities';
+                }
+                
+                var summaryHtml = '<span class="badge badge-pills bg-info mt-1" data-toggle="tooltip" data-placement="top" title="Subdomains">' + 
+                    formatNumber(subdomainCount) + '</span>' +
+                    '<span class="badge badge-pills bg-warning mt-1" data-toggle="tooltip" data-placement="top" title="Endpoints">' + 
+                    formatNumber(endpointCount) + '</span>' +
+                    '<span class="badge badge-pills bg-danger mt-1" data-toggle="tooltip" data-placement="top" title="' + 
+                    escapeHtml(vulnTooltip) + '">' + formatNumber(vulnerabilityCount) + '</span>';
+                summaryCell.html(summaryHtml);
+            }
+        }
+        
         // Re-initialize tooltips for updated content
         if (typeof $ !== 'undefined' && $.fn.tooltip) {
             $(rowNode).find('[data-toggle="tooltip"]').tooltip();
@@ -288,6 +312,75 @@ function updateScanDetailPage(data) {
                 taskElement.style.display = '';
             } else {
                 taskElement.style.display = 'none';
+            }
+        }
+        
+        // Update stats panels
+        // Subdomains panel
+        if (data.subdomain_count !== undefined || data.alive_count !== undefined) {
+            var subdomainPanel = document.querySelector('[data-stats-panel="subdomains"]');
+            if (subdomainPanel) {
+                var subdomainCountElement = subdomainPanel.querySelector('[data-stat="subdomain-count"]');
+                if (subdomainCountElement && data.subdomain_count !== undefined) {
+                    updateCounterupElement(subdomainCountElement, data.subdomain_count);
+                }
+                var aliveCountElement = subdomainPanel.querySelector('[data-stat="alive-count"]');
+                if (aliveCountElement && data.alive_count !== undefined) {
+                    aliveCountElement.textContent = 'Alive Subdomains: ' + formatNumber(data.alive_count);
+                }
+            }
+        }
+        
+        // Endpoints panel
+        if (data.endpoint_count !== undefined || data.endpoint_alive_count !== undefined) {
+            var endpointPanel = document.querySelector('[data-stats-panel="endpoints"]');
+            if (endpointPanel) {
+                var endpointCountElement = endpointPanel.querySelector('[data-stat="endpoint-count"]');
+                if (endpointCountElement && data.endpoint_count !== undefined) {
+                    updateCounterupElement(endpointCountElement, data.endpoint_count);
+                }
+                var endpointAliveCountElement = endpointPanel.querySelector('[data-stat="endpoint-alive-count"]');
+                if (endpointAliveCountElement && data.endpoint_alive_count !== undefined) {
+                    endpointAliveCountElement.textContent = 'Alive Endpoints: ' + formatNumber(data.endpoint_alive_count);
+                }
+            }
+        }
+        
+        // Vulnerabilities panel
+        if (data.vulnerability_count !== undefined || data.critical_count !== undefined) {
+            var vulnPanel = document.querySelector('[data-stats-panel="vulnerabilities"]');
+            if (vulnPanel) {
+                var vulnCountElement = vulnPanel.querySelector('[data-stat="vulnerability-count"]');
+                if (vulnCountElement && data.vulnerability_count !== undefined) {
+                    updateCounterupElement(vulnCountElement, data.vulnerability_count);
+                }
+                
+                // Update severity counts
+                var severityContainer = vulnPanel.querySelector('[data-stat="vulnerability-severity"]');
+                if (severityContainer) {
+                    var totalVulnCount = data.vulnerability_count !== undefined ? data.vulnerability_count : 0;
+                    if (totalVulnCount > 0) {
+                        var criticalCount = data.critical_count !== undefined ? data.critical_count : 0;
+                        var highCount = data.high_count !== undefined ? data.high_count : 0;
+                        var mediumCount = data.medium_count !== undefined ? data.medium_count : 0;
+                        var lowCount = data.low_count !== undefined ? data.low_count : 0;
+                        var infoCount = data.info_count !== undefined ? data.info_count : 0;
+                        var unknownCount = data.unknown_count !== undefined ? data.unknown_count : 0;
+                        
+                        var severityHtml = '<p class="text-muted mb-0">' +
+                            '<span class="w-title text-danger" data-stat="critical-count">' + formatNumber(criticalCount) + '</span> Critical, ' +
+                            '<span class="w-title text-danger" data-stat="high-count">' + formatNumber(highCount) + '</span> High, ' +
+                            '<span class="w-title text-danger" data-stat="medium-count">' + formatNumber(mediumCount) + '</span> Medium</span>' +
+                            '<br>' +
+                            '<span class="w-title text-primary" data-stat="low-count">' + formatNumber(lowCount) + '</span> Low, ' +
+                            '<span class="w-title text-primary" data-stat="info-count">' + formatNumber(infoCount) + '</span> Info, and ' +
+                            '<span class="w-title text-primary" data-stat="unknown-count">' + formatNumber(unknownCount) + '</span> Unknown Vulnerabilities</span>' +
+                            '</p>';
+                        severityContainer.innerHTML = severityHtml;
+                    } else {
+                        severityContainer.innerHTML = '<p class="text-muted mb-0 small">No vulnerabilities found.</p><br>';
+                    }
+                }
             }
         }
         
@@ -710,6 +803,48 @@ function getProgressBarHtml(status, progress) {
  * @param {string} text - Text to escape
  * @returns {string} Escaped text
  */
+/**
+ * Format number with thousand separators (like Django's intcomma filter)
+ * @param {number} num - Number to format
+ * @returns {string} Formatted number
+ */
+function formatNumber(num) {
+    if (num === null || num === undefined) {
+        return '0';
+    }
+    return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
+/**
+ * Update counterup element value and trigger animation if needed
+ * @param {HTMLElement} element - Element with data-plugin="counterup"
+ * @param {number} newValue - New value to set
+ */
+function updateCounterupElement(element, newValue) {
+    if (!element) {
+        return;
+    }
+    
+    var currentValue = parseInt(element.textContent.replace(/,/g, '')) || 0;
+    var formattedValue = formatNumber(newValue);
+    
+    // If counterup plugin is available, use it to animate
+    if (typeof $ !== 'undefined' && $.fn.counterUp) {
+        // Update the text content first
+        element.textContent = formattedValue;
+        // Trigger counterup animation if value changed
+        if (currentValue !== newValue) {
+            $(element).counterUp({
+                delay: 10,
+                time: 300
+            });
+        }
+    } else {
+        // Fallback: just update the text
+        element.textContent = formattedValue;
+    }
+}
+
 function escapeHtml(text) {
     if (!text) {
         return '';

@@ -62,10 +62,10 @@ logger = get_task_logger(__name__)
 
 def scan_history(request, slug):
     host = ScanHistory.objects.filter(domain__project__slug=slug).order_by("-start_scan_date")
-    
+
     # Preload SecatorRunner for all scans to avoid N+1 queries
     secator_runners = SecatorRunner.objects.filter(scan_history__in=host).select_related("scan_history", "domain")
-    
+
     # Build dictionary mapping scan_id to main runner (workflow/scan first, then task)
     main_runner_by_scan = {}
     for runner in secator_runners:
@@ -74,7 +74,7 @@ def scan_history(request, slug):
             main_runner_by_scan[scan_id] = runner
         elif runner.runner_type in ["workflow", "scan"] and main_runner_by_scan[scan_id].runner_type not in ["workflow", "scan"]:
             main_runner_by_scan[scan_id] = runner
-    
+
     context = {
         "scan_history_active": "active",
         "scan_history": host,
@@ -169,7 +169,7 @@ def detail_scan(request, id, slug):
     # Preload SecatorRunner for this scan
     secator_runners = SecatorRunner.objects.filter(scan_history=scan).order_by("-created_at")
     is_secator_scan = secator_runners.exists()
-    
+
     # Build render context
     ctx = {
         "scan_history_id": id,
@@ -419,18 +419,18 @@ def start_scan_ui(request, slug, domain_id):
                 )
                 # Convert to dict for O(1) lookup in template tags
                 tasks_dict = {task.task_type: task for task in all_tasks}
-                
+
                 # Pre-compute expensive operations (YAML parsing) to avoid repeated parsing in template
                 # Cache is now handled at model level, but we still pre-compute for template efficiency
                 # Convert queryset to list to avoid multiple DB hits
                 workflows_list = list(workflows_queryset)
-                
+
                 # Pre-compute in parallel using list comprehension (faster than loop)
                 for workflow in workflows_list:
                     # These calls now use cache at model level, but we still attach to avoid re-calls in template
                     workflow._precomputed_structured_tasks = workflow.get_structured_tasks()
                     workflow._precomputed_tasks_count = workflow.get_tasks_count()
-                
+
                 context["workflows"] = workflows_list
                 context["all_tasks"] = all_tasks
                 context["tasks_dict"] = tasks_dict
@@ -820,18 +820,18 @@ def start_organization_scan(request, id, slug):
             )
             # Convert to dict for O(1) lookup in template tags
             tasks_dict = {task.task_type: task for task in all_tasks}
-            
+
             # Pre-compute expensive operations (YAML parsing) to avoid repeated parsing in template
             # Cache is now handled at model level, but we still pre-compute for template efficiency
             # Convert queryset to list to avoid multiple DB hits
             workflows_list = list(workflows_queryset)
-            
+
             # Pre-compute in parallel using list comprehension (faster than loop)
             for workflow in workflows_list:
                 # These calls now use cache at model level, but we still attach to avoid re-calls in template
                 workflow._precomputed_structured_tasks = workflow.get_structured_tasks()
                 workflow._precomputed_tasks_count = workflow.get_tasks_count()
-            
+
             context["workflows"] = workflows_list
             context["all_tasks"] = all_tasks
             context["tasks_dict"] = tasks_dict

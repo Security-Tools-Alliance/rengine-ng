@@ -393,52 +393,52 @@ class Subdomain(models.Model):
             for ip in self.ip_addresses.all()
         }
 
+    @property
+    def _default_endpoint(self):
+        """
+        Get the default endpoint for this subdomain (cached per instance).
+        This property is used internally by display_* properties to avoid N+1 queries.
+        """
+        if not hasattr(self, "_cached_default_endpoint"):
+            if self.scan_history and not self.scan_history.is_legacy_scan:
+                self._cached_default_endpoint = EndPoint.objects.filter(
+                    subdomain=self,
+                    is_default=True
+                ).first()
+            else:
+                self._cached_default_endpoint = None
+        return self._cached_default_endpoint
+
     @HybridProperty
     def display_http_status(self):
         """Return default endpoint http_status for Secator scans, otherwise subdomain http_status."""
-        if self.scan_history and not self.scan_history.is_legacy_scan:
-            default_endpoint = EndPoint.objects.filter(
-                subdomain=self,
-                is_default=True
-            ).first()
-            if default_endpoint:
-                return default_endpoint.http_status
+        default_endpoint = self._default_endpoint
+        if default_endpoint:
+            return default_endpoint.http_status
         return self.http_status
 
     @HybridProperty
     def display_page_title(self):
         """Return default endpoint page_title for Secator scans, otherwise subdomain page_title."""
-        if self.scan_history and not self.scan_history.is_legacy_scan:
-            default_endpoint = EndPoint.objects.filter(
-                subdomain=self,
-                is_default=True
-            ).first()
-            if default_endpoint:
-                return default_endpoint.page_title
+        default_endpoint = self._default_endpoint
+        if default_endpoint:
+            return default_endpoint.page_title
         return self.page_title
 
     @HybridProperty
     def display_content_length(self):
         """Return default endpoint content_length for Secator scans, otherwise subdomain content_length."""
-        if self.scan_history and not self.scan_history.is_legacy_scan:
-            default_endpoint = EndPoint.objects.filter(
-                subdomain=self,
-                is_default=True
-            ).first()
-            if default_endpoint:
-                return default_endpoint.content_length
+        default_endpoint = self._default_endpoint
+        if default_endpoint:
+            return default_endpoint.content_length
         return self.content_length
 
     @HybridProperty
     def display_response_time(self):
         """Return default endpoint response_time for Secator scans, otherwise subdomain response_time."""
-        if self.scan_history and not self.scan_history.is_legacy_scan:
-            default_endpoint = EndPoint.objects.filter(
-                subdomain=self,
-                is_default=True
-            ).first()
-            if default_endpoint:
-                return default_endpoint.response_time
+        default_endpoint = self._default_endpoint
+        if default_endpoint:
+            return default_endpoint.response_time
         return self.response_time
 
     @classmethod

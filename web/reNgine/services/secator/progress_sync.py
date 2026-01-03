@@ -3,7 +3,7 @@ Progress synchronization service for Secator scans.
 Handles synchronization between Secator runner data and ScanHistory.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Optional
 
 from celery.utils.log import get_task_logger
 from django.utils import timezone

@@ -204,7 +204,7 @@ def get_task_info(context, task_name):
                 "description": task.description,
                 "icon": category_icon(task.category),
             }
-    
+
     # Fallback to database query if not in context
     task = SecatorTask.objects.filter(task_type=task_name, is_active=True).only(
         "name", "category", "description"

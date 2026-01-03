@@ -6,9 +6,11 @@ import logging
 
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
+from django.db.models import Count
 
-from api.serializers import ScanActivitySerializer, SecatorRunnerSerializer
-from startScan.models import ScanActivity, ScanHistory, SecatorRunner
+from api.serializers import ScanActivitySerializer
+from startScan.models import EndPoint, ScanActivity, ScanHistory, SecatorRunner, Subdomain, Vulnerability
+
 
 logger = logging.getLogger("websocket")
 
@@ -31,10 +33,34 @@ def build_scan_status_message(scan_history_id: int) -> dict:
         scan_history_id: ID of the scan history
 
     Returns:
-        dict: Detailed message with status, progress, runners, and timeline
+        dict: Detailed message with status, progress, runners, timeline, and findings counts
     """
     try:
         scan = ScanHistory.objects.get(id=scan_history_id)
+
+        # Calculate all counts in optimized queries to avoid N+1
+        subdomain_count = Subdomain.objects.filter(scan_history__id=scan_history_id).count()
+        alive_count = Subdomain.objects.filter(scan_history__id=scan_history_id, http_status__gt=0).count()
+
+        endpoint_count = EndPoint.objects.filter(scan_history__id=scan_history_id).count()
+        endpoint_alive_count = EndPoint.objects.filter(scan_history__id=scan_history_id, http_status__gt=0).count()
+
+        vulnerability_count = Vulnerability.objects.filter(scan_history__id=scan_history_id).count()
+
+        # Get vulnerability counts by severity in a single query
+        vuln_severity_counts = (
+            Vulnerability.objects.filter(scan_history__id=scan_history_id)
+            .values("severity")
+            .annotate(count=Count("id"))
+        )
+        severity_map = {item["severity"]: item["count"] for item in vuln_severity_counts}
+
+        critical_count = severity_map.get(4, 0)
+        high_count = severity_map.get(3, 0)
+        medium_count = severity_map.get(2, 0)
+        low_count = severity_map.get(1, 0)
+        info_count = severity_map.get(0, 0)
+        unknown_count = severity_map.get(-1, 0)
 
         message = {
             "type": "scan_status_update",
@@ -43,6 +69,17 @@ def build_scan_status_message(scan_history_id: int) -> dict:
             "status": scan.scan_status,
             "progress": scan.get_progress(),
             "current_task": scan.get_current_task(),
+            "subdomain_count": subdomain_count,
+            "endpoint_count": endpoint_count,
+            "vulnerability_count": vulnerability_count,
+            "alive_count": alive_count,
+            "endpoint_alive_count": endpoint_alive_count,
+            "critical_count": critical_count,
+            "high_count": high_count,
+            "medium_count": medium_count,
+            "low_count": low_count,
+            "info_count": info_count,
+            "unknown_count": unknown_count,
         }
 
         if scan.is_legacy_scan:
