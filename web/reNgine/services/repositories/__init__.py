@@ -3,6 +3,7 @@ Repositories package - Data access layer.
 Implements Repository pattern for database operations.
 """
 
+from .command_repository import CommandRepository
 from .dns_repository import DnsRepository
 from .employee_repository import EmployeeRepository
 from .endpoint_repository import EndpointRepository
@@ -15,6 +16,7 @@ from .vulnerability_repository import VulnerabilityRepository
 
 
 __all__ = [
+    "CommandRepository",
     "EndpointRepository",
     "SubdomainRepository",
     "VulnerabilityRepository",

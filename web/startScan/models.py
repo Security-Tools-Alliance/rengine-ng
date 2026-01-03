@@ -945,9 +945,44 @@ class Command(models.Model):
     return_code = models.IntegerField(blank=True, null=True)
     output = models.TextField(blank=True, null=True)
     time = models.DateTimeField()
+    end_time = models.DateTimeField(blank=True, null=True)
+    elapsed = models.DurationField(blank=True, null=True)
+    errors = models.JSONField(default=list, blank=True)
+    warnings = models.JSONField(default=list, blank=True)
+    name = models.CharField(max_length=200, blank=True, null=True)
+    status = models.CharField(max_length=50, blank=True, null=True)
+    cwd = models.CharField(max_length=500, blank=True, null=True)
 
     def __str__(self):
         return str(self.command)
+
+    def get_elapsed(self):
+        """Get elapsed as timedelta, handling legacy float values."""
+        from datetime import timedelta
+
+        try:
+            elapsed_value = self.elapsed
+        except (AttributeError, TypeError, ValueError):
+            return None
+
+        if elapsed_value is None:
+            return None
+
+        # If it's already a timedelta, return it
+        if isinstance(elapsed_value, timedelta):
+            return elapsed_value
+
+        # If it's a float (legacy data), convert to timedelta
+        if isinstance(elapsed_value, (int, float)):
+            return timedelta(seconds=elapsed_value)
+
+        # Fallback: return as is
+        return elapsed_value
+
+    @property
+    def elapsed_safe(self):
+        """Safe accessor for elapsed that handles legacy float values."""
+        return self.get_elapsed()
 
 
 class Waf(models.Model):

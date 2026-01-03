@@ -4309,6 +4309,19 @@ class SecatorRunnerUpdate(APIView):
             f"[SECATOR API STATUS SYNC] Synchronized runner {runner_name} (status: {runner_status}) with scan {scan_history.id}"
         )
 
+        # Save command log from runner data
+        try:
+            from reNgine.services.repositories.command_repository import CommandRepository
+
+            command_repo = CommandRepository()
+            activity_id_for_command = existing_activity.id if existing_activity else activity_id
+            command_repo.save_from_secator(runner_data, scan_history.id, activity_id_for_command)
+        except Exception as e:
+            logger.warning(
+                f"[SECATOR API STATUS SYNC] Error saving command log for runner {runner_name}: {e}",
+                exc_info=True,
+            )
+
         # Send WebSocket update for runner status/progress changes
         # This ensures real-time updates even when status doesn't change
         runner_progress = runner_data.get("progress")

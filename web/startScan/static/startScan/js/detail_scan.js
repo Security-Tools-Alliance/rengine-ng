@@ -1182,14 +1182,21 @@ function get_directory_modal(endpoint_url, scan_id=null, subdomain_id=null, subd
 
 function create_log_element(log) {
 	let logElement = document.createElement("p");
+	const displayName = (log.name && log.name.trim().length > 0) ? log.name : log.command;
 	innerHTML = `
 	<p>
-	  <p data-bs-toggle="collapse" data-bs-target="#collapse${log.id}">
-		<b>${log.command}</b>
+	  <p data-bs-toggle="collapse" data-bs-target="#collapse${log.id}" style="cursor: pointer;">
+		<b>${displayName}</b>
 	  </p>
 	</p>`
 	if (log.output != ''){
-		innerHTML += `<div class="collapse" id="collapse${log.id}"><div style="white-space: pre-line" class="card card-body">${log.output}</div></div>`;
+		innerHTML += `<div class="collapse" id="collapse${log.id}">
+		<div style="white-space: pre-line" class="card card-body">
+			${log.command ? `<p><b>${log.command}</b></p>` : ''}
+			<p><b>${log.time}</b></p>
+			<p>${log.output}</p>
+		</div>
+		</div>`;
 	}
 	logElement.innerHTML = innerHTML;
 	return logElement;

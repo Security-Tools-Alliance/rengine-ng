@@ -223,10 +223,57 @@ class SubScanSerializer(serializers.ModelSerializer):
 
 
 class CommandSerializer(serializers.ModelSerializer):
+    elapsed = serializers.SerializerMethodField()
+
     class Meta:
         model = Command
-        fields = ["id", "scan_history", "activity", "command", "return_code", "output", "time"]
+        fields = [
+            "id",
+            "scan_history",
+            "activity",
+            "command",
+            "return_code",
+            "output",
+            "time",
+            "end_time",
+            "elapsed",
+            "errors",
+            "warnings",
+            "name",
+            "status",
+            "cwd",
+        ]
         depth = 1
+
+    def get_elapsed(self, obj):
+        """Handle elapsed field which can be timedelta or float (legacy data)."""
+        from datetime import timedelta
+
+        try:
+            # Try to get the raw value first to handle legacy data
+            elapsed_value = obj.elapsed
+        except (AttributeError, TypeError, ValueError):
+            return None
+
+        if elapsed_value is None:
+            return None
+
+        # If it's already a timedelta, serialize it
+        if isinstance(elapsed_value, timedelta):
+            return str(elapsed_value)
+
+        # If it's a float (legacy data), convert to timedelta first
+        if isinstance(elapsed_value, (int, float)):
+            return str(timedelta(seconds=elapsed_value))
+
+        # Fallback: try to use the model's get_elapsed method
+        try:
+            elapsed_value = obj.get_elapsed()
+            if elapsed_value is None:
+                return None
+            return str(elapsed_value)
+        except (AttributeError, TypeError, ValueError):
+            return None
 
 
 class ScanHistorySerializer(serializers.ModelSerializer):
