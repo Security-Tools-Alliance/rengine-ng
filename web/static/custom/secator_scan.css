@@ -2840,6 +2840,184 @@ body.execution-mode-scan .scan-type-tile.selected .tile-icon i {
 }
 
 
+/* ANSI Color Codes for Command Output */
+/* Foreground colors */
+.ansi-black {
+  color: #000000;
+}
+
+.ansi-red {
+  color: #cd0000;
+}
+
+.ansi-green {
+  color: #00cd00;
+}
+
+.ansi-yellow {
+  color: #cdcd00;
+}
+
+.ansi-blue {
+  color: #0000ee;
+}
+
+.ansi-magenta {
+  color: #cd00cd;
+}
+
+.ansi-cyan {
+  color: #00cdcd;
+}
+
+.ansi-white {
+  color: #e5e5e5;
+}
+
+/* Bright foreground colors */
+.ansi-bright-black {
+  color: #7f7f7f;
+}
+
+.ansi-bright-red {
+  color: #ff0000;
+}
+
+.ansi-bright-green {
+  color: #00ff00;
+}
+
+.ansi-bright-yellow {
+  color: #ffff00;
+}
+
+.ansi-bright-blue {
+  color: #5c5cff;
+}
+
+.ansi-bright-magenta {
+  color: #ff00ff;
+}
+
+.ansi-bright-cyan {
+  color: #00ffff;
+}
+
+.ansi-bright-white {
+  color: #ffffff;
+}
+
+/* Background colors */
+.ansi-bg-black {
+  background-color: #000000;
+}
+
+.ansi-bg-red {
+  background-color: #cd0000;
+}
+
+.ansi-bg-green {
+  background-color: #00cd00;
+}
+
+.ansi-bg-yellow {
+  background-color: #cdcd00;
+}
+
+.ansi-bg-blue {
+  background-color: #0000ee;
+}
+
+.ansi-bg-magenta {
+  background-color: #cd00cd;
+}
+
+.ansi-bg-cyan {
+  background-color: #00cdcd;
+}
+
+.ansi-bg-white {
+  background-color: #e5e5e5;
+}
+
+/* Bright background colors */
+.ansi-bg-bright-black {
+  background-color: #7f7f7f;
+}
+
+.ansi-bg-bright-red {
+  background-color: #ff0000;
+}
+
+.ansi-bg-bright-green {
+  background-color: #00ff00;
+}
+
+.ansi-bg-bright-yellow {
+  background-color: #ffff00;
+}
+
+.ansi-bg-bright-blue {
+  background-color: #5c5cff;
+}
+
+.ansi-bg-bright-magenta {
+  background-color: #ff00ff;
+}
+
+.ansi-bg-bright-cyan {
+  background-color: #00ffff;
+}
+
+.ansi-bg-bright-white {
+  background-color: #ffffff;
+}
+
+/* Text styles */
+.ansi-bold {
+  font-weight: bold;
+}
+
+.ansi-dim {
+  opacity: 0.5;
+}
+
+.ansi-italic {
+  font-style: italic;
+}
+
+.ansi-underline {
+  text-decoration: underline;
+}
+
+.ansi-reset {
+  color: inherit;
+  background-color: inherit;
+  font-weight: normal;
+  font-style: normal;
+  text-decoration: none;
+  opacity: 1;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .ansi-black {
+    color: #2e3436;
+  }
+
+  .ansi-white {
+    color: #d3d7cf;
+  }
+
+  .ansi-bright-black {
+    color: #555753;
+  }
+
+  .ansi-bright-white {
+    color: #ffffff;
+  }
+}
+
 /* ACE Editor Styles - Centralized */
 .ace_editor {
   width: 100%;

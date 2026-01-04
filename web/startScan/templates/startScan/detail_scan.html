@@ -235,6 +235,9 @@ Scan Findings
 						{% endfor %}
 						{% endif %}
 
+						<h6 class="font-13 text-muted text-uppercase mt-3">Scan Logs</h6>
+						<span><a href="javascript:get_logs_modal({{history.id}})"><i class="fe-file"></i> Logs</a></span>
+
 						<h6 class="font-13 text-muted text-uppercase mt-4 mb-2">Scan Timeline</h6>
 						<div data-simplebar style="max-height: 410px;" class="p-2 scan-timeline" data-scan-id="{{history.id}}">
 							<div class="track-order-list">
@@ -281,9 +284,6 @@ Scan Findings
 								</ul>
 							</div>
 						</div>
-						
-						<h6 class="font-13 text-muted text-uppercase mt-3">Scan Logs</h6>
-						<span><a href="javascript:get_logs_modal({{history.id}})"><i class="fe-file"></i> Logs</a></span>
 					</div>
 				</div>
 				<div class="card">

@@ -50,12 +50,16 @@ print_msg "Starting web server with auto-restart enabled"
 
 # Start static files watcher in background
 print_msg "Starting static files watcher"
-watchmedo shell-command \
-    --patterns="*.js;*.css;*.scss;*.sass;*.less" \
-    --command="echo 'Collecting static files...' && poetry run -C $RENGINE_FOLDER python3 manage.py collectstatic --noinput" \
-    --recursive \
-    --wait \
-    "$RENGINE_FOLDER/static" &
+# Find all static directories in Django apps and watch them
+find "$RENGINE_FOLDER" -type d -name "static" | while read -r static_dir; do
+    echo "Watching static directory: $static_dir"
+    watchmedo shell-command \
+        --patterns="*.js;*.css;*.scss;*.sass;*.less" \
+        --command="echo 'Collecting static files...' && poetry run -C $RENGINE_FOLDER python3 manage.py collectstatic --noinput" \
+        --recursive \
+        --wait \
+        "$static_dir" &
+done
 
 # Start web server with watchmedo for Python files
 watchmedo auto-restart \

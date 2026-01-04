@@ -2871,10 +2871,95 @@ class ListScanLogsViewSet(viewsets.ModelViewSet):
     queryset = Command.objects.none()
 
     def get_queryset(self):
+        from django.db.models import Q
+
         req = self.request
         scan_id = safe_int_cast(req.query_params.get("scan_id"))
-        self.queryset = Command.objects.filter(scan_history__id=scan_id).order_by("id")
+        include_pending = req.query_params.get("include_pending", "false").lower() == "true"
+
+        queryset = Command.objects.filter(scan_history__id=scan_id)
+
+        # Exclude PENDING status by default unless include_pending is true
+        if not include_pending:
+            queryset = queryset.filter(~Q(status="PENDING") | Q(status__isnull=True))
+
+        self.queryset = queryset.order_by("id")
         return self.queryset
+
+
+class GetScanLogsHTML(APIView):
+    """
+    API endpoint to get formatted command logs as HTML.
+    Returns HTML formatted logs with hierarchy and ANSI color support.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from django.db.models import Q
+        from django.template.loader import render_to_string
+
+        scan_id = safe_int_cast(request.query_params.get("scan_id"))
+        activity_id = safe_int_cast(request.query_params.get("activity_id"))
+        include_pending = request.query_params.get("include_pending", "false").lower() == "true"
+
+        if not scan_id and not activity_id:
+            return Response({"error": "scan_id or activity_id is required"}, status=400)
+
+        # Get commands
+        if scan_id:
+            queryset = Command.objects.filter(scan_history__id=scan_id)
+        else:
+            queryset = Command.objects.filter(activity__id=activity_id)
+
+        # Exclude PENDING status by default unless include_pending is true
+        if not include_pending:
+            queryset = queryset.filter(~Q(status="PENDING") | Q(status__isnull=True))
+
+        # Sort by hierarchy: scan > workflow > task, then by workflow_name for tasks, then by time
+        def sort_key(command):
+            type_order = {"scan": 0, "workflow": 1, "task": 2}
+            runner_type_order = type_order.get(command.runner_type, 3)
+            workflow_name = command.workflow_name or ""
+            time_value = command.time.timestamp() if command.time else 0
+            return (runner_type_order, workflow_name, time_value, command.id)
+
+        commands = sorted(queryset, key=sort_key)
+
+        # Build hierarchy and calculate indent levels
+        commands_with_indent = []
+        workflow_indent_map = {}  # Map workflow_name to its indent level
+
+        for command in commands:
+            indent_level = 0
+
+            if command.runner_type == "workflow":
+                # Workflow - no parent, store its name for children
+                if command.workflow_name:
+                    workflow_indent_map[command.workflow_name] = 0
+                indent_level = 0
+            elif command.runner_type == "task" and command.has_parent:
+                # Task under a workflow - indent based on workflow
+                if command.workflow_name and command.workflow_name in workflow_indent_map:
+                    indent_level = workflow_indent_map[command.workflow_name] + 1
+                else:
+                    indent_level = 1  # Default indent if workflow not found
+            elif command.runner_type == "scan":
+                # Scan - top level
+                indent_level = 0
+
+            commands_with_indent.append((command, indent_level))
+
+        # Render HTML using template
+        html_content = ""
+        for command, indent_level in commands_with_indent:
+            html_content += render_to_string(
+                "startScan/_items/command_log.html",
+                {"command": command, "indent_level": indent_level},
+                request=request,
+            )
+
+        return Response({"html": html_content}, content_type="application/json")
 
 
 class ListEndpoints(APIView):

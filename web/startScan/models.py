@@ -953,9 +953,41 @@ class Command(models.Model):
     name = models.CharField(max_length=200, blank=True, null=True)
     status = models.CharField(max_length=50, blank=True, null=True)
     cwd = models.CharField(max_length=500, blank=True, null=True)
+    runner_type = models.CharField(max_length=50, blank=True, null=True)
+    has_parent = models.BooleanField(default=False)
+    has_children = models.BooleanField(default=False)
+    workflow_name = models.CharField(max_length=200, blank=True, null=True)
+    node_id = models.CharField(max_length=500, blank=True, null=True)
+    ancestor_id = models.CharField(max_length=500, blank=True, null=True)
 
     def __str__(self):
         return str(self.command)
+
+    def get_formatted_output(self):
+        """
+        Get formatted output using the output formatter utility.
+        Returns a dictionary with formatted output and metadata.
+        """
+        from reNgine.utilities.output_formatter import format_output
+
+        if not self.output:
+            return {
+                "formatted": "",
+                "is_json": False,
+                "has_ansi": False,
+                "raw": "",
+            }
+
+        try:
+            return format_output(self.output)
+        except Exception:
+            # Fallback to raw output if formatting fails
+            return {
+                "formatted": self.output,
+                "is_json": False,
+                "has_ansi": False,
+                "raw": self.output,
+            }
 
 
 class Waf(models.Model):

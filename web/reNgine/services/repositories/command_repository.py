@@ -74,6 +74,19 @@ class CommandRepository:
         status = runner_data.get("status")
         cwd = runner_data.get("cwd")
 
+        # Extract hierarchy fields
+        runner_type = runner_data.get("config", {}).get("type")
+        has_parent = runner_data.get("has_parent", False)
+        has_children = runner_data.get("has_children", False)
+        # workflow_name from run_opts.workflow_name or config.name if it's a workflow
+        workflow_name = runner_data.get("run_opts", {}).get("workflow_name")
+        if not workflow_name and runner_type == "workflow":
+            workflow_name = runner_data.get("config", {}).get("name")
+        # node_id from context.node_id or config.node_id
+        node_id = runner_data.get("context", {}).get("node_id") or runner_data.get("config", {}).get("node_id")
+        # ancestor_id from context.ancestor_id
+        ancestor_id = runner_data.get("context", {}).get("ancestor_id")
+
         # Validate required fields
         if not cmd and not output:
             logger.warning("Command data missing both cmd and output fields")
@@ -139,6 +152,16 @@ class CommandRepository:
             existing_command.warnings = warnings or existing_command.warnings
             existing_command.status = status or existing_command.status
             existing_command.cwd = cwd or existing_command.cwd
+            if runner_type:
+                existing_command.runner_type = runner_type
+            existing_command.has_parent = has_parent
+            existing_command.has_children = has_children
+            if workflow_name:
+                existing_command.workflow_name = workflow_name
+            if node_id:
+                existing_command.node_id = node_id
+            if ancestor_id:
+                existing_command.ancestor_id = ancestor_id
             if activity:
                 existing_command.activity = activity
             existing_command.save()
@@ -160,6 +183,12 @@ class CommandRepository:
                 name=name,
                 status=status,
                 cwd=cwd,
+                runner_type=runner_type,
+                has_parent=has_parent,
+                has_children=has_children,
+                workflow_name=workflow_name,
+                node_id=node_id,
+                ancestor_id=ancestor_id,
             )
             logger.info(f"Created Command {command.id} for runner {name}")
             return command
