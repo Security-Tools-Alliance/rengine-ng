@@ -228,6 +228,7 @@ class SubScanSerializer(serializers.ModelSerializer):
 class CommandSerializer(serializers.ModelSerializer):
     elapsed = serializers.SerializerMethodField()
     formatted_output = serializers.SerializerMethodField()
+    indent_level = serializers.SerializerMethodField()
 
     class Meta:
         model = Command
@@ -254,6 +255,7 @@ class CommandSerializer(serializers.ModelSerializer):
             "ancestor_id",
             "scan_type",
             "formatted_output",
+            "indent_level",
         ]
         depth = 1
 
@@ -302,6 +304,58 @@ class CommandSerializer(serializers.ModelSerializer):
                 "has_ansi": False,
                 "raw": obj.output,
             }
+
+    def __init__(self, *args, **kwargs):
+        """Initialize serializer and precompute indent level mapping."""
+        super().__init__(*args, **kwargs)
+        # Precompute indent level mapping to avoid O(n²) lookups
+        self._indent_level_map = self._compute_indent_level_map()
+
+    def _compute_indent_level_map(self):
+        """
+        Precompute indent level mapping for all commands.
+        
+        Returns a dict mapping workflow identifiers (name/workflow_name) to their indent level.
+        This avoids O(n²) lookups in get_indent_level.
+        """
+        all_commands = self.context.get("all_commands", [])
+        if not all_commands:
+            return {}
+        
+        # Map workflow identifiers to their indent levels
+        indent_map = {}
+        
+        for cmd in all_commands:
+            if cmd.runner_type == "workflow":
+                # Calculate workflow indent level
+                workflow_indent = 1 if cmd.has_parent else 0
+                # Map both name and workflow_name to the indent level
+                if cmd.name:
+                    indent_map[cmd.name] = workflow_indent
+                if cmd.workflow_name and cmd.workflow_name != cmd.name:
+                    indent_map[cmd.workflow_name] = workflow_indent
+        
+        return indent_map
+
+    def get_indent_level(self, obj):
+        """
+        Calculate indent level based on hierarchy.
+        Uses precomputed mapping to avoid O(n²) lookups.
+        """
+        if obj.runner_type == "scan":
+            return 0
+        elif obj.runner_type == "workflow":
+            # Workflow indent: 1 if has_parent (child of scan), 0 otherwise
+            return 1 if obj.has_parent else 0
+        elif obj.runner_type == "task" and obj.has_parent:
+            # Task under a workflow - lookup parent workflow indent and add 1
+            if obj.ancestor_id and self._indent_level_map:
+                workflow_indent = self._indent_level_map.get(obj.ancestor_id, 1)
+                return workflow_indent + 1
+            # Default: task is at level 2 (workflow at 1 + task at 2)
+            return 2
+        
+        return 0
 
 
 class ScanHistorySerializer(serializers.ModelSerializer):
@@ -462,6 +516,7 @@ class SecatorRunnerSerializer(serializers.ModelSerializer):
     """Serializer for SecatorRunner model with computed fields."""
 
     elapsed = serializers.SerializerMethodField()
+    elapsed_seconds = serializers.SerializerMethodField()
     status = serializers.SerializerMethodField()
     status_display = serializers.SerializerMethodField()
     status_code = serializers.SerializerMethodField()
@@ -483,6 +538,7 @@ class SecatorRunnerSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
             "elapsed",
+            "elapsed_seconds",
             "start_time",
             "scan_history",
             "domain",
@@ -529,22 +585,46 @@ class SecatorRunnerSerializer(serializers.ModelSerializer):
         return obj.created_at.isoformat() if obj.created_at else None
 
     def get_elapsed(self, obj):
-        """Calculate elapsed time since start."""
+        """Calculate elapsed time since start as formatted string."""
         from django.utils import timezone
 
         from reNgine.core.time import get_time_taken
+        from reNgine.utilities.time import parse_datetime_iso
 
         start_time = obj.created_at
         if obj.runner_data and "start_time" in obj.runner_data:
-            try:
-                from datetime import datetime
-                start_time_str = obj.runner_data["start_time"]
-                if isinstance(start_time_str, str):
-                    start_time = datetime.fromisoformat(start_time_str.replace("Z", "+00:00"))
-            except (ValueError, TypeError):
-                pass
+            start_time_str = obj.runner_data.get("start_time")
+            parsed_start = parse_datetime_iso(start_time_str)
+            if parsed_start:
+                start_time = parsed_start
 
         return get_time_taken(timezone.now(), start_time) if start_time else "0s"
+
+    def get_elapsed_seconds(self, obj):
+        """Calculate elapsed time since start in seconds."""
+        from django.utils import timezone
+
+        from reNgine.utilities.time import parse_datetime_iso
+
+        # Try to get elapsed from runner_data first (float in seconds)
+        if obj.runner_data and "elapsed" in obj.runner_data:
+            elapsed_value = obj.runner_data.get("elapsed")
+            if isinstance(elapsed_value, (int, float)):
+                return float(elapsed_value)
+
+        # Calculate elapsed from start_time or created_at
+        start_time = obj.created_at
+        if obj.runner_data and "start_time" in obj.runner_data:
+            start_time_str = obj.runner_data.get("start_time")
+            parsed_start = parse_datetime_iso(start_time_str)
+            if parsed_start:
+                start_time = parsed_start
+
+        if start_time:
+            delta = timezone.now() - start_time
+            return delta.total_seconds()
+
+        return 0.0
 
 
 class OrganizationSerializer(serializers.ModelSerializer):

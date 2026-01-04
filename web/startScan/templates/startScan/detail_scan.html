@@ -236,10 +236,10 @@ Scan Findings
 						{% endif %}
 
 						<h6 class="font-13 text-muted text-uppercase mt-3">Scan Logs</h6>
-						<span><a href="javascript:get_logs_modal({{history.id}})"><i class="fe-file"></i> Logs</a></span>
+						<span><a href="javascript:get_logs_modal({{history.id}}, null, '{{current_project.slug}}')"><i class="fe-file"></i> Logs</a></span>
 
 						<h6 class="font-13 text-muted text-uppercase mt-4 mb-2">Scan Timeline</h6>
-						<div data-simplebar style="max-height: 410px;" class="p-2 scan-timeline" data-scan-id="{{history.id}}">
+						<div data-simplebar style="max-height: 800px;" class="p-2 scan-timeline" data-scan-id="{{history.id}}">
 							<div class="track-order-list">
 								<ul class="list-unstyled">
 									{% if history.is_legacy_scan %}
@@ -259,7 +259,7 @@ Scan Findings
 													<p class="badge badge-soft-danger">Error: {{activity.error_message}}</p>
 												{% endif %}
 											{% endif %}
-											<span><a href="javascript:get_logs_modal(null, {{activity.id}})"><i class="fe-file"></i> Logs</a></span>
+											<span><a href="javascript:get_logs_modal(null, {{activity.id}}, '{{current_project.slug}}')"><i class="fe-file"></i> Logs</a></span>
 										</li>
 										{% endfor %}
 									{% else %}

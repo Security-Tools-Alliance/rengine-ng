@@ -38,4 +38,5 @@ urlpatterns = [
     path("<slug:slug>/vulnerabilities", views.detail_vuln_scan, name="all_vulns"),
     path("<slug:slug>/vulnerability/<int:id>", views.detail_vuln_scan, name="detail_vuln_scan"),
     path("<slug:slug>/vulnerability/toggle/<int:id>", views.change_vuln_status, name="change_vuln_status"),
+    path("<slug:slug>/logs/", views.scan_logs_view, name="scan_logs"),
 ]

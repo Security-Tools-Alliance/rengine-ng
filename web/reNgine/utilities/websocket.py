@@ -8,7 +8,7 @@ from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.db.models import Count
 
-from api.serializers import ScanActivitySerializer
+from api.serializers import ScanActivitySerializer, SecatorRunnerSerializer
 from startScan.models import EndPoint, ScanActivity, ScanHistory, SecatorRunner, Subdomain, Vulnerability
 
 
@@ -90,31 +90,9 @@ def build_scan_status_message(scan_history_id: int) -> dict:
         else:
             # Secator: use SecatorRunner
             runners = SecatorRunner.objects.filter(scan_history=scan).order_by("-created_at")
-            # Build runners data manually (avoiding serializer validation issue)
-            message["runners"] = [
-                {
-                    "id": runner.id,
-                    "runner_type": runner.runner_type,
-                    "runner_name": runner.runner_name or "",
-                    "status": runner.runner_data.get("status", "PENDING") if runner.runner_data else "PENDING",
-                    "status_display": (
-                        "Running" if runner.runner_data and runner.runner_data.get("status") == "RUNNING"
-                        else "Success" if runner.runner_data and runner.runner_data.get("status") == "SUCCESS"
-                        else "Failed" if runner.runner_data and runner.runner_data.get("status") in ["FAILURE", "FAILED"]
-                        else "Pending"
-                    ),
-                    "status_code": get_runner_status_code(runner),
-                    "progress": runner.runner_data.get("progress", 0) if runner.runner_data else 0,
-                    "done": runner.runner_data.get("done", False) if runner.runner_data else False,
-                    "created_at": runner.created_at.isoformat() if runner.created_at else None,
-                    "updated_at": runner.updated_at.isoformat() if runner.updated_at else None,
-                    "elapsed": runner.elapsed.total_seconds() if runner.elapsed else 0,
-                    "start_time": runner.runner_data.get("start_time") if runner.runner_data and "start_time" in runner.runner_data else (runner.created_at.isoformat() if runner.created_at else None),
-                    "scan_history": runner.scan_history_id,
-                    "domain": runner.domain_id,
-                }
-                for runner in runners
-            ]
+            # Use serializer to get consistent data, including elapsed_seconds
+            serializer = SecatorRunnerSerializer(runners, many=True)
+            message["runners"] = serializer.data
 
             # Build timeline from runners
             message["timeline"] = [

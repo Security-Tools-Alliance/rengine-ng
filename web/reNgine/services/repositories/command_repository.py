@@ -84,8 +84,15 @@ class CommandRepository:
             workflow_name = runner_data.get("config", {}).get("name")
         # node_id from context.node_id or config.node_id
         node_id = runner_data.get("context", {}).get("node_id") or runner_data.get("config", {}).get("node_id")
-        # ancestor_id from context.ancestor_id
-        ancestor_id = runner_data.get("context", {}).get("ancestor_id")
+        # Extract ancestor_id from node_id if available (more reliable than API)
+        # node_id format: "workflow_name.task_name" -> extract "workflow_name"
+        ancestor_id = None
+        if node_id and "." in node_id:
+            # Extract first part before the dot (workflow name)
+            ancestor_id = node_id.split(".", 1)[0]
+        else:
+            # Fallback to API ancestor_id if node_id doesn't contain a dot
+            ancestor_id = runner_data.get("context", {}).get("ancestor_id")
         # scan_type from run_opts.scan_type
         scan_type = runner_data.get("run_opts", {}).get("scan_type")
 
@@ -110,9 +117,7 @@ class CommandRepository:
                 logger.warning(f"ScanActivity with ID {activity_id} not found, continuing without activity link")
 
         # Parse start_time
-        start_time = parse_datetime_iso(start_time_str)
-        if not start_time:
-            start_time = timezone.now()
+        start_time = parse_datetime_iso(start_time_str) or timezone.now()
 
         # Parse end_time
         end_time = parse_datetime_iso(end_time_str)

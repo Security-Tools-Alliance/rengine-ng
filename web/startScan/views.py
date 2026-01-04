@@ -6,8 +6,8 @@ from celery import group
 from celery.utils.log import get_task_logger
 from django.contrib import messages
 from django.core.serializers.json import DjangoJSONEncoder
-from django.db.models import Count
-from django.db.models.functions import Lower
+from django.db.models import Case, Count, F, IntegerField, Q, Value, When
+from django.db.models.functions import Coalesce, Lower
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import get_template
@@ -40,6 +40,7 @@ from reNgine.utilities.subdomain import get_interesting_subdomains
 from reNgine.utilities.time import local_to_utc_aware
 from scanEngine.models import EngineType, SecatorScan, SecatorTask, SecatorWorkflow, VulnerabilityReportSetting
 from startScan.models import (
+    Command,
     CountryISO,
     CveId,
     CweId,
@@ -61,19 +62,147 @@ from targetApp.models import Domain, Organization
 logger = get_task_logger(__name__)
 
 
+def build_command_hierarchy(commands):
+    """
+    Build hierarchical structure from ordered commands.
+    
+    Takes a list of Command objects ordered by hierarchy (scan > workflow > task)
+    and builds a nested structure: scan > workflows > tasks.
+    
+    Args:
+        commands: List of Command objects, already ordered by hierarchy type,
+                  group key (ancestor_id/workflow_name), and time.
+    
+    Returns:
+        List of hierarchical entries. Each entry is either:
+        - A scan dict: {"command": Command, "workflows": [...], "tasks": [...]}
+        - A workflow dict: {"command": Command, "tasks": [...]}
+    
+    Example:
+        Input: [scan_cmd, workflow_cmd, task_cmd1, task_cmd2]
+        Output: [
+            {
+                "command": scan_cmd,
+                "workflows": [
+                    {
+                        "command": workflow_cmd,
+                        "tasks": [task_cmd1, task_cmd2]
+                    }
+                ],
+                "tasks": []
+            }
+        ]
+        
+        Input: [scan_cmd, task_cmd1, task_cmd2]  # Direct task scan
+        Output: [
+            {
+                "command": scan_cmd,
+                "workflows": [],
+                "tasks": [task_cmd1, task_cmd2]
+            }
+        ]
+    """
+    # First pass: build map of workflows by name
+    workflow_by_name = {}  # Map workflow name to workflow command
+    workflow_entries = {}  # Map workflow command to its entry dict
+    
+    for command in commands:
+        if command.runner_type == "workflow":
+            workflow_name = command.name or ""
+            if workflow_name:
+                workflow_by_name[workflow_name] = command
+            if command.workflow_name and command.workflow_name != workflow_name:
+                workflow_by_name[command.workflow_name] = command
+            # Create workflow entry
+            workflow_entries[command] = {
+                "command": command,
+                "tasks": []
+            }
+    
+    # Second pass: build hierarchical structure
+    hierarchical_structure = []
+    current_scan = None
+    
+    for command in commands:
+        if command.runner_type == "scan":
+            # New scan - start a new top-level entry with both workflows and direct tasks
+            current_scan = {
+                "command": command,
+                "workflows": [],
+                "tasks": []  # Direct tasks (no workflow parent)
+            }
+            hierarchical_structure.append(current_scan)
+        elif command.runner_type == "workflow":
+            # Workflow - add to current scan or create standalone
+            if current_scan:
+                # Add to current scan
+                workflow_entry = workflow_entries.get(command, {
+                    "command": command,
+                    "tasks": []
+                })
+                current_scan["workflows"].append(workflow_entry)
+            else:
+                # Standalone workflow (no scan parent)
+                workflow_entry = workflow_entries.get(command, {
+                    "command": command,
+                    "tasks": []
+                })
+                hierarchical_structure.append(workflow_entry)
+        elif command.runner_type == "task":
+            # Task - find parent workflow and add to it, or add directly to scan if no workflow found
+            task_added = False
+            if command.ancestor_id:
+                parent_workflow = workflow_by_name.get(command.ancestor_id)
+                if parent_workflow:
+                    workflow_entry = workflow_entries.get(parent_workflow)
+                    if workflow_entry:
+                        workflow_entry["tasks"].append(command)
+                        task_added = True
+                    else:
+                        # Workflow entry not found, create it
+                        if current_scan:
+                            # Add workflow to current scan first
+                            new_workflow_entry = {
+                                "command": parent_workflow,
+                                "tasks": [command]
+                            }
+                            current_scan["workflows"].append(new_workflow_entry)
+                            workflow_entries[parent_workflow] = new_workflow_entry
+                            task_added = True
+                        else:
+                            # Standalone workflow
+                            new_workflow_entry = {
+                                "command": parent_workflow,
+                                "tasks": [command]
+                            }
+                            hierarchical_structure.append(new_workflow_entry)
+                            workflow_entries[parent_workflow] = new_workflow_entry
+                            task_added = True
+            
+            # If task wasn't added to a workflow, add it directly to scan (scan of type "task")
+            if not task_added and current_scan:
+                current_scan["tasks"].append(command)
+            elif not task_added:
+                # No scan and no workflow found - create standalone task entry
+                hierarchical_structure.append({
+                    "command": command,
+                    "tasks": []
+                })
+    
+    return hierarchical_structure
+
+
 def scan_history(request, slug):
     host = ScanHistory.objects.filter(domain__project__slug=slug).order_by("-start_scan_date")
 
     # Preload SecatorRunner for all scans to avoid N+1 queries
-    secator_runners = SecatorRunner.objects.filter(scan_history__in=host).select_related("scan_history", "domain")
+    secator_runners = SecatorRunner.objects.filter(scan_history__in=host).select_related("scan_history", "domain").order_by("id")
 
-    # Build dictionary mapping scan_id to main runner (workflow/scan first, then task)
+    # Build dictionary mapping scan_id to first runner (by ID) to determine scan engine type
     main_runner_by_scan = {}
     for runner in secator_runners:
         scan_id = runner.scan_history_id
         if scan_id not in main_runner_by_scan:
-            main_runner_by_scan[scan_id] = runner
-        elif runner.runner_type in ["workflow", "scan"] and main_runner_by_scan[scan_id].runner_type not in ["workflow", "scan"]:
             main_runner_by_scan[scan_id] = runner
 
     context = {
@@ -88,6 +217,77 @@ def subscan_history(request, slug):
     subscans = SubScan.objects.filter(scan_history__domain__project__slug=slug).order_by("-start_scan_date")
     context = {"scan_history_active": "active", "subscans": subscans}
     return render(request, "startScan/subscan_history.html", context)
+
+
+def scan_logs_view(request, slug):
+    """
+    View to render command logs with hierarchy.
+    Returns HTML formatted logs using Django template.
+    """
+    scan_id = safe_int_cast(request.GET.get("scan_id"))
+    activity_id = safe_int_cast(request.GET.get("activity_id"))
+    include_pending = request.GET.get("include_pending", "false").lower() == "true"
+
+    if scan_id is None and activity_id is None:
+        return HttpResponse("scan_id or activity_id is required", status=400)
+
+    # Get commands and validate slug matches project
+    if scan_id is not None:
+        queryset = Command.objects.filter(
+            scan_history__id=scan_id,
+            scan_history__domain__project__slug=slug,
+        )
+    else:
+        queryset = Command.objects.filter(
+            activity__id=activity_id,
+            activity__scan_history__domain__project__slug=slug,
+        )
+
+    # Exclude PENDING status by default unless include_pending is true
+    if not include_pending:
+        queryset = queryset.filter(~Q(status="PENDING") | Q(status__isnull=True))
+
+    # Push ordering into the database so we don't have to materialize and sort
+    # a large queryset in Python. Order first by hierarchy type, then by
+    # grouping key (ancestor_id/workflow_name), and finally by a stable timestamp/id.
+    type_order_case = Case(
+        When(runner_type="scan", then=Value(0)),
+        When(runner_type="workflow", then=Value(1)),
+        When(runner_type="task", then=Value(2)),
+        default=Value(3),
+        output_field=IntegerField(),
+    )
+
+    # Use Coalesce to handle None values for ancestor_id in group_key
+    # For scans: group_key is None (appear first)
+    # For workflows: group_key is workflow_name or name
+    # For tasks: group_key is ancestor_id
+    queryset = queryset.annotate(
+        type_order=type_order_case,
+        # Use ancestor_id for tasks, workflow_name for workflows, None for scans
+        group_key=Coalesce(
+            F("ancestor_id"),
+            F("workflow_name"),
+            F("name"),
+            Value(""),
+        ),
+    ).order_by(
+        "type_order",
+        "group_key",
+        "time",
+        "id",
+    )
+
+    # Materialize the ordered queryset
+    commands_list = list(queryset)
+
+    # Build hierarchical structure in a single pass
+    hierarchical_structure = build_command_hierarchy(commands_list)
+
+    context = {
+        "hierarchical_structure": hierarchical_structure,
+    }
+    return render(request, "startScan/_items/command_logs.html", context)
 
 
 def detail_scan(request, id, slug):

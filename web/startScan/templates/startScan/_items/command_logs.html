@@ -1,0 +1,59 @@
+{% load humanize %}
+{% load mathfilters %}
+{% comment %}
+Template for displaying command logs with hierarchical structure.
+
+Context variables:
+- hierarchical_structure: List of dicts with structure:
+  - For scans: {"command": scan_command, "workflows": [...], "tasks": [...]}
+    - workflows: List of workflow dicts with their tasks
+    - tasks: Direct tasks (no workflow parent) - for scan of type "task"
+  - For standalone workflows: {"command": workflow_command, "tasks": [...]}
+{% endcomment %}
+
+{% for item in hierarchical_structure %}
+  {% if item.command.runner_type == "scan" %}
+    {# Scan with nested workflows and/or direct tasks #}
+    <div class="command-log-group">
+      {% include "startScan/_items/command_log.html" with command=item.command %}
+      {% if item.workflows %}
+        <div class="command-log-children ms-3">
+          {% for workflow_item in item.workflows %}
+            <div class="command-log-group">
+              {% include "startScan/_items/command_log.html" with command=workflow_item.command %}
+              {% if workflow_item.tasks %}
+                <div class="command-log-children ms-3">
+                  {% for task_command in workflow_item.tasks %}
+                    {% include "startScan/_items/command_log.html" with command=task_command %}
+                  {% endfor %}
+                </div>
+              {% endif %}
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+      {% if item.tasks %}
+        {# Direct tasks (scan of type "task" without workflows) #}
+        <div class="command-log-children ms-3">
+          {% for task_command in item.tasks %}
+            {% include "startScan/_items/command_log.html" with command=task_command %}
+          {% endfor %}
+        </div>
+      {% endif %}
+    </div>
+  {% else %}
+    {# Standalone workflow (no scan parent) #}
+    <div class="command-log-group">
+      {% include "startScan/_items/command_log.html" with command=item.command %}
+      {% if item.tasks %}
+        <div class="command-log-children ms-3">
+          {% for task_command in item.tasks %}
+            {% include "startScan/_items/command_log.html" with command=task_command %}
+          {% endfor %}
+        </div>
+      {% endif %}
+    </div>
+  {% endif %}
+{% empty %}
+  <p class="text-muted">No logs available.</p>
+{% endfor %}

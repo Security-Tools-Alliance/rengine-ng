@@ -1346,21 +1346,26 @@ function create_log_element(log) {
 	return logElement;
 }
 
-function get_logs_modal(scan_id=null, activity_id=null) {
+function get_logs_modal(scan_id=null, activity_id=null, project_slug=null) {
 
 	// This function will display a xl modal with formatted command logs
-	// Uses Django template for proper formatting and security
+	// Uses Django template for proper formatting and security (MVC pattern)
 	$('#xl-modal-title').empty();
 	$('#xl-modal-content').empty();
 	$('#xl-modal-footer').empty();
 
+	// Get project slug from global variable if not provided
+	if (!project_slug && typeof current_project_slug !== 'undefined') {
+		project_slug = current_project_slug;
+	}
+
 	let url, title;
 	if (scan_id) {
-		url = `/api/getScanLogsHTML?scan_id=${scan_id}`
+		url = `/scan/${project_slug || ''}/logs/?scan_id=${scan_id}`
 		title = `Logs for scan #${scan_id}`
 	}
 	else{
-		url = `/api/getScanLogsHTML?activity_id=${activity_id}`
+		url = `/scan/${project_slug || ''}/logs/?activity_id=${activity_id}`
 		title = `Logs for activity #${activity_id}`
 	}
 
@@ -1369,16 +1374,21 @@ function get_logs_modal(scan_id=null, activity_id=null) {
 	});
 	swal.showLoading();
 
-	// Get formatted HTML logs from server
+	// Get formatted HTML logs from Django view
 	fetch(url)
-	.then(response => response.json())
-	.then(data => {
+	.then(response => {
+		if (!response.ok) {
+			throw new Error(`HTTP error! status: ${response.status}`);
+		}
+		return response.text();
+	})
+	.then(html => {
 		swal.close();
 		$('#xl-modal-title').html(title);
 		
 		// Insert the HTML directly (it's already escaped and formatted by Django template)
-		if (data.html) {
-			$('#xl-modal-content').html(data.html);
+		if (html && html.trim()) {
+			$('#xl-modal-content').html(html);
 		} else {
 			$('#xl-modal-content').html('<p class="text-muted">No logs available.</p>');
 		}

@@ -347,3 +347,118 @@ class TestCommandRepository(BaseTestCase):
         self.assertEqual(result1.id, result2.id)
         self.assertEqual(result2.errors, ["Error 1"])
         self.assertEqual(result2.warnings, ["Warning 1"])
+
+    def test_save_from_secator_ancestor_id_from_node_id_with_dot(self):
+        """Test extracting ancestor_id from node_id when it contains a dot."""
+        runner_data = {
+            "name": "httpx/tls",
+            "cmd": "httpx -u example.com",
+            "output": "Output",
+            "config": {
+                "type": "task",
+                "node_id": "subdomain_recon.httpx/tls",
+            },
+            "context": {
+                "ancestor_id": "wrong_ancestor",  # Should be ignored
+            },
+        }
+
+        result = self.command_repo.save_from_secator(runner_data, self.scan_history.id)
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result.ancestor_id, "subdomain_recon")
+        self.assertEqual(result.node_id, "subdomain_recon.httpx/tls")
+
+    def test_save_from_secator_ancestor_id_from_node_id_with_slash(self):
+        """Test extracting ancestor_id from node_id with task name containing slash."""
+        runner_data = {
+            "name": "httpx/probe",
+            "cmd": "httpx -l input.txt",
+            "output": "Output",
+            "config": {
+                "type": "task",
+                "node_id": "subdomain_recon.httpx/probe",
+            },
+        }
+
+        result = self.command_repo.save_from_secator(runner_data, self.scan_history.id)
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result.ancestor_id, "subdomain_recon")
+
+    def test_save_from_secator_ancestor_id_from_node_id_no_dot(self):
+        """Test that ancestor_id is None when node_id doesn't contain a dot."""
+        runner_data = {
+            "name": "subdomain_recon",
+            "cmd": "subfinder -d example.com",
+            "output": "Output",
+            "config": {
+                "type": "workflow",
+                "node_id": "subdomain_recon",  # No dot, so no ancestor
+            },
+        }
+
+        result = self.command_repo.save_from_secator(runner_data, self.scan_history.id)
+
+        self.assertIsNotNone(result)
+        self.assertIsNone(result.ancestor_id)
+        self.assertEqual(result.node_id, "subdomain_recon")
+
+    def test_save_from_secator_ancestor_id_fallback_to_api(self):
+        """Test that ancestor_id falls back to API value when node_id has no dot."""
+        runner_data = {
+            "name": "task",
+            "cmd": "task command",
+            "output": "Output",
+            "config": {
+                "type": "task",
+                "node_id": "simple_task",  # No dot
+            },
+            "context": {
+                "ancestor_id": "workflow_from_api",
+            },
+        }
+
+        result = self.command_repo.save_from_secator(runner_data, self.scan_history.id)
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result.ancestor_id, "workflow_from_api")
+
+    def test_save_from_secator_ancestor_id_no_node_id(self):
+        """Test that ancestor_id uses API value when node_id is None."""
+        runner_data = {
+            "name": "task",
+            "cmd": "task command",
+            "output": "Output",
+            "config": {
+                "type": "task",
+            },
+            "context": {
+                "ancestor_id": "workflow_from_api",
+            },
+        }
+
+        result = self.command_repo.save_from_secator(runner_data, self.scan_history.id)
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result.ancestor_id, "workflow_from_api")
+
+    def test_save_from_secator_ancestor_id_node_id_priority(self):
+        """Test that node_id takes priority over API ancestor_id when both are present."""
+        runner_data = {
+            "name": "gau",
+            "cmd": "gau example.com",
+            "output": "Output",
+            "config": {
+                "type": "task",
+                "node_id": "subdomain_recon.gau",
+            },
+            "context": {
+                "ancestor_id": "wrong_workflow",  # Should be ignored
+            },
+        }
+
+        result = self.command_repo.save_from_secator(runner_data, self.scan_history.id)
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result.ancestor_id, "subdomain_recon")  # From node_id, not API
