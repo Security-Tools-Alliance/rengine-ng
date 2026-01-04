@@ -160,26 +160,8 @@ Scan Findings
 						{% endif %}
 						{% endif %}
 						
-						<h6 class="font-13 text-muted text-uppercase mt-3">{% if not is_secator_scan %}Scan Engine{% else %}Scan Name{% endif %}</h6>
-						{% if not is_secator_scan %}
-						<span class="badge badge-soft-primary">{{history.scan_type.engine_name}}</span>
-						{% else %}
-							{% if secator_runners %}
-								{% with main_runner=secator_runners|first %}
-									{% if main_runner.runner_type == 'workflow' or main_runner.runner_type == 'scan' %}
-										<span class="badge badge-soft-primary">Secator {{ main_runner.runner_type|title }}</span>
-										<br>
-										<span class="badge badge-soft-info mt-1" id="scan-name-display">{{ main_runner.runner_name }}</span>
-									{% else %}
-										<span class="badge badge-soft-primary">Secator Task</span>
-										<br>
-										<span class="badge badge-soft-info mt-1" id="scan-name-display">{{ main_runner.runner_name }}</span>
-									{% endif %}
-								{% endwith %}
-							{% else %}
-								<span class="badge badge-soft-primary">Secator</span>
-							{% endif %}
-						{% endif %}
+						<h6 class="font-13 text-muted text-uppercase mt-3">Scan Name</h6>
+						<span class="badge badge-soft-primary" id="scan-name-display">{{ history.display_runner_type }}: {{ history.display_scan_name }}</span>
 						
 						<h6 class="font-13 text-muted text-uppercase mt-3">Scan Duration</h6>
 						{% if history.scan_status == -1 %}
@@ -303,12 +285,7 @@ Scan Findings
 													<span class="active-dot dot"></span>
 													<span class="float-start badge badge-soft-primary ms-1 me-1">Current Scan</span>
 													{% endif %}
-													{{scan.scan_type.engine_name}}
-													{% if scan.scan_type.scan_type == 'internet' %}
-													<span class="badge badge-soft-info ms-1">Bug Bounty</span>
-													{% elif scan.scan_type.scan_type == 'internal_network' %}
-													<span class="badge badge-soft-warning ms-1">Internal Network</span>
-													{% endif %}
+													{{scan.scan_name}}
 													{% if scan.scan_status == -1 %}
 													<span class="badge badge-soft-warning float-end">Pending</span>
 													{% elif scan.scan_status == 0 %}

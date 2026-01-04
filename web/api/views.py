@@ -1292,6 +1292,7 @@ class StopScan(APIView):
                     scan.save()
                     # Send WebSocket update
                     from reNgine.utilities.websocket import send_scan_status_update
+
                     send_scan_status_update(scan_id)
                     response["status"] = True
                 else:
@@ -4028,7 +4029,9 @@ class SecatorRunnerCreate(APIView):
             logger.info(
                 f"[SECATOR API STATUS SYNC] Creating runner: type={runner_type}, name={runner_name}, scan_history_id={scan_history_id}"
             )
-            logger.debug(f"[SECATOR API STATUS SYNC] Full runner data received: {json.dumps(runner_data, indent=2, default=str)}")
+            logger.debug(
+                f"[SECATOR API STATUS SYNC] Full runner data received: {json.dumps(runner_data, indent=2, default=str)}"
+            )
             logger.debug(f"[SECATOR API STATUS SYNC] Runner data keys: {list(runner_data.keys())}")
             if "config" in runner_data:
                 logger.debug(f"[SECATOR API STATUS SYNC] Config keys: {list(runner_data.get('config', {}).keys())}")
@@ -4102,9 +4105,7 @@ class SecatorRunnerUpdate(APIView):
                 logger.error(
                     f"[SECATOR API STATUS SYNC] runner_data is not a dict: {type(runner_data)}, runner_id={runner_id}"
                 )
-                return Response(
-                    {"status": False, "error": "Invalid request data format"}, status=400
-                )
+                return Response({"status": False, "error": "Invalid request data format"}, status=400)
 
             logger.info(f"[SECATOR API STATUS SYNC] Updating runner: runner_id={runner_id}")
             logger.debug(
@@ -4185,9 +4186,7 @@ class SecatorRunnerUpdate(APIView):
                 runner_type = runner.runner_type or runner.runner_data.get("config", {}).get("type", "unknown")
                 # If any runner is not done or still running, scan is not completed
                 if not done or status == "RUNNING":
-                    incomplete_runners.append(
-                        f"{runner_name} (type={runner_type}, status={status}, done={done})"
-                    )
+                    incomplete_runners.append(f"{runner_name} (type={runner_type}, status={status}, done={done})")
 
         if incomplete_runners:
             logger.debug(
@@ -4358,7 +4357,9 @@ class SecatorRunnerUpdate(APIView):
             if runner_done and runner_status in ["SUCCESS", "FAILURE", "FAILED"]:
                 existing_activity.title = f"{activity_title} - Completed"
             existing_activity.save(update_fields=["status", "time", "title"])
-            logger.debug(f"[SECATOR API STATUS SYNC] Updated ScanActivity {existing_activity.id} for runner {runner_name}")
+            logger.debug(
+                f"[SECATOR API STATUS SYNC] Updated ScanActivity {existing_activity.id} for runner {runner_name}"
+            )
         else:
             # Create new activity
             activity_id = scan_repo.create_activity(scan_history.id, activity_title, rengine_status)
@@ -4435,7 +4436,9 @@ class SecatorFindingCreate(APIView):
             logger.info(
                 f"[SECATOR API FINDINGS] Creating finding: type={finding_type}, scan_history_id={scan_history_id}, domain_id={domain_id}"
             )
-            logger.debug(f"[SECATOR API FINDINGS] Full finding data received: {json.dumps(finding_data, indent=2, default=str)}")
+            logger.debug(
+                f"[SECATOR API FINDINGS] Full finding data received: {json.dumps(finding_data, indent=2, default=str)}"
+            )
             logger.debug(f"[SECATOR API FINDINGS] Finding data keys: {list(finding_data.keys())}")
             logger.debug(f"[SECATOR API FINDINGS] Finding type: {finding_type}")
             if "_context" in finding_data:
@@ -4444,7 +4447,9 @@ class SecatorFindingCreate(APIView):
             for key, value in finding_data.items():
                 if key not in ["_type", "_context", "_uuid"]:
                     if isinstance(value, (dict, list)):
-                        logger.debug(f"[SECATOR API FINDINGS] Finding field '{key}': {json.dumps(value, indent=2, default=str)}")
+                        logger.debug(
+                            f"[SECATOR API FINDINGS] Finding field '{key}': {json.dumps(value, indent=2, default=str)}"
+                        )
                     else:
                         logger.debug(f"[SECATOR API FINDINGS] Finding field '{key}': {value}")
 
@@ -4475,17 +4480,11 @@ class SecatorFindingCreate(APIView):
 
             # Validate required parameters before saving
             if not scan_history_id:
-                logger.warning(
-                    f"[SECATOR API FINDINGS] Missing scan_history_id for finding type={finding_type}"
-                )
-                return Response(
-                    {"status": False, "error": "Missing scan_history_id in _context"}, status=400
-                )
+                logger.warning(f"[SECATOR API FINDINGS] Missing scan_history_id for finding type={finding_type}")
+                return Response({"status": False, "error": "Missing scan_history_id in _context"}, status=400)
 
             if not domain_id:
-                logger.warning(
-                    f"[SECATOR API FINDINGS] Missing domain_id for finding type={finding_type}"
-                )
+                logger.warning(f"[SECATOR API FINDINGS] Missing domain_id for finding type={finding_type}")
                 return Response({"status": False, "error": "Missing domain_id in _context"}, status=400)
 
             # Validate that ScanHistory and Domain exist
@@ -4497,14 +4496,10 @@ class SecatorFindingCreate(APIView):
 
             try:
                 scan_history = ScanHistory.objects.get(id=scan_history_id)
-                logger.debug(
-                    f"[SECATOR API FINDINGS] ScanHistory {scan_history_id} found: {scan_history.scan_type}"
-                )
+                logger.debug(f"[SECATOR API FINDINGS] ScanHistory {scan_history_id} found: {scan_history.scan_name}")
             except ObjectDoesNotExist:
                 logger.error(f"[SECATOR API FINDINGS] ScanHistory {scan_history_id} not found")
-                return Response(
-                    {"status": False, "error": f"ScanHistory {scan_history_id} not found"}, status=404
-                )
+                return Response({"status": False, "error": f"ScanHistory {scan_history_id} not found"}, status=404)
 
             try:
                 domain = Domain.objects.get(id=domain_id)
@@ -4555,37 +4550,27 @@ class SecatorFindingCreate(APIView):
                     )
                     return Response({"status": True, "id": finding_id})
                 else:
-                    logger.warning(
-                        f"[SECATOR API FINDINGS] Saved object has no 'id' attribute: {type(saved_object)}"
-                    )
-                    return Response(
-                        {"status": False, "error": "Saved object has no ID attribute"}, status=500
-                    )
+                    logger.warning(f"[SECATOR API FINDINGS] Saved object has no 'id' attribute: {type(saved_object)}")
+                    return Response({"status": False, "error": "Saved object has no ID attribute"}, status=500)
 
             except ObjectDoesNotExist as e:
                 logger.error(
                     f"[SECATOR API FINDINGS] ObjectDoesNotExist error saving finding: {e}",
                     exc_info=True,
                 )
-                return Response(
-                    {"status": False, "error": f"Required object not found: {str(e)}"}, status=404
-                )
+                return Response({"status": False, "error": f"Required object not found: {str(e)}"}, status=404)
             except IntegrityError as e:
                 logger.error(
                     f"[SECATOR API FINDINGS] IntegrityError saving finding: {e}",
                     exc_info=True,
                 )
-                return Response(
-                    {"status": False, "error": f"Database integrity error: {str(e)}"}, status=409
-                )
+                return Response({"status": False, "error": f"Database integrity error: {str(e)}"}, status=409)
             except Exception as e:
                 logger.error(
                     f"[SECATOR API FINDINGS] Error in repository.save_from_secator: {e}",
                     exc_info=True,
                 )
-                return Response(
-                    {"status": False, "error": f"Error saving finding: {str(e)}"}, status=500
-                )
+                return Response({"status": False, "error": f"Error saving finding: {str(e)}"}, status=500)
         except Exception as e:
             logger.error(f"[SECATOR API FINDINGS] Error creating finding: {e}")
             logger.error(f"[SECATOR API FINDINGS] Traceback: {traceback.format_exc()}")
@@ -4614,7 +4599,6 @@ class SecatorFindingUpdate(APIView):
                     {"status": False, "error": f"Error parsing request data: {str(parse_error)}"}, status=400
                 )
 
-
             from reNgine.services.repositories.certificate_repository import CertificateRepository
             from reNgine.services.repositories.dns_repository import DnsRepository
             from reNgine.services.repositories.employee_repository import EmployeeRepository
@@ -4631,21 +4615,15 @@ class SecatorFindingUpdate(APIView):
                 logger.error(
                     f"[SECATOR API FINDINGS] finding_data is not a dict: {type(finding_data)}, finding_id={finding_id}"
                 )
-                return Response(
-                    {"status": False, "error": "Invalid request data format"}, status=400
-                )
+                return Response({"status": False, "error": "Invalid request data format"}, status=400)
 
             finding_type = finding_data.get("_type")
             context = finding_data.get("_context", {})
 
             # Validate context is a dict
             if not isinstance(context, dict):
-                logger.error(
-                    f"[SECATOR API FINDINGS] _context is not a dict: {type(context)}, finding_id={finding_id}"
-                )
-                return Response(
-                    {"status": False, "error": "Invalid _context format"}, status=400
-                )
+                logger.error(f"[SECATOR API FINDINGS] _context is not a dict: {type(context)}, finding_id={finding_id}")
+                return Response({"status": False, "error": "Invalid _context format"}, status=400)
 
             scan_history_id = context.get("scan_history_id")
             domain_id = context.get("domain_id")
@@ -4658,9 +4636,7 @@ class SecatorFindingUpdate(APIView):
             logger.debug(f"[SECATOR API FINDINGS] Finding type: {finding_type}")
 
             if not finding_type:
-                logger.warning(
-                    f"[SECATOR API FINDINGS] Missing _type in finding data for finding_id={finding_id}"
-                )
+                logger.warning(f"[SECATOR API FINDINGS] Missing _type in finding data for finding_id={finding_id}")
                 return Response({"status": False, "error": "Missing _type in finding data"}, status=400)
 
             # Map finding type to repository class
@@ -4693,18 +4669,14 @@ class SecatorFindingUpdate(APIView):
                 logger.warning(
                     f"[SECATOR API FINDINGS] Unknown finding type: {finding_type} for finding_id={finding_id}"
                 )
-                return Response(
-                    {"status": False, "error": f"Unknown finding type: {finding_type}"}, status=400
-                )
+                return Response({"status": False, "error": f"Unknown finding type: {finding_type}"}, status=400)
 
             # Validate required parameters before saving
             if not scan_history_id:
                 logger.warning(
                     f"[SECATOR API FINDINGS] Missing scan_history_id for finding type={finding_type}, finding_id={finding_id}"
                 )
-                return Response(
-                    {"status": False, "error": "Missing scan_history_id in _context"}, status=400
-                )
+                return Response({"status": False, "error": "Missing scan_history_id in _context"}, status=400)
 
             if not domain_id:
                 logger.warning(
@@ -4721,24 +4693,18 @@ class SecatorFindingUpdate(APIView):
 
             try:
                 scan_history = ScanHistory.objects.get(id=scan_history_id)
-                logger.debug(
-                    f"[SECATOR API FINDINGS] ScanHistory {scan_history_id} found: {scan_history.scan_type}"
-                )
+                logger.debug(f"[SECATOR API FINDINGS] ScanHistory {scan_history_id} found: {scan_history.scan_name}")
             except ObjectDoesNotExist:
                 logger.error(
                     f"[SECATOR API FINDINGS] ScanHistory {scan_history_id} not found for finding_id={finding_id}"
                 )
-                return Response(
-                    {"status": False, "error": f"ScanHistory {scan_history_id} not found"}, status=404
-                )
+                return Response({"status": False, "error": f"ScanHistory {scan_history_id} not found"}, status=404)
 
             try:
                 domain = Domain.objects.get(id=domain_id)
                 logger.debug(f"[SECATOR API FINDINGS] Domain {domain_id} found: {domain.name}")
             except ObjectDoesNotExist:
-                logger.error(
-                    f"[SECATOR API FINDINGS] Domain {domain_id} not found for finding_id={finding_id}"
-                )
+                logger.error(f"[SECATOR API FINDINGS] Domain {domain_id} not found for finding_id={finding_id}")
                 return Response({"status": False, "error": f"Domain {domain_id} not found"}, status=404)
 
             # Instantiate repository and save finding (upsert: create or update)
@@ -4788,34 +4754,26 @@ class SecatorFindingUpdate(APIView):
                     logger.warning(
                         f"[SECATOR API FINDINGS] Saved object has no 'id' attribute: {type(saved_object)}, finding_id: {finding_id}"
                     )
-                    return Response(
-                        {"status": False, "error": "Saved object has no ID attribute"}, status=500
-                    )
+                    return Response({"status": False, "error": "Saved object has no ID attribute"}, status=500)
 
             except ObjectDoesNotExist as e:
                 logger.error(
                     f"[SECATOR API FINDINGS] ObjectDoesNotExist error saving finding: {e}, finding_id: {finding_id}",
                     exc_info=True,
                 )
-                return Response(
-                    {"status": False, "error": f"Required object not found: {str(e)}"}, status=404
-                )
+                return Response({"status": False, "error": f"Required object not found: {str(e)}"}, status=404)
             except IntegrityError as e:
                 logger.error(
                     f"[SECATOR API FINDINGS] IntegrityError saving finding: {e}, finding_id: {finding_id}",
                     exc_info=True,
                 )
-                return Response(
-                    {"status": False, "error": f"Database integrity error: {str(e)}"}, status=409
-                )
+                return Response({"status": False, "error": f"Database integrity error: {str(e)}"}, status=409)
             except Exception as e:
                 logger.error(
                     f"[SECATOR API FINDINGS] Error in repository.save_from_secator: {e}, finding_id: {finding_id}",
                     exc_info=True,
                 )
-                return Response(
-                    {"status": False, "error": f"Error saving finding: {str(e)}"}, status=500
-                )
+                return Response({"status": False, "error": f"Error saving finding: {str(e)}"}, status=500)
         except Exception as e:
             logger.error(
                 f"[SECATOR API FINDINGS] Error updating finding {finding_id}: {e}",

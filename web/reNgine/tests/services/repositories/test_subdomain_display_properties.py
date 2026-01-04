@@ -17,10 +17,9 @@ class SubdomainDisplayPropertiesTestCase(BaseTestCase):
         self.repository = EndpointRepository()
 
         # Use the data_generator from BaseTestCase which already has domain, engine_type, etc.
-        # Create a Secator scan
+        # Create a Secator scan (scan_type=None for Secator scans)
         self.secator_scan = ScanHistory.objects.create(
             domain=self.data_generator.domain,
-            scan_type=self.data_generator.engine_type,
             start_scan_date=self.data_generator.scan_history.start_scan_date,
             is_legacy_scan=False,
         )

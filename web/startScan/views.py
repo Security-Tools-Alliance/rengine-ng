@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime
 import json
 from pathlib import Path
 
@@ -65,19 +65,19 @@ logger = get_task_logger(__name__)
 def build_command_hierarchy(commands):
     """
     Build hierarchical structure from ordered commands.
-    
+
     Takes a list of Command objects ordered by hierarchy (scan > workflow > task)
     and builds a nested structure: scan > workflows > tasks.
-    
+
     Args:
         commands: List of Command objects, already ordered by hierarchy type,
                   group key (ancestor_id/workflow_name), and time.
-    
+
     Returns:
         List of hierarchical entries. Each entry is either:
         - A scan dict: {"command": Command, "workflows": [...], "tasks": [...]}
         - A workflow dict: {"command": Command, "tasks": [...]}
-    
+
     Example:
         Input: [scan_cmd, workflow_cmd, task_cmd1, task_cmd2]
         Output: [
@@ -92,7 +92,7 @@ def build_command_hierarchy(commands):
                 "tasks": []
             }
         ]
-        
+
         Input: [scan_cmd, task_cmd1, task_cmd2]  # Direct task scan
         Output: [
             {
@@ -105,7 +105,7 @@ def build_command_hierarchy(commands):
     # First pass: build map of workflows by name
     workflow_by_name = {}  # Map workflow name to workflow command
     workflow_entries = {}  # Map workflow command to its entry dict
-    
+
     for command in commands:
         if command.runner_type == "workflow":
             workflow_name = command.name or ""
@@ -114,39 +114,30 @@ def build_command_hierarchy(commands):
             if command.workflow_name and command.workflow_name != workflow_name:
                 workflow_by_name[command.workflow_name] = command
             # Create workflow entry
-            workflow_entries[command] = {
-                "command": command,
-                "tasks": []
-            }
-    
+            workflow_entries[command] = {"command": command, "tasks": []}
+
     # Second pass: build hierarchical structure
     hierarchical_structure = []
     current_scan = None
-    
+
     for command in commands:
         if command.runner_type == "scan":
             # New scan - start a new top-level entry with both workflows and direct tasks
             current_scan = {
                 "command": command,
                 "workflows": [],
-                "tasks": []  # Direct tasks (no workflow parent)
+                "tasks": [],  # Direct tasks (no workflow parent)
             }
             hierarchical_structure.append(current_scan)
         elif command.runner_type == "workflow":
             # Workflow - add to current scan or create standalone
             if current_scan:
                 # Add to current scan
-                workflow_entry = workflow_entries.get(command, {
-                    "command": command,
-                    "tasks": []
-                })
+                workflow_entry = workflow_entries.get(command, {"command": command, "tasks": []})
                 current_scan["workflows"].append(workflow_entry)
             else:
                 # Standalone workflow (no scan parent)
-                workflow_entry = workflow_entries.get(command, {
-                    "command": command,
-                    "tasks": []
-                })
+                workflow_entry = workflow_entries.get(command, {"command": command, "tasks": []})
                 hierarchical_structure.append(workflow_entry)
         elif command.runner_type == "task":
             # Task - find parent workflow and add to it, or add directly to scan if no workflow found
@@ -162,53 +153,36 @@ def build_command_hierarchy(commands):
                         # Workflow entry not found, create it
                         if current_scan:
                             # Add workflow to current scan first
-                            new_workflow_entry = {
-                                "command": parent_workflow,
-                                "tasks": [command]
-                            }
+                            new_workflow_entry = {"command": parent_workflow, "tasks": [command]}
                             current_scan["workflows"].append(new_workflow_entry)
                             workflow_entries[parent_workflow] = new_workflow_entry
                             task_added = True
                         else:
                             # Standalone workflow
-                            new_workflow_entry = {
-                                "command": parent_workflow,
-                                "tasks": [command]
-                            }
+                            new_workflow_entry = {"command": parent_workflow, "tasks": [command]}
                             hierarchical_structure.append(new_workflow_entry)
                             workflow_entries[parent_workflow] = new_workflow_entry
                             task_added = True
-            
+
             # If task wasn't added to a workflow, add it directly to scan (scan of type "task")
             if not task_added and current_scan:
                 current_scan["tasks"].append(command)
             elif not task_added:
                 # No scan and no workflow found - create standalone task entry
-                hierarchical_structure.append({
-                    "command": command,
-                    "tasks": []
-                })
-    
+                hierarchical_structure.append({"command": command, "tasks": []})
+
     return hierarchical_structure
 
 
 def scan_history(request, slug):
     host = ScanHistory.objects.filter(domain__project__slug=slug).order_by("-start_scan_date")
 
-    # Preload SecatorRunner for all scans to avoid N+1 queries
-    secator_runners = SecatorRunner.objects.filter(scan_history__in=host).select_related("scan_history", "domain").order_by("id")
-
-    # Build dictionary mapping scan_id to first runner (by ID) to determine scan engine type
-    main_runner_by_scan = {}
-    for runner in secator_runners:
-        scan_id = runner.scan_history_id
-        if scan_id not in main_runner_by_scan:
-            main_runner_by_scan[scan_id] = runner
+    # Preload scan_type and SecatorRunner to avoid N+1 queries when accessing scan_name
+    host = host.select_related("scan_type").prefetch_related("secatorrunner_set")
 
     context = {
         "scan_history_active": "active",
         "scan_history": host,
-        "main_runner_by_scan": main_runner_by_scan,
     }
     return render(request, "startScan/history.html", context)
 

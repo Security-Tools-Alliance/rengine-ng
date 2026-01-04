@@ -53,7 +53,9 @@ class TestStartScanViews(BaseTestCase):
 
         scan = ScanHistory.objects.latest("id")
         self.assertEqual(scan.domain, self.data_generator.domain)
-        self.assertEqual(scan.scan_type.id, self.data_generator.engine_type.id)
+        # All new scans are Secator scans, scan_type should be None
+        self.assertIsNone(scan.scan_type)
+        self.assertFalse(scan.is_legacy_scan)
 
     def test_scan_history_view(self):
         """Test the scan history view."""

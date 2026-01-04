@@ -87,9 +87,9 @@
 						<h5>Select the scan engine <small>(default engine Selected)</small></h5>
 						<select class="form-select" id="subtaskScanEngine" name="subtaskScanEngine">
 						{% for engine in scan_engines %}
-							{% if engine.engine_name == history.scan_type.engine_name %}
+							{% if history.is_legacy_scan and history.scan_type and engine.engine_name == history.scan_type.engine_name %}
 								<option value="{{engine.id}}" selected>{{engine}}</option>
-								{% else %}
+							{% else %}
 								<option value="{{engine.id}}">{{engine}}</option>
 							{% endif %}
 						{% endfor %}

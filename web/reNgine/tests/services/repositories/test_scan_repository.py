@@ -198,7 +198,9 @@ class TestScanRepository(BaseTestCase):
 
         scan = ScanHistory.objects.get(id=result)
         self.assertEqual(scan.domain.id, domain.id)
-        self.assertEqual(scan.scan_type.id, engine.id)
+        # All new scans are Secator scans, scan_type should be None
+        self.assertIsNone(scan.scan_type)
+        self.assertFalse(scan.is_legacy_scan)
         from reNgine.definitions import INITIATED_TASK
 
         self.assertEqual(scan.scan_status, INITIATED_TASK)
@@ -278,7 +280,9 @@ class TestScanRepository(BaseTestCase):
 
         scan = ScanHistory.objects.get(id=result)
         self.assertEqual(scan.domain.id, domain.id)
-        self.assertEqual(scan.scan_type.id, engine.id)
+        # All new scans are Secator scans, scan_type should be None
+        self.assertIsNone(scan.scan_type)
+        self.assertFalse(scan.is_legacy_scan)
 
     def test_create_scan_history_entry_with_user(self):
         """Test _create_scan_history_entry with initiated_by user."""

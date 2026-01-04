@@ -232,15 +232,13 @@ class ScanRepository:
         # Get current time
         current_scan_time = timezone.now()
 
-        # Fetch engine and domain objects
-        engine = EngineType.objects.get(pk=engine_id)
+        # Fetch domain object
         domain = Domain.objects.get(pk=host_id)
 
-        # Create scan history
+        # Create scan history (all new scans are Secator scans, no scan_type assigned)
         scan = ScanHistory()
         scan.scan_status = INITIATED_TASK
         scan.domain = domain
-        scan.scan_type = engine
         scan.start_scan_date = current_scan_time
 
         if initiated_by_id:
@@ -253,7 +251,7 @@ class ScanRepository:
         domain.start_scan_date = current_scan_time
         domain.save()
 
-        logger.info(f"Created scan {scan.id} for domain {domain.name} with engine {engine.engine_name}")
+        logger.info(f"Created scan {scan.id} for domain {domain.name}")
         return scan.id
 
     def create_activity(self, scan_history_id, message, status):

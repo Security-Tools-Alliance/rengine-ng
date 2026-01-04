@@ -105,27 +105,7 @@ Quick Scan History
                 <span class="badge badge-pills bg-danger mt-1" data-toggle="tooltip" data-placement="top" title="{{scan_history.get_critical_vulnerability_count}} Critical, {{scan_history.get_high_vulnerability_count}} High, {{scan_history.get_medium_vulnerability_count}} Medium Vulnerabilities">{{scan_history.get_vulnerability_count}}</span>
               </td>
               <td class="scan-engine-cell">
-                {% if scan_history.is_legacy_scan %}
-                <span class="badge badge-soft-primary">{{ scan_history.scan_type.engine_name }}</span>
-                <br>
-                {% if scan_history.scan_type.scan_type == 'internet' %}
-                <span class="badge badge-soft-info mt-1">Bug Bounty</span>
-                {% elif scan_history.scan_type.scan_type == 'internal_network' %}
-                <span class="badge badge-soft-warning mt-1">Internal Network</span>
-                {% else %}
-                <span class="badge badge-soft-secondary mt-1">{{ scan_history.scan_type.scan_type|title }}</span>
-                {% endif %}
-                {% else %}
-                  {% if main_runner_by_scan|get_item:scan_history.id %}
-                    {% with runner=main_runner_by_scan|get_item:scan_history.id %}
-                      <span class="badge badge-soft-primary">Secator {{ runner.runner_type|title }}</span>
-                      <br>
-                      <span class="badge badge-soft-info mt-1">{{ runner.runner_name }}</span>
-                    {% endwith %}
-                  {% else %}
-                    <span class="badge badge-soft-primary">Secator</span>
-                  {% endif %}
-                {% endif %}
+                <span class="badge badge-soft-primary">{{ scan_history.display_runner_type }}: {{ scan_history.display_scan_name }}</span>
               </td>
               <td>
                 <span data-toggle="tooltip" data-placement="top" title="{{scan_history.start_scan_date}}">{{scan_history.start_scan_date|naturaltime}}</span>

@@ -1,4 +1,3 @@
-from datetime import datetime
 from urllib.parse import urlparse
 
 from django.apps import apps
@@ -10,7 +9,6 @@ from django.db.models.functions import TruncDay
 from django.utils import timezone
 
 from reNgine.core.time import get_time_taken
-from reNgine.utilities.time import date_to_aware_datetime
 from reNgine.definitions import (
     CELERY_TASK_STATUSES,
     CONFIDENCE_CHOICES,
@@ -19,6 +17,7 @@ from reNgine.definitions import (
     NUCLEI_REVERSE_SEVERITY_MAP,
 )
 from reNgine.llm.utils import convert_markdown_to_html
+from reNgine.utilities.time import date_to_aware_datetime
 from scanEngine.models import EngineType
 from targetApp.models import Domain
 
@@ -48,7 +47,7 @@ class ScanHistory(models.Model):
     scan_status = models.IntegerField(choices=CELERY_TASK_STATUSES, default=-1)
     results_dir = models.CharField(max_length=255, blank=True)
     domain = models.ForeignKey(Domain, on_delete=models.CASCADE)
-    scan_type = models.ForeignKey(EngineType, on_delete=models.CASCADE)
+    scan_type = models.ForeignKey(EngineType, on_delete=models.CASCADE, null=True, blank=True)
     celery_ids = ArrayField(models.CharField(max_length=100), blank=True, default=list)
     tasks = ArrayField(models.CharField(max_length=200), null=True)
     stop_scan_date = models.DateTimeField(null=True, blank=True)
@@ -149,21 +148,18 @@ class ScanHistory(models.Model):
 
         secator_runners = SecatorRunner.objects.filter(scan_history=self)
         if secator_runners.exists():
-            # Get current running Secator runner
-            current_runner = SecatorProgressSync.get_current_running_runner(self.id)
-            if current_runner:
+            if current_runner := SecatorProgressSync.get_current_running_runner(self.id):
                 runner_name = current_runner.runner_name or current_runner.runner_data.get("name", "Unknown")
-                runner_type = current_runner.runner_type or current_runner.runner_data.get("config", {}).get("type", "task")
+                runner_type = current_runner.runner_type or current_runner.runner_data.get("config", {}).get(
+                    "type", "task"
+                )
                 # Format for display
                 if runner_type in ["workflow", "scan"]:
                     return f"{runner_type.title()}: {runner_name}"
                 else:
                     return f"Task: {runner_name}"
 
-        # Legacy scan: get the most recent running task from ScanActivity
-        current_activity = self.scanactivity_set.filter(status=RUNNING_TASK).order_by("-time").first()
-
-        if current_activity:
+        if current_activity := self.scanactivity_set.filter(status=RUNNING_TASK).order_by("-time").first():
             # Format task name for display
             task_name = current_activity.name
 
@@ -200,6 +196,58 @@ class ScanHistory(models.Model):
 
     def get_elapsed_time(self):
         return self.get_time_ago(self.start_scan_date)
+
+    def _get_main_runner(self):
+        """
+        Get the main SecatorRunner for this scan (workflow or scan type).
+        Returns None for legacy scans or if no runner is found.
+        Caches the result to avoid multiple queries.
+        """
+        if self.is_legacy_scan:
+            return None
+
+        if not hasattr(self, "_cached_main_runner"):
+            # Import here to avoid circular import
+            from startScan.models import SecatorRunner
+
+            main_runner = (
+                SecatorRunner.objects.filter(scan_history=self, runner_type__in=["workflow", "scan"])
+                .order_by("id")
+                .first()
+            )
+            self._cached_main_runner = main_runner
+
+        return self._cached_main_runner
+
+    @property
+    def scan_name(self):
+        """Get scan name: engine_name for legacy scans, runner_name for Secator scans."""
+        if self.is_legacy_scan and self.scan_type:
+            return self.scan_type.engine_name
+
+        main_runner = self._get_main_runner()
+        return main_runner.runner_name or "Secator" if main_runner else "Secator"
+
+    @property
+    def runner_type(self):
+        """Get runner type: 'legacy' for legacy scans, runner_type for Secator scans."""
+        if self.is_legacy_scan:
+            return "legacy"
+
+        main_runner = self._get_main_runner()
+        return main_runner.runner_type if main_runner else None
+
+    @property
+    def display_scan_name(self):
+        """Format scan_name by replacing underscores with spaces and capitalizing words."""
+        scan_name = self.scan_name
+        return scan_name.replace("_", " ").title() if scan_name else ""
+
+    @property
+    def display_runner_type(self):
+        """Format runner_type by replacing underscores with spaces and capitalizing words."""
+        runner_type = self.runner_type
+        return runner_type.replace("_", " ").title() if runner_type else ""
 
     def get_time_ago(self, time):
         duration = timezone.now() - time
@@ -408,10 +456,7 @@ class Subdomain(models.Model):
         """
         if not hasattr(self, "_cached_default_endpoint"):
             if self.scan_history and not self.scan_history.is_legacy_scan:
-                self._cached_default_endpoint = EndPoint.objects.filter(
-                    subdomain=self,
-                    is_default=True
-                ).first()
+                self._cached_default_endpoint = EndPoint.objects.filter(subdomain=self, is_default=True).first()
             else:
                 self._cached_default_endpoint = None
         return self._cached_default_endpoint
@@ -420,17 +465,13 @@ class Subdomain(models.Model):
     def display_http_status(self):
         """Return default endpoint http_status for Secator scans, otherwise subdomain http_status."""
         default_endpoint = self._default_endpoint
-        if default_endpoint:
-            return default_endpoint.http_status
-        return self.http_status
+        return default_endpoint.http_status if default_endpoint else self.http_status
 
     @HybridProperty
     def display_page_title(self):
         """Return default endpoint page_title for Secator scans, otherwise subdomain page_title."""
         default_endpoint = self._default_endpoint
-        if default_endpoint:
-            return default_endpoint.page_title
-        return self.page_title
+        return default_endpoint.page_title if default_endpoint else self.page_title
 
     @HybridProperty
     def display_content_length(self):
@@ -653,10 +694,18 @@ class EndPoint(models.Model):
     words = models.IntegerField(default=0, null=True, blank=True, help_text="Number of words in the response")
     lines = models.IntegerField(default=0, null=True, blank=True, help_text="Number of lines in the response")
     headers = models.JSONField(null=True, blank=True, help_text="HTTP headers (response_headers and request_headers)")
-    is_directory = models.BooleanField(null=True, blank=True, default=False, help_text="Whether the endpoint is a directory listing")
-    stored_response_path = models.CharField(max_length=1000, null=True, blank=True, help_text="Path to stored response file")
+    is_directory = models.BooleanField(
+        null=True, blank=True, default=False, help_text="Whether the endpoint is a directory listing"
+    )
+    stored_response_path = models.CharField(
+        max_length=1000, null=True, blank=True, help_text="Path to stored response file"
+    )
     confidence = models.CharField(
-        max_length=20, null=True, blank=True, choices=CONFIDENCE_CHOICES, help_text="Confidence level: low, medium, high"
+        max_length=20,
+        null=True,
+        blank=True,
+        choices=CONFIDENCE_CHOICES,
+        help_text="Confidence level: low, medium, high",
     )
 
     def __str__(self):
@@ -981,6 +1030,7 @@ class Command(models.Model):
         Returns a dictionary with formatted output and metadata.
         """
         from html import escape
+
         from reNgine.utilities.output_formatter import format_output
 
         if not self.output:
@@ -1117,7 +1167,11 @@ class Port(models.Model):
     protocol = models.CharField(max_length=10, null=True, blank=True)
     host = models.CharField(max_length=1000, null=True, blank=True)
     confidence = models.CharField(
-        max_length=20, null=True, blank=True, choices=CONFIDENCE_CHOICES, help_text="Confidence level: low, medium, high"
+        max_length=20,
+        null=True,
+        blank=True,
+        choices=CONFIDENCE_CHOICES,
+        help_text="Confidence level: low, medium, high",
     )
 
     class Meta:
@@ -1302,6 +1356,7 @@ class Certificate(models.Model):
     """
     Model to store SSL/TLS certificates discovered by Secator.
     """
+
     id = models.AutoField(primary_key=True)
     scan_history = models.ForeignKey(ScanHistory, on_delete=models.CASCADE, null=True, blank=True)
     subdomain = models.ForeignKey(Subdomain, on_delete=models.CASCADE, null=True, blank=True)
@@ -1309,17 +1364,23 @@ class Certificate(models.Model):
     domain = models.ForeignKey(Domain, on_delete=models.CASCADE, null=True, blank=True)
 
     host = models.CharField(max_length=1000, help_text="Hostname for the certificate")
-    fingerprint_sha256 = models.CharField(max_length=64, null=True, blank=True, help_text="SHA256 fingerprint of the certificate")
+    fingerprint_sha256 = models.CharField(
+        max_length=64, null=True, blank=True, help_text="SHA256 fingerprint of the certificate"
+    )
     ip = models.CharField(max_length=100, null=True, blank=True, help_text="IP address where certificate was found")
     raw_value = models.TextField(null=True, blank=True, help_text="Raw certificate value")
     subject_cn = models.CharField(max_length=500, null=True, blank=True, help_text="Subject Common Name")
-    subject_an = ArrayField(models.CharField(max_length=500), null=True, blank=True, help_text="Subject Alternative Names")
+    subject_an = ArrayField(
+        models.CharField(max_length=500), null=True, blank=True, help_text="Subject Alternative Names"
+    )
     not_before = models.DateTimeField(null=True, blank=True, help_text="Certificate validity start date")
     not_after = models.DateTimeField(null=True, blank=True, help_text="Certificate validity end date")
     issuer_dn = models.CharField(max_length=1000, null=True, blank=True, help_text="Issuer Distinguished Name")
     issuer_cn = models.CharField(max_length=500, null=True, blank=True, help_text="Issuer Common Name")
     issuer = models.CharField(max_length=500, null=True, blank=True, help_text="Issuer name")
-    self_signed = models.BooleanField(default=False, null=True, blank=True, help_text="Whether the certificate is self-signed")
+    self_signed = models.BooleanField(
+        default=False, null=True, blank=True, help_text="Whether the certificate is self-signed"
+    )
     trusted = models.BooleanField(default=False, null=True, blank=True, help_text="Whether the certificate is trusted")
     status = models.CharField(max_length=50, null=True, blank=True, help_text="Certificate status")
     keysize = models.IntegerField(null=True, blank=True, help_text="Certificate key size in bits")
@@ -1346,5 +1407,6 @@ class Certificate(models.Model):
         """Check if certificate expires soon."""
         if self.not_after:
             from datetime import timedelta
+
             return self.not_after < timezone.now() + timedelta(days=months * 30)
         return False

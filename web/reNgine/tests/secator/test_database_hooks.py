@@ -30,8 +30,9 @@ class TestDatabaseHooksFiltering(BaseTestCase):
             default_engine=True,
         )
 
+        # Create a Secator scan (all new scans are Secator, scan_type=None)
         self.scan_history = ScanHistory.objects.create(
-            domain=self.domain, scan_type=self.engine_type, scan_status=RUNNING_TASK, start_scan_date=timezone.now()
+            domain=self.domain, scan_status=RUNNING_TASK, start_scan_date=timezone.now(), is_legacy_scan=False
         )
 
         # Create hooks instance

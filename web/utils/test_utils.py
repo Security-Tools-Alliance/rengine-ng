@@ -147,32 +147,41 @@ class TestDataGenerator:
         )
         return self.domain
 
-    def create_scan_history(self):
-        """Create and return a test scan history."""
-        # Use the engine type created earlier instead of hardcoded ID
-        scan_type = getattr(self, "engine_type", None)
-        if not scan_type:
-            # Fallback: create engine type if not exists
-            scan_type = self.create_engine_type()
+    def create_scan_history(self, is_legacy=False):
+        """Create and return a test scan history.
+        
+        Args:
+            is_legacy: If True, create a legacy scan with scan_type. If False, create a Secator scan without scan_type.
+        """
+        # All new scans are Secator scans by default (scan_type=None)
+        scan_kwargs = {
+            "domain": self.domain,
+            "start_scan_date": timezone.now(),
+            "scan_status": 2,
+            "is_legacy_scan": is_legacy,
+        }
+        
+        # Only assign scan_type for legacy scans
+        if is_legacy:
+            scan_type = getattr(self, "engine_type", None)
+            if not scan_type:
+                scan_type = self.create_engine_type()
+            scan_kwargs["scan_type"] = scan_type
 
-        self.scan_history = ScanHistory.objects.create(
-            domain=self.domain,
-            start_scan_date=timezone.now(),
-            scan_type=scan_type,
-            scan_status=2,
-            tasks=[
-                "fetch_url",
-                "subdomain_discovery",
-                "port_scan",
-                "vulnerability_scan",
-                "osint",
-                "dir_file_fuzz",
-                "screenshot",
-                "waf_detection",
-                "nuclei_scan",
-                "endpoint_scan",
-            ],
-        )
+        scan_kwargs["tasks"] = [
+            "fetch_url",
+            "subdomain_discovery",
+            "port_scan",
+            "vulnerability_scan",
+            "osint",
+            "dir_file_fuzz",
+            "screenshot",
+            "waf_detection",
+            "nuclei_scan",
+            "endpoint_scan",
+        ]
+        
+        self.scan_history = ScanHistory.objects.create(**scan_kwargs)
         return self.scan_history
 
     def create_subdomain(self, name=None, scan_history=None, target_domain=None, **kwargs):

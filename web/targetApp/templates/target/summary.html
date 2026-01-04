@@ -76,7 +76,7 @@ Target Summary
 										<li class="completed">
 											<a href="{% url 'detail_scan' current_project.slug scan.id %}">
 												<h5 class="mt-0 mb-1">
-													{{scan.scan_type.engine_name}}
+													{{scan.display_runner_type}}: {{scan.display_scan_name}}
 													{% if scan.scan_status == -1 %}
 													<span class="badge badge-soft-warning float-end">Pending</span>
 													{% elif scan.scan_status == 0 %}

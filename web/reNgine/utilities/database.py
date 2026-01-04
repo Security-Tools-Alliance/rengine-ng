@@ -600,21 +600,18 @@ def create_scan_object(host_id, engine_id, initiated_by_id=None):
     threads are free
     Args:
         host_id: int: id of Domain model
-        engine_id: int: id of EngineType model
+        engine_id: int: id of EngineType model (kept for compatibility, not used)
         initiated_by_id: int : id of User model (Optional)
     """
     from reNgine.definitions import INITIATED_TASK
-    from scanEngine.models import EngineType
 
     # get current time
     current_scan_time = timezone.now()
-    # fetch engine and domain object
-    engine = EngineType.objects.get(pk=engine_id)
+    # fetch domain object
     domain = Domain.objects.get(pk=host_id)
     scan = ScanHistory()
     scan.scan_status = INITIATED_TASK
     scan.domain = domain
-    scan.scan_type = engine
     scan.start_scan_date = current_scan_time
     if initiated_by_id:
         user = User.objects.get(pk=initiated_by_id)

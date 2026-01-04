@@ -66,6 +66,7 @@ def build_scan_status_message(scan_history_id: int) -> dict:
             "type": "scan_status_update",
             "scan_id": scan_history_id,
             "scan_type": "legacy" if scan.is_legacy_scan else "secator",
+            "scan_name": scan.scan_name,
             "status": scan.scan_status,
             "progress": scan.get_progress(),
             "current_task": scan.get_current_task(),
@@ -117,9 +118,7 @@ def build_scan_status_message(scan_history_id: int) -> dict:
         return {}
 
 
-def send_scan_status_update(
-    scan_history_id: int, scan_status=None, progress=None, current_task=None
-):
+def send_scan_status_update(scan_history_id: int, scan_status=None, progress=None, current_task=None):
     """
     Send detailed scan status update via WebSocket.
 

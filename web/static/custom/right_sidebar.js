@@ -1,27 +1,10 @@
 /**
- * Get scan name from scan object (handles legacy and Secator scans)
+ * Get scan name from scan object
  * @param {Object} scan_object - Scan object from API
  * @returns {string} Scan name for display
  */
 function getScanName(scan_object) {
-  if (scan_object.scan_type && scan_object.scan_type.engine_name) {
-    // Legacy scan: use engine name
-    return scan_object.scan_type.engine_name;
-  } else if (scan_object.current_task) {
-    // Secator scan: extract name from current_task
-    // Format: "Workflow: name" or "Scan: name" or "Task: name"
-    const taskParts = scan_object.current_task.split(':');
-    if (taskParts.length >= 2) {
-      const taskType = taskParts[0].trim();
-      const taskName = taskParts.slice(1).join(':').trim();
-      if (taskType === 'Workflow' || taskType === 'Scan') {
-        // For workflows and scans, use the actual name
-        return taskName || 'Secator';
-      }
-    }
-  }
-  // Default fallback
-  return 'Secator';
+  return scan_object.display_runner_type + ': ' + scan_object.display_scan_name;
 }
 
 function getScanStatusSidebar(endpoint_url, endpoint_stop_scan_url, endpoint_scan_status_url, project, reload) {

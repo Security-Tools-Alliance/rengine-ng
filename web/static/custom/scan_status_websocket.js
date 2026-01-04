@@ -277,22 +277,11 @@ const updateScanRowInTable = function(table, data) {
         }
         
         // Update scan engine cell if Secator scan
-        if (data.scan_type === 'secator' && data.runners && data.runners.length > 0) {
+        if (data.scan_name) {
             const engineCell = $(rowNode).find('.scan-engine-cell');
             if (engineCell.length) {
-                let mainRunner = data.runners.find(function(r) {
-                    return r.runner_type === 'workflow' || r.runner_type === 'scan';
-                });
-                if (!mainRunner && data.runners.length > 0) {
-                    mainRunner = data.runners[0];
-                }
-                if (mainRunner) {
-                    const engineHtml = '<span class="badge badge-soft-primary">Secator ' + 
-                        escapeHtml(mainRunner.runner_type.charAt(0).toUpperCase() + mainRunner.runner_type.slice(1)) + 
-                        '</span><br><span class="badge badge-soft-info mt-1">' + 
-                        escapeHtml(mainRunner.runner_name || '') + '</span>';
-                    engineCell.html(engineHtml);
-                }
+                const engineHtml = '<span class="badge badge-soft-primary">' + escapeHtml(data.scan_name) + '</span>';
+                engineCell.html(engineHtml);
             }
         }
         
@@ -491,45 +480,13 @@ const updateScanDetailPage = function(data) {
             }
         }
         
-        // Update scan engine/name for Secator scans
-        if (data.scan_type === 'secator' && data.runners && data.runners.length > 0) {
-            let mainRunner = data.runners.find(function(r) {
-                return r.runner_type === 'workflow' || r.runner_type === 'scan';
-            });
-            if (!mainRunner && data.runners.length > 0) {
-                mainRunner = data.runners[0];
-            }
-            if (mainRunner) {
-                // Find the scan engine element (h6 with "Scan Engine" or "Scan Name" text)
-                // scanContainer is the div with data-scan-id, its parent is the card-body
-                const scanEngineSection = scanContainer.parentElement;
-                if (scanEngineSection) {
-                    // querySelector doesn't support :contains(), so we need to search manually
-                    const h6Elements = scanEngineSection.querySelectorAll('h6');
-                    let scanEngineLabel = null;
-                    for (let i = 0; i < h6Elements.length; i++) {
-                        const text = h6Elements[i].textContent.trim();
-                        if (text.indexOf('Scan Engine') !== -1 || text.indexOf('Scan Name') !== -1) {
-                            scanEngineLabel = h6Elements[i];
-                            break;
-                        }
-                    }
-                    if (scanEngineLabel) {
-                        // Find the next element after h6 (should be a span or p with the badge)
-                        const nextElement = scanEngineLabel.nextElementSibling;
-                        // Also check for the element with id="scan-name-display" if it exists
-                        const scanNameDisplay = scanEngineSection.querySelector('#scan-name-display');
-                        if (scanNameDisplay) {
-                            // Update the scan name display element
-                            scanNameDisplay.textContent = mainRunner.runner_name || '';
-                        } else if (nextElement && (nextElement.tagName === 'SPAN' || nextElement.tagName === 'P')) {
-                            // Update the next element (span or p)
-                            nextElement.innerHTML = '<span class="badge badge-soft-primary">Secator ' + 
-                                escapeHtml(mainRunner.runner_type.charAt(0).toUpperCase() + mainRunner.runner_type.slice(1)) + 
-                                '</span><br><span class="badge badge-soft-info mt-1">' + 
-                                escapeHtml(mainRunner.runner_name || '') + '</span>';
-                        }
-                    }
+        // Update scan name
+        if (data.scan_name) {
+            const scanEngineSection = scanContainer.parentElement;
+            if (scanEngineSection) {
+                const scanNameDisplay = scanEngineSection.querySelector('#scan-name-display');
+                if (scanNameDisplay) {
+                    scanNameDisplay.textContent = data.scan_name;
                 }
             }
         }
