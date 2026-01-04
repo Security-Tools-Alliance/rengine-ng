@@ -2839,3 +2839,20 @@ body.execution-mode-scan .scan-type-tile.selected .tile-icon i {
   }
 }
 
+
+/* ACE Editor Styles - Centralized */
+.ace_editor {
+  width: 100%;
+  height: 450px;
+  border: 1px solid #CCC;
+}
+
+.django-ace-toolbar {
+  display: none;
+}
+
+/* ACE Editor for readonly detail views - dynamic height */
+#yaml-editor-readonly,
+#workflow-yaml-editor-readonly {
+  min-height: 200px;
+}

@@ -5,18 +5,10 @@
 
 {% block custom_js_css_link %}
 <link rel="stylesheet" href="{% static 'scanEngine/css/secator.css' %}">
+<link rel="stylesheet" href="{% static 'custom/secator_scan.css' %}">
 <link rel="stylesheet" type="text/css" href="{% static 'plugins/switches/switches.min.css' %}">
 {{ form.media }}
-<style media="screen">
-.ace_editor {
-  width:100%;
-  height:450px;
-  border:1px solid #CCC;
-}
-.django-ace-toolbar{
-  display: none;
-}
-</style>
+
 {% endblock %}
 
 {% block main_content %}

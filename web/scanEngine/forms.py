@@ -954,7 +954,6 @@ class SecatorScanForm(forms.ModelForm):
         model = SecatorScan
         fields = [
             "name",
-            "alias",
             "description",
             "scan_type",
             "scan_config_type",
@@ -964,9 +963,6 @@ class SecatorScanForm(forms.ModelForm):
         ]
         widgets = {
             "name": forms.TextInput(attrs={"class": "form-control", "placeholder": "Enter scan configuration name"}),
-            "alias": forms.TextInput(
-                attrs={"class": "form-control", "placeholder": "e.g., domain, host, network, subdomain, url"}
-            ),
             "description": forms.Textarea(
                 attrs={"class": "form-control", "rows": 3, "placeholder": "Enter scan description"}
             ),
@@ -988,14 +984,6 @@ class SecatorScanForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
-        # Make alias not required for custom scans
-        self.fields["alias"].required = False
-
-        # Add help text with documentation links
-        self.fields[
-            "alias"
-        ].help_text = "Scan alias from Secator (e.g., domain, host, network). See <a href='https://docs.freelabz.com/for-developers/writing-scans-wip' target='_blank'>Secator scans documentation</a>"
         self.fields[
             "yaml_configuration"
         ].help_text = "Define the scan structure. See <a href='https://docs.freelabz.com/for-developers/writing-scans-wip' target='_blank'>Secator documentation</a>"

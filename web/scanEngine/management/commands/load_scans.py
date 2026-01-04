@@ -109,27 +109,16 @@ class Command(SecatorLoaderBase):
                     # Determine scan type based on scan content
                     scan_type = self._determine_scan_type_from_yaml(scan_data)
 
-                    # Use display name from SCAN_ALIAS_CHOICES if name matches an alias, otherwise use name
-                    # Check if scan_name matches any alias in SCAN_ALIAS_CHOICES
-                    scan_alias = None
-                    display_name = scan_name.replace("_", " ").title()
-                    for alias, alias_display_name in SecatorScan.SCAN_ALIAS_CHOICES:
-                        if alias == scan_name:
-                            scan_alias = alias
-                            display_name = alias_display_name
-                            break
-
-                    # Use name as unique key (not alias) - alias is secondary information for Secator CLI
+                    # Use scan_loader.name directly as name (unique identifier for Secator)
                     scan, created = SecatorScan.objects.get_or_create(
-                        name=display_name,
+                        name=scan_name,
                         defaults={
-                            "alias": scan_alias,
                             "description": description,
                             "long_description": long_description,
                             "yaml_configuration": yaml_config,
                             "scan_type": scan_type,
                             "scan_config_type": "builtin",
-                            "is_default": scan_alias == "domain" if scan_alias else False,  # Domain scan is default
+                            "is_default": scan_name == "domain",  # Domain scan is default
                             "is_active": True,
                         },
                     )
@@ -138,19 +127,18 @@ class Command(SecatorLoaderBase):
                         # For built-in scans, use bypass_builtin_constraints to allow save
                         scan.save(bypass_builtin_constraints=True)
                         created_count += 1
-                        self.stdout.write(f"Created built-in scan: {display_name}")
+                        self.stdout.write(f"Created built-in scan: {scan_name}")
                     else:
                         # Update existing scan using update() to bypass save() constraints
                         SecatorScan.objects.filter(pk=scan.pk).update(
-                            alias=scan_alias,
                             description=description,
                             long_description=long_description,
                             yaml_configuration=yaml_config,
                             scan_type=scan_type,
-                            is_default=scan_alias == "domain" if scan_alias else False,  # Domain scan is default
+                            is_default=scan_name == "domain",  # Domain scan is default
                         )
                         updated_count += 1
-                        self.stdout.write(f"Updated built-in scan: {display_name}")
+                        self.stdout.write(f"Updated built-in scan: {scan_name}")
 
                 except Exception as e:
                     self.stdout.write(

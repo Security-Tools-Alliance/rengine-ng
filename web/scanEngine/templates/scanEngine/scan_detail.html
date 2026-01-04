@@ -5,19 +5,11 @@
 
 {% block custom_js_css_link %}
 <link rel="stylesheet" href="{% static 'scanEngine/css/secator.css' %}">
+<link rel="stylesheet" href="{% static 'custom/secator_scan.css' %}">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/ace.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/mode-yaml.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/theme-tomorrow_night_eighties.min.js"></script>
-<style media="screen">
-.ace_editor {
-  width:100%;
-  height:450px;
-  border:1px solid #CCC;
-}
-.django-ace-toolbar{
-  display: none;
-}
-</style>
+
 {% endblock %}
 
 {% block main_content %}
@@ -54,11 +46,14 @@
                                     <h6>Configuration Information</h6>
                                 </div>
                                 <div class="card-body">
-                                    <p><strong>Alias:</strong> 
-                                        {% if scan.alias %}
-                                            <span class="badge badge-soft-info">{{ scan.alias }}</span>
+                                    <p><strong>Name:</strong> 
+                                        <span class="badge badge-soft-info">{{ scan.name }}</span>
+                                    </p>
+                                    <p><strong>Description:</strong> 
+                                        {% if scan.description %}
+                                            {{ scan.description }}
                                         {% else %}
-                                            <span class="text-muted">None</span>
+                                            <span class="text-muted">-</span>
                                         {% endif %}
                                     </p>
                                     <p><strong>Type:</strong> 
@@ -106,6 +101,32 @@ $(document).ready(function() {
         highlightActiveLine: false,
         highlightGutterLine: false
     });
-});
+    
+    // Calculate optimal height based on content and available space
+    function calculateEditorHeight() {
+        const editorElement = document.getElementById("yaml-editor-readonly");
+        const contentLines = editor.session.getLength();
+        const lineHeight = editor.renderer.lineHeight;
+        const minHeight = 200; // Minimum height in pixels
+        const viewportHeight = window.innerHeight;
+        const editorOffsetTop = editorElement.getBoundingClientRect().top;
+        const maxHeight = viewportHeight - editorOffsetTop - 50; // 50px padding from bottom
+        
+        // Calculate height based on content (with some padding)
+        const contentHeight = Math.max(contentLines * lineHeight + 40, minHeight);
+        
+        // Use the smaller of content height or max height
+        const finalHeight = Math.min(contentHeight, maxHeight);
+        
+        editorElement.style.height = finalHeight + "px";
+        editor.resize();
+    }
+    
+    // Calculate height after editor is initialized
+    setTimeout(calculateEditorHeight, 100);
+    
+    // Recalculate on window resize
+    $(window).on('resize', calculateEditorHeight);
+    });
 </script>
 {% endblock %}

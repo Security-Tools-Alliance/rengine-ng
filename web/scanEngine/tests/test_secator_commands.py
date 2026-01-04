@@ -143,7 +143,7 @@ input_types:
         call_command("load_scans", stdout=out)
 
         # Check that scan was created
-        self.assertTrue(SecatorScan.objects.filter(name="Domain Scan").exists())
+        self.assertTrue(SecatorScan.objects.filter(name="domain").exists())
 
     def test_load_secator_all_command(self):
         """Test the load_secator_all management command."""
@@ -645,7 +645,7 @@ input_types:
         call_command("load_scans", "--builtin-only", stdout=out)
 
         # Verify scan was created (using name as key, not alias)
-        scan = SecatorScan.objects.get(name="Domain Scan")
+        scan = SecatorScan.objects.get(name="domain")
         self.assertEqual(scan.description, "Domain reconnaissance scan")
         self.assertEqual(scan.scan_config_type, "builtin")
         self.assertEqual(scan.scan_type, "internet")
@@ -733,8 +733,7 @@ input_types:
         """
         # Create an existing scan (using name as key)
         existing_scan = SecatorScan.objects.create(
-            name="Domain Scan",
-            alias="domain",
+            name="domain",
             description="Old description",
             scan_config_type="builtin",
             yaml_configuration="old: config",
@@ -756,7 +755,7 @@ input_types:
 
         # Verify scan was updated via QuerySet.update() (not save())
         existing_scan.refresh_from_db()
-        self.assertEqual(existing_scan.name, "Domain Scan")
+        self.assertEqual(existing_scan.name, "domain")
         self.assertEqual(existing_scan.description, "Domain reconnaissance scan")
         self.assertEqual(existing_scan.scan_type, "internet")
         self.assertIn("subdomain_recon", existing_scan.yaml_configuration)

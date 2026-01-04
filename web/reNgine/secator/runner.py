@@ -81,12 +81,12 @@ class SecatorRunner:
                 f"Could not load workflow template '{workflow_name}': {e}"
             ) from e
 
-    def _load_scan_template(self, scan_name_or_alias: str):
+    def _load_scan_template(self, scan_name: str):
         """
         Load scan template from builtin or custom source.
 
         Args:
-            scan_name_or_alias: Name or alias of the scan
+            scan_name: Name of the scan
 
         Returns:
             TemplateLoader configuration object
@@ -94,20 +94,20 @@ class SecatorRunner:
         from scanEngine.models import SecatorScan
 
         try:
-            scan_obj = SecatorScan.objects.get(name=scan_name_or_alias)
+            scan_obj = SecatorScan.objects.get(name=scan_name)
 
             if scan_obj.scan_config_type == "builtin":
-                template = TemplateLoader(name=f"scan/{scan_name_or_alias}")
-                logger.info(f"Loaded built-in scan template: {scan_name_or_alias}")
+                template = TemplateLoader(name=f"scan/{scan_name}")
+                logger.info(f"Loaded built-in scan template: {scan_name}")
             else:
                 template = TemplateLoader(scan_obj.yaml_configuration)
-                logger.info(f"Loaded custom scan template: {scan_name_or_alias}")
+                logger.info(f"Loaded custom scan template: {scan_name}")
 
             return template
         except Exception as e:
-            logger.error(f"Failed to load scan template '{scan_name_or_alias}': {e}")
+            logger.error(f"Failed to load scan template '{scan_name}': {e}")
             raise Exception(
-                f"Could not load scan template '{scan_name_or_alias}': {e}"
+                f"Could not load scan template '{scan_name}': {e}"
             ) from e
 
     def _execute_runner(

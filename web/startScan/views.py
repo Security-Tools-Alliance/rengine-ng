@@ -444,7 +444,10 @@ def start_scan_ui(request, slug, domain_id):
                 context["tasks"] = tasks
                 template = "startScan/_items/secator_task_select.html"
             elif execution_mode == "scan":
-                context["scan_types"] = SecatorScan.SCAN_ALIAS_CHOICES
+                context["scan_types"] = [
+                    (scan.name, scan.description)
+                    for scan in SecatorScan.objects.filter(scan_config_type="builtin", is_active=True).order_by("name")
+                ]
                 template = "startScan/_items/secator_scan_select.html"
             else:
                 return JsonResponse({"html": '<div class="alert alert-warning">Invalid execution mode</div>'})
@@ -845,7 +848,10 @@ def start_organization_scan(request, id, slug):
             context["tasks"] = tasks
             template = "startScan/_items/secator_task_select.html"
         elif execution_mode == "scan":
-            context["scan_types"] = SecatorScan.SCAN_ALIAS_CHOICES
+            context["scan_types"] = [
+                (scan.name, scan.description)
+                for scan in SecatorScan.objects.filter(scan_config_type="builtin", is_active=True).order_by("name")
+            ]
             template = "startScan/_items/secator_scan_select.html"
         else:
             return JsonResponse({"html": '<div class="alert alert-warning">Invalid execution mode</div>'})

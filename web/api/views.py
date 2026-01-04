@@ -3683,6 +3683,28 @@ class LoadBuiltinTasks(APIView):
             return Response({"status": "error", "message": str(e)}, status=400)
 
 
+class LoadBuiltinScans(APIView):
+    """Load built-in scans."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        try:
+            from io import StringIO
+
+            from django.core.management import call_command
+
+            # Capture output
+            out = StringIO()
+            call_command("load_scans", "--builtin-only", stdout=out)
+
+            return Response(
+                {"status": "success", "message": "Built-in scans loaded successfully", "output": out.getvalue()}
+            )
+        except Exception as e:
+            return Response({"status": "error", "message": str(e)}, status=400)
+
+
 class GetWorkflowTasks(APIView):
     """Get tasks for a specific workflow."""
 

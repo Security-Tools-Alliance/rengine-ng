@@ -167,7 +167,6 @@ class SecatorScanAdmin(admin.ModelAdmin):
 
     list_display = [
         "name",
-        "alias",
         "scan_type",
         "scan_config_type",
         "is_default",
@@ -190,7 +189,7 @@ class SecatorScanAdmin(admin.ModelAdmin):
         "updated_at",
     ]
     fieldsets = (
-        ("Basic Information", {"fields": ("name", "alias", "display_name", "description", "scan_type", "is_default")}),
+        ("Basic Information", {"fields": ("name", "display_name", "description", "scan_type", "is_default")}),
         ("Configuration", {"fields": ("scan_config_type", "yaml_configuration", "is_active")}),
         (
             "Timestamps",
@@ -200,12 +199,3 @@ class SecatorScanAdmin(admin.ModelAdmin):
             },
         ),
     )
-
-    def formfield_for_dbfield(self, db_field, request, **kwargs):
-        """Override form field for alias to use TextInput instead of Select."""
-        if db_field.name == "alias":
-            from django import forms
-
-            kwargs["widget"] = forms.TextInput(attrs={"placeholder": "e.g., domain, host, network, subdomain, url"})
-            kwargs["help_text"] = "Enter the scan alias from Secator (optional)"
-        return super().formfield_for_dbfield(db_field, request, **kwargs)

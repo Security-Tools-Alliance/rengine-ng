@@ -555,23 +555,9 @@ class SecatorScan(models.Model):
         ("custom", "Custom"),
     ]
 
-    SCAN_ALIAS_CHOICES = [
-        ("domain", "Domain Scan"),
-        ("host", "Host Scan"),
-        ("network", "Internal Network Scan"),
-        ("subdomain", "Subdomain Scan"),
-        ("url", "URL Scan"),
-    ]
 
     id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=200, unique=True)
-    alias = models.CharField(
-        max_length=50,
-        choices=SCAN_ALIAS_CHOICES,
-        blank=True,
-        null=True,
-        help_text="Built-in scan alias from Secator",
-    )
     description = models.TextField(blank=True, null=True)
     long_description = models.TextField(
         blank=True,

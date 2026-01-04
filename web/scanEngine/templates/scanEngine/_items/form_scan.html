@@ -25,21 +25,6 @@
 </div>
 
 <div class="form-group">
-    <label for="{{ form.alias.id_for_label }}">Alias</label>
-    {{ form.alias }}
-    {% if form.alias.help_text %}
-        <small class="form-text text-muted">{{ form.alias.help_text|safe }}</small>
-    {% endif %}
-    {% if form.alias.errors %}
-        <div class="text-danger">
-            {% for error in form.alias.errors %}
-                <small>{{ error }}</small>
-            {% endfor %}
-        </div>
-    {% endif %}
-</div>
-
-<div class="form-group">
     <label for="{{ form.description.id_for_label }}">Description</label>
     {{ form.description }}
     {% if form.description.errors %}

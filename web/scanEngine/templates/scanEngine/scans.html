@@ -20,6 +20,9 @@
                         <a href="{% url 'add_scan' %}" class="btn btn-primary btn-sm">
                             <i class="fas fa-plus"></i> Create Scan
                         </a>
+                        <button type="button" class="btn btn-success btn-sm" onclick="loadBuiltinScans()">
+                            <i class="fas fa-download"></i> Load Built-in
+                        </button>
                     </div>
                 </div>
                 
@@ -49,7 +52,7 @@
                             <thead>
                                 <tr>
                                     <th>Name</th>
-                                    <th>Alias</th>
+                                    <th>Description</th>
                                     <th>Type</th>
                                     <th>Config Type</th>
                                     <th>Long Description</th>
@@ -63,11 +66,11 @@
                                 {% for scan in page_obj %}
                                 <tr>
                                     <td>
-                                        <strong>{{ scan.name }}</strong>
+                                        <span class="badge badge-soft-info">{{ scan.name }}</span>
                                     </td>
                                     <td>
-                                        {% if scan.alias %}
-                                            <span class="badge badge-soft-info">{{ scan.alias }}</span>
+                                        {% if scan.description %}
+                                            {{ scan.description }}
                                         {% else %}
                                             <span class="text-muted">-</span>
                                         {% endif %}
@@ -197,6 +200,59 @@ function clearFilters() {
     window.location.href = window.location.pathname;
 }
 
+// Load built-in scans
+function loadBuiltinScans() {
+    Swal.fire({
+        title: 'Load Built-in Scans?',
+        text: 'This will load built-in Secator scans. Continue?',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#3085d6',
+        cancelButtonColor: '#d33',
+        confirmButtonText: 'Yes, load them!'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            Swal.fire({
+                title: 'Loading...',
+                text: 'Please wait while we load the scans',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+
+            fetch('{% url "api:load_builtin_scans" %}', {
+                method: 'POST',
+                credentials: "same-origin",
+                headers: {
+                    'X-CSRFToken': getCookie('csrftoken'),
+                    'Content-Type': 'application/json',
+                },
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    Swal.fire({
+                        title: 'Success!',
+                        text: 'Built-in scans loading started. Please refresh the page in a few moments.',
+                        icon: 'success'
+                    }).then(() => {
+                        window.location.reload();
+                    });
+                } else {
+                    throw new Error(data.message || 'Failed to load built-in scans');
+                }
+            })
+            .catch(error => {
+                Swal.fire({
+                    title: 'Error!',
+                    text: error.message || 'Error loading built-in scans',
+                    icon: 'error'
+                });
+            });
+        }
+    });
+}
 
 // Utility function to get cookie value
 function getCookie(name) {

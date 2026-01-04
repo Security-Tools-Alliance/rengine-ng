@@ -20,8 +20,7 @@ class TestSecatorRunnerScans(BaseTestCase):
         self.domain = Domain.objects.create(name="testdomain.com")
 
         self.builtin_scan = SecatorScan.objects.create(
-            name="Test Domain Scan",
-            alias="domain",
+            name="domain",
             description="Test domain scan",
             scan_config_type="builtin",
             yaml_configuration="",
@@ -30,8 +29,7 @@ class TestSecatorRunnerScans(BaseTestCase):
         )
 
         self.custom_scan = SecatorScan.objects.create(
-            name="Custom Test Scan",
-            alias="custom_test",
+            name="custom_test",
             description="Custom test scan",
             scan_config_type="custom",
             yaml_configuration="""
