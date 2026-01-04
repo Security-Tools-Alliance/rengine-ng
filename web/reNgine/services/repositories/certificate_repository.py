@@ -4,13 +4,15 @@ Handles Certificate database operations from Secator Certificate output type.
 """
 
 import contextlib
-from datetime import datetime, timezone
+from datetime import datetime, timezone as dt_timezone
 from typing import Any, Dict, Optional
 
 from celery.utils.log import get_task_logger
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError
+from django.utils import timezone
 
+from reNgine.utilities.time import ensure_timezone_aware, parse_datetime_iso
 from startScan.models import Certificate, IpAddress, ScanHistory, Subdomain
 from targetApp.models import Domain
 
@@ -131,34 +133,31 @@ class CertificateRepository:
             return None
 
         if isinstance(value, datetime):
-            # If datetime is naive, make it aware using UTC (Django best practice with USE_TZ=True)
-            if value.tzinfo is None:
-                return value.replace(tzinfo=timezone.utc)
-            return value
+            # Ensure datetime is timezone-aware
+            return ensure_timezone_aware(value)
 
         if isinstance(value, str):
-            try:
-                # Try ISO format - fromisoformat returns aware datetime if timezone info is present
-                parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-                # If parsed datetime is naive, make it aware using UTC
-                if parsed.tzinfo is None:
-                    parsed = parsed.replace(tzinfo=timezone.utc)
+            # Try ISO format first using utility function
+            parsed = parse_datetime_iso(value)
+            if parsed is not None:
                 return parsed
-            except Exception:
-                with contextlib.suppress(Exception):
-                    # Try common formats - strptime returns naive datetime
-                    for fmt in ["%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%d/%m/%Y"]:
-                        try:
-                            parsed = datetime.strptime(value, fmt)
-                            # Make naive datetime aware using UTC (Django best practice)
-                            return parsed.replace(tzinfo=timezone.utc)
-                        except ValueError:
-                            continue
+
+            # Try common formats - strptime returns naive datetime
+            with contextlib.suppress(Exception):
+                for fmt in ["%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%d/%m/%Y"]:
+                    try:
+                        parsed = datetime.strptime(value, fmt)
+                        # Make naive datetime aware using UTC
+                        return ensure_timezone_aware(parsed)
+                    except ValueError:
+                        continue
+
         if isinstance(value, (int, float)):
             with contextlib.suppress(Exception):
                 # Handle both seconds and milliseconds timestamps
                 # If value is very large (> year 2100 in seconds), assume milliseconds
                 if value > 4102444800:  # Year 2100 in seconds
                     value = value / 1000
-                return datetime.fromtimestamp(value, tz=timezone.utc)
+                return datetime.fromtimestamp(value, tz=dt_timezone.utc)
+
         return None

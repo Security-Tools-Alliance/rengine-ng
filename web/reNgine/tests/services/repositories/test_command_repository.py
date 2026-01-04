@@ -2,7 +2,7 @@
 Tests for Command repository functionality.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from django.utils import timezone
 
@@ -45,7 +45,7 @@ class TestCommandRepository(BaseTestCase):
         self.assertEqual(result.command, "nuclei -l input.txt -jsonl -tags takeover")
         self.assertEqual(result.output, "Test output")
         self.assertEqual(result.return_code, 0)
-        self.assertEqual(result.elapsed, timedelta(seconds=4.11068))
+        self.assertEqual(result.elapsed, 4.11068)
         self.assertEqual(result.errors, [])
         self.assertEqual(result.warnings, ["Warning 1", "Warning 2"])
         self.assertEqual(result.cwd, "/home/rengine")
@@ -280,3 +280,70 @@ class TestCommandRepository(BaseTestCase):
         self.assertIsNotNone(result)
         self.assertEqual(result.time, start_time)
         self.assertEqual(result.end_time, end_time)
+
+    def test_save_from_secator_with_elapsed_int(self):
+        """Test saving command when elapsed is an integer (seconds)."""
+        runner_data = {
+            "name": "nuclei",
+            "cmd": "nuclei -l input.txt",
+            "output": "Output",
+            "elapsed": 30,
+        }
+
+        result = self.command_repo.save_from_secator(runner_data, self.scan_history.id)
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result.elapsed, 30.0)
+
+    def test_save_from_secator_with_elapsed_float_decimal(self):
+        """Test saving command when elapsed is a float with decimal (real-world example)."""
+        runner_data = {
+            "name": "nuclei",
+            "cmd": "nuclei -l input.txt",
+            "output": "Output",
+            "elapsed": 253.096803,
+        }
+
+        result = self.command_repo.save_from_secator(runner_data, self.scan_history.id)
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result.elapsed, 253.096803)
+
+    def test_save_from_secator_with_invalid_elapsed(self):
+        """Test saving command with invalid elapsed type."""
+        runner_data = {
+            "name": "nuclei",
+            "cmd": "nuclei -l input.txt",
+            "output": "Output",
+            "elapsed": {"invalid": "type"},
+        }
+
+        result = self.command_repo.save_from_secator(runner_data, self.scan_history.id)
+
+        self.assertIsNotNone(result)
+        self.assertIsNone(result.elapsed)
+
+    def test_save_from_secator_with_empty_errors_warnings(self):
+        """Test updating existing command with empty errors/warnings lists."""
+        runner_data = {
+            "name": "nuclei",
+            "cmd": "nuclei -l input.txt",
+            "output": "Initial output",
+            "errors": ["Error 1"],
+            "warnings": ["Warning 1"],
+            "start_time": "2026-01-03T19:36:51.506013",
+        }
+
+        result1 = self.command_repo.save_from_secator(runner_data, self.scan_history.id)
+        self.assertIsNotNone(result1)
+        self.assertEqual(result1.errors, ["Error 1"])
+        self.assertEqual(result1.warnings, ["Warning 1"])
+
+        runner_data["errors"] = []
+        runner_data["warnings"] = []
+
+        result2 = self.command_repo.save_from_secator(runner_data, self.scan_history.id)
+        self.assertIsNotNone(result2)
+        self.assertEqual(result1.id, result2.id)
+        self.assertEqual(result2.errors, ["Error 1"])
+        self.assertEqual(result2.warnings, ["Warning 1"])

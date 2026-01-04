@@ -246,32 +246,10 @@ class CommandSerializer(serializers.ModelSerializer):
         depth = 1
 
     def get_elapsed(self, obj):
-        """Handle elapsed field which can be timedelta or float (legacy data)."""
-        from datetime import timedelta
-
+        """Return elapsed field as float."""
         try:
-            # Try to get the raw value first to handle legacy data
             elapsed_value = obj.elapsed
-        except (AttributeError, TypeError, ValueError):
-            return None
-
-        if elapsed_value is None:
-            return None
-
-        # If it's already a timedelta, serialize it
-        if isinstance(elapsed_value, timedelta):
-            return str(elapsed_value)
-
-        # If it's a float (legacy data), convert to timedelta first
-        if isinstance(elapsed_value, (int, float)):
-            return str(timedelta(seconds=elapsed_value))
-
-        # Fallback: try to use the model's get_elapsed method
-        try:
-            elapsed_value = obj.get_elapsed()
-            if elapsed_value is None:
-                return None
-            return str(elapsed_value)
+            return float(elapsed_value) if elapsed_value is not None else None
         except (AttributeError, TypeError, ValueError):
             return None
 

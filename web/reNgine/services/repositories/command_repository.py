@@ -3,7 +3,7 @@ Command Repository - Data access for command log operations.
 Handles Command database operations from Secator runner data.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any, Dict, Optional
 
 from celery.utils.log import get_task_logger
@@ -11,6 +11,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError
 from django.utils import timezone
 
+from reNgine.utilities.time import parse_datetime_iso
 from startScan.models import Command, ScanActivity, ScanHistory
 
 
@@ -94,41 +95,21 @@ class CommandRepository:
                 logger.warning(f"ScanActivity with ID {activity_id} not found, continuing without activity link")
 
         # Parse start_time
-        start_time = None
-        if start_time_str:
-            try:
-                if isinstance(start_time_str, str):
-                    start_time = datetime.fromisoformat(start_time_str.replace("Z", "+00:00"))
-                elif isinstance(start_time_str, datetime):
-                    start_time = start_time_str
-            except (ValueError, AttributeError) as e:
-                logger.warning(f"Error parsing start_time '{start_time_str}': {e}")
-                start_time = timezone.now()
-
+        start_time = parse_datetime_iso(start_time_str)
         if not start_time:
             start_time = timezone.now()
 
         # Parse end_time
-        end_time = None
-        if end_time_str:
-            try:
-                if isinstance(end_time_str, str):
-                    end_time = datetime.fromisoformat(end_time_str.replace("Z", "+00:00"))
-                elif isinstance(end_time_str, datetime):
-                    end_time = end_time_str
-            except (ValueError, AttributeError) as e:
-                logger.warning(f"Error parsing end_time '{end_time_str}': {e}")
+        end_time = parse_datetime_iso(end_time_str)
 
-        # Convert elapsed from float (seconds) to timedelta
-        elapsed_duration = None
+        # Store elapsed as float (Secator sends float values)
+        elapsed_float = None
         if elapsed is not None:
             try:
                 if isinstance(elapsed, (int, float)):
-                    elapsed_duration = timedelta(seconds=elapsed)
-                elif isinstance(elapsed, timedelta):
-                    elapsed_duration = elapsed
+                    elapsed_float = float(elapsed)
             except (ValueError, TypeError) as e:
-                logger.warning(f"Error converting elapsed '{elapsed}' to timedelta: {e}")
+                logger.warning(f"Error converting elapsed '{elapsed}' to float: {e}")
 
         # Ensure errors and warnings are lists
         if not isinstance(errors, list):
@@ -141,9 +122,7 @@ class CommandRepository:
         existing_command = None
         if name and start_time:
             try:
-                existing_command = Command.objects.filter(
-                    scan_history=scan_history, name=name, time=start_time
-                ).first()
+                existing_command = Command.objects.filter(scan_history=scan_history, name=name, time=start_time).first()
             except Exception as e:
                 logger.debug(f"Error checking for existing command: {e}")
 
@@ -155,9 +134,9 @@ class CommandRepository:
                 existing_command.output = output
             existing_command.return_code = return_code if return_code is not None else existing_command.return_code
             existing_command.end_time = end_time or existing_command.end_time
-            existing_command.elapsed = elapsed_duration if elapsed_duration is not None else existing_command.elapsed
-            existing_command.errors = errors if errors else existing_command.errors
-            existing_command.warnings = warnings if warnings else existing_command.warnings
+            existing_command.elapsed = elapsed_float if elapsed_float is not None else existing_command.elapsed
+            existing_command.errors = errors or existing_command.errors
+            existing_command.warnings = warnings or existing_command.warnings
             existing_command.status = status or existing_command.status
             existing_command.cwd = cwd or existing_command.cwd
             if activity:
@@ -175,7 +154,7 @@ class CommandRepository:
                 output=output,
                 time=start_time,
                 end_time=end_time,
-                elapsed=elapsed_duration,
+                elapsed=elapsed_float,
                 errors=errors,
                 warnings=warnings,
                 name=name,

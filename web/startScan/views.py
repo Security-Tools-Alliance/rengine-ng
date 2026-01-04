@@ -37,6 +37,7 @@ from reNgine.settings import RENGINE_RESULTS
 from reNgine.tasks import initiate_secator_scan
 from reNgine.utilities.command import run_command
 from reNgine.utilities.subdomain import get_interesting_subdomains
+from reNgine.utilities.time import local_to_utc_aware
 from scanEngine.models import EngineType, SecatorScan, SecatorTask, SecatorWorkflow, VulnerabilityReportSetting
 from startScan.models import (
     CountryISO,
@@ -688,10 +689,8 @@ def schedule_scan(request, host_id, slug):
             timezone_offset = max(-1440, min(1440, safe_int_cast(request.POST.get("timezone_offset", 0), 0)))
             # Convert received hour in UTC
             local_time = datetime.strptime(schedule_time, "%Y-%m-%d %H:%M")
-            # Adjust hour to UTC
-            utc_time = local_time + timedelta(minutes=timezone_offset)
-            # Make hour "aware" in UTC
-            utc_time = timezone.make_aware(utc_time, timezone.utc)
+            # Convert local time to UTC-aware datetime
+            utc_time = local_to_utc_aware(local_time, timezone_offset)
             clock, _ = ClockedSchedule.objects.get_or_create(clocked_time=utc_time)
             kwargs = {
                 "scan_history_id": 0,

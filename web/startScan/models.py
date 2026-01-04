@@ -10,6 +10,7 @@ from django.db.models.functions import TruncDay
 from django.utils import timezone
 
 from reNgine.core.time import get_time_taken
+from reNgine.utilities.time import date_to_aware_datetime
 from reNgine.definitions import CELERY_TASK_STATUSES, ENGINE_DISPLAY_NAMES, NUCLEI_REVERSE_SEVERITY_MAP
 from reNgine.llm.utils import convert_markdown_to_html
 from scanEngine.models import EngineType
@@ -250,7 +251,7 @@ class ScanHistory(models.Model):
 
         results = []
         for date in date_range:
-            aware_date = timezone.make_aware(datetime.combine(date, datetime.min.time()))
+            aware_date = date_to_aware_datetime(date)
             results.append(raw_data.get(aware_date, 0))
 
         return results[::-1]
@@ -539,7 +540,7 @@ class Subdomain(models.Model):
 
         results = []
         for date in date_range:
-            aware_date = timezone.make_aware(datetime.combine(date, datetime.min.time()))
+            aware_date = date_to_aware_datetime(date)
             results.append(raw_data.get(aware_date, 0))
 
         return results[::-1]
@@ -615,7 +616,7 @@ class SubScan(models.Model):
 
         results = []
         for date in date_range:
-            aware_date = timezone.make_aware(datetime.combine(date, datetime.min.time()))
+            aware_date = date_to_aware_datetime(date)
             results.append(raw_data.get(aware_date, 0))
 
         return results[::-1]
@@ -696,7 +697,7 @@ class EndPoint(models.Model):
 
         results = []
         for date in date_range:
-            aware_date = timezone.make_aware(datetime.combine(date, datetime.min.time()))
+            aware_date = date_to_aware_datetime(date)
             results.append(raw_data.get(aware_date, 0))
 
         return results[::-1]
@@ -896,7 +897,7 @@ class Vulnerability(models.Model):
 
         results = []
         for date in date_range:
-            aware_date = timezone.make_aware(datetime.combine(date, datetime.min.time()))
+            aware_date = date_to_aware_datetime(date)
             results.append(raw_data.get(aware_date, 0))
 
         return results[::-1]
@@ -946,7 +947,7 @@ class Command(models.Model):
     output = models.TextField(blank=True, null=True)
     time = models.DateTimeField()
     end_time = models.DateTimeField(blank=True, null=True)
-    elapsed = models.DurationField(blank=True, null=True)
+    elapsed = models.FloatField(blank=True, null=True)
     errors = models.JSONField(default=list, blank=True)
     warnings = models.JSONField(default=list, blank=True)
     name = models.CharField(max_length=200, blank=True, null=True)
@@ -955,34 +956,6 @@ class Command(models.Model):
 
     def __str__(self):
         return str(self.command)
-
-    def get_elapsed(self):
-        """Get elapsed as timedelta, handling legacy float values."""
-        from datetime import timedelta
-
-        try:
-            elapsed_value = self.elapsed
-        except (AttributeError, TypeError, ValueError):
-            return None
-
-        if elapsed_value is None:
-            return None
-
-        # If it's already a timedelta, return it
-        if isinstance(elapsed_value, timedelta):
-            return elapsed_value
-
-        # If it's a float (legacy data), convert to timedelta
-        if isinstance(elapsed_value, (int, float)):
-            return timedelta(seconds=elapsed_value)
-
-        # Fallback: return as is
-        return elapsed_value
-
-    @property
-    def elapsed_safe(self):
-        """Safe accessor for elapsed that handles legacy float values."""
-        return self.get_elapsed()
 
 
 class Waf(models.Model):

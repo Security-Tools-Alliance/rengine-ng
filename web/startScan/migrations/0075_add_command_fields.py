@@ -18,7 +18,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='command',
             name='elapsed',
-            field=models.DurationField(blank=True, null=True),
+            field=models.FloatField(blank=True, null=True),
         ),
         migrations.AddField(
             model_name='command',

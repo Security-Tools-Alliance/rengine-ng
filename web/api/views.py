@@ -3388,7 +3388,7 @@ class LLMModelsManager(APIView):
                             f"Could not parse timestamp: {date_str}",
                             extra={"timestamp": date_str, "parsing_formats": formats},
                         )
-                        return datetime.now()
+                        return timezone.now()
 
                     all_models.extend(
                         [

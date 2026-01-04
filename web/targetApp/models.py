@@ -6,6 +6,7 @@ from django.db.models import Count
 from django.db.models.functions import TruncDay
 from django.utils import timezone
 
+from reNgine.utilities.time import date_to_aware_datetime
 from dashboard.models import Project
 
 
@@ -222,7 +223,7 @@ class Domain(models.Model):
 
         results = []
         for date in date_range:
-            aware_date = timezone.make_aware(datetime.combine(date, datetime.min.time()))
+            aware_date = date_to_aware_datetime(date)
             results.append(raw_data.get(aware_date, 0))
 
         return results[::-1]  # Reverse to match chart order

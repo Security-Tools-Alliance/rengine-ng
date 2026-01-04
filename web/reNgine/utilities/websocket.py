@@ -108,7 +108,7 @@ def build_scan_status_message(scan_history_id: int) -> dict:
                     "done": runner.runner_data.get("done", False) if runner.runner_data else False,
                     "created_at": runner.created_at.isoformat() if runner.created_at else None,
                     "updated_at": runner.updated_at.isoformat() if runner.updated_at else None,
-                    "elapsed": None,  # Will be calculated on frontend if needed
+                    "elapsed": runner.elapsed.total_seconds() if runner.elapsed else 0,
                     "start_time": runner.runner_data.get("start_time") if runner.runner_data and "start_time" in runner.runner_data else (runner.created_at.isoformat() if runner.created_at else None),
                     "scan_history": runner.scan_history_id,
                     "domain": runner.domain_id,

@@ -172,8 +172,8 @@ class TestSecatorDataMapping(BaseTestCase):
             "ip": "192.168.1.1",
             "subject_cn": "Example Certificate",
             "subject_an": ["www.example.com", "mail.example.com"],
-            "not_before": datetime.now() - timedelta(days=365),
-            "not_after": datetime.now() + timedelta(days=365),
+            "not_before": timezone.now() - timedelta(days=365),
+            "not_after": timezone.now() + timedelta(days=365),
             "issuer": "Let's Encrypt",
             "self_signed": False,
             "trusted": True,
@@ -199,7 +199,7 @@ class TestSecatorDataMapping(BaseTestCase):
         repository = CertificateRepository()
 
         # Test with datetime object
-        dt = datetime.now()
+        dt = timezone.now()
         result = repository._parse_datetime(dt)
         self.assertEqual(result, dt)
 
