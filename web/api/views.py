@@ -2903,11 +2903,11 @@ class GetScanLogsHTML(APIView):
         activity_id = safe_int_cast(request.query_params.get("activity_id"))
         include_pending = request.query_params.get("include_pending", "false").lower() == "true"
 
-        if not scan_id and not activity_id:
+        if scan_id is None and activity_id is None:
             return Response({"error": "scan_id or activity_id is required"}, status=400)
 
         # Get commands
-        if scan_id:
+        if scan_id is not None:
             queryset = Command.objects.filter(scan_history__id=scan_id)
         else:
             queryset = Command.objects.filter(activity__id=activity_id)

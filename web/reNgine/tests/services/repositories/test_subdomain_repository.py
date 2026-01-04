@@ -156,6 +156,23 @@ class TestSubdomainRepository(BaseTestCase):
 
         self.assertEqual(defaults, {})
 
+    def test_map_extra_data_to_subdomain_fields_new_fields(self):
+        """Test _map_extra_data_to_subdomain_fields with new fields (cname, is_cdn, cdn_name, http_header_path)."""
+        extra_data = {
+            "cname": "cdn.example.com",
+            "is_cdn": True,
+            "cdn_name": "Cloudflare",
+            "http_header_path": "/path/to/headers.json",
+        }
+
+        defaults = {}
+        self.subdomain_repo._map_extra_data_to_subdomain_fields(extra_data, defaults)
+
+        self.assertEqual(defaults["cname"], "cdn.example.com")
+        self.assertEqual(defaults["is_cdn"], True)
+        self.assertEqual(defaults["cdn_name"], "Cloudflare")
+        self.assertEqual(defaults["http_header_path"], "/path/to/headers.json")
+
     def test_process_secator_subdomain_item_valid(self):
         """Test _process_secator_subdomain_item with valid data."""
         item = {

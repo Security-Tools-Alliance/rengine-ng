@@ -61,14 +61,28 @@ class IpRepository:
         ScanHistory.objects.get(id=scan_history_id)
         Domain.objects.get(id=domain_id)
 
+        # Compute version once and reuse for both version and protocol
+        version = self._get_ip_version(ip_address)
+        protocol = item.get("protocol", "")
+        if protocol:
+            # Validate and normalize protocol if provided
+            from reNgine.core.validators import validate_ip_protocol
+
+            validated_protocol = validate_ip_protocol(protocol)
+            protocol = validated_protocol if validated_protocol else ""
+        if not protocol:
+            # Derive protocol from version
+            protocol = "IPv6" if version == 6 else "IPv4"
+
         # Get or create IP address
         ip_obj, created = IpAddress.objects.get_or_create(
             address=ip_address,
             defaults={
                 "is_cdn": False,
                 "is_private": self._is_private_ip(ip_address),
-                "version": self._get_ip_version(ip_address),
+                "version": version,
                 "alive": item.get("alive", False),
+                "protocol": protocol,
             },
         )
 
@@ -102,10 +116,23 @@ class IpRepository:
                 logger.warning(f"Invalid IP address: {address}")
                 return None, False
 
+            # Compute version once and derive protocol from it if not provided
+            version = self._get_ip_version(address)
+            protocol = kwargs.get("protocol", "")
+            if protocol:
+                # Validate and normalize protocol if provided
+                from reNgine.core.validators import validate_ip_protocol
+
+                validated_protocol = validate_ip_protocol(protocol)
+                protocol = validated_protocol if validated_protocol else ""
+            if not protocol:
+                protocol = "IPv6" if version == 6 else "IPv4"
+
             defaults = {
                 "is_cdn": False,
                 "is_private": self._is_private_ip(address),
-                "version": self._get_ip_version(address),
+                "version": version,
+                "protocol": protocol,
             } | kwargs
             ip_obj, created = IpAddress.objects.get_or_create(address=address, defaults=defaults)
 
@@ -136,16 +163,22 @@ class IpRepository:
             ScanHistory.objects.get(id=scan_history_id)
             Domain.objects.get(id=domain_id)
 
-            if ip_objects := [
-                IpAddress(
-                    address=ip_address,
-                    is_cdn=False,
-                    is_private=self._is_private_ip(ip_address),
-                    version=self._get_ip_version(ip_address),
-                )
-                for ip_address in ip_addresses
-                if is_valid_ip(ip_address)
-            ]:
+            # Precompute version for each IP to avoid multiple calls
+            ip_objects = []
+            for ip_address in ip_addresses:
+                if is_valid_ip(ip_address):
+                    version = self._get_ip_version(ip_address)
+                    ip_objects.append(
+                        IpAddress(
+                            address=ip_address,
+                            is_cdn=False,
+                            is_private=self._is_private_ip(ip_address),
+                            version=version,
+                            protocol="IPv6" if version == 6 else "IPv4",
+                        )
+                    )
+
+            if ip_objects:
                 created = IpAddress.objects.bulk_create(ip_objects, ignore_conflicts=True)
                 logger.info(f"Bulk created {len(created)} IP addresses")
 

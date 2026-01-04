@@ -82,6 +82,7 @@ class PortRepository:
                 "cpes": item.get("cpes", []),
                 "protocol": item.get("protocol", ""),
                 "host": item.get("host", ""),
+                "confidence": self._validate_confidence(item.get("confidence", "")),
             },
         )
 
@@ -255,6 +256,21 @@ class PortRepository:
         except Exception as e:
             logger.error(f"Error getting or creating IP for port: {e}")
             return None
+
+    def _validate_confidence(self, confidence: str) -> str:
+        """
+        Validate and normalize confidence level.
+
+        Args:
+            confidence: Confidence string to validate
+
+        Returns:
+            str: Validated confidence or empty string if invalid
+        """
+        from reNgine.core.validators import validate_confidence
+
+        validated = validate_confidence(confidence)
+        return validated if validated else ""
 
     def _is_uncommon_port(self, port_number: int) -> bool:
         """

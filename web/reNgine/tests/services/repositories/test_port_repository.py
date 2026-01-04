@@ -299,3 +299,19 @@ class TestPortRepository(BaseTestCase):
         result = self.port_repo._create_ports_in_bulk(self.scan_history.id, self.domain.id, ports_data)
 
         self.assertEqual(result, [])
+
+    def test_save_from_secator_with_confidence(self):
+        """Test saving port with confidence field."""
+        item = {
+            "_type": "port",
+            "port": 80,
+            "ip": "192.168.1.1",
+            "service_name": "http",
+            "confidence": "high",
+        }
+
+        result = self.port_repo.save_from_secator(item, self.scan_history.id, self.domain.id)
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result.number, 80)
+        self.assertEqual(result.confidence, "high")

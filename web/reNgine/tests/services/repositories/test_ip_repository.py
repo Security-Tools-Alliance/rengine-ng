@@ -245,6 +245,37 @@ class TestIpRepository(BaseTestCase):
 
         self.assertIsNone(result)
 
+    def test_save_from_secator_with_protocol(self):
+        """Test saving IP with protocol field."""
+        item = {
+            "_type": "ip",
+            "ip": "2001:db8::1",
+            "protocol": "IPv6",
+            "alive": True,
+        }
+
+        result = self.ip_repo.save_from_secator(item, self.scan_history.id, self.domain.id)
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result.address, "2001:db8::1")
+        self.assertEqual(result.protocol, "IPv6")
+        self.assertEqual(result.version, 6)
+
+    def test_save_from_secator_protocol_derived_from_version(self):
+        """Test that protocol is derived from version if not provided."""
+        item = {
+            "_type": "ip",
+            "ip": "192.168.1.1",
+            "alive": True,
+        }
+
+        result = self.ip_repo.save_from_secator(item, self.scan_history.id, self.domain.id)
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result.address, "192.168.1.1")
+        self.assertEqual(result.protocol, "IPv4")  # Should be derived from version
+        self.assertEqual(result.version, 4)
+
     def test_process_secator_ip_item_with_hostname(self):
         """Test _process_secator_ip_item with hostname for subdomain association."""
         subdomain = self.data_generator.create_subdomain(

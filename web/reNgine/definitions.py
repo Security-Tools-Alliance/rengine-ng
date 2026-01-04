@@ -559,3 +559,15 @@ ENGINE_DISPLAY_NAMES = [
 
 # Engine names for internal use (LEGACY - kept for backward compatibility)
 ENGINE_NAMES = [engine[0] for engine in ENGINE_DISPLAY_NAMES]
+
+###############################################################################
+# Secator Output Types DEFINITIONS
+###############################################################################
+
+# Confidence levels for endpoints and ports
+CONFIDENCE_LEVELS = ["low", "medium", "high"]
+CONFIDENCE_CHOICES = [(level, level.capitalize()) for level in CONFIDENCE_LEVELS]
+
+# IP Protocol types
+IP_PROTOCOLS = ["IPv4", "IPv6"]
+IP_PROTOCOL_CHOICES = [(protocol, protocol) for protocol in IP_PROTOCOLS]

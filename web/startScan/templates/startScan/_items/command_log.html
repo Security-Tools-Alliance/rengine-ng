@@ -43,7 +43,7 @@ Context variables:
     </div>
   </div>
   
-  {% if command.output or command.command %}
+  {% if command.output or command.command or command.cwd or command.errors or command.warnings or command.return_code is not None or command.time or command.end_time %}
     <div class="collapse" id="collapse-command-{{ command.id }}">
       <div class="card card-body mt-2">
         {% if command.command %}

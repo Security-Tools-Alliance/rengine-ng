@@ -11,7 +11,13 @@ from django.utils import timezone
 
 from reNgine.core.time import get_time_taken
 from reNgine.utilities.time import date_to_aware_datetime
-from reNgine.definitions import CELERY_TASK_STATUSES, ENGINE_DISPLAY_NAMES, NUCLEI_REVERSE_SEVERITY_MAP
+from reNgine.definitions import (
+    CELERY_TASK_STATUSES,
+    CONFIDENCE_CHOICES,
+    ENGINE_DISPLAY_NAMES,
+    IP_PROTOCOL_CHOICES,
+    NUCLEI_REVERSE_SEVERITY_MAP,
+)
 from reNgine.llm.utils import convert_markdown_to_html
 from scanEngine.models import EngineType
 from targetApp.models import Domain
@@ -647,6 +653,11 @@ class EndPoint(models.Model):
     words = models.IntegerField(default=0, null=True, blank=True, help_text="Number of words in the response")
     lines = models.IntegerField(default=0, null=True, blank=True, help_text="Number of lines in the response")
     headers = models.JSONField(null=True, blank=True, help_text="HTTP headers (response_headers and request_headers)")
+    is_directory = models.BooleanField(null=True, blank=True, default=False, help_text="Whether the endpoint is a directory listing")
+    stored_response_path = models.CharField(max_length=1000, null=True, blank=True, help_text="Path to stored response file")
+    confidence = models.CharField(
+        max_length=20, null=True, blank=True, choices=CONFIDENCE_CHOICES, help_text="Confidence level: low, medium, high"
+    )
 
     def __str__(self):
         return self.http_url
@@ -959,6 +970,7 @@ class Command(models.Model):
     workflow_name = models.CharField(max_length=200, blank=True, null=True)
     node_id = models.CharField(max_length=500, blank=True, null=True)
     ancestor_id = models.CharField(max_length=500, blank=True, null=True)
+    scan_type = models.CharField(max_length=50, blank=True, null=True, help_text="Scan type from run_opts.scan_type")
 
     def __str__(self):
         return str(self.command)
@@ -968,6 +980,7 @@ class Command(models.Model):
         Get formatted output using the output formatter utility.
         Returns a dictionary with formatted output and metadata.
         """
+        from html import escape
         from reNgine.utilities.output_formatter import format_output
 
         if not self.output:
@@ -981,9 +994,11 @@ class Command(models.Model):
         try:
             return format_output(self.output)
         except Exception:
-            # Fallback to raw output if formatting fails
+            # Fallback to escaped raw output if formatting fails
+            # We must escape here to prevent XSS since templates use |safe
+            escaped_output = escape(self.output)
             return {
-                "formatted": self.output,
+                "formatted": escaped_output,
                 "is_json": False,
                 "has_ansi": False,
                 "raw": self.output,
@@ -1066,6 +1081,9 @@ class IpAddress(models.Model):
     # this is used for querying which ip was discovered during subcan
     ip_subscan_ids = models.ManyToManyField("SubScan", related_name="ip_subscan_ids")
     alive = models.BooleanField(default=False, null=True, blank=True)
+    protocol = models.CharField(
+        max_length=10, null=True, blank=True, choices=IP_PROTOCOL_CHOICES, help_text="IP protocol: IPv4 or IPv6"
+    )
 
     def __str__(self):
         return str(self.address)
@@ -1098,6 +1116,9 @@ class Port(models.Model):
     cpes = ArrayField(models.CharField(max_length=500), null=True, blank=True)
     protocol = models.CharField(max_length=10, null=True, blank=True)
     host = models.CharField(max_length=1000, null=True, blank=True)
+    confidence = models.CharField(
+        max_length=20, null=True, blank=True, choices=CONFIDENCE_CHOICES, help_text="Confidence level: low, medium, high"
+    )
 
     class Meta:
         unique_together = ("ip_address", "number")

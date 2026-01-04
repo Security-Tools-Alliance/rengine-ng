@@ -231,3 +231,53 @@ def validate_severity(severity: str) -> Optional[str]:
         return normalized
 
     return None
+
+
+def validate_confidence(confidence: str) -> Optional[str]:
+    """
+    Validate and normalize confidence level.
+
+    Args:
+        confidence: Confidence string to validate (low, medium, high)
+
+    Returns:
+        str or None: Normalized confidence or None if invalid
+    """
+    if not confidence:
+        return None
+
+    from reNgine.definitions import CONFIDENCE_LEVELS
+
+    normalized = confidence.lower().strip()
+    if normalized in CONFIDENCE_LEVELS:
+        return normalized
+
+    return None
+
+
+def validate_ip_protocol(protocol: str) -> Optional[str]:
+    """
+    Validate and normalize IP protocol.
+
+    Args:
+        protocol: Protocol string to validate (IPv4 or IPv6)
+
+    Returns:
+        str or None: Normalized protocol or None if invalid
+    """
+    if not protocol:
+        return None
+
+    from reNgine.definitions import IP_PROTOCOLS
+
+    # Normalize common variations
+    normalized = protocol.strip()
+    if normalized.upper() == "IPV4":
+        normalized = "IPv4"
+    elif normalized.upper() == "IPV6":
+        normalized = "IPv6"
+
+    if normalized in IP_PROTOCOLS:
+        return normalized
+
+    return None

@@ -123,6 +123,14 @@ class SubdomainRepository:
             defaults["webserver"] = extra_data["webserver"]
         if "response_time" in extra_data:
             defaults["response_time"] = extra_data["response_time"]
+        if "cname" in extra_data:
+            defaults["cname"] = extra_data["cname"]
+        if "is_cdn" in extra_data:
+            defaults["is_cdn"] = extra_data["is_cdn"]
+        if "cdn_name" in extra_data:
+            defaults["cdn_name"] = extra_data["cdn_name"]
+        if "http_header_path" in extra_data:
+            defaults["http_header_path"] = extra_data["http_header_path"]
 
     def get_or_create(self, name, scan_history_id, domain_id, **kwargs):
         """

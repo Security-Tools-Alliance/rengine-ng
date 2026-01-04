@@ -230,3 +230,22 @@ class EndpointRepositoryIsDefaultTestCase(BaseTestCase):
         )
 
         self.assertEqual(result, [])
+
+    def test_process_secator_endpoint_item_with_secator_fields(self):
+        """Test _process_secator_endpoint_item with new Secator fields."""
+        item = {
+            "url": "https://test.example.com/",
+            "status_code": 200,
+            "is_directory": True,
+            "stored_response_path": "/path/to/response.json",
+            "confidence": "high",
+        }
+
+        result = self.repository._process_secator_endpoint_item(
+            item, self.scan_history.id, self.data_generator.domain.id
+        )
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result.is_directory, True)
+        self.assertEqual(result.stored_response_path, "/path/to/response.json")
+        self.assertEqual(result.confidence, "high")

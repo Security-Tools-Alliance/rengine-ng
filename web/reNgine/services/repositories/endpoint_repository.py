@@ -107,7 +107,22 @@ class EndpointRepository:
         # Add screenshot path if available
         if "screenshot_path" in item:
             defaults["screenshot_path"] = item["screenshot_path"]
-        # Note: stored_response_path is not stored as EndPoint model doesn't have this field
+
+        # Add stored_response_path if available
+        if "stored_response_path" in item:
+            defaults["stored_response_path"] = item["stored_response_path"]
+
+        # Add is_directory if available
+        if "is_directory" in item:
+            defaults["is_directory"] = item["is_directory"]
+
+        # Add confidence if available (validate and normalize)
+        if "confidence" in item:
+            from reNgine.core.validators import validate_confidence
+
+            validated_confidence = validate_confidence(item["confidence"])
+            if validated_confidence:
+                defaults["confidence"] = validated_confidence
 
         endpoint, created = EndPoint.objects.get_or_create(
             http_url=http_url,

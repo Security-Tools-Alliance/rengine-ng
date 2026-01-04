@@ -86,6 +86,8 @@ class CommandRepository:
         node_id = runner_data.get("context", {}).get("node_id") or runner_data.get("config", {}).get("node_id")
         # ancestor_id from context.ancestor_id
         ancestor_id = runner_data.get("context", {}).get("ancestor_id")
+        # scan_type from run_opts.scan_type
+        scan_type = runner_data.get("run_opts", {}).get("scan_type")
 
         # Validate required fields
         if not cmd and not output:
@@ -162,6 +164,8 @@ class CommandRepository:
                 existing_command.node_id = node_id
             if ancestor_id:
                 existing_command.ancestor_id = ancestor_id
+            if scan_type:
+                existing_command.scan_type = scan_type
             if activity:
                 existing_command.activity = activity
             existing_command.save()
@@ -189,6 +193,7 @@ class CommandRepository:
                 workflow_name=workflow_name,
                 node_id=node_id,
                 ancestor_id=ancestor_id,
+                scan_type=scan_type,
             )
             logger.info(f"Created Command {command.id} for runner {name}")
             return command
