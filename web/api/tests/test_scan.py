@@ -99,16 +99,93 @@ class TestStopScan(BaseTestCase):
     def setUp(self):
         """Set up test environment."""
         super().setUp()
+        self.data_generator.create_subscan()
 
-    @patch("api.views.StopScan")
-    def test_stop_scan(self, mock_stop_scan):
+    @patch("reNgine.secator.control.SecatorScanController")
+    def test_stop_scan(self, mock_controller_class):
         """Test stopping a scan."""
-        mock_stop_scan.return_value = True
+        mock_controller = mock_controller_class.return_value
+        mock_controller.stop_scan.return_value = True
         url = reverse("api:stop_scan")
         data = {"scan_id": self.data_generator.scan_history.id}
         response = self.client.post(url, data)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data["status"])
+        mock_controller_class.assert_called_once_with(self.data_generator.scan_history.id)
+        mock_controller.stop_scan.assert_called_once()
+
+    @patch("reNgine.secator.control.SecatorScanController")
+    def test_stop_subscan(self, mock_controller_class):
+        """Test stopping a subscan."""
+        mock_controller = mock_controller_class.return_value
+        mock_controller.stop_subscan.return_value = True
+        url = reverse("api:stop_scan")
+        subscan_id = self.data_generator.subscans[-1].id if self.data_generator.subscans else 1
+        data = {"subscan_id": subscan_id}
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["status"])
+        mock_controller.stop_subscan.assert_called_once_with(subscan_id)
+
+    @patch("reNgine.secator.control.SecatorScanController")
+    def test_stop_scan_failure(self, mock_controller_class):
+        """Test stopping a scan when it fails."""
+        mock_controller = mock_controller_class.return_value
+        mock_controller.stop_scan.return_value = False
+        url = reverse("api:stop_scan")
+        data = {"scan_id": self.data_generator.scan_history.id}
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(response.data["status"])
+
+
+class TestStopActivity(BaseTestCase):
+    """Tests for the StopActivity class."""
+
+    def setUp(self):
+        """Set up test environment."""
+        super().setUp()
+        self.data_generator.create_scan_activity()
+
+    @patch("reNgine.secator.control.SecatorScanController")
+    def test_stop_activity_success(self, mock_controller_class):
+        """Test stopping an activity successfully."""
+        mock_controller = mock_controller_class.return_value
+        mock_controller.stop_activity.return_value = True
+        url = reverse("api:stop_activity")
+        data = {"activity_id": self.data_generator.scan_activity.id}
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["status"])
+        mock_controller_class.assert_called_once_with(self.data_generator.scan_history.id)
+        mock_controller.stop_activity.assert_called_once_with(self.data_generator.scan_activity.id)
+
+    @patch("reNgine.secator.control.SecatorScanController")
+    def test_stop_activity_failure(self, mock_controller_class):
+        """Test stopping an activity when it fails."""
+        mock_controller = mock_controller_class.return_value
+        mock_controller.stop_activity.return_value = False
+        url = reverse("api:stop_activity")
+        data = {"activity_id": self.data_generator.scan_activity.id}
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(response.data["status"])
+
+    def test_stop_activity_missing_id(self):
+        """Test stopping an activity without providing activity_id."""
+        url = reverse("api:stop_activity")
+        response = self.client.post(url, {})
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(response.data["status"])
+
+    def test_stop_activity_not_found(self):
+        """Test stopping an activity that doesn't exist."""
+        url = reverse("api:stop_activity")
+        data = {"activity_id": 99999}
+        response = self.client.post(url, data)
+        # The API returns 400 when activity is not found (get_object_or_404 raises Http404 which is caught)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(response.data["status"])
 
 
 # TestInitiateSubTask removed - functionality migrated to Secator
