@@ -149,7 +149,7 @@ class TestDataGenerator:
 
     def create_scan_history(self, is_legacy=False):
         """Create and return a test scan history.
-        
+
         Args:
             is_legacy: If True, create a legacy scan with scan_type. If False, create a Secator scan without scan_type.
         """
@@ -160,7 +160,7 @@ class TestDataGenerator:
             "scan_status": 2,
             "is_legacy_scan": is_legacy,
         }
-        
+
         # Only assign scan_type for legacy scans
         if is_legacy:
             scan_type = getattr(self, "engine_type", None)
@@ -180,7 +180,7 @@ class TestDataGenerator:
             "nuclei_scan",
             "endpoint_scan",
         ]
-        
+
         self.scan_history = ScanHistory.objects.create(**scan_kwargs)
         return self.scan_history
 

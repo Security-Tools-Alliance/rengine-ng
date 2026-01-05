@@ -72,7 +72,9 @@ class SecatorScanController:
                         failed_count += 1
                         logger.error(f"Failed to revoke Celery task {celery_id} for scan {self.scan_history_id}: {e}")
                 else:
-                    logger.warning(f"Runner {runner.id} ({runner.runner_type}: {runner.runner_name}) has no celery_id to revoke")
+                    logger.warning(
+                        f"Runner {runner.id} ({runner.runner_type}: {runner.runner_name}) has no celery_id to revoke"
+                    )
 
             # Log summary of revocation results
             if revoked_count > 0:
@@ -121,10 +123,9 @@ class SecatorScanController:
                 return False
 
             # Check if there are other running subscans for this scan
-            other_running_subscans = SubScan.objects.filter(
-                scan_history=scan,
-                status=RUNNING_TASK
-            ).exclude(id=subscan_id).count()
+            other_running_subscans = (
+                SubScan.objects.filter(scan_history=scan, status=RUNNING_TASK).exclude(id=subscan_id).count()
+            )
 
             if other_running_subscans > 0:
                 logger.warning(
@@ -139,10 +140,9 @@ class SecatorScanController:
             # this is a best-effort approach. In the current architecture, subscans
             # share runners with their parent scan, so stopping a subscan may affect
             # other subscans sharing the same scan.
-            subscan_activities = ScanActivity.objects.filter(
-                scan_of=scan,
-                status=RUNNING_TASK
-            ).select_related('runner_id')
+            subscan_activities = ScanActivity.objects.filter(scan_of=scan, status=RUNNING_TASK).select_related(
+                "runner_id"
+            )
 
             # Collect unique runners from activities, filtering by subdomain if possible
             # Only include runners that explicitly match this subscan's subdomain
@@ -164,13 +164,8 @@ class SecatorScanController:
             # If we found activity-specific runners, use only those
             # Otherwise, fall back to all runners for the scan (shared behavior)
             if activity_runner_ids:
-                runners = list(SecatorRunner.objects.filter(
-                    id__in=activity_runner_ids,
-                    scan_history_id=scan.id
-                ))
-                logger.debug(
-                    f"Scoping subscan {subscan_id} stop to {len(runners)} activity-specific runner(s)"
-                )
+                runners = list(SecatorRunner.objects.filter(id__in=activity_runner_ids, scan_history_id=scan.id))
+                logger.debug(f"Scoping subscan {subscan_id} stop to {len(runners)} activity-specific runner(s)")
             else:
                 # Fallback: Get all SecatorRunner instances associated with the parent scan
                 # This is the shared behavior when activities don't provide specific runners
@@ -207,7 +202,9 @@ class SecatorScanController:
                         failed_count += 1
                         logger.error(f"Failed to revoke Celery task {celery_id} for subscan {subscan_id}: {e}")
                 else:
-                    logger.warning(f"Runner {runner.id} ({runner.runner_type}: {runner.runner_name}) has no celery_id to revoke")
+                    logger.warning(
+                        f"Runner {runner.id} ({runner.runner_type}: {runner.runner_name}) has no celery_id to revoke"
+                    )
 
             self._abort_subscan(subscan)
             self.scan_repo.create_activity(scan.id, f"Subscan {subscan_id} aborted", ABORTED_TASK)
@@ -247,7 +244,7 @@ class SecatorScanController:
         try:
             from secator.celery import revoke_task
 
-            activity = ScanActivity.objects.filter(id=activity_id).select_related('runner_id').first()
+            activity = ScanActivity.objects.filter(id=activity_id).select_related("runner_id").first()
             if not activity:
                 logger.error(f"ScanActivity {activity_id} not found")
                 return False
@@ -265,10 +262,11 @@ class SecatorScanController:
 
             # Correlation check: Verify that this activity is actually associated with this runner
             # Check if there are other activities using the same runner to ensure we're stopping the right one
-            other_activities_with_same_runner = ScanActivity.objects.filter(
-                runner_id=activity.runner_id,
-                status=RUNNING_TASK
-            ).exclude(id=activity_id).count()
+            other_activities_with_same_runner = (
+                ScanActivity.objects.filter(runner_id=activity.runner_id, status=RUNNING_TASK)
+                .exclude(id=activity_id)
+                .count()
+            )
 
             if other_activities_with_same_runner > 0:
                 logger.warning(
@@ -278,7 +276,11 @@ class SecatorScanController:
                 )
 
             # Additional guard: Verify the runner belongs to the same scan as the activity
-            if activity.scan_of and activity.runner_id.scan_history and activity.scan_of.id != activity.runner_id.scan_history.id:
+            if (
+                activity.scan_of
+                and activity.runner_id.scan_history
+                and activity.scan_of.id != activity.runner_id.scan_history.id
+            ):
                 logger.error(
                     f"Activity {activity_id} (scan {activity.scan_of.id}) has runner "
                     f"{activity.runner_id.id} associated with different scan "
@@ -290,9 +292,13 @@ class SecatorScanController:
             # Revoke the Celery task
             try:
                 revoke_task(activity.runner_id.celery_id, task_name=f"activity_{activity_id}")
-                logger.debug(f"Successfully revoked Celery task {activity.runner_id.celery_id} for activity {activity_id}")
+                logger.debug(
+                    f"Successfully revoked Celery task {activity.runner_id.celery_id} for activity {activity_id}"
+                )
             except Exception as e:
-                logger.error(f"Failed to revoke Celery task {activity.runner_id.celery_id} for activity {activity_id}: {e}")
+                logger.error(
+                    f"Failed to revoke Celery task {activity.runner_id.celery_id} for activity {activity_id}: {e}"
+                )
                 return False
 
             self._abort_activity(activity)

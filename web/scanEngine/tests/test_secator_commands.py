@@ -4,7 +4,6 @@ test_secator_commands.py
 This file contains unit tests for the Secator management commands.
 """
 
-
 import contextlib
 from io import StringIO
 import sys

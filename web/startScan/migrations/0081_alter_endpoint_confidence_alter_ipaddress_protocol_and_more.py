@@ -4,25 +4,42 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('startScan', '0080_add_command_scan_type'),
+        ("startScan", "0080_add_command_scan_type"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='endpoint',
-            name='confidence',
-            field=models.CharField(blank=True, choices=[('low', 'Low'), ('medium', 'Medium'), ('high', 'High')], help_text='Confidence level: low, medium, high', max_length=20, null=True),
+            model_name="endpoint",
+            name="confidence",
+            field=models.CharField(
+                blank=True,
+                choices=[("low", "Low"), ("medium", "Medium"), ("high", "High")],
+                help_text="Confidence level: low, medium, high",
+                max_length=20,
+                null=True,
+            ),
         ),
         migrations.AlterField(
-            model_name='ipaddress',
-            name='protocol',
-            field=models.CharField(blank=True, choices=[('IPv4', 'IPv4'), ('IPv6', 'IPv6')], help_text='IP protocol: IPv4 or IPv6', max_length=10, null=True),
+            model_name="ipaddress",
+            name="protocol",
+            field=models.CharField(
+                blank=True,
+                choices=[("IPv4", "IPv4"), ("IPv6", "IPv6")],
+                help_text="IP protocol: IPv4 or IPv6",
+                max_length=10,
+                null=True,
+            ),
         ),
         migrations.AlterField(
-            model_name='port',
-            name='confidence',
-            field=models.CharField(blank=True, choices=[('low', 'Low'), ('medium', 'Medium'), ('high', 'High')], help_text='Confidence level: low, medium, high', max_length=20, null=True),
+            model_name="port",
+            name="confidence",
+            field=models.CharField(
+                blank=True,
+                choices=[("low", "Low"), ("medium", "Medium"), ("high", "High")],
+                help_text="Confidence level: low, medium, high",
+                max_length=20,
+                null=True,
+            ),
         ),
     ]

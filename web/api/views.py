@@ -1335,7 +1335,9 @@ class StopActivity(APIView):
             scan = activity.scan_of
 
             if not scan:
-                return Response({"status": False, "message": "Activity has no associated scan"}, status=HTTP_400_BAD_REQUEST)
+                return Response(
+                    {"status": False, "message": "Activity has no associated scan"}, status=HTTP_400_BAD_REQUEST
+                )
 
             # Use SecatorScanController to stop the activity
             controller = SecatorScanController(scan.id)
@@ -1344,6 +1346,7 @@ class StopActivity(APIView):
             if success:
                 # Send WebSocket update if scan is available
                 from reNgine.utilities.websocket import send_scan_status_update
+
                 send_scan_status_update(scan.id)
                 return Response({"status": True})
             else:

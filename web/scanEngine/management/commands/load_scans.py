@@ -77,9 +77,7 @@ class Command(SecatorLoaderBase):
                     except (OSError, IOError) as e:
                         # I/O-related issues (missing file, permission error, etc.) are expected
                         self.stdout.write(
-                            self.style.ERROR(
-                                f"Failed to read YAML file for scan {scan_name} at {scan_path}: {e}"
-                            )
+                            self.style.ERROR(f"Failed to read YAML file for scan {scan_name} at {scan_path}: {e}")
                         )
                         failed_count += 1
                         continue
@@ -104,7 +102,9 @@ class Command(SecatorLoaderBase):
                     # Use description from YAML if available, otherwise use loader description
                     description = scan_data.get("description", scan_description) or f"Built-in {scan_name}"
                     # Get long_description from YAML or TemplateLoader
-                    long_description = scan_data.get("long_description") or getattr(scan_loader, "long_description", None)
+                    long_description = scan_data.get("long_description") or getattr(
+                        scan_loader, "long_description", None
+                    )
 
                     # Determine scan type based on scan content
                     scan_type = self._determine_scan_type_from_yaml(scan_data)

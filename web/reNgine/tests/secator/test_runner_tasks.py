@@ -96,9 +96,7 @@ class TestSecatorRunnerTasks(BaseTestCase):
     @patch("reNgine.secator.runner.os.makedirs")
     @patch("reNgine.secator.runner.Task")
     @patch("reNgine.secator.runner.TemplateLoader")
-    def test_run_task_single_delegates_to_run_tasks(
-        self, mock_template_loader, mock_task_class, mock_makedirs
-    ):
+    def test_run_task_single_delegates_to_run_tasks(self, mock_template_loader, mock_task_class, mock_makedirs):
         """Test that run_task delegates to run_tasks."""
         mock_template = MagicMock()
         mock_template_loader.return_value = mock_template
@@ -144,9 +142,7 @@ class TestSecatorRunnerTasks(BaseTestCase):
     @patch("reNgine.secator.runner.os.makedirs")
     @patch("reNgine.secator.runner.Task")
     @patch("reNgine.secator.runner.TemplateLoader")
-    def test_run_tasks_template_loader_dict_format(
-        self, mock_template_loader, mock_task_class, mock_makedirs
-    ):
+    def test_run_tasks_template_loader_dict_format(self, mock_template_loader, mock_task_class, mock_makedirs):
         """Test that TemplateLoader is called with correct dict format."""
         mock_template = MagicMock()
         mock_template_loader.return_value = mock_template

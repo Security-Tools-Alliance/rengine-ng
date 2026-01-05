@@ -4,7 +4,6 @@ test_secator_models.py
 This file contains unit tests for the Secator models (SecatorScan, SecatorWorkflow, SecatorTask).
 """
 
-
 from scanEngine.models import SecatorScan, SecatorTask, SecatorWorkflow
 from utils.test_base import BaseTestCase
 

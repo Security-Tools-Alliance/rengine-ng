@@ -5,16 +5,17 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('scanEngine', '0019_remove_alias_from_secator_scan'),
-        ('startScan', '0081_alter_endpoint_confidence_alter_ipaddress_protocol_and_more'),
+        ("scanEngine", "0019_remove_alias_from_secator_scan"),
+        ("startScan", "0081_alter_endpoint_confidence_alter_ipaddress_protocol_and_more"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='scanhistory',
-            name='scan_type',
-            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, to='scanEngine.enginetype'),
+            model_name="scanhistory",
+            name="scan_type",
+            field=models.ForeignKey(
+                blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, to="scanEngine.enginetype"
+            ),
         ),
     ]

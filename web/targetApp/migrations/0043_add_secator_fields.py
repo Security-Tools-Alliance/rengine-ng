@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('targetApp', '0042_domain_custom_dns_servers'),
+        ("targetApp", "0042_domain_custom_dns_servers"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='domaininfo',
-            name='extra_data',
-            field=models.JSONField(blank=True, help_text='Additional data from Secator Record output type', null=True),
+            model_name="domaininfo",
+            name="extra_data",
+            field=models.JSONField(blank=True, help_text="Additional data from Secator Record output type", null=True),
         ),
     ]

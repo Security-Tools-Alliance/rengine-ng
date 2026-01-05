@@ -4,25 +4,28 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('startScan', '0076_add_command_hierarchy_fields'),
+        ("startScan", "0076_add_command_hierarchy_fields"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='endpoint',
-            name='confidence',
-            field=models.CharField(blank=True, help_text='Confidence level: low, medium, high', max_length=20, null=True),
+            model_name="endpoint",
+            name="confidence",
+            field=models.CharField(
+                blank=True, help_text="Confidence level: low, medium, high", max_length=20, null=True
+            ),
         ),
         migrations.AddField(
-            model_name='endpoint',
-            name='is_directory',
-            field=models.BooleanField(blank=True, default=False, help_text='Whether the endpoint is a directory listing', null=True),
+            model_name="endpoint",
+            name="is_directory",
+            field=models.BooleanField(
+                blank=True, default=False, help_text="Whether the endpoint is a directory listing", null=True
+            ),
         ),
         migrations.AddField(
-            model_name='endpoint',
-            name='stored_response_path',
-            field=models.CharField(blank=True, help_text='Path to stored response file', max_length=1000, null=True),
+            model_name="endpoint",
+            name="stored_response_path",
+            field=models.CharField(blank=True, help_text="Path to stored response file", max_length=1000, null=True),
         ),
     ]

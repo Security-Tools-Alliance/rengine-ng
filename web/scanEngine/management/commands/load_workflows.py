@@ -100,7 +100,9 @@ class Command(SecatorLoaderBase):
                         workflow_data.get("description", workflow_description) or f"Built-in {workflow_name} workflow"
                     )
                     # Get long_description from YAML or TemplateLoader
-                    long_description = workflow_data.get("long_description") or getattr(workflow_loader, "long_description", None)
+                    long_description = workflow_data.get("long_description") or getattr(
+                        workflow_loader, "long_description", None
+                    )
 
                     # Determine scan type based on workflow content
                     scan_type = self._determine_scan_type_from_yaml(workflow_data)

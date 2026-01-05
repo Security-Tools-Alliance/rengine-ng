@@ -4,15 +4,19 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('scanEngine', '0016_secatorworkflow_display_name_and_more'),
+        ("scanEngine", "0016_secatorworkflow_display_name_and_more"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='secatorworkflow',
-            name='alias',
-            field=models.CharField(blank=True, help_text='Built-in workflow alias from Secator (for CLI usage only, not used by reNgine-ng)', max_length=50, null=True),
+            model_name="secatorworkflow",
+            name="alias",
+            field=models.CharField(
+                blank=True,
+                help_text="Built-in workflow alias from Secator (for CLI usage only, not used by reNgine-ng)",
+                max_length=50,
+                null=True,
+            ),
         ),
     ]

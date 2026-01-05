@@ -38,7 +38,6 @@ class Command(BaseCommand):
         synced_count = 0
 
         for workflow in workflows:
-
             try:
                 # Parse YAML configuration
                 config = yaml.safe_load(workflow.yaml_configuration)

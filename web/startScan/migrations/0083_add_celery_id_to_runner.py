@@ -3,38 +3,43 @@
 import django.db.models.deletion
 from django.db import migrations, models
 
-class Migration(migrations.Migration):
 
+class Migration(migrations.Migration):
     dependencies = [
-        ('startScan', '0082_make_scan_type_nullable'),
+        ("startScan", "0082_make_scan_type_nullable"),
     ]
 
     operations = [
         # Step 1: Add celery_id to SecatorRunner
         migrations.AddField(
-            model_name='secatorrunner',
-            name='celery_id',
-            field=models.CharField(blank=True, help_text='Celery task ID for this runner', max_length=100, null=True),
+            model_name="secatorrunner",
+            name="celery_id",
+            field=models.CharField(blank=True, help_text="Celery task ID for this runner", max_length=100, null=True),
         ),
         # Step 2: Add runner_id to ScanActivity (nullable, no data migration needed)
         migrations.AddField(
-            model_name='scanactivity',
-            name='runner_id',
-            field=models.ForeignKey(blank=True, help_text='SecatorRunner associated with this activity', null=True, on_delete=django.db.models.deletion.SET_NULL, to='startScan.secatorrunner'),
+            model_name="scanactivity",
+            name="runner_id",
+            field=models.ForeignKey(
+                blank=True,
+                help_text="SecatorRunner associated with this activity",
+                null=True,
+                on_delete=django.db.models.deletion.SET_NULL,
+                to="startScan.secatorrunner",
+            ),
         ),
-
         # Step 3: Remove old celery_id from ScanActivity
         migrations.RemoveField(
-            model_name='scanactivity',
-            name='celery_id',
+            model_name="scanactivity",
+            name="celery_id",
         ),
         # Step 4: Remove celery_ids from ScanHistory and SubScan
         migrations.RemoveField(
-            model_name='scanhistory',
-            name='celery_ids',
+            model_name="scanhistory",
+            name="celery_ids",
         ),
         migrations.RemoveField(
-            model_name='subscan',
-            name='celery_ids',
+            model_name="subscan",
+            name="celery_ids",
         ),
     ]

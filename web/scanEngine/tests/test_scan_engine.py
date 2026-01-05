@@ -5,7 +5,6 @@ This file contains unit tests for the views of the scanEngine application.
 It tests functionalities related to scan engines, wordlists, settings, and tools.
 """
 
-
 from django.urls import reverse
 
 from scanEngine.models import EngineType, Wordlist

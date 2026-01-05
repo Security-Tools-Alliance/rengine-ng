@@ -311,7 +311,6 @@ class SecatorWorkflow(models.Model):
             return self.display_name
         return self.name.replace("_", " ").title()
 
-
     def __str__(self):
         return f"{self.get_display_name()} ({self.workflow_type})"
 
@@ -334,7 +333,7 @@ class SecatorWorkflow(models.Model):
     def get_structured_tasks(self):
         """
         Return structured list of tasks with group information.
-        
+
         Returns a list of dictionaries:
         - For groups: {"type": "group", "name": "_group/discover", "display_name": "discover", "tasks": ["netdetect", "arp"]}
         - For individual tasks: {"type": "task", "name": "prompt", "group": None}
@@ -363,26 +362,17 @@ class SecatorWorkflow(models.Model):
                 if not display_name:
                     display_name = "tasks"
 
-                structured.append({
-                    "type": "group",
-                    "name": key,
-                    "display_name": display_name,
-                    "tasks": group_tasks
-                })
+                structured.append({"type": "group", "name": key, "display_name": display_name, "tasks": group_tasks})
             else:
                 # This is an individual task
-                structured.append({
-                    "type": "task",
-                    "name": key,
-                    "group": None
-                })
+                structured.append({"type": "task", "name": key, "group": None})
 
         return structured
 
     def get_tasks_count(self):
         """
         Return total count of individual tasks (including tasks within groups).
-        
+
         This counts all individual tasks, not groups.
         """
         # Use pre-computed value if available (from view optimization)
@@ -554,7 +544,6 @@ class SecatorScan(models.Model):
         ("builtin", "Built-in"),
         ("custom", "Custom"),
     ]
-
 
     id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=200, unique=True)

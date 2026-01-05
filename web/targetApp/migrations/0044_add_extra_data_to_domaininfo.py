@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('targetApp', '0043_add_secator_fields'),
+        ("targetApp", "0043_add_secator_fields"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='domaininfo',
-            name='extra_data',
+            model_name="domaininfo",
+            name="extra_data",
             field=models.JSONField(blank=True, null=True),
         ),
     ]

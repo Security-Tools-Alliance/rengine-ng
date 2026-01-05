@@ -4,20 +4,19 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('scanEngine', '0017_remove_choices_from_workflow_alias'),
+        ("scanEngine", "0017_remove_choices_from_workflow_alias"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='secatorscan',
-            name='long_description',
-            field=models.TextField(blank=True, help_text='Long description for the scan', null=True),
+            model_name="secatorscan",
+            name="long_description",
+            field=models.TextField(blank=True, help_text="Long description for the scan", null=True),
         ),
         migrations.AddField(
-            model_name='secatorworkflow',
-            name='long_description',
-            field=models.TextField(blank=True, help_text='Long description for the workflow', null=True),
+            model_name="secatorworkflow",
+            name="long_description",
+            field=models.TextField(blank=True, help_text="Long description for the workflow", null=True),
         ),
     ]

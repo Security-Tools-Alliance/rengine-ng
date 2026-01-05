@@ -128,10 +128,11 @@ class SecatorProgressSync:
             SecatorRunner: Currently running runner or None
         """
         try:
-            runner = SecatorRunner.objects.filter(
-                scan_history_id=scan_history_id,
-                runner_data__status="RUNNING"
-            ).order_by("-updated_at").first()
+            runner = (
+                SecatorRunner.objects.filter(scan_history_id=scan_history_id, runner_data__status="RUNNING")
+                .order_by("-updated_at")
+                .first()
+            )
 
             if runner:
                 return runner
@@ -235,12 +236,13 @@ class SecatorProgressSync:
             if runner_id:
                 try:
                     from startScan.models import SecatorRunner
+
                     runner = SecatorRunner.objects.get(id=runner_id)
-                    existing_activity = ScanActivity.objects.filter(
-                        scan_of=scan_history,
-                        name=runner_name,
-                        runner_id=runner
-                    ).order_by("-time").first()
+                    existing_activity = (
+                        ScanActivity.objects.filter(scan_of=scan_history, name=runner_name, runner_id=runner)
+                        .order_by("-time")
+                        .first()
+                    )
                 except SecatorRunner.DoesNotExist:
                     logger.warning(f"SecatorRunner {runner_id} not found when syncing progress")
                     existing_activity = None
@@ -260,6 +262,7 @@ class SecatorProgressSync:
                 if runner_id:
                     try:
                         from startScan.models import SecatorRunner
+
                         runner = SecatorRunner.objects.get(id=runner_id)
                         new_activity = ScanActivity.objects.get(id=activity_id)
                         new_activity.runner_id = runner

@@ -990,7 +990,13 @@ class ScanActivity(models.Model):
     status = models.IntegerField()
     error_message = models.CharField(max_length=300, blank=True, null=True)
     traceback = models.TextField(blank=True, null=True)
-    runner_id = models.ForeignKey('SecatorRunner', on_delete=models.SET_NULL, null=True, blank=True, help_text="SecatorRunner associated with this activity")
+    runner_id = models.ForeignKey(
+        "SecatorRunner",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        help_text="SecatorRunner associated with this activity",
+    )
 
     @property
     def celery_id(self):

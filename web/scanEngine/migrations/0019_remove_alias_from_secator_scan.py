@@ -4,14 +4,13 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('scanEngine', '0018_secatorscan_long_description_and_more'),
+        ("scanEngine", "0018_secatorscan_long_description_and_more"),
     ]
 
     operations = [
         migrations.RemoveField(
-            model_name='secatorscan',
-            name='alias',
+            model_name="secatorscan",
+            name="alias",
         ),
     ]

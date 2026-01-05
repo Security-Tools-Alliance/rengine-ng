@@ -4,40 +4,39 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('startScan', '0075_add_command_fields'),
+        ("startScan", "0075_add_command_fields"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='command',
-            name='runner_type',
+            model_name="command",
+            name="runner_type",
             field=models.CharField(blank=True, max_length=50, null=True),
         ),
         migrations.AddField(
-            model_name='command',
-            name='has_parent',
+            model_name="command",
+            name="has_parent",
             field=models.BooleanField(default=False),
         ),
         migrations.AddField(
-            model_name='command',
-            name='has_children',
+            model_name="command",
+            name="has_children",
             field=models.BooleanField(default=False),
         ),
         migrations.AddField(
-            model_name='command',
-            name='workflow_name',
+            model_name="command",
+            name="workflow_name",
             field=models.CharField(blank=True, max_length=200, null=True),
         ),
         migrations.AddField(
-            model_name='command',
-            name='node_id',
+            model_name="command",
+            name="node_id",
             field=models.CharField(blank=True, max_length=500, null=True),
         ),
         migrations.AddField(
-            model_name='command',
-            name='ancestor_id',
+            model_name="command",
+            name="ancestor_id",
             field=models.CharField(blank=True, max_length=500, null=True),
         ),
     ]

@@ -269,4 +269,3 @@ class TestSecatorAPIAuthentication(BaseTestCase):
         finding_data = {"_type": "subdomain", "name": "test.example.com"}
         response = self.client.post(url, finding_data, content_type="application/json")
         self.assertIn(response.status_code, [status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN])
-

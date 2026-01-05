@@ -4,45 +4,44 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('startScan', '0074_add_certificate_model'),
+        ("startScan", "0074_add_certificate_model"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='command',
-            name='end_time',
+            model_name="command",
+            name="end_time",
             field=models.DateTimeField(blank=True, null=True),
         ),
         migrations.AddField(
-            model_name='command',
-            name='elapsed',
+            model_name="command",
+            name="elapsed",
             field=models.FloatField(blank=True, null=True),
         ),
         migrations.AddField(
-            model_name='command',
-            name='errors',
+            model_name="command",
+            name="errors",
             field=models.JSONField(blank=True, default=list),
         ),
         migrations.AddField(
-            model_name='command',
-            name='warnings',
+            model_name="command",
+            name="warnings",
             field=models.JSONField(blank=True, default=list),
         ),
         migrations.AddField(
-            model_name='command',
-            name='name',
+            model_name="command",
+            name="name",
             field=models.CharField(blank=True, max_length=200, null=True),
         ),
         migrations.AddField(
-            model_name='command',
-            name='status',
+            model_name="command",
+            name="status",
             field=models.CharField(blank=True, max_length=50, null=True),
         ),
         migrations.AddField(
-            model_name='command',
-            name='cwd',
+            model_name="command",
+            name="cwd",
             field=models.CharField(blank=True, max_length=500, null=True),
         ),
     ]

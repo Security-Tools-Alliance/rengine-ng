@@ -77,9 +77,7 @@ class SecatorRunner:
             return template
         except Exception as e:
             logger.error(f"Failed to load workflow template '{workflow_name}': {e}")
-            raise Exception(
-                f"Could not load workflow template '{workflow_name}': {e}"
-            ) from e
+            raise Exception(f"Could not load workflow template '{workflow_name}': {e}") from e
 
     def _load_scan_template(self, scan_name: str):
         """
@@ -106,9 +104,7 @@ class SecatorRunner:
             return template
         except Exception as e:
             logger.error(f"Failed to load scan template '{scan_name}': {e}")
-            raise Exception(
-                f"Could not load scan template '{scan_name}': {e}"
-            ) from e
+            raise Exception(f"Could not load scan template '{scan_name}': {e}") from e
 
     def _execute_runner(
         self,
@@ -176,6 +172,7 @@ class SecatorRunner:
             # Import and activate Secator API hooks
             try:
                 from secator.hooks.api import HOOKS as API_HOOKS
+
                 logger.info("🔧 Secator API hooks imported successfully")
                 logger.info(f"🔧 API hooks available for: {list(API_HOOKS.keys())}")
             except ImportError as e:
@@ -211,9 +208,7 @@ class SecatorRunner:
 
             except Exception as e:
                 logger.error(f"Error creating runner with hooks: {e}")
-                raise Exception(
-                    f"Could not create runner: {e}"
-                ) from e
+                raise Exception(f"Could not create runner: {e}") from e
 
             try:
                 result = runner.run()
@@ -221,9 +216,7 @@ class SecatorRunner:
 
             except Exception as e:
                 logger.error(f"Error running runner: {e}")
-                raise Exception(
-                    f"Could not run runner: {e}"
-                ) from e
+                raise Exception(f"Could not run runner: {e}") from e
 
             logger.info(f"Secator {runner_class.__name__} executed successfully")
 

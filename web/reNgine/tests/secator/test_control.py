@@ -90,7 +90,9 @@ class TestSecatorScanController(unittest.TestCase):
     @patch("reNgine.secator.control.SecatorRunner")
     @patch("reNgine.secator.control.ScanRepository")
     @patch("secator.celery.revoke_task")
-    def test_stop_scan_partial_revocation_failure(self, mock_revoke_task, mock_scan_repo_class, mock_secator_runner_class):
+    def test_stop_scan_partial_revocation_failure(
+        self, mock_revoke_task, mock_scan_repo_class, mock_secator_runner_class
+    ):
         """Test stopping a scan when some task revocations fail."""
         mock_scan_repo = Mock()
         mock_scan_repo_class.return_value = mock_scan_repo

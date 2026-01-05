@@ -2,7 +2,6 @@
 Integration tests for Secator components.
 """
 
-
 from reNgine.services.scan.scan_orchestrator import ScanOrchestrator
 from utils.test_base import BaseTestCase
 

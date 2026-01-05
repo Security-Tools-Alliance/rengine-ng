@@ -4,15 +4,16 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('startScan', '0077_add_secator_endpoint_fields'),
+        ("startScan", "0077_add_secator_endpoint_fields"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='port',
-            name='confidence',
-            field=models.CharField(blank=True, help_text='Confidence level: low, medium, high', max_length=20, null=True),
+            model_name="port",
+            name="confidence",
+            field=models.CharField(
+                blank=True, help_text="Confidence level: low, medium, high", max_length=20, null=True
+            ),
         ),
     ]

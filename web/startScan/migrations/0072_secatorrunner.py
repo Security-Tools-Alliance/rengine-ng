@@ -5,27 +5,36 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('startScan', '0071_remove_employee_email_employee_emails'),
-        ('targetApp', '0042_domain_custom_dns_servers'),
+        ("startScan", "0071_remove_employee_email_employee_emails"),
+        ("targetApp", "0042_domain_custom_dns_servers"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='SecatorRunner',
+            name="SecatorRunner",
             fields=[
-                ('id', models.AutoField(primary_key=True, serialize=False)),
-                ('runner_type', models.CharField(help_text='Type of runner: workflow, scan, or task', max_length=50)),
-                ('runner_name', models.CharField(blank=True, max_length=500, null=True)),
-                ('runner_data', models.JSONField(default=dict, help_text='Full runner data from Secator')),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('domain', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, to='targetApp.domain')),
-                ('scan_history', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, to='startScan.scanhistory')),
+                ("id", models.AutoField(primary_key=True, serialize=False)),
+                ("runner_type", models.CharField(help_text="Type of runner: workflow, scan, or task", max_length=50)),
+                ("runner_name", models.CharField(blank=True, max_length=500, null=True)),
+                ("runner_data", models.JSONField(default=dict, help_text="Full runner data from Secator")),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                (
+                    "domain",
+                    models.ForeignKey(
+                        blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, to="targetApp.domain"
+                    ),
+                ),
+                (
+                    "scan_history",
+                    models.ForeignKey(
+                        blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, to="startScan.scanhistory"
+                    ),
+                ),
             ],
             options={
-                'ordering': ['-created_at'],
+                "ordering": ["-created_at"],
             },
         ),
     ]
