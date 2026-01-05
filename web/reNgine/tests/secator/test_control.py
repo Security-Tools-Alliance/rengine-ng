@@ -41,6 +41,8 @@ class TestSecatorScanController(unittest.TestCase):
         # Create mock runner with celery_id
         mock_runner = Mock()
         mock_runner.celery_id = "task-123"
+        mock_runner.status = None
+        mock_runner.save = Mock()
         mock_secator_runner_class.objects.filter.return_value = [mock_runner]
 
         controller = SecatorScanController(self.scan_history_id)
@@ -52,6 +54,8 @@ class TestSecatorScanController(unittest.TestCase):
         mock_scan_repo.get_by_id.assert_called_once_with(self.scan_history_id)
         mock_secator_runner_class.objects.filter.assert_called_once_with(scan_history_id=self.scan_history_id)
         mock_revoke_task.assert_called_once_with("task-123", task_name=f"scan_{self.scan_history_id}")
+        self.assertEqual(mock_runner.status, "REVOKED")
+        mock_runner.save.assert_called()
         mock_scan_repo.update_status.assert_called_once()
         mock_scan_repo.create_scan_activity.assert_called_once()
 
@@ -68,10 +72,16 @@ class TestSecatorScanController(unittest.TestCase):
         # Create mock runners with celery_ids
         mock_runner1 = Mock()
         mock_runner1.celery_id = "task-123"
+        mock_runner1.status = None
+        mock_runner1.save = Mock()
         mock_runner2 = Mock()
         mock_runner2.celery_id = "task-456"
+        mock_runner2.status = None
+        mock_runner2.save = Mock()
         mock_runner3 = Mock()
         mock_runner3.celery_id = "task-789"
+        mock_runner3.status = None
+        mock_runner3.save = Mock()
         mock_secator_runner_class.objects.filter.return_value = [mock_runner1, mock_runner2, mock_runner3]
 
         controller = SecatorScanController(self.scan_history_id)
@@ -83,6 +93,12 @@ class TestSecatorScanController(unittest.TestCase):
         mock_scan_repo.get_by_id.assert_called_once_with(self.scan_history_id)
         mock_secator_runner_class.objects.filter.assert_called_once_with(scan_history_id=self.scan_history_id)
         self.assertEqual(mock_revoke_task.call_count, 3)
+        self.assertEqual(mock_runner1.status, "REVOKED")
+        self.assertEqual(mock_runner2.status, "REVOKED")
+        self.assertEqual(mock_runner3.status, "REVOKED")
+        mock_runner1.save.assert_called()
+        mock_runner2.save.assert_called()
+        mock_runner3.save.assert_called()
         mock_scan_repo.update_status.assert_called_once()
         mock_scan_repo.create_scan_activity.assert_called_once()
 
@@ -101,8 +117,12 @@ class TestSecatorScanController(unittest.TestCase):
         # Create mock runners with celery_ids
         mock_runner1 = Mock()
         mock_runner1.celery_id = "task-123"
+        mock_runner1.status = None
+        mock_runner1.save = Mock()
         mock_runner2 = Mock()
         mock_runner2.celery_id = "task-456"
+        mock_runner2.status = None
+        mock_runner2.save = Mock()
         mock_secator_runner_class.objects.filter.return_value = [mock_runner1, mock_runner2]
 
         def side_effect(task_id, task_name=None):
@@ -119,6 +139,10 @@ class TestSecatorScanController(unittest.TestCase):
         self.assertTrue(result)
         mock_secator_runner_class.objects.filter.assert_called_once_with(scan_history_id=self.scan_history_id)
         self.assertEqual(mock_revoke_task.call_count, 2)
+        self.assertEqual(mock_runner1.status, "REVOKED")
+        self.assertEqual(mock_runner2.status, "REVOKED")
+        mock_runner1.save.assert_called()
+        mock_runner2.save.assert_called()
         mock_scan_repo.update_status.assert_called_once()
         mock_scan_repo.create_scan_activity.assert_called_once()
 
@@ -240,6 +264,8 @@ class TestSecatorScanController(unittest.TestCase):
         mock_runner = Mock()
         mock_runner.id = 111
         mock_runner.celery_id = "task-subscan-123"
+        mock_runner.status = None
+        mock_runner.save = Mock()
         mock_runner.runner_data = {"context": {"subdomain_id": 789}}
         mock_activity.runner_id = mock_runner
         mock_scan_activity_class.objects.filter.return_value.select_related.return_value = [mock_activity]
@@ -259,6 +285,8 @@ class TestSecatorScanController(unittest.TestCase):
         mock_subscan_class.objects.filter.assert_called()
         mock_scan_activity_class.objects.filter.assert_called()
         mock_revoke_task.assert_called_once_with("task-subscan-123", task_name="subscan_456")
+        self.assertEqual(mock_runner.status, "REVOKED")
+        mock_runner.save.assert_called()
         self.assertEqual(mock_subscan.status, 3)  # ABORTED_TASK
         mock_subscan.save.assert_called()
 
@@ -328,6 +356,8 @@ class TestSecatorScanController(unittest.TestCase):
         mock_runner = Mock()
         mock_runner.id = 111
         mock_runner.celery_id = "task-activity-123"
+        mock_runner.status = None
+        mock_runner.save = Mock()
         mock_scan = Mock()
         mock_scan.id = self.scan_history_id
         mock_activity.runner_id = mock_runner
@@ -348,6 +378,8 @@ class TestSecatorScanController(unittest.TestCase):
         self.assertTrue(result)
         mock_scan_activity_class.objects.filter.assert_called()
         mock_revoke_task.assert_called_once_with("task-activity-123", task_name="activity_789")
+        self.assertEqual(mock_runner.status, "REVOKED")
+        mock_runner.save.assert_called()
         self.assertEqual(mock_activity.status, 3)  # ABORTED_TASK
         mock_activity.save.assert_called()
 
@@ -460,6 +492,109 @@ class TestSecatorScanController(unittest.TestCase):
         self.assertFalse(result)
         mock_revoke_task.assert_called_once_with("task-activity-123", task_name="activity_789")
         mock_activity.save.assert_not_called()
+
+    @patch("reNgine.secator.control.SecatorRunner")
+    @patch("reNgine.secator.control.ScanRepository")
+    @patch("secator.celery.revoke_task")
+    def test_stop_scan_sets_runner_status_revoked(
+        self, mock_revoke_task, mock_scan_repo_class, mock_secator_runner_class
+    ):
+        """Test that stop_scan sets runner.status to REVOKED."""
+        mock_scan_repo = Mock()
+        mock_scan_repo_class.return_value = mock_scan_repo
+        mock_scan = Mock()
+        mock_scan_repo.get_by_id.return_value = mock_scan
+
+        # Create mock runner with celery_id
+        mock_runner = Mock()
+        mock_runner.celery_id = "task-123"
+        mock_runner.status = None
+        mock_runner.save = Mock()
+        mock_secator_runner_class.objects.filter.return_value = [mock_runner]
+
+        controller = SecatorScanController(self.scan_history_id)
+        controller.scan_repo = mock_scan_repo
+
+        result = controller.stop_scan()
+
+        self.assertTrue(result)
+        self.assertEqual(mock_runner.status, "REVOKED")
+        mock_runner.save.assert_called()
+
+    @patch("reNgine.services.repositories.command_repository.CommandRepository")
+    @patch("reNgine.secator.control.ScanActivity")
+    def test_create_or_update_command_for_runner_with_activity(self, mock_scan_activity_class, mock_command_repo_class):
+        """Test _create_or_update_command_for_runner creates Command for runner with activity."""
+        from reNgine.secator.control import SecatorScanController
+
+        mock_command_repo = Mock()
+        mock_command_repo_class.return_value = mock_command_repo
+
+        mock_runner = Mock()
+        mock_runner.id = 111
+        mock_runner.runner_type = "task"
+        mock_runner.runner_name = "test_task"
+        mock_runner.runner_data = {
+            "name": "test_task",
+            "status": "REVOKED",
+            "done": True,
+            "cmd": "test command",
+            "output": "test output",
+        }
+        mock_scan = Mock()
+        mock_scan.id = self.scan_history_id
+        mock_runner.scan_history = mock_scan
+        mock_runner.save = Mock()
+
+        mock_activity = Mock()
+        mock_activity.id = 789
+        mock_scan_activity_class.objects.get.return_value = mock_activity
+
+        controller = SecatorScanController(self.scan_history_id)
+        controller._create_or_update_command_for_runner(mock_runner, activity_id=789)
+
+        mock_command_repo.save_from_secator.assert_called_once()
+        call_args = mock_command_repo.save_from_secator.call_args
+        self.assertEqual(call_args[0][0]["status"], "REVOKED")
+        self.assertEqual(call_args[0][1], self.scan_history_id)
+        self.assertEqual(call_args[0][2], 789)
+
+    @patch("reNgine.services.repositories.command_repository.CommandRepository")
+    @patch("reNgine.secator.control.ScanActivity")
+    def test_create_or_update_command_for_workflow_without_cmd(self, mock_scan_activity_class, mock_command_repo_class):
+        """Test _create_or_update_command_for_runner creates Command for workflow without cmd/output."""
+        from reNgine.secator.control import SecatorScanController
+
+        mock_command_repo = Mock()
+        mock_command_repo_class.return_value = mock_command_repo
+
+        mock_runner = Mock()
+        mock_runner.id = 111
+        mock_runner.runner_type = "workflow"
+        mock_runner.runner_name = "test_workflow"
+        mock_runner.runner_data = {
+            "name": "test_workflow",
+            "status": "REVOKED",
+            "done": True,
+            # No cmd or output for workflows
+        }
+        mock_scan = Mock()
+        mock_scan.id = self.scan_history_id
+        mock_runner.scan_history = mock_scan
+        mock_runner.save = Mock()
+
+        mock_activity = Mock()
+        mock_activity.id = 789
+        mock_scan_activity_class.objects.filter.return_value.first.return_value = mock_activity
+
+        controller = SecatorScanController(self.scan_history_id)
+        controller._create_or_update_command_for_runner(mock_runner)
+
+        # Should still create Command even without cmd/output for workflows
+        mock_command_repo.save_from_secator.assert_called_once()
+        call_args = mock_command_repo.save_from_secator.call_args
+        self.assertEqual(call_args[0][0]["name"], "test_workflow")
+        self.assertEqual(call_args[0][0]["status"], "REVOKED")
 
 
 if __name__ == "__main__":

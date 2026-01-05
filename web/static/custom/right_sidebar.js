@@ -8,11 +8,17 @@ function getScanName(scan_object) {
 }
 
 function getScanStatusSidebar(endpoint_url, endpoint_stop_scan_url, endpoint_stop_activity_url, endpoint_scan_status_url, project, reload) {
-  // Handle calls without parameters by using defaults or extracting from DOM
+  // Handle calls without parameters by using URLs from window.scanStatusApiUrls or extracting from DOM
   // Note: endpoint_scan_status_url is kept for compatibility but not currently used in this function
-  const finalEndpointUrl = endpoint_url || '/api/scan_status/';
-  const finalStopScanUrl = endpoint_stop_scan_url || '/api/stop_scan/';
-  const finalStopActivityUrl = endpoint_stop_activity_url || '/api/stop_activity/';
+  const finalEndpointUrl = endpoint_url || window.scanStatusApiUrls?.scanStatusUrl;
+  const finalStopScanUrl = endpoint_stop_scan_url || window.scanStatusApiUrls?.stopScanUrl;
+  const finalStopActivityUrl = endpoint_stop_activity_url || window.scanStatusApiUrls?.stopActivityUrl;
+  
+  // Ensure URLs are provided
+  if (!finalEndpointUrl || !finalStopScanUrl || !finalStopActivityUrl) {
+    console.error('getScanStatusSidebar: API URLs are required. Please ensure URLs are passed from template.');
+    return;
+  }
   
   let finalProject = project;
   if (!finalProject) {

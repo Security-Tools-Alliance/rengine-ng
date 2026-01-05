@@ -4173,6 +4173,12 @@ class SecatorRunnerUpdate(APIView):
                     secator_runner.celery_id = celery_id
                     logger.debug(f"[SECATOR API STATUS SYNC] Extracted celery_id {celery_id} for runner {runner_id}")
 
+                # Extract and store status from runner_data
+                runner_status = runner_data.get("status")
+                if runner_status:
+                    secator_runner.status = runner_status.upper()
+                    logger.debug(f"[SECATOR API STATUS SYNC] Extracted status {runner_status} for runner {runner_id}")
+
                 secator_runner.save()
                 logger.info(f"[SECATOR API STATUS SYNC] Runner {runner_id} updated successfully")
 

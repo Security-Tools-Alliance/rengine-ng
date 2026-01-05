@@ -29,6 +29,10 @@
  * @param {function} options.updateTable - Function to update DataTable (for history.html)
  * @param {function} options.updateDetail - Function to update detail page (for detail_scan.html)
  * @param {function} options.updateSidebar - Function to update sidebar (for right_bar.html)
+ * @param {string} options.scanStatusUrl - URL for scan status API endpoint
+ * @param {string} options.stopScanUrl - URL for stop scan API endpoint
+ * @param {string} options.stopActivityUrl - URL for stop activity API endpoint
+ * @param {string} options.fetchSubscanUrl - URL for fetch subscan results API endpoint
  */
 const connectScanStatusWebSocket = function(scanId, projectSlug, options) {
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -67,6 +71,35 @@ const connectScanStatusWebSocket = function(scanId, projectSlug, options) {
                 if (options.updateSidebar && !scanStatusOptions[key].updateSidebar) {
                     scanStatusOptions[key].updateSidebar = options.updateSidebar;
                 }
+                // Store API URLs if provided
+                if (options.scanStatusUrl) {
+                    scanStatusOptions[key].scanStatusUrl = options.scanStatusUrl;
+                    if (!window.scanStatusApiUrls) {
+                        window.scanStatusApiUrls = {};
+                    }
+                    window.scanStatusApiUrls.scanStatusUrl = options.scanStatusUrl;
+                }
+                if (options.stopScanUrl) {
+                    scanStatusOptions[key].stopScanUrl = options.stopScanUrl;
+                    if (!window.scanStatusApiUrls) {
+                        window.scanStatusApiUrls = {};
+                    }
+                    window.scanStatusApiUrls.stopScanUrl = options.stopScanUrl;
+                }
+                if (options.stopActivityUrl) {
+                    scanStatusOptions[key].stopActivityUrl = options.stopActivityUrl;
+                    if (!window.scanStatusApiUrls) {
+                        window.scanStatusApiUrls = {};
+                    }
+                    window.scanStatusApiUrls.stopActivityUrl = options.stopActivityUrl;
+                }
+                if (options.fetchSubscanUrl) {
+                    scanStatusOptions[key].fetchSubscanUrl = options.fetchSubscanUrl;
+                    if (!window.scanStatusApiUrls) {
+                        window.scanStatusApiUrls = {};
+                    }
+                    window.scanStatusApiUrls.fetchSubscanUrl = options.fetchSubscanUrl;
+                }
             }
             return;
         } else if (readyState === WebSocket.CONNECTING) {
@@ -84,6 +117,35 @@ const connectScanStatusWebSocket = function(scanId, projectSlug, options) {
                 }
                 if (options.updateSidebar && !scanStatusOptions[key].updateSidebar) {
                     scanStatusOptions[key].updateSidebar = options.updateSidebar;
+                }
+                // Store API URLs if provided
+                if (options.scanStatusUrl) {
+                    scanStatusOptions[key].scanStatusUrl = options.scanStatusUrl;
+                    if (!window.scanStatusApiUrls) {
+                        window.scanStatusApiUrls = {};
+                    }
+                    window.scanStatusApiUrls.scanStatusUrl = options.scanStatusUrl;
+                }
+                if (options.stopScanUrl) {
+                    scanStatusOptions[key].stopScanUrl = options.stopScanUrl;
+                    if (!window.scanStatusApiUrls) {
+                        window.scanStatusApiUrls = {};
+                    }
+                    window.scanStatusApiUrls.stopScanUrl = options.stopScanUrl;
+                }
+                if (options.stopActivityUrl) {
+                    scanStatusOptions[key].stopActivityUrl = options.stopActivityUrl;
+                    if (!window.scanStatusApiUrls) {
+                        window.scanStatusApiUrls = {};
+                    }
+                    window.scanStatusApiUrls.stopActivityUrl = options.stopActivityUrl;
+                }
+                if (options.fetchSubscanUrl) {
+                    scanStatusOptions[key].fetchSubscanUrl = options.fetchSubscanUrl;
+                    if (!window.scanStatusApiUrls) {
+                        window.scanStatusApiUrls = {};
+                    }
+                    window.scanStatusApiUrls.fetchSubscanUrl = options.fetchSubscanUrl;
                 }
             }
             return;
@@ -110,6 +172,19 @@ const connectScanStatusWebSocket = function(scanId, projectSlug, options) {
             if (options.updateSidebar && !scanStatusOptions[key].updateSidebar) {
                 scanStatusOptions[key].updateSidebar = options.updateSidebar;
             }
+            // Store API URLs if provided
+            if (options.scanStatusUrl) {
+                scanStatusOptions[key].scanStatusUrl = options.scanStatusUrl;
+            }
+            if (options.stopScanUrl) {
+                scanStatusOptions[key].stopScanUrl = options.stopScanUrl;
+            }
+            if (options.stopActivityUrl) {
+                scanStatusOptions[key].stopActivityUrl = options.stopActivityUrl;
+            }
+            if (options.fetchSubscanUrl) {
+                scanStatusOptions[key].fetchSubscanUrl = options.fetchSubscanUrl;
+            }
         }
         return;
     }
@@ -119,6 +194,25 @@ const connectScanStatusWebSocket = function(scanId, projectSlug, options) {
     
     // Store options for this connection
     scanStatusOptions[key] = options || {};
+    
+    // Store API URLs in global object for use by updateRightSidebar
+    if (options && (options.scanStatusUrl || options.stopScanUrl || options.stopActivityUrl || options.fetchSubscanUrl)) {
+        if (!window.scanStatusApiUrls) {
+            window.scanStatusApiUrls = {};
+        }
+        if (options.scanStatusUrl) {
+            window.scanStatusApiUrls.scanStatusUrl = options.scanStatusUrl;
+        }
+        if (options.stopScanUrl) {
+            window.scanStatusApiUrls.stopScanUrl = options.stopScanUrl;
+        }
+        if (options.stopActivityUrl) {
+            window.scanStatusApiUrls.stopActivityUrl = options.stopActivityUrl;
+        }
+        if (options.fetchSubscanUrl) {
+            window.scanStatusApiUrls.fetchSubscanUrl = options.fetchSubscanUrl;
+        }
+    }
     
     try {
         const socket = new WebSocket(wsUrl);
@@ -670,11 +764,16 @@ const updateRightSidebar = function(data) {
             
             if (projectSlug) {
                 // Reload sidebar immediately for new scans
-                const endpointUrl = '/api/scan_status/';
-                const stopScanUrl = '/api/stop_scan/';
-                const stopActivityUrl = '/api/stop_activity/';
-                const fetchSubscanUrl = '/api/fetch_subscan_results/';
-                getScanStatusSidebar(endpointUrl, stopScanUrl, stopActivityUrl, fetchSubscanUrl, projectSlug, false);
+                // Get URLs from options if available, otherwise they should be passed from template
+                const endpointUrl = window.scanStatusApiUrls?.scanStatusUrl;
+                const stopScanUrl = window.scanStatusApiUrls?.stopScanUrl;
+                const stopActivityUrl = window.scanStatusApiUrls?.stopActivityUrl;
+                const fetchSubscanUrl = window.scanStatusApiUrls?.fetchSubscanUrl;
+                if (endpointUrl && stopScanUrl && stopActivityUrl && fetchSubscanUrl) {
+                    getScanStatusSidebar(endpointUrl, stopScanUrl, stopActivityUrl, fetchSubscanUrl, projectSlug, false);
+                } else {
+                    console.warn('scan_status_websocket: API URLs not available. Please ensure URLs are passed from template.');
+                }
             }
             return;
         }
@@ -760,11 +859,16 @@ const updateRightSidebar = function(data) {
                         
                         if (projectSlug) {
                             // Reload sidebar immediately (no delay) to show completed scan
-                            const endpointUrl = '/api/scan_status/';
-                            const stopScanUrl = '/api/stop_scan/';
-                            const stopActivityUrl = '/api/stop_activity/';
-                            const fetchSubscanUrl = '/api/fetch_subscan_results/';
-                            getScanStatusSidebar(endpointUrl, stopScanUrl, stopActivityUrl, fetchSubscanUrl, projectSlug, false);
+                            // Get URLs from options if available, otherwise they should be passed from template
+                            const endpointUrl = window.scanStatusApiUrls?.scanStatusUrl;
+                            const stopScanUrl = window.scanStatusApiUrls?.stopScanUrl;
+                            const stopActivityUrl = window.scanStatusApiUrls?.stopActivityUrl;
+                            const fetchSubscanUrl = window.scanStatusApiUrls?.fetchSubscanUrl;
+                            if (endpointUrl && stopScanUrl && stopActivityUrl && fetchSubscanUrl) {
+                                getScanStatusSidebar(endpointUrl, stopScanUrl, stopActivityUrl, fetchSubscanUrl, projectSlug, false);
+                            } else {
+                                console.warn('scan_status_websocket: API URLs not available. Please ensure URLs are passed from template.');
+                            }
                         }
                     }
                 }

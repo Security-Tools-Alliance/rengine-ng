@@ -254,29 +254,34 @@ Scan Findings
 										</li>
 										{% endfor %}
 									{% else %}
-										{% for runner in secator_runners %}
-										<li class="{% if runner.runner_data.status == 'SUCCESS' %}completed{% elif runner.runner_data.status == 'RUNNING' %}running{% else %}pending{% endif %}" data-runner-id="{{runner.id}}">
-											<h5 class="mt-0 mb-1">{{runner.runner_type|title}}: {{runner.runner_name}}
-												<span class="float-end badge {% if runner.runner_data.status == 'FAILURE' or runner.runner_data.status == 'FAILED' %}badge-soft-danger {% elif runner.runner_data.status == 'RUNNING' %}badge-soft-warning{% elif runner.runner_data.status == 'SUCCESS' %}badge-soft-success{% else %}badge-soft-secondary{% endif %}">
-													{% if runner.runner_data.status == 'FAILURE' or runner.runner_data.status == 'FAILED' %}Failed
-													{% elif runner.runner_data.status == 'RUNNING' %}In progress<span class="active-dot dot"></span>
-													{% elif runner.runner_data.status == 'SUCCESS' %}Completed
+										{% for activity in scan_activity %}
+										{% if activity.runner_id %}
+										<li class="{% if activity.status_string == 'SUCCESS' %}completed{% elif activity.status_string == 'RUNNING' %}running{% elif activity.status_string == 'REVOKED' %}aborted{% else %}pending{% endif %}" data-runner-id="{{activity.runner_id.id}}">
+											<h5 class="mt-0 mb-1">{{activity.title}}
+												<span class="float-end badge {% if activity.status_string == 'FAILURE' or activity.status_string == 'FAILED' %}badge-soft-danger {% elif activity.status_string == 'RUNNING' %}badge-soft-warning{% elif activity.status_string == 'SUCCESS' %}badge-soft-success{% elif activity.status_string == 'REVOKED' %}badge-soft-danger{% else %}badge-soft-secondary{% endif %}">
+													{% if activity.status_string == 'FAILURE' or activity.status_string == 'FAILED' %}Failed
+													{% elif activity.status_string == 'RUNNING' %}In progress<span class="active-dot dot"></span>
+													{% elif activity.status_string == 'SUCCESS' %}Completed
+													{% elif activity.status_string == 'REVOKED' %}Aborted
 													{% else %}Pending
 													{% endif %}
 												</span>
 											</h5>
-											<p class="text-muted">{{runner.created_at|naturaltime}}<br><small class="text-muted">{{runner.created_at}}</small></p>
-											{% if runner.runner_data.progress is not None %}
-												<p class="text-muted"><small>Progress: {{runner.runner_data.progress}}%</small></p>
+											<p class="text-muted">{{activity.time|naturaltime}}<br><small class="text-muted">{{activity.time}}</small></p>
+											{% if activity.runner_id.runner_data.progress is not None %}
+												<p class="text-muted"><small>Progress: {{activity.runner_id.runner_data.progress}}%</small></p>
 											{% endif %}
-											{% if runner.runner_data.status == 'RUNNING' %}
-												{% for activity in scan_activity %}
-													{% if activity.runner_id and activity.runner_id.id == runner.id %}
-														<span class="float-end"><a href="#" onclick="stop_activity('{% url 'api:stop_activity' %}', activity_id={{activity.id}}, reload_scan_bar=true, reload_location=true); return false;" class="btn btn-xs btn-soft-danger waves-effect waves-light"><i class="fe-alert-triangle"></i> Stop</a></span>
-													{% endif %}
-												{% endfor %}
+											{% if activity.status_string == 'RUNNING' %}
+												<span class="float-end"><a href="#" onclick="stop_activity('{% url 'api:stop_activity' %}', activity_id={{activity.id}}, reload_scan_bar=true, reload_location=true); return false;" class="btn btn-xs btn-soft-danger waves-effect waves-light"><i class="fe-alert-triangle"></i> Stop</a></span>
+											{% endif %}
+											<span><a href="javascript:get_logs_modal(null, {{activity.id}}, '{{current_project.slug}}')"><i class="fe-file"></i> Logs</a></span>
+											{% if activity.status_string == 'FAILURE' or activity.status_string == 'FAILED' %}
+												{% if activity.error_message %}
+													<p class="badge badge-soft-danger">Error: {{activity.error_message}}</p>
+												{% endif %}
 											{% endif %}
 										</li>
+										{% endif %}
 										{% endfor %}
 									{% endif %}
 								</ul>
@@ -2762,12 +2767,24 @@ $(document).ready(function() {
 		}
 	});
 
+	// Set API URLs for scan status functions
+	window.scanStatusApiUrls = {
+		scanStatusUrl: '{% url 'api:scan_status' %}',
+		stopScanUrl: '{% url 'api:stop_scan' %}',
+		stopActivityUrl: '{% url 'api:stop_activity' %}',
+		fetchSubscanUrl: '{% url 'api:fetch_subscan_results' %}'
+	};
+
 	// Connect to WebSocket for real-time scan status updates
 	if (typeof connectScanStatusWebSocket === 'function') {
 		connectScanStatusWebSocket({{history.id}}, null, {
 			updateDetail: function(data) {
 				updateScanDetailPage(data);
-			}
+			},
+			scanStatusUrl: '{% url 'api:scan_status' %}',
+			stopScanUrl: '{% url 'api:stop_scan' %}',
+			stopActivityUrl: '{% url 'api:stop_activity' %}',
+			fetchSubscanUrl: '{% url 'api:fetch_subscan_results' %}'
 		});
 	}
 

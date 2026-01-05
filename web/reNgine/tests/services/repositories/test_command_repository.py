@@ -150,6 +150,54 @@ class TestCommandRepository(BaseTestCase):
 
         self.assertIsNone(result)
 
+    def test_save_from_secator_workflow_without_cmd_output(self):
+        """Test saving command for workflow without cmd/output (should be allowed)."""
+        runner_data = {
+            "name": "domain_recon",
+            "status": "REVOKED",
+            "config": {"type": "workflow"},
+            # No cmd or output for workflows
+        }
+
+        result = self.command_repo.save_from_secator(runner_data, self.scan_history.id)
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result.name, "domain_recon")
+        self.assertEqual(result.status, "REVOKED")
+
+    def test_save_from_secator_scan_without_cmd_output(self):
+        """Test saving command for scan without cmd/output (should be allowed)."""
+        runner_data = {
+            "name": "subdomain_scan",
+            "status": "SUCCESS",
+            "config": {"type": "scan"},
+            # No cmd or output for scans
+        }
+
+        result = self.command_repo.save_from_secator(runner_data, self.scan_history.id)
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result.name, "subdomain_scan")
+        self.assertEqual(result.status, "SUCCESS")
+
+    def test_save_from_secator_workflow_revoked_status(self):
+        """Test saving command for revoked workflow appears in logs."""
+        runner_data = {
+            "name": "domain_recon",
+            "status": "REVOKED",
+            "done": True,
+            "config": {"type": "workflow"},
+        }
+
+        result = self.command_repo.save_from_secator(runner_data, self.scan_history.id)
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result.name, "domain_recon")
+        self.assertEqual(result.status, "REVOKED")
+        # Verify it can be retrieved
+        commands = self.command_repo.get_commands_for_scan(self.scan_history.id)
+        self.assertIn(result, commands)
+
     def test_save_from_secator_invalid_date_format(self):
         """Test saving command with invalid date format."""
         runner_data = {

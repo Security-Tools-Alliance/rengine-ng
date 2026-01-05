@@ -136,6 +136,75 @@ class ScanHistory(models.Model):
         progress = min((steps_completed / number_of_steps) * 100, 100)
         return round(progress, 2)
 
+    @property
+    def status_string(self):
+        """
+        Get status as string. For legacy scans, returns status code as string.
+        For Secator scans, returns status string from runner.
+
+        To avoid N+1 queries when accessing this for many instances, a controller
+        can pre-populate `self._main_runner` (e.g. via `prefetch_related`) and
+        this method will use it instead of querying per-instance.
+        """
+        if self.is_legacy_scan:
+            return str(self.scan_status)
+
+        # Prefer a cached main runner if one has been set by the caller
+        main_runner = getattr(self, "_main_runner", None)
+
+        if main_runner is None:
+            # Fallback: query for the main runner when not provided
+            from startScan.models import SecatorRunner
+
+            runners = SecatorRunner.objects.filter(scan_history=self)
+            main_runner = runners.filter(runner_type__in=["workflow", "scan"]).first()
+
+        if main_runner and main_runner.status:
+            return str(main_runner.status).upper()
+        # Fallback: try to get from runner_data
+        if main_runner and getattr(main_runner, "runner_data", None):
+            return str(main_runner.runner_data.get("status", "")).upper()
+        # Final fallback: use scan_status
+        return str(self.scan_status).upper()
+
+    @property
+    def status(self):
+        """
+        Get status as integer code (for compatibility with JavaScript).
+        For legacy scans, returns integer status code.
+        For Secator scans, maps status string to code.
+        """
+        if self.is_legacy_scan:
+            return self.scan_status
+        # For Secator scans, map status string to code
+        from reNgine.services.secator.progress_sync import SecatorProgressSync
+
+        status_str = self.status_string
+        if isinstance(status_str, str):
+            return SecatorProgressSync.map_secator_status_to_rengine(status_str)
+        # Fallback: try to convert to int, but handle non-numeric strings safely
+        if status_str:
+            try:
+                return int(status_str)
+            except (ValueError, TypeError):
+                # If conversion fails, return INITIATED_TASK as safe default
+                from reNgine.definitions import INITIATED_TASK
+
+                return INITIATED_TASK
+        return -1
+
+    @property
+    def status_code(self):
+        """Alias for status (for compatibility)."""
+        return self.status
+
+    def get_status_display(self):
+        """Get human-readable status display."""
+        from reNgine.definitions import CELERY_TASK_STATUS_MAP
+
+        status_code = self.status_code
+        return CELERY_TASK_STATUS_MAP.get(status_code, "UNKNOWN")
+
     def get_current_task(self):
         """Get the current running task name, formatted for display."""
         from reNgine.definitions import RUNNING_TASK
@@ -618,6 +687,78 @@ class SubScan(models.Model):
     def get_task_name_str(self):
         return dict(ENGINE_DISPLAY_NAMES).get(self.type, "Unknown")
 
+    def _get_status_field_value(self):
+        """Get the raw status field value to avoid recursion."""
+        return self._meta.get_field("status").value_from_object(self)
+
+    @property
+    def status_string(self):
+        """
+        Get status as string. For legacy scans, returns status code as string.
+        For Secator scans, returns status string from runner.
+
+        To avoid N+1 queries when accessing this for many instances, a controller
+        can pre-populate `self.scan_history._main_runner` (e.g. via `prefetch_related`) and
+        this method will use it instead of querying per-instance.
+        """
+        if not self.scan_history:
+            return str(self._get_status_field_value())
+        if self.scan_history.is_legacy_scan:
+            return str(self._get_status_field_value())
+        # For Secator scans, get status from parent scan's main runner
+        # Prefer a cached main runner if one has been set on scan_history
+        main_runner = getattr(self.scan_history, "_main_runner", None)
+
+        if main_runner is None:
+            # Fallback: query for the main runner when not provided
+            from startScan.models import SecatorRunner
+
+            runners = SecatorRunner.objects.filter(scan_history=self.scan_history)
+            main_runner = runners.filter(runner_type__in=["workflow", "scan"]).first()
+
+        if main_runner and main_runner.status:
+            return str(main_runner.status).upper()
+        # Fallback: try to get from runner_data
+        if main_runner and getattr(main_runner, "runner_data", None):
+            return str(main_runner.runner_data.get("status", "")).upper()
+        # Final fallback: use the field value
+        return str(self._get_status_field_value()).upper()
+
+    @property
+    def status_code(self):
+        """
+        Get status as integer code (for compatibility with JavaScript).
+        For legacy scans, returns integer status code from field.
+        For Secator scans, maps status string to code.
+        """
+        if not self.scan_history:
+            return self._get_status_field_value()
+        if self.scan_history.is_legacy_scan:
+            return self._get_status_field_value()
+        # For Secator scans, map status string to code
+        from reNgine.services.secator.progress_sync import SecatorProgressSync
+
+        status_str = self.status_string
+        if isinstance(status_str, str):
+            return SecatorProgressSync.map_secator_status_to_rengine(status_str)
+        # Fallback: try to convert to int, but handle non-numeric strings safely
+        if status_str:
+            try:
+                return int(status_str)
+            except (ValueError, TypeError):
+                # If conversion fails, return INITIATED_TASK as safe default
+                from reNgine.definitions import INITIATED_TASK
+
+                return INITIATED_TASK
+        return -1
+
+    def get_status_display(self):
+        """Get human-readable status display."""
+        from reNgine.definitions import CELERY_TASK_STATUS_MAP
+
+        status_code = self.status_code
+        return CELERY_TASK_STATUS_MAP.get(status_code, "UNKNOWN")
+
     @classmethod
     def get_all_counts(cls, queryset):
         """Aggregate total subscans and status distribution"""
@@ -1005,6 +1146,64 @@ class ScanActivity(models.Model):
             return self.runner_id.celery_id
         return None
 
+    def _get_status_field_value(self):
+        """Get the raw status field value to avoid recursion."""
+        return self._meta.get_field("status").value_from_object(self)
+
+    @property
+    def status_string(self):
+        """
+        Get status as string. For legacy scans, returns status code as string.
+        For Secator scans, returns status string from runner.
+        """
+        if not self.scan_of:
+            return str(self._get_status_field_value())
+        if self.scan_of.is_legacy_scan:
+            return str(self._get_status_field_value())
+        # For Secator scans, get status from runner
+        if self.runner_id and self.runner_id.status:
+            return str(self.runner_id.status).upper()
+        # Fallback: try to get from runner_data
+        if self.runner_id and self.runner_id.runner_data:
+            return str(self.runner_id.runner_data.get("status", "")).upper()
+        # Final fallback: use the field value
+        return str(self._get_status_field_value()).upper()
+
+    @property
+    def status_code(self):
+        """
+        Get status as integer code (for compatibility with JavaScript).
+        For legacy scans, returns integer status code from field.
+        For Secator scans, maps status string to code.
+        """
+        if not self.scan_of:
+            return self._get_status_field_value()
+        if self.scan_of.is_legacy_scan:
+            return self._get_status_field_value()
+        # For Secator scans, map status string to code
+        from reNgine.services.secator.progress_sync import SecatorProgressSync
+
+        status_str = self.status_string
+        if isinstance(status_str, str):
+            return SecatorProgressSync.map_secator_status_to_rengine(status_str)
+        # Fallback: try to convert to int, but handle non-numeric strings safely
+        if status_str:
+            try:
+                return int(status_str)
+            except (ValueError, TypeError):
+                # If conversion fails, return INITIATED_TASK as safe default
+                from reNgine.definitions import INITIATED_TASK
+
+                return INITIATED_TASK
+        return -1
+
+    def get_status_display(self):
+        """Get human-readable status display."""
+        from reNgine.definitions import CELERY_TASK_STATUS_MAP
+
+        status_code = self.status_code
+        return CELERY_TASK_STATUS_MAP.get(status_code, "UNKNOWN")
+
     def __str__(self):
         return str(self.title)
 
@@ -1031,6 +1230,30 @@ class Command(models.Model):
     node_id = models.CharField(max_length=500, blank=True, null=True)
     ancestor_id = models.CharField(max_length=500, blank=True, null=True)
     scan_type = models.CharField(max_length=50, blank=True, null=True, help_text="Scan type from run_opts.scan_type")
+
+    def _get_status_field_value(self):
+        """Get the raw status field value to avoid recursion."""
+        return self._meta.get_field("status").value_from_object(self)
+
+    @property
+    def status_string(self):
+        """
+        Get status as string. For legacy scans, returns status string from field.
+        For Secator scans, returns status string from runner.
+        """
+        if not self.scan_history:
+            return self._get_status_field_value() or ""
+        if self.scan_history.is_legacy_scan:
+            return self._get_status_field_value() or ""
+        # For Secator scans, get status from activity's runner
+        if self.activity and self.activity.runner_id and self.activity.runner_id.status:
+            return str(self.activity.runner_id.status).upper()
+        # Fallback: try to get from activity's runner_data
+        if self.activity and self.activity.runner_id and self.activity.runner_id.runner_data:
+            return str(self.activity.runner_id.runner_data.get("status", "")).upper()
+        # Final fallback: use the field value
+        status_value = self._get_status_field_value()
+        return str(status_value).upper() if status_value else ""
 
     def __str__(self):
         return str(self.command)
@@ -1354,6 +1577,9 @@ class SecatorRunner(models.Model):
     domain = models.ForeignKey(Domain, on_delete=models.CASCADE, null=True, blank=True)
     runner_data = models.JSONField(default=dict, help_text="Full runner data from Secator")
     celery_id = models.CharField(max_length=100, blank=True, null=True, help_text="Celery task ID for this runner")
+    status = models.CharField(
+        max_length=50, blank=True, null=True, help_text="Status from Secator (RUNNING, SUCCESS, FAILURE, REVOKED, etc.)"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

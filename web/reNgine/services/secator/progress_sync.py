@@ -8,7 +8,7 @@ from typing import Optional
 from celery.utils.log import get_task_logger
 from django.utils import timezone
 
-from reNgine.definitions import FAILED_TASK, INITIATED_TASK, RUNNING_TASK, SUCCESS_TASK
+from reNgine.definitions import ABORTED_TASK, FAILED_TASK, INITIATED_TASK, RUNNING_TASK, SUCCESS_TASK
 from startScan.models import ScanActivity, ScanHistory, SecatorRunner
 
 
@@ -35,6 +35,7 @@ class SecatorProgressSync:
             "FAILURE": FAILED_TASK,
             "FAILED": FAILED_TASK,
             "PENDING": INITIATED_TASK,
+            "REVOKED": ABORTED_TASK,
         }
         return status_map.get(secator_status.upper(), INITIATED_TASK)
 
@@ -248,11 +249,24 @@ class SecatorProgressSync:
                     existing_activity = None
 
             if existing_activity:
-                # Update existing activity
+                # Update runner status if runner_id is available
+                if runner_id:
+                    try:
+                        from startScan.models import SecatorRunner
+
+                        runner = SecatorRunner.objects.get(id=runner_id)
+                        runner.status = runner_status.upper()
+                        runner.save(update_fields=["status"])
+                    except SecatorRunner.DoesNotExist:
+                        logger.warning(f"SecatorRunner {runner_id} not found when updating status")
+
+                # Update existing activity (for legacy compatibility)
                 existing_activity.status = rengine_status
                 existing_activity.time = timezone.now()
                 if runner_status in ["SUCCESS", "FAILURE", "FAILED"]:
                     existing_activity.title = f"{activity_title} - Completed"
+                elif runner_status == "REVOKED":
+                    existing_activity.title = f"{activity_title} - Aborted"
                 existing_activity.save(update_fields=["status", "time", "title"])
                 logger.debug(f"Updated ScanActivity {existing_activity.id} for runner {runner_name}")
                 return existing_activity.id

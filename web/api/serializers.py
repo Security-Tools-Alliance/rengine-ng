@@ -449,6 +449,7 @@ class ScanActivitySerializer(serializers.ModelSerializer):
     engine_name = serializers.SerializerMethodField("get_engine_name")
     formatted_task_name = serializers.SerializerMethodField("get_formatted_task_name")
     elapsed_time = serializers.SerializerMethodField("get_elapsed_time")
+    status_code = serializers.SerializerMethodField()
 
     class Meta:
         model = ScanActivity
@@ -458,6 +459,7 @@ class ScanActivitySerializer(serializers.ModelSerializer):
             "name",
             "time",
             "status",
+            "status_code",
             "domain_name",
             "scan_id",
             "engine_name",
@@ -466,6 +468,10 @@ class ScanActivitySerializer(serializers.ModelSerializer):
             "error_message",
             "runner_id",
         ]
+
+    def get_status_code(self, scan_activity):
+        """Get status as integer code (for compatibility with JavaScript)."""
+        return scan_activity.status_code
 
     def get_domain_name(self, scan_activity):
         if scan_activity.scan_of and scan_activity.scan_of.domain:
@@ -553,7 +559,9 @@ class SecatorRunnerSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "created_at", "updated_at"]
 
     def get_status(self, obj):
-        """Get status from runner_data."""
+        """Get status from status field or runner_data as fallback."""
+        if obj.status:
+            return obj.status
         if obj.runner_data:
             return obj.runner_data.get("status", "PENDING")
         return "PENDING"
@@ -567,6 +575,7 @@ class SecatorRunnerSerializer(serializers.ModelSerializer):
             "FAILURE": "Failed",
             "FAILED": "Failed",
             "PENDING": "Pending",
+            "REVOKED": "Aborted",
         }
         return status_map.get(status.upper(), "Unknown")
 

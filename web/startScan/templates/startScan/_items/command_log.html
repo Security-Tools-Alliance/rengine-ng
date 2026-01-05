@@ -28,10 +28,22 @@ Context variables:
         {{ command.name|default:command.command|truncatewords:10 }}
       </span>
       
-      {% if command.status %}
-        <span class="badge badge-soft-{% if command.status == 'SUCCESS' %}success{% elif command.status == 'FAILURE' or command.status == 'FAILED' %}danger{% elif command.status == 'RUNNING' %}primary{% else %}secondary{% endif %}">
-          {{ command.status }}
-        </span>
+      {% if command.scan_history and command.scan_history.is_legacy_scan %}
+        {% if command.status %}
+          <span class="badge badge-soft-{% if command.status == 'SUCCESS' %}success{% elif command.status == 'FAILURE' or command.status == 'FAILED' %}danger{% elif command.status == 'RUNNING' %}primary{% elif command.status == 'REVOKED' %}danger{% else %}secondary{% endif %}">
+            {% if command.status == 'REVOKED' %}Aborted{% else %}{{ command.status }}{% endif %}
+          </span>
+        {% endif %}
+      {% else %}
+        {% if command.status_string %}
+          <span class="badge badge-soft-{% if command.status_string == 'SUCCESS' %}success{% elif command.status_string == 'FAILURE' or command.status_string == 'FAILED' %}danger{% elif command.status_string == 'RUNNING' %}primary{% elif command.status_string == 'REVOKED' %}danger{% else %}secondary{% endif %}">
+            {% if command.status_string == 'REVOKED' %}Aborted{% else %}{{ command.status_string }}{% endif %}
+          </span>
+        {% elif command.status %}
+          <span class="badge badge-soft-{% if command.status == 'SUCCESS' %}success{% elif command.status == 'FAILURE' or command.status == 'FAILED' %}danger{% elif command.status == 'RUNNING' %}primary{% elif command.status == 'REVOKED' %}danger{% else %}secondary{% endif %}">
+            {% if command.status == 'REVOKED' %}Aborted{% else %}{{ command.status }}{% endif %}
+          </span>
+        {% endif %}
       {% endif %}
       
       {% if command.elapsed %}

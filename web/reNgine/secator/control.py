@@ -3,6 +3,8 @@ Scan control operations for Secator scans.
 Provides start, stop, pause functionality.
 """
 
+from typing import Optional
+
 from celery.utils.log import get_task_logger
 from django.utils import timezone
 
@@ -26,6 +28,41 @@ class SecatorScanController:
         """
         self.scan_history_id = scan_history_id
         self.scan_repo = ScanRepository()
+
+    def _create_or_update_command_for_runner(self, runner: SecatorRunner, activity_id: Optional[int] = None) -> None:
+        """
+        Create or update Command for a runner to ensure it appears in logs.
+
+        Args:
+            runner: SecatorRunner instance
+            activity_id: Optional activity ID to link the command to
+        """
+        try:
+            from reNgine.services.repositories.command_repository import CommandRepository
+
+            # Update runner_data with REVOKED status to ensure consistency
+            if runner.runner_data:
+                runner.runner_data["status"] = "REVOKED"
+                runner.runner_data["done"] = True
+                runner.save(update_fields=["runner_data"])
+
+            # Get or create activity for this runner
+            activity = None
+            if activity_id:
+                try:
+                    activity = ScanActivity.objects.get(id=activity_id)
+                except ScanActivity.DoesNotExist:
+                    logger.warning(f"ScanActivity {activity_id} not found")
+            elif runner.scan_history:
+                # Try to find existing activity for this runner
+                activity = ScanActivity.objects.filter(scan_of=runner.scan_history, runner_id=runner).first()
+
+            # Create or update Command
+            command_repo = CommandRepository()
+            scan_history_id = runner.scan_history.id if runner.scan_history else self.scan_history_id
+            command_repo.save_from_secator(runner.runner_data or {}, scan_history_id, activity.id if activity else None)
+        except Exception as e:
+            logger.warning(f"Failed to create/update Command for runner {runner.id}: {e}")
 
     def stop_scan(self) -> bool:
         """
@@ -76,6 +113,13 @@ class SecatorScanController:
                         f"Runner {runner.id} ({runner.runner_type}: {runner.runner_name}) has no celery_id to revoke"
                     )
 
+                # Update runner status to REVOKED
+                runner.status = "REVOKED"
+                runner.save(update_fields=["status"])
+
+                # Create or update Command for this runner to ensure it appears in logs
+                self._create_or_update_command_for_runner(runner)
+
             # Log summary of revocation results
             if revoked_count > 0:
                 logger.info(f"Revoked {revoked_count} Celery task(s) for scan {self.scan_history_id}")
@@ -85,6 +129,10 @@ class SecatorScanController:
             # Update scan status regardless of individual task revocation results
             self.scan_repo.update_status(self.scan_history_id, ABORTED_TASK)
             self.scan_repo.create_scan_activity(self.scan_history_id, "Scan stopped by user", ABORTED_TASK)
+
+            # Update all running activities to ABORTED_TASK
+            running_activities = ScanActivity.objects.filter(scan_of_id=self.scan_history_id, status=RUNNING_TASK)
+            running_activities.update(status=ABORTED_TASK)
 
             logger.info(f"Stopped scan {self.scan_history_id} (revoked {revoked_count}/{len(runners)} runners)")
             return True
@@ -206,8 +254,42 @@ class SecatorScanController:
                         f"Runner {runner.id} ({runner.runner_type}: {runner.runner_name}) has no celery_id to revoke"
                     )
 
+                # Update runner status to REVOKED
+                runner.status = "REVOKED"
+                runner.save(update_fields=["status"])
+
+                # Update runner_data with REVOKED status to ensure consistency
+                if runner.runner_data:
+                    runner.runner_data["status"] = "REVOKED"
+                    runner.runner_data["done"] = True
+                    runner.save(update_fields=["runner_data"])
+
+                # Create or update Command for this runner to ensure it appears in logs
+                try:
+                    from reNgine.services.repositories.command_repository import CommandRepository
+
+                    # Get or create activity for this runner
+                    activity = None
+                    if runner.scan_history:
+                        # Try to find existing activity for this runner
+                        activity = ScanActivity.objects.filter(scan_of=runner.scan_history, runner_id=runner).first()
+
+                    # Create or update Command
+                    command_repo = CommandRepository()
+                    command_repo.save_from_secator(
+                        runner.runner_data or {},
+                        runner.scan_history.id if runner.scan_history else scan.id,
+                        activity.id if activity else None,
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to create/update Command for runner {runner.id}: {e}")
+
             self._abort_subscan(subscan)
             self.scan_repo.create_activity(scan.id, f"Subscan {subscan_id} aborted", ABORTED_TASK)
+
+            # Update running activities for this subscan to ABORTED_TASK
+            running_activities = ScanActivity.objects.filter(scan_of=scan, status=RUNNING_TASK)
+            running_activities.update(status=ABORTED_TASK)
 
             logger.info(f"Stopped subscan {subscan_id} (revoked {revoked_count}/{len(runners)} runners)")
             return True
@@ -300,6 +382,14 @@ class SecatorScanController:
                     f"Failed to revoke Celery task {activity.runner_id.celery_id} for activity {activity_id}: {e}"
                 )
                 return False
+
+            # Update runner status to REVOKED
+            runner = activity.runner_id
+            runner.status = "REVOKED"
+            runner.save(update_fields=["status"])
+
+            # Create or update Command for this runner to ensure it appears in logs
+            self._create_or_update_command_for_runner(runner, activity.id)
 
             self._abort_activity(activity)
             logger.info(f"Stopped activity {activity_id}")

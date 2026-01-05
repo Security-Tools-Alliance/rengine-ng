@@ -96,8 +96,16 @@ class CommandRepository:
         scan_type = runner_data.get("run_opts", {}).get("scan_type")
 
         # Validate required fields
-        if not cmd and not output:
-            logger.warning("Command data missing both cmd and output fields")
+        # For workflows and scans, we allow creation even without cmd/output
+        # as they are orchestrators and may not have direct commands
+        if runner_type not in ["workflow", "scan"]:
+            # For tasks, we require at least cmd or output
+            if not cmd and not output:
+                logger.warning(f"Command data missing both cmd and output fields for runner type {runner_type}")
+                return None
+        elif not name:
+            # For workflows and scans, we still need at least a name to create a meaningful entry
+            logger.warning("Workflow/scan runner missing name field")
             return None
 
         # Get scan history
@@ -156,7 +164,9 @@ class CommandRepository:
             existing_command.elapsed = elapsed_float if elapsed_float is not None else existing_command.elapsed
             existing_command.errors = errors or existing_command.errors
             existing_command.warnings = warnings or existing_command.warnings
-            existing_command.status = status or existing_command.status
+            # Only update status for legacy scans (Secator scans use runner.status)
+            if scan_history.is_legacy_scan:
+                existing_command.status = status or existing_command.status
             existing_command.cwd = cwd or existing_command.cwd
             if runner_type:
                 existing_command.runner_type = runner_type

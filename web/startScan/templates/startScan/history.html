@@ -430,11 +430,23 @@ Quick Scan History
     }, false);
 
     // Connect to WebSocket for real-time scan status updates
+    // Set API URLs for scan status functions
+    window.scanStatusApiUrls = {
+      scanStatusUrl: '{% url 'api:scan_status' %}',
+      stopScanUrl: '{% url 'api:stop_scan' %}',
+      stopActivityUrl: '{% url 'api:stop_activity' %}',
+      fetchSubscanUrl: '{% url 'api:fetch_subscan_results' %}'
+    };
+
     if (typeof connectScanStatusWebSocket === 'function') {
       connectScanStatusWebSocket(null, '{{ current_project.slug }}', {
         updateTable: function(data) {
           updateScanRowInTable(table, data);
-        }
+        },
+        scanStatusUrl: '{% url 'api:scan_status' %}',
+        stopScanUrl: '{% url 'api:stop_scan' %}',
+        stopActivityUrl: '{% url 'api:stop_activity' %}',
+        fetchSubscanUrl: '{% url 'api:fetch_subscan_results' %}'
       });
     }
 

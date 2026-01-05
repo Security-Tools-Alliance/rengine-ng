@@ -1141,7 +1141,7 @@ function stop_scan(url, scan_id=null, subscan_id=null, reload_scan_bar=true, rel
 					});
 					if (reload_scan_bar) {
 						try {
-							getScanStatusSidebar();
+						getScanStatusSidebar();
 						} catch (e) {
 							console.error('Error reloading scan sidebar:', e);
 						}
