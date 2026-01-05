@@ -233,11 +233,17 @@ class SecatorProgressSync:
             # Check if activity already exists
             existing_activity = None
             if runner_id:
-                existing_activity = ScanActivity.objects.filter(
-                    scan_of=scan_history,
-                    name=runner_name,
-                    celery_id=str(runner_id)
-                ).order_by("-time").first()
+                try:
+                    from startScan.models import SecatorRunner
+                    runner = SecatorRunner.objects.get(id=runner_id)
+                    existing_activity = ScanActivity.objects.filter(
+                        scan_of=scan_history,
+                        name=runner_name,
+                        runner_id=runner
+                    ).order_by("-time").first()
+                except SecatorRunner.DoesNotExist:
+                    logger.warning(f"SecatorRunner {runner_id} not found when syncing progress")
+                    existing_activity = None
 
             if existing_activity:
                 # Update existing activity
@@ -253,12 +259,14 @@ class SecatorProgressSync:
                 activity_id = scan_repo.create_activity(scan_history.id, activity_title, rengine_status)
                 if runner_id:
                     try:
+                        from startScan.models import SecatorRunner
+                        runner = SecatorRunner.objects.get(id=runner_id)
                         new_activity = ScanActivity.objects.get(id=activity_id)
-                        new_activity.celery_id = str(runner_id)
+                        new_activity.runner_id = runner
                         new_activity.name = runner_name
-                        new_activity.save(update_fields=["celery_id", "name"])
-                    except ScanActivity.DoesNotExist:
-                        logger.warning(f"Could not find newly created ScanActivity {activity_id}")
+                        new_activity.save(update_fields=["runner_id", "name"])
+                    except (SecatorRunner.DoesNotExist, ScanActivity.DoesNotExist) as e:
+                        logger.warning(f"Could not link runner to activity: {e}")
 
                 logger.debug(f"Created ScanActivity {activity_id} for runner {runner_name}")
                 return activity_id

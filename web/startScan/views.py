@@ -791,20 +791,22 @@ def delete_scan(request, slug, id):
 def stop_scan(request, slug, id):
     if request.method == "POST":
         scan = get_object_or_404(ScanHistory, id=id)
-        scan.scan_status = ABORTED_TASK
-        scan.save()
         try:
-            for task_id in scan.celery_ids:
-                app.control.revoke(task_id, terminate=True, signal="SIGKILL")
-            tasks = ScanActivity.objects.filter(scan_of=scan).filter(status=RUNNING_TASK).order_by("-pk")
-            for task in tasks:
-                task.status = ABORTED_TASK
-                task.time = timezone.now()
-                task.save()
-            scan_repo = ScanRepository()
-            scan_repo.create_activity(scan.id, "Scan aborted", SUCCESS_TASK)
-            response = {"status": True}
-            messages.add_message(request, messages.INFO, "Scan successfully stopped!")
+            from reNgine.secator.control import SecatorScanController
+
+            controller = SecatorScanController(id)
+            success = controller.stop_scan()
+
+            if success:
+                scan.refresh_from_db()
+                scan.aborted_by = request.user
+                scan.stop_scan_date = timezone.now()
+                scan.save()
+                response = {"status": True}
+                messages.add_message(request, messages.INFO, "Scan successfully stopped!")
+            else:
+                response = {"status": False, "message": "Failed to stop scan"}
+                messages.add_message(request, messages.ERROR, "Failed to stop scan")
         except Exception as e:
             logger.error(e)
             response = {"status": False}

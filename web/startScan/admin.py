@@ -56,7 +56,6 @@ class ScanHistoryAdmin(admin.ModelAdmin):
         "start_scan_date",
         "stop_scan_date",
         "results_dir",
-        "celery_ids",
         "tasks",
     ]
     fieldsets = (
@@ -64,7 +63,7 @@ class ScanHistoryAdmin(admin.ModelAdmin):
         (
             "Execution Details",
             {
-                "fields": ("start_scan_date", "stop_scan_date", "results_dir", "celery_ids", "tasks", "error_message"),
+                "fields": ("start_scan_date", "stop_scan_date", "results_dir", "tasks", "error_message"),
                 "classes": ("collapse",),
             },
         ),

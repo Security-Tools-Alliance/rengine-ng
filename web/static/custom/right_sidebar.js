@@ -7,8 +7,36 @@ function getScanName(scan_object) {
   return scan_object.display_runner_type + ': ' + scan_object.display_scan_name;
 }
 
-function getScanStatusSidebar(endpoint_url, endpoint_stop_scan_url, endpoint_scan_status_url, project, reload) {
-  $.getJSON(endpoint_url + '?project=' + project, function(data) {
+function getScanStatusSidebar(endpoint_url, endpoint_stop_scan_url, endpoint_stop_activity_url, endpoint_scan_status_url, project, reload) {
+  // Handle calls without parameters by using defaults or extracting from DOM
+  // Note: endpoint_scan_status_url is kept for compatibility but not currently used in this function
+  const finalEndpointUrl = endpoint_url || '/api/scan_status/';
+  const finalStopScanUrl = endpoint_stop_scan_url || '/api/stop_scan/';
+  const finalStopActivityUrl = endpoint_stop_activity_url || '/api/stop_activity/';
+  
+  let finalProject = project;
+  if (!finalProject) {
+    // Try to extract project from URL or DOM
+    const urlMatch = window.location.pathname.match(/\/scan\/([^\/]+)\//);
+    if (urlMatch) {
+      finalProject = urlMatch[1];
+    } else {
+      const projectElement = document.querySelector('[data-project-slug]');
+      if (projectElement) {
+        finalProject = projectElement.getAttribute('data-project-slug');
+      }
+    }
+  }
+  
+  // Ensure we have a valid project before making the request
+  if (!finalProject) {
+    console.error('getScanStatusSidebar: Unable to determine project slug. Cannot load scan status.');
+    return;
+  }
+  
+  const finalReload = reload !== undefined ? reload : false;
+  
+  $.getJSON(finalEndpointUrl + '?project=' + finalProject, function(data) {
     // main scans
     $('#currently_scanning').empty();
     $('#completed').empty();
@@ -71,14 +99,14 @@ function getScanStatusSidebar(endpoint_url, endpoint_stop_scan_url, endpoint_sca
           </span>
           </p>
           <div>
-          <span class="badge-subdomain-count badge badge-soft-info waves-effect waves-light">&nbsp;&nbsp;${scan_object.subdomain_count}&nbsp;&nbsp;</span>
-          <span class="badge-endpoint-count badge badge-soft-primary waves-effect waves-light">&nbsp;&nbsp;${scan_object.endpoint_count}&nbsp;&nbsp;</span>
-          <span class="badge-vuln-count badge badge-soft-danger waves-effect waves-light">&nbsp;&nbsp;${scan_object.vulnerability_count}&nbsp;&nbsp;</span>
+          <span class="badge-subdomain-count badge badge-pills bg-info mt-1" data-toggle="tooltip" data-placement="top" title="Subdomains">&nbsp;&nbsp;${scan_object.subdomain_count}&nbsp;&nbsp;</span>
+          <span class="badge-endpoint-count badge badge-pills bg-warning mt-1" data-toggle="tooltip" data-placement="top" title="Endpoints">&nbsp;&nbsp;${scan_object.endpoint_count}&nbsp;&nbsp;</span>
+          <span class="badge-vuln-count badge badge-pills bg-danger mt-1" data-toggle="tooltip" data-placement="top" title="Vulnerabilities">&nbsp;&nbsp;${scan_object.vulnerability_count}&nbsp;&nbsp;</span>
           </div>
           <div class="progress mt-2 progress-4px">
           <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary scan-progress-bar" role="progressbar" aria-valuenow="${scan_object.current_progress}" aria-valuemin="0" aria-valuemax="100" style="width: ${scan_object.current_progress}%"></div>
           </div>
-          <a href="#" onclick="stop_scan('${endpoint_stop_scan_url}', scan_id=${scan_object.id}, subscan_id=null, reload_scan_bar=true, reload_location=false)" class="btn btn-xs btn-soft-danger waves-effect waves-light mt-1 float-end"><i class="fe-alert-triangle"></i> Stop</a>
+          <a href="#" onclick="stop_scan('${finalStopScanUrl}', scan_id=${scan_object.id}, subscan_id=null, reload_scan_bar=true, reload_location=false)" class="btn btn-xs btn-soft-danger waves-effect waves-light mt-1 float-end"><i class="fe-alert-triangle"></i> Stop</a>
           </div>
           </a>
           </div>
@@ -124,9 +152,9 @@ function getScanStatusSidebar(endpoint_url, endpoint_stop_scan_url, endpoint_sca
             Scan Completed ${scan_object.completed_ago} ago
             </span>
             <div>
-            <span class="badge-subdomain-count badge badge-soft-info waves-effect waves-light">&nbsp;&nbsp;${scan_object.subdomain_count}&nbsp;&nbsp;</span>
-            <span class="badge-endpoint-count badge badge-soft-primary waves-effect waves-light">&nbsp;&nbsp;${scan_object.endpoint_count}&nbsp;&nbsp;</span>
-            <span class="badge-vuln-count badge badge-soft-danger waves-effect waves-light">&nbsp;&nbsp;${scan_object.vulnerability_count}&nbsp;&nbsp;</span>
+            <span class="badge-subdomain-count badge badge-pills bg-info mt-1" data-toggle="tooltip" data-placement="top" title="Subdomains">&nbsp;&nbsp;${scan_object.subdomain_count}&nbsp;&nbsp;</span>
+            <span class="badge-endpoint-count badge badge-pills bg-warning mt-1" data-toggle="tooltip" data-placement="top" title="Endpoints">&nbsp;&nbsp;${scan_object.endpoint_count}&nbsp;&nbsp;</span>
+            <span class="badge-vuln-count badge badge-pills bg-danger mt-1" data-toggle="tooltip" data-placement="top" title="Vulnerabilities">&nbsp;&nbsp;${scan_object.vulnerability_count}&nbsp;&nbsp;</span>
             </div>
             </p>
             </div>
@@ -144,13 +172,11 @@ function getScanStatusSidebar(endpoint_url, endpoint_stop_scan_url, endpoint_sca
 
       if (tasks['running'].length > 0){
         $('#current_task_count').html(`${tasks['running'].length} Tasks are currently running`)
-        for (var task in tasks['running']) {
-          var task_object = tasks['running'][task];
-          var task_name = task_object.formatted_task_name || 'Unknown Task';
-          var domain_name = task_object.domain_name || 'Unknown';
-          var engine_name = task_object.engine_name || 'Unknown';
-          var bg_color = 'bg-soft-info';
-          var status_badge = '<span class="float-end badge bg-info">Running</span>';
+        for (let task in tasks['running']) {
+          const task_object = tasks['running'][task];
+          const task_name = task_object.formatted_task_name || 'Unknown Task';
+          const domain_name = task_object.domain_name || 'Unknown';
+          const engine_name = task_object.engine_name || 'Unknown';
 
           $('#currently_running_tasks').append(`
             <div class="card border-primary border mini-card">
@@ -171,6 +197,7 @@ function getScanStatusSidebar(endpoint_url, endpoint_stop_scan_url, endpoint_sca
             </div>
             </div>
             </a>
+            <a href="#" onclick="stop_activity('${finalStopActivityUrl}', activity_id=${task_object.id}, reload_scan_bar=true, reload_location=false); return false;" class="btn btn-xs btn-soft-danger waves-effect waves-light mt-1 float-end"><i class="fe-alert-triangle"></i> Stop</a>
             </div>
           `);
         }
@@ -180,25 +207,27 @@ function getScanStatusSidebar(endpoint_url, endpoint_stop_scan_url, endpoint_sca
       }
 
       if (tasks['completed'].length > 0){
-        for (var task in tasks['completed']) {
-          var task_object = tasks['completed'][task];
-          var task_name = task_object.formatted_task_name || 'Unknown Task';
-          var domain_name = task_object.domain_name || 'Unknown';
-          var engine_name = task_object.engine_name || 'Unknown';
-          var error_message = '';
+        for (let task in tasks['completed']) {
+          const task_object = tasks['completed'][task];
+          const task_name = task_object.formatted_task_name || 'Unknown Task';
+          const domain_name = task_object.domain_name || 'Unknown';
+          let error_message = '';
 
+          let bg_color;
+          let color;
+          let status_badge;
           if (task_object.status == 0) {
-            var bg_color = 'bg-soft-danger';
-            var color = 'danger';
-            var status_badge = '<span class="float-end badge bg-danger">Failed</span>';
+            bg_color = 'bg-soft-danger';
+            color = 'danger';
+            status_badge = '<span class="float-end badge bg-danger">Failed</span>';
             if (task_object.error_message) {
               error_message = `<small class="text-danger">${task_object.error_message}</small><br>`;
             }
           }
           else if (task_object.status == 2) {
-            var bg_color = 'bg-soft-success';
-            var color = 'success';
-            var status_badge = '<span class="float-end badge bg-success">Completed</span>';
+            bg_color = 'bg-soft-success';
+            color = 'success';
+            status_badge = '<span class="float-end badge bg-success">Completed</span>';
           }
 
           $('#completed_tasks').append(`
@@ -255,7 +284,7 @@ function getScanStatusSidebar(endpoint_url, endpoint_stop_scan_url, endpoint_sca
       tippy('.badge-scan_engine-type', {
         content: 'Scan Engine',
       });
-      if(reload){
+      if(finalReload){
         Snackbar.show({
           text: 'Scan Status Reloaded.',
           pos: 'top-right',
@@ -266,7 +295,7 @@ function getScanStatusSidebar(endpoint_url, endpoint_stop_scan_url, endpoint_sca
       
       // Connect to WebSocket for real-time updates if available
       if (typeof connectScanStatusWebSocket === 'function') {
-        connectScanStatusWebSocket(null, project, {
+        connectScanStatusWebSocket(null, finalProject, {
           updateSidebar: function(data) {
             updateRightSidebar(data);
           }

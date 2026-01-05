@@ -220,6 +220,12 @@ Scan Findings
 						<h6 class="font-13 text-muted text-uppercase mt-3">Scan Logs</h6>
 						<span><a href="javascript:get_logs_modal({{history.id}}, null, '{{current_project.slug}}')"><i class="fe-file"></i> Logs</a></span>
 
+						{% if history.scan_status == 1 %}
+						<div class="mt-3 mb-2">
+							<a href="#" onclick="stop_scan('{% url 'api:stop_scan' %}', scan_id={{history.id}}, subscan_id=null, reload_scan_bar=true, reload_location=true); return false;" class="btn btn-sm btn-soft-danger waves-effect waves-light"><i class="fe-alert-triangle"></i> Stop Scan</a>
+						</div>
+						{% endif %}
+
 						<h6 class="font-13 text-muted text-uppercase mt-4 mb-2">Scan Timeline</h6>
 						<div data-simplebar style="max-height: 800px;" class="p-2 scan-timeline" data-scan-id="{{history.id}}">
 							<div class="track-order-list">
@@ -242,6 +248,9 @@ Scan Findings
 												{% endif %}
 											{% endif %}
 											<span><a href="javascript:get_logs_modal(null, {{activity.id}}, '{{current_project.slug}}')"><i class="fe-file"></i> Logs</a></span>
+											{% if activity.status == 1 and activity.runner_id %}
+											<span class="float-end"><a href="#" onclick="stop_activity('{% url 'api:stop_activity' %}', activity_id={{activity.id}}, reload_scan_bar=true, reload_location=true); return false;" class="btn btn-xs btn-soft-danger waves-effect waves-light"><i class="fe-alert-triangle"></i> Stop</a></span>
+											{% endif %}
 										</li>
 										{% endfor %}
 									{% else %}
@@ -259,6 +268,13 @@ Scan Findings
 											<p class="text-muted">{{runner.created_at|naturaltime}}<br><small class="text-muted">{{runner.created_at}}</small></p>
 											{% if runner.runner_data.progress is not None %}
 												<p class="text-muted"><small>Progress: {{runner.runner_data.progress}}%</small></p>
+											{% endif %}
+											{% if runner.runner_data.status == 'RUNNING' %}
+												{% for activity in scan_activity %}
+													{% if activity.runner_id and activity.runner_id.id == runner.id %}
+														<span class="float-end"><a href="#" onclick="stop_activity('{% url 'api:stop_activity' %}', activity_id={{activity.id}}, reload_scan_bar=true, reload_location=true); return false;" class="btn btn-xs btn-soft-danger waves-effect waves-light"><i class="fe-alert-triangle"></i> Stop</a></span>
+													{% endif %}
+												{% endfor %}
 											{% endif %}
 										</li>
 										{% endfor %}

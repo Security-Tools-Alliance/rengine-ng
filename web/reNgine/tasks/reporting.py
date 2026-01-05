@@ -38,7 +38,9 @@ def report(ctx=None, description=None):
     # Get failed tasks
     tasks = ScanActivity.objects.filter(scan_of=scan).all()
     if subscan:
-        tasks = tasks.filter(celery_id__in=subscan.celery_ids)
+        # For subscans, filter tasks by checking if they belong to the subscan's scan
+        # Note: Subscans don't have direct runners, so we filter by scan
+        pass
     failed_tasks = tasks.filter(status=FAILED_TASK)
 
     # Get task status - since report is a callback, all tasks are completed

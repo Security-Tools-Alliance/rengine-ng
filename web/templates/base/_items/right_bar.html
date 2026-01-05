@@ -55,9 +55,18 @@
             </div>
           </div>
           <div class="text-center mt-3 mb-4">
-            <a href="javascript:getScanStatusSidebar('{% url 'api:scan_status' %}', '{% url 'api:stop_scan' %}', '{% url 'api:fetch_subscan_results' %}', project='{{current_project.slug}}', reload=true)" class="btn btn-md btn-primary">
+            <a href="javascript:getScanStatusSidebar('{% url 'api:scan_status' %}', '{% url 'api:stop_scan' %}', '{% url 'api:stop_activity' %}', '{% url 'api:fetch_subscan_results' %}', project='{{current_project.slug}}', reload=true)" class="btn btn-md btn-primary">
               Reload
             </a>
+            <script>
+              // Make stop_activity available globally
+              if (typeof stop_activity === 'undefined') {
+                function stop_activity(url, activity_id, reload_scan_bar, reload_location) {
+                  // This will be defined in custom.js
+                  console.error('stop_activity function not loaded');
+                }
+              }
+            </script>
           </div>
         </div>
       </div>

@@ -672,8 +672,9 @@ const updateRightSidebar = function(data) {
                 // Reload sidebar immediately for new scans
                 const endpointUrl = '/api/scan_status/';
                 const stopScanUrl = '/api/stop_scan/';
+                const stopActivityUrl = '/api/stop_activity/';
                 const fetchSubscanUrl = '/api/fetch_subscan_results/';
-                getScanStatusSidebar(endpointUrl, stopScanUrl, fetchSubscanUrl, projectSlug, false);
+                getScanStatusSidebar(endpointUrl, stopScanUrl, stopActivityUrl, fetchSubscanUrl, projectSlug, false);
             }
             return;
         }
@@ -761,8 +762,9 @@ const updateRightSidebar = function(data) {
                             // Reload sidebar immediately (no delay) to show completed scan
                             const endpointUrl = '/api/scan_status/';
                             const stopScanUrl = '/api/stop_scan/';
+                            const stopActivityUrl = '/api/stop_activity/';
                             const fetchSubscanUrl = '/api/fetch_subscan_results/';
-                            getScanStatusSidebar(endpointUrl, stopScanUrl, fetchSubscanUrl, projectSlug, false);
+                            getScanStatusSidebar(endpointUrl, stopScanUrl, stopActivityUrl, fetchSubscanUrl, projectSlug, false);
                         }
                     }
                 }
@@ -793,6 +795,29 @@ const updateRightSidebar = function(data) {
                     const progressBadge = scanCard.querySelector('.badge-soft-primary.float-end');
                     if (progressBadge && progressBadge.textContent.includes('%')) {
                         progressBadge.textContent = progress + '%';
+                    }
+                }
+                
+                // Update findings counts (subdomains, endpoints, vulnerabilities)
+                if (data.subdomain_count !== undefined || data.endpoint_count !== undefined || data.vulnerability_count !== undefined) {
+                    const subdomainBadge = scanCard.querySelector('.badge-subdomain-count');
+                    if (subdomainBadge && data.subdomain_count !== undefined) {
+                        subdomainBadge.innerHTML = '&nbsp;&nbsp;' + formatNumber(data.subdomain_count) + '&nbsp;&nbsp;';
+                    }
+                    
+                    const endpointBadge = scanCard.querySelector('.badge-endpoint-count');
+                    if (endpointBadge && data.endpoint_count !== undefined) {
+                        endpointBadge.innerHTML = '&nbsp;&nbsp;' + formatNumber(data.endpoint_count) + '&nbsp;&nbsp;';
+                    }
+                    
+                    const vulnBadge = scanCard.querySelector('.badge-vuln-count');
+                    if (vulnBadge && data.vulnerability_count !== undefined) {
+                        vulnBadge.innerHTML = '&nbsp;&nbsp;' + formatNumber(data.vulnerability_count) + '&nbsp;&nbsp;';
+                    }
+                    
+                    // Re-initialize tooltips for updated badges
+                    if (typeof $ !== 'undefined' && $.fn.tooltip) {
+                        $(scanCard).find('[data-toggle="tooltip"]').tooltip();
                     }
                 }
                 

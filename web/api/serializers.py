@@ -126,7 +126,6 @@ class SubScanResultSerializer(serializers.ModelSerializer):
             "stop_scan_date",
             "scan_history",
             "subdomain",
-            "celery_ids",
             "status",
             "subdomain_name",
             "task",
@@ -197,7 +196,6 @@ class SubScanSerializer(serializers.ModelSerializer):
             "type",
             "start_scan_date",
             "status",
-            "celery_ids",
             "scan_history",
             "subdomain",
             "stop_scan_date",
@@ -388,7 +386,6 @@ class ScanHistorySerializer(serializers.ModelSerializer):
             "start_scan_date",
             "scan_status",
             "results_dir",
-            "celery_ids",
             "tasks",
             "stop_scan_date",
             "error_message",
@@ -467,6 +464,7 @@ class ScanActivitySerializer(serializers.ModelSerializer):
             "formatted_task_name",
             "elapsed_time",
             "error_message",
+            "runner_id",
         ]
 
     def get_domain_name(self, scan_activity):
@@ -550,6 +548,7 @@ class SecatorRunnerSerializer(serializers.ModelSerializer):
             "start_time",
             "scan_history",
             "domain",
+            "celery_id",
         ]
         read_only_fields = ["id", "created_at", "updated_at"]
 

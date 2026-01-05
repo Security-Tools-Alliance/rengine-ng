@@ -79,6 +79,7 @@ from .views import (
     SecatorRunnerCreate,
     SecatorRunnerUpdate,
     StartScan,
+    StopActivity,
     StopScan,
     SubdomainChangesViewSet,
     SubdomainDatatableViewSet,
@@ -172,6 +173,7 @@ urlpatterns = [
     path("action/initiate/subtask/", InitiateSubTask.as_view(), name="initiate_subscan"),
     path("action/start/scan/", StartScan.as_view(), name="start_scan"),
     path("action/stop/scan/", StopScan.as_view(), name="stop_scan"),
+    path("action/stop/activity/", StopActivity.as_view(), name="stop_activity"),
     path("fetch/results/subscan/", FetchSubscanResults.as_view(), name="fetch_subscan_results"),
     path("fetch/most_vulnerable/", FetchMostVulnerable.as_view(), name="fetch_most_vulnerable"),
     path(

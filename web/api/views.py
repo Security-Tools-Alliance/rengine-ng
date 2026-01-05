@@ -1268,12 +1268,15 @@ class StopScan(APIView):
             try:
                 subscan = get_object_or_404(SubScan, id=subscan_id)
                 scan = subscan.scan_history
-                subscan.status = ABORTED_TASK
-                subscan.stop_scan_date = timezone.now()
-                subscan.save()
-                scan_repo = ScanRepository()
-                scan_repo.create_activity(scan.id, f"Subscan {subscan_id} aborted", SUCCESS_TASK)
-                response["status"] = True
+
+                # Use SecatorScanController to stop the subscan
+                controller = SecatorScanController(scan.id)
+                success = controller.stop_subscan(subscan_id)
+
+                if success:
+                    response["status"] = True
+                else:
+                    response = {"status": False, "message": "Failed to stop subscan"}
             except Exception as e:
                 logger.error(e)
                 response = {"status": False, "message": str(e)}
@@ -1305,15 +1308,49 @@ class StopScan(APIView):
         if scan:
             tasks = ScanActivity.objects.filter(scan_of=scan).filter(status=RUNNING_TASK).order_by("-pk")
             for task in tasks:
-                if subscan_id:
-                    subscan = get_object_or_404(SubScan, id=subscan_id)
-                    if task.id not in subscan.celery_ids:
-                        continue
                 task.status = ABORTED_TASK
                 task.time = timezone.now()
                 task.save()
 
         return Response(response)
+
+
+class StopActivity(APIView):
+    """
+    API endpoint to stop a running ScanActivity.
+    Uses SecatorScanController to revoke the associated Celery task.
+    """
+
+    def post(self, request):
+        from reNgine.secator.control import SecatorScanController
+
+        data = request.data
+        activity_id = safe_int_cast(data.get("activity_id"))
+
+        if not activity_id:
+            return Response({"status": False, "message": "activity_id is required"}, status=HTTP_400_BAD_REQUEST)
+
+        try:
+            activity = get_object_or_404(ScanActivity, id=activity_id)
+            scan = activity.scan_of
+
+            if not scan:
+                return Response({"status": False, "message": "Activity has no associated scan"}, status=HTTP_400_BAD_REQUEST)
+
+            # Use SecatorScanController to stop the activity
+            controller = SecatorScanController(scan.id)
+            success = controller.stop_activity(activity_id)
+
+            if success:
+                # Send WebSocket update if scan is available
+                from reNgine.utilities.websocket import send_scan_status_update
+                send_scan_status_update(scan.id)
+                return Response({"status": True})
+            else:
+                return Response({"status": False, "message": "Failed to stop activity"})
+        except Exception as e:
+            logger.error(e)
+            return Response({"status": False, "message": str(e)}, status=HTTP_400_BAD_REQUEST)
 
 
 class StartScan(APIView):
@@ -4130,6 +4167,13 @@ class SecatorRunnerUpdate(APIView):
                 if runner_name:
                     secator_runner.runner_name = runner_name
 
+                # Extract and store celery_id from context
+                context = runner_data.get("context", {})
+                celery_id = context.get("celery_id")
+                if celery_id:
+                    secator_runner.celery_id = celery_id
+                    logger.debug(f"[SECATOR API STATUS SYNC] Extracted celery_id {celery_id} for runner {runner_id}")
+
                 secator_runner.save()
                 logger.info(f"[SECATOR API STATUS SYNC] Runner {runner_id} updated successfully")
 
@@ -4345,7 +4389,7 @@ class SecatorRunnerUpdate(APIView):
 
         # Check if activity already exists for this runner
         existing_activity = (
-            ScanActivity.objects.filter(scan_of=scan_history, name=runner_name, celery_id=str(secator_runner.id))
+            ScanActivity.objects.filter(scan_of=scan_history, name=runner_name, runner_id=secator_runner)
             .order_by("-time")
             .first()
         )
@@ -4363,12 +4407,12 @@ class SecatorRunnerUpdate(APIView):
         else:
             # Create new activity
             activity_id = scan_repo.create_activity(scan_history.id, activity_title, rengine_status)
-            # Update the newly created activity with celery_id and name
+            # Update the newly created activity with runner_id and name
             try:
                 new_activity = ScanActivity.objects.get(id=activity_id)
-                new_activity.celery_id = str(secator_runner.id)
+                new_activity.runner_id = secator_runner
                 new_activity.name = runner_name
-                new_activity.save(update_fields=["celery_id", "name"])
+                new_activity.save(update_fields=["runner_id", "name"])
                 logger.debug(f"[SECATOR API STATUS SYNC] Created ScanActivity {activity_id} for runner {runner_name}")
             except ScanActivity.DoesNotExist:
                 logger.warning(f"[SECATOR API STATUS SYNC] Could not find newly created ScanActivity {activity_id}")

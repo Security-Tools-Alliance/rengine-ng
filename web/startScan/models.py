@@ -48,7 +48,6 @@ class ScanHistory(models.Model):
     results_dir = models.CharField(max_length=255, blank=True)
     domain = models.ForeignKey(Domain, on_delete=models.CASCADE)
     scan_type = models.ForeignKey(EngineType, on_delete=models.CASCADE, null=True, blank=True)
-    celery_ids = ArrayField(models.CharField(max_length=100), blank=True, default=list)
     tasks = ArrayField(models.CharField(max_length=200), null=True)
     stop_scan_date = models.DateTimeField(null=True, blank=True)
     used_gf_patterns = models.CharField(max_length=500, null=True, blank=True)
@@ -598,7 +597,6 @@ class SubScan(models.Model):
     type = models.CharField(max_length=100, blank=True, null=True)
     start_scan_date = models.DateTimeField()
     status = models.IntegerField()
-    celery_ids = ArrayField(models.CharField(max_length=100), blank=True, default=list)
     scan_history = models.ForeignKey(ScanHistory, on_delete=models.CASCADE)
     subdomain = models.ForeignKey(Subdomain, on_delete=models.CASCADE)
     stop_scan_date = models.DateTimeField(null=True, blank=True)
@@ -992,7 +990,14 @@ class ScanActivity(models.Model):
     status = models.IntegerField()
     error_message = models.CharField(max_length=300, blank=True, null=True)
     traceback = models.TextField(blank=True, null=True)
-    celery_id = models.CharField(max_length=100, blank=True, null=True)
+    runner_id = models.ForeignKey('SecatorRunner', on_delete=models.SET_NULL, null=True, blank=True, help_text="SecatorRunner associated with this activity")
+
+    @property
+    def celery_id(self):
+        """Get celery_id from associated runner if available."""
+        if self.runner_id and self.runner_id.celery_id:
+            return self.runner_id.celery_id
+        return None
 
     def __str__(self):
         return str(self.title)
@@ -1342,6 +1347,7 @@ class SecatorRunner(models.Model):
     scan_history = models.ForeignKey(ScanHistory, on_delete=models.CASCADE, null=True, blank=True)
     domain = models.ForeignKey(Domain, on_delete=models.CASCADE, null=True, blank=True)
     runner_data = models.JSONField(default=dict, help_text="Full runner data from Secator")
+    celery_id = models.CharField(max_length=100, blank=True, null=True, help_text="Celery task ID for this runner")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

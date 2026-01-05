@@ -1127,12 +1127,88 @@ function stop_scan(url, scan_id=null, subscan_id=null, reload_scan_bar=true, rel
 					"Content-Type": 'application/json',
 				}
 			}).then(function(response) {
+				if (!response.ok) {
+					throw new Error('Network response was not ok');
+				}
 				return response.json();
 			}).then(function(data) {
 				// TODO Look for better way
 				if (data.status) {
 					Snackbar.show({
 						text: 'Scan Successfully Aborted.',
+						pos: 'top-right',
+						duration: 1500
+					});
+					if (reload_scan_bar) {
+						try {
+							getScanStatusSidebar();
+						} catch (e) {
+							console.error('Error reloading scan sidebar:', e);
+						}
+					}
+					if (reload_location) {
+						window.location.reload();
+					}
+					return true;
+				} else {
+					Snackbar.show({
+						text: 'Oops! Could not abort the scan. ' + (data.message || ''),
+						pos: 'top-right',
+						duration: 1500
+					});
+					return false;
+				}
+			}).catch(function(error) {
+				console.error('Error stopping scan:', error);
+				Snackbar.show({
+					text: 'Oops! Unable to stop the scan. ' + (error.message || ''),
+					pos: 'top-right',
+					duration: 1500
+				});
+				swal.insertQueueStep({
+					icon: 'error',
+					title: 'Oops! Unable to stop the scan'
+				});
+				return false;
+			});
+		}
+	}])
+}
+
+function stop_activity(url, activity_id=null, reload_scan_bar=true, reload_location=false) {
+	if (!activity_id) {
+		Snackbar.show({
+			text: 'Activity ID is required',
+			pos: 'top-right',
+			duration: 1500
+		});
+		return;
+	}
+
+	var data = {'activity_id': activity_id}
+	swal.queue([{
+		title: 'Are you sure you want to stop this activity?',
+		text: "You won't be able to revert this!",
+		icon: 'warning',
+		showCancelButton: true,
+		confirmButtonText: 'Stop',
+		padding: '2em',
+		showLoaderOnConfirm: true,
+		preConfirm: function() {
+			return fetch(url, {
+				method: 'POST',
+				credentials: "same-origin",
+				body: JSON.stringify(data),
+				headers: {
+					"X-CSRFToken": getCookie("csrftoken"),
+					"Content-Type": 'application/json',
+				}
+			}).then(function(response) {
+				return response.json();
+			}).then(function(data) {
+				if (data.status) {
+					Snackbar.show({
+						text: 'Activity Successfully Stopped.',
 						pos: 'top-right',
 						duration: 1500
 					});
@@ -1144,7 +1220,7 @@ function stop_scan(url, scan_id=null, subscan_id=null, reload_scan_bar=true, rel
 					}
 				} else {
 					Snackbar.show({
-						text: 'Oops! Could not abort the scan. ' + data.message,
+						text: 'Oops! Could not stop the activity. ' + (data.message || ''),
 						pos: 'top-right',
 						duration: 1500
 					});
@@ -1152,7 +1228,7 @@ function stop_scan(url, scan_id=null, subscan_id=null, reload_scan_bar=true, rel
 			}).catch(function() {
 				swal.insertQueueStep({
 					icon: 'error',
-					title: 'Oops! Unable to stop the scan'
+					title: 'Oops! Unable to stop the activity'
 				})
 			})
 		}

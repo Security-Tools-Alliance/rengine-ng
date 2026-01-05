@@ -132,30 +132,6 @@ class ScanRepository:
         scan_activity.save()
         return scan_activity.id
 
-    def update_celery_task_id(self, scan_history_id, celery_task_id):
-        """
-        Update Celery task ID for a scan.
-
-        Args:
-            scan_history_id: ID of the scan history
-            celery_task_id: Celery task ID
-
-        Returns:
-            bool: True if successful, False otherwise
-        """
-        try:
-            scan = ScanHistory.objects.get(id=scan_history_id)
-            scan.celery_ids = [celery_task_id]
-            scan.save(update_fields=["celery_ids"])
-            logger.debug(f"Updated scan {scan_history_id} celery task ID to {celery_task_id}")
-            return True
-        except ObjectDoesNotExist:
-            logger.error(f"ScanHistory with ID {scan_history_id} not found")
-            return False
-        except Exception as e:
-            logger.error(f"Error updating celery task ID: {e}")
-            return False
-
     def update_error_message(self, scan_history_id, error_message):
         """
         Update error message for a scan.
