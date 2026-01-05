@@ -2332,8 +2332,6 @@ class ListSubdomains(AdvancedSearchMixin, APIView):
             subdomain_query = self.apply_advanced_search(subdomain_query, search_value)
 
         # Optimize queries with select_related and prefetch_related to avoid N+1 queries
-        from startScan.models import EndPoint
-
         subdomain_query = subdomain_query.select_related("scan_history", "target_domain").prefetch_related(
             "ip_addresses",
             "ip_addresses__ports",
@@ -2486,8 +2484,6 @@ class SubdomainsViewSet(viewsets.ModelViewSet):
                 queryset = Subdomain.objects.filter(scan_history=scan_id)
 
             # Optimize queries with prefetch_related to avoid N+1 queries
-            from startScan.models import EndPoint
-
             queryset = queryset.prefetch_related(
                 "ip_addresses",
                 "ip_addresses__ports",

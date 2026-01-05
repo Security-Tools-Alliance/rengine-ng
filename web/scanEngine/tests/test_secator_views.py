@@ -114,7 +114,7 @@ input_types:
     def test_secator_scans_filter_custom(self):
         """Test filtering scans by custom type."""
         # Create a custom scan
-        custom_scan = SecatorScan.objects.create(
+        SecatorScan.objects.create(
             name="Custom Scan",
             description="A custom scan",
             scan_type="internet",

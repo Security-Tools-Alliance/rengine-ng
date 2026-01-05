@@ -22,15 +22,12 @@ from weasyprint import CSS, HTML
 from api.serializers import IpSerializer
 from reNgine.core.data import safe_int_cast
 from reNgine.definitions import (
-    ABORTED_TASK,
     FOUR_OH_FOUR_URL,
     PERM_INITATE_SCANS_SUBSCANS,
     PERM_MODIFY_SCAN_REPORT,
     PERM_MODIFY_SCAN_RESULTS,
     PERM_MODIFY_SYSTEM_CONFIGURATIONS,
-    RUNNING_TASK,
     SCHEDULED_SCAN,
-    SUCCESS_TASK,
 )
 from reNgine.services.repositories.scan_repository import ScanRepository
 from reNgine.settings import RENGINE_RESULTS

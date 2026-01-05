@@ -113,7 +113,7 @@ tasks:
     def test_run_workflow_with_workflow_no_alias(self):
         """Test workflow execution with workflow that has no alias."""
         # Create workflow without alias
-        workflow_no_alias = SecatorWorkflow.objects.create(
+        SecatorWorkflow.objects.create(
             name="Workflow Without Alias",
             alias=None,
             description="Test workflow without alias",

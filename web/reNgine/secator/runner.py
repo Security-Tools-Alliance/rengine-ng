@@ -171,14 +171,15 @@ class SecatorRunner:
 
             # Import and activate Secator API hooks
             try:
-                from secator.hooks.api import HOOKS as API_HOOKS
+                from secator.hooks.api import HOOKS
 
+                api_hooks = HOOKS
                 logger.info("🔧 Secator API hooks imported successfully")
-                logger.info(f"🔧 API hooks available for: {list(API_HOOKS.keys())}")
+                logger.info(f"🔧 API hooks available for: {list(api_hooks.keys())}")
             except ImportError as e:
                 logger.warning(f"⚠️  Could not import Secator API hooks: {e}")
                 logger.warning("⚠️  API hooks will not be available")
-                API_HOOKS = {}
+                api_hooks = {}
 
             # Create runner with hooks
             try:
@@ -197,8 +198,8 @@ class SecatorRunner:
                 logger.info(f"🔧 Runner context: {context}")
 
                 # Pass API hooks to runner if available
-                if API_HOOKS:
-                    hooks = API_HOOKS
+                hooks = api_hooks or {}
+                if api_hooks:
                     logger.info("🔧 API hooks passed to runner")
 
                 runner = runner_class(config, inputs=targets, hooks=hooks, run_opts=run_opts, context=context)

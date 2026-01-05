@@ -1,13 +1,10 @@
-from datetime import datetime
-
 from django.apps import apps
 from django.db import models
 from django.db.models import Count
 from django.db.models.functions import TruncDay
-from django.utils import timezone
 
-from reNgine.utilities.time import date_to_aware_datetime
 from dashboard.models import Project
+from reNgine.utilities.time import date_to_aware_datetime
 
 
 class HistoricalIP(models.Model):

@@ -2,7 +2,7 @@
 Test cases for Secator scan progress and data mapping.
 """
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from django.utils import timezone
 
@@ -22,7 +22,7 @@ class TestSecatorProgress(BaseTestCase):
 
     def test_calculate_workflow_progress_with_single_runner(self):
         """Test progress calculation with a single workflow runner."""
-        runner = SecatorRunner.objects.create(
+        SecatorRunner.objects.create(
             runner_type="workflow",
             runner_name="test_workflow",
             scan_history=self.scan_history,
@@ -40,7 +40,7 @@ class TestSecatorProgress(BaseTestCase):
     def test_calculate_workflow_progress_with_multiple_runners(self):
         """Test progress calculation with multiple task runners."""
         # Create workflow runner
-        workflow_runner = SecatorRunner.objects.create(
+        SecatorRunner.objects.create(
             runner_type="workflow",
             runner_name="test_workflow",
             scan_history=self.scan_history,

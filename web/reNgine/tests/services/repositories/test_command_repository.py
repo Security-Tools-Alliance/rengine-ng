@@ -2,12 +2,9 @@
 Tests for Command repository functionality.
 """
 
-from datetime import datetime
-
 from django.utils import timezone
 
 from reNgine.services.repositories.command_repository import CommandRepository
-from startScan.models import Command, ScanActivity
 from utils.test_base import BaseTestCase
 
 

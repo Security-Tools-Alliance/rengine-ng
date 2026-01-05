@@ -6,7 +6,6 @@ import unittest
 from unittest.mock import Mock, patch
 
 from reNgine.secator.control import SecatorScanController
-from startScan.models import SecatorRunner
 
 
 class TestSecatorScanController(unittest.TestCase):

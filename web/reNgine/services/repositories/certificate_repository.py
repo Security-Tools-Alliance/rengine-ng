@@ -4,13 +4,13 @@ Handles Certificate database operations from Secator Certificate output type.
 """
 
 import contextlib
-from datetime import datetime, timezone as dt_timezone
+from datetime import datetime
+from datetime import timezone as dt_timezone
 from typing import Any, Dict, Optional
 
 from celery.utils.log import get_task_logger
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError
-from django.utils import timezone
 
 from reNgine.utilities.time import ensure_timezone_aware, parse_datetime_iso
 from startScan.models import Certificate, IpAddress, ScanHistory, Subdomain

@@ -6,9 +6,6 @@ from django.db.models import F, JSONField, Value
 from rest_framework import serializers
 import yaml
 
-
-logger = logging.getLogger(__name__)
-
 from dashboard.models import (
     Project,
     SearchHistory,
@@ -45,6 +42,9 @@ from targetApp.models import (
     Domain,
     Organization,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 class SearchHistorySerializer(serializers.ModelSerializer):

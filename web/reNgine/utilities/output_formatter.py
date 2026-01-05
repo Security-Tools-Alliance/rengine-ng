@@ -4,9 +4,9 @@ Pure text formatting functions with no Django dependencies.
 Handles JSON formatting, ANSI code conversion to HTML, and unicode handling.
 """
 
+from html import escape
 import json
 import re
-from html import escape
 from typing import Dict, Tuple
 
 
@@ -100,7 +100,6 @@ def convert_ansi_to_html(text: str) -> str:
                     current_classes = [c for c in current_classes if c not in ["ansi-italic"]]
                 elif code == 24:  # Reset underline
                     current_classes = [c for c in current_classes if c not in ["ansi-underline"]]
-                # Foreground colors (30-37)
                 elif 30 <= code <= 37:
                     # Remove existing foreground colors
                     current_classes = [
@@ -119,7 +118,6 @@ def convert_ansi_to_html(text: str) -> str:
                         37: "ansi-white",
                     }
                     current_classes.append(color_map[code])
-                # Background colors (40-47)
                 elif 40 <= code <= 47:
                     # Remove existing background colors
                     current_classes = [c for c in current_classes if not c.startswith("ansi-bg-")]
@@ -134,14 +132,14 @@ def convert_ansi_to_html(text: str) -> str:
                         47: "ansi-bg-white",
                     }
                     current_classes.append(bg_color_map[code])
-                # Bright foreground colors (90-97)
                 elif 90 <= code <= 97:
-                    # Remove existing foreground colors
+                    # Remove existing foreground colors, but preserve style classes and background colors
                     current_classes = [
                         c
                         for c in current_classes
                         if not c.startswith("ansi-")
-                        or c in ["ansi-bold", "ansi-dim", "ansi-italic", "ansi-underline", "ansi-bg-"]
+                        or c in ["ansi-bold", "ansi-dim", "ansi-italic", "ansi-underline"]
+                        or c.startswith("ansi-bg-")
                     ]
                     bright_color_map = {
                         90: "ansi-bright-black",
@@ -154,7 +152,6 @@ def convert_ansi_to_html(text: str) -> str:
                         97: "ansi-bright-white",
                     }
                     current_classes.append(bright_color_map[code])
-                # Bright background colors (100-107)
                 elif 100 <= code <= 107:
                     # Remove existing background colors
                     current_classes = [c for c in current_classes if not c.startswith("ansi-bg-")]
@@ -169,21 +166,11 @@ def convert_ansi_to_html(text: str) -> str:
                         107: "ansi-bg-bright-white",
                     }
                     current_classes.append(bright_bg_color_map[code])
-                # 256 colors (38;5;n and 48;5;n) - simplified handling
-                # We'll map common 256 colors to basic colors for simplicity
-                elif code == 38:  # Foreground 256 color (next code should be 5, then color number)
-                    # This is handled in the next iteration, simplified here
-                    pass
-                elif code == 48:  # Background 256 color
-                    # This is handled in the next iteration, simplified here
-                    pass
-
         last_pos = match.end()
 
     # Add remaining text
     if last_pos < len(text):
-        text_segment = text[last_pos:]
-        if text_segment:
+        if text_segment := text[last_pos:]:
             if current_classes:
                 result.append(f'<span class="{" ".join(current_classes)}">{text_segment}</span>')
             else:
@@ -232,12 +219,7 @@ def format_output(output: str) -> Dict[str, any]:
         }
 
     # Not JSON, convert ANSI to HTML if present
-    if has_ansi:
-        formatted = convert_ansi_to_html(output)
-    else:
-        # No ANSI codes, just escape HTML for safety
-        formatted = escape(output)
-
+    formatted = convert_ansi_to_html(output) if has_ansi else escape(output)
     return {
         "formatted": formatted,
         "is_json": False,

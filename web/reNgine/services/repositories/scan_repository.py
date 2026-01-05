@@ -9,7 +9,6 @@ from django.utils import timezone
 
 from dashboard.models import User
 from reNgine.definitions import INITIATED_TASK
-from scanEngine.models import EngineType
 from startScan.models import Domain, ScanActivity, ScanHistory
 
 
