@@ -53,6 +53,7 @@ services:
     entrypoint: /entrypoint-dev.sh
     environment:
       - UI_DEBUG=1
+      - SECATOR_API_DEBUG=1
       - UI_REMOTE_DEBUG=1
       - UI_REMOTE_DEBUG_PORT=5678
     volumes:

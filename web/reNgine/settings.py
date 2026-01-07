@@ -40,6 +40,7 @@ UI_DEBUG = bool(int(os.environ.get("UI_DEBUG", "0")))
 UI_ERROR_LOGGING = bool(int(os.environ.get("UI_ERROR_LOGGING", "0")))
 UI_REMOTE_DEBUG = bool(int(os.environ.get("UI_REMOTE_DEBUG", "0")))
 UI_REMOTE_DEBUG_PORT = int(os.environ.get("UI_REMOTE_DEBUG_PORT", 5678))
+SECATOR_API_DEBUG = bool(int(os.environ.get("SECATOR_API_DEBUG", "0")))
 CELERY_DEBUG = bool(int(os.environ.get("CELERY_DEBUG", "0")))
 CELERY_REMOTE_DEBUG = bool(int(os.environ.get("CELERY_REMOTE_DEBUG", "0")))
 CELERY_REMOTE_DEBUG_PORT = int(os.environ.get("CELERY_REMOTE_DEBUG_PORT", 5679))
@@ -376,12 +377,12 @@ LOGGING = {
         },
         "api": {
             "handlers": ["console"],
-            "level": "DEBUG" if (UI_DEBUG or CELERY_DEBUG) else "INFO",
+            "level": "DEBUG" if (UI_DEBUG or SECATOR_API_DEBUG) else "INFO",
             "propagate": True,  # Allow log messages to propagate to root logger
         },
         "websocket": {
             "handlers": ["console"],
-            "level": "DEBUG" if (UI_DEBUG or CELERY_DEBUG) else "INFO",
+            "level": "DEBUG" if (UI_DEBUG) else "INFO",
             "propagate": True,  # Allow log messages to propagate to root logger
         },
         "kombu.pidbox": {
@@ -407,9 +408,14 @@ LOGGING = {
         },
         "migrations": {
             "handlers": ["console", "file"],
-            "level": "DEBUG" if CELERY_DEBUG else "INFO",
+            "level": "DEBUG" if UI_DEBUG else "INFO",
             "formatter": "migration",
             "propagate": False,
+        },
+        "reNgine.utilities.secator_api_logger": {
+            "handlers": ["console"],
+            "level": "DEBUG" if (SECATOR_API_DEBUG) else "INFO",
+            "propagate": False,  # Don't propagate to avoid duplicate logs
         },
     },
     "root": {

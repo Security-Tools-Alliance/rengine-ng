@@ -235,6 +235,7 @@ def initiate_secator_scan(
             "url_filter": url_filter,
             "scan_existing_elements": scan_existing_elements,
             "initiated_by_id": initiated_by_id,
+            "expert_mode": expert_mode,
         }
 
         # Add output directory to config

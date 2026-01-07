@@ -22,13 +22,12 @@ class TestSecatorRunnerCreate(BaseTestCase):
     def test_create_runner_success(self):
         """Test successful runner creation."""
         runner_data = {
-            "name": "test_workflow",
-            "_type": "workflow",
-            "status": "RUNNING",
-            "_context": {
+            "config": {"type": "workflow", "name": "test_workflow"},
+            "context": {
                 "scan_history_id": self.data_generator.scan_history.id,
                 "domain_id": self.data_generator.domain.id,
             },
+            "status": "RUNNING",
         }
         response = self.client.post(self.url, runner_data, content_type="application/json")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -38,18 +37,15 @@ class TestSecatorRunnerCreate(BaseTestCase):
     def test_create_runner_minimal_data(self):
         """Test runner creation with minimal data."""
         runner_data = {
-            "name": "test_task",
-            "_type": "task",
+            "config": {"type": "task", "name": "test_task"},
         }
         response = self.client.post(self.url, runner_data, content_type="application/json")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data["status"])
 
-    def test_create_runner_missing_name(self):
-        """Test runner creation with missing name."""
-        runner_data = {
-            "_type": "workflow",
-        }
+    def test_create_runner_invalid_data(self):
+        """Test runner creation with invalid data format."""
+        runner_data = "not a dict"
         response = self.client.post(self.url, runner_data, content_type="application/json")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertFalse(response.data["status"])
@@ -117,7 +113,7 @@ class TestSecatorFindingCreate(BaseTestCase):
         self.assertTrue(response.data["status"])
         self.assertIn("unknown_type_", response.data["id"])
 
-    @patch("api.views.SubdomainRepository")
+    @patch("api.secator_api_base.SubdomainRepository")
     def test_create_subdomain_finding(self, mock_repo_class):
         """Test creating a subdomain finding."""
         mock_repo = MagicMock()
@@ -140,7 +136,7 @@ class TestSecatorFindingCreate(BaseTestCase):
         self.assertTrue(response.data["status"])
         mock_repo.save_from_secator.assert_called_once()
 
-    @patch("api.views.VulnerabilityRepository")
+    @patch("api.secator_api_base.VulnerabilityRepository")
     def test_create_vulnerability_finding(self, mock_repo_class):
         """Test creating a vulnerability finding."""
         mock_repo = MagicMock()
@@ -164,7 +160,7 @@ class TestSecatorFindingCreate(BaseTestCase):
         self.assertTrue(response.data["status"])
         mock_repo.save_from_secator.assert_called_once()
 
-    @patch("api.views.IpRepository")
+    @patch("api.secator_api_base.IpRepository")
     def test_create_ip_finding(self, mock_repo_class):
         """Test creating an IP finding."""
         mock_repo = MagicMock()
@@ -197,7 +193,7 @@ class TestSecatorFindingCreate(BaseTestCase):
         self.assertTrue(response.data["status"])
         self.assertIn("subdomain_", response.data["id"])
 
-    @patch("api.views.SubdomainRepository")
+    @patch("api.secator_api_base.SubdomainRepository")
     def test_create_finding_repository_returns_none(self, mock_repo_class):
         """Test finding creation when repository returns None (validation error)."""
         mock_repo = MagicMock()
@@ -226,26 +222,29 @@ class TestSecatorFindingUpdate(BaseTestCase):
         """Set up test environment."""
         super().setUp()
 
-    def test_update_finding_success(self):
-        """Test successful finding update."""
+    def test_update_finding_metadata_type(self):
+        """Test finding update with metadata type (should be ignored)."""
         finding_id = "test-finding-123"
         url = reverse("api:secator_finding_update", kwargs={"finding_id": finding_id})
         update_data = {
-            "status": "verified",
-            "extra_data": {"note": "Confirmed vulnerability"},
+            "_type": "warning",
+            "_context": {
+                "scan_history_id": self.data_generator.scan_history.id,
+                "domain_id": self.data_generator.domain.id,
+            },
         }
         response = self.client.put(url, update_data, content_type="application/json")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data["status"])
-        self.assertEqual(response.data["id"], finding_id)
+        self.assertIn("message", response.data)
 
-    def test_update_finding_empty_data(self):
-        """Test finding update with empty data."""
+    def test_update_finding_invalid_data(self):
+        """Test finding update with invalid data format."""
         finding_id = "test-finding-456"
         url = reverse("api:secator_finding_update", kwargs={"finding_id": finding_id})
-        response = self.client.put(url, {}, content_type="application/json")
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertTrue(response.data["status"])
+        response = self.client.put(url, "not a dict", content_type="application/json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(response.data["status"])
 
 
 class TestSecatorAPIAuthentication(BaseTestCase):
@@ -259,7 +258,7 @@ class TestSecatorAPIAuthentication(BaseTestCase):
     def test_runner_create_unauthenticated(self):
         """Test runner creation without authentication."""
         url = reverse("api:secator_runner_create")
-        runner_data = {"name": "test", "_type": "workflow"}
+        runner_data = {"config": {"type": "workflow", "name": "test"}}
         response = self.client.post(url, runner_data, content_type="application/json")
         self.assertIn(response.status_code, [status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN])
 
