@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from celery.utils.log import get_task_logger
 from django.core.exceptions import ObjectDoesNotExist
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 
 from targetApp.models import DNSRecord, Domain, DomainInfo
 
@@ -34,6 +34,7 @@ class DnsRepository:
         "DNSKEY",
         "NSEC",
         "NSEC3",
+        "AXFR",  # Zone transfer - security finding
     }
 
     def save_from_secator(self, item: Dict[str, Any], scan_history_id: int, domain_id: int) -> Optional[DNSRecord]:
@@ -79,23 +80,56 @@ class DnsRepository:
 
         # Validate DNS record type
         if record_type not in self.VALID_DNS_TYPES:
-            logger.warning(f"Invalid DNS record type: {record_type}, using INVALID")
-            record_type = "INVALID"
+            logger.warning(f"Invalid DNS record type: {record_type}, skipping")
+            return None
 
-        domain = Domain.objects.get(id=domain_id)
+        # Extract data from item
+        name_value = record_name
+        extra_data = item.get("extra_data", {}) or {}
 
-        # Get or create DNS record
-        dns_record, created = DNSRecord.objects.get_or_create(name=record_name, type=record_type, defaults={})
+        # Get or create domain info atomically to prevent race conditions
+        # Use select_for_update within transaction to lock the domain row
+        with transaction.atomic():
+            domain = Domain.objects.select_for_update().get(id=domain_id)
+            domain_info = domain.domain_info if hasattr(domain, "domain_info") and domain.domain_info else None
+            if not domain_info:
+                domain_info = DomainInfo()
+                domain_info.save()
+                domain.domain_info = domain_info
+                domain.save()
+                logger.debug(f"Created domain info for domain {domain.name}")
 
-        if created:
-            logger.info(f"Created DNS record: {record_name} ({record_type})")
-        else:
-            logger.debug(f"DNS record already exists: {record_name} ({record_type})")
+        if existing_record := (
+            domain_info.dns_records.filter(type=record_type, name=name_value).first()
+            or domain_info.dns_records.filter(type=record_type, name=host).first()
+        ):
+            # Update existing record
+            if existing_record.name != name_value:
+                existing_record.name = name_value
+                logger.info(f"Updated DNS record name from {host} to {name_value} ({record_type})")
+            else:
+                logger.debug(f"Updated DNS record: {name_value} ({record_type})")
+            self._update_dns_record_extra_data(extra_data, existing_record)
+            return existing_record
 
-        # Associate with domain info if available
-        self._associate_with_domain_info(dns_record, domain, host, item)
+        # Create new record
+        dns_record = DNSRecord.objects.create(name=name_value, type=record_type, extra_data=extra_data)
+        # Associate with domain info
+        domain_info.dns_records.add(dns_record)
+        logger.info(f"Created DNS record: {name_value} ({record_type})")
 
         return dns_record
+
+    def _update_dns_record_extra_data(self, extra_data: Dict[str, Any], dns_record: DNSRecord) -> None:
+        """
+        Update extra data for an existing DNS record.
+
+        Args:
+            extra_data: Extra data dictionary to update
+            dns_record: DNS record to update
+        """
+        dns_record.extra_data = extra_data
+        dns_record.save()
 
     def get_or_create(self, name: str, record_type: str, **kwargs) -> Tuple[Optional[DNSRecord], bool]:
         """
@@ -173,8 +207,8 @@ class DnsRepository:
         """
         try:
             domain = Domain.objects.get(id=domain_id)
-            if domain_info := DomainInfo.objects.filter(domain=domain).first():
-                return list(domain_info.dns_records.all())
+            if domain.domain_info:
+                return list(domain.domain_info.dns_records.all())
             logger.warning(f"No domain info found for domain {domain.name}")
             return []
 
@@ -202,15 +236,16 @@ class DnsRepository:
                 logger.warning(f"Invalid DNS record type: {record_type}")
                 return []
 
-            queryset = DNSRecord.objects.filter(type=record_type)
-
             if domain_id:
                 domain = Domain.objects.get(id=domain_id)
-                if domain_info := DomainInfo.objects.filter(domain=domain).first():
-                    queryset = queryset.filter(domaininfo=domain_info)
+                if domain.domain_info:
+                    # Filter DNS records by type that are associated with this domain's domain_info
+                    queryset = domain.domain_info.dns_records.filter(type=record_type)
                 else:
                     logger.warning(f"No domain info found for domain {domain.name}")
                     return []
+            else:
+                queryset = DNSRecord.objects.filter(type=record_type)
 
             return list(queryset)
 
@@ -220,48 +255,6 @@ class DnsRepository:
         except Exception as e:
             logger.error(f"Error getting DNS records by type: {e}")
             return []
-
-    def _associate_with_domain_info(
-        self, dns_record: DNSRecord, domain: Domain, host: str = None, item: Dict[str, Any] = None
-    ) -> None:
-        """
-        Associate DNS record with domain info.
-
-        Args:
-            dns_record: DNS record object
-            domain: Domain object
-            host: Optional host information
-            item: Optional Secator item with extra_data
-        """
-        try:
-            # Get or create domain info
-            domain_info, created = DomainInfo.objects.get_or_create(domain=domain)
-
-            if created:
-                logger.debug(f"Created domain info for domain {domain.name}")
-
-            # Store extra_data from Secator item in DomainInfo
-            if item and "extra_data" in item:
-                self._store_extra_data_in_domain_info(domain_info, dns_record, item)
-            # Associate DNS record with domain info
-            domain_info.dns_records.add(dns_record)
-            logger.debug(f"Associated DNS record {dns_record.name} ({dns_record.type}) with domain {domain.name}")
-
-        except Exception as e:
-            logger.error(f"Error associating DNS record with domain info: {e}")
-
-    def _store_extra_data_in_domain_info(
-        self, domain_info: DomainInfo, dns_record: DNSRecord, item: Dict[str, Any]
-    ) -> None:
-        if domain_info.extra_data is None:
-            domain_info.extra_data = {}
-        # Merge extra_data, using record name and type as key
-        record_key = f"{dns_record.name}_{dns_record.type}"
-        if record_key not in domain_info.extra_data:
-            domain_info.extra_data[record_key] = {}
-        domain_info.extra_data[record_key].update(item["extra_data"])
-        domain_info.save(update_fields=["extra_data"])
-        logger.debug(f"Stored extra_data for DNS record {dns_record.name} ({dns_record.type}) in domain info")
 
     def validate_dns_record_type(self, record_type: str) -> bool:
         """

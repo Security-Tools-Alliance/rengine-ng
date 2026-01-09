@@ -160,3 +160,35 @@ def parse_references(value):
     except Exception:
         # If all parsing fails, return the original value as a single item
         return [value]
+
+
+@register.filter(name="pretty_json")
+def pretty_json(value):
+    """
+    Format JSON data in a readable way.
+
+    Args:
+        value: JSON data (dict, list, or JSON string)
+
+    Returns:
+        str: Formatted JSON string
+    """
+    if value is None:
+        return ""
+
+    try:
+        # If it's already a dict or list, use it directly
+        if isinstance(value, (dict, list)):
+            return json.dumps(value, indent=2, ensure_ascii=False)
+        # If it's a string, try to parse it first
+        elif isinstance(value, str):
+            try:
+                parsed = json.loads(value)
+                return json.dumps(parsed, indent=2, ensure_ascii=False)
+            except (json.JSONDecodeError, TypeError):
+                return value
+        else:
+            return str(value)
+    except Exception as e:
+        logger.error(f"Error formatting JSON: {e}")
+        return str(value)

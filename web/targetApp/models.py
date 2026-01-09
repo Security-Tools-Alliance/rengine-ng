@@ -32,6 +32,9 @@ class Registrar(models.Model):
     phone = models.CharField(max_length=150, null=True, blank=True)
     email = models.CharField(max_length=350, null=True, blank=True)
     url = models.CharField(max_length=1000, null=True, blank=True)
+    address = models.CharField(max_length=1000, null=True, blank=True)
+    country = models.CharField(max_length=100, null=True, blank=True)
+    fax = models.CharField(max_length=150, null=True, blank=True)
 
     def __str__(self):
         return self.name
@@ -41,6 +44,8 @@ class DomainRegistration(models.Model):
     id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=500, null=True, blank=True)
     organization = models.CharField(max_length=500, null=True, blank=True)
+    contact = models.CharField(max_length=500, null=True, blank=True)
+    type = models.CharField(max_length=100, null=True, blank=True)
     address = models.CharField(max_length=500, null=True, blank=True)
     city = models.CharField(max_length=100, null=True, blank=True)
     state = models.CharField(max_length=100, null=True, blank=True)
@@ -73,8 +78,9 @@ class NameServer(models.Model):
 
 class DNSRecord(models.Model):
     id = models.AutoField(primary_key=True)
-    name = models.CharField(max_length=500)
+    name = models.TextField()
     type = models.CharField(max_length=50)
+    extra_data = models.JSONField(null=True, blank=True)
 
     def __str__(self):
         return self.name

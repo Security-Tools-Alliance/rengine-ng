@@ -21,6 +21,7 @@ import validators
 
 from api.serializers import IpSerializer
 from reNgine.core.data import get_ip_info, get_ips_from_cidr_range
+from reNgine.core.validators import is_valid_cidr
 from reNgine.definitions import (
     FOUR_OH_FOUR_URL,
     PERM_MODIFY_TARGETS,
@@ -196,7 +197,7 @@ def add_target(request, slug):
                     # save new found ips to DB)
                     is_domain = bool(validators.domain(target))
                     is_ip = bool(validators.ipv4(target)) or bool(validators.ipv6(target))
-                    is_range = bool(validators.ipv4_cidr(target)) or bool(validators.ipv6_cidr(target))
+                    is_range = is_valid_cidr(target)
                     is_url = bool(validators.url(target))
 
                     # Set ip_domain / http_url based on type of input

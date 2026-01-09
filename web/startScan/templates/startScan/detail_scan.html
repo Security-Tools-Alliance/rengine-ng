@@ -503,24 +503,40 @@ Scan Findings
 									<div class="col-sm-9">
 										<div class="tab-content pt-0">
 											<div class="tab-pane fade" id="v-pills-dns" role="tabpanel" aria-labelledby="v-pills-dns-tab" data-simplebar style="min-height: 300px;">
-												<h4>A Records</h4>
-												{% for dns in history.domain.domain_info.dns_records.all %}
-													{% if dns.type == 'a' %}
-														<span class="badge badge-soft-primary me-1 mt-1">{{ dns }}</span>
-													{% endif %}
-												{% endfor %}
-												<h4>MX Records</h4>
-												{% for dns in history.domain.domain_info.dns_records.all %}
-													{% if dns.type == 'mx' %}
-														<span class="badge badge-soft-primary me-1 mt-1">{{ dns }}</span>
-													{% endif %}
-												{% endfor %}
-												<h4>TXT Records</h4>
-												{% for dns in history.domain.domain_info.dns_records.all %}
-													{% if dns.type == 'txt' %}
-														<span class="badge badge-soft-secondary me-1 mt-1">{{ dns }}</span>
-													{% endif %}
-												{% endfor %}
+												{% if history.domain.domain_info.dns_records.all %}
+													{% regroup history.domain.domain_info.dns_records.all|dictsort:"type" by type as dns_records_by_type %}
+													{% for type_group in dns_records_by_type %}
+														<div class="mb-3">
+															<h4>{{ type_group.grouper|upper }} Records</h4>
+															{% if type_group.grouper|upper == 'AXFR' %}
+																{% for dns in type_group.list %}
+																	<div class="mb-2">
+																		<span class="badge badge-soft-primary me-1 mt-1">{{ dns }}</span>
+																		{% if dns.extra_data %}
+																			<div class="alert alert-danger mt-2 mb-2" role="alert">
+																				<strong><i class="mdi mdi-alert-circle"></i> Zone Transfer Possible!</strong>
+																				<div class="mt-2">
+																					<small><strong>Extra Data:</strong></small>
+																					<pre class="mb-0 mt-1" style="font-size: 0.85em; max-height: 200px; overflow-y: auto; background-color: #f8f9fa; padding: 10px; border-radius: 4px;">{{ dns.extra_data|pretty_json }}</pre>
+																				</div>
+																			</div>
+																		{% else %}
+																			<div class="alert alert-warning mt-2 mb-2" role="alert">
+																				<small><i class="mdi mdi-information"></i> AXFR record detected but no additional data available.</small>
+																			</div>
+																		{% endif %}
+																	</div>
+																{% endfor %}
+															{% else %}
+																{% for dns in type_group.list %}
+																	<span class="badge badge-soft-primary me-1 mt-1">{{ dns }}</span>
+																{% endfor %}
+															{% endif %}
+														</div>
+													{% endfor %}
+												{% else %}
+													<div class="alert alert-info">No DNS Records found!</div>
+												{% endif %}
 											</div>
 											<div class="tab-pane fade active show" id="v-pills-domain" role="tabpanel" aria-labelledby="v-pills-domain-tab" data-simplebar style="min-height: 300px;">
 												{% if not history.domain.domain_info %}

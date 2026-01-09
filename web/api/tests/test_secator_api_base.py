@@ -74,9 +74,7 @@ class TestSecatorAPIBase(BaseTestCase):
     def test_validate_request_data_with_prefix(self):
         """Test validation of request data with custom prefix."""
         data = "not a dict"
-        is_valid, error_response = self.base.validate_request_data(
-            data, prefix=self.base.logger.PREFIX_FINDING
-        )
+        is_valid, error_response = self.base.validate_request_data(data, prefix=self.base.logger.PREFIX_FINDING)
         self.assertFalse(is_valid)
         self.assertIsInstance(error_response, Response)
         self.assertEqual(error_response.status_code, 400)

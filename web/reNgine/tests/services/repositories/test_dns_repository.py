@@ -34,6 +34,7 @@ class TestDnsRepository(BaseTestCase):
         result = self.dns_repo.save_from_secator(item, self.scan_history.id, self.domain.id)
 
         self.assertIsNotNone(result)
+        # name field stores the domain name (record_name), not the value
         self.assertEqual(result.name, "www.example.com")
         self.assertEqual(result.type, "A")
 
@@ -49,6 +50,7 @@ class TestDnsRepository(BaseTestCase):
         result = self.dns_repo.save_from_secator(item, self.scan_history.id, self.domain.id)
 
         self.assertIsNotNone(result)
+        # name field stores the domain name (record_name), not the value
         self.assertEqual(result.name, "www.example.com")
         self.assertEqual(result.type, "AAAA")
 
@@ -64,6 +66,7 @@ class TestDnsRepository(BaseTestCase):
         result = self.dns_repo.save_from_secator(item, self.scan_history.id, self.domain.id)
 
         self.assertIsNotNone(result)
+        # name field stores the domain name (record_name), not the value
         self.assertEqual(result.name, "www.example.com")
         self.assertEqual(result.type, "CNAME")
 
@@ -79,6 +82,7 @@ class TestDnsRepository(BaseTestCase):
         result = self.dns_repo.save_from_secator(item, self.scan_history.id, self.domain.id)
 
         self.assertIsNotNone(result)
+        # name field stores the domain name (record_name), not the value
         self.assertEqual(result.name, "example.com")
         self.assertEqual(result.type, "MX")
 
@@ -94,6 +98,7 @@ class TestDnsRepository(BaseTestCase):
         result = self.dns_repo.save_from_secator(item, self.scan_history.id, self.domain.id)
 
         self.assertIsNotNone(result)
+        # name field stores the domain name (record_name), not the value
         self.assertEqual(result.name, "example.com")
         self.assertEqual(result.type, "TXT")
 
@@ -144,9 +149,8 @@ class TestDnsRepository(BaseTestCase):
 
         result = self.dns_repo.save_from_secator(item, self.scan_history.id, self.domain.id)
 
-        # Should still create the record but log a warning
-        self.assertIsNotNone(result)
-        self.assertEqual(result.type, "INVALID")
+        # Invalid types should return None
+        self.assertIsNone(result)
 
     def test_get_or_create_existing_record(self):
         """Test get_or_create with existing DNS record."""
@@ -225,6 +229,7 @@ class TestDnsRepository(BaseTestCase):
         records = self.dns_repo.get_records_for_domain(self.domain.id)
 
         self.assertEqual(len(records), 2)
+        # name field stores the domain name (record_name), not the value
         record_names = [record.name for record in records]
         self.assertIn("www.example.com", record_names)
         self.assertIn("mail.example.com", record_names)
@@ -257,6 +262,7 @@ class TestDnsRepository(BaseTestCase):
 
         self.assertEqual(len(a_records), 1)
         self.assertEqual(len(mx_records), 1)
+        # name field stores the domain name (record_name), not the value
         self.assertEqual(a_records[0].name, "www.example.com")
         self.assertEqual(mx_records[0].name, "example.com")
 
@@ -276,6 +282,7 @@ class TestDnsRepository(BaseTestCase):
         result = self.dns_repo.save_from_secator(item, self.scan_history.id, self.domain.id)
 
         self.assertIsNotNone(result)
+        # name field stores the domain name (record_name), not the value
         self.assertEqual(result.name, "www.example.com")
         self.assertEqual(result.type, "A")
 
@@ -316,6 +323,7 @@ class TestDnsRepository(BaseTestCase):
         result = self.dns_repo._process_secator_dns_record_item(item, self.domain.id)
 
         self.assertIsNotNone(result)
+        # name field stores the domain name (record_name), not the value
         self.assertEqual(result.name, "www.example.com")
         self.assertEqual(result.type, "A")
 
@@ -352,56 +360,273 @@ class TestDnsRepository(BaseTestCase):
 
         self.assertIsNone(result)
 
-    def test_store_extra_data_in_domain_info(self):
-        """Test _store_extra_data_in_domain_info method."""
-        from targetApp.models import DNSRecord, DomainInfo
+    def test_update_existing_record_with_name_change(self):
+        """Test updating existing DNS record when name changes."""
+        # Create initial record with old name
+        item1 = {
+            "_type": "record",
+            "name": "old.example.com",
+            "type": "A",
+            "host": "192.168.1.1",
+        }
+        result1 = self.dns_repo.save_from_secator(item1, self.scan_history.id, self.domain.id)
+        self.assertIsNotNone(result1)
+        self.assertEqual(result1.name, "old.example.com")
 
-        domain_info = DomainInfo.objects.get_or_create(domain=self.domain)[0]
-        domain_info.extra_data = {}
-        domain_info.save()
+        # Update with new name but same host (old name)
+        item2 = {
+            "_type": "record",
+            "name": "new.example.com",
+            "type": "A",
+            "host": "old.example.com",
+        }
+        result2 = self.dns_repo.save_from_secator(item2, self.scan_history.id, self.domain.id)
 
-        dns_record = DNSRecord.objects.create(
-            name="www.example.com",
-            type="A",
-        )
+        # Should update existing record and change name
+        self.assertIsNotNone(result2)
+        self.assertEqual(result1.id, result2.id)  # Same record
+        self.assertEqual(result2.name, "new.example.com")
 
-        item = {
-            "extra_data": {
-                "ttl": 3600,
-                "priority": 0,
-            }
+    def test_update_existing_record_extra_data(self):
+        """Test updating existing DNS record extra data."""
+        # Create initial record
+        item1 = {
+            "_type": "record",
+            "name": "www.example.com",
+            "type": "A",
+            "host": "192.168.1.1",
+            "extra_data": {"ttl": 3600},
+        }
+        result1 = self.dns_repo.save_from_secator(item1, self.scan_history.id, self.domain.id)
+        self.assertIsNotNone(result1)
+        self.assertEqual(result1.extra_data, {"ttl": 3600})
+
+        # Update with new extra_data
+        item2 = {
+            "_type": "record",
+            "name": "www.example.com",
+            "type": "A",
+            "host": "192.168.1.1",
+            "extra_data": {"ttl": 7200, "priority": 10},
+        }
+        result2 = self.dns_repo.save_from_secator(item2, self.scan_history.id, self.domain.id)
+
+        # Should update existing record
+        self.assertIsNotNone(result2)
+        self.assertEqual(result1.id, result2.id)  # Same record
+        self.assertEqual(result2.extra_data, {"ttl": 7200, "priority": 10})
+
+    def test_update_dns_record_extra_data(self):
+        """Test _update_dns_record_extra_data method."""
+
+        dns_record = self.data_generator.create_dns_record()
+        new_extra_data = {"ttl": 3600, "priority": 10, "value": "192.168.1.1"}
+
+        self.dns_repo._update_dns_record_extra_data(new_extra_data, dns_record)
+
+        dns_record.refresh_from_db()
+        self.assertEqual(dns_record.extra_data, new_extra_data)
+
+    def test_validate_dns_record_type_valid(self):
+        """Test validate_dns_record_type with valid types."""
+        self.assertTrue(self.dns_repo.validate_dns_record_type("A"))
+        self.assertTrue(self.dns_repo.validate_dns_record_type("AAAA"))
+        self.assertTrue(self.dns_repo.validate_dns_record_type("CNAME"))
+        self.assertTrue(self.dns_repo.validate_dns_record_type("MX"))
+        self.assertTrue(self.dns_repo.validate_dns_record_type("TXT"))
+        self.assertTrue(self.dns_repo.validate_dns_record_type("NS"))
+        self.assertTrue(self.dns_repo.validate_dns_record_type("SOA"))
+        self.assertTrue(self.dns_repo.validate_dns_record_type("PTR"))
+        self.assertTrue(self.dns_repo.validate_dns_record_type("SRV"))
+        self.assertTrue(self.dns_repo.validate_dns_record_type("CAA"))
+        self.assertTrue(self.dns_repo.validate_dns_record_type("DS"))
+        self.assertTrue(self.dns_repo.validate_dns_record_type("DNSKEY"))
+        self.assertTrue(self.dns_repo.validate_dns_record_type("NSEC"))
+        self.assertTrue(self.dns_repo.validate_dns_record_type("NSEC3"))
+        self.assertTrue(self.dns_repo.validate_dns_record_type("AXFR"))
+
+    def test_validate_dns_record_type_invalid(self):
+        """Test validate_dns_record_type with invalid types."""
+        self.assertFalse(self.dns_repo.validate_dns_record_type("INVALID"))
+        self.assertFalse(self.dns_repo.validate_dns_record_type(""))
+
+    def test_validate_dns_record_type_case_insensitive(self):
+        """Test validate_dns_record_type is case insensitive."""
+        self.assertTrue(self.dns_repo.validate_dns_record_type("a"))
+        self.assertTrue(self.dns_repo.validate_dns_record_type("A"))
+        self.assertTrue(self.dns_repo.validate_dns_record_type("AaAa"))
+
+    def test_get_valid_dns_types(self):
+        """Test get_valid_dns_types method."""
+        valid_types = self.dns_repo.get_valid_dns_types()
+
+        self.assertIsInstance(valid_types, set)
+        self.assertIn("A", valid_types)
+        self.assertIn("AAAA", valid_types)
+        self.assertIn("CNAME", valid_types)
+        self.assertIn("MX", valid_types)
+        self.assertIn("TXT", valid_types)
+        self.assertIn("NS", valid_types)
+        self.assertIn("SOA", valid_types)
+        self.assertIn("PTR", valid_types)
+        self.assertIn("SRV", valid_types)
+        self.assertIn("CAA", valid_types)
+        self.assertIn("DS", valid_types)
+        self.assertIn("DNSKEY", valid_types)
+        self.assertIn("NSEC", valid_types)
+        self.assertIn("NSEC3", valid_types)
+        self.assertIn("AXFR", valid_types)
+        self.assertEqual(len(valid_types), 15)
+
+    def test_get_valid_dns_types_returns_copy(self):
+        """Test that get_valid_dns_types returns a copy, not the original set."""
+        valid_types1 = self.dns_repo.get_valid_dns_types()
+        valid_types2 = self.dns_repo.get_valid_dns_types()
+
+        self.assertIsNot(valid_types1, valid_types2)
+        self.assertEqual(valid_types1, valid_types2)
+
+    def test_parse_extra_data(self):
+        """Test parse_extra_data method."""
+        extra_data = {
+            "value": "192.168.1.1",
+            "ttl": 3600,
+            "priority": 10,
+            "weight": 5,
+            "port": 80,
+            "target": "example.com",
+            "other_field": "should_not_be_included",
         }
 
-        self.dns_repo._store_extra_data_in_domain_info(domain_info, dns_record, item)
+        parsed = self.dns_repo.parse_extra_data(extra_data)
 
-        domain_info.refresh_from_db()
-        record_key = f"{dns_record.name}_{dns_record.type}"
-        self.assertIn(record_key, domain_info.extra_data)
-        self.assertEqual(domain_info.extra_data[record_key]["ttl"], 3600)
-        self.assertEqual(domain_info.extra_data[record_key]["priority"], 0)
+        self.assertEqual(parsed["value"], "192.168.1.1")
+        self.assertEqual(parsed["ttl"], 3600)
+        self.assertEqual(parsed["priority"], 10)
+        self.assertEqual(parsed["weight"], 5)
+        self.assertEqual(parsed["port"], 80)
+        self.assertEqual(parsed["target"], "example.com")
+        self.assertNotIn("other_field", parsed)
 
-    def test_store_extra_data_in_domain_info_none_extra_data(self):
-        """Test _store_extra_data_in_domain_info when domain_info.extra_data is None."""
-        from targetApp.models import DNSRecord, DomainInfo
+    def test_parse_extra_data_partial(self):
+        """Test parse_extra_data with partial data."""
+        extra_data = {"value": "192.168.1.1", "ttl": 3600}
 
-        domain_info = DomainInfo.objects.get_or_create(domain=self.domain)[0]
-        domain_info.extra_data = None
-        domain_info.save()
+        parsed = self.dns_repo.parse_extra_data(extra_data)
 
-        dns_record = DNSRecord.objects.create(
-            name="www.example.com",
-            type="A",
-        )
+        self.assertEqual(parsed["value"], "192.168.1.1")
+        self.assertEqual(parsed["ttl"], 3600)
+        self.assertNotIn("priority", parsed)
+        self.assertNotIn("weight", parsed)
+
+    def test_parse_extra_data_empty(self):
+        """Test parse_extra_data with empty dictionary."""
+        parsed = self.dns_repo.parse_extra_data({})
+
+        self.assertEqual(parsed, {})
+
+    def test_parse_extra_data_none(self):
+        """Test parse_extra_data with None."""
+        parsed = self.dns_repo.parse_extra_data(None)
+
+        self.assertEqual(parsed, {})
+
+    def test_get_or_create_empty_name(self):
+        """Test get_or_create with empty name."""
+        record, created = self.dns_repo.get_or_create("", "A")
+
+        self.assertIsNone(record)
+        self.assertFalse(created)
+
+    def test_get_or_create_empty_type(self):
+        """Test get_or_create with empty type."""
+        record, created = self.dns_repo.get_or_create("www.example.com", "")
+
+        self.assertIsNone(record)
+        self.assertFalse(created)
+
+    def test_get_or_create_invalid_type(self):
+        """Test get_or_create with invalid type."""
+        record, created = self.dns_repo.get_or_create("www.example.com", "INVALID")
+
+        self.assertIsNone(record)
+        self.assertFalse(created)
+
+    def test_get_records_for_domain_no_domain_info(self):
+        """Test get_records_for_domain when domain has no domain_info."""
+        domain = self.data_generator.create_domain()
+        domain.domain_info = None
+        domain.save()
+
+        records = self.dns_repo.get_records_for_domain(domain.id)
+
+        self.assertEqual(records, [])
+
+    def test_get_records_for_domain_nonexistent(self):
+        """Test get_records_for_domain with nonexistent domain."""
+        records = self.dns_repo.get_records_for_domain(99999)
+
+        self.assertEqual(records, [])
+
+    def test_get_records_by_type_no_domain_id(self):
+        """Test get_records_by_type without domain_id."""
+        # Create records directly
+        from targetApp.models import DNSRecord
+
+        DNSRecord.objects.create(name="www.example.com", type="A")
+        DNSRecord.objects.create(name="mail.example.com", type="MX")
+
+        a_records = self.dns_repo.get_records_by_type("A")
+        mx_records = self.dns_repo.get_records_by_type("MX")
+
+        self.assertGreaterEqual(len(a_records), 1)
+        self.assertGreaterEqual(len(mx_records), 1)
+
+    def test_get_records_by_type_invalid_type(self):
+        """Test get_records_by_type with invalid type."""
+        records = self.dns_repo.get_records_by_type("INVALID", self.domain.id)
+
+        self.assertEqual(records, [])
+
+    def test_get_records_by_type_nonexistent_domain(self):
+        """Test get_records_by_type with nonexistent domain."""
+        records = self.dns_repo.get_records_by_type("A", 99999)
+
+        self.assertEqual(records, [])
+
+    def test_bulk_create_empty_list(self):
+        """Test bulk_create with empty list."""
+        result = self.dns_repo.bulk_create([])
+
+        self.assertEqual(result, [])
+
+    def test_bulk_create_invalid_records(self):
+        """Test bulk_create with invalid records."""
+        records_data = [
+            {"name": "", "type": "A"},  # Empty name
+            {"name": "www.example.com", "type": ""},  # Empty type
+            {"name": "www.example.com", "type": "INVALID"},  # Invalid type
+        ]
+
+        result = self.dns_repo.bulk_create(records_data)
+
+        self.assertEqual(result, [])
+
+    def test_save_from_secator_creates_domain_info_if_missing(self):
+        """Test that save_from_secator creates domain_info if it doesn't exist."""
+        domain = self.data_generator.create_domain()
+        domain.domain_info = None
+        domain.save()
 
         item = {
-            "extra_data": {
-                "ttl": 3600,
-            }
+            "_type": "record",
+            "name": "www.example.com",
+            "type": "A",
+            "host": "192.168.1.1",
         }
 
-        self.dns_repo._store_extra_data_in_domain_info(domain_info, dns_record, item)
+        result = self.dns_repo.save_from_secator(item, self.scan_history.id, domain.id)
 
-        domain_info.refresh_from_db()
-        self.assertIsNotNone(domain_info.extra_data)
-        record_key = f"{dns_record.name}_{dns_record.type}"
-        self.assertIn(record_key, domain_info.extra_data)
+        self.assertIsNotNone(result)
+        domain.refresh_from_db()
+        self.assertIsNotNone(domain.domain_info)

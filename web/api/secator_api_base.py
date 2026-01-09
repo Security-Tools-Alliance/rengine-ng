@@ -13,6 +13,7 @@ from rest_framework.views import APIView
 
 from reNgine.services.repositories.certificate_repository import CertificateRepository
 from reNgine.services.repositories.dns_repository import DnsRepository
+from reNgine.services.repositories.domain_repository import DomainRepository
 from reNgine.services.repositories.employee_repository import EmployeeRepository
 from reNgine.services.repositories.endpoint_repository import EndpointRepository
 from reNgine.services.repositories.exploit_repository import ExploitRepository
@@ -41,6 +42,7 @@ class SecatorAPIBase(APIView, ABC):
         "tag": TechnologyRepository,
         "vulnerability": VulnerabilityRepository,
         "record": DnsRepository,
+        "domain": DomainRepository,
         "exploit": ExploitRepository,
         "user_account": EmployeeRepository,
         "certificate": CertificateRepository,
