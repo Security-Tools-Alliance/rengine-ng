@@ -11,7 +11,9 @@
 {% block page_title %}Edit Project: {{ edit_project.name }}{% endblock page_title %}
 
 {% block breadcrumb_title %}
+{% if current_project %}
 <li class="breadcrumb-item"><a href="{% url 'dashboardIndex' current_project.slug %}">Dashboard</a></li>
+{% endif %}
 <li class="breadcrumb-item"><a href="{% url 'list_projects' %}">Projects</a></li>
 <li class="breadcrumb-item active">Edit Project</li>
 {% endblock breadcrumb_title %}

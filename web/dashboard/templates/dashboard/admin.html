@@ -16,7 +16,9 @@ Admin Settings
 {% endblock page_title %}
 
 {% block breadcrumb_title %}
+{% if current_project %}
 <li class="breadcrumb-item"><a href="{% url 'dashboardIndex' current_project.slug %}">Dashboard</a></li>
+{% endif %}
 <li class="breadcrumb-item active">Admin Settings</li>
 {% endblock breadcrumb_title %}
 

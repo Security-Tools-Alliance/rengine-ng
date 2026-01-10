@@ -104,6 +104,24 @@
                   <button class="btn btn-primary" type="submit"> Log In </button>
                 </div>
               </form>
+              
+              <!-- OAuth Login Section -->
+              {% load socialaccount %}
+              <div class="mt-3">
+                <div class="text-center">
+                  <p class="text-muted mb-2">Or login with</p>
+                </div>
+                <div class="d-grid gap-2">
+                  {% providers_media_js %}
+                  <a href="{% provider_login_url 'google' method='oauth2' %}" class="btn btn-outline-secondary">
+                    <i class="mdi mdi-google"></i> Sign in with Google
+                  </a>
+                  <a href="{% provider_login_url 'github' %}" class="btn btn-outline-secondary">
+                    <i class="mdi mdi-github"></i> Sign in with GitHub
+                  </a>
+                </div>
+              </div>
+              
             </div>
           </div>
         </div>
