@@ -3,14 +3,20 @@ This file contains the test cases for the dashboard views.
 """
 import json
 from unittest.mock import patch, MagicMock
-from django.urls import reverse
-from utils.test_base import BaseTestCase
+import uuid
+
+from allauth.socialaccount.models import SocialAccount
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import User
+from django.test import RequestFactory, TestCase
+from django.urls import reverse
 from django.utils import timezone
 from rolepermissions.checkers import has_role
 from rolepermissions.roles import assign_role
-import uuid
+
+from dashboard.adapters import AccountAdapter
+from dashboard.models import Project
+from utils.test_base import BaseTestCase
 
 __all__ = [
     'TestDashboardViews'
@@ -217,6 +223,43 @@ class AdminInterfaceUpdateTests(BaseTestCase):
         response = self.client.post(
             reverse('admin_interface_update') + f'?user={self.superuser.id}&mode=delete')
         self.assertEqual(response.status_code, 403)
+
+
+class OAuthRedirectTests(TestCase):
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.adapter = AccountAdapter()
+        self.user = get_user_model().objects.create_user(username='oauthuser', password='password123')
+        SocialAccount.objects.create(user=self.user, provider='google', uid='oauth-123')
+
+    def test_oauth_user_without_projects_redirects_to_list(self):
+        request = self.factory.get('/')
+        request.user = self.user
+
+        redirect_url = self.adapter.get_login_redirect_url(request)
+
+        self.assertEqual(redirect_url, reverse('list_projects'))
+        # Auditor should be applied
+        self.assertTrue(has_role(self.user, 'auditor'))
+
+    def test_oauth_user_with_assigned_project_redirects_to_dashboard(self):
+        project = Project.objects.create(
+            name='Assigned Project',
+            description='',
+            slug='assigned-project',
+            insert_date=timezone.now()
+        )
+        project.users.add(self.user)
+
+        request = self.factory.get('/')
+        request.user = self.user
+
+        redirect_url = self.adapter.get_login_redirect_url(request)
+
+        self.assertEqual(
+            redirect_url,
+            reverse('dashboardIndex', kwargs={'slug': project.slug})
+        )
         
         # Test sys_admin trying to delete themselves
         self.client.force_login(self.sys_admin)
