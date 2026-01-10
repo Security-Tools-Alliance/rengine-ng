@@ -50,6 +50,9 @@ urlpatterns = [
         auth_views.LogoutView.as_view(template_name='base/logout.html'),
         name='logout'),
     path(
+        'accounts/',
+        include('allauth.urls')),
+    path(
         'api/',
         include(
             'api.urls',
