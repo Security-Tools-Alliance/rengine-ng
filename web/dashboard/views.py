@@ -346,6 +346,13 @@ def delete_project(request, id):
 
 def onboarding(request):
     error = ''
+    # OAuth users should skip onboarding; they will receive project access from an admin later
+    if request.user.is_authenticated:
+        is_oauth_user = hasattr(request.user, 'socialaccount_set') and request.user.socialaccount_set.exists()
+        if is_oauth_user:
+            messages.info(request, 'Your account is managed via OAuth. An admin will assign projects for you.')
+            return redirect('list_projects')
+
     if request.method == "POST":
         project_name = request.POST.get('project_name')
         slug = slugify(project_name)

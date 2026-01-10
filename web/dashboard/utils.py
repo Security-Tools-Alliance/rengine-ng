@@ -5,10 +5,18 @@ from django.urls import reverse
 from .models import Project
 
 def get_user_projects(user):
-    # Return all projects for superuser and sys_admin
-    if user.is_superuser or get_user_groups(user) == 'sys_admin':
+    # Superusers see everything
+    if user.is_superuser:
         return Project.objects.all()
-    # Return only projects where user is a member
+
+    # SysAdmin users see all projects unless they are OAuth users, who only see explicit assignments
+    if get_user_groups(user) == 'sys_admin':
+        is_oauth_user = hasattr(user, 'socialaccount_set') and user.socialaccount_set.exists()
+        if is_oauth_user:
+            return Project.objects.filter(users=user)
+        return Project.objects.all()
+
+    # Other roles only see assigned projects
     return Project.objects.filter(users=user)
 
 def user_has_project_access(view_func):
