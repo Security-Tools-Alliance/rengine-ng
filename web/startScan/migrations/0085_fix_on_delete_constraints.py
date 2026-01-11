@@ -1,0 +1,282 @@
+# Generated manually to fix on_delete constraints
+
+from django.db import migrations
+from psycopg2.extensions import quote_ident
+
+
+def get_table_name(apps, app_label, model_name):
+    """Get the actual database table name for a model."""
+    model = apps.get_model(app_label, model_name)
+    return model._meta.db_table
+
+
+def resolve_actual_table_name(schema_editor, table_name):
+    """Resolve the actual table name from PostgreSQL, handling case sensitivity."""
+    with schema_editor.connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT tablename
+            FROM pg_tables
+            WHERE schemaname = 'public'
+            AND LOWER(tablename) = LOWER(%s)
+            LIMIT 1
+            """,
+            [table_name],
+        )
+        result = cursor.fetchone()
+        return result[0] if result else None
+
+
+def get_constraint_name(schema_editor, actual_table_name, column_name, actual_ref_table_name):
+    """Get the foreign key constraint name for a given table and column.
+
+    Uses the actual table names from the database to find the constraint,
+    handling cases where Django truncates constraint names.
+    """
+    with schema_editor.connection.cursor() as cursor:
+        # Find the constraint using the actual table names
+        cursor.execute(
+            """
+            SELECT c.conname
+            FROM pg_constraint c
+            JOIN pg_class t ON t.oid = c.conrelid
+            JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY(c.conkey)
+            JOIN pg_class rt ON rt.oid = c.confrelid
+            WHERE t.relname = %s
+            AND rt.relname = %s
+            AND c.contype = 'f'
+            AND a.attname = %s
+            LIMIT 1
+            """,
+            [actual_table_name, actual_ref_table_name, column_name],
+        )
+        result = cursor.fetchone()
+        return result[0] if result else None
+
+
+def fix_constraint(
+    apps, schema_editor, table_name, column_name, referenced_table, referenced_column="id", on_delete="SET NULL"
+):
+    """Fix a foreign key constraint by changing its on_delete behavior."""
+    # Resolve actual table names from PostgreSQL
+    actual_table_name = resolve_actual_table_name(schema_editor, table_name)
+    if not actual_table_name:
+        return
+
+    actual_ref_table_name = resolve_actual_table_name(schema_editor, referenced_table)
+    if not actual_ref_table_name:
+        return
+
+    # Get the actual constraint name from the database using resolved table names
+    constraint_name = get_constraint_name(schema_editor, actual_table_name, column_name, actual_ref_table_name)
+
+    if constraint_name:
+        # Safely quote all identifiers
+        quoted_table_name = quote_ident(actual_table_name, schema_editor.connection.connection)
+        quoted_column_name = quote_ident(column_name, schema_editor.connection.connection)
+        quoted_ref_table_name = quote_ident(actual_ref_table_name, schema_editor.connection.connection)
+        quoted_ref_column = quote_ident(referenced_column, schema_editor.connection.connection)
+        quoted_constraint_name = quote_ident(constraint_name, schema_editor.connection.connection)
+
+        # Drop existing constraint using actual table name
+        schema_editor.execute(f"ALTER TABLE {quoted_table_name} DROP CONSTRAINT {quoted_constraint_name};")
+        # Add new constraint with specified on_delete using actual table names
+        schema_editor.execute(
+            f"ALTER TABLE {quoted_table_name} ADD CONSTRAINT {quoted_constraint_name} "
+            f"FOREIGN KEY ({quoted_column_name}) REFERENCES {quoted_ref_table_name}({quoted_ref_column}) ON DELETE {on_delete};"
+        )
+
+
+def fix_all_constraints(apps, schema_editor):
+    """Fix all on_delete constraints: CASCADE for strong parent-child relationships, SET NULL for optional relationships."""
+    # Get actual table names from Django metadata
+    scanhistory_table = get_table_name(apps, "startScan", "ScanHistory")
+    subdomain_table = get_table_name(apps, "startScan", "Subdomain")
+    subscan_table = get_table_name(apps, "startScan", "SubScan")
+    endpoint_table = get_table_name(apps, "startScan", "EndPoint")
+    vulnerability_table = get_table_name(apps, "startScan", "Vulnerability")
+    scanactivity_table = get_table_name(apps, "startScan", "ScanActivity")
+    command_table = get_table_name(apps, "startScan", "Command")
+    ipaddress_table = get_table_name(apps, "startScan", "IpAddress")
+    port_table = get_table_name(apps, "startScan", "Port")
+    metafinderdocument_table = get_table_name(apps, "startScan", "MetaFinderDocument")
+    employee_table = get_table_name(apps, "startScan", "Employee")
+    exploit_table = get_table_name(apps, "startScan", "Exploit")
+    secatorrunner_table = get_table_name(apps, "startScan", "SecatorRunner")
+    certificate_table = get_table_name(apps, "startScan", "Certificate")
+    enginetype_table = get_table_name(apps, "scanEngine", "EngineType")
+    user_table = get_table_name(apps, "auth", "User")
+    domain_table = get_table_name(apps, "targetApp", "Domain")
+    countryiso_table = get_table_name(apps, "startScan", "CountryISO")
+
+    # ScanHistory
+    fix_constraint(apps, schema_editor, scanhistory_table, "domain_id", domain_table, on_delete="CASCADE")
+    fix_constraint(apps, schema_editor, scanhistory_table, "scan_type_id", enginetype_table, on_delete="SET NULL")
+    fix_constraint(apps, schema_editor, scanhistory_table, "initiated_by_id", user_table, on_delete="SET NULL")
+    fix_constraint(apps, schema_editor, scanhistory_table, "aborted_by_id", user_table, on_delete="SET NULL")
+
+    # Subdomain
+    fix_constraint(apps, schema_editor, subdomain_table, "scan_history_id", scanhistory_table, on_delete="CASCADE")
+    fix_constraint(apps, schema_editor, subdomain_table, "target_domain_id", domain_table, on_delete="CASCADE")
+
+    # SubScan
+    fix_constraint(apps, schema_editor, subscan_table, "engine_id", enginetype_table, on_delete="SET NULL")
+
+    # EndPoint
+    fix_constraint(apps, schema_editor, endpoint_table, "scan_history_id", scanhistory_table, on_delete="CASCADE")
+    fix_constraint(apps, schema_editor, endpoint_table, "target_domain_id", domain_table, on_delete="CASCADE")
+    fix_constraint(apps, schema_editor, endpoint_table, "subdomain_id", subdomain_table, on_delete="CASCADE")
+
+    # Vulnerability
+    fix_constraint(apps, schema_editor, vulnerability_table, "scan_history_id", scanhistory_table, on_delete="CASCADE")
+    fix_constraint(apps, schema_editor, vulnerability_table, "subdomain_id", subdomain_table, on_delete="CASCADE")
+    fix_constraint(apps, schema_editor, vulnerability_table, "endpoint_id", endpoint_table, on_delete="CASCADE")
+    fix_constraint(apps, schema_editor, vulnerability_table, "target_domain_id", domain_table, on_delete="CASCADE")
+
+    # ScanActivity
+    fix_constraint(apps, schema_editor, scanactivity_table, "scan_of_id", scanhistory_table, on_delete="CASCADE")
+
+    # Command
+    fix_constraint(apps, schema_editor, command_table, "scan_history_id", scanhistory_table, on_delete="CASCADE")
+    fix_constraint(apps, schema_editor, command_table, "activity_id", scanactivity_table, on_delete="CASCADE")
+
+    # IpAddress
+    fix_constraint(apps, schema_editor, ipaddress_table, "geo_iso_id", countryiso_table, on_delete="SET NULL")
+
+    # Port
+    fix_constraint(apps, schema_editor, port_table, "ip_address_id", ipaddress_table, on_delete="CASCADE")
+
+    # MetaFinderDocument
+    fix_constraint(
+        apps, schema_editor, metafinderdocument_table, "scan_history_id", scanhistory_table, on_delete="CASCADE"
+    )
+    fix_constraint(apps, schema_editor, metafinderdocument_table, "target_domain_id", domain_table, on_delete="CASCADE")
+    fix_constraint(apps, schema_editor, metafinderdocument_table, "subdomain_id", subdomain_table, on_delete="CASCADE")
+
+    # Employee
+    fix_constraint(apps, schema_editor, employee_table, "scan_history_id", scanhistory_table, on_delete="CASCADE")
+    fix_constraint(apps, schema_editor, employee_table, "target_domain_id", domain_table, on_delete="CASCADE")
+    fix_constraint(apps, schema_editor, employee_table, "subdomain_id", subdomain_table, on_delete="CASCADE")
+    fix_constraint(apps, schema_editor, employee_table, "endpoint_id", endpoint_table, on_delete="CASCADE")
+
+    # Exploit
+    fix_constraint(apps, schema_editor, exploit_table, "ip_address_id", ipaddress_table, on_delete="CASCADE")
+    fix_constraint(apps, schema_editor, exploit_table, "subdomain_id", subdomain_table, on_delete="CASCADE")
+    fix_constraint(apps, schema_editor, exploit_table, "endpoint_id", endpoint_table, on_delete="CASCADE")
+    fix_constraint(apps, schema_editor, exploit_table, "target_domain_id", domain_table, on_delete="CASCADE")
+    fix_constraint(apps, schema_editor, exploit_table, "scan_history_id", scanhistory_table, on_delete="CASCADE")
+
+    # SecatorRunner
+    fix_constraint(apps, schema_editor, secatorrunner_table, "scan_history_id", scanhistory_table, on_delete="CASCADE")
+    fix_constraint(apps, schema_editor, secatorrunner_table, "domain_id", domain_table, on_delete="CASCADE")
+
+    # Certificate
+    fix_constraint(apps, schema_editor, certificate_table, "scan_history_id", scanhistory_table, on_delete="CASCADE")
+    fix_constraint(apps, schema_editor, certificate_table, "subdomain_id", subdomain_table, on_delete="CASCADE")
+    fix_constraint(apps, schema_editor, certificate_table, "ip_address_id", ipaddress_table, on_delete="CASCADE")
+    fix_constraint(apps, schema_editor, certificate_table, "domain_id", domain_table, on_delete="CASCADE")
+
+
+def reverse_fix_all_constraints(apps, schema_editor):
+    """Reverse: Change all on_delete constraints back to their original values."""
+    # Get actual table names from Django metadata
+    scanhistory_table = get_table_name(apps, "startScan", "ScanHistory")
+    subdomain_table = get_table_name(apps, "startScan", "Subdomain")
+    subscan_table = get_table_name(apps, "startScan", "SubScan")
+    endpoint_table = get_table_name(apps, "startScan", "EndPoint")
+    vulnerability_table = get_table_name(apps, "startScan", "Vulnerability")
+    scanactivity_table = get_table_name(apps, "startScan", "ScanActivity")
+    command_table = get_table_name(apps, "startScan", "Command")
+    ipaddress_table = get_table_name(apps, "startScan", "IpAddress")
+    port_table = get_table_name(apps, "startScan", "Port")
+    metafinderdocument_table = get_table_name(apps, "startScan", "MetaFinderDocument")
+    employee_table = get_table_name(apps, "startScan", "Employee")
+    exploit_table = get_table_name(apps, "startScan", "Exploit")
+    secatorrunner_table = get_table_name(apps, "startScan", "SecatorRunner")
+    certificate_table = get_table_name(apps, "startScan", "Certificate")
+    enginetype_table = get_table_name(apps, "scanEngine", "EngineType")
+    user_table = get_table_name(apps, "auth", "User")
+    domain_table = get_table_name(apps, "targetApp", "Domain")
+    countryiso_table = get_table_name(apps, "startScan", "CountryISO")
+
+    # ScanHistory
+    fix_constraint(apps, schema_editor, scanhistory_table, "domain_id", domain_table, on_delete="CASCADE")
+    fix_constraint(apps, schema_editor, scanhistory_table, "scan_type_id", enginetype_table, on_delete="CASCADE")
+    fix_constraint(apps, schema_editor, scanhistory_table, "initiated_by_id", user_table, on_delete="CASCADE")
+    fix_constraint(apps, schema_editor, scanhistory_table, "aborted_by_id", user_table, on_delete="SET NULL")
+
+    # Subdomain
+    fix_constraint(apps, schema_editor, subdomain_table, "scan_history_id", scanhistory_table, on_delete="CASCADE")
+    fix_constraint(apps, schema_editor, subdomain_table, "target_domain_id", domain_table, on_delete="CASCADE")
+
+    # SubScan
+    fix_constraint(apps, schema_editor, subscan_table, "engine_id", enginetype_table, on_delete="CASCADE")
+
+    # EndPoint
+    fix_constraint(apps, schema_editor, endpoint_table, "scan_history_id", scanhistory_table, on_delete="CASCADE")
+    fix_constraint(apps, schema_editor, endpoint_table, "target_domain_id", domain_table, on_delete="CASCADE")
+    fix_constraint(apps, schema_editor, endpoint_table, "subdomain_id", subdomain_table, on_delete="CASCADE")
+
+    # Vulnerability
+    fix_constraint(apps, schema_editor, vulnerability_table, "scan_history_id", scanhistory_table, on_delete="CASCADE")
+    fix_constraint(apps, schema_editor, vulnerability_table, "subdomain_id", subdomain_table, on_delete="CASCADE")
+    fix_constraint(apps, schema_editor, vulnerability_table, "endpoint_id", endpoint_table, on_delete="CASCADE")
+    fix_constraint(apps, schema_editor, vulnerability_table, "target_domain_id", domain_table, on_delete="CASCADE")
+
+    # ScanActivity
+    fix_constraint(apps, schema_editor, scanactivity_table, "scan_of_id", scanhistory_table, on_delete="CASCADE")
+
+    # Command
+    fix_constraint(apps, schema_editor, command_table, "scan_history_id", scanhistory_table, on_delete="CASCADE")
+    fix_constraint(apps, schema_editor, command_table, "activity_id", scanactivity_table, on_delete="CASCADE")
+
+    # IpAddress
+    fix_constraint(apps, schema_editor, ipaddress_table, "geo_iso_id", countryiso_table, on_delete="CASCADE")
+
+    # Port
+    fix_constraint(apps, schema_editor, port_table, "ip_address_id", ipaddress_table, on_delete="CASCADE")
+
+    # MetaFinderDocument
+    fix_constraint(
+        apps, schema_editor, metafinderdocument_table, "scan_history_id", scanhistory_table, on_delete="CASCADE"
+    )
+    fix_constraint(apps, schema_editor, metafinderdocument_table, "target_domain_id", domain_table, on_delete="CASCADE")
+    fix_constraint(apps, schema_editor, metafinderdocument_table, "subdomain_id", subdomain_table, on_delete="CASCADE")
+
+    # Employee
+    fix_constraint(apps, schema_editor, employee_table, "scan_history_id", scanhistory_table, on_delete="CASCADE")
+    fix_constraint(apps, schema_editor, employee_table, "target_domain_id", domain_table, on_delete="CASCADE")
+    fix_constraint(apps, schema_editor, employee_table, "subdomain_id", subdomain_table, on_delete="CASCADE")
+    fix_constraint(apps, schema_editor, employee_table, "endpoint_id", endpoint_table, on_delete="CASCADE")
+
+    # Exploit
+    fix_constraint(apps, schema_editor, exploit_table, "ip_address_id", ipaddress_table, on_delete="CASCADE")
+    fix_constraint(apps, schema_editor, exploit_table, "subdomain_id", subdomain_table, on_delete="CASCADE")
+    fix_constraint(apps, schema_editor, exploit_table, "endpoint_id", endpoint_table, on_delete="CASCADE")
+    fix_constraint(apps, schema_editor, exploit_table, "target_domain_id", domain_table, on_delete="CASCADE")
+    fix_constraint(apps, schema_editor, exploit_table, "scan_history_id", scanhistory_table, on_delete="CASCADE")
+
+    # SecatorRunner
+    fix_constraint(apps, schema_editor, secatorrunner_table, "scan_history_id", scanhistory_table, on_delete="CASCADE")
+    fix_constraint(apps, schema_editor, secatorrunner_table, "domain_id", domain_table, on_delete="CASCADE")
+
+    # Certificate
+    fix_constraint(apps, schema_editor, certificate_table, "scan_history_id", scanhistory_table, on_delete="CASCADE")
+    fix_constraint(apps, schema_editor, certificate_table, "subdomain_id", subdomain_table, on_delete="CASCADE")
+    fix_constraint(apps, schema_editor, certificate_table, "ip_address_id", ipaddress_table, on_delete="CASCADE")
+    fix_constraint(apps, schema_editor, certificate_table, "domain_id", domain_table, on_delete="CASCADE")
+
+
+class Migration(migrations.Migration):
+    atomic = True
+
+    dependencies = [
+        ("startScan", "0084_add_status_to_secator_runner"),
+    ]
+
+    operations = [
+        migrations.RunPython(
+            fix_all_constraints,
+            reverse_fix_all_constraints,
+        ),
+    ]
