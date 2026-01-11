@@ -1,6 +1,6 @@
 """
 Scan orchestration service - highest layer.
-Coordinates scan execution using Secator or legacy engines.
+Coordinates scan execution using Secator.
 """
 
 from typing import Any, Dict, List

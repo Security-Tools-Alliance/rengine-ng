@@ -1440,152 +1440,34 @@ class StartScan(APIView):
             url_filter = ""
             scan_existing_elements = False
 
-        # Validate required parameters
-        if not domain_id:
-            return Response({"status": False, "error": "domain_id is required"}, status=400)
+        # Call shared service to start scan
+        from reNgine.secator.service import start_secator_scan
 
-        # Verify domain exists
-        try:
-            domain = Domain.objects.get(id=domain_id)
-        except Domain.DoesNotExist:
-            return Response({"status": False, "error": f"Domain with ID {domain_id} not found"}, status=404)
+        result = start_secator_scan(
+            domain_id=domain_id,
+            user_id=request.user.id,
+            execution_mode=execution_mode,
+            workflow_id=workflow_id,
+            task_ids=task_ids,
+            secator_scan_type=secator_scan_type,
+            secator_scan_id=secator_scan_id,
+            imported_subdomains=imported_subdomains,
+            out_of_scope_subdomains=out_of_scope_subdomains,
+            url_filter=url_filter,
+            scan_existing_elements=scan_existing_elements,
+            secator_config=secator_config,
+            speed_profile=speed_profile,
+            stealth_profile=stealth_profile,
+            expert_mode=expert_mode,
+        )
 
-        # Ensure lists are properly formatted
-        if isinstance(imported_subdomains, str):
-            imported_subdomains = [s.strip() for s in imported_subdomains.split("\n") if s.strip()]
-        if isinstance(out_of_scope_subdomains, str):
-            out_of_scope_subdomains = [s.strip() for s in out_of_scope_subdomains.split("\n") if s.strip()]
-
-        try:
-            # Handle existing SecatorScan ID
-            if secator_scan_id:
-                # Use existing SecatorScan - this is a special case for API
-                try:
-                    secator_scan = SecatorScan.objects.get(id=secator_scan_id)
-                except SecatorScan.DoesNotExist:
-                    return Response(
-                        {"status": False, "error": f"SecatorScan with ID {secator_scan_id} not found"}, status=404
-                    )
-
-                # Use the existing scan configuration
-                from reNgine.services.repositories.scan_repository import ScanRepository
-                from reNgine.tasks.scan import initiate_scan
-
-                # Create scan object
-                scan_repo = ScanRepository()
-                scan_history_id = scan_repo.create_scan(
-                    host_id=domain_id,
-                    engine_id=1,
-                    initiated_by_id=request.user.id,
-                )
-                scan = ScanHistory.objects.get(pk=scan_history_id)
-
-                # Prepare kwargs for initiate_scan
-                kwargs = {
-                    "scan_history_id": scan.id,
-                    "domain_id": domain_id,
-                    "secator_scan_id": secator_scan.id,
-                    "imported_subdomains": imported_subdomains,
-                    "out_of_scope_subdomains": out_of_scope_subdomains,
-                    "url_filter": url_filter,
-                    "initiated_by_id": request.user.id,
-                    "scan_existing_elements": scan_existing_elements,
-                    "secator_config": secator_config,
-                    "speed_profile": speed_profile,
-                    "stealth_profile": stealth_profile,
-                    "expert_mode": expert_mode,
-                }
-
-                # Start the scan
-                result = initiate_scan(**kwargs)
-                scan.save()
-
-                if result.get("status") == "success":
-                    return Response(
-                        {
-                            "status": True,
-                            "scan_id": scan.id,
-                            "scan_status": scan.scan_status,
-                            "domain_id": domain.id,
-                            "domain_name": domain.name,
-                            "secator_scan_id": secator_scan.id,
-                            "execution_mode": "scan",
-                            "message": f"Scan started successfully for {domain.name}",
-                        }
-                    )
-                else:
-                    return Response({"status": False, "error": result.get("error", "Unknown error")}, status=400)
-
-            elif execution_mode:
-                # Create scan object first (synchronously)
-                from reNgine.services.repositories.scan_repository import ScanRepository
-
-                scan_repo = ScanRepository()
-                scan_history_id = scan_repo.create_scan(
-                    host_id=domain_id,
-                    engine_id=1,  # Fixed engine ID for all Secator scans
-                    initiated_by_id=request.user.id,
-                )
-                scan = ScanHistory.objects.get(pk=scan_history_id)
-
-                # Launch scan asynchronously in a separate thread
-                # Secator will handle Celery tasks internally
-                import threading
-
-                from reNgine.tasks.scan import initiate_secator_scan
-
-                def launch_scan():
-                    try:
-                        initiate_secator_scan(
-                            scan_history_id=scan.id,
-                            domain_id=domain_id,
-                            execution_mode=execution_mode,
-                            workflow_id=workflow_id,
-                            task_ids=task_ids,
-                            secator_scan_type=secator_scan_type,
-                            imported_subdomains=imported_subdomains,
-                            out_of_scope_subdomains=out_of_scope_subdomains,
-                            url_filter=url_filter,
-                            scan_existing_elements=scan_existing_elements,
-                            secator_config=secator_config,
-                            speed_profile=speed_profile,
-                            stealth_profile=stealth_profile,
-                            expert_mode=expert_mode,
-                            initiated_by_id=request.user.id,
-                        )
-                        # Do not save scan here - status is managed by Secator hooks via SecatorRunnerUpdate API
-                        # Saving would overwrite the status updated by the hooks
-                    except Exception as e:
-                        logger.error(f"Error in scan thread: {str(e)}")
-                        # Refresh from DB to get current state before modifying
-                        scan.refresh_from_db()
-                        scan.scan_status = -1  # FAILED
-                        scan.save()
-
-                scan_thread = threading.Thread(target=launch_scan, daemon=True)
-                scan_thread.start()
-
-                # Return immediately without waiting for scan completion
-                return Response(
-                    {
-                        "status": True,
-                        "scan_id": scan.id,
-                        "scan_status": scan.scan_status,
-                        "domain_id": domain.id,
-                        "domain_name": domain.name,
-                        "execution_mode": execution_mode,
-                        "message": f"Scan started successfully for {domain.name}",
-                    }
-                )
-            else:
-                return Response(
-                    {"status": False, "error": "Must provide either secator_scan_id or execution_mode with parameters"},
-                    status=400,
-                )
-
-        except Exception as e:
-            logger.error(f"Error starting scan: {str(e)}")
-            return Response({"status": False, "error": "Failed to start scan due to a server error."}, status=500)
+        # Convert result to Response
+        # Use explicit http_status from result, with fallback for backward compatibility
+        http_status = result.get("http_status")
+        if http_status is None:
+            # Backward compatibility / safety net: derive a status code if not provided
+            http_status = 200 if result.get("status") else 500
+        return Response(result, status=http_status)
 
 
 class InitiateSubTask(APIView):
@@ -1706,7 +1588,7 @@ class InitiateSubTask(APIView):
                 }
 
                 # Call SecatorRunner
-                from reNgine.services.scan.scan_orchestrator import ScanOrchestrator
+                from reNgine.secator import ScanOrchestrator
 
                 orchestrator = ScanOrchestrator()
                 result = orchestrator.execute_scan(

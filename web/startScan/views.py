@@ -486,40 +486,32 @@ def start_scan_ui(request, slug, domain_id):
             messages.error(request, "Please select an execution mode.")
             return redirect("start_scan", slug=slug, domain_id=domain_id)
 
-        # Use common scan initiation logic
-        from reNgine.tasks.scan import start_secator_scan
+        # Call shared service to start scan
+        from reNgine.secator.service import start_secator_scan
 
         result = start_secator_scan(
             domain_id=domain.id,
-            execution_mode=execution_mode,
             user_id=request.user.id,
-            workflow_id=api_data.get("workflow_id") if execution_mode == "workflow" else None,
+            execution_mode=execution_mode,
+            workflow_id=safe_int_cast(api_data.get("workflow_id")) if execution_mode == "workflow" else None,
             task_ids=api_data.get("task_ids") if execution_mode == "tasks" else None,
             secator_scan_type=api_data.get("secator_scan_type") if execution_mode == "scan" else None,
-            imported_subdomains=api_data["imported_subdomains"],
-            out_of_scope_subdomains=api_data["out_of_scope_subdomains"],
-            url_filter=api_data["url_filter"],
-            scan_existing_elements=api_data["scan_existing_elements"],
-            secator_config=api_data["secator_config"],
-            speed_profile=api_data["speed_profile"],
-            stealth_profile=api_data["stealth_profile"],
-            expert_mode=api_data["expert_mode"],
-            scan_type="internet",
+            imported_subdomains=subdomains_in,
+            out_of_scope_subdomains=subdomains_out,
+            url_filter=filter_path,
+            scan_existing_elements=scan_existing_elements,
+            secator_config=secator_config,
+            speed_profile=speed_profile,
+            stealth_profile=stealth_profile,
+            expert_mode=expert_mode,
         )
 
         # Check result
-        if result.get("status") == "success":
-            response_status = 200
-            response_data = {"status": True, "scan_id": result.get("scan_id")}
-        else:
-            response_status = 400
-            response_data = {"status": False, "error": result.get("error", "Unknown error")}
-
-        if response_status == 200 and response_data.get("status"):
+        if result.get("status"):
             messages.add_message(request, messages.INFO, f"Scan Started for {domain.name}")
             return HttpResponseRedirect(reverse("scan_history", kwargs={"slug": slug}))
         else:
-            error_msg = response_data.get("error", "Unknown error")
+            error_msg = result.get("error", "Unknown error")
             messages.add_message(request, messages.ERROR, f"Failed to start scan: {error_msg}")
             return HttpResponseRedirect(reverse("start_scan", kwargs={"slug": slug, "domain_id": domain_id}))
 
@@ -1032,7 +1024,7 @@ def start_organization_scan(request, id, slug):
         return JsonResponse({"html": html})
 
     if request.method == "POST":
-        # Collect parameters (même logique que start_scan_ui)
+        # Collect parameters (same logic as start_scan_ui)
         execution_mode = request.POST.get("execution_mode")
         scan_existing_elements = request.POST.get("scan_existing_elements") == "true"
 
@@ -1072,30 +1064,31 @@ def start_organization_scan(request, id, slug):
             elif execution_mode == "scan":
                 api_data["secator_scan_type"] = request.POST.get("secator_scan_type")
 
-            # Call API
-            import json
+            # Call shared service to start scan
+            from reNgine.secator.service import start_secator_scan
 
-            from django.http import HttpRequest
-            from rest_framework.request import Request
+            result = start_secator_scan(
+                domain_id=domain.id,
+                user_id=request.user.id,
+                execution_mode=execution_mode,
+                workflow_id=safe_int_cast(api_data.get("workflow_id")) if execution_mode == "workflow" else None,
+                task_ids=api_data.get("task_ids") if execution_mode == "tasks" else None,
+                secator_scan_type=api_data.get("secator_scan_type") if execution_mode == "scan" else None,
+                imported_subdomains=api_data.get("imported_subdomains", []),
+                out_of_scope_subdomains=api_data.get("out_of_scope_subdomains", []),
+                url_filter=api_data.get("url_filter", ""),
+                scan_existing_elements=api_data.get("scan_existing_elements", False),
+                secator_config=api_data.get("secator_config", {}),
+                speed_profile=api_data.get("speed_profile"),
+                stealth_profile=api_data.get("stealth_profile"),
+                expert_mode=api_data.get("expert_mode", False),
+            )
 
-            from api.views import StartScan
-
-            api_view = StartScan()
-            mock_request = HttpRequest()
-            mock_request.method = "POST"
-            mock_request.user = request.user
-            mock_request._body = json.dumps(api_data).encode()
-            mock_request.content_type = "application/json"
-            api_request = Request(mock_request)
-            api_request._data = api_data
-
-            response = api_view.post(api_request)
-
-            if response.status_code == 200 and response.data.get("status"):
+            if result.get("status"):
                 scan_count += 1
             else:
                 failed_count += 1
-                logger.error(f"Failed to start scan for {domain.name}: {response.data.get('error')}")
+                logger.error(f"Failed to start scan for {domain.name}: {result.get('error')}")
 
         if scan_count > 0:
             messages.add_message(

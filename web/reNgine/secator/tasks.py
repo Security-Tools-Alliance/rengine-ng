@@ -7,113 +7,6 @@ from targetApp.models import Domain
 logger = get_task_logger(__name__)
 
 
-def start_secator_scan(
-    domain_id,
-    execution_mode,
-    user_id,
-    workflow_id=None,
-    task_ids=None,
-    secator_scan_type=None,
-    imported_subdomains=None,
-    out_of_scope_subdomains=None,
-    url_filter="",
-    scan_existing_elements=False,
-    secator_config=None,
-    speed_profile=None,
-    stealth_profile=None,
-    expert_mode=False,
-    scan_type="internet",
-):
-    """Start a Secator scan with common logic for both UI and API.
-
-    Args:
-        domain_id (int): ID of the target domain
-        execution_mode (str): workflow|tasks|scan
-        user_id (int): ID of the user initiating the scan
-        workflow_id (int): Required for workflow mode
-        task_ids (list): Required for tasks mode
-        secator_scan_type (str): Required for scan mode
-        imported_subdomains (list): List of subdomains to import
-        out_of_scope_subdomains (list): List of subdomains to exclude
-        url_filter (str): URL filter/path to scan
-        scan_existing_elements (bool): Whether to scan existing elements
-        secator_config (dict): Configuration parameters
-        speed_profile (str): Speed profile
-        stealth_profile (str): Stealth profile
-        expert_mode (bool): Enable expert mode
-        scan_type (str): Scan type
-
-    Returns:
-        dict: Result with status, scan_id, and error message if any
-    """
-    try:
-        from reNgine.services.repositories.scan_repository import ScanRepository
-
-        # Validate domain exists
-        try:
-            domain = Domain.objects.get(id=domain_id)
-        except Domain.DoesNotExist:
-            return {"status": "error", "error": f"Domain with ID {domain_id} not found"}
-
-        # Ensure lists are properly formatted
-        if imported_subdomains is None:
-            imported_subdomains = []
-        if out_of_scope_subdomains is None:
-            out_of_scope_subdomains = []
-        if secator_config is None:
-            secator_config = {}
-
-        # Create scan object (always use engine_id=1 for Secator)
-        scan_repo = ScanRepository()
-        scan_history_id = scan_repo.create_scan(
-            host_id=domain_id,
-            engine_id=1,  # Fixed engine ID for all Secator scans
-            initiated_by_id=user_id,
-        )
-        scan = ScanHistory.objects.get(pk=scan_history_id)
-
-        # Start the scan directly with parameters
-        result = initiate_secator_scan(
-            scan_history_id=scan.id,
-            domain_id=domain_id,
-            execution_mode=execution_mode,
-            workflow_id=workflow_id,
-            task_ids=task_ids,
-            secator_scan_type=secator_scan_type,
-            imported_subdomains=imported_subdomains,
-            out_of_scope_subdomains=out_of_scope_subdomains,
-            url_filter=url_filter,
-            scan_existing_elements=scan_existing_elements,
-            secator_config=secator_config,
-            speed_profile=speed_profile,
-            stealth_profile=stealth_profile,
-            expert_mode=expert_mode,
-        )
-        # Do not save scan here - status is managed by Secator hooks via SecatorRunnerUpdate API
-        # Saving would overwrite the status updated by the hooks
-        # Refresh from DB to get current status for return value
-        scan.refresh_from_db()
-
-        # Check result
-        if result.get("status") == "success":
-            return {
-                "status": "success",
-                "scan_id": scan.id,
-                "scan_status": scan.scan_status,
-                "domain_id": domain.id,
-                "domain_name": domain.name,
-                "secator_scan_id": None,
-                "execution_mode": execution_mode,
-                "message": f"Scan started successfully for {domain.name}",
-            }
-        else:
-            return {"status": "error", "error": result.get("error", "Unknown error")}
-
-    except Exception as e:
-        logger.error(f"Error starting Secator scan: {str(e)}")
-        return {"status": "error", "error": str(e)}
-
-
 def initiate_secator_scan(
     scan_history_id,
     domain_id,
@@ -152,7 +45,7 @@ def initiate_secator_scan(
         expert_mode (bool): Enable expert mode. Default: False.
     """
     try:
-        from reNgine.services.scan.scan_orchestrator import ScanOrchestrator
+        from reNgine.secator.orchestrator import ScanOrchestrator
 
         domain = Domain.objects.get(id=domain_id)
         scan_history = ScanHistory.objects.get(id=scan_history_id)
@@ -160,7 +53,7 @@ def initiate_secator_scan(
         scan_history.save()
 
         # Build enriched targets list
-        targets = _build_enriched_targets(
+        targets = build_enriched_targets(
             domain=domain,
             imported_subdomains=imported_subdomains or [],
             out_of_scope_subdomains=out_of_scope_subdomains or [],
@@ -263,7 +156,7 @@ def initiate_secator_scan(
         return {"status": "error", "error": str(e)}
 
 
-def _build_enriched_targets(
+def build_enriched_targets(
     domain,
     imported_subdomains=None,
     out_of_scope_subdomains=None,

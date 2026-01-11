@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch
 from django.test import override_settings
 from django.utils import timezone
 
-from reNgine.tasks.scan import _build_enriched_targets, initiate_scan
+from reNgine.secator import build_enriched_targets, initiate_secator_scan
 from startScan.models import Domain, Subdomain
 from utils.test_base import BaseTestCase
 
@@ -41,16 +41,16 @@ class TestSecatorTasks(BaseTestCase):
             name=f"sub2.{self.domain_name}", target_domain=self.domain, scan_history=self.scan_history
         )
 
-    def test_initiate_scan_exists(self):
-        """Test that initiate_scan function exists and is no longer a Celery task."""
-        self.assertTrue(callable(initiate_scan))
+    def test_initiate_secator_scan_exists(self):
+        """Test that initiate_secator_scan function exists and is no longer a Celery task."""
+        self.assertTrue(callable(initiate_secator_scan))
         # Verify it's not a Celery task anymore
-        self.assertFalse(hasattr(initiate_scan, "delay"))
-        self.assertFalse(hasattr(initiate_scan, "apply_async"))
+        self.assertFalse(hasattr(initiate_secator_scan, "delay"))
+        self.assertFalse(hasattr(initiate_secator_scan, "apply_async"))
 
     def test_build_enriched_targets_basic(self):
         """Test building enriched targets with basic domain only."""
-        targets = _build_enriched_targets(
+        targets = build_enriched_targets(
             domain=self.domain,
             imported_subdomains=[],
             out_of_scope_subdomains=[],
@@ -65,7 +65,7 @@ class TestSecatorTasks(BaseTestCase):
         """Test building enriched targets with imported subdomains."""
         imported_subdomains = [f"imported1.{self.domain_name}", f"imported2.{self.domain_name}"]
 
-        targets = _build_enriched_targets(
+        targets = build_enriched_targets(
             domain=self.domain,
             imported_subdomains=imported_subdomains,
             out_of_scope_subdomains=[],
@@ -80,7 +80,7 @@ class TestSecatorTasks(BaseTestCase):
 
     def test_build_enriched_targets_with_existing_elements(self):
         """Test building enriched targets with existing elements."""
-        targets = _build_enriched_targets(
+        targets = build_enriched_targets(
             domain=self.domain,
             imported_subdomains=[],
             out_of_scope_subdomains=[],
@@ -96,7 +96,7 @@ class TestSecatorTasks(BaseTestCase):
 
     def test_build_enriched_targets_with_url_filter(self):
         """Test building enriched targets with URL filter."""
-        targets = _build_enriched_targets(
+        targets = build_enriched_targets(
             domain=self.domain,
             imported_subdomains=[f"imported1.{self.domain_name}"],
             out_of_scope_subdomains=[],
@@ -113,7 +113,7 @@ class TestSecatorTasks(BaseTestCase):
         imported_subdomains = [f"imported1.{self.domain_name}", f"imported2.{self.domain_name}"]
         out_of_scope_subdomains = [f"imported2.{self.domain_name}"]
 
-        targets = _build_enriched_targets(
+        targets = build_enriched_targets(
             domain=self.domain,
             imported_subdomains=imported_subdomains,
             out_of_scope_subdomains=out_of_scope_subdomains,
@@ -131,7 +131,7 @@ class TestSecatorTasks(BaseTestCase):
         # Create a subdomain that matches an imported one
         imported_subdomains = [f"sub1.{self.domain_name}"]  # This already exists
 
-        targets = _build_enriched_targets(
+        targets = build_enriched_targets(
             domain=self.domain,
             imported_subdomains=imported_subdomains,
             out_of_scope_subdomains=[],
@@ -154,7 +154,7 @@ class TestSecatorTasks(BaseTestCase):
             "   ",  # Whitespace only
         ]
 
-        targets = _build_enriched_targets(
+        targets = build_enriched_targets(
             domain=self.domain,
             imported_subdomains=imported_subdomains,
             out_of_scope_subdomains=[],
@@ -168,17 +168,14 @@ class TestSecatorTasks(BaseTestCase):
         self.assertNotIn("invalid.otherdomain.com", targets)
 
     @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
-    @patch("reNgine.services.scan.scan_orchestrator.ScanOrchestrator")
-    def test_initiate_scan_passes_parameters(self, mock_orchestrator):
-        """Test that initiate_scan passes all reNgine parameters correctly."""
-        from reNgine.tasks.scan import initiate_scan
-        from scanEngine.models import SecatorScan
+    @patch("reNgine.secator.orchestrator.ScanOrchestrator")
+    def test_initiate_secator_scan_passes_parameters(self, mock_orchestrator):
+        """Test that initiate_secator_scan passes all reNgine parameters correctly."""
+        from scanEngine.models import SecatorWorkflow
 
-        # Create mock SecatorScan
-        mock_secator_scan = Mock(spec=SecatorScan)
-        mock_secator_scan.execution_mode = "workflow"
-        mock_secator_scan.workflow = Mock()
-        mock_secator_scan.workflow.name = "test_workflow"
+        # Create mock workflow
+        mock_workflow = Mock(spec=SecatorWorkflow)
+        mock_workflow.name = "test_workflow"
 
         mock_orchestrator.return_value.execute_scan.return_value = {"status": "success"}
 
@@ -188,13 +185,14 @@ class TestSecatorTasks(BaseTestCase):
         scan_existing_elements = True
         initiated_by_id = self.user.id
 
-        with patch("scanEngine.models.SecatorScan.objects.get", return_value=mock_secator_scan):
+        with patch("scanEngine.models.SecatorWorkflow.objects.get", return_value=mock_workflow):
             with patch("targetApp.models.Domain.objects.get", return_value=self.domain):
                 with patch("startScan.models.ScanHistory.objects.get", return_value=self.scan_history):
-                    initiate_scan(
+                    initiate_secator_scan(
                         scan_history_id=self.scan_history.id,
                         domain_id=self.domain.id,
-                        secator_scan_id=1,
+                        execution_mode="workflow",
+                        workflow_id=1,
                         imported_subdomains=imported_subdomains,
                         out_of_scope_subdomains=out_of_scope_subdomains,
                         url_filter=url_filter,
@@ -217,27 +215,25 @@ class TestSecatorTasks(BaseTestCase):
                     self.assertEqual(rengine_context["initiated_by_id"], initiated_by_id)
 
     @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
-    @patch("reNgine.services.scan.scan_orchestrator.ScanOrchestrator")
-    def test_initiate_scan_with_rengine_context(self, mock_orchestrator):
-        """Test that initiate_scan creates proper reNgine context."""
-        from reNgine.tasks.scan import initiate_scan
-        from scanEngine.models import SecatorScan
+    @patch("reNgine.secator.orchestrator.ScanOrchestrator")
+    def test_initiate_secator_scan_with_rengine_context(self, mock_orchestrator):
+        """Test that initiate_secator_scan creates proper reNgine context."""
+        from scanEngine.models import SecatorWorkflow
 
-        # Create mock SecatorScan
-        mock_secator_scan = Mock(spec=SecatorScan)
-        mock_secator_scan.execution_mode = "workflow"
-        mock_secator_scan.workflow = Mock()
-        mock_secator_scan.workflow.name = "test_workflow"
+        # Create mock workflow
+        mock_workflow = Mock(spec=SecatorWorkflow)
+        mock_workflow.name = "test_workflow"
 
-        with patch("scanEngine.models.SecatorScan.objects.get", return_value=mock_secator_scan):
+        with patch("scanEngine.models.SecatorWorkflow.objects.get", return_value=mock_workflow):
             with patch("targetApp.models.Domain.objects.get", return_value=self.domain):
                 with patch("startScan.models.ScanHistory.objects.get", return_value=self.scan_history):
                     mock_orchestrator.return_value.execute_scan.return_value = {"status": "success"}
 
-                    initiate_scan(
+                    initiate_secator_scan(
                         scan_history_id=self.scan_history.id,
                         domain_id=self.domain.id,
-                        secator_scan_id=1,
+                        execution_mode="workflow",
+                        workflow_id=1,
                         imported_subdomains=[f"imported1.{self.domain_name}"],
                         out_of_scope_subdomains=[f"outofscope.{self.domain_name}"],
                         url_filter="/admin",

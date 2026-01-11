@@ -6,8 +6,8 @@ from datetime import timedelta
 
 from django.utils import timezone
 
+from reNgine.secator import SecatorProgressSync
 from reNgine.services.repositories.certificate_repository import CertificateRepository
-from reNgine.services.secator.progress_sync import SecatorProgressSync
 from startScan.models import Certificate, SecatorRunner
 from utils.test_base import BaseTestCase
 

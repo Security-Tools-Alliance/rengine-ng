@@ -113,7 +113,7 @@ class ScanHistory(models.Model):
     def get_progress(self):
         """Calculate scan progress percentage based on completed steps vs total steps."""
         from reNgine.definitions import SUCCESS_TASK
-        from reNgine.services.secator.progress_sync import SecatorProgressSync
+        from reNgine.secator import SecatorProgressSync
 
         # Check if this is a Secator scan (has SecatorRunner)
         secator_runners = SecatorRunner.objects.filter(scan_history=self)
@@ -177,7 +177,7 @@ class ScanHistory(models.Model):
         if self.is_legacy_scan:
             return self.scan_status
         # For Secator scans, map status string to code
-        from reNgine.services.secator.progress_sync import SecatorProgressSync
+        from reNgine.secator import SecatorProgressSync
 
         status_str = self.status_string
         if isinstance(status_str, str):
@@ -208,7 +208,7 @@ class ScanHistory(models.Model):
     def get_current_task(self):
         """Get the current running task name, formatted for display."""
         from reNgine.definitions import RUNNING_TASK
-        from reNgine.services.secator.progress_sync import SecatorProgressSync
+        from reNgine.secator import SecatorProgressSync
 
         # Check if this is a Secator scan (has SecatorRunner)
         # Import here to avoid circular import
@@ -736,7 +736,7 @@ class SubScan(models.Model):
         if self.scan_history.is_legacy_scan:
             return self._get_status_field_value()
         # For Secator scans, map status string to code
-        from reNgine.services.secator.progress_sync import SecatorProgressSync
+        from reNgine.secator import SecatorProgressSync
 
         status_str = self.status_string
         if isinstance(status_str, str):
@@ -1181,7 +1181,7 @@ class ScanActivity(models.Model):
         if self.scan_of.is_legacy_scan:
             return self._get_status_field_value()
         # For Secator scans, map status string to code
-        from reNgine.services.secator.progress_sync import SecatorProgressSync
+        from reNgine.secator import SecatorProgressSync
 
         status_str = self.status_string
         if isinstance(status_str, str):

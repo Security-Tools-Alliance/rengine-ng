@@ -54,6 +54,7 @@ from .test_secator_api import (
     TestSecatorRunnerCreate,
     TestSecatorRunnerUpdate,
 )
+from .test_start_scan import TestStartScanAPI
 from .test_subdomain import (
     TestDeleteSubdomain,
     TestInterestingSubdomainViewSet,
@@ -125,6 +126,8 @@ __all__ = [
     "TestScanStatus",
     "TestStopScan",
     "TestVisualiseData",
+    # test_start_scan
+    "TestStartScanAPI",
     # test_search
     "TestSearchHistoryView",
     "TestUniversalSearch",

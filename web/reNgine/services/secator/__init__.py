@@ -1,3 +1,0 @@
-"""
-Secator services package.
-"""

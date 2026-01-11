@@ -581,7 +581,7 @@ class SecatorRunnerSerializer(serializers.ModelSerializer):
 
     def get_status_code(self, obj):
         """Get reNgine status code from Secator status."""
-        from reNgine.services.secator.progress_sync import SecatorProgressSync
+        from reNgine.secator import SecatorProgressSync
 
         status = self.get_status(obj)
         return SecatorProgressSync.map_secator_status_to_rengine(status)

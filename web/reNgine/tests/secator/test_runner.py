@@ -123,10 +123,16 @@ tasks:
             scan_type="internet",
         )
 
-        result = self.runner.run_workflow(
-            workflow_name="Workflow Without Alias", targets=["example.com"], scan_history_id=1, domain_id=1
-        )
+        # Mock _execute_runner to avoid domain/scan_history lookup errors
+        with patch.object(self.runner, "_execute_runner") as mock_execute:
+            # The workflow should load successfully, but we mock execution
+            # to test that workflows without alias can still be loaded by name
+            mock_execute.return_value = {"status": "success", "result": "test_result"}
 
-        # Should return error status
-        self.assertEqual(result["status"], "error")
-        self.assertIn("Could not load workflow template", result["error"])
+            result = self.runner.run_workflow(
+                workflow_name="Workflow Without Alias", targets=["example.com"], scan_history_id=1, domain_id=1
+            )
+
+            # Should succeed since workflow can be loaded by name (alias is optional)
+            self.assertEqual(result["status"], "success")
+            mock_execute.assert_called_once()

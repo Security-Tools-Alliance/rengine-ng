@@ -17,7 +17,7 @@ logger = logging.getLogger("websocket")
 
 def get_runner_status_code(runner: SecatorRunner) -> int:
     """Get reNgine status code from Secator runner."""
-    from reNgine.services.secator.progress_sync import SecatorProgressSync
+    from reNgine.secator import SecatorProgressSync
 
     if runner.runner_data:
         status = runner.runner_data.get("status", "PENDING")

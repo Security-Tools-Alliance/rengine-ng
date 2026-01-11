@@ -18,6 +18,7 @@ The following legacy tasks have been removed as Secator now handles all scanning
 For all scanning needs, use Secator tasks via initiate_secator_scan.
 """
 
+from reNgine.secator import initiate_secator_scan
 from reNgine.tasks.geo import geo_localize, geo_localize_batch
 from reNgine.tasks.llm import llm_vulnerability_report
 from reNgine.tasks.notification import (
@@ -27,7 +28,6 @@ from reNgine.tasks.notification import (
     send_scan_notif,
     send_task_notif,
 )
-from reNgine.tasks.scan import initiate_secator_scan
 
 
 # Export all tasks
