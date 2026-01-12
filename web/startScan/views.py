@@ -20,7 +20,7 @@ from rolepermissions.decorators import has_permission_decorator
 from weasyprint import CSS, HTML
 
 from api.serializers import IpSerializer
-from reNgine.core.data import safe_int_cast
+from reNgine.core.data import safe_bool_cast, safe_int_cast
 from reNgine.definitions import (
     FOUR_OH_FOUR_URL,
     PERM_INITATE_SCANS_SUBSCANS,
@@ -211,7 +211,7 @@ def scan_logs_view(request, slug):
     else:
         queryset = Command.objects.filter(
             activity__id=activity_id,
-            activity__scan_history__domain__project__slug=slug,
+            activity__scan_of__domain__project__slug=slug,
         )
 
     # Exclude PENDING status by default unless include_pending is true
@@ -449,7 +449,7 @@ def start_scan_ui(request, slug, domain_id):
         stealth_profile = request.POST.get("stealth_profile")
         general_profile = request.POST.get("general_profile")
         network_profile = request.POST.get("network_profile")
-        expert_mode = request.POST.get("expert_mode") in ["true", "on", "1", True]
+        expert_mode = safe_bool_cast(request.POST.get("expert_mode"))
 
         # Prepare API payload
         api_data = {
@@ -1046,7 +1046,7 @@ def start_organization_scan(request, id, slug):
         stealth_profile = request.POST.get("stealth_profile")
         general_profile = request.POST.get("general_profile")
         network_profile = request.POST.get("network_profile")
-        expert_mode = request.POST.get("expert_mode") == "true"
+        expert_mode = safe_bool_cast(request.POST.get("expert_mode"))
 
         domain_list = organization.get_domains()
         scan_count = 0

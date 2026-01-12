@@ -268,6 +268,160 @@ const connectScanStatusWebSocket = function(scanId, projectSlug, options) {
 };
 
 /**
+ * Update command outputs in the logs modal in real-time
+ * @param {object} data - Update data from WebSocket with commands array
+ */
+const updateCommandOutputs = function(data) {
+    if (!data || !data.commands || !Array.isArray(data.commands) || data.commands.length === 0) {
+        return;
+    }
+    
+    // Check if the logs modal is open
+    const modal = document.getElementById('modal_xl_scroll_dialog');
+    if (!modal) {
+        return;
+    }
+    
+    // Check if modal is visible (Bootstrap adds 'show' class and removes 'display: none')
+    const isModalOpen = modal.classList.contains('show') && 
+                       (typeof $ !== 'undefined' ? $('#modal_xl_scroll_dialog').is(':visible') : 
+                        window.getComputedStyle(modal).display !== 'none');
+    
+    if (!isModalOpen) {
+        return;
+    }
+    
+    // Find the modal content container
+    const modalContent = document.getElementById('xl-modal-content');
+    if (!modalContent) {
+        return;
+    }
+
+    /**
+     * Decide whether we should auto-scroll a specific output container
+     * based on the user's current scroll position in that container.
+     *
+     * We track "auto-scroll enabled" per container via a data attribute
+     * so that scrolling in one container does not affect others.
+     *
+     * @param {HTMLElement} container - The output container being updated
+     * @returns {boolean} - true if we should auto-scroll this container
+     */
+    const shouldAutoScrollContainer = function(container) {
+        if (!container) {
+            return false;
+        }
+
+        const scrollTop = container.scrollTop;
+        const scrollHeight = container.scrollHeight;
+        const clientHeight = container.clientHeight;
+
+        // Consider "near bottom" if within 100px of bottom
+        const nearBottom = (scrollHeight - scrollTop - clientHeight) < 100;
+
+        // Persist per-container preference: if user is near bottom, keep auto-scroll on;
+        // if they scroll up, we stop auto-scrolling for this container.
+        if (nearBottom) {
+            container.dataset.autoScroll = 'true';
+        } else {
+            // If user scrolled away from bottom, disable auto-scroll
+            // But initialize to true on first check if not yet set
+            if (container.dataset.autoScroll === undefined) {
+                container.dataset.autoScroll = 'true';
+            } else {
+                container.dataset.autoScroll = 'false';
+            }
+        }
+
+        return container.dataset.autoScroll === 'true';
+    };
+
+    /**
+     * Auto-scroll a specific output container if appropriate.
+     *
+     * @param {HTMLElement} container - The output container being updated
+     */
+    const maybeAutoScrollContainer = function(container) {
+        if (!container) {
+            return;
+        }
+
+        if (shouldAutoScrollContainer(container)) {
+            container.scrollTop = container.scrollHeight;
+        }
+    };
+    
+    // Filter commands by activity context if modal is opened for specific activity
+    let commandsToUpdate = data.commands;
+    if (window.currentLogsModalContext) {
+        const context = window.currentLogsModalContext;
+        commandsToUpdate = data.commands.filter(function(command) {
+            // Filter by activity_id if available
+            if (context.activity_id && command.activity_id) {
+                return command.activity_id === context.activity_id;
+            }
+            // Filter by runner_id if available
+            if (context.runner_id && command.runner_id) {
+                return command.runner_id === context.runner_id;
+            }
+            // If no filter matches, include all commands
+            return true;
+        });
+    }
+    
+    // Update each command output
+    commandsToUpdate.forEach(function(command) {
+        if (!command.id) {
+            return;
+        }
+        
+        // Find the command element by data-command-id
+        const commandElement = modalContent.querySelector('[data-command-id="' + command.id + '"]');
+        if (!commandElement) {
+            // Command doesn't exist in DOM yet (newly created)
+            // Could optionally add it dynamically, but for now we skip
+            return;
+        }
+        
+        // Find the output pre element
+        const outputElement = commandElement.querySelector('.command-output');
+        if (!outputElement) {
+            return;
+        }
+        
+        // Skip if command is not running (has end_time and status is not RUNNING)
+        if (command.end_time && command.status !== 'RUNNING') {
+            return;
+        }
+        
+        // Get formatted output or fallback to raw output
+        let outputHtml = '';
+        if (command.formatted_output && command.formatted_output.formatted) {
+            outputHtml = command.formatted_output.formatted;
+        } else if (command.output) {
+            // Escape HTML if no formatted output
+            const div = document.createElement('div');
+            div.textContent = command.output;
+            outputHtml = div.innerHTML;
+        }
+        
+        // Track the last rendered output to avoid relying on innerHTML normalization
+        if (typeof outputElement._lastRenderedHtml === 'undefined') {
+            outputElement._lastRenderedHtml = '';
+        }
+        
+        // Update the output content only when the effective HTML changes
+        if (outputHtml !== outputElement._lastRenderedHtml) {
+            outputElement.innerHTML = outputHtml;
+            outputElement._lastRenderedHtml = outputHtml;
+            
+            // Auto-scroll this specific container if user is near its bottom
+            maybeAutoScrollContainer(outputElement);
+        }
+    });
+};
+
+/**
  * Handle scan status update from WebSocket
  * @param {object} data - Update data from WebSocket
  * @param {object} options - Update handler options
@@ -275,6 +429,11 @@ const connectScanStatusWebSocket = function(scanId, projectSlug, options) {
 const handleScanStatusUpdate = function(data, options) {
     if (!data || !data.scan_id) {
         return;
+    }
+    
+    // Update command outputs in real-time if commands are present
+    if (data.commands && Array.isArray(data.commands) && data.commands.length > 0) {
+        updateCommandOutputs(data);
     }
     
     // Always update the right sidebar if it exists (for real-time updates)
@@ -394,9 +553,9 @@ const updateScanRowInTable = function(table, data) {
                 }
                 
                 const summaryHtml = '<span class="badge badge-pills bg-info mt-1" data-toggle="tooltip" data-placement="top" title="Subdomains">' + 
-                    formatNumber(subdomainCount) + '</span>' +
+                    formatNumber(subdomainCount) + '</span> ' +
                     '<span class="badge badge-pills bg-warning mt-1" data-toggle="tooltip" data-placement="top" title="Endpoints">' + 
-                    formatNumber(endpointCount) + '</span>' +
+                    formatNumber(endpointCount) + '</span> ' +
                     '<span class="badge badge-pills bg-danger mt-1" data-toggle="tooltip" data-placement="top" title="' + 
                     escapeHtml(vulnTooltip) + '">' + formatNumber(vulnerabilityCount) + '</span>';
                 summaryCell.html(summaryHtml);
@@ -630,10 +789,15 @@ const updateScanTimeline = function(data) {
             return;
         }
         
-        // Clear existing timeline items for Secator scans (those with data-runner-id)
+        // Update existing timeline items instead of removing them
+        // This preserves Logs links and Stop buttons
+        const existingItemsMap = {};
         const existingItems = timelineList.querySelectorAll('[data-runner-id]');
         existingItems.forEach(function(item) {
-            item.remove();
+            const runnerId = item.getAttribute('data-runner-id');
+            if (runnerId) {
+                existingItemsMap[runnerId] = item;
+            }
         });
         
         // Use timeline data if available (preferred), otherwise use runners
@@ -661,17 +825,41 @@ const updateScanTimeline = function(data) {
             return timeB - timeA;
         });
         
-        // Add new timeline items
+        // Get project slug and URLs from options or global variables
+        const projectSlug = data.project_slug || (function() {
+            const urlMatch = window.location.pathname.match(/\/scan\/([^\/]+)\//);
+            return urlMatch ? urlMatch[1] : null;
+        })();
+        const stopActivityUrl = (scanStatusOptions['scan-' + data.scan_id] && scanStatusOptions['scan-' + data.scan_id].stopActivityUrl) || 
+                                window.scanStatusApiUrls?.stopActivityUrl || 
+                                '/api/stop-activity/';
+        
+        // Update or add timeline items
         itemsToRender.forEach(function(item) {
-            const listItem = document.createElement('li');
-            listItem.setAttribute('data-runner-id', item.id);
+            let listItem = existingItemsMap[item.id];
+            const isNew = !listItem;
+            
+            if (isNew) {
+                listItem = document.createElement('li');
+                listItem.setAttribute('data-runner-id', item.id);
+                if (item.activity_id) {
+                    listItem.setAttribute('data-activity-id', item.activity_id);
+                }
+            } else {
+                // Update existing item attributes
+                if (item.activity_id) {
+                    listItem.setAttribute('data-activity-id', item.activity_id);
+                }
+            }
             
             // Determine class based on status
-            // status: -1 = PENDING, 0 = FAILURE, 1 = RUNNING, 2 = SUCCESS
+            // status: -1 = PENDING, 0 = FAILURE, 1 = RUNNING, 2 = SUCCESS, 3 = REVOKED
             if (item.status === 2) {
                 listItem.className = 'completed';
             } else if (item.status === 1) {
                 listItem.className = 'running';
+            } else if (item.status === 3) {
+                listItem.className = 'aborted';
             } else {
                 listItem.className = 'pending';
             }
@@ -683,11 +871,14 @@ const updateScanTimeline = function(data) {
                 statusClass = 'badge-soft-danger';
                 statusText = item.status === 0 ? 'Failed' : 'Pending';
             } else if (item.status === 1) {
-                statusClass = 'badge-soft-warning';
+                statusClass = 'badge-soft-info';
                 statusText = 'In progress';
             } else if (item.status === 2) {
                 statusClass = 'badge-soft-success';
                 statusText = 'Completed';
+            } else if (item.status === 3) {
+                statusClass = 'badge-soft-danger';
+                statusText = 'Aborted';
             }
             
             // Format time
@@ -715,16 +906,47 @@ const updateScanTimeline = function(data) {
                 }
             }
             
+            // Build progress HTML if available
+            let progressHtml = '';
+            if (item.progress !== null && item.progress !== undefined) {
+                progressHtml = '<p class="text-muted mb-0"><small>Progress: ' + item.progress + '%</small></p>';
+            }
+            
+            // Build stop button HTML if running
+            let stopButtonHtml = '';
+            if (item.status === 1 && item.activity_id) {
+                stopButtonHtml = '<span class="float-end"><a href="#" onclick="stop_activity(\'' + stopActivityUrl + '\', activity_id=' + item.activity_id + ', reload_scan_bar=true, reload_location=true); return false;" class="btn btn-xs btn-soft-danger waves-effect waves-light"><i class="fe-alert-triangle"></i> Stop</a></span>';
+            }
+            
+            // Build logs link HTML
+            let logsLinkHtml = '';
+            if (item.activity_id && projectSlug) {
+                logsLinkHtml = '<span><a href="javascript:get_logs_modal_realtime(null, ' + item.activity_id + ', \'' + projectSlug + '\', ' + item.id + ')"><i class="fe-file"></i> Logs</a></span>';
+            }
+            
+            // Build error message HTML if failed
+            let errorHtml = '';
+            if ((item.status === 0 || item.status === -1) && item.error_message) {
+                errorHtml = '<p class="badge badge-soft-danger">Error: ' + escapeHtml(item.error_message) + '</p>';
+            }
+            
             listItem.innerHTML = '<h5 class="mt-0 mb-1">' + 
                 escapeHtml(item.title || item.name) +
-                '<span class="float-end badge ' + statusClass + '">' + statusText + 
+                '<span class="float-end badge ' + statusClass + ' mt-1">' + statusText + 
                 (item.status === 1 ? '<span class="active-dot dot"></span>' : '') +
                 '</span></h5>' +
-                '<p class="text-muted">' + timeText + 
-                (item.time ? '<br><small class="text-muted">' + escapeHtml(item.time) + '</small>' : '') +
-                '</p>';
+                '<p class="text-muted mb-0">' + timeText + 
+                (item.time ? '<br><small class="text-muted mb-0">' + escapeHtml(item.time) + '</small>' : '') +
+                '</p>' +
+                progressHtml +
+                stopButtonHtml +
+                logsLinkHtml +
+                errorHtml;
             
-            timelineList.appendChild(listItem);
+            // Only append if it's a new item
+            if (isNew) {
+                timelineList.appendChild(listItem);
+            }
         });
     } catch (e) {
         console.error('Error updating scan timeline:', e);
@@ -1017,8 +1239,8 @@ const getStatusBadgeHtmlForDetail = function(status, currentTask) {
         badgeClass += 'danger';
         badgeText = 'Failed';
     } else if (status === 1) {
-        iconClass += 'warning';
-        badgeClass += 'warning';
+        iconClass += 'info';
+        badgeClass += 'info';
         badgeText = 'In Progress';
     } else if (status === 2) {
         iconClass += 'success';
@@ -1171,9 +1393,121 @@ const disconnectAllScanStatusWebSockets = function() {
         disconnectAllScanStatusWebSockets();
     });
     
+    /**
+     * Open logs modal for a specific activity with real-time updates
+     * @param {number|null} scan_id - Scan ID (optional)
+     * @param {number} activity_id - Activity ID
+     * @param {string} project_slug - Project slug
+     * @param {number} runner_id - Runner ID for filtering commands
+     */
+    window.get_logs_modal_realtime = function(scan_id, activity_id, project_slug, runner_id) {
+        // Store current activity context for filtering commands
+        window.currentLogsModalContext = {
+            activity_id: activity_id,
+            runner_id: runner_id,
+            scan_id: scan_id
+        };
+        
+        // Get project slug from global variable if not provided
+        if (!project_slug && typeof current_project_slug !== 'undefined') {
+            project_slug = current_project_slug;
+        }
+        
+        const url = `/scan/${project_slug || ''}/logs/?activity_id=${activity_id}`;
+        const title = `Logs for activity #${activity_id}`;
+        
+        // Clear modal
+        $('#xl-modal-title').empty();
+        $('#xl-modal-content').empty();
+        $('#xl-modal-footer').empty();
+        
+        // Show loading
+        if (typeof Swal !== 'undefined') {
+            Swal.fire({
+                title: 'Fetching logs...'
+            });
+            swal.showLoading();
+        }
+        
+        // Fetch logs
+        fetch(url)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.text();
+        })
+        .then(html => {
+            if (typeof Swal !== 'undefined') {
+                swal.close();
+            }
+            $('#xl-modal-title').html(title);
+            
+            // Insert the HTML directly (it's already escaped and formatted by Django template)
+            if (html && html.trim()) {
+                $('#xl-modal-content').html(html);
+                
+                // After HTML is inserted, automatically expand all collapses
+                // Use setTimeout to ensure DOM is ready and Bootstrap is initialized
+                setTimeout(function() {
+                    const modalContent = document.getElementById('xl-modal-content');
+                    if (modalContent) {
+                        // Find all collapse elements and expand them
+                        const collapseElements = modalContent.querySelectorAll('.collapse');
+                        collapseElements.forEach(function(collapseElement) {
+                            // Add 'show' class to make it visible
+                            collapseElement.classList.add('show');
+                            
+                            // Trigger Bootstrap collapse show event
+                            if (typeof bootstrap !== 'undefined' && bootstrap.Collapse) {
+                                // Bootstrap 5
+                                try {
+                                    const bsCollapse = bootstrap.Collapse.getInstance(collapseElement);
+                                    if (bsCollapse) {
+                                        bsCollapse.show();
+                                    } else {
+                                        const newCollapse = new bootstrap.Collapse(collapseElement, {
+                                            toggle: false
+                                        });
+                                        newCollapse.show();
+                                    }
+                                } catch (e) {
+                                    // If Bootstrap collapse fails, just ensure show class is present
+                                    collapseElement.classList.add('show');
+                                }
+                            } else if (typeof $ !== 'undefined' && $.fn.collapse) {
+                                // Bootstrap 4/jQuery fallback
+                                $(collapseElement).collapse('show');
+                            }
+                        });
+                    }
+                }, 150);
+            } else {
+                $('#xl-modal-content').html('<p class="text-muted">No logs available.</p>');
+            }
+        })
+        .catch(error => {
+            if (typeof Swal !== 'undefined') {
+                swal.close();
+            }
+            console.error('Error fetching logs:', error);
+            $('#xl-modal-title').html(title);
+            $('#xl-modal-content').html('<p class="text-danger">Error loading logs. Please try again.</p>');
+        });
+        
+        // Show modal
+        $('#modal_xl_scroll_dialog').modal('show');
+        if (typeof $ !== 'undefined') {
+            $("body").tooltip({
+                selector: '[data-toggle=tooltip]'
+            });
+        }
+    };
+    
     // Expose functions globally so they can be called from other scripts
     window.connectScanStatusWebSocket = connectScanStatusWebSocket;
     window.handleScanStatusUpdate = handleScanStatusUpdate;
+    window.updateCommandOutputs = updateCommandOutputs;
     window.updateScanRowInTable = updateScanRowInTable;
     window.updateScanDetailPage = updateScanDetailPage;
     window.updateRightSidebar = updateRightSidebar;

@@ -502,18 +502,6 @@ class SecatorRunner:
                         profile_list.append(profile_name)
                         logger.info(f"🔧 Added profile '{profile_name}' from '{key}' category")
 
-            # Add any other profile keys that might be profile names
-            # Other keys are added directly to secator_config
-            for key, value in profiles.items():
-                if key not in profile_keys:
-                    # If the value is a string and looks like a profile name, add it to profiles list
-                    if isinstance(value, str) and value and value not in profile_list:
-                        profile_list.append(value)
-                        logger.info(f"🔧 Added profile '{value}' from key '{key}'")
-                    else:
-                        # Otherwise, add the key-value pair directly to secator_config
-                        secator_config[key] = value
-
             # Set the profiles list in secator_config
             if profile_list:
                 secator_config["profiles"] = profile_list

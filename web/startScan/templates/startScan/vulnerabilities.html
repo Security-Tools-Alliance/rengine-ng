@@ -108,6 +108,7 @@ $(document).ready(function() {
 					if (data) {
 						return `<span class="badge badge-soft-primary">${data.toUpperCase()}</span>`;
 					}
+					return '';
 				},
 				"targets": get_datatable_col_index('type', vuln_datatable_columns),
 			},

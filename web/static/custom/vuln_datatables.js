@@ -1,7 +1,7 @@
 const vuln_datatable_columns = [
 	{'data': 'id'},                    // Checkbox column
-	{'data': 'source'},                // Source
-	{'data': 'type'},                  // Type
+	{'data': 'source', 'defaultContent': ''},  // Source (optional field)
+	{'data': 'type', 'defaultContent': ''},  // Type (optional field)
 	{'data': 'name'},                  // Title
 	{'data': 'cvss_metrics'},          // CVSS Metrics
 	{'data': 'tags'},                  // Tags

@@ -10,6 +10,7 @@ from reNgine.core.data import (
     is_iterable,
     replace_nulls,
     return_iterable,
+    safe_bool_cast,
     safe_int_cast,
 )
 
@@ -247,6 +248,73 @@ class TestDataUtils(TestCase):
         """Test safe_int_cast with list."""
         result = safe_int_cast(["1", "2", "3"])
         self.assertEqual(result, [1, 2, 3])
+
+    def test_safe_bool_cast_true_strings(self):
+        """Test safe_bool_cast with true string values."""
+        self.assertTrue(safe_bool_cast("true"))
+        self.assertTrue(safe_bool_cast("True"))
+        self.assertTrue(safe_bool_cast("TRUE"))
+        self.assertTrue(safe_bool_cast("on"))
+        self.assertTrue(safe_bool_cast("On"))
+        self.assertTrue(safe_bool_cast("ON"))
+        self.assertTrue(safe_bool_cast("1"))
+        self.assertTrue(safe_bool_cast("yes"))
+        self.assertTrue(safe_bool_cast("Yes"))
+        self.assertTrue(safe_bool_cast("YES"))
+
+    def test_safe_bool_cast_false_strings(self):
+        """Test safe_bool_cast with false string values."""
+        self.assertFalse(safe_bool_cast("false"))
+        self.assertFalse(safe_bool_cast("False"))
+        self.assertFalse(safe_bool_cast("FALSE"))
+        self.assertFalse(safe_bool_cast("off"))
+        self.assertFalse(safe_bool_cast("Off"))
+        self.assertFalse(safe_bool_cast("OFF"))
+        self.assertFalse(safe_bool_cast("0"))
+        self.assertFalse(safe_bool_cast("no"))
+        self.assertFalse(safe_bool_cast("No"))
+        self.assertFalse(safe_bool_cast("NO"))
+        self.assertFalse(safe_bool_cast(""))
+
+    def test_safe_bool_cast_boolean_values(self):
+        """Test safe_bool_cast with boolean values."""
+        self.assertTrue(safe_bool_cast(True))
+        self.assertFalse(safe_bool_cast(False))
+
+    def test_safe_bool_cast_none(self):
+        """Test safe_bool_cast with None."""
+        self.assertFalse(safe_bool_cast(None))
+        self.assertTrue(safe_bool_cast(None, default=True))
+
+    def test_safe_bool_cast_integer_values(self):
+        """Test safe_bool_cast with integer values."""
+        self.assertTrue(safe_bool_cast(1))
+        self.assertFalse(safe_bool_cast(0))
+        self.assertTrue(safe_bool_cast(42))
+        self.assertTrue(safe_bool_cast(-1))
+
+    def test_safe_bool_cast_string_with_whitespace(self):
+        """Test safe_bool_cast with strings containing whitespace."""
+        self.assertTrue(safe_bool_cast(" true "))
+        self.assertTrue(safe_bool_cast(" on "))
+        self.assertTrue(safe_bool_cast(" 1 "))
+        self.assertFalse(safe_bool_cast(" false "))
+        self.assertFalse(safe_bool_cast(" off "))
+        self.assertFalse(safe_bool_cast(" 0 "))
+
+    def test_safe_bool_cast_invalid_string(self):
+        """Test safe_bool_cast with invalid string values."""
+        self.assertFalse(safe_bool_cast("invalid"))
+        self.assertFalse(safe_bool_cast("maybe"))
+        self.assertFalse(safe_bool_cast("unknown"))
+        self.assertTrue(safe_bool_cast("invalid", default=True))
+
+    def test_safe_bool_cast_default_value(self):
+        """Test safe_bool_cast with custom default value."""
+        self.assertFalse(safe_bool_cast(None, default=False))
+        self.assertTrue(safe_bool_cast(None, default=True))
+        self.assertFalse(safe_bool_cast("invalid", default=False))
+        self.assertTrue(safe_bool_cast("invalid", default=True))
 
     def test_get_ip_info_ipv4(self):
         """Test get_ip_info with IPv4."""

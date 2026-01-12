@@ -2956,7 +2956,9 @@ function render_vuln_offcanvas(vuln){
 	body += `<p><b>ID: </b>${vuln.id}</p>`;
 	body += `<p><b>Discovered on: </b>${vuln.discovered_date}</p>`;
 	body += `<p><b>URL: </b><a href="${vuln.http_url}" target="_blank">${vuln.http_url}</a></p>`;
-	body += `<p><b>Severity: </b>${vuln.severity}<br><b>Type: </b>${vuln.type.toUpperCase()}<br><b>Source: </b> ${vuln.source.toUpperCase()}</p>`;
+	var type_display = vuln.type ? vuln.type.toUpperCase() : 'N/A';
+	var source_display = vuln.source ? vuln.source.toUpperCase() : 'N/A';
+	body += `<p><b>Severity: </b>${vuln.severity}<br><b>Type: </b>${type_display}<br><b>Source: </b> ${source_display}</p>`;
 
 	if (vuln.description) {
 		// Sanitize with DOMPurify before inserting into the DOM
@@ -3205,7 +3207,8 @@ function render_vuln_offcanvas(vuln){
 		});
 		referencesContent += '</ul>';
 	} else {
-		referencesContent = `<p>${references}</p>`;
+		referenceText = references || 'N/A';
+		referencesContent = `<p>${referenceText}</p>`;
 	}
 
 	body += `<div class="accordion custom-accordion mt-2">

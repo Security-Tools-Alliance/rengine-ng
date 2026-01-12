@@ -157,6 +157,50 @@ def safe_int_cast(value, default=None):
         return default
 
 
+def safe_bool_cast(value, default=False):
+    """
+    Convert a value to a boolean if possible, otherwise return a default value.
+
+    Handles common boolean representations from POST requests:
+    - String "true", "on", "1", "yes" -> True
+    - Boolean True -> True
+    - Integer: non-zero values -> True, 0 -> False
+    - Float: non-zero values -> True, 0.0 -> False
+    - String "false", "off", "0", "no", empty string -> False
+    - Boolean False -> False
+    - None -> default
+    - Other types or unrecognized string values -> default
+
+    Args:
+        value: The value to convert to a boolean.
+        default: The default value to return if conversion fails (default: False).
+
+    Returns:
+        bool: The boolean value if conversion is successful, otherwise the default value.
+    """
+    if value is None:
+        return default
+
+    if isinstance(value, bool):
+        return value
+
+    if isinstance(value, str):
+        value_lower = value.lower().strip()
+        if value_lower in ("true", "on", "1", "yes"):
+            return True
+        if value_lower in ("false", "off", "0", "no", ""):
+            return False
+        return default
+
+    if isinstance(value, int):
+        return bool(value)
+
+    if isinstance(value, float):
+        return bool(value)
+
+    return default
+
+
 def get_ip_info(ip_address):
     """
     Get IP information, determining whether it is an IPv4 or IPv6 address.

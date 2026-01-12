@@ -6,10 +6,11 @@ import logging
 
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
-from django.db.models import Count
+from django.db import models
+from django.db.models import Count, Q
 
-from api.serializers import ScanActivitySerializer, SecatorRunnerSerializer
-from startScan.models import EndPoint, ScanActivity, ScanHistory, SecatorRunner, Subdomain, Vulnerability
+from api.serializers import CommandSerializer, ScanActivitySerializer, SecatorRunnerSerializer
+from startScan.models import Command, EndPoint, ScanActivity, ScanHistory, SecatorRunner, Subdomain, Vulnerability
 
 
 logger = logging.getLogger("websocket")
@@ -95,18 +96,48 @@ def build_scan_status_message(scan_history_id: int) -> dict:
             serializer = SecatorRunnerSerializer(runners, many=True)
             message["runners"] = serializer.data
 
-            # Build timeline from runners
-            message["timeline"] = [
-                {
+            # Build timeline from runners with activity_id and progress
+            timeline_items = []
+            for runner in runners:
+                # Get activity_id from ScanActivity if it exists
+                activity_id = None
+                try:
+                    activity = ScanActivity.objects.filter(runner_id=runner).first()
+                    if activity:
+                        activity_id = activity.id
+                except Exception:
+                    pass
+                
+                # Get progress from runner_data
+                progress = None
+                if runner.runner_data and isinstance(runner.runner_data, dict):
+                    progress = runner.runner_data.get("progress")
+                
+                timeline_items.append({
                     "id": runner.id,
                     "title": f"{runner.runner_type.title()}: {runner.runner_name}",
                     "name": runner.runner_name or "",
                     "status": get_runner_status_code(runner),
                     "time": runner.created_at.isoformat() if runner.created_at else None,
                     "type": runner.runner_type,
-                }
-                for runner in runners
-            ]
+                    "activity_id": activity_id,
+                    "progress": progress,
+                })
+            message["timeline"] = timeline_items
+
+        # Include running commands with their outputs for real-time updates
+        running_commands = Command.objects.filter(
+            scan_history=scan,
+        ).filter(
+            # Commands that are running: status is RUNNING or end_time is None
+            Q(status="RUNNING") | Q(end_time__isnull=True)
+        ).order_by("-time")[:30]  # Limit to last 30 running commands to avoid large messages
+
+        if running_commands.exists():
+            serializer = CommandSerializer(running_commands, many=True)
+            message["commands"] = serializer.data
+        else:
+            message["commands"] = []
 
         return message
 
