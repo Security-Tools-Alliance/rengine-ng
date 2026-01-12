@@ -1,0 +1,119 @@
+<div class="form-group">
+    <label for="{{ form.name.id_for_label }}">Profile Name *</label>
+    {{ form.name }}
+    {% if form.name.errors %}
+        <div class="text-danger">
+            {% for error in form.name.errors %}
+                <small>{{ error }}</small>
+            {% endfor %}
+        </div>
+    {% endif %}
+</div>
+
+<div class="form-group">
+    <label for="{{ form.category.id_for_label }}">Category *</label>
+    {{ form.category }}
+    {% if form.category.help_text %}
+        <small class="form-text text-muted">{{ form.category.help_text }}</small>
+    {% endif %}
+    {% if form.category.errors %}
+        <div class="text-danger">
+            {% for error in form.category.errors %}
+                <small>{{ error }}</small>
+            {% endfor %}
+        </div>
+    {% endif %}
+</div>
+
+<div class="form-group">
+    <label for="{{ form.description.id_for_label }}">Description *</label>
+    {{ form.description }}
+    {% if form.description.errors %}
+        <div class="text-danger">
+            {% for error in form.description.errors %}
+                <small>{{ error }}</small>
+            {% endfor %}
+        </div>
+    {% endif %}
+</div>
+
+<div class="form-check form-switch">
+    {{ form.enforce }}
+    <label class="form-check-label" for="{{ form.enforce.id_for_label }}">
+        Enforce
+    </label>
+    {% if form.enforce.help_text %}
+        <small class="form-text text-muted d-block">{{ form.enforce.help_text }}</small>
+    {% endif %}
+    {% if form.enforce.errors %}
+        <div class="text-danger">
+            {% for error in form.enforce.errors %}
+                <small>{{ error }}</small>
+            {% endfor %}
+        </div>
+    {% endif %}
+</div>
+
+<div class="form-group">
+    <label for="{{ form.opts.id_for_label }}">Options (YAML) *</label>
+    <div class="mb-2 d-flex justify-content-between align-items-center">
+        <div>
+            <button type="button" class="btn btn-sm btn-secondary" onclick="loadDefaultOpts()">
+                <i class="fas fa-download"></i> Load Default Options Template
+            </button>
+            <a href="https://docs.freelabz.com/in-depth/concepts/profiles" target="_blank" class="btn btn-sm btn-outline-info ms-2" rel="noopener noreferrer">
+                <i class="fas fa-book"></i> View Documentation
+            </a>
+        </div>
+    </div>
+    {{ form.opts }}
+    {% if form.opts.help_text %}
+        <small class="form-text text-muted">{{ form.opts.help_text }}</small>
+    {% endif %}
+    {% if form.opts.errors %}
+        <div class="text-danger">
+            {% for error in form.opts.errors %}
+                <small>{{ error }}</small>
+            {% endfor %}
+        </div>
+    {% endif %}
+    <div class="mt-3">
+        <div class="card border-info">
+            <div class="card-header bg-info text-white">
+                <h6 class="mb-0"><i class="fas fa-info-circle"></i> Profile Options Guide</h6>
+            </div>
+            <div class="card-body">
+                <p class="mb-2"><strong>Options are organized by category:</strong></p>
+                <ul class="mb-2">
+                    <li><strong>Speed options:</strong> Control scan speed and intensity (<code>rate_limit</code>, <code>delay</code>, <code>timeout</code>, <code>retries</code>)</li>
+                    <li><strong>Evasion options:</strong> Stealth and evasion techniques (<code>fragment</code>, <code>tcp_syn_stealth</code>, <code>proxy</code>, etc.)</li>
+                    <li><strong>General options:</strong> Global scan approach (<code>active</code>, <code>passive</code>, and their variants)</li>
+                    <li><strong>Network & Feature options:</strong> Network-specific settings and feature activation (<code>ports</code>, <code>headless</code>, <code>nuclei</code>, etc.)</li>
+                </ul>
+                <p class="mb-0">
+                    <strong>Tips:</strong>
+                    <ul class="mb-0">
+                        <li>Click "Load Default Options Template" to see all available options with descriptions</li>
+                        <li>Remove options you don't need or modify their values</li>
+                        <li>Options are grouped by category with comments explaining each option</li>
+                        <li>Use <code>enforce: true</code> to make this profile override conflicting options</li>
+                    </ul>
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="form-check form-switch">
+    {{ form.is_active }}
+    <label class="form-check-label" for="{{ form.is_active.id_for_label }}">
+        Active
+    </label>
+    {% if form.is_active.errors %}
+        <div class="text-danger">
+            {% for error in form.is_active.errors %}
+                <small>{{ error }}</small>
+            {% endfor %}
+        </div>
+    {% endif %}
+</div>

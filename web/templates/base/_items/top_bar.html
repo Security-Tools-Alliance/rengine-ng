@@ -266,16 +266,23 @@
     </div>
     <div class="mobile-submenu">
       {% if user|can:'modify_scan_configurations' %}
-      <a href="{% url 'scan_engine_index' %}" class="dropdown-item">
-        <i class="fas fa-exclamation-triangle text-warning me-1"></i>Scan Engines
-        <small class="text-muted d-block">(Legacy - Use Secator instead)</small>
-      </a>
+      <a href="{% url 'scans' %}" class="dropdown-item">Scans</a>
+      <a href="{% url 'workflows' %}" class="dropdown-item">Workflows</a>
+      <a href="{% url 'tasks' %}" class="dropdown-item">Tasks</a>
+      <a href="{% url 'profiles' %}" class="dropdown-item">Profiles</a>
+      <div class="dropdown-divider"></div>
       {% endif %}
       {% if user|can:'modify_wordlists' %}
       <a href="{% url 'wordlist_list' %}" class="dropdown-item">Wordlists</a>
       {% endif %}
       {% if user|can:'modify_interesting_lookup' %}
       <a href="{% url 'interesting_lookup' %}" class="dropdown-item">Interesting Lookup</a>
+      {% endif %}
+      {% if user|can:'modify_scan_configurations' %}
+      <a href="{% url 'scan_engine_index' %}" class="dropdown-item">
+        <i class="fas fa-exclamation-triangle text-warning me-1"></i>Scan Engines
+        <small class="text-muted d-block">(Legacy - Use Secator instead)</small>
+      </a>
       {% endif %}
     </div>
   </div>

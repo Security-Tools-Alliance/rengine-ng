@@ -35,7 +35,7 @@ from reNgine.tasks import initiate_secator_scan
 from reNgine.utilities.command import run_command
 from reNgine.utilities.subdomain import get_interesting_subdomains
 from reNgine.utilities.time import local_to_utc_aware
-from scanEngine.models import EngineType, SecatorScan, SecatorTask, SecatorWorkflow, VulnerabilityReportSetting
+from scanEngine.models import EngineType, SecatorProfile, SecatorScan, SecatorTask, SecatorWorkflow, VulnerabilityReportSetting
 from startScan.models import (
     Command,
     CountryISO,
@@ -445,10 +445,11 @@ def start_scan_ui(request, slug, domain_id):
             "delay": max(0, min(60, safe_int_cast(request.POST.get("delay", 0), 0))),
         }
 
-        speed_profile = request.POST.get("speed_profile")
-        stealth_profile = request.POST.get("stealth_profile")
-        general_profile = request.POST.get("general_profile")
-        network_profile = request.POST.get("network_profile")
+        # Get profiles - check custom first, then builtin
+        speed_profile = request.POST.get("speed_custom_profile") or request.POST.get("speed_profile")
+        stealth_profile = request.POST.get("evasion_custom_profile") or request.POST.get("stealth_profile")
+        general_profile = request.POST.get("general_custom_profile") or request.POST.get("general_profile")
+        network_profile = request.POST.get("network_custom_profile") or request.POST.get("network_profile")
         expert_mode = safe_bool_cast(request.POST.get("expert_mode"))
 
         # Prepare API payload
@@ -637,6 +638,17 @@ def start_scan_ui(request, slug, domain_id):
         )
         return JsonResponse({"engine_html": engine_html})
 
+    # Get custom profiles by category
+    from scanEngine.models import SecatorProfile
+
+    custom_profiles = SecatorProfile.objects.filter(profile_type="custom", is_active=True).order_by("category", "name")
+    custom_profiles_by_category = {
+        "speed": [p for p in custom_profiles if p.category == "speed"],
+        "evasion": [p for p in custom_profiles if p.category == "evasion"],
+        "general": [p for p in custom_profiles if p.category == "general"],
+        "network": [p for p in custom_profiles if p.category == "network"],
+    }
+
     context = {
         "scan_history_active": "active",
         "domain": domain,
@@ -644,6 +656,7 @@ def start_scan_ui(request, slug, domain_id):
         "custom_engine_count": custom_engine_count,
         "scan_type": scan_type,
         "has_ip_content": has_ip_content,
+        "custom_profiles_by_category": custom_profiles_by_category,
     }
     return render(request, "startScan/start_scan_ui.html", context)
 
@@ -1042,10 +1055,11 @@ def start_organization_scan(request, id, slug):
             "delay": max(0, min(60, safe_int_cast(request.POST.get("delay", 0), 0))),
         }
 
-        speed_profile = request.POST.get("speed_profile")
-        stealth_profile = request.POST.get("stealth_profile")
-        general_profile = request.POST.get("general_profile")
-        network_profile = request.POST.get("network_profile")
+        # Get profiles - check custom first, then builtin
+        speed_profile = request.POST.get("speed_custom_profile") or request.POST.get("speed_profile")
+        stealth_profile = request.POST.get("evasion_custom_profile") or request.POST.get("stealth_profile")
+        general_profile = request.POST.get("general_custom_profile") or request.POST.get("general_profile")
+        network_profile = request.POST.get("network_custom_profile") or request.POST.get("network_profile")
         expert_mode = safe_bool_cast(request.POST.get("expert_mode"))
 
         domain_list = organization.get_domains()
@@ -1121,6 +1135,15 @@ def start_organization_scan(request, id, slug):
     # Optimize domain list query
     domain_list = organization.get_domains().select_related()
 
+    # Get custom profiles by category
+    custom_profiles = SecatorProfile.objects.filter(profile_type="custom", is_active=True).order_by("category", "name")
+    custom_profiles_by_category = {
+        "speed": [p for p in custom_profiles if p.category == "speed"],
+        "evasion": [p for p in custom_profiles if p.category == "evasion"],
+        "general": [p for p in custom_profiles if p.category == "general"],
+        "network": [p for p in custom_profiles if p.category == "network"],
+    }
+
     context = {
         "organization_data_active": "true",
         "list_organization_li": "active",
@@ -1129,6 +1152,7 @@ def start_organization_scan(request, id, slug):
         "domain_ids": ",".join(str(d.id) for d in domain_list),
         "scan_type": scan_type,
         "secator_scans": secator_scans,
+        "custom_profiles_by_category": custom_profiles_by_category,
     }
     return render(request, "organization/start_scan.html", context)
 

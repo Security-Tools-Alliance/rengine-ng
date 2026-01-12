@@ -11,6 +11,7 @@ from scanEngine.models import (
     InterestingLookupModel,
     Notification,
     Proxy,
+    SecatorProfile,
     SecatorScan,
     SecatorTask,
     SecatorWorkflow,
@@ -1027,5 +1028,84 @@ class SecatorScanForm(forms.ModelForm):
         # Check if this is an update operation on a built-in scan configuration
         if self.instance.pk and self.instance.scan_config_type == "builtin":
             raise ValidationError("Built-in scan configurations cannot be modified.")
+
+        return cleaned_data
+
+
+class SecatorProfileForm(forms.ModelForm):
+    """Form for creating/editing Secator profiles."""
+
+    class Meta:
+        model = SecatorProfile
+        fields = ["name", "category", "description", "enforce", "opts", "is_active"]
+
+    name = forms.CharField(
+        required=True,
+        widget=forms.TextInput(
+            attrs={"class": "form-control form-control-lg", "id": "profile_name", "placeholder": "Profile Name"}
+        ),
+    )
+    category = forms.ChoiceField(
+        choices=SecatorProfile.CATEGORY_CHOICES,
+        required=True,
+        widget=forms.Select(attrs={"class": "form-control form-control-lg", "id": "profile_category"}),
+        help_text="Select the category of the profile",
+    )
+    description = forms.CharField(
+        required=True,
+        widget=forms.Textarea(
+            attrs={
+                "class": "form-control",
+                "id": "profile_description",
+                "rows": 3,
+                "placeholder": "Enter profile description",
+            }
+        ),
+    )
+    enforce = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "form-check-input", "id": "profile_enforce"}),
+        help_text="Whether this profile should enforce its options (handled by Secator)",
+    )
+    opts = forms.CharField(
+        required=True,
+        widget=AceWidget(
+            mode="yaml",
+            theme="tomorrow_night_eighties",
+            width="100%",
+            height="450px",
+            tabsize=2,
+            fontsize="17px",
+            showinvisibles=True,
+            attrs={"id": "profile_opts_editor"},
+        ),
+        help_text="YAML configuration options for the profile",
+    )
+    is_active = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "form-check-input", "id": "profile_is_active"}),
+        initial=True,
+    )
+
+    def clean_opts(self):
+        """Validate YAML syntax for opts field."""
+        opts = self.cleaned_data.get("opts")
+        if not opts:
+            raise ValidationError("opts field is required")
+
+        try:
+            yaml.safe_load(opts)
+        except yaml.YAMLError as e:
+            raise ValidationError(f"Invalid YAML syntax: {e}")
+
+        return opts
+
+    def clean(self):
+        """Validate profile configuration."""
+        cleaned_data = super().clean()
+
+        # Check if this is an update operation on a built-in profile
+        if self.instance.pk and self.instance.profile_type == "builtin":
+            raise ValidationError("Built-in profiles cannot be modified.")
 
         return cleaned_data

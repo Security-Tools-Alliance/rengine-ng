@@ -6,8 +6,10 @@ This file contains unit tests for the Secator views and forms.
 
 from django.urls import reverse
 
-from scanEngine.forms import SecatorScanForm, SecatorWorkflowForm
-from scanEngine.models import SecatorScan, SecatorTask, SecatorWorkflow
+import yaml
+
+from scanEngine.forms import SecatorProfileForm, SecatorScanForm, SecatorWorkflowForm
+from scanEngine.models import SecatorProfile, SecatorScan, SecatorTask, SecatorWorkflow
 from utils.test_base import BaseTestCase
 
 
@@ -338,3 +340,134 @@ tasks:
         form = SecatorScanForm(data=form_data, instance=scan)
         self.assertFalse(form.is_valid())
         self.assertIn("__all__", form.errors)
+
+
+class TestSecatorProfileViews(BaseTestCase):
+    """Test class for Secator profile views."""
+
+    def setUp(self):
+        """Set up test data."""
+        super().setUp()
+
+        # Create test builtin profile
+        self.builtin_profile = SecatorProfile.objects.create(
+            name="test_builtin",
+            category="speed",
+            description="A test builtin profile",
+            enforce=False,
+            opts=yaml.dump({"rate_limit": 100}),
+            profile_type="builtin",
+            is_active=True,
+        )
+
+        # Create test custom profile
+        self.custom_profile = SecatorProfile.objects.create(
+            name="test_custom",
+            category="evasion",
+            description="A test custom profile",
+            enforce=True,
+            opts=yaml.dump({"tcp_syn_stealth": True}),
+            profile_type="custom",
+            is_active=True,
+        )
+
+    def test_secator_profiles_view(self):
+        """Test the secator profiles list view."""
+        response = self.client.get(reverse("profiles"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "test_builtin")
+        self.assertContains(response, "test_custom")
+
+    def test_secator_profile_detail_view(self):
+        """Test the secator profile detail view."""
+        response = self.client.get(reverse("profile_detail", args=[self.custom_profile.id]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "test_custom")
+
+    def test_add_profile_view_get(self):
+        """Test the add profile view GET request."""
+        response = self.client.get(reverse("add_profile"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Add Profile")
+
+    def test_add_profile_view_post(self):
+        """Test the add profile view POST request."""
+        form_data = {
+            "name": "new_profile",
+            "category": "general",
+            "description": "A new profile",
+            "enforce": False,
+            "opts": yaml.dump({"timeout": 300}),
+            "is_active": True,
+        }
+        response = self.client.post(reverse("add_profile"), data=form_data)
+        self.assertEqual(response.status_code, 302)  # Redirect after success
+        self.assertTrue(SecatorProfile.objects.filter(name="new_profile", profile_type="custom").exists())
+
+    def test_update_profile_view_get(self):
+        """Test the update profile view GET request."""
+        response = self.client.get(reverse("update_profile", args=[self.custom_profile.id]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Update Profile")
+
+    def test_update_profile_view_post(self):
+        """Test the update profile view POST request."""
+        form_data = {
+            "name": "test_custom",
+            "category": "evasion",
+            "description": "Updated description",
+            "enforce": True,
+            "opts": yaml.dump({"tcp_syn_stealth": True, "nmap_light_tcp_syn_stealth": True}),
+            "is_active": True,
+        }
+        response = self.client.post(reverse("update_profile", args=[self.custom_profile.id]), data=form_data)
+        self.assertEqual(response.status_code, 302)  # Redirect after success
+        self.custom_profile.refresh_from_db()
+        self.assertEqual(self.custom_profile.description, "Updated description")
+
+    def test_cannot_update_builtin_profile(self):
+        """Test that built-in profiles cannot be updated."""
+        response = self.client.get(reverse("update_profile", args=[self.builtin_profile.id]))
+        self.assertEqual(response.status_code, 302)  # Redirect with error message
+
+    def test_delete_profile_view(self):
+        """Test the delete profile view."""
+        profile_id = self.custom_profile.id
+        response = self.client.post(reverse("delete_profile", args=[profile_id]))
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(SecatorProfile.objects.filter(id=profile_id).exists())
+
+    def test_cannot_delete_builtin_profile(self):
+        """Test that built-in profiles cannot be deleted."""
+        response = self.client.post(reverse("delete_profile", args=[self.builtin_profile.id]))
+        self.assertEqual(response.status_code, 200)
+        response_data = response.json()
+        self.assertFalse(response_data.get("status"))
+        self.assertIn("cannot be deleted", response_data.get("message", ""))
+
+    def test_secator_profile_form_validation(self):
+        """Test SecatorProfileForm validation."""
+        form_data = {
+            "name": "test_form",
+            "category": "speed",
+            "description": "Test form profile",
+            "enforce": False,
+            "opts": yaml.dump({"rate_limit": 100}),
+            "is_active": True,
+        }
+        form = SecatorProfileForm(data=form_data)
+        self.assertTrue(form.is_valid())
+
+    def test_secator_profile_form_invalid_yaml(self):
+        """Test SecatorProfileForm with invalid YAML."""
+        form_data = {
+            "name": "test_form",
+            "category": "speed",
+            "description": "Test form profile",
+            "enforce": False,
+            "opts": "invalid: yaml: [",
+            "is_active": True,
+        }
+        form = SecatorProfileForm(data=form_data)
+        self.assertFalse(form.is_valid())
+        self.assertIn("opts", form.errors)

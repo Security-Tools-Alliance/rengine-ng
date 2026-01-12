@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, mock_open, patch
 
 from django.core.management import call_command
 
-from scanEngine.models import SecatorScan, SecatorTask, SecatorWorkflow
+from scanEngine.models import SecatorProfile, SecatorScan, SecatorTask, SecatorWorkflow
 from utils.test_base import BaseTestCase
 
 
@@ -782,3 +782,64 @@ input_types:
 
         # Verify no scans were created
         self.assertEqual(SecatorScan.objects.filter(scan_config_type="builtin").count(), 0)
+
+
+class TestLoadProfilesCommand(BaseTestCase):
+    """
+    Test class for the load_profiles management command.
+    """
+
+    def setUp(self):
+        """
+        Initial setup for the tests.
+        """
+        super().setUp()
+
+    @patch("scanEngine.management.commands.load_profiles.get_configs_by_type")
+    @patch(
+        "builtins.open",
+        new_callable=mock_open,
+        read_data="""
+type: profile
+name: test_profile
+category: speed
+description: Test speed profile
+enforce: false
+opts:
+  rate_limit: 100
+  delay: 0
+""",
+    )
+    def test_load_profiles_command(self, mock_file, mock_get_configs):
+        """Test the load_profiles management command."""
+        # Mock TemplateLoader object for profile
+        mock_profile = MagicMock()
+        mock_profile.name = "test_profile"
+        mock_profile.description = "Test speed profile"
+        mock_profile._path = "/path/to/profile.yaml"
+
+        mock_get_configs.return_value = [mock_profile]
+
+        # Run the command
+        out = get_test_stdout()
+        call_command("load_profiles", "--builtin-only", stdout=out)
+
+        # Check that profile was created
+        profile = SecatorProfile.objects.filter(name="test_profile").first()
+        self.assertIsNotNone(profile)
+        self.assertEqual(profile.profile_type, "builtin")
+        self.assertEqual(profile.category, "speed")
+        self.assertEqual(profile.description, "Test speed profile")
+        self.assertFalse(profile.enforce)
+
+    @patch("scanEngine.management.commands.load_profiles.get_configs_by_type")
+    def test_load_profiles_command_no_profiles(self, mock_get_configs):
+        """Test the load_profiles command when no profiles are found."""
+        mock_get_configs.return_value = []
+
+        # Run the command
+        out = get_test_stdout()
+        call_command("load_profiles", "--builtin-only", stdout=out)
+
+        # Verify no profiles were created
+        self.assertEqual(SecatorProfile.objects.filter(profile_type="builtin").count(), 0)

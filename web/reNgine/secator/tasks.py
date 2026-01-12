@@ -94,10 +94,10 @@ def initiate_secator_scan(
             profiles["speed"] = speed_profile
             logger.info(f"Applied speed profile: {speed_profile}")
 
-        # Apply stealth profile
+        # Apply evasion profile (mapped from stealth_profile for backward compatibility)
         if stealth_profile:
-            profiles["stealth"] = stealth_profile
-            logger.info(f"Applied stealth profile: {stealth_profile}")
+            profiles["evasion"] = stealth_profile
+            logger.info(f"Applied evasion profile: {stealth_profile}")
 
         # Apply general profile
         if general_profile:

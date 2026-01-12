@@ -1422,10 +1422,11 @@ class StartScan(APIView):
         # Secator configuration
         if hasattr(data, "get"):
             secator_config = data.get("secator_config", {})
-            speed_profile = data.get("speed_profile")
-            stealth_profile = data.get("stealth_profile")
-            general_profile = data.get("general_profile")
-            network_profile = data.get("network_profile")
+            # Get profiles - check custom first, then builtin
+            speed_profile = data.get("speed_custom_profile") or data.get("speed_profile")
+            stealth_profile = data.get("evasion_custom_profile") or data.get("stealth_profile")
+            general_profile = data.get("general_custom_profile") or data.get("general_profile")
+            network_profile = data.get("network_custom_profile") or data.get("network_profile")
         else:
             secator_config = {}
             speed_profile = None
@@ -3651,6 +3652,45 @@ class LoadBuiltinTasks(APIView):
             return Response(
                 {"status": "success", "message": "Built-in tasks loaded successfully", "output": out.getvalue()}
             )
+        except Exception as e:
+            return Response({"status": "error", "message": str(e)}, status=400)
+
+
+class LoadBuiltinProfiles(APIView):
+    """Load built-in profiles."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        try:
+            from io import StringIO
+
+            from django.core.management import call_command
+
+            # Capture output
+            out = StringIO()
+            call_command("load_profiles", "--builtin-only", stdout=out)
+
+            return Response(
+                {"status": "success", "message": "Built-in profiles loaded successfully", "output": out.getvalue()}
+            )
+        except Exception as e:
+            return Response({"status": "error", "message": str(e)}, status=400)
+
+
+class GetDefaultProfileOpts(APIView):
+    """Get default profile opts template."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        try:
+            from scanEngine.management.commands.load_profiles import Command
+
+            command = Command()
+            opts_yaml = command._extract_all_opts()
+
+            return Response({"status": "success", "opts": opts_yaml})
         except Exception as e:
             return Response({"status": "error", "message": str(e)}, status=400)
 

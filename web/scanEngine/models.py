@@ -1,5 +1,10 @@
+import logging
+
 from django.db import models
 import yaml
+
+
+logger = logging.getLogger(__name__)
 
 
 class HybridProperty:
@@ -646,3 +651,121 @@ class SecatorScan(models.Model):
 
     class Meta:
         ordering = ["scan_config_type", "name"]
+
+
+class SecatorProfile(models.Model):
+    """Secator profile configuration (built-in or custom)"""
+
+    PROFILE_TYPE_CHOICES = [
+        ("builtin", "Built-in"),
+        ("custom", "Custom"),
+    ]
+
+    CATEGORY_CHOICES = [
+        ("speed", "Speed"),
+        ("evasion", "Evasion"),
+        ("general", "General"),
+        ("network", "Network"),
+    ]
+
+    id = models.AutoField(primary_key=True)
+    name = models.CharField(max_length=200, unique=True)
+    category = models.CharField(
+        max_length=20,
+        choices=CATEGORY_CHOICES,
+        help_text="Category of the profile",
+    )
+    description = models.TextField(help_text="Description of the profile")
+    enforce = models.BooleanField(
+        default=False,
+        help_text="Whether this profile should enforce its options (handled by Secator)",
+    )
+    opts = models.TextField(
+        help_text="YAML configuration options for the profile",
+    )
+    profile_type = models.CharField(
+        max_length=20,
+        choices=PROFILE_TYPE_CHOICES,
+        default="custom",
+        help_text="Type of profile: built-in from Secator or custom",
+    )
+    is_active = models.BooleanField(default=True, help_text="Whether this profile is available for use")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.name} ({self.category}) - {self.profile_type}"
+
+    def _parse_opts(self):
+        """
+        Parse opts YAML configuration safely.
+
+        Returns:
+            dict: Parsed options or empty dict on missing/invalid YAML.
+        """
+        if not getattr(self, "opts", None):
+            return {}
+
+        try:
+            parsed = yaml.safe_load(self.opts)
+            return parsed if isinstance(parsed, dict) else {}
+        except yaml.YAMLError as exc:
+            logger.warning(
+                "Failed to parse YAML opts for profile id=%s name=%s: %s",
+                getattr(self, "id", None),
+                getattr(self, "name", None),
+                exc,
+            )
+            return {}
+
+    def can_modify(self):
+        """Check if this profile can be modified"""
+        return self.profile_type != "builtin"
+
+    def can_delete(self):
+        """Check if this profile can be deleted"""
+        return self.profile_type != "builtin"
+
+    def save(self, *args, **kwargs):
+        """Override save to prevent modification of built-in profiles"""
+        # Allow modification if explicitly bypassing constraints (for management commands)
+        if kwargs.pop("bypass_builtin_constraints", False):
+            super().save(*args, **kwargs)
+            return
+
+        if self.pk is not None:
+            # This is an update operation
+            try:
+                orig = SecatorProfile.objects.get(pk=self.pk)
+                if orig.profile_type == "builtin":
+                    # Check if this is a bulk operation (admin actions)
+                    if kwargs.get("update_fields"):
+                        # For bulk operations, log the attempt but don't raise exception
+                        import logging
+
+                        logger = logging.getLogger(__name__)
+                        logger.warning(
+                            f"Attempted to modify built-in profile '{self.name}' (ID: {self.pk}) - operation blocked"
+                        )
+                        return  # Skip the save operation silently
+                    else:
+                        # For regular operations, raise exception with clear message
+                        raise PermissionError("Built-in profiles cannot be modified!")
+            except SecatorProfile.DoesNotExist:
+                # If original doesn't exist, allow save (shouldn't happen in normal cases)
+                pass
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        """Override delete to prevent deletion of built-in profiles"""
+        # Allow deletion if explicitly bypassing constraints (for management commands)
+        if kwargs.pop("bypass_builtin_constraints", False):
+            super().delete(*args, **kwargs)
+            return
+
+        if self.profile_type == "builtin":
+            raise PermissionError("Built-in profiles cannot be deleted!")
+        super().delete(*args, **kwargs)
+
+    class Meta:
+        ordering = ["profile_type", "category", "name"]

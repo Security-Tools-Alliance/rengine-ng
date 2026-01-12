@@ -41,6 +41,7 @@ from scanEngine.forms import (
     NotificationForm,
     ProxyForm,
     ReportForm,
+    SecatorProfileForm,
     SecatorScanForm,
     SecatorWorkflowForm,
     UpdateEngineForm,
@@ -51,6 +52,7 @@ from scanEngine.models import (
     InterestingLookupModel,
     Notification,
     Proxy,
+    SecatorProfile,
     SecatorScan,
     SecatorTask,
     SecatorWorkflow,
@@ -865,4 +867,147 @@ def delete_scan(request, scan_id):
     else:
         response_data = {"status": False, "message": "Invalid request method"}
         messages.add_message(request, messages.ERROR, "Oops! Scan configuration could not be deleted!")
+    return http.JsonResponse(response_data)
+
+
+# =============================================================================
+# PROFILE INTEGRATION VIEWS
+# =============================================================================
+
+
+@login_required
+def secator_profiles(request):
+    """List profiles with filtering."""
+    filter_type = request.GET.get("filter", "all")
+    search_query = request.GET.get("search", "")
+
+    # Validate filter_type
+    valid_filter_types = {"all", "builtin", "custom"}
+    if filter_type not in valid_filter_types:
+        filter_type = "all"
+
+    profiles = SecatorProfile.objects.all()
+
+    # Apply filters
+    if filter_type == "builtin":
+        profiles = profiles.filter(profile_type="builtin")
+    elif filter_type == "custom":
+        profiles = profiles.filter(profile_type="custom")
+
+    # Apply search
+    if search_query:
+        profiles = profiles.filter(Q(name__icontains=search_query) | Q(description__icontains=search_query))
+
+    profiles = profiles.order_by("profile_type", "category", "name")
+
+    # Pagination
+    paginator = Paginator(profiles, 20)
+    page_number = request.GET.get("page")
+    page_obj = paginator.get_page(page_number)
+
+    context = {
+        "page_obj": page_obj,
+        "filter_type": filter_type,
+        "search_query": search_query,
+    }
+
+    return render(request, "scanEngine/profiles.html", context)
+
+
+@login_required
+def secator_profile_detail(request, profile_id):
+    """Detail view for a profile."""
+    profile = get_object_or_404(SecatorProfile, id=profile_id)
+
+    context = {
+        "profile": profile,
+    }
+
+    return render(request, "scanEngine/profile_detail.html", context)
+
+
+@login_required
+def add_profile(request):
+    """Create a new profile."""
+    form = SecatorProfileForm()
+
+    if request.method == "POST":
+        form = SecatorProfileForm(request.POST)
+        if form.is_valid():
+            cleaned_data = {key: clean_quotes(value) for key, value in form.cleaned_data.items()}
+            for key, value in cleaned_data.items():
+                setattr(form.instance, key, value)
+            # Custom profiles are not built-in
+            form.instance.profile_type = "custom"
+            form.instance.save()
+            messages.add_message(request, messages.INFO, "Profile added successfully")
+            return http.HttpResponseRedirect(reverse("profiles"))
+
+    context = {"scan_engine_nav_active": "active", "form": form}
+    return render(request, "scanEngine/add_profile.html", context)
+
+
+@login_required
+def update_profile(request, profile_id):
+    """Update an existing profile."""
+    profile = get_object_or_404(SecatorProfile, id=profile_id)
+
+    # Check if profile can be modified (early check for better UX)
+    if not profile.can_modify():
+        messages.add_message(request, messages.ERROR, "Built-in profiles cannot be modified!")
+        return http.HttpResponseRedirect(reverse("profiles"))
+
+    form = SecatorProfileForm(
+        initial={
+            "name": profile.name,
+            "category": profile.category,
+            "description": profile.description,
+            "enforce": profile.enforce,
+            "opts": profile.opts,
+            "is_active": profile.is_active,
+        }
+    )
+
+    if request.method == "POST":
+        form = SecatorProfileForm(request.POST, instance=profile)
+        if form.is_valid():
+            try:
+                cleaned_data = {key: clean_quotes(value) for key, value in form.cleaned_data.items()}
+                for key, value in cleaned_data.items():
+                    setattr(form.instance, key, value)
+                form.save()
+                messages.add_message(request, messages.INFO, "Profile updated successfully")
+                return http.HttpResponseRedirect(reverse("profiles"))
+            except PermissionError as e:
+                messages.add_message(request, messages.ERROR, str(e))
+                return http.HttpResponseRedirect(reverse("profiles"))
+
+    context = {"scan_engine_nav_active": "active", "form": form, "profile": profile}
+    return render(request, "scanEngine/update_profile.html", context)
+
+
+@login_required
+def delete_profile(request, profile_id):
+    """Delete a profile."""
+    profile = get_object_or_404(SecatorProfile, id=profile_id)
+
+    # Check if profile can be deleted (early check for better UX)
+    if not profile.can_delete():
+        response_data = {"status": False, "message": "Built-in profiles cannot be deleted!"}
+        return http.JsonResponse(response_data)
+
+    if request.method == "POST":
+        try:
+            profile_name = profile.name
+            profile.delete()
+            response_data = {"status": True}
+            messages.add_message(request, messages.INFO, f"Profile '{profile_name}' successfully deleted!")
+        except PermissionError as e:
+            response_data = {"status": False, "message": str(e)}
+        except Exception:
+            response_data = {"status": False, "message": "Oops! Profile could not be deleted!"}
+            messages.add_message(request, messages.ERROR, "Oops! Profile could not be deleted!")
+    else:
+        response_data = {"status": False, "message": "Invalid request method"}
+        messages.add_message(request, messages.ERROR, "Oops! Profile could not be deleted!")
     return http.JsonResponse(response_data)

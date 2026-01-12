@@ -490,17 +490,75 @@ class SecatorRunner:
             # Force async mode - override any sync setting from config
             secator_config["sync"] = False
 
-        # Merge profiles dictionary - Secator expects a 'profiles' list with profile names
+        # Merge profiles dictionary - Secator expects a 'profiles' list with profile names or profile configs
         profile_list = []
         if profiles:
-            # Collect profile names from speed, stealth, general, and network
-            profile_keys = ["speed", "stealth", "general", "network"]
+            # Collect profile names from speed, evasion, general, and network
+            profile_keys = ["speed", "evasion", "general", "network"]
+            # Map old "stealth" key to "evasion" for backward compatibility
+            if "stealth" in profiles and "evasion" not in profiles:
+                profiles["evasion"] = profiles.pop("stealth")
+
+            # Track seen profile names to avoid duplicates and improve performance
+            seen_profile_names = set(p if isinstance(p, str) else p.get("name") for p in profile_list)
+
             for key in profile_keys:
                 if key in profiles and profiles[key]:
                     profile_name = profiles[key]
-                    if profile_name not in profile_list:
-                        profile_list.append(profile_name)
-                        logger.info(f"🔧 Added profile '{profile_name}' from '{key}' category")
+
+                    # Check if this is a custom profile (not a builtin name)
+                    try:
+                        from scanEngine.models import SecatorProfile
+
+                        # Try to find custom profile by name
+                        custom_profile = SecatorProfile.objects.filter(
+                            name=profile_name, profile_type="custom", is_active=True
+                        ).first()
+
+                        if custom_profile:
+                            # This is a custom profile - build full profile config
+                            profile_opts = custom_profile._parse_opts()
+
+                            # Merge opts into secator_config (profile opts override config)
+                            if profile_opts:
+                                for opt_key, opt_value in profile_opts.items():
+                                    secator_config[opt_key] = opt_value
+                                logger.info(
+                                    f"🔧 Merged opts from custom profile '{profile_name}': {list(profile_opts.keys())}"
+                                )
+
+                            # Build profile config structure for Secator
+                            profile_config = {
+                                "type": "profile",
+                                "name": custom_profile.name,
+                                "category": custom_profile.category,
+                                "description": custom_profile.description,
+                            }
+                            if custom_profile.enforce:
+                                profile_config["enforce"] = True
+                            if profile_opts:
+                                profile_config["opts"] = profile_opts
+
+                            # Check if profile name already added before appending
+                            if profile_config.get("name") not in seen_profile_names:
+                                profile_list.append(profile_config)
+                                seen_profile_names.add(profile_config.get("name"))
+                                logger.info(f"🔧 Added custom profile '{profile_name}' from '{key}' category")
+                        else:
+                            # Builtin profile - just add the name
+                            if profile_name not in seen_profile_names:
+                                profile_list.append(profile_name)
+                                seen_profile_names.add(profile_name)
+                                logger.info(f"🔧 Added builtin profile '{profile_name}' from '{key}' category")
+                    except Exception as e:
+                        # If error loading custom profile, fall back to builtin
+                        logger.warning(f"⚠️  Error loading profile '{profile_name}': {e}, treating as builtin")
+                        if profile_name not in seen_profile_names:
+                            profile_list.append(profile_name)
+                            seen_profile_names.add(profile_name)
+                            logger.info(
+                                f"🔧 Added profile '{profile_name}' from '{key}' category (fallback to builtin)"
+                            )
 
             # Set the profiles list in secator_config
             if profile_list:
