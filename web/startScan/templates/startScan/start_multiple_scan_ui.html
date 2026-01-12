@@ -100,33 +100,7 @@ Initiate Scan for Multiple Targets
                 <div id="advancedConfig" class="accordion-collapse collapse">
                   <div class="accordion-body">
                     <!-- Secator Profiles -->
-                    <div class="profile-selector">
-                      <h6>Speed Profile</h6>
-                      <div class="btn-group">
-                        <button class="btn btn-outline-primary" data-profile-type="speed" data-profile-value="jaguar">
-                          🐆 Jaguar (Fast)
-                        </button>
-                        <button class="btn btn-outline-primary" data-profile-type="speed" data-profile-value="rabbit">
-                          🐇 Rabbit (Balanced)
-                        </button>
-                        <button class="btn btn-outline-primary" data-profile-type="speed" data-profile-value="turtle">
-                          🐢 Turtle (Slow)
-                        </button>
-                      </div>
-                      
-                      <h6 class="mt-3">Stealth Profile</h6>
-                      <div class="btn-group">
-                        <button class="btn btn-outline-secondary" data-profile-type="stealth" data-profile-value="ninja">
-                          🥷 Ninja (Max Stealth)
-                        </button>
-                        <button class="btn btn-outline-secondary" data-profile-type="stealth" data-profile-value="chameleon">
-                          🦎 Chameleon (Moderate)
-                        </button>
-                        <button class="btn btn-outline-secondary" data-profile-type="stealth" data-profile-value="mouse">
-                          🐭 Mouse (Low Stealth)
-                        </button>
-                      </div>
-                    </div>
+                    {% include 'startScan/_items/secator_profiles.html' %}
                     
                     <!-- Simplified/Expert Mode -->
                     <div class="form-check form-switch mt-3">

@@ -448,12 +448,11 @@ class SecatorRunner:
         - 'threads' is considered invalid if None, empty string, or False (falls back to 'concurrency')
         - 'rate_limit' maps to 'global.rate_limit'
         - 'timeout' maps to 'global.timeout'
-        - 'speed' maps to 'speed_profile'
-        - 'stealth' maps to 'stealth_profile'
+        - Profiles are collected into a 'profiles' list that Secator expects
 
         Args:
             config: Configuration dictionary from reNgine. All keys are supported.
-            profiles: Speed/stealth profiles. All keys are supported.
+            profiles: Speed/stealth/general/network profiles. Values are profile names.
 
         Returns:
             Merged configuration dictionary for Secator, containing all keys from both config and profiles.
@@ -491,18 +490,34 @@ class SecatorRunner:
             # Force async mode - override any sync setting from config
             secator_config["sync"] = False
 
-        # Merge profiles dictionary - all keys are supported
+        # Merge profiles dictionary - Secator expects a 'profiles' list with profile names
+        profile_list = []
         if profiles:
-            # Handle special cases that need to be mapped to specific keys
-            if "speed" in profiles:
-                secator_config["speed_profile"] = profiles["speed"]
-            if "stealth" in profiles:
-                secator_config["stealth_profile"] = profiles["stealth"]
+            # Collect profile names from speed, stealth, general, and network
+            profile_keys = ["speed", "stealth", "general", "network"]
+            for key in profile_keys:
+                if key in profiles and profiles[key]:
+                    profile_name = profiles[key]
+                    if profile_name not in profile_list:
+                        profile_list.append(profile_name)
+                        logger.info(f"🔧 Added profile '{profile_name}' from '{key}' category")
 
-            # Merge all other profile keys directly
+            # Add any other profile keys that might be profile names
+            # Other keys are added directly to secator_config
             for key, value in profiles.items():
-                if key not in ["speed", "stealth"]:
-                    secator_config[key] = value
+                if key not in profile_keys:
+                    # If the value is a string and looks like a profile name, add it to profiles list
+                    if isinstance(value, str) and value and value not in profile_list:
+                        profile_list.append(value)
+                        logger.info(f"🔧 Added profile '{value}' from key '{key}'")
+                    else:
+                        # Otherwise, add the key-value pair directly to secator_config
+                        secator_config[key] = value
+
+            # Set the profiles list in secator_config
+            if profile_list:
+                secator_config["profiles"] = profile_list
+                logger.info(f"🔧 Profiles list for Secator: {profile_list}")
 
         secator_config["sync"] = False
         logger.info(f"🔧 Final prepared secator config: {secator_config}")

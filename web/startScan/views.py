@@ -447,6 +447,8 @@ def start_scan_ui(request, slug, domain_id):
 
         speed_profile = request.POST.get("speed_profile")
         stealth_profile = request.POST.get("stealth_profile")
+        general_profile = request.POST.get("general_profile")
+        network_profile = request.POST.get("network_profile")
         expert_mode = request.POST.get("expert_mode") in ["true", "on", "1", True]
 
         # Prepare API payload
@@ -460,6 +462,8 @@ def start_scan_ui(request, slug, domain_id):
             "secator_config": secator_config,
             "speed_profile": speed_profile,
             "stealth_profile": stealth_profile,
+            "general_profile": general_profile,
+            "network_profile": network_profile,
             "expert_mode": expert_mode,
         }
 
@@ -503,6 +507,8 @@ def start_scan_ui(request, slug, domain_id):
             secator_config=secator_config,
             speed_profile=speed_profile,
             stealth_profile=stealth_profile,
+            general_profile=general_profile,
+            network_profile=network_profile,
             expert_mode=expert_mode,
         )
 
@@ -1038,6 +1044,8 @@ def start_organization_scan(request, id, slug):
 
         speed_profile = request.POST.get("speed_profile")
         stealth_profile = request.POST.get("stealth_profile")
+        general_profile = request.POST.get("general_profile")
+        network_profile = request.POST.get("network_profile")
         expert_mode = request.POST.get("expert_mode") == "true"
 
         domain_list = organization.get_domains()
@@ -1053,6 +1061,8 @@ def start_organization_scan(request, id, slug):
                 "secator_config": secator_config,
                 "speed_profile": speed_profile,
                 "stealth_profile": stealth_profile,
+                "general_profile": general_profile,
+                "network_profile": network_profile,
                 "expert_mode": expert_mode,
             }
 
@@ -1081,6 +1091,8 @@ def start_organization_scan(request, id, slug):
                 secator_config=api_data.get("secator_config", {}),
                 speed_profile=api_data.get("speed_profile"),
                 stealth_profile=api_data.get("stealth_profile"),
+                general_profile=api_data.get("general_profile"),
+                network_profile=api_data.get("network_profile"),
                 expert_mode=api_data.get("expert_mode", False),
             )
 

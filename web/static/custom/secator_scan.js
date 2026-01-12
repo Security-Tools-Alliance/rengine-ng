@@ -10,6 +10,22 @@
     init: function() {
       this.bindEvents();
       this.initializeSubmitButton();
+      this.initializeDefaultProfiles();
+    },
+    
+    initializeDefaultProfiles: function() {
+      // Initialize hidden input fields with default profile values from active buttons
+      const profileTypes = ['speed', 'stealth', 'general', 'network'];
+      profileTypes.forEach(type => {
+        const $activeBtn = $(`.btn[data-profile-type="${type}"].active`);
+        if ($activeBtn.length) {
+          const value = $activeBtn.data('profile-value');
+          const $hiddenInput = $(`#${type}_profile`);
+          if ($hiddenInput.length) {
+            $hiddenInput.val(value);
+          }
+        }
+      });
     },
     
     bindEvents: function() {
@@ -147,8 +163,10 @@
           timeout: parseInt($('input[name="timeout"]').val()) || 300,
           delay: parseInt($('input[name="delay"]').val()) || 0
         },
-        speed_profile: $('.btn[data-profile-type="speed"].active').data('profile-value') || 'rabbit',
-        stealth_profile: $('.btn[data-profile-type="stealth"].active').data('profile-value') || 'chameleon',
+        speed_profile: $('.btn[data-profile-type="speed"].active').data('profile-value') || 'polite',
+        stealth_profile: $('.btn[data-profile-type="stealth"].active').data('profile-value') || 'stealth',
+        general_profile: $('.btn[data-profile-type="general"].active').data('profile-value') || 'full',
+        network_profile: $('.btn[data-profile-type="network"].active').data('profile-value') || 'all_ports',
         expert_mode: $('#expertMode').is(':checked')
       };
       
@@ -352,24 +370,30 @@
       $(`[data-profile-type="${type}"]`).removeClass('active');
       $btn.addClass('active');
       
-      // Update hidden input field
-      $(`#${type}_profile`).val(value);
+      // Update hidden input field if it exists
+      const $hiddenInput = $(`#${type}_profile`);
+      if ($hiddenInput.length) {
+        $hiddenInput.val(value);
+      }
       
-      // Apply profile values
-      this.applyProfile(type, value);
+      // Apply profile values (only for speed and stealth as they affect form fields)
+      if (type === 'speed' || type === 'stealth') {
+        this.applyProfile(type, value);
+      }
     },
     
     applyProfile: function(type, value) {
       const profiles = {
         speed: {
-          jaguar: { rate_limit: 300, threads: 50, timeout: 5 },
-          rabbit: { rate_limit: 150, threads: 20, timeout: 10 },
-          turtle: { rate_limit: 50, threads: 10, timeout: 30 }
+          aggressive: { rate_limit: 10000, delay: 0, timeout: 1, retries: 1 },
+          insane: { rate_limit: 100000, delay: 0, timeout: 1, retries: 0 },
+          polite: { rate_limit: 100, delay: 0, timeout: 10, retries: 5 },
+          paranoid: { rate_limit: 5, delay: 5, timeout: 15, retries: 5 }
         },
         stealth: {
-          ninja: { rate_limit: 10, threads: 1, timeout: 30, delay: 5 },
-          chameleon: { rate_limit: 50, threads: 5, timeout: 20, delay: 2 },
-          mouse: { rate_limit: 100, threads: 10, timeout: 10, delay: 0 }
+          sneaky: { fragment: true, nmap_light_fragment: true },
+          stealth: { tcp_syn_stealth: true, nmap_light_tcp_syn_stealth: true, scan_type: 's' },
+          tor: { proxy: 'auto' }
         }
       };
       
@@ -575,6 +599,8 @@
   // Initialize on document ready
   $(function() {
     SecatorScan.init();
+    // Initialize tooltips for profile buttons
+    SecatorScan.initializeTooltips();
   });
 
 })(jQuery);

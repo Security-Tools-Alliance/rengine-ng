@@ -1383,8 +1383,10 @@ class StartScan(APIView):
 
         Secator configuration:
             - secator_config (dict): Configuration parameters (proxy, rate_limit, threads, timeout, delay)
-            - speed_profile (str): jaguar|rabbit|turtle
-            - stealth_profile (str): ninja|chameleon|mouse
+            - speed_profile (str): aggressive|insane|polite|paranoid
+            - stealth_profile (str): sneaky|stealth|tor
+            - general_profile (str): active|passive|full
+            - network_profile (str): all_ports|http_headless|http_record
             - expert_mode (bool): Enable expert mode
 
         reNgine parameters:
@@ -1422,10 +1424,14 @@ class StartScan(APIView):
             secator_config = data.get("secator_config", {})
             speed_profile = data.get("speed_profile")
             stealth_profile = data.get("stealth_profile")
+            general_profile = data.get("general_profile")
+            network_profile = data.get("network_profile")
         else:
             secator_config = {}
             speed_profile = None
             stealth_profile = None
+            general_profile = None
+            network_profile = None
         if hasattr(data, "get"):
             expert_mode = data.get("expert_mode", False)
             # reNgine parameters
@@ -1458,6 +1464,8 @@ class StartScan(APIView):
             secator_config=secator_config,
             speed_profile=speed_profile,
             stealth_profile=stealth_profile,
+            general_profile=general_profile,
+            network_profile=network_profile,
             expert_mode=expert_mode,
         )
 

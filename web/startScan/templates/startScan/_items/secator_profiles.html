@@ -1,0 +1,65 @@
+<!-- Secator Profiles Selection - Reusable component -->
+<div class="profile-selector">
+  <!-- Speed Profile -->
+  <h6>Speed Profile</h6>
+  <p class="small text-muted mb-2">Controls scan speed and intensity</p>
+  <div class="btn-group">
+    <button class="btn btn-outline-primary" data-profile-type="speed" data-profile-value="aggressive" data-bs-toggle="tooltip" title="Optimized for internal networks or time-sensitive scans with no rate limiting">
+      ⚡ Aggressive
+    </button>
+    <button class="btn btn-outline-primary" data-profile-type="speed" data-profile-value="insane" data-bs-toggle="tooltip" title="Maximum speed for local LAN scanning or stress testing">
+      🔥 Insane
+    </button>
+    <button class="btn btn-primary active" data-profile-type="speed" data-profile-value="polite" data-bs-toggle="tooltip" title="Balanced settings to avoid overloading the network">
+      🤝 Polite <small class="ms-1">(Default)</small>
+    </button>
+    <button class="btn btn-outline-primary" data-profile-type="speed" data-profile-value="paranoid" data-bs-toggle="tooltip" title="Maximum stealth with very conservative settings">
+      🛡️ Paranoid
+    </button>
+  </div>
+  
+  <!-- Evasion Profile -->
+  <h6 class="mt-3">Evasion Profile</h6>
+  <p class="small text-muted mb-2">Configures evasion techniques to avoid detection</p>
+  <div class="btn-group">
+    <button class="btn btn-outline-secondary" data-profile-type="stealth" data-profile-value="sneaky" data-bs-toggle="tooltip" title="IDS/IPS evasion for sensitive networks using packet fragmentation">
+      🥷 Sneaky
+    </button>
+    <button class="btn btn-secondary active" data-profile-type="stealth" data-profile-value="stealth" data-bs-toggle="tooltip" title="Stealth scan using TCP SYN scanning">
+      🦎 Stealth <small class="ms-1">(Default)</small>
+    </button>
+    <button class="btn btn-outline-secondary" data-profile-type="stealth" data-profile-value="tor" data-bs-toggle="tooltip" title="Anonymous scanning using the Tor network">
+      🧅 Tor
+    </button>
+  </div>
+  
+  <!-- General Profile -->
+  <h6 class="mt-3">General Profile</h6>
+  <p class="small text-muted mb-2">Controls global scan approach and feature activation</p>
+  <div class="btn-group">
+    <button class="btn btn-outline-info" data-profile-type="general" data-profile-value="active" data-bs-toggle="tooltip" title="Active scanning only (no passive sources used)">
+      🎯 Active
+    </button>
+    <button class="btn btn-outline-info" data-profile-type="general" data-profile-value="passive" data-bs-toggle="tooltip" title="Passive scanning only (no requests to targets)">
+      👁️ Passive
+    </button>
+    <button class="btn btn-info active" data-profile-type="general" data-profile-value="full" data-bs-toggle="tooltip" title="Activate all optional features">
+      ⚡ Full <small class="ms-1">(Default)</small>
+    </button>
+  </div>
+  
+  <!-- Network Profile -->
+  <h6 class="mt-3">Network Profile</h6>
+  <p class="small text-muted mb-2">Configures network-specific options for the scan</p>
+  <div class="btn-group">
+    <button class="btn btn-success active" data-profile-type="network" data-profile-value="all_ports" data-bs-toggle="tooltip" title="Scan all ports instead of common ports">
+      🔌 All Ports <small class="ms-1">(Default)</small>
+    </button>
+    <button class="btn btn-outline-success" data-profile-type="network" data-profile-value="http_headless" data-bs-toggle="tooltip" title="Headless HTTP requests - Enables headless browser mode for HTTP tasks">
+      🤖 HTTP Headless
+    </button>
+    <button class="btn btn-outline-success" data-profile-type="network" data-profile-value="http_record" data-bs-toggle="tooltip" title="Record HTTP requests / responses and take screenshots">
+      🎬 HTTP Record
+    </button>
+  </div>
+</div>

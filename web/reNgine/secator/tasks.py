@@ -23,6 +23,8 @@ def initiate_secator_scan(
     secator_config=None,
     speed_profile=None,
     stealth_profile=None,
+    general_profile=None,
+    network_profile=None,
     expert_mode=False,
 ):
     """Initiate a new Secator scan.
@@ -40,8 +42,10 @@ def initiate_secator_scan(
         initiated_by (int): User ID initiating the scan.
         scan_existing_elements (bool): Whether to scan existing hostnames and IPs in the target. Default: False.
         secator_config (dict): Secator configuration parameters. Default: None.
-        speed_profile (str): Speed profile (jaguar, rabbit, turtle). Default: None.
-        stealth_profile (str): Stealth profile (ninja, chameleon, mouse). Default: None.
+        speed_profile (str): Speed profile (aggressive, insane, polite, paranoid). Default: None.
+        stealth_profile (str): Evasion profile (sneaky, stealth, tor). Default: None.
+        general_profile (str): General profile (active, passive, full). Default: None.
+        network_profile (str): Network profile (all_ports, http_headless, http_record). Default: None.
         expert_mode (bool): Enable expert mode. Default: False.
     """
     try:
@@ -94,6 +98,16 @@ def initiate_secator_scan(
         if stealth_profile:
             profiles["stealth"] = stealth_profile
             logger.info(f"Applied stealth profile: {stealth_profile}")
+
+        # Apply general profile
+        if general_profile:
+            profiles["general"] = general_profile
+            logger.info(f"Applied general profile: {general_profile}")
+
+        # Apply network profile
+        if network_profile:
+            profiles["network"] = network_profile
+            logger.info(f"Applied network profile: {network_profile}")
 
         # Apply expert mode settings
         if expert_mode:

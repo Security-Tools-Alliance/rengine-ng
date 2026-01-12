@@ -58,6 +58,8 @@ def start_secator_scan(
     secator_config: dict = None,
     speed_profile: str = None,
     stealth_profile: str = None,
+    general_profile: str = None,
+    network_profile: str = None,
     expert_mode: bool = False,
 ) -> dict:
     """
@@ -79,8 +81,10 @@ def start_secator_scan(
         url_filter: URL filter/path to scan
         scan_existing_elements: Whether to scan existing elements
         secator_config: Configuration parameters
-        speed_profile: Speed profile (jaguar|rabbit|turtle)
-        stealth_profile: Stealth profile (ninja|chameleon|mouse)
+        speed_profile: Speed profile (aggressive|insane|polite|paranoid)
+        stealth_profile: Evasion profile (sneaky|stealth|tor)
+        general_profile: General profile (active|passive|full)
+        network_profile: Network profile (all_ports|http_headless|http_record)
         expert_mode: Enable expert mode
 
     Returns:
@@ -157,6 +161,8 @@ def start_secator_scan(
                         secator_config=secator_config,
                         speed_profile=speed_profile,
                         stealth_profile=stealth_profile,
+                        general_profile=general_profile,
+                        network_profile=network_profile,
                         expert_mode=expert_mode,
                         initiated_by_id=initiated_by_id,
                     )
@@ -212,6 +218,8 @@ def start_secator_scan(
                         secator_config=secator_config,
                         speed_profile=speed_profile,
                         stealth_profile=stealth_profile,
+                        general_profile=general_profile,
+                        network_profile=network_profile,
                         expert_mode=expert_mode,
                         initiated_by_id=initiated_by_id,
                     )

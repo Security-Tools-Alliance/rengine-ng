@@ -28,15 +28,23 @@ class TestSecatorRunnerConfig(unittest.TestCase):
     def test_prepare_secator_config_with_profiles(self):
         """Test Secator configuration with profiles."""
         config = {"threads": 5, "timeout": 60}
-        profiles = {"speed": "fast", "stealth": "high"}
+        profiles = {"speed": "polite", "stealth": "stealth", "general": "full", "network": "all_ports"}
 
         result = self.runner._prepare_secator_config(config, profiles)
 
         self.assertIn("global", result)
         self.assertEqual(result["global"]["concurrency"], 5)
         self.assertEqual(result["global"]["timeout"], 60)
-        self.assertEqual(result["speed_profile"], "fast")
-        self.assertEqual(result["stealth_profile"], "high")
+        # Profiles should be in a list that Secator expects
+        self.assertIn("profiles", result)
+        self.assertIsInstance(result["profiles"], list)
+        # All profile names should be in the list
+        self.assertIn("polite", result["profiles"])
+        self.assertIn("stealth", result["profiles"])
+        self.assertIn("full", result["profiles"])
+        self.assertIn("all_ports", result["profiles"])
+        # No duplicates
+        self.assertEqual(len(result["profiles"]), 4)
 
     def test_prepare_secator_config_threads_precedence(self):
         """Test that threads takes precedence over concurrency."""
@@ -89,14 +97,18 @@ class TestSecatorRunnerConfig(unittest.TestCase):
     def test_prepare_secator_config_profiles_override(self):
         """Test that profiles override config values."""
         config = {"threads": 10, "timeout": 30}
-        profiles = {"custom_key": "custom_value"}
+        profiles = {"custom_key": "custom_value", "custom_profile": "aggressive"}
 
         result = self.runner._prepare_secator_config(config, profiles)
 
         # Config should be used for special keys (profiles don't override them)
         self.assertEqual(result["global"]["concurrency"], 10)  # threads from config
         self.assertEqual(result["global"]["timeout"], 30)  # timeout from config
-        self.assertEqual(result["custom_key"], "custom_value")  # custom key from profiles
+        # Custom profile names (string values) are added to profiles list
+        self.assertIn("profiles", result)
+        self.assertIn("aggressive", result["profiles"])
+        # custom_value is also treated as a profile name (string value)
+        self.assertIn("custom_value", result["profiles"])
 
     def test_prepare_secator_config_none_inputs(self):
         """Test configuration with None inputs."""
@@ -119,8 +131,6 @@ class TestSecatorRunnerConfig(unittest.TestCase):
             "concurrency": 10,  # Should be ignored due to threads
             "rate_limit": 50,
             "timeout": 45,
-            "speed": "medium",
-            "stealth": "low",
         }
 
         result = self.runner._prepare_secator_config(config)
@@ -128,9 +138,6 @@ class TestSecatorRunnerConfig(unittest.TestCase):
         self.assertEqual(result["global"]["concurrency"], 5)  # threads takes precedence
         self.assertEqual(result["global"]["rate_limit"], 50)
         self.assertEqual(result["global"]["timeout"], 45)
-        # speed and stealth should be mapped to speed_profile and stealth_profile
-        self.assertEqual(result["speed"], "medium")  # Direct mapping, not speed_profile
-        self.assertEqual(result["stealth"], "low")  # Direct mapping, not stealth_profile
 
     def test_prepare_secator_config_all_keys_preserved(self):
         """Test that all keys from config and profiles are preserved."""
@@ -139,17 +146,30 @@ class TestSecatorRunnerConfig(unittest.TestCase):
 
         result = self.runner._prepare_secator_config(config, profiles)
 
-        # All keys should be present
+        # All config keys should be present
         self.assertIn("custom_config_key", result)
         self.assertIn("another_key", result)
-        self.assertIn("custom_profile_key", result)
-        self.assertIn("overlap_key", result)
+        
+        # Profile values that are strings are added to profiles list, not as separate keys
+        # So custom_profile_key and overlap_key won't be in result as keys
+        # but their values will be in the profiles list
+        self.assertIn("profiles", result)
+        self.assertIn("profile_value", result["profiles"])
+        self.assertIn("profile_wins", result["profiles"])
 
-        # Values should be correct
-        self.assertEqual(result["custom_config_key"], "config_value")
-        self.assertEqual(result["another_key"], 123)
-        self.assertEqual(result["custom_profile_key"], "profile_value")
-        self.assertEqual(result["overlap_key"], "profile_wins")
+    def test_prepare_secator_config_general_network_profiles(self):
+        """Test Secator configuration with general and network profiles."""
+        config = {"threads": 10}
+        profiles = {"general": "active", "network": "http_headless"}
+
+        result = self.runner._prepare_secator_config(config, profiles)
+
+        # Profiles should be in a list that Secator expects
+        self.assertIn("profiles", result)
+        self.assertIsInstance(result["profiles"], list)
+        self.assertIn("active", result["profiles"])
+        self.assertIn("http_headless", result["profiles"])
+        self.assertEqual(len(result["profiles"]), 2)
 
 
 if __name__ == "__main__":
