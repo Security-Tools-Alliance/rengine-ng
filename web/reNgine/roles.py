@@ -38,7 +38,3 @@ class Auditor(AbstractUserRole):
         PERM_INITATE_SCANS_SUBSCANS: False,
         PERM_MODIFY_TARGETS: False,
     }
-
-# OAuth user defaults
-ACCOUNT_DEFAULT_HTTP_PROTOCOL = 'https'
-SOCIALACCOUNT_STORE_TOKENS = False  # Don't store OAuth tokens (security)
