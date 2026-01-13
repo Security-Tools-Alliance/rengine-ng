@@ -54,9 +54,9 @@ You can enable one or more OAuth providers. Configure only the ones you plan to 
    - Go to https://console.cloud.google.com/
    - Create a new project or select an existing one
 
-2. **Enable Google+ API**:
+2. **Enable Google People API**:
    - Navigate to "APIs & Services" > "Library"
-   - Search for "Google+ API" and enable it
+   - Search for "Google People API" and enable it
 
 3. **Create OAuth Credentials**:
    - Go to "APIs & Services" > "Credentials"
