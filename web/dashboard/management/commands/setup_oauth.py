@@ -54,8 +54,11 @@ class Command(BaseCommand):
                     self.style.SUCCESS(f'{action} {config["name"]} OAuth provider')
                 )
             else:
-                # Remove if exists but no credentials
-                deleted_count, _ = SocialApp.objects.filter(provider=provider_id).delete()
+                # Remove if exists but no credentials (only for current site)
+                deleted_count, _ = SocialApp.objects.filter(
+                    provider=provider_id,
+                    sites=site
+                ).delete()
                 if deleted_count:
                     self.stdout.write(
                         self.style.WARNING(f'Removed {config["name"]} (no credentials)')
