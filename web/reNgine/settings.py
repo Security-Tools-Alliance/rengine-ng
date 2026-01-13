@@ -219,8 +219,10 @@ ACCOUNT_EMAIL_VERIFICATION = 'optional'
 ACCOUNT_USERNAME_REQUIRED = True
 ACCOUNT_UNIQUE_EMAIL = True  # Prevent duplicate emails across OAuth/local accounts
 ACCOUNT_PREVENT_ENUMERATION = True  # Don't reveal if username/email exists
+ACCOUNT_DEFAULT_HTTP_PROTOCOL = 'https'
 SOCIALACCOUNT_AUTO_SIGNUP = True
 SOCIALACCOUNT_EMAIL_VERIFICATION = 'optional'
+SOCIALACCOUNT_STORE_TOKENS = False  # Don't store OAuth tokens (security)
 # Skip intermediate confirmation page and redirect directly to OAuth provider.
 # Set SOCIALACCOUNT_LOGIN_ON_GET=0 in .env for stricter deployments (CSRF protection).
 SOCIALACCOUNT_LOGIN_ON_GET = env.bool('SOCIALACCOUNT_LOGIN_ON_GET', default=True)
