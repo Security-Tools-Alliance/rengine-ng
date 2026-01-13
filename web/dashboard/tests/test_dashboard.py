@@ -232,9 +232,13 @@ class OAuthRedirectTests(TestCase):
         self.user = get_user_model().objects.create_user(username='oauthuser', password='password123')
         SocialAccount.objects.create(user=self.user, provider='google', uid='oauth-123')
 
-    def test_oauth_user_without_projects_redirects_to_list(self):
+    def _build_request(self, user):
         request = self.factory.get('/')
-        request.user = self.user
+        request.user = user
+        return request
+
+    def test_oauth_user_without_projects_redirects_to_list(self):
+        request = self._build_request(self.user)
 
         redirect_url = self.adapter.get_login_redirect_url(request)
 
@@ -251,8 +255,7 @@ class OAuthRedirectTests(TestCase):
         )
         project.users.add(self.user)
 
-        request = self.factory.get('/')
-        request.user = self.user
+        request = self._build_request(self.user)
 
         redirect_url = self.adapter.get_login_redirect_url(request)
 
@@ -260,6 +263,65 @@ class OAuthRedirectTests(TestCase):
             redirect_url,
             reverse('dashboardIndex', kwargs={'slug': project.slug})
         )
+
+    def test_non_oauth_user_with_projects_redirects_to_dashboard(self):
+        """Non-OAuth user with existing projects redirects to first project dashboard."""
+        user = get_user_model().objects.create_user(
+            username='normaluser',
+            password='password123',
+        )
+        project = Project.objects.create(
+            name='First project',
+            description='',
+            slug='first-project',
+            insert_date=timezone.now()
+        )
+
+        request = self._build_request(user)
+        redirect_url = self.adapter.get_login_redirect_url(request)
+
+        self.assertEqual(
+            redirect_url,
+            reverse('dashboardIndex', kwargs={'slug': project.slug}),
+        )
+
+    def test_non_oauth_superuser_without_projects_redirects_to_onboarding(self):
+        """Superuser without projects redirects to onboarding to create one."""
+        superuser = get_user_model().objects.create_superuser(
+            username='superuser',
+            email='super@example.com',
+            password='password123',
+        )
+
+        request = self._build_request(superuser)
+        redirect_url = self.adapter.get_login_redirect_url(request)
+
+        self.assertEqual(redirect_url, reverse('onboarding'))
+
+    def test_non_oauth_sys_admin_without_projects_redirects_to_onboarding(self):
+        """sys_admin role without projects redirects to onboarding."""
+        sys_admin = get_user_model().objects.create_user(
+            username='sysadminuser',
+            password='password123',
+        )
+        assign_role(sys_admin, 'sys_admin')
+
+        request = self._build_request(sys_admin)
+        redirect_url = self.adapter.get_login_redirect_url(request)
+
+        self.assertEqual(redirect_url, reverse('onboarding'))
+
+    def test_non_oauth_non_admin_without_projects_redirects_to_list_projects(self):
+        """Non-admin user without projects redirects to projects list (read-only)."""
+        user = get_user_model().objects.create_user(
+            username='noprojuser',
+            password='password123',
+        )
+
+        request = self._build_request(user)
+        redirect_url = self.adapter.get_login_redirect_url(request)
+
+        self.assertEqual(redirect_url, reverse('list_projects'))
         
         # Test sys_admin trying to delete themselves
         self.client.force_login(self.sys_admin)
