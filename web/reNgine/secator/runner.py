@@ -490,7 +490,7 @@ class SecatorRunner:
             # Force async mode - override any sync setting from config
             secator_config["sync"] = False
 
-        # Merge profiles dictionary - Secator expects a 'profiles' list with profile names or profile configs
+        # Merge profiles dictionary - Secator expects a 'profiles' list with profile names (str) or TemplateLoader instances
         profile_list = []
         if profiles:
             # Collect profile names from speed, evasion, general, and network
@@ -500,7 +500,20 @@ class SecatorRunner:
                 profiles["evasion"] = profiles.pop("stealth")
 
             # Track seen profile names to avoid duplicates and improve performance
-            seen_profile_names = set(p if isinstance(p, str) else p.get("name") for p in profile_list)
+            seen_profile_names = set()
+            for p in profile_list:
+                if isinstance(p, str):
+                    seen_profile_names.add(p)
+                elif hasattr(p, "name") and p.name:
+                    seen_profile_names.add(p.name)
+                else:
+                    # Profile object without name attribute - use repr as fallback to avoid None collisions
+                    # This should not happen in normal operation, but prevents silent merging of distinct entries
+                    logger.warning(
+                        f"Profile object in profile_list lacks 'name' attribute: {type(p).__name__}. "
+                        f"Using repr as identifier to avoid collisions."
+                    )
+                    seen_profile_names.add(repr(p))
 
             for key in profile_keys:
                 if key in profiles and profiles[key]:
@@ -516,7 +529,7 @@ class SecatorRunner:
                         ).first()
 
                         if custom_profile:
-                            # This is a custom profile - build full profile config
+                            # This is a custom profile - create TemplateLoader instance
                             profile_opts = custom_profile._parse_opts()
 
                             # Merge opts into secator_config (profile opts override config)
@@ -527,25 +540,30 @@ class SecatorRunner:
                                     f"🔧 Merged opts from custom profile '{profile_name}': {list(profile_opts.keys())}"
                                 )
 
-                            # Build profile config structure for Secator
-                            profile_config = {
+                            # Build profile config dict for TemplateLoader
+                            profile_config_dict = {
                                 "type": "profile",
                                 "name": custom_profile.name,
                                 "category": custom_profile.category,
-                                "description": custom_profile.description,
+                                "description": custom_profile.description or "",
                             }
                             if custom_profile.enforce:
-                                profile_config["enforce"] = True
+                                profile_config_dict["enforce"] = True
                             if profile_opts:
-                                profile_config["opts"] = profile_opts
+                                profile_config_dict["opts"] = profile_opts
+
+                            # Create TemplateLoader instance for custom profile
+                            profile_loader = TemplateLoader(input=profile_config_dict)
 
                             # Check if profile name already added before appending
-                            if profile_config.get("name") not in seen_profile_names:
-                                profile_list.append(profile_config)
-                                seen_profile_names.add(profile_config.get("name"))
-                                logger.info(f"🔧 Added custom profile '{profile_name}' from '{key}' category")
+                            if custom_profile.name not in seen_profile_names:
+                                profile_list.append(profile_loader)
+                                seen_profile_names.add(custom_profile.name)
+                                logger.info(
+                                    f"🔧 Added custom profile '{profile_name}' from '{key}' category as TemplateLoader"
+                                )
                         else:
-                            # Builtin profile - just add the name
+                            # Builtin profile - just add the name as string (Secator will resolve it)
                             if profile_name not in seen_profile_names:
                                 profile_list.append(profile_name)
                                 seen_profile_names.add(profile_name)
@@ -563,7 +581,9 @@ class SecatorRunner:
             # Set the profiles list in secator_config
             if profile_list:
                 secator_config["profiles"] = profile_list
-                logger.info(f"🔧 Profiles list for Secator: {profile_list}")
+                logger.info(
+                    f"🔧 Profiles list for Secator: {[p if isinstance(p, str) else p.name for p in profile_list]}"
+                )
 
         secator_config["sync"] = False
         logger.info(f"🔧 Final prepared secator config: {secator_config}")

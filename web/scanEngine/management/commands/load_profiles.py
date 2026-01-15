@@ -111,6 +111,19 @@ class Command(SecatorLoaderBase):
                     # Convert opts dict to YAML string
                     opts_yaml = yaml.dump(opts, default_flow_style=False) if opts else ""
 
+                    # Define default profiles for each category (only set on first creation)
+                    default_profiles = {
+                        "speed": "polite",
+                        "evasion": "stealth",
+                        "general": "full",
+                        "network": "all_ports",
+                    }
+
+                    # Check if this profile should be default (only on first creation)
+                    should_be_default = (
+                        name == default_profiles.get(category) and not SecatorProfile.objects.filter(name=name).exists()
+                    )
+
                     # Use profile_loader.name directly as name (unique identifier for Secator)
                     profile, created = SecatorProfile.objects.get_or_create(
                         name=name,
@@ -121,6 +134,7 @@ class Command(SecatorLoaderBase):
                             "opts": opts_yaml,
                             "profile_type": "builtin",
                             "is_active": True,
+                            "is_default": should_be_default,
                         },
                     )
 
@@ -128,9 +142,11 @@ class Command(SecatorLoaderBase):
                         # For built-in profiles, use bypass_builtin_constraints to allow save
                         profile.save(bypass_builtin_constraints=True)
                         created_count += 1
-                        self.stdout.write(f"Created built-in profile: {name}")
+                        default_msg = " (set as default)" if should_be_default else ""
+                        self.stdout.write(f"Created built-in profile: {name}{default_msg}")
                     else:
                         # Update existing profile using update() to bypass save() constraints
+                        # Do NOT modify is_default field on updates
                         SecatorProfile.objects.filter(pk=profile.pk).update(
                             category=category,
                             description=description,

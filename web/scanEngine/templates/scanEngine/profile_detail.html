@@ -61,6 +61,13 @@
                                         <span class="text-muted">No</span>
                                         {% endif %}
                                     </p>
+                                    <p><strong>Default:</strong> 
+                                        {% if profile.is_default %}
+                                        <span class="badge badge-soft-primary"><i class="fas fa-star"></i> Default for {{ profile.get_category_display }}</span>
+                                        {% else %}
+                                        <span class="text-muted">No</span>
+                                        {% endif %}
+                                    </p>
                                     <p><strong>Status:</strong> 
                                         <span class="badge badge-soft-{% if profile.is_active %}success{% else %}danger{% endif %}">
                                             {{ profile.is_active|yesno:"Active,Inactive" }}

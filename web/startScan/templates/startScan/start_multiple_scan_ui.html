@@ -31,6 +31,10 @@ Initiate Scan for Multiple Targets
         <form method="POST">
           {% csrf_token %}
           <input type="hidden" id="execution_mode" name="execution_mode" value="">
+          <input type="hidden" name="speed_profile" id="speed_profile" value="">
+          <input type="hidden" name="stealth_profile" id="stealth_profile" value="">
+          <input type="hidden" name="general_profile" id="general_profile" value="">
+          <input type="hidden" name="network_profile" id="network_profile" value="">
           <h4 class="header-title mt-4">Choose Execution Mode</h4>
           <div class="execution-mode-selector mb-4">
             <div class="row">

@@ -56,6 +56,7 @@
                                     <th>Type</th>
                                     <th>Description</th>
                                     <th>Enforce</th>
+                                    <th>Default</th>
                                     <th>Status</th>
                                     <th>Created</th>
                                     <th>Actions</th>
@@ -87,6 +88,13 @@
                                         {% endif %}
                                     </td>
                                     <td>
+                                        {% if profile.is_default %}
+                                        <span class="badge badge-soft-primary"><i class="fas fa-star"></i> Default</span>
+                                        {% else %}
+                                        <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
                                         {% if profile.is_active %}
                                         <span class="badge badge-soft-success">Active</span>
                                         {% else %}
@@ -99,6 +107,9 @@
                                             <a href="{% url 'profile_detail' profile.id %}" class="btn btn-info btn-sm">
                                                 <i class="fas fa-eye"></i>
                                             </a>
+                                            <button type="button" class="btn btn-{% if profile.is_default %}primary{% else %}secondary{% endif %} btn-sm" onclick="setDefaultProfile({{ profile.id }}, '{{ profile.name }}', {{ profile.is_default|yesno:'true,false' }})" title="{% if profile.is_default %}Currently default{% else %}Set as default{% endif %}">
+                                                <i class="fas fa-star"></i>
+                                            </button>
                                             {% if profile.profile_type == 'custom' %}
                                             <a href="{% url 'update_profile' profile.id %}" class="btn btn-warning btn-sm">
                                                 <i class="fas fa-edit"></i>
@@ -112,7 +123,7 @@
                                 </tr>
                                 {% empty %}
                                 <tr>
-                                    <td colspan="8" class="text-center text-muted">
+                                    <td colspan="9" class="text-center text-muted">
                                         <i class="fas fa-inbox fa-2x mb-2"></i><br>
                                         No profiles found. Create one or load built-in profiles.
                                     </td>
@@ -273,6 +284,77 @@ function loadBuiltinProfiles() {
                 Swal.fire({
                     title: 'Error!',
                     text: error.message || 'Error loading built-in profiles',
+                    icon: 'error'
+                });
+            });
+        }
+    });
+}
+
+// Set default profile
+function setDefaultProfile(profileId, profileName, isCurrentlyDefault) {
+    if (isCurrentlyDefault) {
+        Swal.fire({
+            title: 'Already Default',
+            text: `"${profileName}" is already the default profile for its category.`,
+            icon: 'info'
+        });
+        return;
+    }
+
+    const url = `{% url 'set_default_profile' 0 %}`.replace('0', profileId);
+    
+    Swal.fire({
+        title: 'Set as Default?',
+        html: `Set <strong>"${profileName}"</strong> as the default profile for its category?<br><br>This will unset any other default profile in the same category.`,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#3085d6',
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: 'Yes, set as default!'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            Swal.fire({
+                title: 'Setting default...',
+                text: 'Please wait',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+
+            fetch(url, {
+                method: 'POST',
+                credentials: "same-origin",
+                headers: {
+                    "X-CSRFToken": getCookie("csrftoken"),
+                    "Content-Type": "application/json"
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status) {
+                    Swal.fire({
+                        title: 'Success!',
+                        text: data.message || `"${profileName}" has been set as default.`,
+                        icon: 'success',
+                        timer: 2000,
+                        showConfirmButton: false
+                    }).then(() => {
+                        window.location.reload();
+                    });
+                } else {
+                    Swal.fire({
+                        title: 'Error!',
+                        text: data.message || 'Failed to set default profile',
+                        icon: 'error'
+                    });
+                }
+            })
+            .catch(error => {
+                Swal.fire({
+                    title: 'Error!',
+                    text: error.message || 'Error setting default profile',
                     icon: 'error'
                 });
             });

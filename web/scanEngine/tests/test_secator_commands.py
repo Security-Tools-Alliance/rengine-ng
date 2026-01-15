@@ -10,6 +10,7 @@ import sys
 from unittest.mock import MagicMock, mock_open, patch
 
 from django.core.management import call_command
+import yaml
 
 from scanEngine.models import SecatorProfile, SecatorScan, SecatorTask, SecatorWorkflow
 from utils.test_base import BaseTestCase
@@ -831,6 +832,84 @@ opts:
         self.assertEqual(profile.category, "speed")
         self.assertEqual(profile.description, "Test speed profile")
         self.assertFalse(profile.enforce)
+
+    @patch("scanEngine.management.commands.load_profiles.get_configs_by_type")
+    @patch(
+        "builtins.open",
+        new_callable=mock_open,
+        read_data="""
+type: profile
+name: polite
+category: speed
+description: Polite speed profile
+enforce: false
+opts:
+  rate_limit: 100
+  delay: 0
+""",
+    )
+    def test_load_profiles_sets_default_on_first_import(self, mock_file, mock_get_configs):
+        """Test that default profiles are set on first import."""
+        mock_profile = MagicMock()
+        mock_profile.name = "polite"
+        mock_profile.description = "Polite speed profile"
+        mock_profile._path = "/path/to/polite.yaml"
+
+        mock_get_configs.return_value = [mock_profile]
+
+        # Run the command - first import
+        out = get_test_stdout()
+        call_command("load_profiles", "--builtin-only", stdout=out)
+
+        # Check that profile was created and set as default
+        profile = SecatorProfile.objects.filter(name="polite").first()
+        self.assertIsNotNone(profile)
+        self.assertTrue(profile.is_default)
+
+    @patch("scanEngine.management.commands.load_profiles.get_configs_by_type")
+    @patch(
+        "builtins.open",
+        new_callable=mock_open,
+        read_data="""
+type: profile
+name: polite
+category: speed
+description: Updated polite speed profile
+enforce: false
+opts:
+  rate_limit: 150
+  delay: 1
+""",
+    )
+    def test_load_profiles_does_not_modify_default_on_update(self, mock_file, mock_get_configs):
+        """Test that default status is not modified on subsequent imports."""
+        # Create existing profile with is_default=False
+        existing_profile = SecatorProfile.objects.create(
+            name="polite",
+            category="speed",
+            description="Polite speed profile",
+            enforce=False,
+            opts=yaml.dump({"rate_limit": 100, "delay": 0}),
+            profile_type="builtin",
+            is_active=True,
+            is_default=False,
+        )
+
+        mock_profile = MagicMock()
+        mock_profile.name = "polite"
+        mock_profile.description = "Updated polite speed profile"
+        mock_profile._path = "/path/to/polite.yaml"
+
+        mock_get_configs.return_value = [mock_profile]
+
+        # Run the command - update existing profile
+        out = get_test_stdout()
+        call_command("load_profiles", "--builtin-only", stdout=out)
+
+        # Check that is_default was not modified
+        existing_profile.refresh_from_db()
+        self.assertFalse(existing_profile.is_default)
+        self.assertEqual(existing_profile.description, "Updated polite speed profile")
 
     @patch("scanEngine.management.commands.load_profiles.get_configs_by_type")
     def test_load_profiles_command_no_profiles(self, mock_get_configs):

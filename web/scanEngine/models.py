@@ -690,6 +690,10 @@ class SecatorProfile(models.Model):
         help_text="Type of profile: built-in from Secator or custom",
     )
     is_active = models.BooleanField(default=True, help_text="Whether this profile is available for use")
+    is_default = models.BooleanField(
+        default=False,
+        help_text="Whether this profile is the default for its category (only one default per category allowed)",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -728,32 +732,39 @@ class SecatorProfile(models.Model):
 
     def save(self, *args, **kwargs):
         """Override save to prevent modification of built-in profiles"""
-        # Allow modification if explicitly bypassing constraints (for management commands)
-        if kwargs.pop("bypass_builtin_constraints", False):
-            super().save(*args, **kwargs)
-            return
+        bypass_builtin = kwargs.pop("bypass_builtin_constraints", False)
 
-        if self.pk is not None:
-            # This is an update operation
-            try:
-                orig = SecatorProfile.objects.get(pk=self.pk)
-                if orig.profile_type == "builtin":
-                    # Check if this is a bulk operation (admin actions)
-                    if kwargs.get("update_fields"):
-                        # For bulk operations, log the attempt but don't raise exception
-                        import logging
+        if not bypass_builtin:
+            if self.pk is not None:
+                # This is an update operation
+                try:
+                    orig = SecatorProfile.objects.get(pk=self.pk)
+                    if orig.profile_type == "builtin":
+                        # Check if this is a bulk operation (admin actions)
+                        if kwargs.get("update_fields"):
+                            # For bulk operations, log the attempt but don't raise exception
+                            import logging
 
-                        logger = logging.getLogger(__name__)
-                        logger.warning(
-                            f"Attempted to modify built-in profile '{self.name}' (ID: {self.pk}) - operation blocked"
-                        )
-                        return  # Skip the save operation silently
-                    else:
-                        # For regular operations, raise exception with clear message
-                        raise PermissionError("Built-in profiles cannot be modified!")
-            except SecatorProfile.DoesNotExist:
-                # If original doesn't exist, allow save (shouldn't happen in normal cases)
-                pass
+                            logger = logging.getLogger(__name__)
+                            logger.warning(
+                                f"Attempted to modify built-in profile '{self.name}' (ID: {self.pk}) - operation blocked"
+                            )
+                            return  # Skip the save operation silently
+                        else:
+                            # For regular operations, raise exception with clear message
+                            raise PermissionError("Built-in profiles cannot be modified!")
+                except SecatorProfile.DoesNotExist:
+                    # If original doesn't exist, allow save (shouldn't happen in normal cases)
+                    pass
+
+        # Handle default uniqueness: if setting this profile as default,
+        # unset other defaults in the same category
+        # This must run for both builtin and custom profiles
+        if self.is_default:
+            SecatorProfile.objects.filter(category=self.category, is_default=True).exclude(
+                pk=self.pk if self.pk else None
+            ).update(is_default=False)
+
         super().save(*args, **kwargs)
 
     def delete(self, *args, **kwargs):
@@ -767,5 +778,53 @@ class SecatorProfile(models.Model):
             raise PermissionError("Built-in profiles cannot be deleted!")
         super().delete(*args, **kwargs)
 
+    @classmethod
+    def get_default_profiles(cls, categories=None):
+        """
+        Return a mapping of category -> default profile name.
+
+        Performs a single query for all requested categories and applies
+        hardcoded fallbacks when no active default is configured.
+
+        Args:
+            categories: List of category names to fetch defaults for.
+                       Defaults to ["speed", "evasion", "general", "network"]
+
+        Returns:
+            dict: Mapping of category -> profile name (or fallback name)
+        """
+        if categories is None:
+            categories = ["speed", "evasion", "general", "network"]
+
+        # Hardcoded fallbacks in one place
+        fallback_defaults = {
+            "speed": "polite",
+            "evasion": "stealth",
+            "general": "full",
+            "network": "all_ports",
+        }
+
+        # Fetch all relevant default profiles in a single query
+        qs = cls.objects.filter(
+            category__in=categories,
+            is_default=True,
+            is_active=True,
+        ).values("category", "name")
+
+        defaults_by_category = {row["category"]: row["name"] for row in qs}
+
+        # Build final mapping with fallback handling
+        result = {}
+        for category in categories:
+            result[category] = defaults_by_category.get(category, fallback_defaults.get(category, ""))
+        return result
+
     class Meta:
         ordering = ["profile_type", "category", "name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["category"],
+                condition=models.Q(is_default=True),
+                name="unique_default_per_category",
+            )
+        ]

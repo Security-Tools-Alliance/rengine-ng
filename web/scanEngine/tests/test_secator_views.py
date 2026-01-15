@@ -5,7 +5,6 @@ This file contains unit tests for the Secator views and forms.
 """
 
 from django.urls import reverse
-
 import yaml
 
 from scanEngine.forms import SecatorProfileForm, SecatorScanForm, SecatorWorkflowForm
@@ -471,3 +470,52 @@ class TestSecatorProfileViews(BaseTestCase):
         form = SecatorProfileForm(data=form_data)
         self.assertFalse(form.is_valid())
         self.assertIn("opts", form.errors)
+
+    def test_secator_profile_form_with_is_default(self):
+        """Test SecatorProfileForm with is_default field."""
+        form_data = {
+            "name": "test_form_default",
+            "category": "speed",
+            "description": "Test form profile with default",
+            "enforce": False,
+            "opts": yaml.dump({"rate_limit": 100}),
+            "is_active": True,
+            "is_default": True,
+        }
+        form = SecatorProfileForm(data=form_data)
+        self.assertTrue(form.is_valid())
+        profile = form.save()
+        self.assertTrue(profile.is_default)
+
+    def test_secator_profile_form_default_unsets_other_defaults(self):
+        """Test that setting a profile as default unsets other defaults in the same category."""
+        # Create first profile as default
+        profile1 = SecatorProfile.objects.create(
+            name="profile1",
+            category="speed",
+            description="First profile",
+            enforce=False,
+            opts=yaml.dump({"rate_limit": 100}),
+            profile_type="custom",
+            is_active=True,
+            is_default=True,
+        )
+
+        # Create form for second profile with is_default=True
+        form_data = {
+            "name": "profile2",
+            "category": "speed",
+            "description": "Second profile",
+            "enforce": False,
+            "opts": yaml.dump({"rate_limit": 150}),
+            "is_active": True,
+            "is_default": True,
+        }
+        form = SecatorProfileForm(data=form_data)
+        self.assertTrue(form.is_valid())
+        profile2 = form.save()
+
+        # Check that profile1 is no longer default
+        profile1.refresh_from_db()
+        self.assertFalse(profile1.is_default)
+        self.assertTrue(profile2.is_default)

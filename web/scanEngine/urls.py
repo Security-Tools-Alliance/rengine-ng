@@ -36,6 +36,7 @@ urlpatterns = [
     path("profiles/add/", views.add_profile, name="add_profile"),
     path("profiles/<int:profile_id>/", views.secator_profile_detail, name="profile_detail"),
     path("profiles/<int:profile_id>/update/", views.update_profile, name="update_profile"),
+    path("profiles/<int:profile_id>/set-default/", views.set_default_profile, name="set_default_profile"),
     path("profiles/<int:profile_id>/delete/", views.delete_profile, name="delete_profile"),
     path("scans/", views.secator_scans, name="scans"),
     path("scans/add/", views.add_scan, name="add_scan"),

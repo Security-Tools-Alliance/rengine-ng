@@ -30,6 +30,10 @@ Initiating scan for {{domain.name}}
           {% csrf_token %}
           <input type="hidden" id="domain_id" name="domain_id" value="{{ domain.id }}">
           <input type="hidden" id="execution_mode" name="execution_mode" value="">
+          <input type="hidden" name="speed_profile" id="speed_profile" value="">
+          <input type="hidden" name="stealth_profile" id="stealth_profile" value="">
+          <input type="hidden" name="general_profile" id="general_profile" value="">
+          <input type="hidden" name="network_profile" id="network_profile" value="">
           <div id="select_engine">
             
             <h4>Choose Execution Mode</h4>

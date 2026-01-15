@@ -14,15 +14,29 @@
     },
     
     initializeDefaultProfiles: function() {
-      // Initialize hidden input fields with default profile values from active buttons
-      const profileTypes = ['speed', 'stealth', 'general', 'network'];
-      profileTypes.forEach(type => {
-        const $activeBtn = $(`.btn[data-profile-type="${type}"].active`);
-        if ($activeBtn.length) {
-          const value = $activeBtn.data('profile-value');
-          const $hiddenInput = $(`#${type}_profile`);
-          if ($hiddenInput.length) {
-            $hiddenInput.val(value);
+      // Initialize hidden input fields with default profile values from active buttons or custom selects
+      const profileMappings = [
+        { type: 'speed', hiddenId: 'speed_profile' },
+        { type: 'evasion', hiddenId: 'stealth_profile' }, // evasion maps to stealth_profile
+        { type: 'stealth', hiddenId: 'stealth_profile' }, // legacy support
+        { type: 'general', hiddenId: 'general_profile' },
+        { type: 'network', hiddenId: 'network_profile' }
+      ];
+      
+      profileMappings.forEach(mapping => {
+        const $hiddenInput = $(`#${mapping.hiddenId}`);
+        if ($hiddenInput.length && !$hiddenInput.val()) {
+          // First check custom select
+          const $customSelect = $(`#${mapping.type}_custom_profile`);
+          if ($customSelect.length && $customSelect.val()) {
+            $hiddenInput.val($customSelect.val());
+          } else {
+            // Then check active button
+            const $activeBtn = $(`.btn[data-profile-type="${mapping.type}"].active`);
+            if ($activeBtn.length) {
+              const value = $activeBtn.data('profile-value');
+              $hiddenInput.val(value);
+            }
           }
         }
       });
@@ -163,10 +177,11 @@
           timeout: parseInt($('input[name="timeout"]').val()) || 300,
           delay: parseInt($('input[name="delay"]').val()) || 0
         },
-        speed_profile: $('.btn[data-profile-type="speed"].active').data('profile-value') || 'polite',
-        stealth_profile: $('.btn[data-profile-type="stealth"].active').data('profile-value') || 'stealth',
-        general_profile: $('.btn[data-profile-type="general"].active').data('profile-value') || 'full',
-        network_profile: $('.btn[data-profile-type="network"].active').data('profile-value') || 'all_ports',
+        // Get profile values from hidden inputs first (for custom profiles), then fallback to active buttons (for builtin profiles)
+        speed_profile: $('#speed_profile').val() || $('.btn[data-profile-type="speed"].active').data('profile-value') || 'polite',
+        stealth_profile: $('#stealth_profile').val() || $('.btn[data-profile-type="stealth"].active').data('profile-value') || $('.btn[data-profile-type="evasion"].active').data('profile-value') || 'stealth',
+        general_profile: $('#general_profile').val() || $('.btn[data-profile-type="general"].active').data('profile-value') || 'full',
+        network_profile: $('#network_profile').val() || $('.btn[data-profile-type="network"].active').data('profile-value') || 'all_ports',
         expert_mode: $('#expertMode').is(':checked')
       };
       

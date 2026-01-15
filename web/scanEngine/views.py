@@ -1,6 +1,7 @@
 from contextlib import suppress
 import glob
 import json
+import logging
 import os
 from pathlib import Path
 import re
@@ -60,6 +61,9 @@ from scanEngine.models import (
     Wordlist,
 )
 from startScan.models import ScanHistory
+
+
+logger = logging.getLogger(__name__)
 
 
 def index(request):
@@ -934,14 +938,21 @@ def add_profile(request):
     if request.method == "POST":
         form = SecatorProfileForm(request.POST)
         if form.is_valid():
-            cleaned_data = {key: clean_quotes(value) for key, value in form.cleaned_data.items()}
-            for key, value in cleaned_data.items():
-                setattr(form.instance, key, value)
-            # Custom profiles are not built-in
-            form.instance.profile_type = "custom"
-            form.instance.save()
-            messages.add_message(request, messages.INFO, "Profile added successfully")
-            return http.HttpResponseRedirect(reverse("profiles"))
+            try:
+                cleaned_data = {key: clean_quotes(value) for key, value in form.cleaned_data.items()}
+                for key, value in cleaned_data.items():
+                    setattr(form.instance, key, value)
+                # Custom profiles are not built-in
+                form.instance.profile_type = "custom"
+                form.instance.save()
+
+                messages.add_message(request, messages.INFO, "Profile added successfully")
+                return http.HttpResponseRedirect(reverse("profiles"))
+            except Exception as e:
+                logger.error(f"Error saving profile: {e}", exc_info=True)
+                messages.add_message(request, messages.ERROR, f"Failed to save profile: {str(e)}")
+                context = {"scan_engine_nav_active": "active", "form": form}
+                return render(request, "scanEngine/add_profile.html", context)
 
     context = {"scan_engine_nav_active": "active", "form": form}
     return render(request, "scanEngine/add_profile.html", context)
@@ -976,14 +987,54 @@ def update_profile(request, profile_id):
                 for key, value in cleaned_data.items():
                     setattr(form.instance, key, value)
                 form.save()
+
                 messages.add_message(request, messages.INFO, "Profile updated successfully")
                 return http.HttpResponseRedirect(reverse("profiles"))
             except PermissionError as e:
                 messages.add_message(request, messages.ERROR, str(e))
                 return http.HttpResponseRedirect(reverse("profiles"))
+            except Exception as e:
+                logger.error(f"Error updating profile: {e}", exc_info=True)
+                messages.add_message(request, messages.ERROR, f"Failed to update profile: {str(e)}")
+                context = {"scan_engine_nav_active": "active", "form": form, "profile": profile}
+                return render(request, "scanEngine/update_profile.html", context)
 
     context = {"scan_engine_nav_active": "active", "form": form, "profile": profile}
     return render(request, "scanEngine/update_profile.html", context)
+
+
+@login_required
+def set_default_profile(request, profile_id):
+    """Set a profile as default for its category."""
+    profile = get_object_or_404(SecatorProfile, id=profile_id)
+
+    if request.method == "POST":
+        try:
+            # Unset other defaults in the same category
+            SecatorProfile.objects.filter(category=profile.category, is_default=True).exclude(pk=profile.pk).update(
+                is_default=False
+            )
+
+            # Set this profile as default
+            if profile.profile_type == "builtin":
+                # Use bypass_builtin_constraints for builtin profiles
+                profile.is_default = True
+                profile.save(bypass_builtin_constraints=True)
+            else:
+                profile.is_default = True
+                profile.save()
+
+            response_data = {
+                "status": True,
+                "message": f"Profile '{profile.name}' set as default for {profile.get_category_display()} category",
+            }
+            messages.add_message(request, messages.INFO, response_data["message"])
+        except Exception as e:
+            response_data = {"status": False, "message": f"Failed to set default profile: {str(e)}"}
+            messages.add_message(request, messages.ERROR, response_data["message"])
+    else:
+        response_data = {"status": False, "message": "Invalid request method"}
+    return http.JsonResponse(response_data)
 
 
 @login_required

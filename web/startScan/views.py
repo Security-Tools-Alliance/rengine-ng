@@ -35,7 +35,14 @@ from reNgine.tasks import initiate_secator_scan
 from reNgine.utilities.command import run_command
 from reNgine.utilities.subdomain import get_interesting_subdomains
 from reNgine.utilities.time import local_to_utc_aware
-from scanEngine.models import EngineType, SecatorProfile, SecatorScan, SecatorTask, SecatorWorkflow, VulnerabilityReportSetting
+from scanEngine.models import (
+    EngineType,
+    SecatorProfile,
+    SecatorScan,
+    SecatorTask,
+    SecatorWorkflow,
+    VulnerabilityReportSetting,
+)
 from startScan.models import (
     Command,
     CountryISO,
@@ -649,6 +656,9 @@ def start_scan_ui(request, slug, domain_id):
         "network": [p for p in custom_profiles if p.category == "network"],
     }
 
+    # Get default profiles per category using centralized helper
+    default_profiles = SecatorProfile.get_default_profiles(categories=["speed", "evasion", "general", "network"])
+
     context = {
         "scan_history_active": "active",
         "domain": domain,
@@ -657,6 +667,7 @@ def start_scan_ui(request, slug, domain_id):
         "scan_type": scan_type,
         "has_ip_content": has_ip_content,
         "custom_profiles_by_category": custom_profiles_by_category,
+        "default_profiles": default_profiles,
     }
     return render(request, "startScan/start_scan_ui.html", context)
 
@@ -1144,6 +1155,9 @@ def start_organization_scan(request, id, slug):
         "network": [p for p in custom_profiles if p.category == "network"],
     }
 
+    # Get default profiles per category using centralized helper
+    default_profiles = SecatorProfile.get_default_profiles(categories=["speed", "evasion", "general", "network"])
+
     context = {
         "organization_data_active": "true",
         "list_organization_li": "active",
@@ -1153,6 +1167,7 @@ def start_organization_scan(request, id, slug):
         "scan_type": scan_type,
         "secator_scans": secator_scans,
         "custom_profiles_by_category": custom_profiles_by_category,
+        "default_profiles": default_profiles,
     }
     return render(request, "organization/start_scan.html", context)
 

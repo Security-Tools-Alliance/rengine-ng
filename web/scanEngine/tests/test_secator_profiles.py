@@ -119,3 +119,71 @@ class TestSecatorProfile(BaseTestCase):
         self.assertIn("test_profile", str_repr)
         self.assertIn("speed", str_repr)
         self.assertIn("custom", str_repr)
+
+    def test_set_default_profile(self):
+        """Test setting a profile as default."""
+        profile = SecatorProfile.objects.create(profile_type="custom", **self.profile_data)
+        self.assertFalse(profile.is_default)
+
+        profile.is_default = True
+        profile.save()
+        profile.refresh_from_db()
+        self.assertTrue(profile.is_default)
+
+    def test_only_one_default_per_category(self):
+        """Test that only one profile per category can be default."""
+        profile_data1 = {k: v for k, v in self.profile_data.items() if k not in ["name", "category"]}
+        profile_data1["name"] = "profile1"
+        profile_data1["category"] = "speed"
+        profile1 = SecatorProfile.objects.create(profile_type="custom", **profile_data1)
+
+        profile_data2 = {k: v for k, v in self.profile_data.items() if k not in ["name", "category"]}
+        profile_data2["name"] = "profile2"
+        profile_data2["category"] = "speed"
+        profile2 = SecatorProfile.objects.create(profile_type="custom", **profile_data2)
+
+        # Set first profile as default
+        profile1.is_default = True
+        profile1.save()
+        profile1.refresh_from_db()
+        self.assertTrue(profile1.is_default)
+
+        # Set second profile as default - should unset first
+        profile2.is_default = True
+        profile2.save()
+        profile1.refresh_from_db()
+        profile2.refresh_from_db()
+
+        self.assertFalse(profile1.is_default)
+        self.assertTrue(profile2.is_default)
+
+    def test_default_uniqueness_across_categories(self):
+        """Test that different categories can each have a default."""
+        speed_data = {k: v for k, v in self.profile_data.items() if k not in ["name", "category"]}
+        speed_data["name"] = "speed_profile"
+        speed_data["category"] = "speed"
+        speed_profile = SecatorProfile.objects.create(profile_type="custom", **speed_data)
+
+        evasion_data = {k: v for k, v in self.profile_data.items() if k not in ["name", "category"]}
+        evasion_data["name"] = "evasion_profile"
+        evasion_data["category"] = "evasion"
+        evasion_profile = SecatorProfile.objects.create(profile_type="custom", **evasion_data)
+
+        speed_profile.is_default = True
+        speed_profile.save()
+        evasion_profile.is_default = True
+        evasion_profile.save()
+
+        speed_profile.refresh_from_db()
+        evasion_profile.refresh_from_db()
+
+        self.assertTrue(speed_profile.is_default)
+        self.assertTrue(evasion_profile.is_default)
+
+    def test_builtin_profile_can_be_default(self):
+        """Test that built-in profiles can be set as default."""
+        profile = SecatorProfile.objects.create(profile_type="builtin", **self.profile_data)
+        profile.is_default = True
+        profile.save(bypass_builtin_constraints=True)
+        profile.refresh_from_db()
+        self.assertTrue(profile.is_default)
