@@ -705,7 +705,9 @@ class CreateProjectApi(APIView):
         insert_date = timezone.now()
 
         try:
-            Project.objects.create(name=project_name, slug=slug, insert_date=insert_date)
+            project = Project.objects.create(name=project_name, slug=slug, insert_date=insert_date)
+            # Add the creator to the project's users so they can access it
+            project.users.add(request.user)
             return Response({"status": True, "project_name": project_name})
         except Exception as e:
             logger.error(f"Error in CreateProjectApi: {str(e)}")
@@ -3056,13 +3058,19 @@ class ProjectViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return Project.objects.filter(user=self.request.user)
+        # Superusers see all projects
+        if self.request.user.is_superuser:
+            return Project.objects.all()
+        # Other users only see projects they are assigned to
+        return Project.objects.filter(users=self.request.user)
 
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        project = serializer.save()
+        # Add the creator to the project's users so they can access it
+        project.users.add(self.request.user)
 
     def perform_update(self, serializer):
-        if serializer.instance.user != self.request.user:
+        if not serializer.instance.is_user_authorized(self.request.user):
             raise PermissionDenied("You don't have permission to modify this project.")
         serializer.save()
 

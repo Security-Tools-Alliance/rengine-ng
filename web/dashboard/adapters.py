@@ -2,6 +2,7 @@
 Custom OAuth adapter for reNgine-ng
 Handles user creation with minimal permissions and proper redirects
 """
+from django.contrib import messages
 from django.urls import reverse
 from allauth.socialaccount.adapter import DefaultSocialAccountAdapter
 from allauth.account.adapter import DefaultAccountAdapter
@@ -32,6 +33,31 @@ class OAuthAccountAdapter(DefaultSocialAccountAdapter):
 
         return user
 
+    def _get_oauth_error_message(self, error=None, default_message="OAuth authentication failed."):
+        """
+        Generate an OAuth error message.
+        """
+        return f"OAuth authentication failed: {error}" if error else default_message
+
+    def on_authentication_error(self, request, provider_id, error=None, exception=None, extra_context=None):
+        """
+        Handle OAuth authentication errors by redirecting to login page with an error message.
+        """
+        error_message = self._get_oauth_error_message(error)
+        messages.error(request, error_message)
+        # Return None to let allauth handle the redirect, which will go to login
+        return None
+
+    def authentication_error(self, request, provider_id, error=None, exception=None, extra_context=None):
+        """
+        Called when OAuth authentication fails.
+        Redirect to login page with an error message.
+        """
+        error_message = self._get_oauth_error_message(
+            error, "OAuth authentication failed. Please try again or use another login method."
+        )
+        messages.error(request, error_message)
+
 
 class AccountAdapter(DefaultAccountAdapter):
     """
@@ -48,10 +74,7 @@ class AccountAdapter(DefaultAccountAdapter):
         """
         user = request.user
 
-        # Detect OAuth-linked accounts
-        is_oauth_user = hasattr(user, 'socialaccount_set') and user.socialaccount_set.exists()
-
-        if is_oauth_user:
+        if (social_accounts := getattr(user, 'socialaccount_set', None)) and social_accounts.exists():
             # Ensure OAuth users keep the minimum Auditor role
             if not has_role(user, 'auditor'):
                 assign_role(user, 'auditor')
@@ -62,8 +85,7 @@ class AccountAdapter(DefaultAccountAdapter):
                 return reverse('dashboardIndex', kwargs={'slug': user_project.slug})
             return reverse('list_projects')
 
-        project = Project.objects.first()
-        if project:
+        if project := Project.objects.first():
             return reverse('dashboardIndex', kwargs={'slug': project.slug})
 
         # No project exists

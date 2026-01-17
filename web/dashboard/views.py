@@ -344,7 +344,10 @@ def onboarding(request):
         insert_date = timezone.now()
 
         try:
-            Project.objects.create(name=project_name, slug=slug, insert_date=insert_date)
+            project = Project.objects.create(name=project_name, slug=slug, insert_date=insert_date)
+            # Add the creator to the project's users so they can access it
+            if request.user.is_authenticated:
+                project.users.add(request.user)
         except Exception as e:
             logger.error(f" Could not create project, Error: {e}")
             error = "Could not create project, check logs for more details"
