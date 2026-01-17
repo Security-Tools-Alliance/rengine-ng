@@ -4,20 +4,21 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('targetApp', '0033_alter_nameserver_name'),
+        ("targetApp", "0033_alter_nameserver_name"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='domaininfo',
-            name='similar_domains',
-            field=models.ManyToManyField(blank=True, related_name='similar_domains', to='targetApp.AssociatedDomain'),
+            model_name="domaininfo",
+            name="similar_domains",
+            field=models.ManyToManyField(blank=True, related_name="similar_domains", to="targetApp.AssociatedDomain"),
         ),
         migrations.AlterField(
-            model_name='domaininfo',
-            name='associated_domains',
-            field=models.ManyToManyField(blank=True, related_name='associated_domains', to='targetApp.AssociatedDomain'),
+            model_name="domaininfo",
+            name="associated_domains",
+            field=models.ManyToManyField(
+                blank=True, related_name="associated_domains", to="targetApp.AssociatedDomain"
+            ),
         ),
     ]

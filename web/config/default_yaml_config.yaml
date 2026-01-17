@@ -1,4 +1,5 @@
 # Global vars for all tools
+scan_type: 'bug_bounty'  # 'bug_bounty' or 'internal_network'
 #
 # Custom header - FFUF, Nuclei, Dalfox, CRL Fuzz, HTTPx, Fetch URL (Hakrawler, Katana, Gospider)
 # 'custom_header': {

@@ -9,6 +9,142 @@ Start Scan
 {% block custom_js_css_link %}
 <link href="{% static 'plugins/jquery-step/jquery.steps.css' %}" rel="stylesheet" type="text/css" />
 <link href="{% static 'plugins/accordions/custom-accordions.css' %}" rel="stylesheet" type="text/css" />
+<style>
+/* Styles pour les cartes de sélection de type de scan */
+.scan-type-card {
+  border: 3px solid #e9ecef;
+  border-radius: 12px;
+  padding: 25px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  background: #fff;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.scan-type-card:hover {
+  border-color: #007bff;
+  box-shadow: 0 8px 25px rgba(0, 123, 255, 0.15);
+  transform: translateY(-2px);
+}
+
+.scan-type-card[data-selected="true"] {
+  border-color: #007bff;
+  background: linear-gradient(135deg, rgba(0, 123, 255, 0.05) 0%, rgba(0, 123, 255, 0.1) 100%);
+  box-shadow: 0 8px 25px rgba(0, 123, 255, 0.2);
+}
+
+.scan-type-card[data-selected="true"]::before {
+  content: "✓";
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  background: #007bff;
+  color: white;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 16px;
+}
+
+.scan-type-icon {
+  font-size: 3.5rem;
+  margin-bottom: 20px;
+  color: #6c757d;
+  transition: all 0.3s ease;
+}
+
+.scan-type-card:hover .scan-type-icon {
+  color: #007bff;
+  transform: scale(1.1);
+}
+
+.scan-type-card[data-selected="true"] .scan-type-icon {
+  color: #007bff;
+}
+
+.scan-type-content h5 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #495057;
+  margin-bottom: 10px;
+}
+
+.scan-type-content p {
+  color: #6c757d;
+  margin-bottom: 20px;
+  line-height: 1.5;
+}
+
+.scan-type-features {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.scan-type-features .badge {
+  font-size: 0.75rem;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-weight: 500;
+}
+
+/* Styles pour la section des éléments existants */
+.bg-soft-light {
+  background-color: rgba(248, 249, 250, 0.8) !important;
+}
+
+.form-check-input:checked {
+  background-color: #007bff;
+  border-color: #007bff;
+}
+
+.form-check-input:focus {
+  border-color: #007bff;
+  outline: 0;
+  box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+#existing-elements-info {
+  transition: all 0.3s ease;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .scan-type-card {
+    padding: 20px 15px;
+  }
+  
+  .scan-type-icon {
+    font-size: 2.5rem;
+    margin-bottom: 15px;
+  }
+  
+  .scan-type-content h5 {
+    font-size: 1.25rem;
+  }
+  
+  .scan-type-features {
+    gap: 5px;
+  }
+  
+  .scan-type-features .badge {
+    font-size: 0.7rem;
+    padding: 3px 6px;
+  }
+}
+</style>
 {% endblock custom_js_css_link %}
 
 {% block breadcrumb_title %}
@@ -29,8 +165,59 @@ Initiating scan for {{domain.name}}
         <form method="POST" id="start-scan-form">
           {% csrf_token %}
           <div id="select_engine">
+            <h4>Choose Scan Type</h4>
+            <div class="mb-4">
+              <div class="row">
+                <div class="col-md-6 mb-3">
+                  <div class="scan-type-card" data-scan-type="bug_bounty" 
+                       {% if scan_type == "bug_bounty" %}data-selected="true"{% endif %}>
+                    <div class="scan-type-icon">
+                      <i class="fas fa-bug"></i>
+                    </div>
+                    <div class="scan-type-content">
+                      <h5>Bug Bounty</h5>
+                      <p>Web application reconnaissance with subdomain discovery</p>
+                      <div class="scan-type-features">
+                        <span class="badge badge-soft-success">Subdomain Discovery</span>
+                        <span class="badge badge-soft-info">WAF Detection</span>
+                        <span class="badge badge-soft-primary">Screenshots</span>
+                        <span class="badge badge-soft-warning">OSINT</span>
+                      </div>
+                    </div>
+                    <input type="radio" name="scan_type" id="scan_type_bug_bounty" value="bug_bounty" 
+                           {% if scan_type == "bug_bounty" %}checked{% endif %} style="display: none;">
+                  </div>
+                </div>
+                <div class="col-md-6 mb-3">
+                  <div class="scan-type-card" data-scan-type="internal_network" 
+                       {% if scan_type == "internal_network" %}data-selected="true"{% endif %}>
+                    <div class="scan-type-icon">
+                      <i class="fas fa-network-wired"></i>
+                    </div>
+                    <div class="scan-type-content">
+                      <h5>Internal Network</h5>
+                      <p>Network infrastructure scanning and service discovery</p>
+                      <div class="scan-type-features">
+                        <span class="badge badge-soft-danger">Port Scan</span>
+                        <span class="badge badge-soft-secondary">Service Discovery</span>
+                        <span class="badge badge-soft-dark">Network Mapping</span>
+                        <span class="badge badge-soft-warning">Vulnerability Scan</span>
+                      </div>
+                    </div>
+                    <input type="radio" name="scan_type" id="scan_type_internal" value="internal_network" 
+                           {% if scan_type == "internal_network" %}checked{% endif %} style="display: none;">
+                  </div>
+                </div>
+              </div>
+              {% if has_ip_content %}
+              <div class="alert bg-soft-info border-0 mt-2" role="alert">
+                <i class="fas fa-info-circle"></i> This target contains IP addresses or network elements. Consider using <strong>Internal Network</strong> scan type for better results.
+              </div>
+              {% endif %}
+            </div>
+            
             <h4>Choose Scan Engine</h4>
-            <div class="">
+            <div class="scan-engine-container">
               <h4>Select Scan Engine</h4>
               {% if custom_engine_count == 0 %}
               <div class="alert bg-soft-primary border-0 mb-4" role="alert">
@@ -40,6 +227,51 @@ Initiating scan for {{domain.name}}
               {% endif %}
               {% include "startScan/_items/scanEngine_select.html" %}
             </div>
+            
+            <h4>Scan Target Elements</h4>
+            <div class="mb-4">
+              <div class="card border-0 bg-soft-light">
+                <div class="card-body">
+                  <h5 class="card-title">
+                    <i class="fas fa-target text-primary me-2"></i>
+                    Scan Existing Target Elements
+                  </h5>
+                  <p class="card-text">
+                    Scan the hostnames and IP addresses already discovered in this target. This is particularly useful for internal network reconnaissance.
+                  </p>
+                  
+                  <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="scan_existing_elements" name="scan_existing_elements" value="true">
+                    <label class="form-check-label" for="scan_existing_elements">
+                      <strong>Enable scanning of existing target elements</strong>
+                    </label>
+                  </div>
+                  
+                  <div id="existing-elements-info" class="mt-3" style="display: none;">
+                    <div class="row">
+                      <div class="col-md-6">
+                        <div class="d-flex align-items-center">
+                          <i class="fas fa-globe text-success me-2"></i>
+                          <span>Hostnames: <span id="hostname-count" class="badge badge-soft-success">0</span></span>
+                        </div>
+                      </div>
+                      <div class="col-md-6">
+                        <div class="d-flex align-items-center">
+                          <i class="fas fa-network-wired text-info me-2"></i>
+                          <span>IP Addresses: <span id="ip-count" class="badge badge-soft-info">0</span></span>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div class="alert bg-soft-info border-0 mt-3" role="alert">
+                      <i class="fas fa-info-circle"></i>
+                      <strong>Note:</strong> When enabled, the scan will target all discovered hostnames and IP addresses in this target, in addition to the main domain.
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
             <h4>Import/Ignore Subdomains</h4>
             <div class="">
               <div class="mb-3">
@@ -108,14 +340,109 @@ function enableNext(){
 
 function updateButton(){
   $('a[role="menuitem"]').addClass('btn btn-primary waves-effect waves-light');
-  var text = $("input[type=radio][name=scan_mode]").val();
-  if(text === ''){
-    disableNext();
-    return false;
-  }else{
+  var scanType = $("input[name='scan_type']:checked").val();
+  var scanEngine = $("input[type=radio][name=scan_mode]:checked").val();
+  
+  // Get current step index
+  var currentStep = $('.wizard .current').index();
+  
+  // For step 0 (Choose Scan Type), only check scan type
+  if (currentStep === 0) {
+    if(scanType){
+      enableNext();
+      return true;
+    }else{
+      disableNext();
+      return false;
+    }
+  }
+  // For step 1 (Choose Scan Engine), check both scan type and scan engine
+  else if (currentStep === 1) {
+    if(scanType && scanEngine){
+      enableNext();
+      return true;
+    }else{
+      disableNext();
+      return false;
+    }
+  }
+  // For other steps, allow progression
+  else {
     enableNext();
     return true;
   }
+}
+
+function updateScanEngines() {
+  var scanType = $("input[name='scan_type']:checked").val();
+  
+  // Show loading state
+  $('.scan-engine-container').html('<div class="text-center"><i class="fas fa-spinner fa-spin"></i> Loading scan engines...</div>');
+  
+  // Fetch engines for selected scan type via AJAX
+  $.ajax({
+    url: '{% url "start_scan" current_project.slug domain.id %}',
+    type: 'GET',
+    data: {
+      'scan_type': scanType
+    },
+    headers: {
+      'X-Requested-With': 'XMLHttpRequest'
+    },
+    success: function(data) {
+      if (data.engine_html) {
+        $('.scan-engine-container').html(data.engine_html);
+      } else {
+        $('.scan-engine-container').html('<div class="alert alert-warning">No scan engines available for this scan type.</div>');
+      }
+      
+      // Re-bind events
+      $("input[type=radio][name=scan_mode]").change(function() {
+        initTimer();
+        updateButton();
+      }).keyup(initTimer);
+      // Update button state after loading engines
+      updateButton();
+    },
+    error: function() {
+      $('.scan-engine-container').html('<div class="alert alert-danger">Error loading scan engines.</div>');
+    }
+  });
+}
+
+function updateExistingElementsInfo() {
+  // Show/hide the existing elements info based on checkbox state
+  var isChecked = $('#scan_existing_elements').is(':checked');
+  if (isChecked) {
+    $('#existing-elements-info').show();
+  } else {
+    $('#existing-elements-info').hide();
+  }
+}
+
+function loadExistingElementsCount() {
+  // Load the count of existing hostnames and IP addresses via AJAX
+  $.ajax({
+    url: '{% url "start_scan" current_project.slug domain.id %}',
+    type: 'GET',
+    data: {
+      'get_elements_count': 'true'
+    },
+    headers: {
+      'X-Requested-With': 'XMLHttpRequest'
+    },
+    success: function(data) {
+      if (data.hostname_count !== undefined) {
+        $('#hostname-count').text(data.hostname_count);
+      }
+      if (data.ip_count !== undefined) {
+        $('#ip-count').text(data.ip_count);
+      }
+    },
+    error: function() {
+      console.log('Error loading existing elements count');
+    }
+  });
 }
 
 $(function(){
@@ -126,13 +453,56 @@ $(function(){
     cssClass: 'pill wizard',
     enableKeyNavigation: false,
     onStepChanging: updateButton,
+    onStepChanged: function(event, currentIndex, priorIndex) {
+      // Update button state when step changes
+      setTimeout(updateButton, 100);
+    },
     labels: {finish: "Start Scan"},
     onInit :function (event, current) {
       $(".actions ul li:nth-child(3) a").attr('onclick', `$(this).closest('form').submit()`);
     }
   });
-  $("input[type=radio][name=scan_mode]").change(initTimer).keyup(initTimer);
-  disableNext();
+  
+  // Handle scan type card clicks
+  $('.scan-type-card').click(function() {
+    // Remove selected state from all cards
+    $('.scan-type-card').removeAttr('data-selected');
+    $('.scan-type-card input[type="radio"]').prop('checked', false);
+    
+    // Add selected state to clicked card
+    $(this).attr('data-selected', 'true');
+    $(this).find('input[type="radio"]').prop('checked', true);
+    
+    // Update scan engines and button state
+    updateScanEngines();
+  });
+  
+  // Handle scan type change (fallback for radio buttons)
+  $("input[name='scan_type']").change(function() {
+    var scanType = $(this).val();
+    
+    // Update card selection state
+    $('.scan-type-card').removeAttr('data-selected');
+    $('.scan-type-card[data-scan-type="' + scanType + '"]').attr('data-selected', 'true');
+    
+    updateScanEngines();
+  });
+  
+  $("input[type=radio][name=scan_mode]").change(function() {
+    initTimer();
+    updateButton();
+  }).keyup(initTimer);
+  
+  // Handle existing elements checkbox
+  $('#scan_existing_elements').change(function() {
+    updateExistingElementsInfo();
+  });
+  
+  // Load existing elements count on page load
+  loadExistingElementsCount();
+  
+  // Initialize button state based on current selections
+  updateButton();
   $('a[role="menuitem"]').addClass('text-white');
 });
 

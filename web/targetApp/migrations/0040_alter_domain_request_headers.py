@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('targetApp', '0039_domain_project'),
+        ("targetApp", "0039_domain_project"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='domain',
-            name='request_headers',
+            model_name="domain",
+            name="request_headers",
             field=models.JSONField(blank=True, null=True),
         ),
     ]

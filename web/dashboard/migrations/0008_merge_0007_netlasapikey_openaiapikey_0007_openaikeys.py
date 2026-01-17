@@ -4,11 +4,9 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('dashboard', '0007_netlasapikey_openaiapikey'),
-        ('dashboard', '0007_openaikeys'),
+        ("dashboard", "0007_netlasapikey_openaiapikey"),
+        ("dashboard", "0007_openaikeys"),
     ]
 
-    operations = [
-    ]
+    operations = []

@@ -6,54 +6,144 @@ authors = ["Talanor <q.poirier@astar.services>"]
 package-mode = false
 
 [tool.poetry.dependencies]
-python = "^3.10"
+python = "^3.13"
 aiodns = "3.0.0"
 argh = "0.26.2"
 beautifulsoup4 = "4.9.3"
-celery = "5.4.0"
-channels = "3.0.5"
-channels-redis = "3.4.1"
+celery = "5.5.3"
+channels = "4.3.1"
+channels-redis = "4.3.0"
+daphne = "4.1.2"
 debugpy = "1.8.5"
 discord-webhook = "1.3.0"
-django = "3.2.25"
-django-ace = "1.32.4"
+django = "5.2.6"
+dnspython = "^2.8.0"
+django-ace = "1.42.0"
 django-allauth = "0.54.0"
-django-celery-beat = "2.6.0"
-django-debug-toolbar = "4.3.0"
-django-environ = "0.11.2"
-django-extensions = "3.2.3"
+django-celery-beat = "2.8.1"
+django-debug-toolbar = "6.0.0"
+django-extensions = "4.1"
+django-environ = "0.12.0"
 django-login-required-middleware = "0.9.0"
+django-redis = "6.0.0"
 django-role-permissions = "3.2.0"
 django-mathfilters = "1.0.0"
-django-timezone-field = "6.1.0"
-djangorestframework = "3.14.0"
+django-timezone-field = "7.1"
+djangorestframework = "3.16.1"
+djangorestframework-api-key = "3.1.0"
 djangorestframework-datatables = "0.7.2"
 dotted-dict = "1.1.3"
-drf-yasg = "1.21.5"
-gunicorn = "23.0.0"
-gevent = "24.2.1"
+drf-yasg = "1.21.10"
+gevent = "25.9.1"
+httpx = "^0.28.1"
 humanize = "4.3.0"
-langchain = "0.1.0"
-markdown = "3.3.4"
+langchain = "0.3.27"
+langchain-community = "0.3.29"
+langchain-ollama = "0.2.0"
+markdown = "3.6"
 metafinder = "1.2"
 netaddr = "0.8.0"
-netlas = "0.4.1"
-openai = "0.28.0"
+netlas = "0.7.2"
+openai = "1.51.0"
 pyyaml = "6.0.1"
 pysocks = "1.7.1"
-psycopg2 = "2.9.7"
+psycopg2 = "2.9.10"
 pycvesearch = "1.0"
 redis = "5.0.3"
-requests = "2.32.2"
-scapy = "2.4.3"
+requests = "2.32.5"
+scapy = "2.5.0"
 tldextract = "3.5.0"
 uro = "1.0.0"
-uvicorn = { extras = ["standard"], version = "^0.27.1" }
+uvicorn = { extras = ["standard"], version = "0.35.0" }
 validators = "0.18.2"
 watchdog = "4.0.0"
-weasyprint = "53.3"
-whatportis = { git = "https://github.com/Security-Tools-Alliance/whatportis" }
+weasyprint = "62.3"
 xmltodict = "0.13.0"
+
+[tool.poetry.group.dev.dependencies]
+ruff = "0.12.11"
+
+[tool.ruff]
+# Maximum line length (PEP8 default 79, here we extend to 120 for Django project readability).
+line-length = 120
+
+# Target Python version
+target-version = "py313"
+
+[tool.ruff.lint]
+# Select the rule sets to enforce:
+# - E: pycodestyle errors (PEP8)
+# - F: pyflakes (logic errors like unused variables/imports)
+# - W: pycodestyle warnings
+# - C: cyclomatic complexity checks
+# - N: naming conventions (PEP8 naming rules)
+# - I: import sorting (isort-compatible)
+select = [
+    "E",
+    "F",
+    "W",
+#    "C",
+    "N",
+    "I",
+]
+
+# Ignore specific rules that conflict with formatter style:
+# - E203: whitespace before ':' in slicing
+# - N803: argument name should be lowercase (Django convention often uses uppercase)
+# - E501: line too long (handled by formatter)
+# - N999: Invalid module name
+ignore = ["E203", "N803", "E501", "N999"]
+
+# Add "line-too-long" rule explicitly
+extend-select = ["E501"]
+
+[tool.ruff.lint.mccabe]
+# Maximum cyclomatic complexity allowed per function
+max-complexity = 10
+
+[tool.ruff.lint.isort]
+# Define which modules are part of the project (first-party)
+known-first-party = [
+    "api",
+    "commonFilters",
+    "dashboard",
+    "recon_note",
+    "reNgine",
+    "scanEngine",
+    "startScan",
+    "targetApp",
+    "utils",
+]
+
+# Import sorting style: separate imports by sections with blank lines
+section-order = [
+    "future",
+    "standard-library",
+    "third-party",
+    "first-party",
+    "local-folder",
+]
+
+# Blank line between standard/third-party and first-party imports
+lines-after-imports = 2
+split-on-trailing-comma = true
+force-sort-within-sections = true
+
+[tool.ruff.format]
+# Always use double quotes for strings (PEP8 consistent style)
+quote-style = "double"
+
+# Use spaces for indentation
+indent-style = "space"
+
+# Always enforce trailing commas when breaking lines
+skip-magic-trailing-comma = false
+
+# Format code inside docstrings
+docstring-code-format = true
+
+# Enforce stricter line length for code snippets in docstrings
+docstring-code-line-length = 79
 
 [build-system]
 requires = ["poetry-core"]

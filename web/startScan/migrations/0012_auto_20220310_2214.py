@@ -4,39 +4,41 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('startScan', '0011_auto_20220308_1711'),
+        ("startScan", "0011_auto_20220308_1711"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='DirectoryFile',
+            name="DirectoryFile",
             fields=[
-                ('id', models.AutoField(primary_key=True, serialize=False)),
-                ('length', models.IntegerField(default=0)),
-                ('lines', models.IntegerField(default=0)),
-                ('http_status', models.IntegerField(default=0)),
-                ('words', models.IntegerField(default=0)),
-                ('url', models.CharField(blank=True, max_length=2000, null=True)),
-                ('content_type', models.CharField(blank=True, max_length=100, null=True)),
+                ("id", models.AutoField(primary_key=True, serialize=False)),
+                ("length", models.IntegerField(default=0)),
+                ("lines", models.IntegerField(default=0)),
+                ("http_status", models.IntegerField(default=0)),
+                ("words", models.IntegerField(default=0)),
+                ("url", models.CharField(blank=True, max_length=2000, null=True)),
+                ("content_type", models.CharField(blank=True, max_length=100, null=True)),
             ],
         ),
         migrations.CreateModel(
-            name='DirectoryScan',
+            name="DirectoryScan",
             fields=[
-                ('id', models.AutoField(primary_key=True, serialize=False)),
-                ('command_line', models.CharField(blank=True, max_length=1000, null=True)),
-                ('dir_subscan_ids', models.ManyToManyField(related_name='dir_subscan_ids', to='startScan.SubScan')),
-                ('directory_files', models.ManyToManyField(related_name='directory_files', to='startScan.DirectoryFile')),
+                ("id", models.AutoField(primary_key=True, serialize=False)),
+                ("command_line", models.CharField(blank=True, max_length=1000, null=True)),
+                ("dir_subscan_ids", models.ManyToManyField(related_name="dir_subscan_ids", to="startScan.SubScan")),
+                (
+                    "directory_files",
+                    models.ManyToManyField(related_name="directory_files", to="startScan.DirectoryFile"),
+                ),
             ],
         ),
         migrations.DeleteModel(
-            name='Directory',
+            name="Directory",
         ),
         migrations.AlterField(
-            model_name='subdomain',
-            name='directories',
-            field=models.ManyToManyField(blank=True, related_name='directories', to='startScan.DirectoryFile'),
+            model_name="subdomain",
+            name="directories",
+            field=models.ManyToManyField(blank=True, related_name="directories", to="startScan.DirectoryFile"),
         ),
     ]

@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('startScan', '0015_alter_subdomain_directories'),
+        ("startScan", "0015_alter_subdomain_directories"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='directoryscan',
-            name='scanned_date',
+            model_name="directoryscan",
+            name="scanned_date",
             field=models.DateTimeField(null=True),
         ),
     ]

@@ -5,15 +5,16 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('startScan', '0004_rename_template_used_vulnerability_template'),
+        ("startScan", "0004_rename_template_used_vulnerability_template"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='ipaddress',
-            name='subscan',
-            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, to='startScan.subscan'),
+            model_name="ipaddress",
+            name="subscan",
+            field=models.ForeignKey(
+                blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, to="startScan.subscan"
+            ),
         ),
     ]

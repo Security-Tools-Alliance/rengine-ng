@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('targetApp', '0024_alter_domain_insert_date'),
+        ("targetApp", "0024_alter_domain_insert_date"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='domain',
-            name='request_headers',
+            model_name="domain",
+            name="request_headers",
             field=models.JSONField(null=True),
         ),
     ]

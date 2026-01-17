@@ -1,9 +1,21 @@
 include .env
 .DEFAULT_GOAL:=help
 
-# Export host UID & GID
+# Operating system detection (must be early to use in conditional exports)
+UNAME_S := $(shell uname -s)
+IS_MACOS := $(shell if [ "$(UNAME_S)" = "Darwin" ]; then echo "yes"; else echo "no"; fi)
+
+# Export host UID & GID (cross-platform handling)
+ifeq ($(IS_MACOS),yes)
+# On macOS, use safe defaults to avoid conflicts with system groups (GID 20 = staff)
+# Docker Desktop handles file permission mapping automatically
+export HOST_UID=1000
+export HOST_GID=1000
+else
+# On Linux, respect sudo context for proper permissions
 export HOST_UID=$(if $(SUDO_USER),$(shell id -u $(SUDO_USER)),$(shell id -u))
 export HOST_GID=$(if $(SUDO_USER),$(shell id -g $(SUDO_USER)),$(shell id -g))
+endif
 
 
 # Define RENGINE_VERSION
@@ -33,11 +45,19 @@ ifeq ($(DOCKER_COMPOSE),)
 $(error Docker Compose not found. Please install Docker Compose)
 endif
 
-# Check if user is in docker group or is root
-DOCKER_GROUP_CHECK := $(shell if [ -n "$$(getent group docker)" ]; then echo "yes"; else echo "no"; fi)
-
+# Check if user has Docker access (different on macOS vs Linux)
+ifeq ($(IS_MACOS),yes)
+# On macOS, Docker Desktop handles permissions differently
+DOCKER_ACCESS_CHECK := $(shell if docker version > /dev/null 2>&1; then echo "yes"; else echo "no"; fi)
+ifeq ($(DOCKER_ACCESS_CHECK),no)
+$(error Docker is not accessible. Please ensure Docker Desktop is running)
+endif
+else
+# On Linux, check if user is in docker group or is root
+DOCKER_GROUP_CHECK := $(shell if [ -n "$$(getent group docker 2>/dev/null)" ]; then echo "yes"; else echo "no"; fi)
 ifeq ($(DOCKER_GROUP_CHECK),no)
 $(error This command must be run with sudo or by a user in the docker group)
+endif
 endif
 
 $(info Using: $(DOCKER_COMPOSE))
@@ -74,7 +94,7 @@ define gpu_config
 	$(eval export DOCKER_RUNTIME)
 endef
 
-.PHONY: certs up dev_up build_up build pull superuser_create superuser_delete superuser_changepassword migrate down stop restart remove_images test logs images prune help
+.PHONY: certs up dev_up build_up build build-service pull superuser_create superuser_delete superuser_changepassword migrate down stop restart remove_images test logs images prune help
 
 pull:			## Pull pre-built Docker images from repository.
 	${DOCKER_COMPOSE_FILE_CMD} pull
@@ -86,6 +106,39 @@ build:			## Build all Docker images locally. Use GPU=1 to enable GPU support.
 	@make remove_images
 	$(call gpu_config)
 	${DOCKER_COMPOSE_FILE_CMD} -f ${COMPOSE_FILE_BUILD} ${COMPOSE_GPU_FILE} build --build-arg HOST_UID=$(HOST_UID) --build-arg HOST_GID=$(HOST_GID) ${SERVICES}
+
+build-service:		## Build a specific Docker service without removing images. Usage: make build-service SERVICE=<service_name> [GPU=1] [REBUILD=1]
+	@if [ -z "$(SERVICE)" ]; then \
+		echo "Error: SERVICE parameter is required. Usage: make build-service SERVICE=<service_name>"; \
+		echo "Available services: ${SERVICES}"; \
+		exit 1; \
+	fi
+	@if ! echo "${SERVICES}" | grep -wq "$(SERVICE)"; then \
+		echo "Error: Service '$(SERVICE)' is not valid. Available services: ${SERVICES}"; \
+		exit 1; \
+	fi
+	@if [ "$(REBUILD)" = "1" ]; then \
+		echo "REBUILD=1 detected, removing $(SERVICE) image before build..."; \
+		# Map service names to image names \
+		case "$(SERVICE)" in \
+			"db") IMAGE_NAME="postgres" ;; \
+			"celery-beat") IMAGE_NAME="celery" ;; \
+			*) IMAGE_NAME="$(SERVICE)" ;; \
+		esac; \
+		image_id=$$(docker images --filter=reference="ghcr.io/security-tools-alliance/rengine-ng:rengine-$$IMAGE_NAME-v$(RENGINE_VERSION)" --format "{{.ID}}" | head -1); \
+		if [ -n "$$image_id" ]; then \
+			echo "Removing image: ghcr.io/security-tools-alliance/rengine-ng:rengine-$$IMAGE_NAME-v$(RENGINE_VERSION) ($$image_id)"; \
+			docker rmi -f "$$image_id" || true; \
+		else \
+			echo "No existing image found for ghcr.io/security-tools-alliance/rengine-ng:rengine-$$IMAGE_NAME-v$(RENGINE_VERSION)"; \
+		fi \
+	fi
+	$(call gpu_config)
+	@if [ "$(REBUILD)" = "1" ]; then \
+		${DOCKER_COMPOSE_FILE_CMD} -f ${COMPOSE_FILE_BUILD} ${COMPOSE_GPU_FILE} build --no-cache --build-arg HOST_UID=$(HOST_UID) --build-arg HOST_GID=$(HOST_GID) $(SERVICE); \
+	else \
+		${DOCKER_COMPOSE_FILE_CMD} -f ${COMPOSE_FILE_BUILD} ${COMPOSE_GPU_FILE} build --build-arg HOST_UID=$(HOST_UID) --build-arg HOST_GID=$(HOST_GID) $(SERVICE); \
+	fi
 
 build_up:		## Build and start all services.
 	@make down
@@ -219,6 +272,10 @@ help:			## Show this help.
 	@echo "  make dev_up GPU=1                      				Start development environment with GPU support"
 	@echo "  make build GPU=1                       				Build all images with GPU support"
 	@echo "  make build_up GPU=1                    				Build and start all services with GPU support"
+	@echo "  make build-service SERVICE=web         				Build only the web service without removing images"
+	@echo "  make build-service SERVICE=celery GPU=1				Build only the celery service with GPU support"
+	@echo "  make build-service SERVICE=web REBUILD=1				Build web service after removing its image"
+	@echo "  make build-service SERVICE=redis REBUILD=1 GPU=1		Build redis service after removing image with GPU support"
 
 %:
 	@:

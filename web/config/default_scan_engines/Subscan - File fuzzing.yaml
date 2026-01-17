@@ -4,6 +4,7 @@
 # Global vars for all tools
 #
 # Custom header - FFUF, Nuclei, Dalfox, CRL Fuzz, HTTPx, Fetch URL (Hakrawler, Katana, Gospider)
+scan_type: 'bug_bounty'
 custom_header: {
   'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:126.0) Gecko/20100101 Firefox/126.0',
 }

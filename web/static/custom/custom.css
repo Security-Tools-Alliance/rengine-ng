@@ -15,20 +15,12 @@ body[data-layout-mode=horizontal] .container-fluid {
 .text-sm-logo{
   color:#fff;
   font-size: 21px;
-  margin-left: 5px !important;
 }
 
 .text-lg-logo{
   color:#fff;
-  font-size: 30px;
-}
-
-.vertical-center{
+  font-size: 28px;
   margin: 0;
-  position: absolute;
-  top: 50%;
-  -ms-transform: translateY(-50%);
-  transform: translateY(-50%);
 }
 
 .text-low {
@@ -152,8 +144,33 @@ div.dataTables_wrapper div.dataTables_filter input:focus {
 }
 
 .right-bar{
-  width: 460px;
-  right: -470px;
+  /* Bootstrap responsive widths */
+  width: 85vw; /* Mobile: full width */
+  right: -85vw;
+}
+
+/* Medium devices (tablets, 768px and up) */
+@media (min-width: 768px) {
+  .right-bar {
+    width: 65vw; /* 75% of viewport width */
+    right: -65vw;
+  }
+}
+
+/* Large devices (desktops, 992px and up) */
+@media (min-width: 992px) {
+  .right-bar {
+    width: 50vw; /* 50% of viewport width */
+    right: -50vw;
+  }
+}
+
+/* Extra large devices (large desktops, 1200px and up) */
+@media (min-width: 1200px) {
+  .right-bar {
+    width: 460px; /* Fixed width for large screens */
+    right: -470px;
+  }
 }
 
 /* theme toggle theme-switch */
@@ -382,6 +399,10 @@ tr.group:hover {
 }
 
 
+body[data-layout-mode="horizontal"] .navbar-custom {
+  padding: 0 12px;
+}
+
 .navbar-custom .app-search{
   max-width: 300px !important;
 }
@@ -510,4 +531,289 @@ mark{
 /* Model selection card */
 .model-selection-card {
   cursor: pointer;
+}
+
+/* Projects dropdown improvements */
+.projects-dropdown {
+  max-height: 300px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.projects-dropdown::-webkit-scrollbar {
+  width: 6px;
+}
+
+.projects-dropdown::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+.projects-dropdown::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+
+.projects-dropdown::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+/* Mobile hamburger - Bootstrap 5 styling */
+.navbar-toggler {
+  border: none;
+  background: none;
+  padding: 8px 12px;
+}
+
+.navbar-toggler:focus {
+  box-shadow: none;
+}
+
+.navbar-toggler-icon .lines span {
+  background: #fff !important;
+  display: block !important;
+  height: 2px !important;
+  width: 20px !important;
+  margin: 3px 0 !important;
+  transition: all 0.3s ease;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+/* Ensure the lines container is visible */
+.navbar-toggler-icon .lines {
+  display: block !important;
+  width: 20px;
+  height: 14px;
+}
+
+/* Mobile menu improvements */
+@media (max-width: 991px) {
+  /* Hide the original Bootstrap navbar toggle */
+  .navbar-custom .navbar-toggle[data-bs-target="#topnav-menu-content"] {
+    display: none !important;
+  }
+}
+
+/* Medium devices (tablets, 768px to 991px) */
+@media (max-width: 991.98px) {
+  body[data-layout-mode="horizontal"] .navbar-custom {
+    padding: 0 4px;
+  }
+  
+  /* Compact navigation for tablets */
+  .navbar-custom .topnav-menu .nav-link {
+    padding-left: 6px !important;
+    padding-right: 6px !important;
+    font-size: 0.75rem !important;
+  }
+  
+  /* Adjust search field for tablets */
+  .navbar-custom .app-search .form-control {
+    width: 150px;
+    font-size: 0.8rem;
+  }
+  
+  /* Compact dropdowns */
+  .topnav-menu .dropdown-menu {
+    min-width: 180px;
+    font-size: 0.8rem;
+  }
+}
+
+/* Mobile search (below 768px) */
+@media (max-width: 767.98px) {
+  .navbar-custom .app-search {
+    margin-right: 0;
+  }
+  .navbar-custom .app-search .btn,
+  .navbar-custom .topnav-menu .dropdown .nav-link.add-button {
+    background-color: transparent;
+    font-size: 1.3rem !important;
+  }
+  .navbar-custom .app-search.search-active {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 10001;
+    background: var(--bs-body-bg, #fff);
+    padding: 15px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+  }
+  
+  .navbar-custom .app-search.search-active .form-control {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    padding: 12px 15px;
+    font-size: 16px;
+  }
+  
+  .navbar-custom .app-search.search-active .btn {
+    position: absolute;
+    right: 25px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    color: #666;
+    padding: 0;
+  }
+}
+
+/* Large devices (992px to 1199px) */
+@media (min-width: 992px) and (max-width: 1199.98px) {
+  #topnav-menu-content .navbar-nav .nav-link {
+    font-size: .70rem !important;
+    /*padding: calc(33px / 2) 0.7rem !important;*/
+  }
+}
+
+@media (min-width: 1200px) {
+  .navbar-custom .topnav-menu .nav-link span.d-xl-inline {
+    display: inline !important;
+  }
+}
+
+/* Mobile navigation menu - Bootstrap handles positioning */
+.mobile-nav-menu {
+  position: fixed;
+  top: 70px;
+  left: 0;
+  width: 280px;
+  height: calc(100vh - 70px);
+  background: #fff;
+  box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+  z-index: 1050;
+  overflow-y: auto;
+}
+
+.mobile-nav-menu .nav-item {
+  border-bottom: 1px solid #e9ecef;
+}
+
+.mobile-nav-menu .nav-link {
+  padding: 15px 20px;
+  color: #495057;
+  display: flex;
+  align-items: center;
+  text-decoration: none;
+  transition: background-color 0.2s ease;
+}
+
+.mobile-nav-menu .nav-link:hover {
+  background-color: #f8f9fa;
+  color: #3283f6;
+}
+
+.mobile-nav-menu .nav-link i {
+  margin-right: 10px;
+  width: 20px;
+  text-align: center;
+}
+
+.mobile-nav-menu .nav-link.active {
+  background-color: #e3f2fd;
+  color: #3283f6;
+  font-weight: 600;
+}
+
+/* Mobile projects dropdown */
+.mobile-projects-dropdown {
+  max-height: 200px;
+  overflow-y: auto;
+  background: #f8f9fa;
+  border-top: 1px solid #e9ecef;
+}
+
+.mobile-projects-dropdown .dropdown-item {
+  padding: 10px 20px;
+  border-bottom: 1px solid #e9ecef;
+  color: #495057;
+}
+
+.mobile-projects-dropdown .dropdown-item:hover {
+  background-color: #e9ecef;
+  color: #3283f6;
+}
+
+.mobile-projects-dropdown .dropdown-item.active {
+  background-color: #e3f2fd;
+  color: #3283f6;
+  font-weight: 600;
+}
+
+/* Mobile submenu styles */
+.mobile-submenu-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+}
+
+.mobile-submenu-header span {
+  display: flex;
+  align-items: center;
+  text-align: left;
+}
+
+.mobile-submenu-header span i {
+  margin-right: 8px;
+}
+
+.mobile-submenu-header:hover {
+  background-color: #f8f9fa;
+}
+
+.mobile-submenu-arrow {
+  transition: transform 0.3s ease;
+  font-size: 12px;
+}
+
+.mobile-submenu-header.active .mobile-submenu-arrow {
+  transform: rotate(90deg);
+}
+
+.mobile-submenu {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease;
+  background-color: #f8f9fa;
+}
+
+.mobile-submenu.show {
+  max-height: 500px;
+}
+
+.mobile-submenu .dropdown-item {
+  padding-left: 40px;
+  font-size: 14px;
+  color: #6c757d;
+}
+
+.mobile-submenu .dropdown-item:hover {
+  background-color: #e9ecef;
+  color: #495057;
+}
+
+.mobile-submenu .dropdown-item.active {
+  background-color: #e3f2fd;
+  color: #3283f6;
+  font-weight: 600;
+}
+
+.mobile-submenu .dropdown-divider {
+  margin: 8px 0;
+  border-top: 1px solid #dee2e6;
+}
+
+/* Special styling for projects submenu to make it scrollable and always open */
+.mobile-projects-submenu {
+  max-height: 200px;
+  overflow-y: auto;
+  display: block !important;
 }

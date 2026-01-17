@@ -4,20 +4,19 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('startScan', '0037_alter_ipaddress_geo_iso'),
+        ("startScan", "0037_alter_ipaddress_geo_iso"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='vulnerability',
-            name='request',
+            model_name="vulnerability",
+            name="request",
             field=models.TextField(blank=True, null=True),
         ),
         migrations.AddField(
-            model_name='vulnerability',
-            name='response',
+            model_name="vulnerability",
+            name="response",
             field=models.TextField(blank=True, null=True),
         ),
     ]

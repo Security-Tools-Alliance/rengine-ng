@@ -2,27 +2,16 @@
 This file contains the test cases for the API views.
 """
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
+
 from django.urls import reverse
 from rest_framework import status
+
+from dashboard.models import OllamaSettings
+from reNgine.llm import config
 from startScan.models import SubScan
 from utils.test_base import BaseTestCase
-from reNgine.llm import config
-from dashboard.models import OllamaSettings
 
-__all__ = [
-    'TestOllamaManager',
-    'TestWafDetector',
-    'TestCMSDetector',
-    'TestGfList',
-    'TestUpdateTool',
-    'TestUninstallTool',
-    'TestGetExternalToolCurrentVersion',
-    'TestRengineUpdateCheck',
-    'TestGithubToolCheckGetLatestRelease',
-    'TestGetFileContents',
-    'TestDeleteMultipleRows'
-]
 
 class TestOllamaManager(BaseTestCase):
     """Tests for the OllamaManager API endpoints."""
@@ -30,11 +19,7 @@ class TestOllamaManager(BaseTestCase):
     def setUp(self):
         """Set up test environment."""
         super().setUp()
-        self.ollama_settings = OllamaSettings.objects.create(
-            id=1,
-            selected_model="llama2",
-            use_ollama=True
-        )
+        self.ollama_settings = OllamaSettings.objects.create(id=1, selected_model="llama2", use_ollama=True)
 
     @patch("requests.post")
     def test_get_download_model(self, mock_post):
@@ -49,40 +34,34 @@ class TestOllamaManager(BaseTestCase):
     @patch("requests.get")
     def test_delete_model(self, mock_get, mock_delete):
         """Test deleting an Ollama model."""
-        mock_get.return_value.json.return_value = {
-            "models": [{"name": "llama2"}]
-        }
+        mock_get.return_value.json.return_value = {"models": [{"name": "llama2"}]}
         mock_delete.return_value.status_code = 200
-        
+
         model_name = "llama2"
         api_url = reverse("api:ollama_detail_manager", kwargs={"model_name": model_name})
-        
+
         response = self.client.delete(api_url)
-        
+
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data["status"])
-        mock_delete.assert_called_once_with(
-            f"{config.OLLAMA_INSTANCE}/api/delete",
-            json={"name": model_name}
-        )
+        mock_delete.assert_called_once_with(f"{config.OLLAMA_INSTANCE}/api/delete", json={"name": model_name})
 
     @patch("requests.get")
     def test_put_update_model(self, mock_get):
         """Test updating the selected Ollama model."""
-        mock_get.return_value.json.return_value = {
-            "models": [{"name": "gpt-4"}]
-        }
-        
+        mock_get.return_value.json.return_value = {"models": [{"name": "gpt-4"}]}
+
         model_name = "gpt-4"
         api_url = reverse("api:ollama_detail_manager", kwargs={"model_name": model_name})
-        
+
         response = self.client.put(api_url)
-        
+
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data["status"])
-        
+
         updated_settings = OllamaSettings.objects.get(id=1)
         self.assertEqual(updated_settings.selected_model, model_name)
+
 
 class TestWafDetector(BaseTestCase):
     """Tests for the WAF Detector API."""
@@ -90,9 +69,7 @@ class TestWafDetector(BaseTestCase):
     @patch("api.views.run_wafw00f")
     def test_waf_detection_success(self, mock_run_wafw00f):
         """Test successful WAF detection."""
-        mock_run_wafw00f.delay.return_value.get.return_value = (
-            "WAF Detected: CloudFlare"
-        )
+        mock_run_wafw00f.delay.return_value.get.return_value = "WAF Detected: CloudFlare"
         api_url = reverse("api:waf_detector")
         response = self.client.get(api_url, {"url": "https://www.cloudflare.com"})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -117,6 +94,7 @@ class TestWafDetector(BaseTestCase):
         self.assertFalse(response.data["status"])
         self.assertEqual(response.data["message"], "URL parameter is missing")
 
+
 class TestCMSDetector(BaseTestCase):
     """Test case for CMS detection functionality."""
 
@@ -137,6 +115,7 @@ class TestCMSDetector(BaseTestCase):
         self.assertTrue(response.data["status"])
         self.assertEqual(response.data["cms"], "WordPress")
 
+
 class TestGfList(BaseTestCase):
     """Test case for retrieving GF patterns."""
 
@@ -152,6 +131,7 @@ class TestGfList(BaseTestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data, ["pattern1", "pattern2"])
 
+
 class TestUpdateTool(BaseTestCase):
     """Test case for updating a tool."""
 
@@ -164,13 +144,12 @@ class TestUpdateTool(BaseTestCase):
     def test_update_tool(self, mock_run_command):
         """Test updating a tool."""
         api_url = reverse("api:update_tool")
-        response = self.client.get(
-            api_url, {"tool_id": self.data_generator.installed_external_tool.id}
-        )
+        response = self.client.get(api_url, {"tool_id": self.data_generator.installed_external_tool.id})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data["status"])
         mock_run_command.assert_called()
         mock_run_command.apply_async.assert_called_once()
+
 
 class TestUninstallTool(BaseTestCase):
     """Tests for the UninstallTool class."""
@@ -189,6 +168,7 @@ class TestUninstallTool(BaseTestCase):
         response = self.client.get(url, data)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data["status"])
+
 
 class TestGetExternalToolCurrentVersion(BaseTestCase):
     """Test case for getting the current version of an external tool."""
@@ -222,15 +202,14 @@ class TestGetExternalToolCurrentVersion(BaseTestCase):
                 # Just verify the response structure is correct
                 self.assertIn("message", response.data)
 
+
 class TestRengineUpdateCheck(BaseTestCase):
     """Tests for checking reNgine updates."""
 
     @patch("requests.get")
     def test_rengine_update_check(self, mock_get):
         """Test checking for reNgine updates."""
-        mock_get.return_value.json.return_value = [
-            {"name": "v2.0.0", "body": "Changelog"}
-        ]
+        mock_get.return_value.json.return_value = [{"name": "v2.0.0", "body": "Changelog"}]
         api_url = reverse("api:check_rengine_update")
         response = self.client.get(api_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -238,6 +217,7 @@ class TestRengineUpdateCheck(BaseTestCase):
         self.assertIn("latest_version", response.data)
         self.assertIn("current_version", response.data)
         self.assertIn("update_available", response.data)
+
 
 class TestGithubToolCheckGetLatestRelease(BaseTestCase):
     """Test case for checking the latest release of a GitHub tool."""
@@ -266,6 +246,7 @@ class TestGithubToolCheckGetLatestRelease(BaseTestCase):
         self.assertTrue(response.data["status"])
         self.assertEqual(response.data["name"], "v1.0.0")
 
+
 class TestGetFileContents(BaseTestCase):
     """Test case for retrieving file contents."""
 
@@ -280,6 +261,7 @@ class TestGetFileContents(BaseTestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data["status"])
         self.assertGreaterEqual(len(response.data["content"]), 1)
+
 
 class TestDeleteMultipleRows(BaseTestCase):
     """Test case for deleting multiple rows."""
@@ -311,3 +293,177 @@ class TestDeleteMultipleRows(BaseTestCase):
                 ]
             ).exists()
         )
+
+
+class TestIPToDomain(BaseTestCase):
+    """Tests for the IPToDomain API endpoint."""
+
+    @patch("reNgine.tasks.dns.ip_range_discovery.delay")
+    def test_ip_to_domain_single_ip(self, mock_task):
+        """Test IP to domain conversion for a single IP address."""
+        # Mock the Celery task
+        mock_task_result = MagicMock()
+        mock_task_result.id = "test-task-id"
+        mock_task_result.get.return_value = {
+            "status": True,
+            "ip_address": [{"ip": "8.8.8.8", "domain": "dns.google"}],
+            "discovered_domains": ["dns.google"],
+            "total_hosts": 1,
+            "ping_required": True,
+        }
+        mock_task.return_value = mock_task_result
+
+        api_url = reverse("api:ip_to_domain")
+        response = self.client.get(api_url, {"ip_address": "8.8.8.8"})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["status"])
+        self.assertEqual(response.data["total_hosts"], 1)
+        self.assertTrue(response.data["ping_required"])
+        mock_task.assert_called_once()
+
+    @patch("reNgine.tasks.dns.ip_range_discovery.delay")
+    def test_ip_to_domain_cidr_range(self, mock_task):
+        """Test IP to domain conversion for a CIDR range."""
+        # Mock the Celery task
+        mock_task_result = MagicMock()
+        mock_task_result.id = "test-task-id"
+        mock_task_result.get.return_value = {
+            "status": True,
+            "ip_address": [{"ip": "192.168.1.1", "domain": "test.local"}],
+            "discovered_domains": ["test.local"],
+            "total_hosts": 1,
+            "ping_required": True,
+        }
+        mock_task.return_value = mock_task_result
+
+        api_url = reverse("api:ip_to_domain")
+        response = self.client.get(api_url, {"ip_address": "192.168.1.0/30"})  # Only 4 IPs instead of 256
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["status"])
+        self.assertEqual(response.data["total_hosts"], 1)
+        self.assertTrue(response.data["ping_required"])
+        mock_task.assert_called_once()
+
+    def test_ip_to_domain_missing_ip(self):
+        """Test IP to domain conversion with missing IP parameter."""
+        api_url = reverse("api:ip_to_domain")
+        response = self.client.get(api_url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(response.data["status"])
+        self.assertEqual(response.data["message"], "IP Address Required")
+
+    def test_ip_to_domain_invalid_ip(self):
+        """Test IP to domain conversion with invalid IP format."""
+        api_url = reverse("api:ip_to_domain")
+        response = self.client.get(api_url, {"ip_address": "invalid-ip"})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(response.data["status"])
+        self.assertIn("Exception: Expected 4 octets", response.data["message"])
+
+    @patch("reNgine.tasks.dns.ip_range_discovery.delay")
+    def test_ip_to_domain_with_custom_dns(self, mock_task):
+        """Test IP to domain conversion with custom DNS servers."""
+        # Mock the Celery task
+        mock_task_result = MagicMock()
+        mock_task_result.id = "test-task-id"
+        mock_task_result.get.return_value = {
+            "status": True,
+            "ip_address": [{"ip": "8.8.8.8", "domain": "dns.google"}],
+            "discovered_domains": ["dns.google"],
+            "total_hosts": 1,
+            "ping_required": True,
+        }
+        mock_task.return_value = mock_task_result
+
+        api_url = reverse("api:ip_to_domain")
+        response = self.client.get(api_url, {"ip_address": "8.8.8.8", "custom_dns": "8.8.8.8,1.1.1.1"})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["status"])
+        mock_task.assert_called_once()
+
+
+class TestPingHosts(BaseTestCase):
+    """Tests for the PingHosts API endpoint."""
+
+    @patch("reNgine.tasks.dns.ping_hosts_task.delay")
+    def test_ping_hosts_post_success(self, mock_task):
+        """Test successful ping hosts task launch."""
+        # Mock the Celery task
+        mock_task_result = MagicMock()
+        mock_task_result.id = "test-ping-task-id"
+        mock_task.return_value = mock_task_result
+
+        api_url = reverse("api:ping_hosts")
+        data = {"ip_list": ["8.8.8.8", "1.1.1.1"], "scan_id": "test-scan-id"}
+        response = self.client.post(api_url, data, content_type="application/json")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["status"])
+        self.assertEqual(response.data["task_id"], "test-ping-task-id")
+        self.assertEqual(response.data["total_hosts"], 2)
+        mock_task.assert_called_once()
+
+    def test_ping_hosts_post_missing_ip_list(self):
+        """Test ping hosts with missing IP list."""
+        api_url = reverse("api:ping_hosts")
+        data = {"scan_id": "test-scan-id"}
+        response = self.client.post(api_url, data, content_type="application/json")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(response.data["status"])
+        self.assertEqual(response.data["message"], "No IP addresses provided")
+
+    @patch("celery.result.AsyncResult")
+    def test_ping_hosts_get_success(self, mock_async_result):
+        """Test successful ping hosts result retrieval."""
+        # Mock successful task result
+        mock_result = MagicMock()
+        mock_result.ready.return_value = True
+        mock_result.successful.return_value = True
+        mock_result.result = {
+            "status": True,
+            "ping_results": {"8.8.8.8": True, "1.1.1.1": False},
+            "alive_count": 1,
+            "total_count": 2,
+        }
+        mock_async_result.return_value = mock_result
+
+        api_url = reverse("api:ping_hosts")
+        response = self.client.get(api_url, {"task_id": "test-task-id"})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["status"])
+        self.assertEqual(response.data["task_status"], "completed")
+        self.assertIn("result", response.data)
+
+    @patch("celery.result.AsyncResult")
+    def test_ping_hosts_get_pending(self, mock_async_result):
+        """Test ping hosts result retrieval for pending task."""
+        # Mock pending task result
+        mock_result = MagicMock()
+        mock_result.ready.return_value = False
+        mock_async_result.return_value = mock_result
+
+        api_url = reverse("api:ping_hosts")
+        response = self.client.get(api_url, {"task_id": "test-task-id"})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["status"])
+        self.assertEqual(response.data["task_status"], "pending")
+
+    def test_ping_hosts_get_missing_task_id(self):
+        """Test ping hosts result retrieval with missing task ID."""
+        api_url = reverse("api:ping_hosts")
+        response = self.client.get(api_url)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(response.data["status"])
+        self.assertEqual(response.data["message"], "Task ID required")
+
+
+# CSRF token endpoint tests removed - endpoint not implemented in URLs

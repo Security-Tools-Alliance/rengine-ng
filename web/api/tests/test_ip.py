@@ -2,21 +2,13 @@
 This file contains the test cases for the API views.
 """
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
+
 from django.urls import reverse
 from rest_framework import status
-from utils.test_base import BaseTestCase
-import socket
 
-__all__ = [
-    'TestIpAddressViewSet',
-    'TestIPToDomain',
-    'TestDomainIPHistory',
-    'TestListIPs',
-    'TestListPorts',
-    'TestWhois',
-    'TestReverseWhois'
-]
+from utils.test_base import BaseTestCase
+
 
 class TestIpAddressViewSet(BaseTestCase):
     """Test case for IP address viewset."""
@@ -28,15 +20,14 @@ class TestIpAddressViewSet(BaseTestCase):
     def test_ip_address_viewset(self):
         """Test retrieving IP addresses for a scan."""
         url = reverse("api:ip-addresses-list")
-        response = self.client.get(
-            url, {"scan_id": self.data_generator.scan_history.id}
-        )
+        response = self.client.get(url, {"scan_id": self.data_generator.scan_history.id})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertGreaterEqual(len(response.data), 1)
         self.assertEqual(
             response.data["results"][0]["ip_addresses"][0]["address"],
             self.data_generator.ip_address.address,
         )
+
 
 class TestIPToDomain(BaseTestCase):
     """Test case for IP to domain resolution."""
@@ -45,45 +36,74 @@ class TestIPToDomain(BaseTestCase):
         """Set up test environment."""
         super().setUp()
 
-    @patch("api.views.socket.gethostbyaddr")
-    def test_ip_to_domain(self, mock_gethostbyaddr):
+    @patch("reNgine.tasks.dns.ip_range_discovery.delay")
+    def test_ip_to_domain(self, mock_task):
         """Test resolving an IP address to a domain name."""
-        mock_gethostbyaddr.return_value = (
-            self.data_generator.domain.name,
-            [self.data_generator.domain.name],
-            [self.data_generator.subdomain.ip_addresses.first().address],
-        )
+        # Mock the Celery task
+        mock_task_result = MagicMock()
+        mock_task_result.id = "test-task-id"
+        mock_task_result.get.return_value = {
+            "status": True,
+            "ip_address": [{"ip": "8.8.8.8", "domain": "dns.google"}],
+            "discovered_domains": ["dns.google"],
+            "total_hosts": 1,
+            "ping_required": True,
+        }
+        mock_task.return_value = mock_task_result
+
         url = reverse("api:ip_to_domain")
-        response = self.client.get(
-            url,
-            {"ip_address": self.data_generator.subdomain.ip_addresses.first().address},
-        )
+        response = self.client.get(url, {"ip_address": "8.8.8.8"})
+
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data["status"])
-        self.assertEqual(
-            response.data["ip_address"][0]["domain"], self.data_generator.domain.name
-        )
+        self.assertEqual(response.data["total_hosts"], 1)
+        self.assertTrue(response.data["ping_required"])
+        mock_task.assert_called_once()
 
-    @patch("api.views.socket.gethostbyaddr")
-    def test_ip_to_domain_failure(self, mock_gethostbyaddr):
+    @patch("reNgine.tasks.dns.ip_range_discovery.delay")
+    def test_ip_to_domain_failure(self, mock_task):
         """Test IP to domain resolution when it fails."""
-        mock_gethostbyaddr.side_effect = socket.herror
+        # Mock the Celery task to return failure
+        mock_task_result = MagicMock()
+        mock_task_result.id = "test-task-id"
+        mock_task_result.get.return_value = {
+            "status": True,
+            "ip_address": [{"ip": "192.0.2.1", "domain": "192.0.2.1"}],
+            "discovered_domains": [],
+            "total_hosts": 1,
+            "ping_required": True,
+        }
+        mock_task.return_value = mock_task_result
+
         url = reverse("api:ip_to_domain")
         response = self.client.get(url, {"ip_address": "192.0.2.1"})
+
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.data["status"])
         self.assertEqual(response.data["ip_address"][0]["domain"], "192.0.2.1")
 
-    @patch("api.views.socket.gethostbyaddr")
-    def test_ip_to_domain_multiple(self, mock_gethostbyaddr):
+    @patch("reNgine.tasks.dns.ip_range_discovery.delay")
+    def test_ip_to_domain_multiple(self, mock_task):
         """Test IP to domain resolution with multiple domains."""
-        mock_domains = ["example.com", "example.org"]
-        mock_gethostbyaddr.return_value = (mock_domains[0], mock_domains, ["192.0.2.1"])
+        # Mock the Celery task
+        mock_task_result = MagicMock()
+        mock_task_result.id = "test-task-id"
+        mock_task_result.get.return_value = {
+            "status": True,
+            "ip_address": [{"ip": "192.0.2.1", "domain": "example.com", "domains": ["example.com", "example.org"]}],
+            "discovered_domains": ["example.com", "example.org"],
+            "total_hosts": 1,
+            "ping_required": True,
+        }
+        mock_task.return_value = mock_task_result
+
         url = reverse("api:ip_to_domain")
         response = self.client.get(url, {"ip_address": "192.0.2.1"})
+
         self.assertEqual(response.status_code, 200)
         self.assertIn("domains", response.data["ip_address"][0])
-        self.assertEqual(response.data["ip_address"][0]["domains"], mock_domains)
+        self.assertEqual(response.data["ip_address"][0]["domains"], ["example.com", "example.org"])
+
 
 class TestDomainIPHistory(BaseTestCase):
     """Test case for domain IP history lookup."""
@@ -105,6 +125,7 @@ class TestDomainIPHistory(BaseTestCase):
         self.assertTrue(response.data["status"])
         self.assertEqual(response.data["data"], "IP History data")
 
+
 class TestListIPs(BaseTestCase):
     """Test case for listing IP addresses."""
 
@@ -119,9 +140,8 @@ class TestListIPs(BaseTestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("ips", response.data)
         self.assertGreaterEqual(len(response.data["ips"]), 1)
-        self.assertEqual(
-            response.data["ips"][0]["address"], self.data_generator.ip_address.address
-        )
+        self.assertEqual(response.data["ips"][0]["address"], self.data_generator.ip_address.address)
+
 
 class TestListPorts(BaseTestCase):
     """Test case for listing ports."""
@@ -149,6 +169,7 @@ class TestListPorts(BaseTestCase):
         self.assertEqual(response.data["ports"][0]["number"], 80)
         self.assertEqual(response.data["ports"][0]["service_name"], "http")
 
+
 class TestWhois(BaseTestCase):
     """Test case for WHOIS lookup."""
 
@@ -169,6 +190,7 @@ class TestWhois(BaseTestCase):
         self.assertTrue(response.data["status"])
         self.assertEqual(response.data["data"], "Whois data")
 
+
 class TestReverseWhois(BaseTestCase):
     """Test case for Reverse WHOIS lookup."""
 
@@ -184,9 +206,7 @@ class TestReverseWhois(BaseTestCase):
             "data": "Reverse Whois data",
         }
         url = reverse("api:reverse_whois")
-        response = self.client.get(
-            url, {"lookup_keyword": self.data_generator.domain.name}
-        )
+        response = self.client.get(url, {"lookup_keyword": self.data_generator.domain.name})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data["status"])
         self.assertEqual(response.data["data"], "Reverse Whois data")

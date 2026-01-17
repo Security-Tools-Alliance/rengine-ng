@@ -1619,7 +1619,6 @@ function initiate_subscan(subdomain_ids){
 		method: 'POST',
 		credentials: "same-origin",
 		headers: {
-			"X-CSRFToken": getCookie("csrftoken"),
 			'Content-Type': 'application/json'
 		},
 		body: JSON.stringify(data)

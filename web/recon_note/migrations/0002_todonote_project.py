@@ -5,17 +5,16 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('dashboard', '0005_alter_project_slug'),
-        ('recon_note', '0001_initial'),
+        ("dashboard", "0005_alter_project_slug"),
+        ("recon_note", "0001_initial"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='todonote',
-            name='project',
-            field=models.ForeignKey(default='', on_delete=django.db.models.deletion.CASCADE, to='dashboard.project'),
+            model_name="todonote",
+            name="project",
+            field=models.ForeignKey(default="", on_delete=django.db.models.deletion.CASCADE, to="dashboard.project"),
             preserve_default=False,
         ),
     ]

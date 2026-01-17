@@ -1,5 +1,16 @@
 from rolepermissions.roles import AbstractUserRole
-from reNgine.definitions import *
+
+from reNgine.definitions import (
+    PERM_INITATE_SCANS_SUBSCANS,
+    PERM_MODIFY_INTERESTING_LOOKUP,
+    PERM_MODIFY_SCAN_CONFIGURATIONS,
+    PERM_MODIFY_SCAN_REPORT,
+    PERM_MODIFY_SCAN_RESULTS,
+    PERM_MODIFY_SYSTEM_CONFIGURATIONS,
+    PERM_MODIFY_TARGETS,
+    PERM_MODIFY_WORDLISTS,
+)
+
 
 class SysAdmin(AbstractUserRole):
     available_permissions = {

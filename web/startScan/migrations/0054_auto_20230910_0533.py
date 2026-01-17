@@ -4,19 +4,18 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('startScan', '0053_auto_20230908_1156'),
+        ("startScan", "0053_auto_20230908_1156"),
     ]
 
     operations = [
         migrations.RemoveField(
-            model_name='endpoint',
-            name='technologies',
+            model_name="endpoint",
+            name="technologies",
         ),
         migrations.AddField(
-            model_name='endpoint',
-            name='techs',
-            field=models.ManyToManyField(blank=True, null=True, related_name='techs', to='startScan.Technology'),
+            model_name="endpoint",
+            name="techs",
+            field=models.ManyToManyField(blank=True, null=True, related_name="techs", to="startScan.Technology"),
         ),
     ]
