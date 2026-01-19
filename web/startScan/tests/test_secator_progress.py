@@ -78,8 +78,9 @@ class TestSecatorProgress(BaseTestCase):
         )
 
         progress = SecatorProgressSync.calculate_workflow_progress(self.scan_history.id)
-        # Average of 100 and 50 = 75
-        self.assertEqual(progress, 75)
+        # Task progress is calculated as completed_tasks/total_tasks.
+        # Here: 1 completed (SUCCESS/done) out of 2 => 50%.
+        self.assertEqual(progress, 50.0)
 
     def test_get_current_running_runner(self):
         """Test getting the current running runner."""

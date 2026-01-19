@@ -147,124 +147,129 @@ document.addEventListener('DOMContentLoaded', function() {
     'network': '{{ default_profiles.network|default:"all_ports" }}'
   };
   
-  categories.forEach(category => {
-    const builtinButtons = document.getElementById(category + '-builtin-buttons');
-    const customSelect = document.getElementById(category + '_custom_profile');
-    const descriptionDiv = document.getElementById(category + '_custom_description');
-    const hiddenInput = document.getElementById(category === 'evasion' ? 'stealth_profile' : category + '_profile');
+  document.querySelectorAll('.profile-selector').forEach(profileRoot => {
+    const form = profileRoot.closest('form') || document;
+
+    categories.forEach(category => {
+      const builtinButtons = profileRoot.querySelector('#' + category + '-builtin-buttons');
+      const customSelect = profileRoot.querySelector('#' + category + '_custom_profile');
+      const descriptionDiv = profileRoot.querySelector('#' + category + '_custom_description');
+      const hiddenInputName = category === 'evasion' ? 'stealth_profile' : category + '_profile';
+      const hiddenInput = form.querySelector(`input[name="${hiddenInputName}"]`);
     
-    // Handle builtin button clicks
-    if (builtinButtons) {
-      builtinButtons.querySelectorAll('button').forEach(button => {
-        button.addEventListener('click', function() {
-          // Deselect all buttons in this category
-          builtinButtons.querySelectorAll('button').forEach(btn => {
-            resetButtonClasses(btn, category);
+      // Handle builtin button clicks
+      if (builtinButtons) {
+        builtinButtons.querySelectorAll('button').forEach(button => {
+          button.addEventListener('click', function() {
+            // Deselect all buttons in this category
+            builtinButtons.querySelectorAll('button').forEach(btn => {
+              resetButtonClasses(btn, category);
+            });
+            
+            // Select clicked button
+            resetButtonClasses(this, category);
+            const solidClass = categoryToButtonClass[category];
+            if (solidClass) {
+              this.classList.add(solidClass, 'active');
+            }
+            
+            // Hide and reset custom select
+            if (customSelect) {
+              customSelect.style.display = 'none';
+              customSelect.value = '';
+            }
+            if (descriptionDiv) {
+              descriptionDiv.style.display = 'none';
+              descriptionDiv.textContent = '';
+            }
+            
+            // Update hidden input
+            if (hiddenInput) {
+              hiddenInput.value = this.dataset.profileValue;
+            }
           });
+        });
+      }
+      
+      // Handle custom select changes
+      if (customSelect) {
+        customSelect.addEventListener('change', function() {
+          const selectedOption = this.options[this.selectedIndex];
           
-          // Select clicked button
-          resetButtonClasses(this, category);
-          const solidClass = categoryToButtonClass[category];
-          if (solidClass) {
-            this.classList.add(solidClass, 'active');
-          }
-          
-          // Hide and reset custom select
-          if (customSelect) {
-            customSelect.style.display = 'none';
-            customSelect.value = '';
-          }
-          if (descriptionDiv) {
-            descriptionDiv.style.display = 'none';
-            descriptionDiv.textContent = '';
-          }
-          
-          // Update hidden input
-          if (hiddenInput) {
-            hiddenInput.value = this.dataset.profileValue;
+          if (this.value) {
+            // Deselect all builtin buttons
+            if (builtinButtons) {
+              builtinButtons.querySelectorAll('button').forEach(btn => {
+                resetButtonClasses(btn, category);
+              });
+            }
+            
+            // Show description
+            if (descriptionDiv && selectedOption.dataset.description) {
+              descriptionDiv.textContent = selectedOption.dataset.description;
+              descriptionDiv.style.display = 'block';
+            }
+            
+            // Update hidden input with custom profile name
+            if (hiddenInput) {
+              hiddenInput.value = this.value;
+            }
+          } else {
+            // Reset to default
+            if (descriptionDiv) {
+              descriptionDiv.style.display = 'none';
+              descriptionDiv.textContent = '';
+            }
+            if (hiddenInput) {
+              hiddenInput.value = '';
+            }
           }
         });
-      });
-    }
-    
-    // Handle custom select changes
-    if (customSelect) {
-      customSelect.addEventListener('change', function() {
-        const selectedOption = this.options[this.selectedIndex];
+      }
+      
+      // Show custom select if there are custom profiles
+      if (customSelect && customSelect.options.length > 1) {
+        customSelect.style.display = 'block';
+      }
+      
+      // Initialize default profile value
+      const defaultProfile = defaultProfiles[category];
+      if (defaultProfile && hiddenInput) {
+        // Check if default profile is a custom profile
+        const isCustomDefault = customSelect && Array.from(customSelect.options).some(opt => opt.value === defaultProfile);
         
-        if (this.value) {
+        if (isCustomDefault) {
+          // Default is a custom profile - select it in dropdown
+          customSelect.value = defaultProfile;
+          // Update hidden input
+          hiddenInput.value = defaultProfile;
+          // Show description
+          const selectedOption = customSelect.options[customSelect.selectedIndex];
+          if (descriptionDiv && selectedOption && selectedOption.dataset.description) {
+            descriptionDiv.textContent = selectedOption.dataset.description;
+            descriptionDiv.style.display = 'block';
+          }
           // Deselect all builtin buttons
           if (builtinButtons) {
             builtinButtons.querySelectorAll('button').forEach(btn => {
               resetButtonClasses(btn, category);
             });
           }
-          
-          // Show description
-          if (descriptionDiv && selectedOption.dataset.description) {
-            descriptionDiv.textContent = selectedOption.dataset.description;
-            descriptionDiv.style.display = 'block';
-          }
-          
-          // Update hidden input with custom profile name
-          if (hiddenInput) {
-            hiddenInput.value = this.value;
-          }
         } else {
-          // Reset to default
-          if (descriptionDiv) {
-            descriptionDiv.style.display = 'none';
-            descriptionDiv.textContent = '';
-          }
-          if (hiddenInput) {
-            hiddenInput.value = '';
-          }
-        }
-      });
-    }
-    
-    // Show custom select if there are custom profiles
-    if (customSelect && customSelect.options.length > 1) {
-      customSelect.style.display = 'block';
-    }
-    
-    // Initialize default profile value
-    const defaultProfile = defaultProfiles[category];
-    if (defaultProfile && hiddenInput) {
-      // Check if default profile is a custom profile
-      const isCustomDefault = customSelect && Array.from(customSelect.options).some(opt => opt.value === defaultProfile);
-      
-      if (isCustomDefault) {
-        // Default is a custom profile - select it in dropdown
-        customSelect.value = defaultProfile;
-        // Update hidden input
-        hiddenInput.value = defaultProfile;
-        // Show description
-        const selectedOption = customSelect.options[customSelect.selectedIndex];
-        if (descriptionDiv && selectedOption && selectedOption.dataset.description) {
-          descriptionDiv.textContent = selectedOption.dataset.description;
-          descriptionDiv.style.display = 'block';
-        }
-        // Deselect all builtin buttons
-        if (builtinButtons) {
-          builtinButtons.querySelectorAll('button').forEach(btn => {
-            resetButtonClasses(btn, category);
-          });
-        }
-      } else {
-        // Default is a builtin profile
-        if (builtinButtons) {
-          const defaultButton = builtinButtons.querySelector(`[data-profile-value="${defaultProfile}"]`);
-          if (defaultButton) {
-            // Button is already marked as active in template, just set hidden input
+          // Default is a builtin profile
+          if (builtinButtons) {
+            const defaultButton = builtinButtons.querySelector(`[data-profile-value="${defaultProfile}"]`);
+            if (defaultButton) {
+              // Button is already marked as active in template, just set hidden input
+              hiddenInput.value = defaultProfile;
+            }
+          } else {
+            // If no builtin buttons, set default value anyway
             hiddenInput.value = defaultProfile;
           }
-        } else {
-          // If no builtin buttons, set default value anyway
-          hiddenInput.value = defaultProfile;
         }
       }
-    }
+    });
   });
 });
 </script>

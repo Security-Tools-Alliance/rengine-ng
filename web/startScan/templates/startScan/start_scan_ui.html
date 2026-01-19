@@ -29,87 +29,17 @@ Initiating scan for {{domain.name}}
         <form method="POST" id="start-scan-form">
           {% csrf_token %}
           <input type="hidden" id="domain_id" name="domain_id" value="{{ domain.id }}">
-          <input type="hidden" id="execution_mode" name="execution_mode" value="">
-          <input type="hidden" name="speed_profile" id="speed_profile" value="">
-          <input type="hidden" name="stealth_profile" id="stealth_profile" value="">
-          <input type="hidden" name="general_profile" id="general_profile" value="">
-          <input type="hidden" name="network_profile" id="network_profile" value="">
+          {% include 'startScan/_items/secator_hidden_fields.html' with id_prefix='start_scan_' %}
           <div id="select_engine">
             
             <h4>Choose Execution Mode</h4>
-            <div class="execution-mode-selector mb-4">
-              <div class="row">
-                <div class="col-md-4 mb-3">
-                  <div class="execution-mode-card" data-mode="workflow">
-                    <i class="fas fa-project-diagram"></i>
-                    <h5>Workflow</h5>
-                    <p>Pre-configured task sequences</p>
-                  </div>
-                </div>
-                <div class="col-md-4 mb-3">
-                  <div class="execution-mode-card" data-mode="tasks">
-                    <i class="fas fa-tasks"></i>
-                    <h5>Individual Tasks</h5>
-                    <p>Custom task selection</p>
-                  </div>
-                </div>
-                <div class="col-md-4 mb-3">
-                  <div class="execution-mode-card" data-mode="scan">
-                    <i class="fas fa-satellite-dish"></i>
-                    <h5>Scan</h5>
-                    <p>Quick scan modes</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-            
-            <!-- Step 2: Specific selection (dynamically loaded) -->
-            <div id="selection-container"></div>
+            {% include 'startScan/_items/secator_execution_mode_selector.html' with scan_icon='satellite-dish' scan_title='Scan' %}
             
             <!-- Compact Configuration Sections -->
             <div class="row">
               <!-- Scan Target Elements -->
               <div class="col-lg-6 mb-4">
-                <div class="card border-0 bg-soft-light h-100">
-                  <div class="card-body">
-                    <h5 class="card-title">
-                      <i class="fas fa-target text-primary me-2"></i>
-                      Scan Target Elements
-                    </h5>
-                    <p class="card-text small">
-                      Scan the hostnames and IP addresses already discovered in this target.
-                    </p>
-                    
-                    <div class="form-check form-switch">
-                      <input class="form-check-input" type="checkbox" id="scan_existing_elements" name="scan_existing_elements" value="true">
-                      <label class="form-check-label" for="scan_existing_elements">
-                        <strong>Enable scanning of existing target elements</strong>
-                      </label>
-                    </div>
-                    
-                    <div id="existing-elements-info" class="mt-3" style="display: none;">
-                      <div class="row">
-                        <div class="col-6">
-                          <div class="d-flex align-items-center">
-                            <i class="fas fa-globe text-success me-2"></i>
-                            <span class="small">Hostnames: <span id="hostname-count" class="badge badge-soft-success">0</span></span>
-                          </div>
-                        </div>
-                        <div class="col-6">
-                          <div class="d-flex align-items-center">
-                            <i class="fas fa-network-wired text-info me-2"></i>
-                            <span class="small">IP Addresses: <span id="ip-count" class="badge badge-soft-info">0</span></span>
-                          </div>
-                        </div>
-                      </div>
-                      
-                      <div class="alert bg-soft-info border-0 mt-2 small" role="alert">
-                        <i class="fas fa-info-circle"></i>
-                        <strong>Note:</strong> When enabled, the scan will target all discovered hostnames and IP addresses in this target, in addition to the main domain.
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                {% include 'startScan/_items/secator_scan_target_elements.html' with title='Scan Target Elements' description='Scan the hostnames and IP addresses already discovered in this target.' note='When enabled, the scan will target all discovered hostnames and IP addresses in this target, in addition to the main domain.' show_counts=True card_class='card border-0 bg-soft-light h-100' id_suffix='_start_scan' %}
               </div>
 
               <!-- Import Subdomains -->
@@ -192,7 +122,7 @@ Initiating scan for {{domain.name}}
                     
                     <!-- Simplified/Expert Mode -->
                     <div class="form-check form-switch mt-3">
-                      <input class="form-check-input" type="checkbox" id="expertMode">
+                      <input class="form-check-input" type="checkbox" id="expertMode" name="expert_mode">
                       <label class="form-check-label" for="expertMode">Expert Mode</label>
                     </div>
                     
@@ -248,16 +178,7 @@ Initiating scan for {{domain.name}}
             </div>
           </div>
           
-          <!-- Submit Button -->
-          <div class="row mt-4">
-            <div class="col-12">
-              <div class="d-flex justify-content-center">
-                <button type="submit" class="btn btn-secondary btn-lg px-5" id="start-scan-btn" disabled>
-                  <i class="fas fa-play me-2"></i>Start Scan
-                </button>
-              </div>
-            </div>
-          </div>
+          {% include 'startScan/_items/secator_start_scan_button.html' %}
         </form>
       </div>
     </div>
@@ -279,7 +200,7 @@ Initiating scan for {{domain.name}}
 <script type="text/javascript">
 $(function(){
   // Handle existing elements checkbox
-  $('#scan_existing_elements').change(function() {
+  $('#scan_existing_elements_start_scan').change(function() {
     updateExistingElementsInfo();
   });
   
@@ -289,11 +210,11 @@ $(function(){
 
 function updateExistingElementsInfo() {
   // Show/hide the existing elements info based on checkbox state
-  var isChecked = $('#scan_existing_elements').is(':checked');
+  var isChecked = $('#scan_existing_elements_start_scan').is(':checked');
   if (isChecked) {
-    $('#existing-elements-info').show();
+    $('#existing-elements-info_start_scan').show();
   } else {
-    $('#existing-elements-info').hide();
+    $('#existing-elements-info_start_scan').hide();
   }
 }
 
@@ -310,10 +231,10 @@ function loadExistingElementsCount() {
     },
     success: function(data) {
       if (data.hostname_count !== undefined) {
-        $('#hostname-count').text(data.hostname_count);
+        $('#hostname-count_start_scan').text(data.hostname_count);
       }
       if (data.ip_count !== undefined) {
-        $('#ip-count').text(data.ip_count);
+        $('#ip-count_start_scan').text(data.ip_count);
       }
     },
     error: function() {

@@ -1,0 +1,462 @@
+"""
+Test cases for scan views functionality.
+"""
+
+import json
+import uuid
+from unittest.mock import MagicMock, patch
+
+from django.test import override_settings
+from django.urls import reverse
+from django.utils import timezone
+
+from scanEngine.models import SecatorProfile
+from startScan.models import Command, ScanActivity, ScanHistory, Subdomain
+from utils.test_base import BaseTestCase
+
+
+class TestSubscanHistory(BaseTestCase):
+    """Test cases for subscan history view."""
+
+    def setUp(self):
+        """Set up test environment."""
+        super().setUp()
+        self.data_generator.create_subscan()
+
+    def test_subscan_history_view(self):
+        """Test the subscan history view."""
+        response = self.client.get(
+            reverse(
+                "subscan_history",
+                kwargs={"slug": self.data_generator.project.slug},
+            )
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("subscans", response.context)
+        self.assertGreaterEqual(len(response.context["subscans"]), 1)
+
+
+class TestScanLogsView(BaseTestCase):
+    """Test cases for scan logs view."""
+
+    def setUp(self):
+        """Set up test environment."""
+        super().setUp()
+        self.data_generator.create_scan_activity()
+        self.data_generator.create_command()
+
+    def test_scan_logs_view_with_scan_id(self):
+        """Test scan logs view with scan_id parameter."""
+        url = reverse("scan_logs", kwargs={"slug": self.data_generator.project.slug})
+        response = self.client.get(url, {"scan_id": self.data_generator.scan_history.id})
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("hierarchical_structure", response.context)
+
+    def test_scan_logs_view_with_activity_id(self):
+        """Test scan logs view with activity_id parameter."""
+        url = reverse("scan_logs", kwargs={"slug": self.data_generator.project.slug})
+        response = self.client.get(url, {"activity_id": self.data_generator.scan_activity.id})
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("hierarchical_structure", response.context)
+
+    def test_scan_logs_view_missing_parameters(self):
+        """Test scan logs view without required parameters."""
+        url = reverse("scan_logs", kwargs={"slug": self.data_generator.project.slug})
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 400)
+
+    def test_scan_logs_view_with_include_pending(self):
+        """Test scan logs view with include_pending parameter."""
+        url = reverse("scan_logs", kwargs={"slug": self.data_generator.project.slug})
+        response = self.client.get(
+            url, {"scan_id": self.data_generator.scan_history.id, "include_pending": "true"}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("hierarchical_structure", response.context)
+
+
+class TestExportUrls(BaseTestCase):
+    """Test cases for export URLs view."""
+
+    def setUp(self):
+        """Set up test environment."""
+        super().setUp()
+        # Create subdomain with http_url
+        self.data_generator.create_subdomain(http_url="https://admin.example.com")
+
+    def test_export_urls_view(self):
+        """Test the export URLs view."""
+        response = self.client.get(
+            reverse(
+                "export_http_urls",
+                kwargs={
+                    "scan_id": self.data_generator.scan_history.id,
+                    "slug": self.data_generator.project.slug,
+                },
+            )
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "text/plain")
+        self.assertIn("urls_", response["Content-Disposition"])
+
+    def test_export_empty_urls_view(self):
+        """Test the export URLs view when there are no URLs."""
+        # Delete all subdomains with http_url
+        Subdomain.objects.filter(scan_history=self.data_generator.scan_history).update(http_url=None)
+
+        response = self.client.get(
+            reverse(
+                "export_http_urls",
+                kwargs={
+                    "scan_id": self.data_generator.scan_history.id,
+                    "slug": self.data_generator.project.slug,
+                },
+            )
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "text/plain")
+        self.assertEqual(response.content.decode(), "")
+
+
+class TestStartMultipleScan(BaseTestCase):
+    """Test cases for start multiple scan view."""
+
+    def setUp(self):
+        """Set up test environment."""
+        super().setUp()
+
+    def test_start_multiple_scan_view_get(self):
+        """Test the start multiple scan view GET request."""
+        response = self.client.get(
+            reverse(
+                "start_multiple_scan",
+                kwargs={"slug": self.data_generator.project.slug},
+            )
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("domain_list", response.context)
+        self.assertIn("domain_ids", response.context)
+        self.assertIn("default_profiles", response.context)
+        self.assertIn("custom_profiles_by_category", response.context)
+        for category in ["speed", "evasion", "general", "network"]:
+            self.assertIn(category, response.context["custom_profiles_by_category"])
+
+    @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
+    @patch("reNgine.secator.service.start_secator_scan")
+    def test_start_multiple_scan_view_post(self, mock_start_scan):
+        """Test the start multiple scan view POST request."""
+        mock_start_scan.return_value = {"status": True, "scan_id": self.data_generator.scan_history.id}
+
+        data = {
+            "execution_mode": "scan",
+            "secator_scan_type": "domain",
+            "list_of_domain_id": str(self.data_generator.domain.id),
+        }
+        response = self.client.post(
+            reverse(
+                "start_multiple_scan",
+                kwargs={"slug": self.data_generator.project.slug},
+            ),
+            data,
+        )
+        self.assertEqual(response.status_code, 302)
+        mock_start_scan.assert_called()
+
+
+class TestSecatorProfilesContext(BaseTestCase):
+    """Test cases for Secator profiles context in scan start views."""
+
+    def test_start_scan_ui_has_profiles_context(self):
+        """start_scan_ui should always provide profile context keys."""
+        response = self.client.get(
+            reverse(
+                "start_scan",
+                kwargs={"slug": self.data_generator.project.slug, "domain_id": self.data_generator.domain.id},
+            )
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("default_profiles", response.context)
+        self.assertIn("custom_profiles_by_category", response.context)
+        self.assertIn(b'id="start_scan_execution_mode"', response.content)
+        self.assertIn(b'id="scan_existing_elements_start_scan"', response.content)
+
+    def test_start_organization_scan_has_profiles_context(self):
+        """start_organization_scan should always provide profile context keys."""
+        response = self.client.get(
+            reverse(
+                "start_organization_scan",
+                kwargs={"slug": self.data_generator.project.slug, "id": self.data_generator.organization.id},
+            )
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("default_profiles", response.context)
+        self.assertIn("custom_profiles_by_category", response.context)
+        self.assertIn(b'id="start_org_scan_execution_mode"', response.content)
+        self.assertIn(b'id="scan_existing_elements_start_org_scan"', response.content)
+
+    def test_start_multiple_scan_renders_custom_profile_option(self):
+        """start_multiple_scan should render custom profile options when they exist."""
+        profile_name = f"custom-speed-{str(uuid.uuid4())[:8]}"
+        SecatorProfile.objects.create(
+            name=profile_name,
+            category="speed",
+            description="Custom speed profile for tests",
+            opts="rate_limit: 10\n",
+            profile_type="custom",
+            is_active=True,
+        )
+
+        response = self.client.get(
+            reverse(
+                "start_multiple_scan",
+                kwargs={"slug": self.data_generator.project.slug},
+            )
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(profile_name.encode(), response.content)
+        self.assertIn(b'id="start_multi_scan_execution_mode"', response.content)
+        self.assertIn(b'id="scan_existing_elements_start_multi_scan"', response.content)
+
+    @override_settings(DEBUG=True)
+    def test_build_secator_profiles_context_raises_on_unknown_category_in_debug(self):
+        """Unknown SecatorProfile categories should fail fast in DEBUG."""
+        SecatorProfile.objects.create(
+            name=f"custom-unknown-{str(uuid.uuid4())[:8]}",
+            category="unexpected_category",
+            description="Unknown category profile for tests",
+            opts="rate_limit: 10\n",
+            profile_type="custom",
+            is_active=True,
+        )
+
+        from startScan.secator_profiles import build_secator_profiles_context
+
+        with self.assertRaises(ValueError):
+            build_secator_profiles_context()
+
+
+class TestDetailVulnScan(BaseTestCase):
+    """Test cases for detail vulnerability scan view."""
+
+    def setUp(self):
+        """Set up test environment."""
+        super().setUp()
+        self.data_generator.create_vulnerability()
+
+    def test_detail_vuln_scan_view(self):
+        """Test the detail vulnerability scan view."""
+        response = self.client.get(
+            reverse(
+                "all_vulns",
+                kwargs={
+                    "slug": self.data_generator.project.slug,
+                },
+            )
+        )
+        self.assertEqual(response.status_code, 200)
+
+
+class TestDeleteAllScanResults(BaseTestCase):
+    """Test cases for delete all scan results view."""
+
+    def setUp(self):
+        """Set up test environment."""
+        super().setUp()
+
+    @patch("startScan.views.run_command")
+    def test_delete_all_scan_results_view(self, mock_run_command):
+        """Test the delete all scan results view."""
+        mock_run_command.return_value = True
+        response = self.client.post(
+            reverse(
+                "delete_all_scan_results",
+                kwargs={"slug": self.data_generator.project.slug},
+            )
+        )
+        self.assertEqual(response.status_code, 200)
+        response_data = json.loads(response.content)
+        self.assertIn("status", response_data)
+
+
+class TestDeleteAllScreenshots(BaseTestCase):
+    """Test cases for delete all screenshots view."""
+
+    def setUp(self):
+        """Set up test environment."""
+        super().setUp()
+
+    @patch("startScan.views.run_command")
+    def test_delete_all_screenshots_view(self, mock_run_command):
+        """Test the delete all screenshots view."""
+        mock_run_command.return_value = True
+        response = self.client.post(
+            reverse(
+                "delete_all_screenshots",
+                kwargs={"slug": self.data_generator.project.slug},
+            )
+        )
+        self.assertEqual(response.status_code, 200)
+        response_data = json.loads(response.content)
+        self.assertIn("status", response_data)
+
+
+class TestDeleteScans(BaseTestCase):
+    """Test cases for delete scans view."""
+
+    def setUp(self):
+        """Set up test environment."""
+        super().setUp()
+
+    @patch("startScan.views.run_command")
+    def test_delete_scans_view(self, mock_run_command):
+        """Test the delete scans view."""
+        mock_run_command.return_value = True
+        # The view expects scan IDs as POST keys (not in a list)
+        data = {str(self.data_generator.scan_history.id): self.data_generator.scan_history.id}
+        response = self.client.post(
+            reverse(
+                "delete_multiple_scans",
+                kwargs={"slug": self.data_generator.project.slug},
+            ),
+            data,
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/history", response.url)
+
+    def test_delete_scans_view_empty_data(self):
+        """Test the delete scans view with empty data."""
+        response = self.client.post(
+            reverse(
+                "delete_multiple_scans",
+                kwargs={"slug": self.data_generator.project.slug},
+            ),
+            {},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/history", response.url)
+
+
+class TestBuildCommandHierarchy(BaseTestCase):
+    """Test cases for build_command_hierarchy utility function."""
+
+    def setUp(self):
+        """Set up test environment."""
+        super().setUp()
+        self.data_generator.create_scan_activity()
+
+    def test_build_command_hierarchy_scan_only(self):
+        """Test building hierarchy with scan command only."""
+        from startScan.views import build_command_hierarchy
+
+        scan_command = Command.objects.create(
+            scan_history=self.data_generator.scan_history,
+            activity=self.data_generator.scan_activity,
+            runner_type="scan",
+            name="test_scan",
+            time=timezone.now(),
+        )
+
+        hierarchy = build_command_hierarchy([scan_command])
+        self.assertEqual(len(hierarchy), 1)
+        self.assertEqual(hierarchy[0]["command"], scan_command)
+        self.assertEqual(len(hierarchy[0]["workflows"]), 0)
+        self.assertEqual(len(hierarchy[0]["tasks"]), 0)
+
+    def test_build_command_hierarchy_scan_with_tasks(self):
+        """Test building hierarchy with scan and direct tasks."""
+        from startScan.views import build_command_hierarchy
+
+        scan_command = Command.objects.create(
+            scan_history=self.data_generator.scan_history,
+            activity=self.data_generator.scan_activity,
+            runner_type="scan",
+            name="test_scan",
+            time=timezone.now(),
+        )
+
+        task_command = Command.objects.create(
+            scan_history=self.data_generator.scan_history,
+            activity=self.data_generator.scan_activity,
+            runner_type="task",
+            name="test_task",
+            time=timezone.now(),
+        )
+
+        hierarchy = build_command_hierarchy([scan_command, task_command])
+        self.assertEqual(len(hierarchy), 1)
+        self.assertEqual(hierarchy[0]["command"], scan_command)
+        self.assertEqual(len(hierarchy[0]["workflows"]), 0)
+        self.assertEqual(len(hierarchy[0]["tasks"]), 1)
+        self.assertEqual(hierarchy[0]["tasks"][0], task_command)
+
+    def test_build_command_hierarchy_scan_with_workflow_and_tasks(self):
+        """Test building hierarchy with scan, workflow, and tasks."""
+        from startScan.views import build_command_hierarchy
+
+        scan_command = Command.objects.create(
+            scan_history=self.data_generator.scan_history,
+            activity=self.data_generator.scan_activity,
+            runner_type="scan",
+            name="test_scan",
+            time=timezone.now(),
+        )
+
+        workflow_command = Command.objects.create(
+            scan_history=self.data_generator.scan_history,
+            activity=self.data_generator.scan_activity,
+            runner_type="workflow",
+            name="test_workflow",
+            workflow_name="test_workflow",
+            time=timezone.now(),
+        )
+
+        task_command = Command.objects.create(
+            scan_history=self.data_generator.scan_history,
+            activity=self.data_generator.scan_activity,
+            runner_type="task",
+            name="test_task",
+            ancestor_id="test_workflow",
+            time=timezone.now(),
+        )
+
+        hierarchy = build_command_hierarchy([scan_command, workflow_command, task_command])
+        self.assertEqual(len(hierarchy), 1)
+        self.assertEqual(hierarchy[0]["command"], scan_command)
+        self.assertEqual(len(hierarchy[0]["workflows"]), 1)
+        self.assertEqual(len(hierarchy[0]["workflows"][0]["tasks"]), 1)
+        self.assertEqual(hierarchy[0]["workflows"][0]["tasks"][0], task_command)
+
+    def test_build_command_hierarchy_empty_list(self):
+        """Test building hierarchy with empty list."""
+        from startScan.views import build_command_hierarchy
+
+        hierarchy = build_command_hierarchy([])
+        self.assertEqual(len(hierarchy), 0)
+
+    def test_build_command_hierarchy_standalone_workflow(self):
+        """Test building hierarchy with standalone workflow (no scan parent)."""
+        from startScan.views import build_command_hierarchy
+
+        workflow_command = Command.objects.create(
+            scan_history=self.data_generator.scan_history,
+            activity=self.data_generator.scan_activity,
+            runner_type="workflow",
+            name="test_workflow",
+            workflow_name="test_workflow",
+            time=timezone.now(),
+        )
+
+        task_command = Command.objects.create(
+            scan_history=self.data_generator.scan_history,
+            activity=self.data_generator.scan_activity,
+            runner_type="task",
+            name="test_task",
+            ancestor_id="test_workflow",
+            time=timezone.now(),
+        )
+
+        hierarchy = build_command_hierarchy([workflow_command, task_command])
+        self.assertEqual(len(hierarchy), 1)
+        self.assertEqual(hierarchy[0]["command"], workflow_command)
+        self.assertEqual(len(hierarchy[0]["tasks"]), 1)
+        self.assertEqual(hierarchy[0]["tasks"][0], task_command)

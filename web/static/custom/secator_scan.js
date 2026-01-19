@@ -9,36 +9,44 @@
     
     init: function() {
       this.bindEvents();
-      this.initializeSubmitButton();
       this.initializeDefaultProfiles();
+      this.initializeSubmitButtons();
     },
     
     initializeDefaultProfiles: function() {
       // Initialize hidden input fields with default profile values from active buttons or custom selects
       const profileMappings = [
-        { type: 'speed', hiddenId: 'speed_profile' },
-        { type: 'evasion', hiddenId: 'stealth_profile' }, // evasion maps to stealth_profile
-        { type: 'stealth', hiddenId: 'stealth_profile' }, // legacy support
-        { type: 'general', hiddenId: 'general_profile' },
-        { type: 'network', hiddenId: 'network_profile' }
+        { type: 'speed', hiddenName: 'speed_profile', customSelectName: 'speed_custom_profile' },
+        { type: 'evasion', hiddenName: 'stealth_profile', customSelectName: 'evasion_custom_profile' }, // evasion maps to stealth_profile
+        { type: 'stealth', hiddenName: 'stealth_profile', customSelectName: 'evasion_custom_profile' }, // legacy support
+        { type: 'general', hiddenName: 'general_profile', customSelectName: 'general_custom_profile' },
+        { type: 'network', hiddenName: 'network_profile', customSelectName: 'network_custom_profile' }
       ];
       
-      profileMappings.forEach(mapping => {
-        const $hiddenInput = $(`#${mapping.hiddenId}`);
-        if ($hiddenInput.length && !$hiddenInput.val()) {
-          // First check custom select
-          const $customSelect = $(`#${mapping.type}_custom_profile`);
-          if ($customSelect.length && $customSelect.val()) {
-            $hiddenInput.val($customSelect.val());
-          } else {
+      $('form').each(function() {
+        const $form = $(this);
+        if (!$form.find('input[name="execution_mode"]').length) {
+          return;
+        }
+
+        profileMappings.forEach(mapping => {
+          const $hiddenInput = $form.find(`input[name="${mapping.hiddenName}"]`);
+          if ($hiddenInput.length && !$hiddenInput.val()) {
+            // First check custom select
+            const $customSelect = $form.find(`select[name="${mapping.customSelectName}"]`);
+            if ($customSelect.length && $customSelect.val()) {
+              $hiddenInput.val($customSelect.val());
+              return;
+            }
+
             // Then check active button
-            const $activeBtn = $(`.btn[data-profile-type="${mapping.type}"].active`);
+            const $activeBtn = $form.find(`.btn[data-profile-type="${mapping.type}"].active`).first();
             if ($activeBtn.length) {
               const value = $activeBtn.data('profile-value');
               $hiddenInput.val(value);
             }
           }
-        }
+        });
       });
     },
     
@@ -66,48 +74,80 @@
       
       // Handle form submission
       $(document).on('submit', '#start-scan-form', this.handleFormSubmission.bind(this));
+
+      // Keep submit buttons in sync for all forms
+      $(document).on(
+        'change',
+        'input[name="workflow_id"], input[name="task_ids"], input[name="secator_scan_type"]',
+        function(e) {
+          const $form = $(e.target).closest('form');
+          SecatorScan.updateSubmitButtonState($form);
+        }
+      );
+      $(document).on('click', '.execution-mode-card', function(e) {
+        const $form = $(e.currentTarget).closest('form');
+        SecatorScan.updateSubmitButtonState($form);
+      });
+      $(document).on('secator:contentLoaded', function() {
+        $('form').each(function() {
+          SecatorScan.updateSubmitButtonState($(this));
+        });
+      });
     },
     
     handleModeSelection: function(e) {
       const $card = $(e.currentTarget);
-      $('.execution-mode-card').removeClass('selected');
+      const $form = $card.closest('form');
+      const selectedMode = $card.data('mode');
+
+      $form.find('.execution-mode-card').removeClass('selected');
       $card.addClass('selected');
-      this.selectedMode = $card.data('mode');
+      this.selectedMode = selectedMode;
       
-      // Update hidden input field
-      $('#execution_mode').val(this.selectedMode);
+      // Update hidden input field (scoped to form to avoid duplicate IDs)
+      $form.find('input[name="execution_mode"]').val(selectedMode);
       
       // Remove all execution mode classes from body
       $('body').removeClass('execution-mode-workflow execution-mode-tasks execution-mode-scan');
       
       // Add the current execution mode class to body
-      if (this.selectedMode) {
-        $('body').addClass('execution-mode-' + this.selectedMode);
+      if (selectedMode) {
+        $('body').addClass('execution-mode-' + selectedMode);
       }
       
-      this.loadSelectionOptions(this.selectedMode);
+      this.loadSelectionOptions(selectedMode, $form);
+      this.updateSubmitButtonState($form);
     },
     
     handleFormSubmission: function(e) {
       e.preventDefault();
-      
-      const executionMode = $('#execution_mode').val();
+      const $form = $(e.currentTarget);
+      const executionMode = $form.find('input[name="execution_mode"]').val();
       
       if (!executionMode) {
         alert('Please select an execution mode before submitting.');
         return false;
       }
+
+      if (!window.SECATOR_START_SCAN_URL || !window.SCAN_HISTORY_URL) {
+        Swal.fire({
+          icon: 'error',
+          title: 'Error',
+          text: 'Missing required configuration. Please reload the page and try again.'
+        });
+        return false;
+      }
       
       // Disable submit button
-      const $submitBtn = $('#start-scan-btn');
+      const $submitBtn = $form.find('#start-scan-btn');
       $submitBtn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin me-2"></i>Starting Scan...');
       
       // Gather form data
-      const formData = this.collectFormData();
+      const formData = this.collectFormData($form);
       
       // Make asynchronous AJAX call to API
       $.ajax({
-        url: window.SECATOR_START_SCAN_URL || '/api/action/start/scan/',
+        url: window.SECATOR_START_SCAN_URL,
         type: 'POST',
         contentType: 'application/json',
         data: JSON.stringify(formData),
@@ -125,14 +165,7 @@
               showConfirmButton: false
             }).then(() => {
               // Redirect to scan history (prefer server-provided URL)
-              if (window.SCAN_HISTORY_URL) {
-                window.location.href = window.SCAN_HISTORY_URL;
-              } else if (window.PROJECT_SLUG) {
-                window.location.href = `/scan/${window.PROJECT_SLUG}/history`;
-              } else {
-                const projectSlug = window.location.pathname.split('/')[2];
-                window.location.href = `/scan/${projectSlug}/history`;
-              }
+              window.location.href = window.SCAN_HISTORY_URL;
             });
           } else {
             // Show error message
@@ -158,48 +191,48 @@
       return false;
     },
     
-    collectFormData: function() {
-      const executionMode = $('#execution_mode').val();
-      const domainId = $('#domain_id').val();
+    collectFormData: function($form) {
+      const executionMode = $form.find('input[name="execution_mode"]').val();
+      const domainId = $form.find('input[name="domain_id"]').val();
       
       const formData = {
         domain_id: parseInt(domainId),
         execution_mode: executionMode,
-        scan_existing_elements: $('#scan_existing_elements').is(':checked'),
-        imported_subdomains: $('#importSubdomainFormControlTextarea').val().split('\n').filter(s => s.trim()),
-        out_of_scope_subdomains: $('#outOfScopeSubdomainTextarea').val().split('\n').filter(s => s.trim()),
-        url_filter: $('#filterPath').val(),
+        scan_existing_elements: $form.find('input[name="scan_existing_elements"]').is(':checked'),
+        imported_subdomains: ($form.find('#importSubdomainFormControlTextarea').val() || '').split('\n').filter(s => s.trim()),
+        out_of_scope_subdomains: ($form.find('#outOfScopeSubdomainTextarea').val() || '').split('\n').filter(s => s.trim()),
+        url_filter: $form.find('#filterPath').val(),
         secator_config: {
-          proxy: $('#useRandomProxy').is(':checked') ? null : $('#proxy-input').val(),
-          use_random_proxy: $('#useRandomProxy').is(':checked'),
-          rate_limit: parseInt($('input[name="rate_limit"]').val()) || 150,
-          threads: parseInt($('input[name="threads"]').val()) || 20,
-          timeout: parseInt($('input[name="timeout"]').val()) || 300,
-          delay: parseInt($('input[name="delay"]').val()) || 0
+          proxy: $form.find('input[name="use_random_proxy"]').is(':checked') ? null : $form.find('input[name="proxy"]').val(),
+          use_random_proxy: $form.find('input[name="use_random_proxy"]').is(':checked'),
+          rate_limit: parseInt($form.find('input[name="rate_limit"]').val()) || 150,
+          threads: parseInt($form.find('input[name="threads"]').val()) || 20,
+          timeout: parseInt($form.find('input[name="timeout"]').val()) || 300,
+          delay: parseInt($form.find('input[name="delay"]').val()) || 0
         },
         // Get profile values from hidden inputs first (for custom profiles), then fallback to active buttons (for builtin profiles)
-        speed_profile: $('#speed_profile').val() || $('.btn[data-profile-type="speed"].active').data('profile-value') || 'polite',
-        stealth_profile: $('#stealth_profile').val() || $('.btn[data-profile-type="stealth"].active').data('profile-value') || $('.btn[data-profile-type="evasion"].active').data('profile-value') || 'stealth',
-        general_profile: $('#general_profile').val() || $('.btn[data-profile-type="general"].active').data('profile-value') || 'full',
-        network_profile: $('#network_profile').val() || $('.btn[data-profile-type="network"].active').data('profile-value') || 'all_ports',
-        expert_mode: $('#expertMode').is(':checked')
+        speed_profile: $form.find('input[name="speed_profile"]').val() || $form.find('.btn[data-profile-type="speed"].active').data('profile-value') || 'polite',
+        stealth_profile: $form.find('input[name="stealth_profile"]').val() || $form.find('.btn[data-profile-type="stealth"].active').data('profile-value') || $form.find('.btn[data-profile-type="evasion"].active').data('profile-value') || 'stealth',
+        general_profile: $form.find('input[name="general_profile"]').val() || $form.find('.btn[data-profile-type="general"].active').data('profile-value') || 'full',
+        network_profile: $form.find('input[name="network_profile"]').val() || $form.find('.btn[data-profile-type="network"].active').data('profile-value') || 'all_ports',
+        expert_mode: $form.find('input[name="expert_mode"]').is(':checked') || $form.find('#expertMode').is(':checked')
       };
       
       // Add mode-specific parameters
       if (executionMode === 'workflow') {
-        formData.workflow_id = parseInt($('input[name="workflow_id"]:checked').val());
+        formData.workflow_id = parseInt($form.find('input[name="workflow_id"]:checked').val());
       } else if (executionMode === 'tasks') {
-        formData.task_ids = $('input[name="task_ids"]:checked').map(function() {
+        formData.task_ids = $form.find('input[name="task_ids"]:checked').map(function() {
           return parseInt($(this).val());
         }).get();
       } else if (executionMode === 'scan') {
-        formData.secator_scan_type = $('input[name="secator_scan_type"]:checked').val();
+        formData.secator_scan_type = $form.find('input[name="secator_scan_type"]:checked').val();
       }
       
       return formData;
     },
     
-    loadSelectionOptions: function(mode) {
+    loadSelectionOptions: function(mode, $form) {
       $.ajax({
         url: window.location.pathname,
         type: 'GET',
@@ -208,14 +241,14 @@
           'execution_mode': mode
         },
         beforeSend: function() {
-          $('#selection-container').html('<div class="text-center py-4"><i class="fas fa-spinner fa-spin fa-2x"></i></div>');
+          $form.find('#selection-container').html('<div class="text-center py-4"><i class="fas fa-spinner fa-spin fa-2x"></i></div>');
         },
         success: function(data) {
-          $('#selection-container').html(data.html);
-          SecatorScan.initializeSelectionListeners();
+          $form.find('#selection-container').html(data.html);
+          SecatorScan.initializeSelectionListeners($form);
           // Re-initialize tooltips after dynamic content load
           SecatorScan.initializeTooltips();
-          SecatorScan.updateSuggestions(mode);
+          SecatorScan.updateSuggestions(mode, $form);
           
           // Update button state after loading new content
           setTimeout(() => {
@@ -224,7 +257,7 @@
           }, 100);
         },
         error: function() {
-          $('#selection-container').html('<div class="alert alert-danger">Error loading options. Please try again.</div>');
+          $form.find('#selection-container').html('<div class="alert alert-danger">Error loading options. Please try again.</div>');
         }
       });
     },
@@ -241,23 +274,25 @@
       });
     },
     
-    initializeSelectionListeners: function() {
+    initializeSelectionListeners: function($form) {
       // Initialize Bootstrap tooltips
       this.initializeTooltips();
+
+      const $container = $form.find('[id="selection-container"]');
       
       // Handle workflow tiles
-      $('#selection-container .workflow-tile').off('click').on('click', function(e) {
+      $container.find('.workflow-tile').off('click').on('click', function(e) {
         const $tile = $(this);
         const $input = $tile.find('input[type="radio"]');
 
         // Radio button - single selection
-        $('#selection-container .workflow-tile').removeClass('selected');
+        $container.find('.workflow-tile').removeClass('selected');
         $tile.addClass('selected');
         $input.prop('checked', true);
       });
       
         // Handle task tiles
-        $('#selection-container .task-tile').off('click').on('click', function(e) {
+        $container.find('.task-tile').off('click').on('click', function(e) {
           e.preventDefault();
           e.stopPropagation();
           
@@ -275,53 +310,54 @@
             $tile.removeClass('selected');
           }
           
-          SecatorScan.updateTaskSelection();
+          SecatorScan.updateTaskSelection($form);
         });
       
       // Handle scan type tiles
-      $('#selection-container .scan-type-tile').off('click').on('click', function(e) {
+      $container.find('.scan-type-tile').off('click').on('click', function(e) {
         const $tile = $(this);
         const $input = $tile.find('input[type="radio"]');
         
         // Radio button - single selection
-        $('#selection-container .scan-type-tile').removeClass('selected');
+        $container.find('.scan-type-tile').removeClass('selected');
         $tile.addClass('selected');
         $input.prop('checked', true);
       });
       
       // Handle select all tasks
-      $('#select_all_tasks').off('change').on('change', function() {
+      $container.find('input[id="select_all_tasks"]').off('change').on('change', function() {
         const isChecked = $(this).is(':checked');
-        $('#selection-container input[name="task_ids"]').prop('checked', isChecked);
-        $('#selection-container .task-tile').each(function() {
+        $container.find('input[name="task_ids"]').prop('checked', isChecked);
+        $container.find('.task-tile').each(function() {
           if (isChecked) {
             $(this).addClass('selected');
           } else {
             $(this).removeClass('selected');
           }
         });
-        SecatorScan.updateTaskSelection();
+        SecatorScan.updateTaskSelection($form);
       });
       
       // Handle direct checkbox changes (fallback)
-      $('#selection-container input[name="task_ids"]').off('change').on('change', function() {
+      $container.find('input[name="task_ids"]').off('change').on('change', function() {
         const $tile = $(this).closest('.task-tile');
         if ($(this).is(':checked')) {
           $tile.addClass('selected');
         } else {
           $tile.removeClass('selected');
         }
-        SecatorScan.updateTaskSelection();
+        SecatorScan.updateTaskSelection($form);
       });
     },
     
-    updateTaskSelection: function() {
-      const selectedTasks = $('#selection-container input[name="task_ids"]:checked').length;
-      $('#selected-tasks-count, #selected-tasks-count-bottom').text(selectedTasks);
+    updateTaskSelection: function($form) {
+      const $container = $form.find('[id="selection-container"]');
+      const selectedTasks = $container.find('input[name="task_ids"]:checked').length;
+      $container.find('[id="selected-tasks-count"], [id="selected-tasks-count-bottom"]').text(selectedTasks);
       
       // Update select all checkbox state
-      const totalTasks = $('#selection-container input[name="task_ids"]').length;
-      const selectAllCheckbox = $('#select_all_tasks');
+      const totalTasks = $container.find('input[name="task_ids"]').length;
+      const selectAllCheckbox = $container.find('input[id="select_all_tasks"]');
       if (selectedTasks === 0) {
         selectAllCheckbox.prop('indeterminate', false).prop('checked', false);
       } else if (selectedTasks === totalTasks) {
@@ -331,17 +367,18 @@
       }
       
       // Update category headers with selected count
-      this.updateCategoryHeaders();
+      this.updateCategoryHeaders($form);
       
       // Update selected tasks display
-      this.updateSelectedTasksDisplay();
+      this.updateSelectedTasksDisplay($form);
       
       // Trigger button state update
       $(document).trigger('secator:contentLoaded');
     },
     
-    updateCategoryHeaders: function() {
-      $('.category-tile-with-tasks').each(function() {
+    updateCategoryHeaders: function($form) {
+      const $container = $form.find('[id="selection-container"]');
+      $container.find('.category-tile-with-tasks').each(function() {
         const $tile = $(this);
         const selectedInCategory = $tile.find('input[name="task_ids"]:checked').length;
         const totalInCategory = $tile.find('input[name="task_ids"]').length;
@@ -358,7 +395,7 @@
     },
     
     
-    updateSuggestions: function(mode) {
+    updateSuggestions: function(mode, $form) {
       const suggestions = {
         'workflow': 'Recommended: Choose a workflow that matches your target type (web application, network infrastructure, etc.)',
         'tasks': 'Consider: Select multiple tasks for comprehensive reconnaissance. Use categories to organize your selection.',
@@ -366,13 +403,13 @@
       };
       
       const suggestionText = suggestions[mode] || '';
-      $('#auto-suggestions').text(suggestionText);
+      $form.find('[id="auto-suggestions"]').text(suggestionText);
       
       // Show/hide suggestions box
       if (suggestionText) {
-        $('.suggestions-box').slideDown();
+        $form.find('.suggestions-box').slideDown();
       } else {
-        $('.suggestions-box').slideUp();
+        $form.find('.suggestions-box').slideUp();
       }
     },
     
@@ -380,24 +417,34 @@
       const $btn = $(e.currentTarget);
       const type = $btn.data('profile-type');
       const value = $btn.data('profile-value');
+      const $form = $btn.closest('form');
+
+      const typeToHiddenName = {
+        speed: 'speed_profile',
+        evasion: 'stealth_profile',
+        stealth: 'stealth_profile',
+        general: 'general_profile',
+        network: 'network_profile'
+      };
+      const hiddenName = typeToHiddenName[type] || `${type}_profile`;
       
       // Deselect other buttons of the same type
-      $(`[data-profile-type="${type}"]`).removeClass('active');
+      $form.find(`[data-profile-type="${type}"]`).removeClass('active');
       $btn.addClass('active');
       
-      // Update hidden input field if it exists
-      const $hiddenInput = $(`#${type}_profile`);
+      // Update hidden input field if it exists (scoped to form)
+      const $hiddenInput = $form.find(`input[name="${hiddenName}"]`);
       if ($hiddenInput.length) {
         $hiddenInput.val(value);
       }
       
       // Apply profile values (only for speed and stealth as they affect form fields)
       if (type === 'speed' || type === 'stealth') {
-        this.applyProfile(type, value);
+        this.applyProfile(type, value, $form);
       }
     },
     
-    applyProfile: function(type, value) {
+    applyProfile: function(type, value, $form) {
       const profiles = {
         speed: {
           aggressive: { rate_limit: 10000, delay: 0, timeout: 1, retries: 1 },
@@ -415,7 +462,7 @@
       const config = profiles[type]?.[value];
       if (config) {
         Object.keys(config).forEach(key => {
-          const $input = $(`input[name="${key}"]`);
+          const $input = $form.find(`input[name="${key}"]`);
           if ($input.length) {
             $input.val(config[key]).trigger('change');
             // Visual feedback
@@ -425,18 +472,20 @@
         });
       }
       
-      // Update selected tasks display
-      this.updateSelectedTasksDisplay();
+      this.updateSelectedTasksDisplay($form);
+      this.updateTaskSelection($form);
     },
     
     toggleExpertMode: function() {
       const isExpert = $(this).is(':checked');
-      $('#expertOptions').slideToggle(isExpert);
+      const $form = $(this).closest('form');
+      $form.find('#expertOptions').slideToggle(isExpert);
     },
 
     toggleRandomProxy: function() {
-      const useRandom = $('#useRandomProxy').is(':checked');
-      const $proxyInput = $('#proxy-input');
+      const $form = $(this).closest('form');
+      const useRandom = $form.find('#useRandomProxy').is(':checked');
+      const $proxyInput = $form.find('#proxy-input');
       
       if (useRandom) {
         // Disable manual proxy input and clear it
@@ -454,50 +503,52 @@
       e.stopPropagation();
       
       const $btn = $(e.currentTarget);
+      const $container = $btn.closest('[id="selection-container"]');
       const category = $btn.data('category');
       
       // Handle "All" button - exclusive selection
       if (category === 'all') {
-        $('.category-filter-btn').removeClass('active');
+        $container.find('.category-filter-btn').removeClass('active');
         $btn.addClass('active');
-        $('.category-separator').removeClass('d-none');
-        $('.row[data-category]').removeClass('d-none');
+        $container.find('.category-separator').removeClass('d-none');
+        $container.find('.row[data-category]').removeClass('d-none');
         return;
       }
       
       // Remove "All" active state when selecting specific categories
-      $('.category-filter-btn[data-category="all"]').removeClass('active');
+      $container.find('.category-filter-btn[data-category="all"]').removeClass('active');
       
       // Toggle current button
       $btn.toggleClass('active');
       
       // Show/hide category sections based on active filters
-      const activeCategories = $('.category-filter-btn.active:not([data-category="all"])').map(function() {
+      const activeCategories = $container.find('.category-filter-btn.active:not([data-category="all"])').map(function() {
         return $(this).data('category');
       }).get();
       
       if (activeCategories.length === 0) {
         // If no specific categories are selected, show all
-        $('.category-separator').removeClass('d-none');
-        $('.row[data-category]').removeClass('d-none');
-        $('.category-filter-btn[data-category="all"]').addClass('active');
+        $container.find('.category-separator').removeClass('d-none');
+        $container.find('.row[data-category]').removeClass('d-none');
+        $container.find('.category-filter-btn[data-category="all"]').addClass('active');
       } else {
         // Hide all first
-        $('.category-separator').addClass('d-none');
-        $('.row[data-category]').addClass('d-none');
+        $container.find('.category-separator').addClass('d-none');
+        $container.find('.row[data-category]').addClass('d-none');
         
         // Show only active categories
         activeCategories.forEach(function(cat) {
-          $(`.category-separator[data-category="${cat}"]`).removeClass('d-none');
-          $(`.row[data-category="${cat}"]`).removeClass('d-none');
+          $container.find(`.category-separator[data-category="${cat}"]`).removeClass('d-none');
+          $container.find(`.row[data-category="${cat}"]`).removeClass('d-none');
         });
       }
     },
     
-    updateSelectedTasksDisplay: function() {
-      const selectedTasks = $('input[name="task_ids"]:checked');
-      const $display = $('#selected-tasks-display');
-      const $badgesContainer = $('#selected-tasks-badges');
+    updateSelectedTasksDisplay: function($form) {
+      const $container = $form.find('[id="selection-container"]');
+      const selectedTasks = $container.find('input[name="task_ids"]:checked');
+      const $display = $container.find('[id="selected-tasks-display"]');
+      const $badgesContainer = $container.find('[id="selected-tasks-badges"]');
       
       if (selectedTasks.length === 0) {
         $display.hide();
@@ -531,83 +582,80 @@
     clearAllTasks: function(e) {
       e.preventDefault();
       e.stopPropagation();
+
+      const $form = $(e.currentTarget).closest('form');
+      const $container = $form.find('[id="selection-container"]');
       
       // Uncheck all task checkboxes
-      $('input[name="task_ids"]:checked').prop('checked', false);
+      $container.find('input[name="task_ids"]:checked').prop('checked', false);
       
       // Remove visual selection from task tiles
-      $('.task-tile').removeClass('selected');
+      $container.find('.task-tile').removeClass('selected');
       
       // Update the display
-      this.updateSelectedTasksDisplay();
+      this.updateSelectedTasksDisplay($form);
+      this.updateTaskSelection($form);
     },
     
     removeTask: function(e) {
       e.preventDefault();
       e.stopPropagation();
       
+      const $form = $(e.currentTarget).closest('form');
+      const $container = $form.find('[id="selection-container"]');
       const taskId = $(e.currentTarget).data('task-id');
       
       // Uncheck the specific task checkbox
-      $(`input[name="task_ids"][value="${taskId}"]`).prop('checked', false);
+      $container.find(`input[name="task_ids"][value="${taskId}"]`).prop('checked', false);
       
       // Remove visual selection from the specific task tile
-      $(`input[name="task_ids"][value="${taskId}"]`).closest('.task-tile').removeClass('selected');
+      $container.find(`input[name="task_ids"][value="${taskId}"]`).closest('.task-tile').removeClass('selected');
       
       // Update the display
-      this.updateSelectedTasksDisplay();
+      this.updateSelectedTasksDisplay($form);
+      this.updateTaskSelection($form);
     },
 
-    initializeSubmitButton: function() {
-      const $submitBtn = $('#start-scan-btn');
-      
-      // Check if there's a valid selection
-      const hasValidSelection = () => {
-        const executionMode = $('.execution-mode-card.selected').data('mode');
-        
-        let hasSelection = false;
-        switch (executionMode) {
-          case 'workflow':
-            hasSelection = $('input[name="workflow_id"]:checked').length > 0;
-            break;
-          case 'tasks':
-            hasSelection = $('input[name="task_ids"]:checked').length > 0;
-            break;
-          case 'scan':
-            hasSelection = $('input[name="secator_scan_type"]:checked').length > 0;
-            break;
-          default:
-            hasSelection = false;
-        }
-        return hasSelection;
-      };
-      
-      // Function to update button state
-      const updateButtonState = () => {
-        const hasExecutionMode = $('.execution-mode-card.selected').length > 0;
-        const hasSelection = hasValidSelection();
-        
-        if (hasExecutionMode && hasSelection) {
-          $submitBtn.prop('disabled', false).removeClass('btn-secondary').addClass('btn-primary');
-        } else {
-          $submitBtn.prop('disabled', true).removeClass('btn-primary').addClass('btn-secondary');
-        }
-      };
-      
-      // Bind events to update button state
-      $(document).on('change', 'input[name="workflow_id"], input[name="task_ids"], input[name="secator_scan_type"]', updateButtonState);
-      $(document).on('click', '.execution-mode-card', updateButtonState);
-      
-      // Also bind to task tile clicks for individual tasks
-      $(document).on('click', '.task-tile', updateButtonState);
-      $(document).on('click', '.workflow-tile', updateButtonState);
-      $(document).on('click', '.scan-type-tile', updateButtonState);
-      
-      // Listen for content loaded event
-      $(document).on('secator:contentLoaded', updateButtonState);
-      
-      // Initial state
-      updateButtonState();
+    updateSubmitButtonState: function($form) {
+      if (!$form || !$form.length) {
+        return;
+      }
+
+      const $submitBtn = $form.find('#start-scan-btn');
+      if (!$submitBtn.length) {
+        return;
+      }
+
+      const executionMode = $form.find('.execution-mode-card.selected').data('mode');
+      const hasExecutionMode = Boolean(executionMode);
+
+      let hasSelection = false;
+      switch (executionMode) {
+        case 'workflow':
+          hasSelection = $form.find('input[name="workflow_id"]:checked').length > 0;
+          break;
+        case 'tasks':
+          hasSelection = $form.find('input[name="task_ids"]:checked').length > 0;
+          break;
+        case 'scan':
+          hasSelection = $form.find('input[name="secator_scan_type"]:checked').length > 0;
+          break;
+        default:
+          hasSelection = false;
+      }
+
+      if (hasExecutionMode && hasSelection) {
+        $submitBtn.prop('disabled', false).removeClass('btn-secondary').addClass('btn-primary');
+      } else {
+        $submitBtn.prop('disabled', true).removeClass('btn-primary').addClass('btn-secondary');
+      }
+    },
+
+    initializeSubmitButtons: function() {
+      const self = this;
+      $('form').each(function() {
+        self.updateSubmitButtonState($(this));
+      });
     }
   };
 

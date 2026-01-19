@@ -62,8 +62,10 @@ class TestDataGenerator:
     Replaces Django fixtures with clean, maintainable object creation.
     """
 
-    subscans = []
-    vulnerabilities = []
+    def __init__(self):
+        # Lists must be instance-scoped to avoid leaking state across tests.
+        self.subscans: list[SubScan] = []
+        self.vulnerabilities: list[Vulnerability] = []
 
     # Disable logging for tests
     logging.disable(logging.CRITICAL)
@@ -669,6 +671,7 @@ http_crawl: {}
         self.secator_workflow = SecatorWorkflow.objects.create(
             name=f"Test Workflow {unique_id}",
             description="Test workflow for unit tests",
+            yaml_configuration="tasks:\n  prompt: {}\n",
             is_active=True,
         )
         return self.secator_workflow
@@ -690,25 +693,16 @@ http_crawl: {}
 
     def create_secator_scan(self):
         """Create and return a test SecatorScan."""
-        import uuid
-
         from scanEngine.models import SecatorScan
 
-        # Create workflow and task if they don't exist
-        if not hasattr(self, "secator_workflow"):
-            self.create_secator_workflow()
-        if not hasattr(self, "secator_task"):
-            self.create_secator_task()
-
-        unique_id = str(uuid.uuid4())[:8]
-        self.secator_scan = SecatorScan.objects.create(
-            name=f"Test SecatorScan {unique_id}",
-            description="Test SecatorScan for unit tests",
-            execution_mode="workflow",
-            workflow=self.secator_workflow,
-            scan_type="internet",
-            scan_config_type="custom",
-            is_active=True,
+        self.secator_scan, _created = SecatorScan.objects.get_or_create(
+            name="domain",
+            defaults={
+                "description": "Domain scan",
+                "scan_type": "internet",
+                "scan_config_type": "builtin",
+                "is_active": True,
+            },
         )
         return self.secator_scan
 

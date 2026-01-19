@@ -47,7 +47,7 @@ echo "   ✅ Secator installed successfully from local repo" >&2
 
 # Step 4: Install Secator addons (worker and redis)
 # Temporary for debug: Installing addons for local development
-echo "🔧 Step 4: Installing Secator addons (worker and redis)..." >&2
+echo "🔧 Step 4: Installing Secator addons (worker, redis, dev)..." >&2
 secator install addons worker 2>&1 | tee /tmp/addon_worker.log || {
     echo "   ⚠️  Worker addon installation returned non-zero exit code" >&2
     cat /tmp/addon_worker.log >&2
@@ -56,10 +56,15 @@ secator install addons redis 2>&1 | tee /tmp/addon_redis.log || {
     echo "   ⚠️  Redis addon installation returned non-zero exit code" >&2
     cat /tmp/addon_redis.log >&2
 }
+secator install addons dev 2>&1 | tee /tmp/addon_dev.log || {
+    echo "   ⚠️  Dev addon installation returned non-zero exit code" >&2
+    cat /tmp/addon_dev.log >&2
+}
+pipx install watchdog
 
 # Step 5: Verify addons are installed
 echo "🔧 Step 5: Verifying addons installation..." >&2
-if secator config list 2>&1 | grep -qE "(worker|redis)"; then
+if secator config list 2>&1 | grep -qE "(worker|redis|dev)"; then
     echo "   ✅ Addons verified successfully" >&2
 else
     echo "   ⚠️  Could not verify addons in config (might still work)" >&2
@@ -67,4 +72,4 @@ fi
 
 # Step 6: Execute the worker command
 echo "🚀 Step 6: Starting Secator worker..." >&2
-exec secator "$@"
+exec secator "$@" --reload
