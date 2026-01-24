@@ -31,18 +31,19 @@ class EndpointRepositoryIsDefaultTestCase(BaseTestCase):
             target_domain=self.data_generator.domain,
         )
 
+    def _save_secator_endpoint(self, url: str, **overrides):
+        item = {"url": url, "status_code": 200} | overrides
+        return self.repository.save_from_secator(item, self.scan_history.id, self.data_generator.domain.id)
+
     def test_first_endpoint_becomes_default(self):
         """Test that the first endpoint for a subdomain becomes is_default=True."""
         # Create first endpoint via Secator
         # Note: The URL hostname must match the subdomain name for association
-        item = {
-            "url": "https://test.example.com/",
-            "status_code": 200,
-            "title": "Test Page",
-            "content_length": 1000,
-        }
-
-        endpoint = self.repository.save_from_secator(item, self.scan_history.id, self.data_generator.domain.id)
+        endpoint = self._save_secator_endpoint(
+            "https://test.example.com/",
+            title="Test Page",
+            content_length=1000,
+        )
 
         self.assertIsNotNone(endpoint, "Endpoint should be created")
 
@@ -58,24 +59,14 @@ class EndpointRepositoryIsDefaultTestCase(BaseTestCase):
     def test_second_endpoint_not_default(self):
         """Test that a second endpoint does not become default if one already exists."""
         # Create first endpoint
-        item1 = {
-            "url": "https://test.example.com/",
-            "status_code": 200,
-            "title": "Test Page",
-        }
-        endpoint1 = self.repository.save_from_secator(item1, self.scan_history.id, self.data_generator.domain.id)
+        endpoint1 = self._save_secator_endpoint("https://test.example.com/", title="Test Page")
         endpoint1.refresh_from_db()
 
         # Verify first is default
         self.assertTrue(endpoint1.is_default)
 
         # Create second endpoint
-        item2 = {
-            "url": "https://test.example.com/api",
-            "status_code": 200,
-            "title": "API Page",
-        }
-        endpoint2 = self.repository.save_from_secator(item2, self.scan_history.id, self.data_generator.domain.id)
+        endpoint2 = self._save_secator_endpoint("https://test.example.com/api", title="API Page")
         endpoint2.refresh_from_db()
 
         # Assert second is NOT default
@@ -96,11 +87,7 @@ class EndpointRepositoryIsDefaultTestCase(BaseTestCase):
 
         endpoints = []
         for url in urls:
-            item = {
-                "url": url,
-                "status_code": 200,
-            }
-            endpoint = self.repository.save_from_secator(item, self.scan_history.id, self.data_generator.domain.id)
+            endpoint = self._save_secator_endpoint(url)
             endpoint.refresh_from_db()
             endpoints.append(endpoint)
 
@@ -248,3 +235,23 @@ class EndpointRepositoryIsDefaultTestCase(BaseTestCase):
         self.assertEqual(result.is_directory, True)
         self.assertEqual(result.stored_response_path, "/path/to/response.json")
         self.assertEqual(result.confidence, "high")
+
+    def test_subdomain_created_and_associated_when_missing(self):
+        """Test that a missing subdomain is created and linked to the endpoint."""
+        missing_hostname = "missing.example.com"
+        self.assertFalse(
+            Subdomain.objects.filter(name=missing_hostname, scan_history=self.scan_history).exists(),
+            "Precondition failed: subdomain should not exist before creating endpoint",
+        )
+
+        endpoint = self._save_secator_endpoint(f"https://{missing_hostname}/", title="Missing Host")
+        self.assertIsNotNone(endpoint, "Endpoint should be created")
+
+        endpoint.refresh_from_db()
+        self.assertIsNotNone(endpoint.subdomain, "Endpoint should be associated with a subdomain")
+        if endpoint.subdomain:
+            self.assertEqual(endpoint.subdomain.name, missing_hostname)
+            self.assertEqual(endpoint.subdomain.scan_history, self.scan_history)
+
+        created_subdomain = Subdomain.objects.get(name=missing_hostname, scan_history=self.scan_history)
+        self.assertEqual(endpoint.subdomain_id, created_subdomain.id)

@@ -5,7 +5,7 @@ Handles DomainInfo database operations from Secator Domain output type.
 
 import contextlib
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 from celery.utils.log import get_task_logger
 from django.core.exceptions import ObjectDoesNotExist
@@ -56,72 +56,140 @@ class DomainRepository:
     def _process_secator_domain_item(
         self, item: Dict[str, Any], scan_history_id: int, domain_id: int
     ) -> Optional[DomainInfo]:
+        domain_name, whois = self._validate_and_extract_domain_data(item)
+        if not domain_name or not whois:
+            return None
+
+        domain = self._validate_domain_and_scan(scan_history_id, domain_id, domain_name)
+        if not domain:
+            return None
+
+        domain_info, created = self._get_or_create_domain_info(domain)
+        extra_data_internal = self._build_extra_data_internal_from_whois(whois)
+
+        self._update_domain_info_dates(domain_info, item, whois, extra_data_internal)
+        self._associate_registrar_and_registrant(domain_info, item, whois, extra_data_internal)
+        self._associate_admin_and_tech_contacts(domain_info, extra_data_internal, domain)
+        self._store_whois_payload(domain_info, whois, item)
+
+        self._save_and_finalize_domain_info(domain_info, extra_data_internal, domain, domain_name, created)
+
+        return domain_info
+
+    def _validate_and_extract_domain_data(self, item: Dict[str, Any]) -> Tuple[Optional[str], Optional[Dict[str, Any]]]:
+        """Validate and extract domain name and WHOIS data from item."""
         domain_name = item.get("domain")
-
-        if not domain_name:
+        if not isinstance(domain_name, str) or not domain_name.strip():
             logger.warning("Domain item missing domain field")
+            return None, None
+
+        whois = (item.get("extra_data", {}) or {}).get("whois")
+        if not isinstance(whois, dict):
+            logger.warning("Domain item missing extra_data.whois payload")
+            return None, None
+
+        return domain_name.strip(), whois
+
+    def _validate_domain_and_scan(
+        self, scan_history_id: int, domain_id: int, domain_name: str
+    ) -> Optional[Domain]:
+        """Validate scan history and domain, verify domain name matches."""
+        try:
+            ScanHistory.objects.get(id=scan_history_id)
+            domain = Domain.objects.get(id=domain_id)
+
+            expected = (domain.name or "").strip().lower().rstrip(".")
+            got = domain_name.strip().lower().rstrip(".")
+            if expected != got:
+                logger.warning(f"Domain name mismatch: expected {domain.name}, got {domain_name}")
+                return None
+
+            return domain
+        except ObjectDoesNotExist as e:
+            logger.error(f"Object not found: {e}")
             return None
 
-        # Validate scan_history and domain exist
-        ScanHistory.objects.get(id=scan_history_id)
-        domain = Domain.objects.get(id=domain_id)
-
-        # Verify domain name matches
-        if domain.name != domain_name:
-            logger.warning(f"Domain name mismatch: expected {domain.name}, got {domain_name}")
-            return None
-
-        # Get or create domain info
+    def _get_or_create_domain_info(self, domain: Domain) -> Tuple[DomainInfo, bool]:
+        """Get or create DomainInfo for domain."""
         if domain.domain_info:
-            domain_info = domain.domain_info
-            created = False
-        else:
-            domain_info = DomainInfo()
-            created = True
+            return domain.domain_info, False
+        return DomainInfo(), True
 
-        # Parse dates
-        creation_date = self._parse_datetime(item.get("creation_date"))
-        expiration_date = self._parse_datetime(item.get("expiration_date"))
-        extra_data = item.get("extra_data", {})
-        last_update = self._parse_datetime(extra_data.get("last_update"))
+    def _update_domain_info_dates(
+        self, domain_info: DomainInfo, item: Dict[str, Any], whois: Dict[str, Any], extra_data_internal: Dict[str, Any]
+    ) -> None:
+        """Update domain info date fields."""
+        whois_domain = whois.get("domain", {}) if isinstance(whois, dict) else {}
+        creation_date_value = item.get("creation_date") or (
+            whois_domain.get("creation_date") if isinstance(whois_domain, dict) else None
+        )
+        expiration_date_value = item.get("expiration_date") or (
+            whois_domain.get("expiration_date") if isinstance(whois_domain, dict) else None
+        )
 
-        # Update basic fields
-        if creation_date:
+        if creation_date := self._parse_datetime(creation_date_value):
             domain_info.created = creation_date
-        if expiration_date:
+        if expiration_date := self._parse_datetime(expiration_date_value):
             domain_info.expires = expiration_date
-        if last_update:
+        if last_update := self._parse_datetime(extra_data_internal.get("last_update")):
             domain_info.updated = last_update
 
-        if registrar_name := item.get("registrar", ""):
-            if registrar := self._get_or_create_registrar(registrar_name, extra_data):
-                domain_info.registrar = registrar
+    def _associate_registrar_and_registrant(
+        self, domain_info: DomainInfo, item: Dict[str, Any], whois: Dict[str, Any], extra_data_internal: Dict[str, Any]
+    ) -> None:
+        """Associate registrar and registrant with domain info."""
+        whois_domain = whois.get("domain", {}) if isinstance(whois, dict) else {}
+        registrar_name = (
+            item.get("registrar", "")
+            or (whois_domain.get("registrar", "") if isinstance(whois_domain, dict) else "")
+            or extra_data_internal.get("registrar_name", "")
+        )
 
-        if registrant_name := item.get("registrant", ""):
-            if registrant := self._get_or_create_registrant(registrant_name, extra_data):
-                domain_info.registrant = registrant
+        if registrar_name and (registrar := self._get_or_create_registrar(registrar_name, extra_data_internal)):
+            domain_info.registrar = registrar
 
-        # Process admin and tech contacts
-        if extra_data:
-            admin_c = extra_data.get("admin_c", "")
-            tech_c = extra_data.get("tech_c", "")
+        registrant_name = item.get("registrant", "") or extra_data_internal.get("registrant_name", "")
+        if registrant_name and (registrant := self._get_or_create_registrant(registrant_name, extra_data_internal)):
+            domain_info.registrant = registrant
 
-            if admin_c:
-                if admin := self._get_or_create_admin_tech(admin_c, extra_data, "admin", domain):
-                    domain_info.admin = admin
+    def _associate_admin_and_tech_contacts(
+        self, domain_info: DomainInfo, extra_data_internal: Dict[str, Any], domain: Domain
+    ) -> None:
+        """Associate admin and tech contacts with domain info."""
+        admin_c = extra_data_internal.get("admin_c", "")
+        tech_c = extra_data_internal.get("tech_c", "")
 
-            if tech_c:
-                if tech := self._get_or_create_admin_tech(tech_c, extra_data, "tech", domain):
-                    domain_info.tech = tech
+        if admin_c and (admin := self._get_or_create_admin_tech(admin_c, extra_data_internal, "admin", domain)):
+            domain_info.admin = admin
 
-        # Save domain info first (needed for many-to-many relationships)
+        if tech_c and (tech := self._get_or_create_admin_tech(tech_c, extra_data_internal, "tech", domain)):
+            domain_info.tech = tech
+
+    def _ensure_extra_data_initialized(self, domain_info: DomainInfo) -> None:
+        """Ensure domain_info.extra_data is initialized as an empty dict if None."""
+        if domain_info.extra_data is None:
+            domain_info.extra_data = {}
+
+    def _store_whois_payload(self, domain_info: DomainInfo, whois: Dict[str, Any], item: Dict[str, Any]) -> None:
+        """Store full WHOIS payload in domain info extra_data."""
+        self._ensure_extra_data_initialized(domain_info)
+        domain_info.extra_data["whois"] = whois
+        if "alive" in item:
+            domain_info.extra_data["alive"] = item.get("alive")
+
+    def _save_and_finalize_domain_info(
+        self,
+        domain_info: DomainInfo,
+        extra_data_internal: Dict[str, Any],
+        domain: Domain,
+        domain_name: str,
+        created: bool,
+    ) -> None:
+        """Save domain info and associate with domain."""
+        domain_info.save()
+        self._process_extra_data(domain_info, extra_data_internal)
         domain_info.save()
 
-        # Process extra_data (after save to allow many-to-many relationships)
-        if extra_data:
-            self._process_extra_data(domain_info, extra_data)
-
-        # Associate domain with domain_info (always update to ensure link is correct)
         domain.domain_info = domain_info
         domain.save()
 
@@ -129,8 +197,6 @@ class DomainRepository:
             logger.info(f"Created domain info for domain {domain_name}")
         else:
             logger.debug(f"Updated domain info for domain {domain_name}")
-
-        return domain_info
 
     def _parse_datetime(self, value: Any) -> Optional[datetime]:
         """
@@ -319,33 +385,6 @@ class DomainRepository:
             obj.save()
         return updated
 
-    def _find_nic_hdl_in_jswhois(self, jswhois_full: Dict[str, Any], nic_hdl_id: str) -> Optional[Dict[str, Any]]:
-        """Find matching nic-hdl in jswhois_full structure."""
-        if not jswhois_full or "chain" not in jswhois_full:
-            return None
-
-        last_chain = jswhois_full["chain"][-1]
-        last_elem = jswhois_full.get(last_chain, {})
-
-        found_nic_hdl = last_elem.get("nic-hdl")
-        if not found_nic_hdl:
-            return None
-
-        if isinstance(found_nic_hdl, dict):
-            if found_nic_hdl.get("nic-hdl") == nic_hdl_id:
-                return found_nic_hdl
-        elif isinstance(found_nic_hdl, list):
-            for nh in found_nic_hdl:
-                if isinstance(nh, dict) and nh.get("nic-hdl") == nic_hdl_id:
-                    return nh
-
-        if nic_hdl_id in last_elem:
-            potential_nic_hdl = last_elem[nic_hdl_id]
-            if isinstance(potential_nic_hdl, dict) and potential_nic_hdl.get("nic-hdl") == nic_hdl_id:
-                return potential_nic_hdl
-
-        return None
-
     def _get_or_create_registrant(
         self, registrant_name: str, extra_data: Dict[str, Any]
     ) -> Optional[DomainRegistration]:
@@ -380,7 +419,7 @@ class DomainRepository:
 
     def _find_nic_hdl_in_extra_data(self, extra_data: Dict[str, Any], nic_hdl_id: str) -> Optional[Dict[str, Any]]:
         """
-        Find nic_hdl in extra_data using multiple fallback strategies.
+        Find nic_hdl in extra_data from fragments.nic_hdl.
 
         Args:
             extra_data: Extra data dictionary
@@ -389,10 +428,6 @@ class DomainRepository:
         Returns:
             nic_hdl dictionary or None
         """
-        jswhois_full = extra_data.get("jswhois_full", {})
-        if nic_hdl := self._find_nic_hdl_in_jswhois(jswhois_full, nic_hdl_id):
-            return nic_hdl
-
         extra_nic_hdl = extra_data.get("nic_hdl", {})
         if isinstance(extra_nic_hdl, dict) and extra_nic_hdl.get("nic-hdl") == nic_hdl_id:
             return extra_nic_hdl
@@ -420,7 +455,7 @@ class DomainRepository:
         Returns:
             DomainRegistration object or None
         """
-        if domain_info := getattr(domain, "domain_info", None) if hasattr(domain, "domain_info") else None:
+        if domain_info := getattr(domain, "domain_info", None):
             if contact_type == "admin" and domain_info.admin and domain_info.admin.id_str == nic_hdl_id:
                 return domain_info.admin
             if contact_type == "tech" and domain_info.tech and domain_info.tech.id_str == nic_hdl_id:
@@ -467,7 +502,7 @@ class DomainRepository:
 
         Args:
             nic_hdl_id: NIC handle ID (e.g., "ES6827-FRNIC")
-            extra_data: Extra data containing jswhois_full or domain_info
+            extra_data: Extra data containing nic_hdl from fragments
             contact_type: Type of contact ("admin" or "tech")
             domain: Domain object to restrict the search to
 
@@ -583,6 +618,213 @@ class DomainRepository:
             "key1-tag": extra_data.get("key1-tag", {}),
         }
 
-        if domain_info.extra_data is None:
-            domain_info.extra_data = {}
+        self._ensure_extra_data_initialized(domain_info)
         domain_info.extra_data.update(stored_data)
+
+    def _build_extra_data_internal_from_whois(self, whois: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Build an internal extra_data dict from Secator's normalized WHOIS payload.
+
+        The internal dict is shaped to match what the existing repository helpers
+        expect (registrar_info, nserver, status/eppstatus, nic_hdl, admin_c/tech_c, ...).
+        """
+        extra_data: Dict[str, Any] = {}
+
+        if not isinstance(whois, dict):
+            return extra_data
+
+        self._extract_whois_servers(whois, extra_data)
+        self._extract_chain_and_emails(whois, extra_data)
+        self._extract_raw_data(whois, extra_data)
+        self._extract_domain_info(whois, extra_data)
+        self._extract_fragments_info(whois, extra_data)
+        self._extract_registrar_info(whois, extra_data)
+        self._extract_contacts_info(whois, extra_data)
+        self._extract_registry_ids(whois, extra_data)
+
+        return extra_data
+
+    def _extract_whois_servers(self, whois: Dict[str, Any], extra_data: Dict[str, Any]) -> None:
+        """Extract WHOIS server information."""
+        servers = whois.get("servers", {})
+        if isinstance(servers, dict):
+            used_servers = servers.get("used", [])
+            if isinstance(used_servers, list):
+                used_clean = [s.strip() for s in used_servers if isinstance(s, str) and s.strip()]
+            else:
+                used_clean = []
+
+            if used_clean:
+                extra_data["whois_server"] = ", ".join(used_clean)[:150]
+            else:
+                whois_server = servers.get("primary", "")
+                if isinstance(whois_server, str) and whois_server:
+                    extra_data["whois_server"] = whois_server[:150]
+
+    def _extract_chain_and_emails(self, whois: Dict[str, Any], extra_data: Dict[str, Any]) -> None:
+        """Extract chain and emails from WHOIS."""
+        chain = whois.get("chain", [])
+        if isinstance(chain, list):
+            extra_data["chain"] = chain
+
+        emails = whois.get("emails", [])
+        if isinstance(emails, list):
+            extra_data["emails"] = emails
+
+    def _extract_raw_data(self, whois: Dict[str, Any], extra_data: Dict[str, Any]) -> None:
+        """Extract raw WHOIS data."""
+        raw = whois.get("raw", {})
+        if isinstance(raw, dict):
+            raw_by_server = raw.get("by_server", {})
+            if isinstance(raw_by_server, dict):
+                extra_data["raw"] = raw_by_server
+
+    def _extract_domain_info(self, whois: Dict[str, Any], extra_data: Dict[str, Any]) -> None:
+        """Extract domain information including dates, statuses, name servers, and DNSSEC."""
+        whois_domain = whois.get("domain", {})
+        if not isinstance(whois_domain, dict):
+            return
+
+        updated_date = whois_domain.get("updated_date", "")
+        if isinstance(updated_date, str) and updated_date:
+            extra_data["last_update"] = updated_date
+
+        statuses = whois_domain.get("statuses", [])
+        if isinstance(statuses, list) and (statuses_clean := [s.strip() for s in statuses if isinstance(s, str) and s.strip()]):
+            extra_data["status"] = statuses_clean[0]
+            if len(statuses_clean) > 1:
+                extra_data["eppstatus"] = statuses_clean[1:]
+
+        name_servers = whois_domain.get("name_servers", [])
+        if isinstance(name_servers, list):
+            extra_data.setdefault("nserver", {"nserver": name_servers})
+
+        self._extract_dnssec_info(whois_domain, extra_data)
+
+    def _extract_dnssec_info(self, whois_domain: Dict[str, Any], extra_data: Dict[str, Any]) -> None:
+        """Extract DNSSEC information from domain data."""
+        dnssec = whois_domain.get("dnssec", {})
+        if not isinstance(dnssec, dict):
+            return
+
+        dnssec_state = dnssec.get("dnssec", "")
+        dnssec_keys = dnssec.get("dnssec_keys", [])
+        has_keys = isinstance(dnssec_keys, list) and len(dnssec_keys) > 0
+        if dnssec_state == "signed" or has_keys:
+            if has_keys and isinstance(dnssec_keys[0], dict):
+                first_key = dnssec_keys[0]
+                extra_data["key1-tag"] = {
+                    "key1-tag": first_key.get("key_tag", ""),
+                    "key1-algo": first_key.get("algorithm", ""),
+                    "key1-dgst-t": first_key.get("digest_type", ""),
+                    "key1-dgst": first_key.get("digest", ""),
+                }
+            else:
+                extra_data["key1-tag"] = {}
+
+    def _extract_fragments_info(self, whois: Dict[str, Any], extra_data: Dict[str, Any]) -> None:
+        """Extract fragments information from WHOIS."""
+        fragments = whois.get("fragments", {})
+        if not isinstance(fragments, dict):
+            return
+
+        domain_info = fragments.get("domain_info", {})
+        if isinstance(domain_info, dict):
+            extra_data["domain_info"] = domain_info
+
+        nserver = fragments.get("nserver", {})
+        if isinstance(nserver, dict) and "nserver" in nserver:
+            extra_data["nserver"] = nserver
+
+        nic_hdl = fragments.get("nic_hdl", {})
+        if isinstance(nic_hdl, dict) and nic_hdl:
+            extra_data["nic_hdl"] = nic_hdl
+
+    def _extract_registrar_info(self, whois: Dict[str, Any], extra_data: Dict[str, Any]) -> None:
+        """Extract registrar information with fallback logic."""
+        registrar = whois.get("registrar", {})
+        if not isinstance(registrar, dict):
+            return
+
+        registrar_details = registrar.get("details", {})
+        if isinstance(registrar_details, dict):
+            registrar_info = dict(registrar_details)
+        else:
+            registrar_info = {}
+
+        if "fax-no" not in registrar_info:
+            fax = registrar_info.get("fax", "")
+            if isinstance(fax, str) and fax:
+                registrar_info["fax-no"] = fax
+
+        if "website" not in registrar_info:
+            url = registrar.get("url", "")
+            if isinstance(url, str) and url:
+                registrar_info["website"] = url
+
+        registrar_name = registrar.get("name", "")
+        if isinstance(registrar_name, str) and registrar_name:
+            registrar_info.setdefault("name", registrar_name)
+            extra_data["registrar_name"] = registrar_name
+
+        extra_data["registrar_info"] = registrar_info
+
+    def _extract_contacts_info(self, whois: Dict[str, Any], extra_data: Dict[str, Any]) -> None:
+        """Extract contacts information including admin, tech, and registrant."""
+        contacts = whois.get("contacts", {})
+        if not isinstance(contacts, dict):
+            return
+
+        admin = contacts.get("admin", {})
+        if isinstance(admin, dict) and (admin_handle := admin.get("handle", "")) and isinstance(admin_handle, str):
+            extra_data["admin_c"] = admin_handle
+
+        tech = contacts.get("tech", {})
+        if isinstance(tech, dict) and (tech_handle := tech.get("handle", "")) and isinstance(tech_handle, str):
+            extra_data["tech_c"] = tech_handle
+
+        if "nic_hdl" not in extra_data:
+            self._extract_registrant_nic_hdl(contacts, extra_data)
+
+    def _extract_registrant_nic_hdl(self, contacts: Dict[str, Any], extra_data: Dict[str, Any]) -> None:
+        """Extract registrant NIC handle information."""
+        registrant = contacts.get("registrant", {})
+        if not isinstance(registrant, dict):
+            return
+
+        contact_name = registrant.get("name", "") or registrant.get("organization", "")
+        email = registrant.get("email", "")
+        phone = registrant.get("phone", "")
+        country = registrant.get("country", "")
+        handle = registrant.get("handle", "")
+        street = registrant.get("street", [])
+        address = street if isinstance(street, list) else []
+        extra_data["nic_hdl"] = {
+            "contact": contact_name or "",
+            "e-mail": email if isinstance(email, str) else "",
+            "phone": phone if isinstance(phone, str) else "",
+            "country": country if isinstance(country, str) else "",
+            "address": address,
+            "nic-hdl": handle if isinstance(handle, str) else "",
+        }
+        if contact_name:
+            extra_data["registrant_name"] = contact_name
+
+    def _extract_registry_ids(self, whois: Dict[str, Any], extra_data: Dict[str, Any]) -> None:
+        """Extract registry IDs as fallback for admin_c and tech_c."""
+        if "admin_c" in extra_data and "tech_c" in extra_data:
+            return
+
+        registry_ids = whois.get("registry_ids", {})
+        if not isinstance(registry_ids, dict):
+            return
+
+        if "admin_c" not in extra_data:
+            admin_id = registry_ids.get("registry_admin_id", "")
+            if isinstance(admin_id, str) and admin_id:
+                extra_data["admin_c"] = admin_id
+        if "tech_c" not in extra_data:
+            tech_id = registry_ids.get("registry_tech_id", "")
+            if isinstance(tech_id, str) and tech_id:
+                extra_data["tech_c"] = tech_id
+

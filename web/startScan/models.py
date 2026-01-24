@@ -287,6 +287,63 @@ class ScanHistory(models.Model):
 
         return self._cached_main_runner
 
+    @staticmethod
+    def _format_display_label(value: str) -> str:
+        """Normalize a label for UI display."""
+        return value.replace("_", " ").strip().title()
+
+    @staticmethod
+    def _format_task_display_label(value: str) -> str:
+        """
+        Normalize a task label for UI display.
+
+        Task names are often tool identifiers (e.g. `httpx`, `nuclei`) and should
+        keep their original casing.
+        """
+        return value.replace("_", " ").strip()
+
+    def _get_task_runner_display_names(self) -> list[str]:
+        """
+        Return the ordered, de-duplicated list of task names for Secator task-only scans.
+
+        This is used only for display purposes when no workflow/scan runner exists.
+        """
+        if self.is_legacy_scan:
+            return []
+
+        cached = getattr(self, "_cached_task_runner_display_names", None)
+        if cached is not None:
+            return cached
+
+        # Import here to avoid circular import
+        from startScan.models import SecatorRunner
+
+        runners = SecatorRunner.objects.filter(scan_history=self, runner_type="task").order_by("id")
+
+        names: list[str] = []
+        seen: set[str] = set()
+        for runner in runners:
+            raw_name = runner.runner_name
+            if not raw_name and isinstance(getattr(runner, "runner_data", None), dict):
+                runner_data = runner.runner_data
+                raw_name = runner_data.get("name") or runner_data.get("runner_name")
+                config = runner_data.get("config")
+                if isinstance(config, dict):
+                    raw_name = raw_name or config.get("name")
+
+            if not raw_name:
+                continue
+
+            display_name = self._format_task_display_label(str(raw_name))
+            if not display_name or display_name in seen:
+                continue
+
+            names.append(display_name)
+            seen.add(display_name)
+
+        self._cached_task_runner_display_names = names
+        return names
+
     @property
     def scan_name(self):
         """Get scan name: engine_name for legacy scans, runner_name for Secator scans."""
@@ -307,15 +364,47 @@ class ScanHistory(models.Model):
 
     @property
     def display_scan_name(self):
-        """Format scan_name by replacing underscores with spaces and capitalizing words."""
+        """
+        Human-friendly scan name for UI.
+
+        - For workflow/scan: use the main runner name.
+        - For task-only: show the list of tasks (so UI renders `Task: task1, task2`).
+        """
+        if self.is_legacy_scan:
+            scan_name = self.scan_name
+            return self._format_display_label(scan_name) if scan_name else ""
+
+        main_runner = self._get_main_runner()
+        if main_runner:
+            scan_name = main_runner.runner_name or "Secator"
+            return self._format_display_label(scan_name) if scan_name else ""
+
+        task_names = self._get_task_runner_display_names()
+        if task_names:
+            return ", ".join(task_names)
+
         scan_name = self.scan_name
-        return scan_name.replace("_", " ").title() if scan_name else ""
+        return self._format_display_label(scan_name) if scan_name else ""
 
     @property
     def display_runner_type(self):
-        """Format runner_type by replacing underscores with spaces and capitalizing words."""
-        runner_type = self.runner_type
-        return runner_type.replace("_", " ").title() if runner_type else ""
+        """
+        Human-friendly runner type for UI.
+
+        - For workflow/scan: use the main runner type.
+        - For task-only: always return `Task`.
+        """
+        if self.is_legacy_scan:
+            return "Legacy"
+
+        main_runner = self._get_main_runner()
+        if main_runner and main_runner.runner_type:
+            return self._format_display_label(main_runner.runner_type)
+
+        if self._get_task_runner_display_names():
+            return "Task"
+
+        return ""
 
     def get_time_ago(self, time):
         duration = timezone.now() - time

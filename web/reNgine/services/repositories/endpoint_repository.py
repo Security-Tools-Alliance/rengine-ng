@@ -120,8 +120,7 @@ class EndpointRepository:
         if "confidence" in item:
             from reNgine.core.validators import validate_confidence
 
-            validated_confidence = validate_confidence(item["confidence"])
-            if validated_confidence:
+            if validated_confidence := validate_confidence(item["confidence"]):
                 defaults["confidence"] = validated_confidence
 
         endpoint, created = EndPoint.objects.get_or_create(
@@ -252,7 +251,9 @@ class EndpointRepository:
             logger.error(f"Error updating endpoint HTTP status: {e}")
             return False
 
-    def _associate_with_subdomain(self, endpoint: EndPoint, http_url: str, scan_history_id: int) -> None:
+    def _associate_with_subdomain(
+        self, endpoint: EndPoint, http_url: str, scan_history_id: int, auto_create_subdomain: bool = True
+    ) -> None:
         """
         Associate endpoint with subdomain based on URL hostname.
 
@@ -260,16 +261,46 @@ class EndpointRepository:
             endpoint: Endpoint object
             http_url: Endpoint URL
             scan_history_id: Scan history ID
+            auto_create_subdomain: If True, create subdomain if it doesn't exist. If False, only associate if subdomain exists.
         """
         try:
+            if endpoint.subdomain_id:
+                return
+
             hostname = urlparse(http_url).hostname
-            if hostname and is_valid_domain(hostname):
-                if subdomain := Subdomain.objects.filter(name=hostname, scan_history_id=scan_history_id).first():
-                    endpoint.subdomain = subdomain
-                    endpoint.save(update_fields=["subdomain"])
-                    logger.debug(f"Associated endpoint {http_url} with subdomain {hostname}")
-                else:
-                    logger.debug(f"Subdomain {hostname} not found in scan {scan_history_id}")
+            if not hostname or not is_valid_domain(hostname):
+                return
+
+            subdomain = Subdomain.objects.filter(name=hostname, scan_history_id=scan_history_id).first()
+
+            if not subdomain:
+                if not auto_create_subdomain:
+                    logger.debug(
+                        f"Subdomain {hostname} not found in scan {scan_history_id} and auto_create_subdomain=False, skipping association"
+                    )
+                    return
+
+                target_domain_id = endpoint.target_domain_id or ScanHistory.objects.values_list(
+                    "domain_id", flat=True
+                ).get(id=scan_history_id)
+
+                scheme = urlparse(http_url).scheme
+                subdomain_http_url = None
+                if scheme in ("http", "https"):
+                    subdomain_http_url = f"{scheme}://{hostname}"
+
+                subdomain = Subdomain.objects.create(
+                    name=hostname,
+                    scan_history_id=scan_history_id,
+                    target_domain_id=target_domain_id,
+                    discovered_date=timezone.now(),
+                    http_url=subdomain_http_url,
+                )
+                logger.info(f"Created subdomain {hostname} for scan {scan_history_id}")
+
+            endpoint.subdomain = subdomain
+            endpoint.save(update_fields=["subdomain"])
+            logger.debug(f"Associated endpoint {http_url} with subdomain {hostname}")
 
         except Exception as e:
             logger.error(f"Error associating endpoint with subdomain: {e}")

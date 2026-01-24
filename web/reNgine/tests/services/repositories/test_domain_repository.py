@@ -17,8 +17,82 @@ class TestDomainRepository(BaseTestCase):
         self.domain = self.data_generator.create_domain()
         self.scan_history = self.data_generator.create_scan_history()
 
+    def _build_whois_payload(
+        self,
+        *,
+        primary_server: str = "whois.example.com",
+        registrar_name: str = "Example Registrar Ltd",
+        registrar_details: dict | None = None,
+        updated_date: str = "2025-01-01 00:00:00",
+        statuses: list[str] | None = None,
+        name_servers: list[str] | None = None,
+        emails: list[str] | None = None,
+        raw_by_server: dict | None = None,
+        nic_hdl: dict | None = None,
+        admin_handle: str = "",
+        tech_handle: str = "",
+        jswhois_full: dict | None = None,
+        dnssec: dict | None = None,
+    ) -> dict:
+        registrar_details = registrar_details or {}
+        statuses = statuses or []
+        name_servers = name_servers or []
+        emails = emails or []
+        raw_by_server = raw_by_server or {primary_server: "raw"}
+        nic_hdl = nic_hdl or {}
+        dnssec = dnssec or {"dnssec": "unsigned", "dnssec_keys": []}
+        jswhois_full = jswhois_full or {"chain": [primary_server], primary_server: {}}
+
+        return {
+            "query": self.domain.name,
+            "chain": ["whois.iana.org", primary_server],
+            "servers": {"primary": primary_server, "used": [primary_server]},
+            "iana": {"status": "ACTIVE"},
+            "registry_ids": {
+                "registry_domain_id": "",
+                "registry_registrant_id": "",
+                "registry_admin_id": "",
+                "registry_tech_id": "",
+                "registrar_iana_id": "",
+            },
+            "domain": {
+                "name": self.domain.name,
+                "registrar": registrar_name,
+                "creation_date": "2020-01-15 10:30:00",
+                "expiration_date": "2026-01-15 10:30:00",
+                "updated_date": updated_date,
+                "statuses": statuses,
+                "name_servers": name_servers,
+                "dnssec": dnssec,
+            },
+            "registrar": {
+                "name": registrar_name,
+                "iana_id": "",
+                "url": registrar_details.get("website", ""),
+                "whois_server": primary_server,
+                "details": registrar_details,
+            },
+            "contacts": {
+                "registrant": {},
+                "admin": {"handle": admin_handle},
+                "tech": {"handle": tech_handle},
+                "extra": {"registrant": {}, "admin": {}, "tech": {}},
+            },
+            "emails": emails,
+            "fragments": {
+                "domain_info": {},
+                "nic_hdl": nic_hdl,
+                "nserver": {"nserver": name_servers},
+            },
+            "raw": {"by_server": raw_by_server},
+            "jswhois": {"structured_no_raw": jswhois_full},
+        }
+
     def test_save_from_secator_valid_domain(self):
         """Test saving valid domain info from Secator."""
+        whois = self._build_whois_payload(
+            statuses=["ACTIVE", "clientTransferProhibited"],
+        )
         item = {
             "_type": "domain",
             "domain": self.domain.name,
@@ -28,9 +102,7 @@ class TestDomainRepository(BaseTestCase):
             "expiration_date": "2026-01-15 10:30:00",
             "alive": False,
             "extra_data": {
-                "whois_server": "whois.example.com",
-                "status": "ACTIVE",
-                "eppstatus": "clientTransferProhibited",
+                "whois": whois,
             },
         }
 
@@ -41,21 +113,53 @@ class TestDomainRepository(BaseTestCase):
         self.assertIsNotNone(self.domain.domain_info)
         self.assertEqual(self.domain.domain_info.id, result.id)
 
+    def test_save_from_secator_with_whois_v2_schema(self):
+        """Secator WHOIS v2 payload should be stored and processed."""
+        whois = self._build_whois_payload(
+            primary_server="whois.nic.uk",
+            statuses=["ACTIVE"],
+            name_servers=["ns1.example.com"],
+            emails=["test@example.com"],
+            raw_by_server={"whois.nic.uk": "raw"},
+        )
+        item = {
+            "_type": "domain",
+            "domain": self.domain.name,
+            "registrar": "Example Registrar Ltd",
+            "registrant": "Test Organization",
+            "alive": True,
+            "extra_data": {"whois": whois},
+        }
+
+        result = self.domain_repo.save_from_secator(item, self.scan_history.id, self.domain.id)
+
+        self.assertIsNotNone(result)
+        self.assertIsNotNone(result.extra_data)
+        self.assertIn("whois", result.extra_data)
+        self.assertEqual(result.extra_data["whois"], whois)
+        self.assertEqual(result.whois_server, "whois.nic.uk")
+        self.domain.refresh_from_db()
+        self.assertEqual(self.domain.domain_info.whois_server, "whois.nic.uk")
+
     def test_save_from_secator_with_registrar(self):
         """Test saving domain info with registrar."""
+        registrar_details = {
+            "phone": "+44.2071234567",
+            "e-mail": "admin@exampleregistrar.co.uk",
+            "website": "https://www.exampleregistrar.co.uk",
+            "address": ["123 Example Street", "London SW1A 1AA"],
+            "country": "GB",
+            "fax-no": "+44.2071234568",
+        }
+        whois = self._build_whois_payload(
+            registrar_details=registrar_details,
+        )
         item = {
             "_type": "domain",
             "domain": self.domain.name,
             "registrar": "Example Registrar Ltd",
             "extra_data": {
-                "registrar_info": {
-                    "phone": "+44.2071234567",
-                    "e-mail": "admin@exampleregistrar.co.uk",
-                    "website": "https://www.exampleregistrar.co.uk",
-                    "address": ["123 Example Street", "London SW1A 1AA"],
-                    "country": "GB",
-                    "fax-no": "+44.2071234568",
-                }
+                "whois": whois,
             },
         }
 
@@ -72,21 +176,25 @@ class TestDomainRepository(BaseTestCase):
 
     def test_save_from_secator_with_registrant(self):
         """Test saving domain info with registrant."""
+        nic_hdl = {
+            "contact": "John Smith",
+            "type": "ORGANIZATION",
+            "e-mail": "contact@testorganization.co.uk",
+            "phone": "+44.2076543210",
+            "country": "GB",
+            "address": ["456 Test Avenue", "Manchester M1 1AA"],
+            "fax-no": "+44.2076543211",
+            "nic-hdl": "TEST123-GB",
+        }
+        whois = self._build_whois_payload(
+            nic_hdl=nic_hdl,
+        )
         item = {
             "_type": "domain",
             "domain": self.domain.name,
             "registrant": "Test Organization Ltd",
             "extra_data": {
-                "nic_hdl": {
-                    "contact": "John Smith",
-                    "type": "ORGANIZATION",
-                    "e-mail": "contact@testorganization.co.uk",
-                    "phone": "+44.2076543210",
-                    "country": "GB",
-                    "address": ["456 Test Avenue", "Manchester M1 1AA"],
-                    "fax-no": "+44.2076543211",
-                    "nic-hdl": "TEST123-GB",
-                }
+                "whois": whois,
             },
         }
 
@@ -149,11 +257,14 @@ class TestDomainRepository(BaseTestCase):
 
     def test_save_from_secator_with_name_servers(self):
         """Test saving domain info with name servers."""
+        whois = self._build_whois_payload(
+            name_servers=["ns1.example-dns.co.uk", "ns2.example-dns.co.uk", "ns3.example-dns.co.uk"],
+        )
         item = {
             "_type": "domain",
             "domain": self.domain.name,
             "extra_data": {
-                "nserver": {"nserver": ["ns1.example-dns.co.uk", "ns2.example-dns.co.uk", "ns3.example-dns.co.uk"]}
+                "whois": whois,
             },
         }
 
@@ -169,12 +280,14 @@ class TestDomainRepository(BaseTestCase):
 
     def test_save_from_secator_with_status(self):
         """Test saving domain info with status."""
+        whois = self._build_whois_payload(
+            statuses=["ACTIVE", "clientTransferProhibited"],
+        )
         item = {
             "_type": "domain",
             "domain": self.domain.name,
             "extra_data": {
-                "status": "ACTIVE",
-                "eppstatus": "clientTransferProhibited",
+                "whois": whois,
             },
         }
 
@@ -189,14 +302,17 @@ class TestDomainRepository(BaseTestCase):
 
     def test_save_from_secator_with_dnssec(self):
         """Test saving domain info with DNSSEC."""
+        whois = self._build_whois_payload(
+            dnssec={
+                "dnssec": "signed",
+                "dnssec_keys": [{"key_tag": "2456", "algorithm": "13 [ECDSAP256SHA256]"}],
+            },
+        )
         item = {
             "_type": "domain",
             "domain": self.domain.name,
             "extra_data": {
-                "key1-tag": {
-                    "key1-tag": "2456",
-                    "key1-algo": "13 [ECDSAP256SHA256]",
-                }
+                "whois": whois,
             },
         }
 
@@ -207,11 +323,13 @@ class TestDomainRepository(BaseTestCase):
 
     def test_save_from_secator_with_dates(self):
         """Test saving domain info with dates."""
+        whois = self._build_whois_payload()
         item = {
             "_type": "domain",
             "domain": self.domain.name,
             "creation_date": "2020-09-24 09:16:34",
             "expiration_date": "2026-09-24 09:16:34",
+            "extra_data": {"whois": whois},
         }
 
         result = self.domain_repo.save_from_secator(item, self.scan_history.id, self.domain.id)
@@ -222,11 +340,12 @@ class TestDomainRepository(BaseTestCase):
 
     def test_save_from_secator_with_whois_server(self):
         """Test saving domain info with whois server."""
+        whois = self._build_whois_payload(primary_server="whois.nic.uk")
         item = {
             "_type": "domain",
             "domain": self.domain.name,
             "extra_data": {
-                "whois_server": "whois.nic.uk",
+                "whois": whois,
             },
         }
 
@@ -234,16 +353,21 @@ class TestDomainRepository(BaseTestCase):
 
         self.assertIsNotNone(result)
         self.assertEqual(result.whois_server, "whois.nic.uk")
+        self.domain.refresh_from_db()
+        self.assertEqual(self.domain.domain_info.whois_server, "whois.nic.uk")
 
     def test_save_from_secator_with_extra_data(self):
         """Test saving domain info with extra data."""
+        whois = self._build_whois_payload(
+            primary_server="whois.nic.uk",
+            emails=["test@example.com"],
+            raw_by_server={"whois.nic.uk": "%% This is a test Whois server..."},
+        )
         item = {
             "_type": "domain",
             "domain": self.domain.name,
             "extra_data": {
-                "chain": ["whois.iana.org", "whois.nic.uk"],
-                "raw": "%% This is a test Whois server...",
-                "emails": ["test@example.com"],
+                "whois": whois,
             },
         }
 
@@ -251,21 +375,38 @@ class TestDomainRepository(BaseTestCase):
 
         self.assertIsNotNone(result)
         self.assertIsNotNone(result.extra_data)
+        self.assertIn("whois", result.extra_data)
         self.assertIn("chain", result.extra_data)
         self.assertIn("raw", result.extra_data)
         self.assertIn("emails", result.extra_data)
 
     def test_save_from_secator_domain_name_mismatch(self):
         """Test handling domain name mismatch."""
+        whois = self._build_whois_payload()
         item = {
             "_type": "domain",
             "domain": "different-domain.co.uk",
             "registrar": "Example Registrar Ltd",
+            "extra_data": {"whois": whois},
         }
 
         result = self.domain_repo.save_from_secator(item, self.scan_history.id, self.domain.id)
 
         self.assertIsNone(result)
+
+    def test_save_from_secator_domain_name_case_insensitive_match(self):
+        """Domain name comparison should be case-insensitive."""
+        whois = self._build_whois_payload()
+        item = {
+            "_type": "domain",
+            "domain": self.domain.name.upper(),
+            "registrar": "Example Registrar Ltd",
+            "extra_data": {"whois": whois},
+        }
+
+        result = self.domain_repo.save_from_secator(item, self.scan_history.id, self.domain.id)
+
+        self.assertIsNotNone(result)
 
     def test_save_from_secator_missing_domain(self):
         """Test handling missing domain field."""
@@ -289,11 +430,13 @@ class TestDomainRepository(BaseTestCase):
         self.domain.save()
 
         # Update with new data
+        whois = self._build_whois_payload(registrar_name="New Registrar Ltd")
         item = {
             "_type": "domain",
             "domain": self.domain.name,
             "registrar": "New Registrar Ltd",
             "expiration_date": "2027-01-01 00:00:00",
+            "extra_data": {"whois": whois},
         }
 
         result = self.domain_repo.save_from_secator(item, self.scan_history.id, self.domain.id)
@@ -336,38 +479,43 @@ class TestDomainRepository(BaseTestCase):
 
     def test_save_from_secator_with_admin_tech(self):
         """Test saving domain info with admin and tech contacts."""
+        jswhois_full = {
+            "chain": ["whois.iana.org", "whois.nic.uk"],
+            "whois.nic.uk": {
+                "nic-hdl": [
+                    {
+                        "nic-hdl": "ADMIN456-GB",
+                        "contact": "Jane Doe",
+                        "type": "ORGANIZATION",
+                        "e-mail": "admin@testorganization.co.uk",
+                        "phone": "+44.2071111111",
+                        "country": "GB",
+                        "address": ["789 Admin Road", "Birmingham B1 1AA"],
+                    },
+                    {
+                        "nic-hdl": "TECH789-GB",
+                        "contact": "Tech Contact",
+                        "type": "ORGANIZATION",
+                        "e-mail": "tech@testorganization.co.uk",
+                        "phone": "+44.2071111112",
+                        "country": "GB",
+                        "address": ["789 Tech Road", "Birmingham B1 1AA"],
+                    },
+                ],
+            },
+        }
+        whois = self._build_whois_payload(
+            primary_server="whois.nic.uk",
+            admin_handle="ADMIN456-GB",
+            tech_handle="TECH789-GB",
+            jswhois_full=jswhois_full,
+        )
         item = {
             "_type": "domain",
             "domain": self.domain.name,
             "registrant": "Test Organization Ltd",
             "extra_data": {
-                "admin_c": "ADMIN456-GB",
-                "tech_c": "TECH789-GB",
-                "jswhois_full": {
-                    "chain": ["whois.iana.org", "whois.nic.uk"],
-                    "whois.nic.uk": {
-                        "nic-hdl": [
-                            {
-                                "nic-hdl": "ADMIN456-GB",
-                                "contact": "Jane Doe",
-                                "type": "ORGANIZATION",
-                                "e-mail": "admin@testorganization.co.uk",
-                                "phone": "+44.2071111111",
-                                "country": "GB",
-                                "address": ["789 Admin Road", "Birmingham B1 1AA"],
-                            },
-                            {
-                                "nic-hdl": "TECH789-GB",
-                                "contact": "Tech Contact",
-                                "type": "ORGANIZATION",
-                                "e-mail": "tech@testorganization.co.uk",
-                                "phone": "+44.2071111112",
-                                "country": "GB",
-                                "address": ["789 Tech Road", "Birmingham B1 1AA"],
-                            },
-                        ],
-                    },
-                },
+                "whois": whois,
             },
         }
 
@@ -383,11 +531,12 @@ class TestDomainRepository(BaseTestCase):
 
     def test_save_from_secator_with_last_update(self):
         """Test saving domain info with last-update."""
+        whois = self._build_whois_payload(updated_date="2025-09-22 14:09:03")
         item = {
             "_type": "domain",
             "domain": self.domain.name,
             "extra_data": {
-                "last_update": "2025-09-22 14:09:03",
+                "whois": whois,
             },
         }
 
@@ -1022,11 +1171,14 @@ class TestDomainRepository(BaseTestCase):
 
     def test_save_from_secator_with_eppstatus_list(self):
         """Test saving domain info with eppstatus as list."""
+        whois = self._build_whois_payload(
+            statuses=["clientTransferProhibited", "clientDeleteProhibited"],
+        )
         item = {
             "_type": "domain",
             "domain": self.domain.name,
             "extra_data": {
-                "eppstatus": ["clientTransferProhibited", "clientDeleteProhibited"],
+                "whois": whois,
             },
         }
 
@@ -1041,11 +1193,14 @@ class TestDomainRepository(BaseTestCase):
 
     def test_save_from_secator_with_nserver_list(self):
         """Test saving domain info with nserver as list."""
+        whois = self._build_whois_payload(
+            name_servers=["ns1.example.com", "ns2.example.com"],
+        )
         item = {
             "_type": "domain",
             "domain": self.domain.name,
             "extra_data": {
-                "nserver": ["ns1.example.com", "ns2.example.com"],
+                "whois": whois,
             },
         }
 

@@ -123,6 +123,54 @@ class TestScanHistoryStatusProperties(BaseTestCase):
         # Should return INITIATED_TASK as safe default
         self.assertEqual(status_code, INITIATED_TASK)
 
+    def test_display_runner_type_and_scan_name_task_only(self):
+        """Task-only Secator scans should display `Task: <task list>`."""
+        # Ensure this scan is treated as a Secator scan
+        self.scan_history.is_legacy_scan = False
+        self.scan_history.save()
+
+        SecatorRunner.objects.create(
+            scan_history=self.scan_history,
+            runner_type="task",
+            runner_name="cariddi",
+            status="SUCCESS",
+            celery_id="task-1",
+        )
+        SecatorRunner.objects.create(
+            scan_history=self.scan_history,
+            runner_type="task",
+            runner_name="katana",
+            status="SUCCESS",
+            celery_id="task-2",
+        )
+
+        # UI composes `display_runner_type + ": " + display_scan_name`
+        self.assertEqual(self.scan_history.display_runner_type, "Task")
+        self.assertEqual(self.scan_history.display_scan_name, "cariddi, katana")
+
+    def test_display_runner_type_and_scan_name_prefers_workflow_runner(self):
+        """If a workflow/scan runner exists, display should use it over tasks."""
+        self.scan_history.is_legacy_scan = False
+        self.scan_history.save()
+
+        SecatorRunner.objects.create(
+            scan_history=self.scan_history,
+            runner_type="task",
+            runner_name="cariddi",
+            status="SUCCESS",
+            celery_id="task-1",
+        )
+        SecatorRunner.objects.create(
+            scan_history=self.scan_history,
+            runner_type="workflow",
+            runner_name="test_workflow",
+            status="RUNNING",
+            celery_id="wf-1",
+        )
+
+        self.assertEqual(self.scan_history.display_runner_type, "Workflow")
+        self.assertEqual(self.scan_history.display_scan_name, "Test Workflow")
+
 
 class TestSubScanStatusProperties(BaseTestCase):
     """Test status properties for SubScan model."""

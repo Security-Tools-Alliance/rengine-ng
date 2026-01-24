@@ -74,3 +74,6 @@ get-docker.sh
 
 # Celery
 *.pid
+
+analyse*
+*.json

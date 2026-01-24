@@ -288,7 +288,7 @@
         // Radio button - single selection
         $container.find('.workflow-tile').removeClass('selected');
         $tile.addClass('selected');
-        $input.prop('checked', true);
+        $input.prop('checked', true).trigger('change');
       });
       
         // Handle task tiles
@@ -321,7 +321,7 @@
         // Radio button - single selection
         $container.find('.scan-type-tile').removeClass('selected');
         $tile.addClass('selected');
-        $input.prop('checked', true);
+        $input.prop('checked', true).trigger('change');
       });
       
       // Handle select all tasks
