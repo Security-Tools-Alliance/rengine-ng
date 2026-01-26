@@ -1,0 +1,9 @@
+{# Suggestions box for automatic suggestions #}
+{# Params: id_prefix (string, optional) #}
+<div class="suggestions-box mt-3" style="display: none;">
+  <div class="alert alert-info">
+    <i class="fas fa-lightbulb"></i>
+    <strong>Suggestions:</strong>
+    <span id="{{ id_prefix|default:'' }}auto-suggestions"></span>
+  </div>
+</div>

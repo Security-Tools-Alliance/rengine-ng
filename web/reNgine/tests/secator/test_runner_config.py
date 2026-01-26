@@ -124,6 +124,34 @@ class TestSecatorRunnerConfig(unittest.TestCase):
         self.assertIn("global", result)
         self.assertEqual(result["global"]["concurrency"], 20)  # default
 
+    def test_prepare_secator_config_empty_profiles_dict(self):
+        """Test that empty profiles dictionary does not create profiles list."""
+        config = {"threads": 10, "timeout": 30}
+        profiles = {}
+
+        result = self.runner._prepare_secator_config(config, profiles)
+
+        self.assertIn("global", result)
+        self.assertEqual(result["global"]["concurrency"], 10)
+        # Empty profiles dict should not create a profiles list
+        self.assertNotIn("profiles", result)
+
+    def test_prepare_secator_config_partial_profiles(self):
+        """Test configuration with only some profiles enabled."""
+        config = {"threads": 5, "timeout": 60}
+        profiles = {"speed": "polite", "general": "full"}
+
+        result = self.runner._prepare_secator_config(config, profiles)
+
+        self.assertIn("global", result)
+        self.assertEqual(result["global"]["concurrency"], 5)
+        # Only enabled profiles should be in the list
+        self.assertIn("profiles", result)
+        self.assertIsInstance(result["profiles"], list)
+        self.assertIn("polite", result["profiles"])
+        self.assertIn("full", result["profiles"])
+        self.assertEqual(len(result["profiles"]), 2)
+
     def test_prepare_secator_config_special_keys(self):
         """Test that special keys are properly mapped."""
         config = {

@@ -1,0 +1,8 @@
+{# Expert Mode switch #}
+{# Params: id_prefix (string, optional) #}
+{% with expert_mode_id=id_prefix|default:''|add:'expertMode' %}
+<div class="form-check form-switch mt-3">
+  <input class="form-check-input" type="checkbox" id="{{ expert_mode_id }}" name="expert_mode">
+  <label class="form-check-label" for="{{ expert_mode_id }}">Expert Mode</label>
+</div>
+{% endwith %}

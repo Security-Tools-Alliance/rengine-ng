@@ -10,6 +10,7 @@
     init: function() {
       this.bindEvents();
       this.initializeDefaultProfiles();
+      this.initializeProfileCategories();
       this.initializeSubmitButtons();
     },
     
@@ -57,11 +58,17 @@
       // Handle profiles
       $(document).on('click', '[data-profile-type]', this.handleProfileSelection.bind(this));
       
-      // Toggle expert mode
-      $(document).on('change', '#expertMode', this.toggleExpertMode);
+      // Toggle expert mode (supports id_prefix)
+      $(document).on('change', '[id$="expertMode"], #expertMode', this.toggleExpertMode);
       
-      // Toggle random proxy
-      $(document).on('change', '#useRandomProxy', this.toggleRandomProxy);
+      // Toggle random proxy (supports id_prefix)
+      $(document).on('change', '[id$="useRandomProxy"], #useRandomProxy', this.toggleRandomProxy);
+      
+      // Toggle profile categories (supports id_prefix via suffix matching)
+      $(document).on('change', '[id$="useSpeedProfile"], #useSpeedProfile', this.handleProfileCategoryToggle.bind(this));
+      $(document).on('change', '[id$="useEvasionProfile"], #useEvasionProfile', this.handleProfileCategoryToggle.bind(this));
+      $(document).on('change', '[id$="useGeneralProfile"], #useGeneralProfile', this.handleProfileCategoryToggle.bind(this));
+      $(document).on('change', '[id$="useNetworkProfile"], #useNetworkProfile', this.handleProfileCategoryToggle.bind(this));
       
       // Category filter
       $(document).on('click', '.category-filter-btn', this.handleCategoryFilter.bind(this));
@@ -199,9 +206,9 @@
         domain_id: parseInt(domainId),
         execution_mode: executionMode,
         scan_existing_elements: $form.find('input[name="scan_existing_elements"]').is(':checked'),
-        imported_subdomains: ($form.find('#importSubdomainFormControlTextarea').val() || '').split('\n').filter(s => s.trim()),
-        out_of_scope_subdomains: ($form.find('#outOfScopeSubdomainTextarea').val() || '').split('\n').filter(s => s.trim()),
-        url_filter: $form.find('#filterPath').val(),
+        imported_subdomains: ($form.find('[id$="importSubdomainFormControlTextarea"], #importSubdomainFormControlTextarea').val() || '').split('\n').filter(s => s.trim()),
+        out_of_scope_subdomains: ($form.find('[id$="outOfScopeSubdomainTextarea"], #outOfScopeSubdomainTextarea').val() || '').split('\n').filter(s => s.trim()),
+        url_filter: $form.find('[id$="filterPath"], #filterPath').val(),
         secator_config: {
           proxy: $form.find('input[name="use_random_proxy"]').is(':checked') ? null : $form.find('input[name="proxy"]').val(),
           use_random_proxy: $form.find('input[name="use_random_proxy"]').is(':checked'),
@@ -210,12 +217,12 @@
           timeout: parseInt($form.find('input[name="timeout"]').val()) || 300,
           delay: parseInt($form.find('input[name="delay"]').val()) || 0
         },
-        // Get profile values from hidden inputs first (for custom profiles), then fallback to active buttons (for builtin profiles)
-        speed_profile: $form.find('input[name="speed_profile"]').val() || $form.find('.btn[data-profile-type="speed"].active').data('profile-value') || 'polite',
-        stealth_profile: $form.find('input[name="stealth_profile"]').val() || $form.find('.btn[data-profile-type="stealth"].active').data('profile-value') || $form.find('.btn[data-profile-type="evasion"].active').data('profile-value') || 'stealth',
-        general_profile: $form.find('input[name="general_profile"]').val() || $form.find('.btn[data-profile-type="general"].active').data('profile-value') || 'full',
-        network_profile: $form.find('input[name="network_profile"]').val() || $form.find('.btn[data-profile-type="network"].active').data('profile-value') || 'all_ports',
-        expert_mode: $form.find('input[name="expert_mode"]').is(':checked') || $form.find('#expertMode').is(':checked')
+        // Get profile values only if the corresponding switch is enabled
+        speed_profile: $form.find('[id$="useSpeedProfile"], #useSpeedProfile').is(':checked') ? ($form.find('input[name="speed_profile"]').val() || $form.find('.btn[data-profile-type="speed"].active').data('profile-value') || 'polite') : null,
+        stealth_profile: $form.find('[id$="useEvasionProfile"], #useEvasionProfile').is(':checked') ? ($form.find('input[name="stealth_profile"]').val() || $form.find('.btn[data-profile-type="stealth"].active').data('profile-value') || $form.find('.btn[data-profile-type="evasion"].active').data('profile-value') || 'stealth') : null,
+        general_profile: $form.find('[id$="useGeneralProfile"], #useGeneralProfile').is(':checked') ? ($form.find('input[name="general_profile"]').val() || $form.find('.btn[data-profile-type="general"].active').data('profile-value') || 'full') : null,
+        network_profile: $form.find('[id$="useNetworkProfile"], #useNetworkProfile').is(':checked') ? ($form.find('input[name="network_profile"]').val() || $form.find('.btn[data-profile-type="network"].active').data('profile-value') || 'all_ports') : null,
+        expert_mode: $form.find('input[name="expert_mode"]').is(':checked') || $form.find('[id$="expertMode"], #expertMode').is(':checked')
       };
       
       // Add mode-specific parameters
@@ -403,13 +410,18 @@
       };
       
       const suggestionText = suggestions[mode] || '';
-      $form.find('[id="auto-suggestions"]').text(suggestionText);
+      const $suggestionsBox = $form.find('.suggestions-box');
+      const $suggestionsElement = $suggestionsBox.find('[id$="auto-suggestions"], [id="auto-suggestions"]');
+      
+      if ($suggestionsElement.length) {
+        $suggestionsElement.text(suggestionText);
+      }
       
       // Show/hide suggestions box
       if (suggestionText) {
-        $form.find('.suggestions-box').slideDown();
+        $suggestionsBox.slideDown();
       } else {
-        $form.find('.suggestions-box').slideUp();
+        $suggestionsBox.slideUp();
       }
     },
     
@@ -479,13 +491,19 @@
     toggleExpertMode: function() {
       const isExpert = $(this).is(':checked');
       const $form = $(this).closest('form');
-      $form.find('#expertOptions').slideToggle(isExpert);
+      const expertModeId = $(this).attr('id');
+      const idPrefix = expertModeId.replace('expertMode', '');
+      const expertOptionsId = idPrefix + 'expertOptions';
+      $form.find('#' + expertOptionsId).slideToggle(isExpert);
     },
 
     toggleRandomProxy: function() {
       const $form = $(this).closest('form');
-      const useRandom = $form.find('#useRandomProxy').is(':checked');
-      const $proxyInput = $form.find('#proxy-input');
+      const useRandomProxyId = $(this).attr('id');
+      const idPrefix = useRandomProxyId.replace('useRandomProxy', '');
+      const proxyInputId = idPrefix + 'proxy-input';
+      const useRandom = $form.find('#' + useRandomProxyId).is(':checked');
+      const $proxyInput = $form.find('#' + proxyInputId);
       
       if (useRandom) {
         // Disable manual proxy input and clear it
@@ -496,6 +514,122 @@
         $proxyInput.prop('disabled', false).attr('placeholder', 'socks5://host:port');
         $proxyInput.removeClass('text-muted');
       }
+    },
+    
+    getCategorySwitchMap: function() {
+      return {
+        speed: 'useSpeedProfile',
+        evasion: 'useEvasionProfile',
+        general: 'useGeneralProfile',
+        network: 'useNetworkProfile'
+      };
+    },
+    
+    handleProfileCategoryToggle: function(e) {
+      const $switch = $(e.currentTarget);
+      const category = this.getCategoryFromSwitch($switch);
+      const isEnabled = $switch.is(':checked');
+      const $form = $switch.closest('form');
+      
+      this.toggleProfileCategory(category, isEnabled, $form);
+    },
+    
+    getCategoryFromSwitch: function($switch) {
+      const id = $switch.attr('id');
+      if (!id) return null;
+      
+      const categorySwitchMap = this.getCategorySwitchMap();
+      for (const [category, switchId] of Object.entries(categorySwitchMap)) {
+        if (id === switchId || id.endsWith(switchId)) {
+          return category;
+        }
+      }
+      return null;
+    },
+    
+    toggleProfileCategory: function(category, isEnabled, $form) {
+      const $section = $form.find(`.profile-category-section[data-profile-category="${category}"]`);
+      const hiddenInputName = category === 'evasion' ? 'stealth_profile' : category + '_profile';
+      const $hiddenInput = $form.find(`input[name="${hiddenInputName}"]`);
+      
+      if (isEnabled) {
+        // Show section and enable controls
+        $section.slideDown();
+        $section.find('button, select').prop('disabled', false);
+        
+        // Activate default profile
+        this.activateDefaultProfile(category, $form);
+      } else {
+        // Hide section and disable controls
+        $section.slideUp();
+        $section.find('button, select').prop('disabled', true);
+        
+        // Clear hidden input
+        if ($hiddenInput.length) {
+          $hiddenInput.val('');
+        }
+        
+        // Deselect all buttons in this category
+        $section.find('.btn').removeClass('active');
+        $section.find('select').val('');
+      }
+    },
+    
+    activateDefaultProfile: function(category, $form) {
+      const defaultProfiles = {
+        'speed': 'polite',
+        'evasion': 'stealth',
+        'general': 'full',
+        'network': 'all_ports'
+      };
+      
+      const defaultProfile = defaultProfiles[category];
+      const $section = $form.find(`.profile-category-section[data-profile-category="${category}"]`);
+      const hiddenInputName = category === 'evasion' ? 'stealth_profile' : category + '_profile';
+      const $hiddenInput = $form.find(`input[name="${hiddenInputName}"]`);
+      
+      // Check if there's a custom profile with this default value
+      const $customSelect = $section.find(`select[id$="${category}_custom_profile"], select[id="${category}_custom_profile"]`);
+      const customOption = $customSelect.find(`option[value="${defaultProfile}"]`);
+      
+      if (customOption.length && customOption.val()) {
+        // Use custom profile
+        $customSelect.val(defaultProfile).trigger('change');
+        if ($hiddenInput.length) {
+          $hiddenInput.val(defaultProfile);
+        }
+      } else {
+        // Use builtin profile - find and click the button
+        const $defaultButton = $section.find(`.btn[data-profile-value="${defaultProfile}"]`);
+        if ($defaultButton.length) {
+          $defaultButton.trigger('click');
+        } else if ($hiddenInput.length) {
+          // Fallback: set hidden input directly
+          $hiddenInput.val(defaultProfile);
+        }
+      }
+    },
+    
+    initializeProfileCategories: function() {
+      const self = this;
+      const categorySwitchMap = this.getCategorySwitchMap();
+      
+      $('form').each(function() {
+        const $form = $(this);
+        if (!$form.find('input[name="execution_mode"]').length) {
+          return;
+        }
+        
+        Object.keys(categorySwitchMap).forEach(function(category) {
+          const switchId = categorySwitchMap[category];
+          const $switch = $form.find(`[id$="${switchId}"], #${switchId}`);
+          
+          if ($switch.length) {
+            const isEnabled = $switch.is(':checked');
+            self.toggleProfileCategory(category, isEnabled, $form);
+          }
+        });
+      });
     },
     
     handleCategoryFilter: function(e) {
@@ -656,6 +790,34 @@
       $('form').each(function() {
         self.updateSubmitButtonState($(this));
       });
+    },
+
+    ensureButtonOutsideAdvancedConfig: function() {
+      // Ensure the start scan button is outside advanced-config-section
+      const $buttonContainer = $('.start-scan-button-container');
+      const $advancedConfigSection = $('.advanced-config-section');
+      const $form = $('#start-scan-form');
+      
+      if ($buttonContainer.length && $advancedConfigSection.length && $form.length) {
+        // Check if button is inside advanced-config-section
+        if ($advancedConfigSection.find($buttonContainer).length > 0) {
+          // Move button outside advanced-config-section
+          $buttonContainer.detach();
+          $advancedConfigSection.after($buttonContainer);
+        }
+        
+        // Also ensure it's outside select_engine
+        const $selectEngine = $('#select_engine');
+        if ($selectEngine.length && $selectEngine.find($buttonContainer).length > 0) {
+          $buttonContainer.detach();
+          $selectEngine.after($buttonContainer);
+        }
+        
+        // Ensure it's inside the form
+        if ($buttonContainer.closest('form').length === 0) {
+          $form.append($buttonContainer);
+        }
+      }
     }
   };
 
@@ -664,6 +826,13 @@
     SecatorScan.init();
     // Initialize tooltips for profile buttons
     SecatorScan.initializeTooltips();
+    // Ensure button is in correct position
+    SecatorScan.ensureButtonOutsideAdvancedConfig();
+    
+    // Also check after dynamic content loads
+    $(document).on('secator:contentLoaded', function() {
+      SecatorScan.ensureButtonOutsideAdvancedConfig();
+    });
   });
 
 })(jQuery);

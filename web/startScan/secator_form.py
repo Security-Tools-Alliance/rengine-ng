@@ -52,11 +52,31 @@ def parse_secator_profiles(post: QueryDict) -> tuple[str | None, str | None, str
     Parse profile selections from a POST payload.
 
     Custom profile selectors take precedence over builtin profile hidden inputs.
+    Each profile is only parsed if its corresponding switch is enabled.
     """
-    speed_profile = post.get("speed_custom_profile") or post.get("speed_profile")
-    stealth_profile = post.get("evasion_custom_profile") or post.get("stealth_profile")
-    general_profile = post.get("general_custom_profile") or post.get("general_profile")
-    network_profile = post.get("network_custom_profile") or post.get("network_profile")
+    # Check if each profile category is enabled
+    use_speed_profile = safe_bool_cast(post.get("use_speed_profile"))
+    use_evasion_profile = safe_bool_cast(post.get("use_evasion_profile"))
+    use_general_profile = safe_bool_cast(post.get("use_general_profile"))
+    use_network_profile = safe_bool_cast(post.get("use_network_profile"))
+    
+    # Parse profiles only if their switches are enabled
+    speed_profile = None
+    if use_speed_profile:
+        speed_profile = post.get("speed_custom_profile") or post.get("speed_profile")
+    
+    stealth_profile = None
+    if use_evasion_profile:
+        stealth_profile = post.get("evasion_custom_profile") or post.get("stealth_profile")
+    
+    general_profile = None
+    if use_general_profile:
+        general_profile = post.get("general_custom_profile") or post.get("general_profile")
+    
+    network_profile = None
+    if use_network_profile:
+        network_profile = post.get("network_custom_profile") or post.get("network_profile")
+    
     expert_mode = safe_bool_cast(post.get("expert_mode"))
     return speed_profile, stealth_profile, general_profile, network_profile, expert_mode
 

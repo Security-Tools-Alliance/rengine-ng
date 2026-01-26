@@ -68,12 +68,16 @@ class TestSecatorFormHelpers(BaseTestCase):
     def test_parse_secator_profiles_custom_overrides_builtin(self):
         """Custom profile selectors should override builtin hidden inputs."""
         post = QueryDict("", mutable=True)
+        post["use_speed_profile"] = "true"
         post["speed_profile"] = "polite"
         post["speed_custom_profile"] = "custom_speed"
+        post["use_evasion_profile"] = "true"
         post["stealth_profile"] = "stealth"
         post["evasion_custom_profile"] = "custom_evasion"
+        post["use_general_profile"] = "true"
         post["general_profile"] = "full"
         post["general_custom_profile"] = "custom_general"
+        post["use_network_profile"] = "true"
         post["network_profile"] = "all_ports"
         post["network_custom_profile"] = "custom_network"
         post["expert_mode"] = "true"
@@ -84,6 +88,75 @@ class TestSecatorFormHelpers(BaseTestCase):
         self.assertEqual(general, "custom_general")
         self.assertEqual(network, "custom_network")
         self.assertTrue(expert)
+
+    def test_parse_secator_profiles_all_disabled(self):
+        """When all profile switches are disabled, all profiles should be None."""
+        post = QueryDict("", mutable=True)
+        post["use_speed_profile"] = "false"
+        post["use_evasion_profile"] = "false"
+        post["use_general_profile"] = "false"
+        post["use_network_profile"] = "false"
+        post["speed_profile"] = "polite"
+        post["stealth_profile"] = "stealth"
+        post["general_profile"] = "full"
+        post["network_profile"] = "all_ports"
+
+        speed, stealth, general, network, expert = parse_secator_profiles(post)
+        self.assertIsNone(speed)
+        self.assertIsNone(stealth)
+        self.assertIsNone(general)
+        self.assertIsNone(network)
+        self.assertFalse(expert)
+
+    def test_parse_secator_profiles_partial_enabled(self):
+        """Only enabled profiles should be parsed."""
+        post = QueryDict("", mutable=True)
+        post["use_speed_profile"] = "true"
+        post["speed_profile"] = "polite"
+        post["use_evasion_profile"] = "false"
+        post["stealth_profile"] = "stealth"
+        post["use_general_profile"] = "true"
+        post["general_profile"] = "full"
+        post["use_network_profile"] = "false"
+        post["network_profile"] = "all_ports"
+
+        speed, stealth, general, network, expert = parse_secator_profiles(post)
+        self.assertEqual(speed, "polite")
+        self.assertIsNone(stealth)
+        self.assertEqual(general, "full")
+        self.assertIsNone(network)
+        self.assertFalse(expert)
+
+    def test_parse_secator_profiles_single_enabled(self):
+        """Single profile enabled should work correctly."""
+        post = QueryDict("", mutable=True)
+        post["use_speed_profile"] = "true"
+        post["speed_profile"] = "aggressive"
+        post["use_evasion_profile"] = "false"
+        post["use_general_profile"] = "false"
+        post["use_network_profile"] = "false"
+
+        speed, stealth, general, network, expert = parse_secator_profiles(post)
+        self.assertEqual(speed, "aggressive")
+        self.assertIsNone(stealth)
+        self.assertIsNone(general)
+        self.assertIsNone(network)
+        self.assertFalse(expert)
+
+    def test_parse_secator_profiles_switches_missing(self):
+        """Missing switches should be treated as disabled (None profiles)."""
+        post = QueryDict("", mutable=True)
+        post["speed_profile"] = "polite"
+        post["stealth_profile"] = "stealth"
+        post["general_profile"] = "full"
+        post["network_profile"] = "all_ports"
+
+        speed, stealth, general, network, expert = parse_secator_profiles(post)
+        self.assertIsNone(speed)
+        self.assertIsNone(stealth)
+        self.assertIsNone(general)
+        self.assertIsNone(network)
+        self.assertFalse(expert)
 
     def test_build_start_secator_scan_kwargs_workflow(self):
         """Helper should build normalized kwargs for workflow mode."""

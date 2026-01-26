@@ -25,7 +25,7 @@ Initiating scan for {{domain.name}}
 <div class="row">
   <div class="col-12">
     <div class="card">
-      <div class="card-body">
+      <div class="card-body start-scan-card-body">
         <form method="POST" id="start-scan-form">
           {% csrf_token %}
           <input type="hidden" id="domain_id" name="domain_id" value="{{ domain.id }}">
@@ -35,149 +35,15 @@ Initiating scan for {{domain.name}}
             <h4>Choose Execution Mode</h4>
             {% include 'startScan/_items/secator_execution_mode_selector.html' with scan_icon='satellite-dish' scan_title='Scan' %}
             
-            <!-- Compact Configuration Sections -->
-            <div class="row">
-              <!-- Scan Target Elements -->
-              <div class="col-lg-6 mb-4">
-                {% include 'startScan/_items/secator_scan_target_elements.html' with title='Scan Target Elements' description='Scan the hostnames and IP addresses already discovered in this target.' note='When enabled, the scan will target all discovered hostnames and IP addresses in this target, in addition to the main domain.' show_counts=True card_class='card border-0 bg-soft-light h-100' id_suffix='_start_scan' %}
-              </div>
-
-              <!-- Import Subdomains -->
-              <div class="col-lg-6 mb-4">
-                <div class="card border-0 bg-soft-primary h-100">
-                  <div class="card-body">
-                    <h5 class="card-title">
-                      <i class="fas fa-download text-info me-2"></i>
-                      Import Subdomains
-                    </h5>
-                    <p class="card-text small">
-                      Import subdomains for <b>{{domain.name}}</b> using your private recon tools.
-                    </p>
-                    
-                    <div class="alert bg-soft-primary border-0 mt-1 mb-2 small" role="alert">
-                      <span>Separate the subdomains using <b>new line</b>. If the subdomain does not belong to <b>{{domain.name}}</b> it will be skipped.</span>
-                    </div>
-                    
-                    <label for="importSubdomainFormControlTextarea" class="form-label small">Subdomains List</label>
-                    <textarea class="form-control" id="importSubdomainFormControlTextarea" name="importSubdomainTextArea" rows="4" spellcheck="false"></textarea>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Out of Scope Subdomains -->
-              <div class="col-lg-6 mb-4">
-                <div class="card border-0 bg-soft-warning h-100">
-                  <div class="card-body">
-                    <h5 class="card-title">
-                      <i class="fas fa-ban text-warning me-2"></i>
-                      Out of Scope Subdomains
-                    </h5>
-                    <p class="card-text small">
-                      Define subdomains that should be excluded from the scan.
-                    </p>
-                    
-                    <div class="alert bg-soft-warning border-0 mt-1 mb-2 small" role="alert">
-                      <span>Separate the out of scope subdomains/keywords using new line. (No regex currently supported.)</span>
-                    </div>
-                    
-                    <label for="outOfScopeSubdomainTextarea" class="form-label small">Out of Scope Subdomains List</label>
-                    <textarea class="form-control" id="outOfScopeSubdomainTextarea" name="outOfScopeSubdomainTextarea" rows="4" spellcheck="false"></textarea>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Filters -->
-              <div class="col-lg-6 mb-4">
-                <div class="card border-0 bg-soft-info h-100">
-                  <div class="card-body">
-                    <h5 class="card-title">
-                      <i class="fas fa-filter text-info me-2"></i>
-                      Path Filters
-                    </h5>
-                    <p class="card-text small">
-                      Filter on a specific path for <b>{{domain.name}}</b>.
-                    </p>
-                    
-                    <label for="filterPath" class="form-label small">Path filter</label>
-                    <textarea class="form-control" id="filterPath" name="filterPath" rows="4" spellcheck="false"></textarea>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <!-- Scan Options Accordion -->
+            {% include 'startScan/_items/secator_scan_options_accordion.html' with domain_name=domain.name id_prefix='start_scan_' id_suffix='_start_scan' show_counts=True %}
+            
+            <!-- Advanced Configuration Accordion -->
+            {% include 'startScan/_items/secator_advanced_config_accordion.html' with id_prefix='start_scan_' show_random_proxy=True %}
           </div>
+          <!-- End of select_engine -->
           
-          <!-- Advanced Configuration -->
-          <div class="advanced-config-section mt-4">
-            <div class="accordion">
-              <div class="accordion-item">
-                <div class="accordion-header">
-                  <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#advancedConfig" aria-expanded="false" aria-controls="advancedConfig">
-                    <i class="fas fa-sliders-h me-2"></i> Advanced Configuration
-                  </button>
-                </div>
-                <div id="advancedConfig" class="accordion-collapse collapse">
-                  <div class="accordion-body">
-                    <!-- Secator Profiles -->
-                    {% include 'startScan/_items/secator_profiles.html' %}
-                    
-                    <!-- Simplified/Expert Mode -->
-                    <div class="form-check form-switch mt-3">
-                      <input class="form-check-input" type="checkbox" id="expertMode" name="expert_mode">
-                      <label class="form-check-label" for="expertMode">Expert Mode</label>
-                    </div>
-                    
-                    <!-- Simplified options (always visible) -->
-                    <div class="simple-options mt-3">
-                      <div class="row">
-                        <div class="col-md-6">
-                          <label>Proxy</label>
-                          <input type="text" class="form-control" name="proxy" placeholder="socks5://host:port" id="proxy-input">
-                          <div class="form-check mt-2">
-                            <input class="form-check-input" type="checkbox" id="useRandomProxy" name="use_random_proxy">
-                            <label class="form-check-label" for="useRandomProxy">
-                              <small>Use random proxy from proxy settings</small>
-                            </label>
-                          </div>
-                        </div>
-                        <div class="col-md-3">
-                          <label>Rate Limit</label>
-                          <input type="number" class="form-control" name="rate_limit" value="150">
-                        </div>
-                        <div class="col-md-3">
-                          <label>Threads</label>
-                          <input type="number" class="form-control" name="threads" value="20">
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <!-- Expert options (collapsible) -->
-                    <div id="expertOptions" class="expert-options mt-3" style="display: none;">
-                      <div class="row">
-                        <div class="col-md-6">
-                          <label>Timeout</label>
-                          <input type="number" class="form-control" name="timeout" value="300">
-                        </div>
-                        <div class="col-md-6">
-                          <label>Delay</label>
-                          <input type="number" class="form-control" name="delay" value="0">
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <!-- Automatic suggestions -->
-                    <div class="suggestions-box mt-3" style="display: none;">
-                      <div class="alert alert-info">
-                        <i class="fas fa-lightbulb"></i>
-                        <strong>Suggestions:</strong>
-                        <span id="auto-suggestions"></span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          
+          <!-- Start Scan Button - Outside of select_engine and advanced-config-section -->
           {% include 'startScan/_items/secator_start_scan_button.html' %}
         </form>
       </div>

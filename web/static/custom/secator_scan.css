@@ -434,7 +434,17 @@ body.execution-mode-scan .scan-type-tile.selected .tile-icon i {
   overflow: visible;
 }
 
-/* Start Scan Button */
+/* Start Scan Button - Fixed at bottom of card-body */
+.start-scan-button-container {
+  position: sticky;
+  bottom: 0;
+  z-index: 1050;
+  backdrop-filter: blur(10px);
+  padding: 1.25rem 0;
+  border-radius: 12px 12px 0 0;
+  margin-top: 2rem;
+}
+
 #start-scan-btn {
   background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
   border: none;
@@ -444,6 +454,7 @@ body.execution-mode-scan .scan-type-tile.selected .tile-icon i {
   letter-spacing: 0.5px;
   transition: all 0.3s ease;
   box-shadow: 0 4px 15px rgba(0, 123, 255, 0.3);
+  width: 100%;
 }
 
 #start-scan-btn:hover {
@@ -464,6 +475,40 @@ body.execution-mode-scan .scan-type-tile.selected .tile-icon i {
   box-shadow: none;
 }
 
+/* Ensure card-body allows sticky positioning and proper structure */
+#start-scan-form {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+/* Override card-body for start scan form to allow sticky button */
+.start-scan-card-body,
+.card-body:has(#start-scan-form),
+.card:has(#start-scan-form) .card-body {
+  position: relative;
+  padding-bottom: 0 !important;
+  overflow: visible !important;
+}
+
+/* Responsive adjustments for sticky button */
+@media (max-width: 768px) {
+  .start-scan-button-container {
+    bottom: 0;
+    padding: 0.75rem 1rem;
+    margin-top: 1.5rem;
+    margin-left: -1rem;
+    margin-right: -1rem;
+    margin-bottom: -1rem;
+  }
+  
+  #start-scan-btn {
+    font-size: 0.9rem;
+    padding: 0.75rem 1.5rem;
+  }
+}
+
 /* Proxy input styling */
 #proxy-input:disabled {
   background-color: #f8f9fa;
@@ -480,9 +525,6 @@ body.execution-mode-scan .scan-type-tile.selected .tile-icon i {
   overflow: visible;
 }
 
-.card-body {
-  overflow: visible;
-}
 
 /* Selected tasks display */
 .selected-tasks-display {
@@ -820,7 +862,7 @@ body.execution-mode-scan .scan-type-tile.selected .tile-icon i {
 /* Selection Container */
 #selection-container {
   margin: 2rem 0;
-  min-height: 100px;
+  min-height: 0px;
 }
 
 /* Advanced Configuration Section */

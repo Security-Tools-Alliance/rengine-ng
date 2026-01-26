@@ -199,76 +199,14 @@ Initiating scan for {{organization.name}}
               <h4>Choose Execution Mode</h4>
               {% include 'startScan/_items/secator_execution_mode_selector.html' with scan_icon='radar' scan_title='Scan' %}
               
-              <h4>Scan Target Elements</h4>
-              <div class="mb-4">
-                {% include 'startScan/_items/secator_scan_target_elements.html' with title='Scan Existing Target Elements' description='Scan the hostnames and IP addresses already discovered in the organization targets. This is particularly useful for internal network reconnaissance.' note='When enabled, the scan will target all discovered hostnames and IP addresses in the organization targets, in addition to the main domains.' show_counts=False card_class='card border-0 bg-soft-light' id_suffix='_start_org_scan' %}
-              </div>
+              <!-- Scan Options Accordion -->
+              {% with first_domain=domain_list|first %}
+              {% include 'startScan/_items/secator_scan_options_accordion.html' with domain_name=first_domain.name|default:organization.name id_prefix='start_org_scan_' id_suffix='_start_org_scan' show_counts=False scan_target_title='Scan Existing Target Elements' scan_target_description='Scan the hostnames and IP addresses already discovered in the organization targets. This is particularly useful for internal network reconnaissance.' scan_target_note='When enabled, the scan will target all discovered hostnames and IP addresses in the organization targets, in addition to the main domains.' %}
+              {% endwith %}
               
-              <!-- Step 3: Advanced configuration -->
-              <div class="advanced-config-section">
-                <div class="accordion">
-                  <div class="accordion-item">
-                    <h2 class="accordion-header">
-                      <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#advancedConfig" aria-expanded="false" aria-controls="advancedConfig">
-                        <i class="fas fa-sliders-h me-2"></i> Advanced Configuration
-                      </button>
-                    </h2>
-                    <div id="advancedConfig" class="accordion-collapse collapse">
-                      <div class="accordion-body">
-                        <!-- Secator Profiles -->
-                        {% include 'startScan/_items/secator_profiles.html' %}
-                        
-                        <!-- Simplified/Expert Mode -->
-                        <div class="form-check form-switch mt-3">
-                          <input class="form-check-input" type="checkbox" id="expertMode" name="expert_mode">
-                          <label class="form-check-label" for="expertMode">Expert Mode</label>
-                        </div>
-                        
-                        <!-- Simplified options (always visible) -->
-                        <div class="simple-options mt-3">
-                          <div class="row">
-                            <div class="col-md-6">
-                              <label>Proxy</label>
-                              <input type="text" class="form-control" name="proxy" placeholder="socks5://host:port">
-                            </div>
-                            <div class="col-md-3">
-                              <label>Rate Limit</label>
-                              <input type="number" class="form-control" name="rate_limit" value="150">
-                            </div>
-                            <div class="col-md-3">
-                              <label>Threads</label>
-                              <input type="number" class="form-control" name="threads" value="20">
-                            </div>
-                          </div>
-                        </div>
-                        
-                        <!-- Expert options (collapsible) -->
-                        <div id="expertOptions" class="expert-options mt-3" style="display: none;">
-                          <div class="row">
-                            <div class="col-md-6">
-                              <label>Timeout</label>
-                              <input type="number" class="form-control" name="timeout" value="300">
-                            </div>
-                            <div class="col-md-6">
-                              <label>Delay</label>
-                              <input type="number" class="form-control" name="delay" value="0">
-                            </div>
-                          </div>
-                        </div>
-                        
-                        <!-- Automatic suggestions -->
-                        <div class="suggestions-box mt-3" style="display: none;">
-                          <div class="alert alert-info">
-                            <i class="fas fa-lightbulb"></i>
-                            <strong>Suggestions:</strong>
-                            <span id="auto-suggestions"></span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <!-- Advanced Configuration Accordion -->
+              {% include 'startScan/_items/secator_advanced_config_accordion.html' with id_prefix='start_org_scan_' show_random_proxy=False %}
+              
               {% include 'startScan/_items/secator_start_scan_button.html' %}
             </div>
             <input type="hidden" name="list_of_domain_id" value="{{domain_ids}}">
