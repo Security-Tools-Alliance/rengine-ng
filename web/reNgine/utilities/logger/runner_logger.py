@@ -27,16 +27,7 @@ class RunnerLogger(BaseLogger):
 
     def __init__(self):
         """Initialize the logger."""
-        super().__init__(logger_name=__name__)
-
-    def _get_logger_name(self) -> str:
-        """
-        Get the logger name.
-
-        Returns:
-            str: Logger name
-        """
-        return __name__
+        super().__init__()
 
     def _get_prefix_color(self, prefix: str) -> str:
         """
@@ -124,9 +115,7 @@ class RunnerLogger(BaseLogger):
             self._logger.debug(f"{prefix_colored} {action_colored} | Hooks available: {hook_keys}")
             if hook_keys:
                 hooks_dict = {str(k): str(type(v).__name__) for k, v in hooks.items()}
-                self._logger.debug(
-                    f"{prefix_colored} {action_colored} | Hooks: {json.dumps(hooks_dict, indent=2)}"
-                )
+                self._logger.debug(f"{prefix_colored} {action_colored} | Hooks: {json.dumps(hooks_dict, indent=2)}")
 
     def log_config_preparation(
         self,
@@ -249,9 +238,7 @@ class RunnerLogger(BaseLogger):
             hook_keys = list(hooks.keys())
             self._logger.debug(f"{prefix_colored} {action_colored} | Hooks available: {hook_keys}")
             hooks_dict = {str(k): str(type(v).__name__) for k, v in hooks.items()}
-            self._logger.debug(
-                f"{prefix_colored} {action_colored} | Hooks: {json.dumps(hooks_dict, indent=2)}"
-            )
+            self._logger.debug(f"{prefix_colored} {action_colored} | Hooks: {json.dumps(hooks_dict, indent=2)}")
         else:
             self._logger.debug(f"{prefix_colored} {action_colored} | No hooks provided")
 

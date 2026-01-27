@@ -31,16 +31,7 @@ class SecatorAPILogger(BaseLogger):
 
     def __init__(self):
         """Initialize the logger."""
-        super().__init__(logger_name=__name__)
-
-    def _get_logger_name(self) -> str:
-        """
-        Get the logger name.
-
-        Returns:
-            str: Logger name
-        """
-        return __name__
+        super().__init__()
 
     def _get_prefix_color(self, prefix: str) -> str:
         """

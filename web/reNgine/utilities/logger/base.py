@@ -45,12 +45,12 @@ class BaseLogger(ABC):
 
     def _get_logger_name(self) -> str:
         """
-        Get the logger name. Override in subclasses if needed.
+        Get the logger name. Uses the module name of the class instance.
 
         Returns:
-            str: Logger name (defaults to __name__)
+            str: Logger name (module name of the class)
         """
-        return __name__
+        return self.__class__.__module__
 
     @abstractmethod
     def _get_prefix_color(self, prefix: str) -> str:
@@ -237,12 +237,12 @@ class BaseLogger(ABC):
         formatted_message = self._format_debug_message(prefix, action, message)
         self._logger.debug(formatted_message)
 
-    def log_data_structure(self, data: Dict[str, Any], prefix: str, data_type: str) -> None:
+    def log_data_structure(self, data: Any, prefix: str, data_type: str) -> None:
         """
         Log complete data structure in DEBUG mode.
 
         Args:
-            data: Data dictionary to log
+            data: Data to log (any JSON-serializable type)
             prefix: Log prefix to use
             data_type: Type of data (runner, finding, etc.)
         """

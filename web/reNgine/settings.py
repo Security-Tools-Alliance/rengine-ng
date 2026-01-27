@@ -413,12 +413,17 @@ LOGGING = {
             "propagate": False,
         },
         "reNgine.utilities.logger.api_logger": {
-            "handlers": ["console"],
+            "handlers": ["default"],
             "level": "DEBUG" if (SECATOR_API_DEBUG) else "INFO",
             "propagate": False,  # Don't propagate to avoid duplicate logs
         },
         "reNgine.utilities.logger.runner_logger": {
-            "handlers": ["console"],
+            "handlers": ["default"],
+            "level": "DEBUG" if (SECATOR_API_DEBUG) else "INFO",
+            "propagate": False,  # Don't propagate to avoid duplicate logs
+        },
+        "reNgine.utilities.logger.base": {
+            "handlers": ["default"],
             "level": "DEBUG" if (SECATOR_API_DEBUG) else "INFO",
             "propagate": False,  # Don't propagate to avoid duplicate logs
         },
