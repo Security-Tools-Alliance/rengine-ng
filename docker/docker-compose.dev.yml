@@ -8,6 +8,11 @@ services:
       - "127.0.0.1:6379:6379"
 
   worker:
+    entrypoint: /entrypoint-dev.sh
+    environment:
+      - SECATOR_DEBUG=runner,hooks
+    volumes:
+      - ./worker/entrypoint-dev.sh:/entrypoint-dev.sh:ro
     # args:
       # - --concurrency=3
       # - --dev
@@ -16,8 +21,6 @@ services:
       # - --without-mingle
       # - --without-heartbeat
       # - --quiet
-    environment:
-      - SECATOR_DEBUG=runner,hooks
   # celery:
   #   entrypoint: /entrypoint-dev.sh
   #   environment:

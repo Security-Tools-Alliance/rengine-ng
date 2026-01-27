@@ -45,8 +45,6 @@ services:
     volumes:
       - scan_results:/home/secator/.secator/reports
       - ./worker/entrypoint.sh:/entrypoint.sh:ro
-      # Temporary for debug: Mount Secator repo for local development
-      - ${SECATOR_REPO_PATH:-../../secator}:/opt/secator:rw,z
     depends_on:
       - redis
     networks:
@@ -145,8 +143,7 @@ services:
       - nuclei_templates:/home/rengine/nuclei-templates
       - gf_patterns:/home/rengine/.gf
       - wordlist:/home/rengine/wordlists
-      # Temporary for debug: Mount Secator repo for local development
-      - ${SECATOR_REPO_PATH:-../../secator}:/opt/secator:rw,z
+      - scan_results:/home/rengine/scan_results
     healthcheck:
       test: ["CMD", "curl", "-f", "-k", "http://localhost:8000"]
       interval: 10s

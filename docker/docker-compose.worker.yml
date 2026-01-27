@@ -21,9 +21,9 @@ services:
     restart: unless-stopped
     env_file:
       - .env
-    volumes:
+#    volumes:
       # Volume for scan results (optional, for local storage)
-      - secator_reports:/home/secator/.secator/reports
+#      - secator_reports:/home/secator/.secator/reports
     
     networks:
       - secator_network
