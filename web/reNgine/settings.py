@@ -422,11 +422,6 @@ LOGGING = {
             "level": "DEBUG" if (SECATOR_API_DEBUG) else "INFO",
             "propagate": False,  # Don't propagate to avoid duplicate logs
         },
-        "reNgine.utilities.logger.base": {
-            "handlers": ["default"],
-            "level": "DEBUG" if (SECATOR_API_DEBUG) else "INFO",
-            "propagate": False,  # Don't propagate to avoid duplicate logs
-        },
     },
     "root": {
         "handlers": ["console"],
