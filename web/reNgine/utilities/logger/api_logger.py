@@ -1,34 +1,23 @@
 """
 Secator API Logger - Centralized logging for Secator API endpoints.
+
 Provides structured, colored logging for runner and finding operations.
+This logger handles incoming data from Secator API hooks.
 """
 
 import json
-import logging
-import os
-import sys
 from typing import Any, Dict, Optional
 
+from reNgine.utilities.logger.base import BaseLogger
 
-logger = logging.getLogger(__name__)
 
-
-class SecatorAPILogger:
+class SecatorAPILogger(BaseLogger):
     """
     Centralized logger for Secator API endpoints.
-    Provides structured, colored logging for runner and finding operations.
-    """
 
-    # ANSI color codes
-    COLOR_RESET = "\033[0m"
-    COLOR_GREEN = "\033[32m"  # Success
-    COLOR_YELLOW = "\033[33m"  # Warning/Ignored
-    COLOR_RED = "\033[31m"  # Error
-    COLOR_CYAN = "\033[36m"  # Action in progress
-    COLOR_BLUE = "\033[34m"  # Information (INFO level)
-    COLOR_MAGENTA = "\033[35m"  # Data received / DEBUG level
-    COLOR_VIOLET = "\033[95m"  # DEBUG level (bright magenta/violet)
-    COLOR_BRIGHT_BLUE = "\033[94m"  # INFO level (bright blue)
+    Provides structured, colored logging for runner and finding operations.
+    This logger handles incoming data from Secator API hooks.
+    """
 
     # Prefixes for different log types with colors
     PREFIX_RUNNER = "[SECATOR API RUNNER]"
@@ -36,74 +25,22 @@ class SecatorAPILogger:
     PREFIX_SYNC = "[SECATOR API STATUS SYNC]"
 
     # Colors for prefixes
-    PREFIX_RUNNER_COLOR = COLOR_CYAN  # Cyan for runner operations
-    PREFIX_FINDING_COLOR = COLOR_MAGENTA  # Magenta for finding operations
-    PREFIX_SYNC_COLOR = COLOR_BLUE  # Blue for sync operations
+    PREFIX_RUNNER_COLOR = BaseLogger.COLOR_CYAN  # Cyan for runner operations
+    PREFIX_FINDING_COLOR = BaseLogger.COLOR_MAGENTA  # Magenta for finding operations
+    PREFIX_SYNC_COLOR = BaseLogger.COLOR_BLUE  # Blue for sync operations
 
     def __init__(self):
         """Initialize the logger."""
-        self._logger = logging.getLogger(__name__)
-        self._use_colors = self._detect_color_support()
+        super().__init__(logger_name=__name__)
 
-    def _detect_color_support(self) -> bool:
+    def _get_logger_name(self) -> str:
         """
-        Detect if colors are supported by checking logger handlers and environment.
+        Get the logger name.
 
         Returns:
-            bool: True if colors should be used
+            str: Logger name
         """
-        # Check FORCE_COLOR environment variable first (common in CI/CD)
-        if os.environ.get("FORCE_COLOR") in ("1", "true", "yes"):
-            return True
-
-        # Check if NO_COLOR is set (standard environment variable to disable colors)
-        if os.environ.get("NO_COLOR"):
-            return False
-
-        # Check if we're in a terminal (stdout or stderr)
-        if hasattr(sys.stdout, "isatty") and sys.stdout.isatty():
-            return True
-        if hasattr(sys.stderr, "isatty") and sys.stderr.isatty():
-            return True
-
-        # Check logger handlers for StreamHandler with terminal streams
-        # Also check parent logger handlers
-        loggers_to_check = [self._logger]
-        current = self._logger
-        while current.parent:
-            loggers_to_check.append(current.parent)
-            current = current.parent
-
-        for logger_to_check in loggers_to_check:
-            for handler in logger_to_check.handlers:
-                if isinstance(handler, logging.StreamHandler):
-                    stream = handler.stream
-                    if hasattr(stream, "isatty") and stream.isatty():
-                        return True
-
-        # Check environment variable (for Docker/CI environments)
-        if os.environ.get("TERM") and os.environ.get("TERM") != "dumb":
-            return True
-
-        # Default: always use colors (ANSI codes are harmless if not supported)
-        # This ensures colors work in most environments including Docker
-        # The terminal will simply ignore the codes if it doesn't support them
-        return True
-
-    def _colorize(self, text: str, color: str) -> str:
-        """
-        Add color to text if colors are enabled.
-
-        Args:
-            text: Text to colorize
-            color: ANSI color code
-
-        Returns:
-            str: Colorized text with ANSI codes
-        """
-        # Always use colors - ANSI codes are harmless if terminal doesn't support them
-        # This ensures colors work in most environments (Docker, CI, etc.)
-        return f"{color}{text}{self.COLOR_RESET}" if self._use_colors else text
+        return __name__
 
     def _get_prefix_color(self, prefix: str) -> str:
         """
@@ -122,74 +59,6 @@ class SecatorAPILogger:
         elif prefix == self.PREFIX_SYNC:
             return self.PREFIX_SYNC_COLOR
         return self.COLOR_RESET
-
-    def _format_debug_message(self, prefix: str, action: str, message: str) -> str:
-        """
-        Format a DEBUG level message with colors.
-
-        Args:
-            prefix: Log prefix
-            action: Action being performed
-            message: Message to log
-
-        Returns:
-            str: Formatted message with colors
-        """
-        prefix_colored = self._colorize(prefix, self._get_prefix_color(prefix))
-        action_colored = self._colorize(action, self.COLOR_VIOLET)  # DEBUG level color
-        return f"{prefix_colored} {action_colored} | {message}"
-
-    def _format_info_message(self, prefix: str, action: str, message: str) -> str:
-        """
-        Format an INFO level message with colors.
-
-        Args:
-            prefix: Log prefix
-            action: Action being performed
-            message: Message to log
-
-        Returns:
-            str: Formatted message with colors
-        """
-        prefix_colored = self._colorize(prefix, self._get_prefix_color(prefix))
-        # All INFO level actions (CREATE, UPDATE, etc.) are blue
-        action_colored = self._colorize(action, self.COLOR_BRIGHT_BLUE)
-        return f"{prefix_colored} {action_colored} | {message}"
-
-    def _format_info_line(
-        self,
-        prefix: str,
-        action: str,
-        details: Dict[str, Any],
-        result: str,
-        result_color: str = COLOR_GREEN,
-    ) -> str:
-        """
-        Format a single-line INFO log message with colors.
-
-        Args:
-            prefix: Log prefix (RUNNER, FINDING, etc.)
-            action: Action being performed (CREATE, UPDATE, etc.)
-            details: Dictionary of key-value pairs to include
-            result: Result message (SUCCESS, SAVED, IGNORED, etc.)
-            result_color: Color for the result
-
-        Returns:
-            str: Formatted log message with colors
-        """
-        detail_parts = [f"{key}={value}" for key, value in details.items() if value is not None]
-
-        detail_str = " ".join(detail_parts) if detail_parts else ""
-        result_str = self._colorize(result, result_color)
-        prefix_colored = self._colorize(prefix, self._get_prefix_color(prefix))
-        # All INFO level actions (CREATE, UPDATE, etc.) are blue
-        action_colored = self._colorize(action, self.COLOR_BRIGHT_BLUE)
-
-        return (
-            f"{prefix_colored} {action_colored} | {detail_str} → {result_str}"
-            if detail_str
-            else f"{prefix_colored} {action_colored} | → {result_str}"
-        )
 
     def log_runner_api_call(self, action: str, runner_data: Dict[str, Any], runner_id: Optional[str] = None) -> None:
         """
@@ -436,43 +305,7 @@ class SecatorAPILogger:
             data_type: Type of data (runner, finding, etc.)
         """
         prefix = self.PREFIX_RUNNER if data_type == "runner" else self.PREFIX_FINDING
-        prefix_colored = self._colorize(prefix, self._get_prefix_color(prefix))
-        action_colored = self._colorize("STRUCTURE", self.COLOR_VIOLET)  # DEBUG level color
-        self._logger.debug(
-            f"{prefix_colored} {action_colored} | Full {data_type} structure:\n{json.dumps(data, indent=2, default=str)}"
-        )
-
-    def log_error(self, error: Exception, context: Dict[str, Any], exc_info: bool = True) -> None:
-        """
-        Log an error with context.
-
-        Args:
-            error: Exception that occurred
-            context: Context information (action, id, etc.)
-            exc_info: Whether to include exception info
-        """
-        prefix = context.get("prefix", self.PREFIX_RUNNER)
-        action = context.get("action", "ERROR")
-        error_msg = str(error)
-
-        details = {k: v for k, v in context.items() if k not in ["prefix", "action", "error"]}
-        error_line = self._format_info_line(prefix, action, details, f"ERROR: {error_msg}", self.COLOR_RED)
-        self._logger.error(error_line, exc_info=exc_info)
-
-    def log_warning(self, message: str, context: Optional[Dict[str, Any]] = None) -> None:
-        """
-        Log a warning message.
-
-        Args:
-            message: Warning message
-            context: Optional context information
-        """
-        prefix = context.get("prefix", self.PREFIX_RUNNER) if context else self.PREFIX_RUNNER
-        action = context.get("action", "WARNING") if context else "WARNING"
-
-        details = {k: v for k, v in (context or {}).items() if k not in ["prefix", "action"]}
-        warning_line = self._format_info_line(prefix, action, details, message, self.COLOR_YELLOW)
-        self._logger.warning(warning_line)
+        super().log_data_structure(data, prefix, data_type)
 
     def log_metadata_ignored(self, finding_type: str, finding_id: Optional[str] = None) -> None:
         """
@@ -522,18 +355,6 @@ class SecatorAPILogger:
             self.COLOR_YELLOW,
         )
         self._logger.warning(warning_line)
-
-    def log_debug(self, prefix: str, action: str, message: str) -> None:
-        """
-        Log a DEBUG level message with colors.
-
-        Args:
-            prefix: Log prefix
-            action: Action being performed
-            message: Message to log
-        """
-        formatted_message = self._format_debug_message(prefix, action, message)
-        self._logger.debug(formatted_message)
 
 
 # Singleton instance

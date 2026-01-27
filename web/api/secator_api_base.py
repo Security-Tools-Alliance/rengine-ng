@@ -22,7 +22,7 @@ from reNgine.services.repositories.port_repository import PortRepository
 from reNgine.services.repositories.subdomain_repository import SubdomainRepository
 from reNgine.services.repositories.technology_repository import TechnologyRepository
 from reNgine.services.repositories.vulnerability_repository import VulnerabilityRepository
-from reNgine.utilities.secator_api_logger import get_secator_api_logger
+from reNgine.utilities.logger import get_secator_api_logger
 from startScan.models import ScanHistory
 from targetApp.models import Domain
 

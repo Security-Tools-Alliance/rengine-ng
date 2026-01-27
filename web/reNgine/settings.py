@@ -412,7 +412,12 @@ LOGGING = {
             "formatter": "migration",
             "propagate": False,
         },
-        "reNgine.utilities.secator_api_logger": {
+        "reNgine.utilities.logger.api_logger": {
+            "handlers": ["console"],
+            "level": "DEBUG" if (SECATOR_API_DEBUG) else "INFO",
+            "propagate": False,  # Don't propagate to avoid duplicate logs
+        },
+        "reNgine.utilities.logger.runner_logger": {
             "handlers": ["console"],
             "level": "DEBUG" if (SECATOR_API_DEBUG) else "INFO",
             "propagate": False,  # Don't propagate to avoid duplicate logs

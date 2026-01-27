@@ -9,7 +9,6 @@ Precedence of configuration:
     If both `config` and `profiles` specify the same keys, the value from `profiles` will take precedence over `config`.
 """
 
-import logging
 import os
 from typing import Any, Dict, List
 
@@ -17,10 +16,8 @@ from secator.runners import Scan, Task, Workflow
 from secator.template import TemplateLoader
 
 from reNgine.settings import SECATOR_RESULTS
+from reNgine.utilities.logger import get_runner_logger
 from targetApp.models import Domain
-
-
-logger = logging.getLogger(__name__)
 
 
 class SecatorRunner:
@@ -34,7 +31,7 @@ class SecatorRunner:
     def __init__(self):
         """Initialize the SecatorRunner."""
         self.secator_config = self._load_secator_config()
-        logger.info(f"🔧 SecatorRunner initialized with config: {self.secator_config}")
+        self.runner_logger = get_runner_logger()
 
     def _load_secator_config(self) -> Dict[str, Any]:
         """Load Secator configuration from settings."""
@@ -69,14 +66,14 @@ class SecatorRunner:
 
             if workflow_obj.workflow_type == "builtin":
                 template = TemplateLoader(name=f"workflows/{workflow_name}")
-                logger.info(f"Loaded built-in workflow template: {workflow_name}")
             else:
                 template = TemplateLoader(workflow_obj.yaml_configuration)
-                logger.info(f"Loaded custom workflow template: {workflow_name}")
 
             return template
         except Exception as e:
-            logger.error(f"Failed to load workflow template '{workflow_name}': {e}")
+            self.runner_logger.log_runner_error(
+                "Workflow", e, {"runner_name": workflow_name, "action": "LOAD_TEMPLATE"}
+            )
             raise Exception(f"Could not load workflow template '{workflow_name}': {e}") from e
 
     def _load_scan_template(self, scan_name: str):
@@ -96,14 +93,12 @@ class SecatorRunner:
 
             if scan_obj.scan_config_type == "builtin":
                 template = TemplateLoader(name=f"scan/{scan_name}")
-                logger.info(f"Loaded built-in scan template: {scan_name}")
             else:
                 template = TemplateLoader(scan_obj.yaml_configuration)
-                logger.info(f"Loaded custom scan template: {scan_name}")
 
             return template
         except Exception as e:
-            logger.error(f"Failed to load scan template '{scan_name}': {e}")
+            self.runner_logger.log_runner_error("Scan", e, {"runner_name": scan_name, "action": "LOAD_TEMPLATE"})
             raise Exception(f"Could not load scan template '{scan_name}': {e}") from e
 
     def _execute_runner(
@@ -115,6 +110,7 @@ class SecatorRunner:
         domain_id: int,
         run_config: Dict[str, Any] = None,
         profiles: Dict[str, str] = None,
+        runner_name: str = None,
     ) -> Dict[str, Any]:
         """
         Execute a Secator runner (Workflow, Scan, or Task) with common logic.
@@ -127,13 +123,17 @@ class SecatorRunner:
             domain_id: ID of domain
             run_config: Configuration dictionary
             profiles: Speed/stealth profiles
+            runner_name: Optional runner name for logging
 
         Returns:
             Dict containing execution results
         """
+        runner_type = runner_class.__name__
+        runner_name = runner_name or getattr(config, "name", None) or "unknown"
+
         try:
-            # Reset any potential Secator global state
-            logger.info(f"🔧 Starting fresh scan execution for scan {scan_history_id}")
+            # Log targets
+            self.runner_logger.log_targets(targets, runner_type)
 
             # Get domain and setup results directory
             domain = Domain.objects.get(id=domain_id)
@@ -145,11 +145,13 @@ class SecatorRunner:
             if project := domain.project:
                 project_slug_sanitized = sanitize_path_component(project.slug)
                 workspace = f"{project_slug_sanitized}/{domain_name_sanitized}"
-                logger.info(f"🔧 Workspace: {workspace}")
             else:
                 # Fallback if no project (should not happen in normal operation)
                 workspace = domain_name_sanitized
-                logger.warning(f"⚠️  No project for domain {domain.name}, using domain name as workspace")
+                self.runner_logger.log_warning(
+                    f"No project for domain {domain.name}, using domain name as workspace",
+                    {"prefix": self.runner_logger.PREFIX, "action": "WORKSPACE", "domain": domain.name},
+                )
 
             domain_results_dir = os.path.join(SECATOR_RESULTS, domain_name_sanitized)
             os.makedirs(domain_results_dir, exist_ok=True)
@@ -162,64 +164,96 @@ class SecatorRunner:
             run_config["workspace"] = workspace  # Add workspace to config
 
             # Prepare Secator config
+            base_config = self.secator_config.copy()
             secator_config = self._prepare_secator_config(run_config, profiles)
+            self.runner_logger.log_config_preparation(base_config, secator_config, profiles)
 
             # Force reset sync to False to ensure async mode
             secator_config["sync"] = False
-            logger.info(f"🔧 Secator config sync value: {secator_config.get('sync', 'NOT SET')}")
-            logger.info(f"🔧 Full secator config: {secator_config}")
 
             # Import and activate Secator API hooks
             try:
                 from secator.hooks.api import HOOKS
 
                 api_hooks = HOOKS
-                logger.info("🔧 Secator API hooks imported successfully")
-                logger.info(f"🔧 API hooks available for: {list(api_hooks.keys())}")
             except ImportError as e:
-                logger.warning(f"⚠️  Could not import Secator API hooks: {e}")
-                logger.warning("⚠️  API hooks will not be available")
+                self.runner_logger.log_warning(
+                    f"Could not import Secator API hooks: {e}. API hooks will not be available.",
+                    {"prefix": self.runner_logger.PREFIX, "action": "IMPORT"},
+                )
                 api_hooks = {}
 
             # Create runner with hooks
             try:
-                logger.info("🔧 Creating runner with hooks")
-
                 # Force sync=False in run_opts to override any cached config
                 run_opts = secator_config.copy()
                 run_opts["sync"] = False
-                logger.info(f"🔧 Final run_opts sync: {run_opts.get('sync')}")
 
                 # Prepare context with scan_history_id and domain_id for Secator API hooks
                 context = {
                     "scan_history_id": scan_history_id,
                     "domain_id": domain_id,
                 }
-                logger.info(f"🔧 Runner context: {context}")
+
+                # Log context and hooks
+                self.runner_logger.log_context(context)
+                self.runner_logger.log_hooks(api_hooks)
 
                 # Pass API hooks to runner if available
                 hooks = api_hooks or {}
-                if api_hooks:
-                    logger.info("🔧 API hooks passed to runner")
+
+                # Log run options
+                self.runner_logger.log_run_opts(run_opts)
+
+                # Extract config dict if it's a TemplateLoader
+                config_dict = None
+                if hasattr(config, "config"):
+                    config_dict = config.config
+                elif isinstance(config, dict):
+                    config_dict = config
+
+                # Log runner creation
+                self.runner_logger.log_runner_creation(
+                    runner_type=runner_type,
+                    runner_name=runner_name,
+                    targets=targets,
+                    scan_history_id=scan_history_id,
+                    domain_id=domain_id,
+                    config=config_dict,
+                    run_opts=run_opts,
+                    context=context,
+                    hooks=hooks,
+                )
 
                 runner = runner_class(config, inputs=targets, hooks=hooks, run_opts=run_opts, context=context)
-                logger.info("🔧 Runner created successfully with hooks")
-                logger.info(f"🔧 Runner hooks: {runner.hooks if hasattr(runner, 'hooks') else 'No hooks attribute'}")
-                logger.info(f"🔧 Runner sync mode: {getattr(runner, 'sync', 'NOT SET')}")
 
             except Exception as e:
-                logger.error(f"Error creating runner with hooks: {e}")
+                self.runner_logger.log_runner_error(runner_type, e, {"runner_name": runner_name})
                 raise Exception(f"Could not create runner: {e}") from e
 
             try:
+                # Log execution start
+                self.runner_logger.log_runner_execution_start(runner_type, runner_name)
+
                 result = runner.run()
-                logger.info("🔧 Runner execution completed")
+
+                # Log execution end
+                self.runner_logger.log_runner_execution_end(
+                    runner_type=runner_type,
+                    runner_name=runner_name,
+                    status="success",
+                    result=result,
+                )
 
             except Exception as e:
-                logger.error(f"Error running runner: {e}")
+                self.runner_logger.log_runner_execution_end(
+                    runner_type=runner_type,
+                    runner_name=runner_name,
+                    status="error",
+                    result=None,
+                )
+                self.runner_logger.log_runner_error(runner_type, e, {"runner_name": runner_name})
                 raise Exception(f"Could not run runner: {e}") from e
-
-            logger.info(f"Secator {runner_class.__name__} executed successfully")
 
             return {
                 "status": "success",
@@ -230,7 +264,11 @@ class SecatorRunner:
             }
 
         except Exception as e:
-            logger.error(f"Error running {runner_class.__name__}: {e}")
+            self.runner_logger.log_runner_error(
+                runner_type,
+                e,
+                {"runner_name": runner_name, "scan_history_id": scan_history_id, "domain_id": domain_id},
+            )
             return {
                 "status": "error",
                 "runner_type": runner_class.__name__,
@@ -250,8 +288,6 @@ class SecatorRunner:
     ) -> Dict[str, Any]:
         """Run a Secator workflow."""
         try:
-            logger.info(f"Starting Secator workflow: {workflow_name} for targets: {targets}")
-
             template = self._load_workflow_template(workflow_name)
 
             result = self._execute_runner(
@@ -262,15 +298,13 @@ class SecatorRunner:
                 domain_id=domain_id,
                 run_config=config,
                 profiles=profiles,
+                runner_name=workflow_name,
             )
-
-            if result["status"] == "success":
-                logger.info(f"Secator workflow {workflow_name} completed successfully")
 
             return result
 
         except Exception as e:
-            logger.error(f"Error running Secator workflow {workflow_name}: {e}")
+            self.runner_logger.log_runner_error("Workflow", e, {"runner_name": workflow_name})
             return {
                 "status": "error",
                 "workflow_name": workflow_name,
@@ -303,15 +337,11 @@ class SecatorRunner:
             Dict containing aggregated results from all tasks
         """
         try:
-            logger.info(f"Starting {len(task_names)} Secator tasks for targets: {targets}")
-
             task_results = []
             all_success = True
 
             for task_name in task_names:
                 try:
-                    logger.info(f"Executing task: {task_name}")
-
                     template = TemplateLoader({"type": "task", "name": task_name})
 
                     result = self._execute_runner(
@@ -322,18 +352,20 @@ class SecatorRunner:
                         domain_id=domain_id,
                         run_config=config,
                         profiles=profiles,
+                        runner_name=task_name,
                     )
 
                     task_results.append({"task_name": task_name, "result": result})
 
                     if result.get("status") != "success":
                         all_success = False
-                        logger.warning(f"Task {task_name} failed: {result.get('error', 'Unknown error')}")
-                    else:
-                        logger.info(f"Task {task_name} completed successfully")
+                        self.runner_logger.log_warning(
+                            f"Task {task_name} failed: {result.get('error', 'Unknown error')}",
+                            {"prefix": self.runner_logger.PREFIX, "action": "TASK", "task_name": task_name},
+                        )
 
                 except Exception as task_error:
-                    logger.error(f"Error executing task {task_name}: {task_error}")
+                    self.runner_logger.log_runner_error("Task", task_error, {"runner_name": task_name})
                     task_results.append(
                         {
                             "task_name": task_name,
@@ -357,7 +389,7 @@ class SecatorRunner:
             }
 
         except Exception as e:
-            logger.error(f"Error running Secator tasks: {e}")
+            self.runner_logger.log_runner_error("Tasks", e, {"task_names": task_names})
             return {
                 "status": "error",
                 "task_names": task_names,
@@ -416,7 +448,7 @@ class SecatorRunner:
 
             return secator.get_builtin_workflows()
         except Exception as e:
-            logger.error(f"Error getting built-in workflows: {e}")
+            self.runner_logger.log_runner_error("Workflow", e, {"action": "GET_BUILTIN"})
             return []
 
     def get_builtin_tasks(self) -> List[Dict[str, Any]]:
@@ -432,7 +464,7 @@ class SecatorRunner:
 
             return secator.get_builtin_tasks()
         except Exception as e:
-            logger.error(f"Error getting built-in tasks: {e}")
+            self.runner_logger.log_runner_error("Task", e, {"action": "GET_BUILTIN"})
             return []
 
     def _prepare_secator_config(self, config: Dict[str, Any] = None, profiles: Dict[str, str] = None) -> Dict[str, Any]:
@@ -460,7 +492,6 @@ class SecatorRunner:
         import copy
 
         secator_config = copy.deepcopy(self.secator_config)
-        logger.info(f"🔧 Base secator config: {secator_config}")
 
         # Merge config dictionary - all keys are supported
         if config:
@@ -509,9 +540,10 @@ class SecatorRunner:
                 else:
                     # Profile object without name attribute - use repr as fallback to avoid None collisions
                     # This should not happen in normal operation, but prevents silent merging of distinct entries
-                    logger.warning(
+                    self.runner_logger.log_warning(
                         f"Profile object in profile_list lacks 'name' attribute: {type(p).__name__}. "
-                        f"Using repr as identifier to avoid collisions."
+                        f"Using repr as identifier to avoid collisions.",
+                        {"prefix": self.runner_logger.PREFIX, "action": "PROFILE"},
                     )
                     seen_profile_names.add(repr(p))
 
@@ -536,9 +568,6 @@ class SecatorRunner:
                             if profile_opts:
                                 for opt_key, opt_value in profile_opts.items():
                                     secator_config[opt_key] = opt_value
-                                logger.info(
-                                    f"🔧 Merged opts from custom profile '{profile_name}': {list(profile_opts.keys())}"
-                                )
 
                             # Build profile config dict for TemplateLoader
                             profile_config_dict = {
@@ -559,34 +588,26 @@ class SecatorRunner:
                             if custom_profile.name not in seen_profile_names:
                                 profile_list.append(profile_loader)
                                 seen_profile_names.add(custom_profile.name)
-                                logger.info(
-                                    f"🔧 Added custom profile '{profile_name}' from '{key}' category as TemplateLoader"
-                                )
                         else:
                             # Builtin profile - just add the name as string (Secator will resolve it)
                             if profile_name not in seen_profile_names:
                                 profile_list.append(profile_name)
                                 seen_profile_names.add(profile_name)
-                                logger.info(f"🔧 Added builtin profile '{profile_name}' from '{key}' category")
                     except Exception as e:
                         # If error loading custom profile, fall back to builtin
-                        logger.warning(f"⚠️  Error loading profile '{profile_name}': {e}, treating as builtin")
+                        self.runner_logger.log_warning(
+                            f"Error loading profile '{profile_name}': {e}, treating as builtin",
+                            {"prefix": self.runner_logger.PREFIX, "action": "PROFILE", "profile_name": profile_name},
+                        )
                         if profile_name not in seen_profile_names:
                             profile_list.append(profile_name)
                             seen_profile_names.add(profile_name)
-                            logger.info(
-                                f"🔧 Added profile '{profile_name}' from '{key}' category (fallback to builtin)"
-                            )
 
             # Set the profiles list in secator_config
             if profile_list:
                 secator_config["profiles"] = profile_list
-                logger.info(
-                    f"🔧 Profiles list for Secator: {[p if isinstance(p, str) else p.name for p in profile_list]}"
-                )
 
         secator_config["sync"] = False
-        logger.info(f"🔧 Final prepared secator config: {secator_config}")
         return secator_config
 
     def run_scan(
@@ -613,8 +634,6 @@ class SecatorRunner:
             Dict containing scan results
         """
         try:
-            logger.info(f"Starting Secator scan: {scan_type} for targets: {targets}")
-
             template = self._load_scan_template(scan_type)
 
             result = self._execute_runner(
@@ -625,15 +644,13 @@ class SecatorRunner:
                 domain_id=domain_id,
                 run_config=config,
                 profiles=profiles,
+                runner_name=scan_type,
             )
-
-            if result["status"] == "success":
-                logger.info(f"Secator scan {scan_type} completed successfully")
 
             return result
 
         except Exception as e:
-            logger.error(f"Error running Secator scan {scan_type}: {e}")
+            self.runner_logger.log_runner_error("Scan", e, {"runner_name": scan_type})
             return {
                 "status": "error",
                 "scan_type": scan_type,

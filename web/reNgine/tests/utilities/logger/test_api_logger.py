@@ -128,3 +128,13 @@ class TestSecatorAPILogger(BaseTestCase):
         self.assertIn("CREATE", result)
         self.assertIn("workflow", result)
         self.assertIn("SUCCESS", result)
+
+    def test_get_prefix_color(self):
+        """Test getting prefix color."""
+        runner_color = self.logger._get_prefix_color(self.logger.PREFIX_RUNNER)
+        finding_color = self.logger._get_prefix_color(self.logger.PREFIX_FINDING)
+        sync_color = self.logger._get_prefix_color(self.logger.PREFIX_SYNC)
+
+        self.assertEqual(runner_color, self.logger.PREFIX_RUNNER_COLOR)
+        self.assertEqual(finding_color, self.logger.PREFIX_FINDING_COLOR)
+        self.assertEqual(sync_color, self.logger.PREFIX_SYNC_COLOR)
