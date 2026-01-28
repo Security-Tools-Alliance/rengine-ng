@@ -1,4 +1,4 @@
-{# Simple options: Proxy, Rate Limit, Threads #}
+{# Simple options: Proxy, Delay #}
 {# Params: show_random_proxy (bool, optional), id_prefix (string, optional) #}
 <div class="simple-options mt-3">
   <div class="row">
@@ -14,13 +14,9 @@
       </div>
       {% endif %}
     </div>
-    <div class="col-md-3">
-      <label>Rate Limit</label>
-      <input type="number" class="form-control" name="rate_limit" value="150">
-    </div>
-    <div class="col-md-3">
-      <label>Threads</label>
-      <input type="number" class="form-control" name="threads" value="20">
+    <div class="col-md-6">
+      <label>Delay</label>
+      <input type="number" class="form-control" name="delay" value="0" min="0">
     </div>
   </div>
 </div>

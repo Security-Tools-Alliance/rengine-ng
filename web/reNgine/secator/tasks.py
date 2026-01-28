@@ -21,11 +21,6 @@ def initiate_secator_scan(
     scan_existing_elements=False,
     # Secator parameters
     secator_config=None,
-    speed_profile=None,
-    stealth_profile=None,
-    general_profile=None,
-    network_profile=None,
-    expert_mode=False,
 ):
     """Initiate a new Secator scan.
 
@@ -39,14 +34,9 @@ def initiate_secator_scan(
         imported_subdomains (list): Imported subdomains.
         out_of_scope_subdomains (list): Out-of-scope subdomains.
         url_filter (str): URL path. Default: ''.
-        initiated_by (int): User ID initiating the scan.
+        initiated_by_id (int): User ID initiating the scan.
         scan_existing_elements (bool): Whether to scan existing hostnames and IPs in the target. Default: False.
-        secator_config (dict): Secator configuration parameters. Default: None.
-        speed_profile (str): Speed profile (aggressive, insane, polite, paranoid). Default: None.
-        stealth_profile (str): Evasion profile (sneaky, stealth, tor). Default: None.
-        general_profile (str): General profile (active, passive, full). Default: None.
-        network_profile (str): Network profile (all_ports, http_headless, http_record). Default: None.
-        expert_mode (bool): Enable expert mode. Default: False.
+        secator_config (dict): Secator configuration parameters (proxy, delay, profiles array). Default: None.
     """
     try:
         from reNgine.secator.orchestrator import ScanOrchestrator
@@ -85,34 +75,64 @@ def initiate_secator_scan(
         elif execution_mode not in ["workflow", "tasks", "scan"]:
             raise ValueError(f"Invalid execution_mode: {execution_mode}")
 
-        # Build configuration from secator_config and profiles
-        config = secator_config or {}
+        # Build configuration from secator_config
+        config = {}
+        if secator_config:
+            # Copy only the keys we need for orchestrator
+            if "proxy" in secator_config:
+                config["proxy"] = secator_config["proxy"]
+            if "delay" in secator_config:
+                config["delay"] = secator_config["delay"]
+
+        # Convert profiles array to dict for runner
+        # The profiles array contains profile names, we need to determine their category
         profiles = {}
+        if secator_config and "profiles" in secator_config:
+            profile_list = secator_config.get("profiles", [])
+            if profile_list:
+                # Determine profile category by checking if it's a custom profile or builtin
+                from scanEngine.models import SecatorProfile
 
-        # Apply speed profile
-        if speed_profile:
-            profiles["speed"] = speed_profile
-            logger.info(f"Applied speed profile: {speed_profile}")
+                for profile_name in profile_list:
+                    if not profile_name:
+                        continue
 
-        # Apply evasion profile (mapped from stealth_profile for backward compatibility)
-        if stealth_profile:
-            profiles["evasion"] = stealth_profile
-            logger.info(f"Applied evasion profile: {stealth_profile}")
+                    # Check if it's a custom profile to determine category
+                    custom_profile = SecatorProfile.objects.filter(
+                        name=profile_name, profile_type="custom", is_active=True
+                    ).first()
 
-        # Apply general profile
-        if general_profile:
-            profiles["general"] = general_profile
-            logger.info(f"Applied general profile: {general_profile}")
-
-        # Apply network profile
-        if network_profile:
-            profiles["network"] = network_profile
-            logger.info(f"Applied network profile: {network_profile}")
-
-        # Apply expert mode settings
-        if expert_mode:
-            config["expert_mode"] = True
-            logger.info("Expert mode enabled")
+                    if custom_profile:
+                        # Custom profile - use its category
+                        category = custom_profile.category
+                        if category not in profiles:
+                            profiles[category] = profile_name
+                            logger.info(f"Applied {category} profile: {profile_name}")
+                    else:
+                        # Builtin profile - try to determine category from common names
+                        # Speed profiles
+                        if profile_name in ["aggressive", "insane", "polite", "paranoid"]:
+                            if "speed" not in profiles:
+                                profiles["speed"] = profile_name
+                                logger.info(f"Applied speed profile: {profile_name}")
+                        # Evasion profiles
+                        elif profile_name in ["sneaky", "stealth", "tor"]:
+                            if "evasion" not in profiles:
+                                profiles["evasion"] = profile_name
+                                logger.info(f"Applied evasion profile: {profile_name}")
+                        # General profiles
+                        elif profile_name in ["active", "passive", "full"]:
+                            if "general" not in profiles:
+                                profiles["general"] = profile_name
+                                logger.info(f"Applied general profile: {profile_name}")
+                        # Network profiles
+                        elif profile_name in ["all_ports", "http_headless", "http_record"]:
+                            if "network" not in profiles:
+                                profiles["network"] = profile_name
+                                logger.info(f"Applied network profile: {profile_name}")
+                        else:
+                            # Unknown profile - log warning and skip
+                            logger.warning(f"Unknown profile name: {profile_name}, skipping")
 
         # Set execution mode and configuration based on parameters
         if execution_mode == "workflow":
@@ -134,19 +154,6 @@ def initiate_secator_scan(
             config["tasks"] = [task.task_type for task in tasks]
         elif execution_mode == "scan":
             config["scan_type"] = secator_scan_type
-
-        # Add reNgine context to config for hooks
-        config["rengine_context"] = {
-            "imported_subdomains": imported_subdomains or [],
-            "out_of_scope_subdomains": out_of_scope_subdomains or [],
-            "url_filter": url_filter,
-            "scan_existing_elements": scan_existing_elements,
-            "initiated_by_id": initiated_by_id,
-            "expert_mode": expert_mode,
-        }
-
-        # Add output directory to config
-        config["output_dir"] = domain_results_dir
 
         # Call ScanOrchestrator directly
         orchestrator = ScanOrchestrator()

@@ -13,19 +13,9 @@
           <!-- Secator Profiles -->
           {% include 'startScan/_items/secator_profiles.html' with id_prefix=id_prefix|default:'' %}
           
-          <!-- Expert Mode -->
-          {% include 'startScan/_items/secator_expert_mode.html' with id_prefix=id_prefix|default:'' %}
-          
           <!-- Simple Options -->
           {% include 'startScan/_items/secator_simple_options.html' with show_random_proxy=show_random_proxy|default:False id_prefix=id_prefix|default:'' %}
           
-          <!-- Expert Options (will be inserted into expertOptions div by JavaScript) -->
-          <div id="{{ id_prefix|default:'' }}expertOptions" class="expert-options mt-3" style="display: none;">
-            {% include 'startScan/_items/secator_expert_options.html' with id_prefix=id_prefix|default:'' %}
-          </div>
-          
-          <!-- Suggestions Box -->
-          {% include 'startScan/_items/secator_suggestions_box.html' with id_prefix=id_prefix|default:'' %}
         </div>
       </div>
     </div>

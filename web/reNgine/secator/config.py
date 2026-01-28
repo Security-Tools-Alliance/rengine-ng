@@ -112,8 +112,7 @@ class SecatorConfigConverter:
             try:
                 import yaml
 
-                yaml_config = yaml.safe_load(engine_type.yaml_configuration)
-                if yaml_config:
+                if yaml_config := yaml.safe_load(engine_type.yaml_configuration):
                     config.update(yaml_config)
             except Exception as e:
                 logger.warning(f"Error parsing YAML configuration: {e}")
@@ -165,9 +164,7 @@ class SecatorConfigConverter:
         if proxy_config and proxy_config.get("enabled", False):
             secator_proxy["enabled"] = True
 
-            # Convert proxy URL format if needed
-            proxy_url = proxy_config.get("url", "")
-            if proxy_url:
+            if proxy_url := proxy_config.get("url", ""):
                 secator_proxy["http"] = proxy_url
                 secator_proxy["https"] = proxy_url
 

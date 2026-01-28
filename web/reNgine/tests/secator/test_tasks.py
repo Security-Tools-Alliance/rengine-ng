@@ -204,15 +204,11 @@ class TestSecatorTasks(BaseTestCase):
                     mock_orchestrator.return_value.execute_scan.assert_called_once()
                     call_args = mock_orchestrator.return_value.execute_scan.call_args
 
-                    # Check that rengine_context contains the parameters
+                    # Verify config contains workflow_name
                     config = call_args[1]["config"]
-                    rengine_context = config["rengine_context"]
-
-                    self.assertEqual(rengine_context["imported_subdomains"], imported_subdomains)
-                    self.assertEqual(rengine_context["out_of_scope_subdomains"], out_of_scope_subdomains)
-                    self.assertEqual(rengine_context["url_filter"], url_filter)
-                    self.assertEqual(rengine_context["scan_existing_elements"], scan_existing_elements)
-                    self.assertEqual(rengine_context["initiated_by_id"], initiated_by_id)
+                    self.assertEqual(config["workflow_name"], "test_workflow")
+                    # Verify rengine_context is no longer in config
+                    self.assertNotIn("rengine_context", config)
 
     @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
     @patch("reNgine.secator.orchestrator.ScanOrchestrator")
@@ -250,12 +246,7 @@ class TestSecatorTasks(BaseTestCase):
                     self.assertIn(f"{self.domain_name}/admin", targets)
                     self.assertIn(f"imported1.{self.domain_name}/admin", targets)
 
-                    # Check that reNgine context is passed
+                    # Verify config contains workflow_name and rengine_context is no longer in config
                     config = call_args[1]["config"]
-                    self.assertIn("rengine_context", config)
-                    rengine_context = config["rengine_context"]
-                    self.assertEqual(rengine_context["imported_subdomains"], [f"imported1.{self.domain_name}"])
-                    self.assertEqual(rengine_context["out_of_scope_subdomains"], [f"outofscope.{self.domain_name}"])
-                    self.assertEqual(rengine_context["url_filter"], "/admin")
-                    self.assertEqual(rengine_context["scan_existing_elements"], True)
-                    self.assertEqual(rengine_context["initiated_by_id"], self.user.id)
+                    self.assertEqual(config["workflow_name"], "test_workflow")
+                    self.assertNotIn("rengine_context", config)

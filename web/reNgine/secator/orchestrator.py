@@ -81,18 +81,17 @@ class ScanOrchestrator:
         profiles: Dict[str, str] = None,
     ):
         """Execute Secator workflow."""
-        workflow_name = config.get("workflow_name")
-        if not workflow_name:
+        if workflow_name := config.get("workflow_name"):
+            return self.secator_runner.run_workflow(
+                workflow_name=workflow_name,
+                targets=targets,
+                scan_history_id=scan_history_id,
+                domain_id=domain_id,
+                config=config,
+                profiles=profiles,
+            )
+        else:
             raise ValueError("workflow_name is required in config")
-
-        return self.secator_runner.run_workflow(
-            workflow_name=workflow_name,
-            targets=targets,
-            scan_history_id=scan_history_id,
-            domain_id=domain_id,
-            config=config,
-            profiles=profiles,
-        )
 
     def _execute_tasks(
         self,

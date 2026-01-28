@@ -16,6 +16,7 @@
     
     initializeDefaultProfiles: function() {
       // Initialize hidden input fields with default profile values from active buttons or custom selects
+      // These hidden inputs are still used for form state management
       const profileMappings = [
         { type: 'speed', hiddenName: 'speed_profile', customSelectName: 'speed_custom_profile' },
         { type: 'evasion', hiddenName: 'stealth_profile', customSelectName: 'evasion_custom_profile' }, // evasion maps to stealth_profile
@@ -57,9 +58,6 @@
       
       // Handle profiles
       $(document).on('click', '[data-profile-type]', this.handleProfileSelection.bind(this));
-      
-      // Toggle expert mode (supports id_prefix)
-      $(document).on('change', '[id$="expertMode"], #expertMode', this.toggleExpertMode);
       
       // Toggle random proxy (supports id_prefix)
       $(document).on('change', '[id$="useRandomProxy"], #useRandomProxy', this.toggleRandomProxy);
@@ -121,6 +119,9 @@
       if (selectedMode) {
         $('body').addClass('execution-mode-' + selectedMode);
       }
+      
+      // Update suggestions immediately when mode changes
+      this.updateSuggestions(selectedMode, $form);
       
       this.loadSelectionOptions(selectedMode, $form);
       this.updateSubmitButtonState($form);
@@ -202,6 +203,46 @@
       const executionMode = $form.find('input[name="execution_mode"]').val();
       const domainId = $form.find('input[name="domain_id"]').val();
       
+      // Collect profiles - only if the corresponding switch is enabled
+      const profiles = [];
+      if ($form.find('[id$="useSpeedProfile"], #useSpeedProfile').is(':checked')) {
+        const speedProfile = $form.find('input[name="speed_profile"]').val() || 
+                           $form.find('.btn[data-profile-type="speed"].active').data('profile-value') || 
+                           $form.find('select[name="speed_custom_profile"]').val();
+        if (speedProfile) {
+          profiles.push(speedProfile);
+        }
+      }
+      if ($form.find('[id$="useEvasionProfile"], #useEvasionProfile').is(':checked')) {
+        const evasionProfile = $form.find('input[name="stealth_profile"]').val() || 
+                             $form.find('.btn[data-profile-type="evasion"].active').data('profile-value') || 
+                             $form.find('.btn[data-profile-type="stealth"].active').data('profile-value') ||
+                             $form.find('select[name="evasion_custom_profile"]').val();
+        if (evasionProfile) {
+          profiles.push(evasionProfile);
+        }
+      }
+      if ($form.find('[id$="useGeneralProfile"], #useGeneralProfile').is(':checked')) {
+        const generalProfile = $form.find('input[name="general_profile"]').val() || 
+                            $form.find('.btn[data-profile-type="general"].active').data('profile-value') ||
+                            $form.find('select[name="general_custom_profile"]').val();
+        if (generalProfile) {
+          profiles.push(generalProfile);
+        }
+      }
+      if ($form.find('[id$="useNetworkProfile"], #useNetworkProfile').is(':checked')) {
+        const networkProfile = $form.find('input[name="network_profile"]').val() || 
+                             $form.find('.btn[data-profile-type="network"].active').data('profile-value') ||
+                             $form.find('select[name="network_custom_profile"]').val();
+        if (networkProfile) {
+          profiles.push(networkProfile);
+        }
+      }
+      
+      // Handle proxy - if use_random_proxy is checked, set to null (backend will handle random proxy)
+      const useRandomProxy = $form.find('input[name="use_random_proxy"]').is(':checked');
+      const proxyValue = useRandomProxy ? null : ($form.find('input[name="proxy"]').val() || '');
+      
       const formData = {
         domain_id: parseInt(domainId),
         execution_mode: executionMode,
@@ -210,19 +251,10 @@
         out_of_scope_subdomains: ($form.find('[id$="outOfScopeSubdomainTextarea"], #outOfScopeSubdomainTextarea').val() || '').split('\n').filter(s => s.trim()),
         url_filter: $form.find('[id$="filterPath"], #filterPath').val(),
         secator_config: {
-          proxy: $form.find('input[name="use_random_proxy"]').is(':checked') ? null : $form.find('input[name="proxy"]').val(),
-          use_random_proxy: $form.find('input[name="use_random_proxy"]').is(':checked'),
-          rate_limit: parseInt($form.find('input[name="rate_limit"]').val()) || 150,
-          threads: parseInt($form.find('input[name="threads"]').val()) || 20,
-          timeout: parseInt($form.find('input[name="timeout"]').val()) || 300,
-          delay: parseInt($form.find('input[name="delay"]').val()) || 0
-        },
-        // Get profile values only if the corresponding switch is enabled
-        speed_profile: $form.find('[id$="useSpeedProfile"], #useSpeedProfile').is(':checked') ? ($form.find('input[name="speed_profile"]').val() || $form.find('.btn[data-profile-type="speed"].active').data('profile-value') || 'polite') : null,
-        stealth_profile: $form.find('[id$="useEvasionProfile"], #useEvasionProfile').is(':checked') ? ($form.find('input[name="stealth_profile"]').val() || $form.find('.btn[data-profile-type="stealth"].active').data('profile-value') || $form.find('.btn[data-profile-type="evasion"].active').data('profile-value') || 'stealth') : null,
-        general_profile: $form.find('[id$="useGeneralProfile"], #useGeneralProfile').is(':checked') ? ($form.find('input[name="general_profile"]').val() || $form.find('.btn[data-profile-type="general"].active').data('profile-value') || 'full') : null,
-        network_profile: $form.find('[id$="useNetworkProfile"], #useNetworkProfile').is(':checked') ? ($form.find('input[name="network_profile"]').val() || $form.find('.btn[data-profile-type="network"].active').data('profile-value') || 'all_ports') : null,
-        expert_mode: $form.find('input[name="expert_mode"]').is(':checked') || $form.find('[id$="expertMode"], #expertMode').is(':checked')
+          proxy: proxyValue,
+          delay: parseInt($form.find('input[name="delay"]').val()) || 0,
+          profiles: profiles
+        }
       };
       
       // Add mode-specific parameters
@@ -410,18 +442,32 @@
       };
       
       const suggestionText = suggestions[mode] || '';
-      const $suggestionsBox = $form.find('.suggestions-box');
-      const $suggestionsElement = $suggestionsBox.find('[id$="auto-suggestions"], [id="auto-suggestions"]');
+      
+      // Try to find suggestions box in form first, then in document if not found
+      let $suggestionsBox = $form.find('.suggestions-box');
+      if ($suggestionsBox.length === 0) {
+        // If not found in form, search in the document (for suggestions outside form structure)
+        $suggestionsBox = $('.suggestions-box').first();
+      }
+      
+      // Try multiple selectors for the suggestions element
+      let $suggestionsElement = $suggestionsBox.find('[id$="auto-suggestions"], [id="auto-suggestions"]');
+      if ($suggestionsElement.length === 0) {
+        // Try finding by id prefix pattern
+        $suggestionsElement = $('[id$="auto-suggestions"]').first();
+      }
       
       if ($suggestionsElement.length) {
         $suggestionsElement.text(suggestionText);
       }
       
       // Show/hide suggestions box
-      if (suggestionText) {
-        $suggestionsBox.slideDown();
-      } else {
-        $suggestionsBox.slideUp();
+      if ($suggestionsBox.length) {
+        if (suggestionText) {
+          $suggestionsBox.slideDown();
+        } else {
+          $suggestionsBox.slideUp();
+        }
       }
     },
     
@@ -488,15 +534,6 @@
       this.updateTaskSelection($form);
     },
     
-    toggleExpertMode: function() {
-      const isExpert = $(this).is(':checked');
-      const $form = $(this).closest('form');
-      const expertModeId = $(this).attr('id');
-      const idPrefix = expertModeId.replace('expertMode', '');
-      const expertOptionsId = idPrefix + 'expertOptions';
-      $form.find('#' + expertOptionsId).slideToggle(isExpert);
-    },
-
     toggleRandomProxy: function() {
       const $form = $(this).closest('form');
       const useRandomProxyId = $(this).attr('id');

@@ -30,24 +30,8 @@ class SecatorRunner:
 
     def __init__(self):
         """Initialize the SecatorRunner."""
-        self.secator_config = self._load_secator_config()
+        self.secator_config = {}
         self.runner_logger = get_runner_logger()
-
-    def _load_secator_config(self) -> Dict[str, Any]:
-        """Load Secator configuration from settings."""
-        from reNgine.settings import SECATOR_RESULTS
-
-        return {
-            "workflows_location": "/home/rengine/.secator/workflows",
-            "reports_folder": SECATOR_RESULTS,
-            "sync": False,  # Force async mode for Celery workers
-            "global": {
-                "timeout": 300,
-                "concurrency": 20,
-                "rate_limit": 150,
-                "enable_duplicate_check": False,  # Disable deduplication to avoid Record hash error
-            },
-        }
 
     def _load_workflow_template(self, workflow_name: str):
         """
@@ -64,17 +48,16 @@ class SecatorRunner:
         try:
             workflow_obj = SecatorWorkflow.objects.get(name=workflow_name)
 
-            if workflow_obj.workflow_type == "builtin":
-                template = TemplateLoader(name=f"workflows/{workflow_name}")
-            else:
-                template = TemplateLoader(workflow_obj.yaml_configuration)
-
-            return template
+            return (
+                TemplateLoader(name=f"workflows/{workflow_name}")
+                if workflow_obj.workflow_type == "builtin"
+                else TemplateLoader(workflow_obj.yaml_configuration)
+            )
         except Exception as e:
             self.runner_logger.log_runner_error(
                 "Workflow", e, {"runner_name": workflow_name, "action": "LOAD_TEMPLATE"}
             )
-            raise Exception(f"Could not load workflow template '{workflow_name}': {e}") from e
+            raise RuntimeError(f"Could not load workflow template '{workflow_name}': {e}") from e
 
     def _load_scan_template(self, scan_name: str):
         """
@@ -91,15 +74,14 @@ class SecatorRunner:
         try:
             scan_obj = SecatorScan.objects.get(name=scan_name)
 
-            if scan_obj.scan_config_type == "builtin":
-                template = TemplateLoader(name=f"scan/{scan_name}")
-            else:
-                template = TemplateLoader(scan_obj.yaml_configuration)
-
-            return template
+            return (
+                TemplateLoader(name=f"scan/{scan_name}")
+                if scan_obj.scan_config_type == "builtin"
+                else TemplateLoader(scan_obj.yaml_configuration)
+            )
         except Exception as e:
             self.runner_logger.log_runner_error("Scan", e, {"runner_name": scan_name, "action": "LOAD_TEMPLATE"})
-            raise Exception(f"Could not load scan template '{scan_name}': {e}") from e
+            raise RuntimeError(f"Could not load scan template '{scan_name}': {e}") from e
 
     def _execute_runner(
         self,
@@ -156,20 +138,13 @@ class SecatorRunner:
             domain_results_dir = os.path.join(SECATOR_RESULTS, domain_name_sanitized)
             os.makedirs(domain_results_dir, exist_ok=True)
 
-            # Prepare configuration
+            # Prepare configuration - only keep what orchestrator needs
             if run_config is None:
                 run_config = {}
-            run_config.setdefault("output_dir", domain_results_dir)
-            run_config["domain_name"] = domain.name
-            run_config["workspace"] = workspace  # Add workspace to config
 
-            # Prepare Secator config
-            base_config = self.secator_config.copy()
-            secator_config = self._prepare_secator_config(run_config, profiles)
-            self.runner_logger.log_config_preparation(base_config, secator_config, profiles)
-
-            # Force reset sync to False to ensure async mode
-            secator_config["sync"] = False
+            # Prepare Secator run_opts
+            run_opts = self._prepare_secator_config(run_config, profiles)
+            self.runner_logger.log_config_preparation({}, run_opts, profiles)
 
             # Import and activate Secator API hooks
             try:
@@ -185,14 +160,11 @@ class SecatorRunner:
 
             # Create runner with hooks
             try:
-                # Force sync=False in run_opts to override any cached config
-                run_opts = secator_config.copy()
-                run_opts["sync"] = False
-
-                # Prepare context with scan_history_id and domain_id for Secator API hooks
+                # Prepare context with scan_history_id, domain_id and workspace_name for Secator API hooks
                 context = {
                     "scan_history_id": scan_history_id,
                     "domain_id": domain_id,
+                    "workspace_name": workspace,
                 }
 
                 # Log context and hooks
@@ -229,7 +201,7 @@ class SecatorRunner:
 
             except Exception as e:
                 self.runner_logger.log_runner_error(runner_type, e, {"runner_name": runner_name})
-                raise Exception(f"Could not create runner: {e}") from e
+                raise RuntimeError(f"Could not create runner: {e}") from e
 
             try:
                 # Log execution start
@@ -253,7 +225,7 @@ class SecatorRunner:
                     result=None,
                 )
                 self.runner_logger.log_runner_error(runner_type, e, {"runner_name": runner_name})
-                raise Exception(f"Could not run runner: {e}") from e
+                raise RuntimeError(f"Could not run runner: {e}") from e
 
             return {
                 "status": "success",
@@ -290,7 +262,7 @@ class SecatorRunner:
         try:
             template = self._load_workflow_template(workflow_name)
 
-            result = self._execute_runner(
+            return self._execute_runner(
                 runner_class=Workflow,
                 config=template,
                 targets=targets,
@@ -300,9 +272,6 @@ class SecatorRunner:
                 profiles=profiles,
                 runner_name=workflow_name,
             )
-
-            return result
-
         except Exception as e:
             self.runner_logger.log_runner_error("Workflow", e, {"runner_name": workflow_name})
             return {
@@ -467,6 +436,82 @@ class SecatorRunner:
             self.runner_logger.log_runner_error("Task", e, {"action": "GET_BUILTIN"})
             return []
 
+    def _add_profile_to_list(self, profile_name: str, profile_list: List[Any], seen_profile_names: set[str]) -> None:
+        """
+        Add a profile to the list if not already present.
+
+        Args:
+            profile_name: Name of the profile to add
+            profile_list: List to add the profile to
+            seen_profile_names: Set of already seen profile names
+        """
+        if profile_name not in seen_profile_names:
+            profile_list.append(profile_name)
+            seen_profile_names.add(profile_name)
+
+    def _create_custom_profile_loader(self, custom_profile) -> TemplateLoader:
+        """
+        Create a TemplateLoader instance for a custom profile.
+
+        Args:
+            custom_profile: SecatorProfile instance
+
+        Returns:
+            TemplateLoader instance configured for the custom profile
+        """
+        profile_opts = custom_profile._parse_opts()
+
+        profile_config_dict = {
+            "type": "profile",
+            "name": custom_profile.name,
+            "category": custom_profile.category,
+            "description": custom_profile.description or "",
+        }
+        if custom_profile.enforce:
+            profile_config_dict["enforce"] = True
+        if profile_opts:
+            profile_config_dict["opts"] = profile_opts
+
+        return TemplateLoader(input=profile_config_dict)
+
+    def _process_profile(
+        self, profile_name: str, profile_list: List[Any], seen_profile_names: set[str], secator_config: Dict[str, Any]
+    ) -> None:
+        """
+        Process a profile name and add it to the profile list.
+
+        Args:
+            profile_name: Name of the profile to process
+            profile_list: List to add the profile to
+            seen_profile_names: Set of already seen profile names
+            secator_config: Secator configuration dictionary to merge profile opts into
+        """
+        from scanEngine.models import SecatorProfile
+
+        try:
+            if custom_profile := SecatorProfile.objects.filter(
+                name=profile_name,
+                profile_type="custom",
+                is_active=True,
+            ).first():
+                profile_opts = custom_profile._parse_opts()
+                if profile_opts:
+                    for opt_key, opt_value in profile_opts.items():
+                        secator_config[opt_key] = opt_value
+
+                profile_loader = self._create_custom_profile_loader(custom_profile)
+                if custom_profile.name not in seen_profile_names:
+                    profile_list.append(profile_loader)
+                    seen_profile_names.add(custom_profile.name)
+            else:
+                self._add_profile_to_list(profile_name, profile_list, seen_profile_names)
+        except RuntimeError as e:
+            self.runner_logger.log_warning(
+                f"Error loading profile '{profile_name}': {e}, treating as builtin",
+                {"prefix": self.runner_logger.PREFIX, "action": "PROFILE", "profile_name": profile_name},
+            )
+            self._add_profile_to_list(profile_name, profile_list, seen_profile_names)
+
     def _prepare_secator_config(self, config: Dict[str, Any] = None, profiles: Dict[str, str] = None) -> Dict[str, Any]:
         """
         Prepare Secator configuration by merging with default config and profiles.
@@ -484,7 +529,7 @@ class SecatorRunner:
 
         Args:
             config: Configuration dictionary from reNgine. All keys are supported.
-            profiles: Speed/stealth/general/network profiles. Values are profile names.
+            profiles: Speed/evasion/general/network profiles. Values are profile names.
 
         Returns:
             Merged configuration dictionary for Secator, containing all keys from both config and profiles.
@@ -493,14 +538,10 @@ class SecatorRunner:
 
         secator_config = copy.deepcopy(self.secator_config)
 
-        # Merge config dictionary - all keys are supported
         if config:
-            # Handle special cases that need to be mapped to nested structure
             if "rate_limit" in config:
                 secator_config["global"]["rate_limit"] = config["rate_limit"]
             if "threads" in config or "concurrency" in config:
-                # Priority: 'threads' takes precedence over 'concurrency' when both are set
-                # If 'threads' is explicitly set and not None/empty/false, use it; otherwise use 'concurrency'
                 if (
                     "threads" in config
                     and config["threads"] is not None
@@ -513,99 +554,36 @@ class SecatorRunner:
             if "timeout" in config:
                 secator_config["global"]["timeout"] = config["timeout"]
 
-            # Merge all other config keys directly
             for key, value in config.items():
                 if key not in ["rate_limit", "threads", "concurrency", "timeout"]:
                     secator_config[key] = value
 
-            # Force async mode - override any sync setting from config
             secator_config["sync"] = False
 
-        # Merge profiles dictionary - Secator expects a 'profiles' list with profile names (str) or TemplateLoader instances
-        profile_list = []
-        if profiles:
-            # Collect profile names from speed, evasion, general, and network
-            profile_keys = ["speed", "evasion", "general", "network"]
-            # Map old "stealth" key to "evasion" for backward compatibility
-            if "stealth" in profiles and "evasion" not in profiles:
-                profiles["evasion"] = profiles.pop("stealth")
+        if not profiles:
+            secator_config["sync"] = False
+            return secator_config
 
-            # Track seen profile names to avoid duplicates and improve performance
-            seen_profile_names = set()
-            for p in profile_list:
-                if isinstance(p, str):
-                    seen_profile_names.add(p)
-                elif hasattr(p, "name") and p.name:
-                    seen_profile_names.add(p.name)
-                else:
-                    # Profile object without name attribute - use repr as fallback to avoid None collisions
-                    # This should not happen in normal operation, but prevents silent merging of distinct entries
-                    self.runner_logger.log_warning(
-                        f"Profile object in profile_list lacks 'name' attribute: {type(p).__name__}. "
-                        f"Using repr as identifier to avoid collisions.",
-                        {"prefix": self.runner_logger.PREFIX, "action": "PROFILE"},
-                    )
-                    seen_profile_names.add(repr(p))
+        # Map old "stealth" key to "evasion" for backward compatibility
+        if "stealth" in profiles and "evasion" not in profiles:
+            profiles["evasion"] = profiles.pop("stealth")
 
-            for key in profile_keys:
-                if key in profiles and profiles[key]:
-                    profile_name = profiles[key]
+        profile_list: List[Any] = []
+        seen_profile_names: set[str] = set()
+        profile_keys = ["speed", "evasion", "general", "network"]
 
-                    # Check if this is a custom profile (not a builtin name)
-                    try:
-                        from scanEngine.models import SecatorProfile
+        # Process special profile keys first
+        for key in profile_keys:
+            if profile_name := profiles.get(key):
+                self._process_profile(profile_name, profile_list, seen_profile_names, secator_config)
 
-                        # Try to find custom profile by name
-                        custom_profile = SecatorProfile.objects.filter(
-                            name=profile_name, profile_type="custom", is_active=True
-                        ).first()
+        # Process all other profile values as builtin profile names
+        for key, profile_name in profiles.items():
+            if key not in profile_keys and profile_name and isinstance(profile_name, str):
+                self._add_profile_to_list(profile_name, profile_list, seen_profile_names)
 
-                        if custom_profile:
-                            # This is a custom profile - create TemplateLoader instance
-                            profile_opts = custom_profile._parse_opts()
-
-                            # Merge opts into secator_config (profile opts override config)
-                            if profile_opts:
-                                for opt_key, opt_value in profile_opts.items():
-                                    secator_config[opt_key] = opt_value
-
-                            # Build profile config dict for TemplateLoader
-                            profile_config_dict = {
-                                "type": "profile",
-                                "name": custom_profile.name,
-                                "category": custom_profile.category,
-                                "description": custom_profile.description or "",
-                            }
-                            if custom_profile.enforce:
-                                profile_config_dict["enforce"] = True
-                            if profile_opts:
-                                profile_config_dict["opts"] = profile_opts
-
-                            # Create TemplateLoader instance for custom profile
-                            profile_loader = TemplateLoader(input=profile_config_dict)
-
-                            # Check if profile name already added before appending
-                            if custom_profile.name not in seen_profile_names:
-                                profile_list.append(profile_loader)
-                                seen_profile_names.add(custom_profile.name)
-                        else:
-                            # Builtin profile - just add the name as string (Secator will resolve it)
-                            if profile_name not in seen_profile_names:
-                                profile_list.append(profile_name)
-                                seen_profile_names.add(profile_name)
-                    except Exception as e:
-                        # If error loading custom profile, fall back to builtin
-                        self.runner_logger.log_warning(
-                            f"Error loading profile '{profile_name}': {e}, treating as builtin",
-                            {"prefix": self.runner_logger.PREFIX, "action": "PROFILE", "profile_name": profile_name},
-                        )
-                        if profile_name not in seen_profile_names:
-                            profile_list.append(profile_name)
-                            seen_profile_names.add(profile_name)
-
-            # Set the profiles list in secator_config
-            if profile_list:
-                secator_config["profiles"] = profile_list
+        if profile_list:
+            secator_config["profiles"] = profile_list
 
         secator_config["sync"] = False
         return secator_config
@@ -636,7 +614,7 @@ class SecatorRunner:
         try:
             template = self._load_scan_template(scan_type)
 
-            result = self._execute_runner(
+            return self._execute_runner(
                 runner_class=Scan,
                 config=template,
                 targets=targets,
@@ -646,9 +624,6 @@ class SecatorRunner:
                 profiles=profiles,
                 runner_name=scan_type,
             )
-
-            return result
-
         except Exception as e:
             self.runner_logger.log_runner_error("Scan", e, {"runner_name": scan_type})
             return {

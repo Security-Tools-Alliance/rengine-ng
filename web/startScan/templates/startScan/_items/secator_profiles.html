@@ -206,10 +206,13 @@ document.addEventListener('DOMContentLoaded', function() {
               this.classList.add(solidClass, 'active');
             }
             
-            // Hide and reset custom select
+            // Reset custom select value but keep it visible if there are custom profiles
             if (customSelect) {
-              customSelect.style.display = 'none';
               customSelect.value = '';
+              // Keep select visible if there are custom profiles available
+              if (customSelect.options.length > 1) {
+                customSelect.style.display = 'block';
+              }
             }
             if (descriptionDiv) {
               descriptionDiv.style.display = 'none';
@@ -261,6 +264,7 @@ document.addEventListener('DOMContentLoaded', function() {
       }
       
       // Show custom select if there are custom profiles
+      // Always show the select if there are custom profiles available (options.length > 1 means there's at least one custom profile)
       if (customSelect && customSelect.options.length > 1) {
         customSelect.style.display = 'block';
       }

@@ -56,11 +56,6 @@ def start_secator_scan(
     url_filter: str = "",
     scan_existing_elements: bool = False,
     secator_config: dict = None,
-    speed_profile: str = None,
-    stealth_profile: str = None,
-    general_profile: str = None,
-    network_profile: str = None,
-    expert_mode: bool = False,
 ) -> dict:
     """
     Start a Secator scan with the given parameters.
@@ -80,12 +75,7 @@ def start_secator_scan(
         out_of_scope_subdomains: List of subdomains to exclude
         url_filter: URL filter/path to scan
         scan_existing_elements: Whether to scan existing elements
-        secator_config: Configuration parameters
-        speed_profile: Speed profile (aggressive|insane|polite|paranoid)
-        stealth_profile: Evasion profile (sneaky|stealth|tor)
-        general_profile: General profile (active|passive|full)
-        network_profile: Network profile (all_ports|http_headless|http_record)
-        expert_mode: Enable expert mode
+        secator_config: Configuration parameters (proxy, delay, profiles array)
 
     Returns:
         dict: Result with 'status' (bool), 'scan_id' (int), 'error' (str), 'http_status' (int), etc.
@@ -98,6 +88,14 @@ def start_secator_scan(
         out_of_scope_subdomains = []
     if secator_config is None:
         secator_config = {}
+
+    # Handle random proxy if proxy is None
+    if secator_config.get("proxy") is None:
+        from reNgine.utilities.proxy import get_random_proxy
+
+        random_proxy = get_random_proxy()
+        if random_proxy:
+            secator_config["proxy"] = random_proxy
 
     # Validate required parameters
     if not domain_id:
@@ -159,11 +157,6 @@ def start_secator_scan(
                         url_filter=url_filter,
                         scan_existing_elements=scan_existing_elements,
                         secator_config=secator_config,
-                        speed_profile=speed_profile,
-                        stealth_profile=stealth_profile,
-                        general_profile=general_profile,
-                        network_profile=network_profile,
-                        expert_mode=expert_mode,
                         initiated_by_id=initiated_by_id,
                     )
                     # Do not save scan here - status is managed by Secator hooks via SecatorRunnerUpdate API
@@ -216,11 +209,6 @@ def start_secator_scan(
                         url_filter=url_filter,
                         scan_existing_elements=scan_existing_elements,
                         secator_config=secator_config,
-                        speed_profile=speed_profile,
-                        stealth_profile=stealth_profile,
-                        general_profile=general_profile,
-                        network_profile=network_profile,
-                        expert_mode=expert_mode,
                         initiated_by_id=initiated_by_id,
                     )
                     # Do not save scan here - status is managed by Secator hooks via SecatorRunnerUpdate API

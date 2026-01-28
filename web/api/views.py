@@ -1382,12 +1382,7 @@ class StartScan(APIView):
             - secator_scan_type (str): Required for scan mode (domain|host|network|subdomain|url)
 
         Secator configuration:
-            - secator_config (dict): Configuration parameters (proxy, rate_limit, threads, timeout, delay)
-            - speed_profile (str): aggressive|insane|polite|paranoid
-            - stealth_profile (str): sneaky|stealth|tor
-            - general_profile (str): active|passive|full
-            - network_profile (str): all_ports|http_headless|http_record
-            - expert_mode (bool): Enable expert mode
+            - secator_config (dict): Configuration parameters (proxy, delay, profiles array)
 
         reNgine parameters:
             - imported_subdomains (list): List of subdomains to import
@@ -1422,26 +1417,16 @@ class StartScan(APIView):
         # Secator configuration
         if hasattr(data, "get"):
             secator_config = data.get("secator_config", {})
-            # Get profiles - check custom first, then builtin
-            speed_profile = data.get("speed_custom_profile") or data.get("speed_profile")
-            stealth_profile = data.get("evasion_custom_profile") or data.get("stealth_profile")
-            general_profile = data.get("general_custom_profile") or data.get("general_profile")
-            network_profile = data.get("network_custom_profile") or data.get("network_profile")
-        else:
-            secator_config = {}
-            speed_profile = None
-            stealth_profile = None
-            general_profile = None
-            network_profile = None
-        if hasattr(data, "get"):
-            expert_mode = data.get("expert_mode", False)
+            # Ensure profiles is a list
+            if "profiles" in secator_config and not isinstance(secator_config["profiles"], list):
+                secator_config["profiles"] = []
             # reNgine parameters
             imported_subdomains = data.get("imported_subdomains", [])
             out_of_scope_subdomains = data.get("out_of_scope_subdomains", [])
             url_filter = data.get("url_filter", "")
             scan_existing_elements = data.get("scan_existing_elements", False)
         else:
-            expert_mode = False
+            secator_config = {}
             imported_subdomains = []
             out_of_scope_subdomains = []
             url_filter = ""
@@ -1463,11 +1448,6 @@ class StartScan(APIView):
             url_filter=url_filter,
             scan_existing_elements=scan_existing_elements,
             secator_config=secator_config,
-            speed_profile=speed_profile,
-            stealth_profile=stealth_profile,
-            general_profile=general_profile,
-            network_profile=network_profile,
-            expert_mode=expert_mode,
         )
 
         # Convert result to Response

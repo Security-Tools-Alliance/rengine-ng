@@ -101,18 +101,9 @@ class SecatorProgressSync:
 
                 # If workflow progress is 0 or not available, calculate from tasks
                 # This handles cases where Secator doesn't send intermediate progress updates
-                if task_runners:
-                    return calculate_task_progress(task_runners)
-
-                # If no tasks yet, return 0
-                return 0.0
-
+                return calculate_task_progress(task_runners) if task_runners else 0.0
             # If no main runner, calculate based on number of completed tasks vs total tasks
-            if task_runners:
-                return calculate_task_progress(task_runners)
-
-            return 0.0
-
+            return calculate_task_progress(task_runners) if task_runners else 0.0
         except Exception as e:
             logger.error(f"Error calculating workflow progress for scan {scan_history_id}: {e}")
             return 0.0
@@ -129,13 +120,11 @@ class SecatorProgressSync:
             SecatorRunner: Currently running runner or None
         """
         try:
-            runner = (
+            if runner := (
                 SecatorRunner.objects.filter(scan_history_id=scan_history_id, runner_data__status="RUNNING")
                 .order_by("-updated_at")
                 .first()
-            )
-
-            if runner:
+            ):
                 return runner
 
             # Fallback: check for any running runner by status in runner_data
@@ -263,7 +252,7 @@ class SecatorProgressSync:
                 # Update existing activity (for legacy compatibility)
                 existing_activity.status = rengine_status
                 existing_activity.time = timezone.now()
-                if runner_status in ["SUCCESS", "FAILURE", "FAILED"]:
+                if runner_status in {"SUCCESS", "FAILURE", "FAILED"}:
                     existing_activity.title = f"{activity_title} - Completed"
                 elif runner_status == "REVOKED":
                     existing_activity.title = f"{activity_title} - Aborted"
