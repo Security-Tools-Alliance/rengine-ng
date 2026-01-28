@@ -2,7 +2,7 @@
 Tests for RunnerLogger utility.
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from reNgine.utilities.logger import RunnerLogger, get_runner_logger
 from utils.test_base import BaseTestCase

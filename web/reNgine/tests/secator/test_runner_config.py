@@ -177,7 +177,7 @@ class TestSecatorRunnerConfig(unittest.TestCase):
         # All config keys should be present
         self.assertIn("custom_config_key", result)
         self.assertIn("another_key", result)
-        
+
         # Profile values that are strings are added to profiles list, not as separate keys
         # So custom_profile_key and overlap_key won't be in result as keys
         # but their values will be in the profiles list

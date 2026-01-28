@@ -90,9 +90,7 @@ class DomainRepository:
 
         return domain_name.strip(), whois
 
-    def _validate_domain_and_scan(
-        self, scan_history_id: int, domain_id: int, domain_name: str
-    ) -> Optional[Domain]:
+    def _validate_domain_and_scan(self, scan_history_id: int, domain_id: int, domain_name: str) -> Optional[Domain]:
         """Validate scan history and domain, verify domain name matches."""
         try:
             ScanHistory.objects.get(id=scan_history_id)
@@ -690,7 +688,9 @@ class DomainRepository:
             extra_data["last_update"] = updated_date
 
         statuses = whois_domain.get("statuses", [])
-        if isinstance(statuses, list) and (statuses_clean := [s.strip() for s in statuses if isinstance(s, str) and s.strip()]):
+        if isinstance(statuses, list) and (
+            statuses_clean := [s.strip() for s in statuses if isinstance(s, str) and s.strip()]
+        ):
             extra_data["status"] = statuses_clean[0]
             if len(statuses_clean) > 1:
                 extra_data["eppstatus"] = statuses_clean[1:]
@@ -827,4 +827,3 @@ class DomainRepository:
             tech_id = registry_ids.get("registry_tech_id", "")
             if isinstance(tech_id, str) and tech_id:
                 extra_data["tech_c"] = tech_id
-

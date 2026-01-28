@@ -3,15 +3,15 @@ Test cases for scan views functionality.
 """
 
 import json
+from unittest.mock import patch
 import uuid
-from unittest.mock import MagicMock, patch
 
 from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
 
 from scanEngine.models import SecatorProfile
-from startScan.models import Command, ScanActivity, ScanHistory, Subdomain
+from startScan.models import Command, Subdomain
 from utils.test_base import BaseTestCase
 
 
@@ -68,9 +68,7 @@ class TestScanLogsView(BaseTestCase):
     def test_scan_logs_view_with_include_pending(self):
         """Test scan logs view with include_pending parameter."""
         url = reverse("scan_logs", kwargs={"slug": self.data_generator.project.slug})
-        response = self.client.get(
-            url, {"scan_id": self.data_generator.scan_history.id, "include_pending": "true"}
-        )
+        response = self.client.get(url, {"scan_id": self.data_generator.scan_history.id, "include_pending": "true"})
         self.assertEqual(response.status_code, 200)
         self.assertIn("hierarchical_structure", response.context)
 

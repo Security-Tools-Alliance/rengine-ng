@@ -7,6 +7,7 @@ from django.template.loader import render_to_string
 
 from scanEngine.models import SecatorScan, SecatorTask, SecatorWorkflow
 
+
 _INVALID_EXECUTION_MODE_HTML = '<div class="alert alert-warning">Invalid execution mode</div>'
 
 
@@ -91,4 +92,3 @@ def render_secator_selection_json(request: HttpRequest) -> JsonResponse:
 
     html = render_to_string(template, context, request=request)
     return JsonResponse({"html": html})
-

@@ -2,7 +2,7 @@
 Tests for BaseLogger utility.
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from reNgine.utilities.logger.base import BaseLogger
 from utils.test_base import BaseTestCase

@@ -19,7 +19,7 @@ from rolepermissions.decorators import has_permission_decorator
 from weasyprint import CSS, HTML
 
 from api.serializers import IpSerializer
-from reNgine.core.data import safe_bool_cast, safe_int_cast
+from reNgine.core.data import safe_int_cast
 from reNgine.definitions import (
     FOUR_OH_FOUR_URL,
     PERM_INITATE_SCANS_SUBSCANS,
@@ -34,10 +34,7 @@ from reNgine.utilities.subdomain import get_interesting_subdomains
 from reNgine.utilities.time import local_to_utc_aware
 from scanEngine.models import (
     EngineType,
-    SecatorProfile,
     SecatorScan,
-    SecatorTask,
-    SecatorWorkflow,
     VulnerabilityReportSetting,
 )
 from startScan.models import (

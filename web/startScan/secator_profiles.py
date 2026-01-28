@@ -34,9 +34,7 @@ def build_secator_profiles_context() -> SecatorProfilesContext:
 
     unknown_categories: set[str] = set()
 
-    custom_profiles = SecatorProfile.objects.filter(profile_type="custom", is_active=True).order_by(
-        "category", "name"
-    )
+    custom_profiles = SecatorProfile.objects.filter(profile_type="custom", is_active=True).order_by("category", "name")
     for profile in custom_profiles:
         if profile.category in custom_profiles_by_category:
             custom_profiles_by_category[profile.category].append(profile)
@@ -61,4 +59,3 @@ def build_secator_profiles_context() -> SecatorProfilesContext:
         "custom_profiles_by_category": custom_profiles_by_category,
         "default_profiles": default_profiles,
     }
-
