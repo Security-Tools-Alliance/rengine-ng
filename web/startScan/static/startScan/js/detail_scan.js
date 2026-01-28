@@ -1,6 +1,6 @@
 function get_ips_from_port(port_number, history_id){
 	document.getElementById("detailScanModalLabel").innerHTML='IPs with port ' + port_number + ' OPEN';
-	var ip_badge = '';
+	const ip_badge = '';
 	fetch('../port/ip/'+port_number+'/'+history_id+'/')
 	.then(response => response.json())
 	.then(data => render_ips(data));
@@ -8,7 +8,7 @@ function get_ips_from_port(port_number, history_id){
 
 function get_ports_for_ip(ip, history_id){
 	document.getElementById("detailScanModalLabel").innerHTML='Open Ports identified for ' + ip;
-	var port_badge = '';
+	const port_badge = '';
 	fetch('../ip/ports/'+ip+'/'+history_id+'/')
 	.then(response => response.json())
 	.then(data => render_ports(data));
@@ -16,7 +16,7 @@ function get_ports_for_ip(ip, history_id){
 
 function render_ports(data)
 {
-	var port_badge = ''
+	let port_badge = ''
 	ip_address_content = document.getElementById("detailScanModalContent");
 	Object.entries(JSON.parse(data)).forEach(([key, value]) => {
 		badge_color = value[3] ? 'danger' : 'info';
@@ -42,7 +42,7 @@ function render_ports(data)
 
 function render_ips(data)
 {
-	var ip_badge = ''
+	let ip_badge = ''
 	content = document.getElementById("detailScanModalContent");
 	Object.entries(JSON.parse(data)).forEach(([key, value]) => {
 		badge_color = value[1] ? 'warning' : 'info';
@@ -188,7 +188,7 @@ function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, s
                                 
                                 // Add click event
                                 imgElement.addEventListener('click', function() {
-                                    const subdomainId = this.dataset.subdomainId;
+                                    const {subdomainId} = this.dataset;
                                     if (subdomainId) {
                                         show_port_screenshots(
                                             parseInt(subdomainId) || null,
@@ -249,7 +249,7 @@ function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, s
                                 
                                 // Add click event
                                 fallbackImgElement.addEventListener('click', function() {
-                                    const subdomainId = this.dataset.subdomainId;
+                                    const {subdomainId} = this.dataset;
                                     if (subdomainId) {
                                         show_port_screenshots(
                                             parseInt(subdomainId) || null,
@@ -282,7 +282,7 @@ function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, s
         existing.destroy();
     }
     // Dynamically generate thead based on column definitions to prevent mismatches
-    function generateTableHead(tableId, columns) {
+    const generateTableHead = function(tableId, columns) {
         const table = document.getElementById(tableId);
         if (!table) { return; }
         const thead = document.createElement('thead');
@@ -310,7 +310,7 @@ function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, s
         if (!tbody) {
             table.appendChild(document.createElement('tbody'));
         }
-    }
+    };
 
     generateTableHead('endpoint_results', endpoint_datatable_columns);
 
@@ -598,7 +598,7 @@ function get_endpoint_changes(endpoint, scan_history_id){
 			{"className": "text-center", "targets": [ 2 ]},
 			{
 				"render": function ( data, type, row ) {
-					var url = split_into_lines(data, 70);
+					const url = split_into_lines(data, 70);
 					return "<a href='"+data+"' target='_blank' class='text-primary'>"+url+"</a>";
 				},
 				"targets": 0
@@ -639,7 +639,7 @@ function get_endpoint_changes(endpoint, scan_history_id){
 function get_osint_users(scan_id){
 	$.getJSON(`/api/queryOsintUsers/?scan_id=${scan_id}&format=json`, function(data) {
 		$('#osint-users-count').empty();
-		for (var val in data['users']){
+		for (let val in data['users']){
 			user = data['users'][val]
 			$("#osint-users").append(`<span class='badge badge-soft-info  m-1'>${user['author']}</span>`);
 		}
@@ -652,30 +652,30 @@ function get_osint_users(scan_id){
 }
 
 function get_screenshot(endpoint, scan_id){
-	var port_array = [];
-	var service_array = [];
-	var tech_array = [];
-	var ip_array = [];
-	var gridzyElement = document.querySelector('.gridzy');
+	const port_array = [];
+	const service_array = [];
+	const tech_array = [];
+	const ip_array = [];
+	const gridzyElement = document.querySelector('.gridzy');
 	gridzyElement.classList.add('gridzySkinBlank');
 	gridzyElement.setAttribute('data-gridzy-layout', 'waterfall');
 	gridzyElement.setAttribute('data-gridzy-spaceBetween', 10);
 	gridzyElement.setAttribute('data-gridzy-desiredwidth', 350);
 	gridzyElement.setAttribute('data-gridzySearchField', "#screenshot-search");
-	var interesting_badge = `<span class="m-1 float-end badge  badge-soft-danger">Interesting</span>`;
+	const interesting_badge = `<span class="m-1 float-end badge  badge-soft-danger">Interesting</span>`;
 	// Use the screenshots API endpoint
 	$.getJSON(`${endpoint}?scan_id=${scan_id}`, function(data) {
 		$("#screenshot-loader").remove();
 		$("#filter-screenshot").show();
-		for (var subdomain in data) {
-			var figure = document.createElement('figure');
-			var link = document.createElement('a');
+		for (let subdomain in data) {
+			const figure = document.createElement('figure');
+			const link = document.createElement('a');
 			// return `<a href="/media/`+data+`" data-lightbox="screenshots" data-title="&lt;a target='_blank' href='`+row['http_url']+`'&gt;&lt;h3 style=&quot;color:white&quot;&gt;`+row['name']+`&lt;/h3&gt;&lt;/a&gt;"><img src="/media/`+data+`" class="img-fluid rounded mb-4 mt-4 screenshot" onerror="removeImageElement(this)"></a>`;
 			// currently lookup is supported only for http_status, page title & subdomain name,
 			interesting_field = data[subdomain]['is_interesting'] ? 'interesting' : '';
-			var ips = data[subdomain]['ip_addresses'];
-			var ip_search_values = '';
-			for(var ip in ips){
+			const ips = data[subdomain]['ip_addresses'];
+			let ip_search_values = '';
+			for(let ip in ips){
 				ip_address = ips[ip]['address'];
 				ip_search_values += ip_address + ' ';
 			}
@@ -689,13 +689,13 @@ function get_screenshot(endpoint, scan_id){
 			link.classList.add('mb-4');
 			link.classList.add('mt-4');
 			link.setAttribute('data-gridzySearchText', search_field);
-			var newImage = document.createElement('img');
+			const newImage = document.createElement('img');
 			newImage.setAttribute('data-gridzylazysrc', '/media/' + data[subdomain]['screenshot_path']);
 			// newImage.setAttribute('data-gridzylazysrc', 'https://placeimg.com/1440/900/any?' + subdomain);
 			newImage.setAttribute('height', 500);
 			newImage.setAttribute('width', 500);
 			newImage.setAttribute('class', 'gridzyImage');
-			var figcaption = document.createElement('figcaption');
+			const figcaption = document.createElement('figcaption');
 			figcaption.setAttribute('class', 'gridzyCaption');
 			http_status_badge = 'danger';
 			if (data[subdomain]['http_status'] >=200 && data[subdomain]['http_status'] < 300){
@@ -720,7 +720,7 @@ function get_screenshot(endpoint, scan_id){
 			http_status = data[subdomain]['http_status'];
 			http_status_select = document.getElementById('http_select_filter');
 			if(!$('#http_select_filter').find("option:contains('" + http_status + "')").length){
-				var option = document.createElement('option');
+				const option = document.createElement('option');
 				option.value = ".http_" + http_status;
 				option.innerHTML = http_status;
 				http_status_select.appendChild(option);
@@ -728,7 +728,7 @@ function get_screenshot(endpoint, scan_id){
 
 			// ip, port and services filtering
 			ips = data[subdomain]['ip_addresses']
-			for(var ip in ips){
+			for(let ip in ips){
 				ip_address = ips[ip]['address'];
 				filter_values += 'ip_' + ip_address.replace(/\./g,"_") + ' ';
 				if (ip_array.indexOf(ip_address) === -1){
@@ -736,7 +736,7 @@ function get_screenshot(endpoint, scan_id){
 				}
 
 				ports = ips[ip]['ports'];
-				for(var port in ports){
+				for(let port in ports){
 					port_number = ips[ip]['ports'][port]['number'];
 					service_name = ips[ip]['ports'][port]['service_name'];
 
@@ -754,7 +754,7 @@ function get_screenshot(endpoint, scan_id){
 
 			// technology stack filtering
 			technology = data[subdomain]['technologies'];
-			for(var tech in technology){
+			for(let tech in technology){
 				tech_name = technology[tech]['name']
 				filter_values += 'tech_' + tech_name.replace(/ /g,"_").toLowerCase() + ' ';
 				if (tech_array.indexOf(tech_name) === -1){
@@ -770,9 +770,9 @@ function get_screenshot(endpoint, scan_id){
 		port_select = document.getElementById('ports_select_filter');
 		if (port_select) {
 			port_array.sort((a, b) => a - b);
-			for(var port in port_array){
+			for(let port in port_array){
 				if(!$('#ports_select_filter').find("option:contains('" + port_array[port] + "')").length){
-					var option = document.createElement('option');
+					const option = document.createElement('option');
 					option.value = ".port_" + port_array[port];
 					option.innerHTML = port_array[port];
 					port_select.appendChild(option);
@@ -782,9 +782,9 @@ function get_screenshot(endpoint, scan_id){
 
 		// add ip to select
 		ip_select = document.getElementById('ips_select_filter');
-		for(var ip in ip_array){
+		for(let ip in ip_array){
 			if(!$('#ips_select_filter').find("option:contains('" + ip_array[ip] + "')").length){
-				var option = document.createElement('option');
+				const option = document.createElement('option');
 				option.value = ".ip_" + ip_array[ip];
 				option.innerHTML = ip_array[ip];
 				ip_select.appendChild(option);
@@ -794,9 +794,9 @@ function get_screenshot(endpoint, scan_id){
 		service_array.sort();
 		service_select = document.getElementById('services_select_filter');
 		if (service_select) {
-			for(var service in service_array){
+			for(let service in service_array){
 				if(!$('#services_select_filter').find("option:contains('" + service_array[service] + "')").length){
-					var option = document.createElement('option');
+					const option = document.createElement('option');
 					option.value = ".service_" + service_array[service];
 					option.innerHTML = service_array[service];
 					service_select.appendChild(option);
@@ -805,9 +805,9 @@ function get_screenshot(endpoint, scan_id){
 		}
 
 		tech_select = document.getElementById('tech_select_filter');
-		for(var tech in tech_array){
+		for(let tech in tech_array){
 			if(!$('#tech_select_filter').find("option:contains('" + tech_array[tech] + "')").length){
-				var option = document.createElement('option');
+				const option = document.createElement('option');
 				option.value = ".tech_" + tech_array[tech].replace(/ /g,"_").toLowerCase();
 				option.innerHTML = tech_array[tech];
 				tech_select.appendChild(option);
@@ -818,21 +818,17 @@ function get_screenshot(endpoint, scan_id){
 			tags: true
 		});
 		// search functionality
-		var gridzyElements = document.querySelectorAll('.gridzySkinBlank[data-gridzySearchField]'),
+		const gridzyElements = document.querySelectorAll('.gridzySkinBlank[data-gridzySearchField]'),
 		pos = gridzyElements.length;
 
 		while (pos--) {
 			(function(gridzyElement) {
-				var searchField = document.querySelector(gridzyElement.getAttribute('data-gridzySearchField'));
-				var gridzyInstance = gridzyElement.gridzy;
-				var gridzyItems = gridzyElement.children;
+				const searchField = document.querySelector(gridzyElement.getAttribute('data-gridzySearchField'));
+				const gridzyInstance = gridzyElement.gridzy;
+				const gridzyItems = gridzyElement.children;
 
-				if (searchField) {
-					searchField.addEventListener('input', search);
-				}
-
-				function search() {
-					var pos = gridzyItems.length,
+				const search = function() {
+					let pos = gridzyItems.length,
 					child,
 					itemContent,
 					found = false,
@@ -856,16 +852,20 @@ function get_screenshot(endpoint, scan_id){
 							gridzyInstance.setOptions({filter:null});
 						}
 					}
+				};
+
+				if (searchField) {
+					searchField.addEventListener('input', search);
 				}
 			})(gridzyElements[pos]);
 		}
 
 		//filter functionality
-		var gridzyInstance = document.querySelector('.gridzySkinBlank').gridzy;
+		const gridzyInstance = document.querySelector('.gridzySkinBlank').gridzy;
 		$('#http_select_filter, #ips_select_filter, #services_select_filter, #ports_select_filter, #tech_select_filter').on('change', function() {
 			values = $(this).val();
 			if(values.length && this.id == 'ips_select_filter'){
-				var replaces_str = values.map(function(values){return values.replace(/(?<=\..*)\./g, '_');});
+				const replaces_str = values.map(function(values){return values.replace(/(?<=\..*)\./g, '_');});
 				gridzyInstance.setOptions({
 					filter: replaces_str
 				});
@@ -889,7 +889,7 @@ function get_metadata(scan_id){
 	$.getJSON(`/api/queryMetadata/?scan_id=${scan_id}&format=json`, function(data) {
 		$('#metadata-count').empty();
 		$('#metadata-table-body').empty();
-		for (var val in data['metadata']){
+		for (let val in data['metadata']){
 			doc = data['metadata'][val];
 			rand_id = get_randid();
 			$('#metadata-table-body').append(`<tr id=${rand_id}></tr>`);
@@ -931,11 +931,11 @@ function get_metadata(scan_id){
 
 
 function get_emails(scan_id){
-	var exposed_count = 0;
+	let exposed_count = 0;
 	$.getJSON(`/api/queryEmails/?scan_id=${scan_id}&format=json`, function(data) {
 		$('#emails-count').empty();
 		$('#email-table-body').empty();
-		for (var val in data['emails']){
+		for (let val in data['emails']){
 			email = data['emails'][val];
 			rand_id = get_randid();
 			$('#email-table-body').append(`<tr id=${rand_id}></tr>`);
@@ -957,7 +957,7 @@ function get_employees(scan_id){
 	$.getJSON(`/api/queryEmployees/?scan_id=${scan_id}&format=json`, function(data) {
 		$('#employees-count').empty();
 		$('#employees-table-body').empty();
-		for (var val in data['employees']){
+		for (let val in data['employees']){
 			emp = data['employees'][val];
 			rand_id = get_randid();
 			$('#employees-table-body').append(`<tr id=${rand_id}></tr>`);
@@ -979,9 +979,9 @@ function get_dorks(scan_id){
 		$("#dork_type_vertical_tablist").empty();
 		$("#dork_tab_content").empty();
 		$("#dorking_result_card").show();
-		var is_first = true;
-		for (var val in data['dorks']){
-			var dorks = data['dorks'][val];
+		let is_first = true;
+		for (let val in data['dorks']){
+			const dorks = data['dorks'][val];
 			if (is_first) {
 				active = 'active show';
 			}
@@ -990,9 +990,9 @@ function get_dorks(scan_id){
 			}
 			$("#dork_type_vertical_tablist").append(`<a class="nav-link ${active} mb-1" id="v-${val}-tab" data-bs-toggle="pill" href="#v-${val}" role="tab" aria-controls="v-${val}" aria-selected="true"> ${convertToCamelCase(val)}</a>`);
 			// create tab content
-			var tab_content = `<div class="tab-pane fade ${active}" id="v-${val}" role="tabpanel" aria-labelledby="v-${val}-tab"><ul>`;
-			for (var dork in dorks) {
-				var dork_data = dorks[dork];
+			let tab_content = `<div class="tab-pane fade ${active}" id="v-${val}" role="tabpanel" aria-labelledby="v-${val}-tab"><ul>`;
+			for (let dork in dorks) {
+				const dork_data = dorks[dork];
 				tab_content += `<li><a href="${dork_data.url}" target="_blank">${dork_data.url}</a></li>`;
 			}
 			tab_content += `</ul></div>`;
@@ -1035,7 +1035,7 @@ function get_dork_details(dork_type, scan_id){
 
 
 function get_vulnerability_modal(endpoint_url, scan_id=null, severity=null, subdomain_id=null, subdomain_name=null){
-	var url = `${endpoint_url}?&format=json`;
+	let url = `${endpoint_url}?&format=json`;
 
 	if (scan_id) {
 		url += `&scan_history=${scan_id}`;
@@ -1080,7 +1080,7 @@ function get_vulnerability_modal(endpoint_url, scan_id=null, severity=null, subd
 	Swal.fire({
 		title: `Fetching ${severity_title} vulnerabilities for ${subdomain_name}...`
 	});
-	swal.showLoading();
+	Swal.showLoading();
 
 	fetch(url, {
 		method: 'GET',
@@ -1090,7 +1090,7 @@ function get_vulnerability_modal(endpoint_url, scan_id=null, severity=null, subd
 			'Content-Type': 'application/json'
 		},
 	}).then(response => response.json()).then(function(response) {
-		swal.close();
+		Swal.close();
 		$('#xl-modal-title').html(`${subdomain_name}`);
 		render_vulnerability_in_xl_modal(endpoint_url, response['count'], subdomain_name, response['results'])
 	});
@@ -1120,7 +1120,7 @@ function get_endpoint_modal(endpoint_url, project, scan_id, subdomain_id, subdom
 	Swal.fire({
 		title: `Fetching Endpoints for ${subdomain_name}...`
 	});
-	swal.showLoading();
+	Swal.showLoading();
 
 	fetch(url, {
 		method: 'GET',
@@ -1130,7 +1130,7 @@ function get_endpoint_modal(endpoint_url, project, scan_id, subdomain_id, subdom
 			'Content-Type': 'application/json'
 		},
 	}).then(response => response.json()).then(function(response) {
-		swal.close();
+		Swal.close();
 		$('#xl-modal-title').html(`${subdomain_name}`);
 		render_endpoint_in_xl_modal(response['count'], subdomain_name, response['results'])
 	});
@@ -1159,7 +1159,7 @@ function get_directory_modal(endpoint_url, scan_id=null, subdomain_id=null, subd
 	Swal.fire({
 		title: `Fetching Directories for ${subdomain_name}...`
 	});
-	swal.showLoading();
+	Swal.showLoading();
 
 	fetch(url, {
 		method: 'GET',
@@ -1169,7 +1169,7 @@ function get_directory_modal(endpoint_url, scan_id=null, subdomain_id=null, subd
 			'Content-Type': 'application/json'
 		},
 	}).then(response => response.json()).then(function(response) {
-		swal.close();
+		Swal.close();
 		$('#xl-modal-title').html(`${subdomain_name}`);
 		render_directories_in_xl_modal(response['count'], subdomain_name, response['results'])
 	});
@@ -1372,7 +1372,7 @@ function get_logs_modal(scan_id=null, activity_id=null, project_slug=null) {
 	Swal.fire({
 		title: 'Fetching logs...'
 	});
-	swal.showLoading();
+	Swal.showLoading();
 
 	// Get formatted HTML logs from Django view
 	fetch(url)
@@ -1383,7 +1383,7 @@ function get_logs_modal(scan_id=null, activity_id=null, project_slug=null) {
 		return response.text();
 	})
 	.then(html => {
-		swal.close();
+		Swal.close();
 		$('#xl-modal-title').html(title);
 		
 		// Insert the HTML directly (it's already escaped and formatted by Django template)
@@ -1394,7 +1394,7 @@ function get_logs_modal(scan_id=null, activity_id=null, project_slug=null) {
 		}
 	})
 	.catch(error => {
-		swal.close();
+		Swal.close();
 		console.error('Error fetching logs:', error);
 		$('#xl-modal-title').html(title);
 		$('#xl-modal-content').html('<p class="text-danger">Error loading logs. Please try again.</p>');
@@ -1414,9 +1414,9 @@ function add_todo_for_scanhistory_modal(scan_history_id){
 	subdomain_dropdown = document.getElementById('todoSubdomainDropdown');
 	$.getJSON(`/api/querySubdomains?scan_id=${scan_history_id}&no_lookup_interesting&format=json`, function(data) {
 		document.querySelector("#selectedSubdomainCount").innerHTML = data['subdomains'].length + ' Subdomains';
-		for (var subdomain in data['subdomains']){
+		for (let subdomain in data['subdomains']){
 			subdomain_obj = data['subdomains'][subdomain];
-			var option = document.createElement('option');
+			const option = document.createElement('option');
 			option.value = subdomain_obj['id'];
 			option.innerHTML = subdomain_obj['name'];
 			subdomain_dropdown.appendChild(option);
@@ -1427,9 +1427,9 @@ function add_todo_for_scanhistory_modal(scan_history_id){
 // listen to save todo event
 
 $(".add-scan-history-todo").click(function(){
-	var title = document.getElementById('todoTitle').value;
+	const title = document.getElementById('todoTitle').value;
 
-	var description = document.getElementById('todoDescription').value;
+	const description = document.getElementById('todoDescription').value;
 
 	data = {
 		'title': title,
@@ -1461,7 +1461,7 @@ $(".add-scan-history-todo").click(function(){
 			});
 		}
 		else{
-			swal.fire("Error!", "Could not add recon note, " + response.message, "warning", {
+			Swal.fire("Error!", "Could not add recon note, " + response.message, "warning", {
 				button: "Okay",
 			});
 		}
@@ -1485,9 +1485,9 @@ function add_note_for_subdomain(subdomain_id, subdomain_name, current_project){
 
 
 function add_note_for_subdomain_handler(subdomain_id, current_project){
-	var title = document.getElementById('subdomainTodoTitle').value;
-	var description = document.getElementById('subdomainTodoDescription').value;
-	var scan_id = parseInt(document.getElementById('summary_identifier_val').value);
+	const title = document.getElementById('subdomainTodoTitle').value;
+	const description = document.getElementById('subdomainTodoDescription').value;
+	const scan_id = parseInt(document.getElementById('summary_identifier_val').value);
 
 	data = {
 		'title': title,
@@ -1515,7 +1515,7 @@ function add_note_for_subdomain_handler(subdomain_id, current_project){
 			});
 		}
 		else{
-			swal.fire("Error!", response.message, "warning", {
+			Swal.fire("Error!", response.message, "warning", {
 				button: "Okay",
 			});
 		}
@@ -1529,9 +1529,9 @@ function download_subdomains(scan_id=null, domain_id=null, domain_name=null){
 	Swal.fire({
 		title: 'Querying Subdomains...'
 	});
-	swal.showLoading();
+	Swal.showLoading();
 	count = `<span class="modal_count"></span>`;
-	var url = `/api/querySubdomains?format=json&no_lookup_interesting`;
+	let url = `/api/querySubdomains?format=json&no_lookup_interesting`;
 	if (scan_id) {
 		url += `&scan_id=${scan_id}`;
 	}
@@ -1550,7 +1550,7 @@ function download_subdomains(scan_id=null, domain_id=null, domain_name=null){
 	$('.modal-text').append(`<div class='outer-div' id="modal-loader"></div>`);
 	// query subdomains
 	$.getJSON(url, function(data) {
-		swal.close();
+		Swal.close();
 		if (data['subdomains'].length) {
 			$('#modal_dialog').modal('show');
 			$('.modal_count').html(data['subdomains'].length);
@@ -1567,12 +1567,12 @@ function download_subdomains(scan_id=null, domain_id=null, domain_name=null){
 			$("#modal_dialog .modal-footer").append(`<a href="javascript:;" data-clipboard-action="copy" class="m-1 btn btn-primary copyable float-end btn-md" data-toggle="tooltip" data-placement="top" title="Copy Subdomains!" data-clipboard-target="#all_subdomains_text_area"><i class="fe-copy me-1"></i> Copy Subdomains</a>`);
 		}
 		else{
-			swal.fire("No Subdomains", "Could not find any subdomains.", "warning", {
+			Swal.fire("No Subdomains", "Could not find any subdomains.", "warning", {
 				button: "Okay",
 			});
 		}
 	}).fail(function(){
-		swal.fire("No Subdomains", "Could not find any subdomains.", "warning", {
+		Swal.fire("No Subdomains", "Could not find any subdomains.", "warning", {
 			button: "Okay",
 		});
 	});
@@ -1582,9 +1582,9 @@ function download_interesting_subdomains(project, scan_id=null, domain_id=null, 
 	Swal.fire({
 		title: 'Querying Interesting Subdomains...'
 	});
-	swal.showLoading();
+	Swal.showLoading();
 	count = `<span class="modal_count"></span>`;
-	var url = `/api/queryInterestingSubdomains/?format=json&project=${project}`;
+	let url = `/api/queryInterestingSubdomains/?format=json&project=${project}`;
 	if (scan_id) {
 		url += `&scan_id=${scan_id}`;
 	}
@@ -1601,7 +1601,7 @@ function download_interesting_subdomains(project, scan_id=null, domain_id=null, 
 	$('.modal-text').empty(); $('#modal_dialog .modal-footer').empty();
 	// query subdomains
 	$.getJSON(url, function(data) {
-		swal.close()
+		Swal.close()
 		if (data.length) {
 			$('#modal_dialog').modal('show');
 			$('.modal_count').html(data.length);
@@ -1617,13 +1617,13 @@ function download_interesting_subdomains(project, scan_id=null, domain_id=null, 
 			$("#modal_dialog .modal-footer").append(`<a href="javascript:;" data-clipboard-action="copy" class="m-1 btn btn-primary copyable float-end btn-md" data-toggle="tooltip" data-placement="top" title="Copy Subdomains!" data-clipboard-target="#interesting_subdomains_text_area"><i class="fe-copy me-1"></i> Copy Subdomains</a>`);
 		}
 		else{
-			swal.fire("No Interesting Subdomains", "Could not find any interesting subdomains.", "warning", {
+			Swal.fire("No Interesting Subdomains", "Could not find any interesting subdomains.", "warning", {
 				button: "Okay",
 			});
 		}
 
 	}).fail(function(){
-		swal.fire("No Interesting Subdomains", "Could not find any interesting subdomains.", "warning", {
+		Swal.fire("No Interesting Subdomains", "Could not find any interesting subdomains.", "warning", {
 			button: "Okay",
 		});
 	});
@@ -1633,7 +1633,7 @@ function download_interesting_endpoints(scan_id, domain_name){
 	Swal.fire({
 		title: 'Querying Interesting Endpoints...'
 	});
-	swal.showLoading();
+	Swal.showLoading();
 	count = `<span class="modal_count"></span>`;
 	if (scan_id) {
 		url = `/api/listInterestingEndpoints/?scan_id=${scan_id}&format=json&no_page`;
@@ -1650,7 +1650,7 @@ function download_interesting_endpoints(scan_id, domain_name){
 	$('.modal-text').empty(); $('#modal_dialog .modal-footer').empty();
 	// query subdomains
 	$.getJSON(url, function(data) {
-		swal.close();
+		Swal.close();
 		if (data.length) {
 			$('#modal_dialog').modal('show');
 			$('.modal_count').html(data.length);
@@ -1666,13 +1666,13 @@ function download_interesting_endpoints(scan_id, domain_name){
 			$("#modal_dialog .modal-footer").append(`<a href="javascript:;" data-clipboard-action="copy" class="m-1 btn btn-primary copyable float-end btn-md" data-toggle="tooltip" data-placement="top" title="Copy Endpoints!" data-clipboard-target="#interesting_endpoints_text_area"><i class="fe-copy me-1"></i> Copy Endpoints</a>`);
 		}
 		else{
-			swal.fire("No Interesting Endpoints", "Could not find any interesting Endpoints.", "warning", {
+			Swal.fire("No Interesting Endpoints", "Could not find any interesting Endpoints.", "warning", {
 				button: "Okay",
 			});
 		}
 
 	}).fail(function(){
-		swal.fire("No Interesting Endpoints", "Could not find any interesting Endpoints.", "warning", {
+		Swal.fire("No Interesting Endpoints", "Could not find any interesting Endpoints.", "warning", {
 			button: "Okay",
 		});
 	});
@@ -1683,9 +1683,9 @@ function download_important_subdomains(scan_id=null, domain_id=null, domain_name
 	Swal.fire({
 		title: 'Querying Interesting Subdomains...'
 	});
-	swal.showLoading();
+	Swal.showLoading();
 	count = `<span class="modal_count"></span>`;
-	var url = `/api/querySubdomains?format=json&no_lookup_interesting&only_important`;
+	let url = `/api/querySubdomains?format=json&no_lookup_interesting&only_important`;
 	if (scan_id) {
 		url = `/api/querySubdomains?format=json&no_lookup_interesting&only_important&scan_id=${scan_id}`;
 	}
@@ -1701,7 +1701,7 @@ function download_important_subdomains(scan_id=null, domain_id=null, domain_name
 	$('.modal-text').empty(); $('#modal_dialog .modal-footer').empty();
 	// query subdomains
 	$.getJSON(url, function(data) {
-		swal.close();
+		Swal.close();
 		if (data['subdomains'].length) {
 			$('#modal_dialog').modal('show');
 			$('.modal_count').html(data['subdomains'].length);
@@ -1718,12 +1718,12 @@ function download_important_subdomains(scan_id=null, domain_id=null, domain_name
 			$("#modal_dialog .modal-footer").append(`<a href="javascript:;" data-clipboard-action="copy" class="m-1 btn btn-dark copyable float-end btn-md" data-toggle="tooltip" data-placement="top" title="Copy Subdomains!" data-clipboard-target="#all_subdomains_text_area"><i class="fe-copy me-1"></i> Copy Subdomains</a>`);
 		}
 		else{
-			swal.fire("No Important Endpoints", "No subdomains has been marked as important.", "warning", {
+			Swal.fire("No Important Endpoints", "No subdomains has been marked as important.", "warning", {
 				button: "Okay",
 			});
 		}
 	}).fail(function(){
-		swal.fire("No Important Endpoints", "No subdomains has been marked as important.", "warning", {
+		Swal.fire("No Important Endpoints", "No subdomains has been marked as important.", "warning", {
 			button: "Okay",
 		});
 	});
@@ -1733,10 +1733,10 @@ function download_endpoints(scan_id=null, domain_id=null, domain_name='', patter
 	Swal.fire({
 		title: 'Querying Endpoints...'
 	});
-	swal.showLoading();
-	var count = `<span class="modal_count">Loading... </span>`;
+	Swal.showLoading();
+	const count = `<span class="modal_count">Loading... </span>`;
 
-	var url = `/api/queryEndpoints/?format=json&only_urls`;
+	let url = `/api/queryEndpoints/?format=json&only_urls`;
 
 	if (scan_id) {
 		url += `&scan_id=${scan_id}`;
@@ -1758,7 +1758,7 @@ function download_endpoints(scan_id=null, domain_id=null, domain_name='', patter
 	$('.modal-text').empty(); $('#modal_dialog .modal-footer').empty();
 	// query subdomains
 	$.getJSON(url, function(data) {
-		swal.close();
+		Swal.close();
 		$('#modal_dialog').modal('show');
 		$('.modal_count').html(data['endpoints'].length);
 		$('#modal_dialog .modal-text').empty();
@@ -1782,62 +1782,80 @@ function download_endpoints(scan_id=null, domain_id=null, domain_name='', patter
 }
 
 function initiate_subscan(subdomain_ids){
-	// Check if using Secator mode or legacy mode
-	var secatorMode = $('#secatorMode').is(':checked');
-	var data = {
+	const data = {
 		'subdomain_ids': subdomain_ids,
 	};
 	
-	if (secatorMode) {
-		// Secator mode - use workflows or tasks
-		var workflowId = $('#secatorWorkflow').val();
-		var taskNames = [];
-		
-		// Get selected Secator tasks
-		$('#secatorTasks input:checked').each(function(){
-			taskNames.push($(this).val());
+	// Get execution mode from selected card in subscan modal
+	const executionMode = $('#subscan-modal .execution-mode-card.selected').data('mode');
+	if (!executionMode) {
+		Swal.fire({
+			title: 'Oops!',
+			text: 'Please select an execution mode (Workflow, Tasks, or Scan)!',
+			icon: 'error'
 		});
-		
-		if (workflowId && workflowId !== '') {
-			data['workflow_id'] = parseInt(workflowId);
-		} else if (taskNames.length > 0) {
-			data['task_names'] = taskNames;
-		} else {
-			Swal.fire({
-				title: 'Oops!',
-				text: 'Please select either a Secator workflow or at least one Secator task!',
-				icon: 'error'
-			});
-			return;
-		}
-	} else {
-		// Legacy mode - for backward compatibility
-		var engine_id = $('#subtaskScanEngine').val();
-		var tasks = []
-		var $engine_tasks = $('#engineTasks').find('input')
-		$engine_tasks.each(function(i){
-			if ($(this).is(':checked')){
-				tasks.push(this.id)
-			}
-		})
-		if (tasks.length === 0) {
-			Swal.fire({
-				title: 'Oops!',
-				text: 'No subtasks selected. Please choose at least one subtask !',
-				icon: 'error'
-			});
-			return;
-		}
-		data['tasks'] = tasks;
-		data['engine_id'] = engine_id;
+		return;
 	}
+	
+	// Get selection based on execution mode from subscan modal container
+	const $container = $('#subscan-selection-container');
+	
+	if (executionMode === 'workflow') {
+		const workflowId = $container.find('input[name="workflow_id"]:checked').val();
+		if (!workflowId) {
+			Swal.fire({
+				title: 'Oops!',
+				text: 'Please select a workflow!',
+				icon: 'error'
+			});
+			return;
+		}
+		data['workflow_id'] = parseInt(workflowId);
+	} else if (executionMode === 'tasks') {
+		const taskNames = [];
+		$container.find('input[name="task_ids"]:checked').each(function(){
+			// Get task_type from data attribute for stability
+			const taskType = $(this).attr('data-task-type') || $(this).closest('.task-tile').attr('data-task-type');
+			if (taskType) {
+				taskNames.push(taskType);
+			}
+		});
+		if (taskNames.length === 0) {
+			Swal.fire({
+				title: 'Oops!',
+				text: 'Please select at least one task!',
+				icon: 'error'
+			});
+			return;
+		}
+		data['task_names'] = taskNames;
+	} else if (executionMode === 'scan') {
+		const scanType = $container.find('input[name="secator_scan_type"]:checked').val();
+		if (!scanType) {
+			Swal.fire({
+				title: 'Oops!',
+				text: 'Please select a scan type!',
+				icon: 'error'
+			});
+			return;
+		}
+		data['secator_scan_type'] = scanType;
+	}
+	
+	// Get secator_config (proxy, delay, profiles) - simplified for subscan
+	const secatorConfig = {
+		proxy: '',
+		delay: 0,
+		profiles: []
+	};
+	data['secator_config'] = secatorConfig;
 	
 	Swal.fire({
 		title: 'Initiating subscan...',
-		text: secatorMode ? 'Using Secator workflows/tasks' : 'Using legacy scan engine',
+		text: 'Using Secator ' + executionMode,
 		allowOutsideClick: false
 	});
-	swal.showLoading();
+	Swal.showLoading();
 	
 	fetch('/api/action/initiate/subtask/', {
 		method: 'POST',
@@ -1849,9 +1867,9 @@ function initiate_subscan(subdomain_ids){
 	})
 	.then(response => response.json())
 	.then(function (response) {
-		swal.close();
+		Swal.close();
 		if (response['status']) {
-			var message = response['message'] || 'Subscan initiated successfully!';
+			const message = response['message'] || 'Subscan initiated successfully!';
 			Snackbar.show({
 				text: message,
 				pos: 'top-right',
@@ -1860,8 +1878,8 @@ function initiate_subscan(subdomain_ids){
 			
 			// Show detailed results if available
 			if (response['results'] && response['results'].length > 0) {
-				var successCount = response['results'].filter(r => r.status === 'success').length;
-				var errorCount = response['results'].filter(r => r.status === 'error').length;
+				const successCount = response['results'].filter(r => r.status === 'success').length;
+				const errorCount = response['results'].filter(r => r.status === 'error').length;
 				
 				if (errorCount > 0) {
 					Swal.fire({
@@ -1881,7 +1899,7 @@ function initiate_subscan(subdomain_ids){
 		}
 	})
 	.catch(function(error) {
-		swal.close();
+		Swal.close();
 		Swal.fire({
 			title: 'Network Error',
 			text: 'Failed to communicate with server',
@@ -1895,9 +1913,9 @@ function initiate_subscan(subdomain_ids){
 $('#btn-initiate-subtask').on('click', function(){
 	$('#subscan-modal').modal('hide');
 	if ($('#btn-initiate-subtask').attr('multiple-subscan') === 'true') {
-		var subdomain_item = document.getElementsByClassName("subdomain_checkbox");
-		var subdomain_ids = [];
-		for (var i = 0; i < subdomain_item.length; i++) {
+		const subdomain_item = document.getElementsByClassName("subdomain_checkbox");
+		const subdomain_ids = [];
+		for (let i = 0; i < subdomain_item.length; i++) {
 			if (subdomain_item[i].checked) {
 				subdomain_ids.push($(subdomain_item[i]).val());
 			}
@@ -1905,63 +1923,16 @@ $('#btn-initiate-subtask').on('click', function(){
 		initiate_subscan(subdomain_ids);
 	}
 	else{
-		var subdomain_id = $('#subtask_subdomain_id').val();
+		const subdomain_id = $('#subtask_subdomain_id').val();
 		initiate_subscan([subdomain_id]);
 	}
 });
 
 
-// Load engine tasks on modal load and engine input change
-function load_engine_tasks(engine_id){
-    const url = `/api/listEngines/?engine_id=${engine_id}`;
-    
-    $.getJSON(url)
-    .done(function(data) {
-        if(data.engines.length > 0) {
-            const {tasks} = data.engines[0];
-            
-            if (tasks.length === 0) {
-                $('#engineTasks').html('');
-                Swal.fire({
-                    title: 'No tasks available',
-                    text: 'This engine does not contain any valid tasks. Please select another engine.',
-                    icon: 'warning',
-                });
-                return;
-            }
-
-            const html = tasks.map(task => `
-                <div class="mt-1">
-                    <div class="form-check">
-                        <input type="checkbox" class="form-check-input" id="${task}">
-                        <label class="form-check-label" for="${task}">${task}</label>
-                    </div>
-                </div>`
-            ).join('');
-            $('#engineTasks').html(html);
-        } else {
-            Swal.fire({
-				title: 'No engine found. Please select another one.',
-				icon: 'warning',
-			});
-        }
-    })
-    .fail(function() {
-        Swal.fire({
-			title: 'Error loading tasks',
-			icon: 'error',
-		});
-    });
-}
-
 $('#subscan-modal').on('shown.bs.modal', function() {
-    const engine_id = $('#subtaskScanEngine').val();
-    load_engine_tasks(engine_id);
-});
-
-$('#subtaskScanEngine').on('change', function(){
-    const engine_id = $(this).val();
-    load_engine_tasks(engine_id);
+    // Reset modal state
+    $('#subscan-modal .execution-mode-card').removeClass('selected');
+    $('#subscan-selection-container').empty();
 });
 
 // download subdomains
@@ -1976,16 +1947,16 @@ function downloadSelectedSubdomains(domain_name){
 		Swal.fire({
 			title: 'Querying Selected Subdomains...'
 		});
-		swal.showLoading();
+		Swal.showLoading();
 
 		subdomain_item = document.getElementsByClassName("subdomain_checkbox");
-		var subdomain_ids = [];
-		for (var i = 0; i < subdomain_item.length; i++) {
+		const subdomain_ids = [];
+		for (let i = 0; i < subdomain_item.length; i++) {
 			if (subdomain_item[i].checked) {
 				subdomain_ids.push($(subdomain_item[i]).val());
 			}
 		}
-		var data = {'subdomain_ids': subdomain_ids};
+		const data = {'subdomain_ids': subdomain_ids};
 		fetch('/api/querySubdomains/', {
 			method: 'POST',
 			credentials: "same-origin",
@@ -1997,7 +1968,7 @@ function downloadSelectedSubdomains(domain_name){
 		})
 		.then(response => response.json())
 		.then(function (response) {
-			swal.close();
+			Swal.close();
 			if (response['status']) {
 				$('#modal_dialog').modal('show');
 				$('.modal_count').html(response['results'].length);
@@ -2046,16 +2017,16 @@ function deleteMultipleSubdomains(){
 					title: 'Deleting Subdomain...',
 					allowOutsideClick: false
 				});
-				swal.showLoading();
+				Swal.showLoading();
 
 				subdomain_item = document.getElementsByClassName("subdomain_checkbox");
-				var subdomain_ids = [];
-				for (var i = 0; i < subdomain_item.length; i++) {
+				const subdomain_ids = [];
+				for (let i = 0; i < subdomain_item.length; i++) {
 					if (subdomain_item[i].checked) {
 						subdomain_ids.push($(subdomain_item[i]).val());
 					}
 				}
-				var data = {'subdomain_ids': subdomain_ids};
+				const data = {'subdomain_ids': subdomain_ids};
 				fetch('/api/action/subdomain/delete/', {
 					method: 'POST',
 					credentials: "same-origin",
@@ -2067,11 +2038,11 @@ function deleteMultipleSubdomains(){
 				})
 				.then(response => response.json())
 				.then(function (response) {
-					swal.close();
+					Swal.close();
 					if (response['status']) {
 						// remove all rows
-						var table = $('#subdomain_scan_results').DataTable();
-						for (var id in subdomain_ids) {
+						const table = $('#subdomain_scan_results').DataTable();
+						for (let id in subdomain_ids) {
 							table.row('#subdomain_row_' + id).remove().draw();
 						}
 						Snackbar.show({
@@ -2102,17 +2073,16 @@ function initiateMultipleSubscan(){
 
 
 $(document).on('click', '.detect_subdomain_cms_link', function(){
-	var url = $(this).data('cms-url');
-	var http_status = $(this).data('http-status');
-	var cmsDetectorUrl = $(this).data('url');
+	const url = $(this).data('cms-url');
+	const http_status = $(this).data('http-status');
+	const cmsDetectorUrl = $(this).data('url');
+	let message;
 	if (http_status == 0) {
-		var message = `reNgine has earlier identified that this subdomain did not return any HTTP status and likely the subdomain is not alive. reNgine may not be able to detect any CMS, would you still like to continue?`;
+		message = `reNgine has earlier identified that this subdomain did not return any HTTP status and likely the subdomain is not alive. reNgine may not be able to detect any CMS, would you still like to continue?`;
 	}
 	else if (http_status != 200) {
-		var message = `reNgine has earlier identified that this subdomain has HTTP status as ${http_status} and likely that reNgine will not detect any CMS, would you still like to continue?`;
+		message = `reNgine has earlier identified that this subdomain has HTTP status as ${http_status} and likely that reNgine will not detect any CMS, would you still like to continue?`;
 	}
-
-	var cmsDetectorUrl = $(this).data('url');
 	if (http_status != 200 || http_status == 0) {
 		Swal.fire({
 			showCancelButton: true,
@@ -2137,7 +2107,7 @@ function show_port_screenshots(subdomain_id, subdomain_name, port, scan_id, doma
 		title: `Loading screenshots for ${subdomain_name}:${port}...`,
 		allowOutsideClick: false
 	});
-	swal.showLoading();
+	Swal.showLoading();
 	
 	// Build API URL based on available parameters
 	let apiUrl = `/api/fetchScreenshots/?subdomain_id=${subdomain_id}&port=${port}`;
@@ -2146,7 +2116,7 @@ function show_port_screenshots(subdomain_id, subdomain_name, port, scan_id, doma
 	} else if (domain_id) {
 		apiUrl += `&target_id=${domain_id}`;
 	} else {
-		swal.close();
+		Swal.close();
 		Swal.fire({
 			title: 'Error',
 			text: 'No scan or target information available',
@@ -2159,7 +2129,7 @@ function show_port_screenshots(subdomain_id, subdomain_name, port, scan_id, doma
 	fetch(apiUrl)
 	.then(response => response.json())
 	.then(data => {
-		swal.close();
+		Swal.close();
 		
 		if (data && Object.keys(data).length > 0) {
 			// Create modal content with screenshots
@@ -2205,7 +2175,7 @@ function show_port_screenshots(subdomain_id, subdomain_name, port, scan_id, doma
 		}
 	})
 	.catch(error => {
-		swal.close();
+		Swal.close();
 		console.error('Error loading screenshots:', error);
 		Swal.fire({
 			title: 'Error',
@@ -2221,13 +2191,13 @@ function show_subdomain_screenshots(subdomain_id, subdomain_name, scan_id) {
 		title: `Loading screenshots for ${subdomain_name}...`,
 		allowOutsideClick: false
 	});
-	swal.showLoading();
+	Swal.showLoading();
 	
 	// Fetch screenshots for this subdomain
 	fetch(`/api/fetchScreenshots/?scan_id=${scan_id}&subdomain_id=${subdomain_id}`)
 	.then(response => response.json())
 	.then(data => {
-		swal.close();
+		Swal.close();
 		
 		if (data && Object.keys(data).length > 0) {
 			// Create modal content with screenshots
@@ -2276,7 +2246,7 @@ function show_subdomain_screenshots(subdomain_id, subdomain_name, scan_id) {
 		}
 	})
 	.catch(error => {
-		swal.close();
+		Swal.close();
 		console.error('Error loading screenshots:', error);
 		Swal.fire({
 			title: 'Error',

@@ -3076,3 +3076,267 @@ body.execution-mode-scan .scan-type-tile.selected .tile-icon i {
 #workflow-yaml-editor-readonly {
   min-height: 200px;
 }
+
+/* Subscan Modal Specific Styles */
+/* Execution mode cards in modal */
+#subscan-modal .execution-mode-card {
+  min-height: 150px;
+  padding: 20px;
+}
+
+#subscan-modal .execution-mode-card i {
+  font-size: 2.5rem;
+  margin-bottom: 15px;
+}
+
+#subscan-modal .execution-mode-card h5 {
+  font-size: 1.25rem;
+}
+
+#subscan-modal .execution-mode-card p {
+  font-size: 0.9rem;
+}
+
+/* List container */
+#subscan-modal .subscan-list-container {
+  max-height: 400px;
+  height: 400px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  padding: 0.75rem;
+  background: #f8f9fa;
+}
+
+/* Custom scrollbar for list container */
+#subscan-modal .subscan-list-container::-webkit-scrollbar {
+  width: 8px;
+}
+
+#subscan-modal .subscan-list-container::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+#subscan-modal .subscan-list-container::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+}
+
+#subscan-modal .subscan-list-container::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+#subscan-modal .subscan-list-item {
+  padding: 0.75rem;
+  margin-bottom: 0.5rem;
+  border: 1px solid #e9ecef;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: white;
+}
+
+#subscan-modal .subscan-list-item:hover {
+  background-color: #f8f9fa;
+  border-color: #007bff;
+  transform: translateX(2px);
+}
+
+#subscan-modal .subscan-list-item.active {
+  background-color: rgba(0, 123, 255, 0.1);
+  border-color: #007bff;
+  border-left: 3px solid #007bff;
+}
+
+#subscan-modal .subscan-list-item.active .fa-chevron-right {
+  color: #007bff;
+}
+
+#subscan-modal .subscan-list-category-header {
+  padding: 0.5rem 0.75rem;
+  margin-top: 0.75rem;
+  margin-bottom: 0.5rem;
+  border-bottom: 1px solid #dee2e6;
+}
+
+#subscan-modal .subscan-list-category-header:first-child {
+  margin-top: 0;
+}
+
+#subscan-modal .subscan-detail-container {
+  padding-left: 1rem;
+  min-height: 400px;
+}
+
+#subscan-modal .subscan-detail-container .workflow-tile,
+#subscan-modal .subscan-detail-container .task-tile,
+#subscan-modal .subscan-detail-container .scan-type-tile {
+  max-width: 100%;
+  margin: 0;
+}
+
+/* Adapt existing tile styles for modal detail panel */
+#subscan-modal #subscan-selection-container .workflow-tile,
+#subscan-modal #subscan-selection-container .task-tile,
+#subscan-modal #subscan-selection-container .scan-type-tile {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  width: 100%;
+}
+
+#subscan-modal #subscan-selection-container .workflow-tile:hover,
+#subscan-modal #subscan-selection-container .task-tile:hover,
+#subscan-modal #subscan-selection-container .scan-type-tile:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Inherit execution mode colors for tiles in modal */
+#subscan-modal.execution-mode-workflow #subscan-selection-container .workflow-tile:hover,
+#subscan-modal.execution-mode-workflow #subscan-selection-container .task-tile:hover,
+#subscan-modal.execution-mode-workflow #subscan-selection-container .scan-type-tile:hover {
+  border-color: #007bff !important;
+  box-shadow: 0 4px 12px rgba(0, 123, 255, 0.15) !important;
+}
+
+#subscan-modal.execution-mode-workflow #subscan-selection-container .workflow-tile.selected,
+#subscan-modal.execution-mode-workflow #subscan-selection-container .task-tile.selected,
+#subscan-modal.execution-mode-workflow #subscan-selection-container .scan-type-tile.selected {
+  border-color: #007bff !important;
+  background: linear-gradient(135deg, rgba(0, 123, 255, 0.05) 0%, rgba(0, 123, 255, 0.1) 100%) !important;
+  box-shadow: 0 4px 12px rgba(0, 123, 255, 0.2) !important;
+}
+
+#subscan-modal.execution-mode-tasks #subscan-selection-container .workflow-tile:hover,
+#subscan-modal.execution-mode-tasks #subscan-selection-container .task-tile:hover,
+#subscan-modal.execution-mode-tasks #subscan-selection-container .scan-type-tile:hover {
+  border-color: #28a745 !important;
+  box-shadow: 0 4px 12px rgba(40, 167, 69, 0.15) !important;
+}
+
+#subscan-modal.execution-mode-tasks #subscan-selection-container .workflow-tile.selected,
+#subscan-modal.execution-mode-tasks #subscan-selection-container .task-tile.selected,
+#subscan-modal.execution-mode-tasks #subscan-selection-container .scan-type-tile.selected {
+  border-color: #28a745 !important;
+  background: linear-gradient(135deg, rgba(40, 167, 69, 0.05) 0%, rgba(40, 167, 69, 0.1) 100%) !important;
+  box-shadow: 0 4px 12px rgba(40, 167, 69, 0.2) !important;
+}
+
+#subscan-modal.execution-mode-scan #subscan-selection-container .workflow-tile:hover,
+#subscan-modal.execution-mode-scan #subscan-selection-container .task-tile:hover,
+#subscan-modal.execution-mode-scan #subscan-selection-container .scan-type-tile:hover {
+  border-color: #ffc107 !important;
+  box-shadow: 0 4px 12px rgba(255, 193, 7, 0.15) !important;
+}
+
+#subscan-modal.execution-mode-scan #subscan-selection-container .workflow-tile.selected,
+#subscan-modal.execution-mode-scan #subscan-selection-container .task-tile.selected,
+#subscan-modal.execution-mode-scan #subscan-selection-container .scan-type-tile.selected {
+  border-color: #ffc107 !important;
+  background: linear-gradient(135deg, rgba(255, 193, 7, 0.05) 0%, rgba(255, 193, 7, 0.1) 100%) !important;
+  box-shadow: 0 4px 12px rgba(255, 193, 7, 0.2) !important;
+}
+
+/* Responsive adjustments for modal */
+@media (max-width: 992px) {
+  #subscan-modal .subscan-detail-container {
+    padding-left: 0.5rem;
+  }
+  
+  #subscan-modal .subscan-list-container {
+    max-height: 350px;
+    height: 350px;
+  }
+}
+
+@media (max-width: 768px) {
+  #subscan-modal .subscan-detail-container {
+    padding-left: 0;
+    padding-top: 1rem;
+    margin-top: 1rem;
+    border-top: 1px solid #dee2e6;
+    min-height: auto;
+  }
+  
+  #subscan-modal .subscan-list-container {
+    max-height: 250px;
+    height: 250px;
+  }
+  
+  #subscan-modal .subscan-list-item {
+    padding: 0.5rem;
+  }
+  
+  #subscan-modal .subscan-list-item h6 {
+    font-size: 0.85rem;
+  }
+  
+  #subscan-modal .subscan-list-item p {
+    font-size: 0.75rem;
+  }
+  
+  #subscan-modal .execution-mode-card {
+    min-height: 120px;
+    padding: 15px;
+  }
+  
+  #subscan-modal .execution-mode-card i {
+    font-size: 2rem;
+    margin-bottom: 10px;
+  }
+  
+  #subscan-modal .execution-mode-card h5 {
+    font-size: 1.1rem;
+  }
+  
+  #subscan-modal #subscan-selection-container .workflow-tile,
+  #subscan-modal #subscan-selection-container .task-tile,
+  #subscan-modal #subscan-selection-container .scan-type-tile {
+    min-height: auto;
+  }
+}
+
+@media (max-width: 576px) {
+  #subscan-modal .subscan-list-container {
+    max-height: 200px;
+    height: 200px;
+    padding: 0.5rem;
+  }
+  
+  #subscan-modal .subscan-list-item {
+    padding: 0.4rem;
+    margin-bottom: 0.4rem;
+  }
+  
+  #subscan-modal .subscan-list-item h6 {
+    font-size: 0.8rem;
+  }
+  
+  #subscan-modal .subscan-list-item p {
+    font-size: 0.7rem;
+  }
+  
+  #subscan-modal .execution-mode-card {
+    min-height: 100px;
+    padding: 12px;
+  }
+  
+  #subscan-modal .execution-mode-card i {
+    font-size: 1.5rem;
+    margin-bottom: 8px;
+  }
+  
+  #subscan-modal .execution-mode-card h5 {
+    font-size: 1rem;
+  }
+  
+  #subscan-modal .execution-mode-card p {
+    font-size: 0.8rem;
+  }
+  
+  #subscan-modal .subscan-detail-container {
+    padding-top: 0.75rem;
+    margin-top: 0.75rem;
+  }
+}

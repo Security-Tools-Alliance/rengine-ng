@@ -48,9 +48,9 @@ class TestRunnerLogger(BaseTestCase):
 
     def test_log_config_preparation(self):
         """Test logging config preparation."""
-        base_config = {"sync": False, "global": {"timeout": 300}}
-        merged_config = {"sync": False, "global": {"timeout": 300, "concurrency": 20}}
-        profiles = {"speed": "fast"}
+        base_config = {"sync": False, "proxy": None, "delay": 0}
+        merged_config = {"sync": False, "proxy": None, "delay": 0, "profiles": []}
+        profiles = ["fast"]
         self.logger.log_config_preparation(base_config, merged_config, profiles)
         self.assertEqual(len(self.log_capture), 1)
         self.assertIn("PREPARE", str(self.log_capture[0][0]))

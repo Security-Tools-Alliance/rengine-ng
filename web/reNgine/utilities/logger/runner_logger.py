@@ -134,18 +134,22 @@ class RunnerLogger(BaseLogger):
         # INFO level - single line summary
         details = {
             "sync": merged_config.get("sync", "NOT SET"),
-            "timeout": merged_config.get("global", {}).get("timeout"),
-            "concurrency": merged_config.get("global", {}).get("concurrency"),
-            "rate_limit": merged_config.get("global", {}).get("rate_limit"),
+            "proxy": merged_config.get("proxy"),
+            "delay": merged_config.get("delay", 0),
+            "profiles": merged_config.get("profiles", []),
         }
 
         if profiles:
-            profile_list = []
-            for key in ["speed", "evasion", "general", "network"]:
-                if key in profiles and profiles[key]:
-                    profile_list.append(f"{key}={profiles[key]}")
-            if profile_list:
-                details["profiles"] = ", ".join(profile_list)
+            if isinstance(profiles, list):
+                details["profiles"] = ", ".join(profiles) if profiles else "none"
+            else:
+                # Legacy dict format (should not happen but handle gracefully)
+                profile_list = []
+                for key in ["speed", "evasion", "general", "network"]:
+                    if key in profiles and profiles[key]:
+                        profile_list.append(f"{key}={profiles[key]}")
+                if profile_list:
+                    details["profiles"] = ", ".join(profile_list)
 
         info_msg = self._format_info_line(
             self.PREFIX,

@@ -96,9 +96,9 @@
         <div class="row mb-4" data-category="{{ parent_category_group.grouper }}">
           {% for task in parent_category_group.list %}
             <div class="col-xxl-3 col-xl-4 col-lg-6 col-md-6 col-sm-12 mb-3">
-              <div class="task-tile" data-task-id="{{ task.id }}">
+              <div class="task-tile" data-task-id="{{ task.id }}" data-task-type="{{ task.task_type }}">
                 <div class="form-check">
-                  <input class="form-check-input" type="checkbox" name="task_ids" id="task_{{ task.id }}" value="{{ task.id }}">
+                  <input class="form-check-input" type="checkbox" name="task_ids" id="task_{{ task.id }}" value="{{ task.id }}" data-task-type="{{ task.task_type }}">
                   <label class="form-check-label w-100" for="task_{{ task.id }}">
                     <div class="task-tile-content">
                       <div class="task-tile-header">

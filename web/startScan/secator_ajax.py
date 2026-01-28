@@ -84,9 +84,12 @@ def render_secator_selection_json(request: HttpRequest) -> JsonResponse:
     Render and return Secator selection HTML as JSON payload: {"html": "<...>"}.
     """
     execution_mode = request.GET.get("execution_mode", "")
+    id_prefix = request.GET.get("id_prefix", "")
 
     try:
         template, context = get_secator_selection_template_and_context(execution_mode)
+        if id_prefix:
+            context["id_prefix"] = id_prefix
     except ValueError:
         return JsonResponse({"html": _INVALID_EXECUTION_MODE_HTML})
 

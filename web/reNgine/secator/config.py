@@ -127,21 +127,10 @@ class SecatorConfigConverter:
             Default configuration dictionary
         """
         return {
-            "global": {
-                "timeout": 300,
-                "concurrency": 20,
-                "rate_limit": 150,
-            },
             "proxy": {
                 "enabled": False,
                 "http": "",
                 "https": "",
-            },
-            "output": {
-                "format": "json",
-                "save_results": True,
-                "stream_results": True,
-                "output_dir": None,  # Will be set dynamically per scan
             },
         }
 
@@ -169,48 +158,6 @@ class SecatorConfigConverter:
                 secator_proxy["https"] = proxy_url
 
         return secator_proxy
-
-    def convert_thread_config(self, thread_config: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Convert reNgine thread configuration to Secator format.
-
-        Args:
-            thread_config: reNgine thread configuration
-
-        Returns:
-            Secator thread configuration
-        """
-        secator_threads = {
-            "concurrency": 20,
-            "rate_limit": 150,
-        }
-
-        if thread_config:
-            if "threads" in thread_config:
-                secator_threads["concurrency"] = thread_config["threads"]
-            if "rate_limit" in thread_config:
-                secator_threads["rate_limit"] = thread_config["rate_limit"]
-
-        return secator_threads
-
-    def convert_timeout_config(self, timeout_config: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Convert reNgine timeout configuration to Secator format.
-
-        Args:
-            timeout_config: reNgine timeout configuration
-
-        Returns:
-            Secator timeout configuration
-        """
-        secator_timeout = {
-            "timeout": 300,
-        }
-
-        if timeout_config and "timeout" in timeout_config:
-            secator_timeout["timeout"] = timeout_config["timeout"]
-
-        return secator_timeout
 
     def merge_configs(self, *configs: Dict[str, Any]) -> Dict[str, Any]:
         """

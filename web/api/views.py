@@ -48,6 +48,9 @@ from reNgine.definitions import (
 from reNgine.llm.config import DEFAULT_GPT_MODELS, MODEL_REQUIREMENTS, OLLAMA_INSTANCE, RECOMMENDED_MODELS
 from reNgine.llm.llm import LLMAttackSuggestionGenerator
 from reNgine.llm.utils import convert_markdown_to_html, get_default_llm_model, is_empty_attack_surface
+
+# NOTE: Legacy task functions removed - functionality now in Secator
+from reNgine.secator.service import start_secator_scan
 from reNgine.services.repositories.scan_repository import ScanRepository
 from reNgine.settings import RENGINE_CURRENT_VERSION
 from reNgine.tasks import (
@@ -58,8 +61,6 @@ from reNgine.utilities.command import run_command
 from reNgine.utilities.endpoint import get_interesting_endpoints
 from reNgine.utilities.external import get_open_ai_key
 from reNgine.utilities.lookup import get_lookup_keywords
-
-# NOTE: Legacy task functions removed - functionality now in Secator
 from reNgine.utilities.subdomain import get_interesting_subdomains
 from scanEngine.models import EngineType, SecatorScan, SecatorTask, SecatorWorkflow
 from startScan.models import (
@@ -1433,8 +1434,6 @@ class StartScan(APIView):
             scan_existing_elements = False
 
         # Call shared service to start scan
-        from reNgine.secator.service import start_secator_scan
-
         result = start_secator_scan(
             domain_id=domain_id,
             user_id=request.user.id,
@@ -1473,13 +1472,12 @@ class InitiateSubTask(APIView):
         data = request.data
         subdomain_ids = safe_int_cast(data.get("subdomain_ids", []))
 
-        # New Secator parameters
+        # Secator parameters
         workflow_id = safe_int_cast(data.get("workflow_id"))
         workflow_name = data.get("workflow_name")
         task_names = data.get("task_names", [])
-
-        # Legacy parameters (for backward compatibility)
-        scan_types = data.get("tasks", [])
+        secator_scan_type = data.get("secator_scan_type")
+        secator_config = data.get("secator_config", {})
 
         if not subdomain_ids:
             return Response({"status": False, "error": "Missing subdomain_ids"}, status=400)
@@ -1489,53 +1487,52 @@ class InitiateSubTask(APIView):
 
         # Determine execution mode
         execution_mode = None
-        config = {}
+        workflow_id_for_scan = None
+        task_ids_for_scan = None
 
         if workflow_id:
             # Secator workflow mode
             execution_mode = "workflow"
             try:
                 workflow = SecatorWorkflow.objects.get(id=workflow_id)
-                config["workflow_name"] = workflow.name
+                workflow_id_for_scan = workflow_id
             except SecatorWorkflow.DoesNotExist:
                 return Response({"status": False, "error": f"Workflow with ID {workflow_id} not found"}, status=404)
         elif workflow_name:
-            # Secator workflow mode
+            # Secator workflow mode - find by name
             execution_mode = "workflow"
-            config["workflow_name"] = workflow_name
-
+            try:
+                workflow = SecatorWorkflow.objects.get(name=workflow_name)
+                workflow_id_for_scan = workflow.id
+            except SecatorWorkflow.DoesNotExist:
+                return Response(
+                    {"status": False, "error": f"Workflow with name '{workflow_name}' not found"}, status=404
+                )
         elif task_names:
-            # Secator tasks mode
+            # Secator tasks mode - convert task names to task IDs
             execution_mode = "tasks"
-            config["tasks"] = task_names
 
-        elif scan_types:
-            # Legacy mode - convert to Secator tasks
-            execution_mode = "tasks"
-            # Map legacy task names to Secator task names
-            task_mapping = {
-                "subdomain_discovery": "subfinder",
-                "port_scan": "naabu",
-                "fetch_url": "httpx",
-                "dir_file_fuzz": "ffuf",
-                "vulnerability_scan": "nuclei",
-                "screenshot": "aquatone",
-                "waf_detection": "wafw00f",
-            }
-            config["tasks"] = [task_mapping.get(task, task) for task in scan_types if task in task_mapping]
-
+            # Use unique task names to handle duplicates correctly
+            unique_task_names = list(set(task_names))
+            tasks = SecatorTask.objects.filter(task_type__in=unique_task_names, is_active=True)
+            found_task_types = set(tasks.values_list("task_type", flat=True))
+            if len(found_task_types) != len(unique_task_names):
+                missing = set(unique_task_names) - found_task_types
+                return Response({"status": False, "error": f"Some tasks not found: {', '.join(missing)}"}, status=404)
+            task_ids_for_scan = list(tasks.values_list("id", flat=True))
+        elif secator_scan_type:
+            # Secator scan mode
+            execution_mode = "scan"
         else:
             return Response(
                 {
                     "status": False,
-                    "error": "Must provide either workflow_id/workflow_name, task_names, or legacy tasks",
+                    "error": "Must provide either workflow_id/workflow_name, task_names, or secator_scan_type",
                 },
                 status=400,
             )
 
         # Get subdomains and validate
-        from startScan.models import Subdomain
-
         try:
             subdomains = Subdomain.objects.filter(id__in=subdomain_ids)
             if not subdomains.exists():
@@ -1551,54 +1548,49 @@ class InitiateSubTask(APIView):
         except Exception as e:
             return Response({"status": False, "error": f"Error retrieving subdomains: {str(e)}"}, status=400)
 
-        # Create scan history for each subdomain
+        # Create scan history for each subdomain and start scan
         scan_results = []
 
         for subdomain in subdomains:
             try:
-                # Create scan history
-                scan_repo = ScanRepository()
-                scan_history_id = scan_repo.create_scan(
-                    host_id=domain_id,
-                    engine_id=1,  # Fixed engine ID for Secator scans
-                    initiated_by_id=request.user.id,
-                )
-                # scan = ScanHistory.objects.get(pk=scan_history_id)  # Not used in current implementation
-
-                # Prepare targets (just the subdomain)
-                targets = [subdomain.name]
-
-                # Add reNgine context for hooks
-                config["rengine_context"] = {
-                    "subdomain_id": subdomain.id,
-                    "domain_id": domain_id,
-                    "scan_type": "subscan",
-                    "initiated_by_id": request.user.id,
-                }
-
-                # Call SecatorRunner
-                from reNgine.secator import ScanOrchestrator
-
-                orchestrator = ScanOrchestrator()
-                result = orchestrator.execute_scan(
-                    scan_history_id=scan_history_id,
+                # Start scan using start_secator_scan service
+                # Pass subdomain.name as imported_subdomains so it's the only target
+                result = start_secator_scan(
                     domain_id=domain_id,
+                    user_id=request.user.id,
                     execution_mode=execution_mode,
-                    targets=targets,
-                    config=config,
+                    workflow_id=workflow_id_for_scan,
+                    task_ids=task_ids_for_scan,
+                    secator_scan_type=secator_scan_type,
+                    imported_subdomains=[subdomain.name],
+                    out_of_scope_subdomains=[],
+                    url_filter="",
+                    scan_existing_elements=False,
+                    secator_config=secator_config,
                 )
 
-                scan_results.append(
-                    {
-                        "subdomain_id": subdomain.id,
-                        "subdomain_name": subdomain.name,
-                        "scan_history_id": scan_history_id,
-                        "status": "success",
-                        "result": result,
-                    }
-                )
-
-                logger.info(f"Secator subscan initiated for subdomain {subdomain.name} (ID: {subdomain.id})")
+                if result.get("status"):
+                    scan_results.append(
+                        {
+                            "subdomain_id": subdomain.id,
+                            "subdomain_name": subdomain.name,
+                            "scan_id": result.get("scan_id"),
+                            "status": "success",
+                        }
+                    )
+                    logger.info(f"Secator subscan initiated for subdomain {subdomain.name} (ID: {subdomain.id})")
+                else:
+                    scan_results.append(
+                        {
+                            "subdomain_id": subdomain.id,
+                            "subdomain_name": subdomain.name,
+                            "status": "error",
+                            "error": result.get("error", "Unknown error"),
+                        }
+                    )
+                    logger.error(
+                        f"Failed to start subscan for subdomain {subdomain.name}: {result.get('error', 'Unknown error')}"
+                    )
 
             except Exception as e:
                 logger.error(f"Error initiating subscan for subdomain {subdomain.name}: {e}")
@@ -1613,6 +1605,36 @@ class InitiateSubTask(APIView):
                 "results": scan_results,
             }
         )
+
+
+class GetSecatorSelection(APIView):
+    """
+    API endpoint to get Secator selection HTML (workflows, tasks, scans).
+
+    This endpoint is used by the subscan modal to dynamically load selection options.
+    Access is restricted to authenticated users and AJAX (XMLHttpRequest) requests.
+    """
+
+    http_method_names = ["get"]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from startScan.secator_ajax import render_secator_selection_json
+
+        # Prefer AJAX requests to avoid exposing template HTML broadly
+        # Note: This check is advisory - if other clients need access in future,
+        # consider moving this enforcement to middleware or making it optional
+        # DRF provides request.headers which is case-insensitive
+        x_requested_with = request.headers.get("X-Requested-With", "")
+        if x_requested_with != "XMLHttpRequest":
+            # Log warning but allow request for future client compatibility
+            logger = logging.getLogger(__name__)
+            logger.warning(
+                f"GetSecatorSelection accessed without X-Requested-With header "
+                f"from {request.META.get('REMOTE_ADDR', 'unknown')}"
+            )
+
+        return render_secator_selection_json(request)
 
 
 class DeleteSubdomain(APIView):
@@ -1932,8 +1954,20 @@ class ListScanHistory(APIView):
 
 class ListEngines(APIView):
     def get(self, request):
-        if engine_id := request.GET.get("engine_id"):
-            engines = EngineType.objects.filter(id=engine_id)
+        engine_id = request.GET.get("engine_id")
+        if engine_id:
+            # Validate engine_id is a valid integer
+            engine_id_int = safe_int_cast(engine_id)
+            if engine_id_int is None:
+                logger.warning(
+                    "Invalid engine_id query parameter received",
+                    extra={"engine_id": engine_id},
+                )
+                return Response(
+                    {"detail": "Invalid engine_id parameter."},
+                    status=HTTP_400_BAD_REQUEST,
+                )
+            engines = EngineType.objects.filter(id=engine_id_int)
         else:
             engines = EngineType.objects.all()
 
@@ -4192,7 +4226,6 @@ class SecatorRunnerUpdate(SecatorAPIBase):
         """
         from django.utils import timezone
 
-        from reNgine.services.repositories.scan_repository import ScanRepository
         from reNgine.utilities.websocket import send_scan_status_update
         from startScan.models import ScanActivity, SecatorRunner
 
@@ -4350,6 +4383,10 @@ class SecatorRunnerUpdate(SecatorAPIBase):
                 f"cannot update global status. Current ScanHistory status: {scan_history.scan_status}",
             )
 
+        # Extract reports_folder from run_opts for results_dir
+        run_opts = runner_data.get("run_opts", {})
+        reports_folder = run_opts.get("reports_folder")
+
         # Create or update ScanActivity
         activity_title = f"{runner_type.title()}: {runner_name}"
 
@@ -4366,7 +4403,12 @@ class SecatorRunnerUpdate(SecatorAPIBase):
             existing_activity.time = timezone.now()
             if runner_done and runner_status in ["SUCCESS", "FAILURE", "FAILED"]:
                 existing_activity.title = f"{activity_title} - Completed"
-            existing_activity.save(update_fields=["status", "time", "title"])
+            if reports_folder:
+                existing_activity.results_dir = reports_folder
+            update_fields = ["status", "time", "title"]
+            if reports_folder:
+                update_fields.append("results_dir")
+            existing_activity.save(update_fields=update_fields)
             self.logger.log_debug(
                 self.logger.PREFIX_SYNC,
                 "ACTIVITY",
@@ -4375,12 +4417,17 @@ class SecatorRunnerUpdate(SecatorAPIBase):
         else:
             # Create new activity
             activity_id = scan_repo.create_activity(scan_history.id, activity_title, rengine_status)
-            # Update the newly created activity with runner_id and name
+            # Update the newly created activity with runner_id, name, and results_dir
             try:
                 new_activity = ScanActivity.objects.get(id=activity_id)
                 new_activity.runner_id = secator_runner
                 new_activity.name = runner_name
-                new_activity.save(update_fields=["runner_id", "name"])
+                if reports_folder:
+                    new_activity.results_dir = reports_folder
+                update_fields = ["runner_id", "name"]
+                if reports_folder:
+                    update_fields.append("results_dir")
+                new_activity.save(update_fields=update_fields)
                 self.logger.log_debug(
                     self.logger.PREFIX_SYNC,
                     "ACTIVITY",

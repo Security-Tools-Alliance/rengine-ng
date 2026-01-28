@@ -1227,6 +1227,11 @@ class ScanActivity(models.Model):
         blank=True,
         help_text="SecatorRunner associated with this activity",
     )
+    results_dir = models.CharField(
+        max_length=500,
+        blank=True,
+        help_text="Results directory path for this activity (extracted from Secator run_opts.reports_folder)",
+    )
 
     @property
     def celery_id(self):

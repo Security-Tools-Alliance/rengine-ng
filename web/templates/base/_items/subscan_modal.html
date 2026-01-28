@@ -1,109 +1,43 @@
+{% load secator_extras %}
+{% load static %}
 <div id="subscan-modal" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="standard-modalLabel" aria-hidden="true">
-	<div class="modal-dialog modal-dialog-centered modal-lg">
+	<div class="modal-dialog modal-dialog-centered modal-xl">
 		<div class="modal-content">
 			<div class="modal-header">
 				<h4 class="modal-title" id="standard-modalLabel">Initiate Subscan</h4>
 				<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
 			</div>
 			<div class="modal-body">
-				<!-- Mode Selection -->
+				<!-- Execution Mode Selection -->
 				<div class="mb-4">
-					<div class="form-check form-switch">
-						<input class="form-check-input" type="checkbox" id="secatorMode" checked>
-						<label class="form-check-label" for="secatorMode">
-							<strong>Use Secator (Recommended)</strong>
-						</label>
-					</div>
-					<small class="text-muted">Secator provides modern workflows and tasks. Legacy mode is for backward compatibility only.</small>
+					{% include 'startScan/_items/secator_execution_mode_selector.html' with id_prefix='subscan_' %}
 				</div>
 
-				<!-- Secator Mode -->
-				<div id="secatorModeContent">
-					<!-- Workflow Selection -->
-					<div class="mb-3">
-						<h5>Select Secator Workflow (Optional)</h5>
-						<select class="form-select" id="secatorWorkflow" name="secatorWorkflow">
-							<option value="">Choose a workflow...</option>
-							<option value="subdomain_recon">Subdomain Reconnaissance</option>
-							<option value="url_vuln">URL Vulnerability Scan</option>
-							<option value="host_recon">Host Reconnaissance</option>
-							<option value="url_crawl">URL Crawling</option>
-							<option value="wordpress">WordPress Scan</option>
-						</select>
-						<small class="text-muted">Select a predefined workflow, or choose individual tasks below.</small>
-					</div>
-
-					<!-- Individual Tasks -->
-					<div class="mb-3">
-						<h5>Or Select Individual Secator Tasks</h5>
-						<div id="secatorTasks" class="row">
-							<div class="col-md-6">
-								<div class="form-check">
-									<input class="form-check-input" type="checkbox" value="subfinder" id="task_subfinder">
-									<label class="form-check-label" for="task_subfinder">Subfinder (Subdomain Discovery)</label>
-								</div>
-								<div class="form-check">
-									<input class="form-check-input" type="checkbox" value="naabu" id="task_naabu">
-									<label class="form-check-label" for="task_naabu">Naabu (Port Scan)</label>
-								</div>
-								<div class="form-check">
-									<input class="form-check-input" type="checkbox" value="httpx" id="task_httpx">
-									<label class="form-check-label" for="task_httpx">HTTPx (HTTP Probe)</label>
-								</div>
-								<div class="form-check">
-									<input class="form-check-input" type="checkbox" value="nuclei" id="task_nuclei">
-									<label class="form-check-label" for="task_nuclei">Nuclei (Vulnerability Scan)</label>
-								</div>
-							</div>
-							<div class="col-md-6">
-								<div class="form-check">
-									<input class="form-check-input" type="checkbox" value="ffuf" id="task_ffuf">
-									<label class="form-check-label" for="task_ffuf">FFuF (Directory Fuzzing)</label>
-								</div>
-								<div class="form-check">
-									<input class="form-check-input" type="checkbox" value="aquatone" id="task_aquatone">
-									<label class="form-check-label" for="task_aquatone">Aquatone (Screenshot)</label>
-								</div>
-								<div class="form-check">
-									<input class="form-check-input" type="checkbox" value="wafw00f" id="task_wafw00f">
-									<label class="form-check-label" for="task_wafw00f">WAFW00F (WAF Detection)</label>
-								</div>
-								<div class="form-check">
-									<input class="form-check-input" type="checkbox" value="gobuster" id="task_gobuster">
-									<label class="form-check-label" for="task_gobuster">Gobuster (Directory Brute Force)</label>
-								</div>
-							</div>
+				<!-- Two-column layout -->
+				<div class="row" id="subscan-content-row" style="display: none;">
+					<!-- Left: Compact list -->
+					<div class="col-md-4 col-lg-3">
+						<div id="subscan-list-container" class="subscan-list-container">
+							<!-- Dynamically loaded list items -->
 						</div>
 					</div>
-				</div>
-
-				<!-- Legacy Mode -->
-				<div id="legacyModeContent" style="display: none;">
-					<div class="alert alert-warning">
-						<i class="fe-alert-triangle me-2"></i>
-						<strong>Legacy Mode:</strong> This mode is deprecated and will be removed in future versions. Please use Secator mode instead.
-					</div>
-					<div class="mt-2">
-						<h5>Select the scan engine <small>(default engine Selected)</small></h5>
-						<select class="form-select" id="subtaskScanEngine" name="subtaskScanEngine">
-						{% for engine in scan_engines %}
-							{% if history.is_legacy_scan and history.scan_type and engine.engine_name == history.scan_type.engine_name %}
-								<option value="{{engine.id}}" selected>{{engine}}</option>
-							{% else %}
-								<option value="{{engine.id}}">{{engine}}</option>
-							{% endif %}
-						{% endfor %}
-						</select>
-					</div>
-					<h5>Select the engine's subtasks to perform</h5>
-					<div id="engineTasks" name="engineTasks">
-					<!-- dynamically populated based on engine input -->
+					
+					<!-- Right: Detail panel -->
+					<div class="col-md-8 col-lg-9">
+						<div id="subscan-detail-container" class="subscan-detail-container">
+							<!-- Selection container for tiles/details -->
+							<div id="subscan-selection-container"></div>
+							<!-- Target elements template -->
+							<div id="subscan-target-elements" class="mt-3" style="display: none;">
+								{% include 'startScan/_items/secator_scan_target_elements.html' with id_suffix='_subscan' show_counts=False title="Scan Target Elements" description="Configure which target elements to scan" note="When enabled, the scan will use existing hostnames and IP addresses from the target." %}
+							</div>
+						</div>
 					</div>
 				</div>
 			</div>
 			<div class="modal-footer">
 				<button type="button" class="btn btn-light" data-bs-dismiss="modal">Close</button>
-				<button type="button" class="btn btn-primary" id="btn-initiate-subtask">
+				<button type="button" class="btn btn-primary" id="btn-initiate-subtask" disabled>
 					<i class="fe-zap ms-1 me-1"></i>Initiate Subscan
 				</button>
 			</div>
@@ -112,67 +46,420 @@
 </div>
 
 <script>
-// Wait for DOM and jQuery to be ready
+// Subscan modal initialization
 (function() {
 	let initialized = false;
 	
-	function initSecatorModeToggle() {
-		// Guard: prevent multiple initializations
+	function initSubscanModal() {
 		if (initialized) {
 			return;
 		}
 		
-		// Check if jQuery is available
 		if (typeof $ === 'undefined') {
-			// Retry after a short delay if jQuery is not yet loaded
-			setTimeout(initSecatorModeToggle, 100);
-			return;
-		}
-
-		// Exit early if the Secator mode toggle is not present on this page
-		if (!$('#secatorMode').length) {
+			setTimeout(initSubscanModal, 100);
 			return;
 		}
 		
-		// Mark as initialized before attaching handlers
+		if (!$('#subscan-modal').length) {
+			return;
+		}
+		
 		initialized = true;
 		
-		// Toggle between Secator and Legacy modes
-		$('#secatorMode').on('change', function() {
-			if ($(this).is(':checked')) {
-				$('#secatorModeContent').show();
-				$('#legacyModeContent').hide();
-			} else {
-				$('#secatorModeContent').hide();
-				$('#legacyModeContent').show();
-			}
+		// Handle execution mode selection - only within subscan modal
+		$('#subscan-modal').on('click', '.execution-mode-card', function() {
+			const $card = $(this);
+			const mode = $card.data('mode');
+			const $modal = $('#subscan-modal');
+			
+			// Remove selected class from all cards in modal
+			$modal.find('.execution-mode-card').removeClass('selected');
+			$card.addClass('selected');
+			
+			// Add execution mode class to modal for CSS styling
+			$modal.removeClass('execution-mode-workflow execution-mode-tasks execution-mode-scan');
+			$modal.addClass(`execution-mode-${mode}`);
+			
+			// Load selection options via AJAX
+			loadSubscanSelection(mode);
 		});
-
-		// Clear workflow selection when tasks are selected
-		$('#secatorTasks input').on('change', function() {
-			if ($(this).is(':checked')) {
-				$('#secatorWorkflow').val('');
-			}
+		
+		// Handle selection changes to enable/disable button
+		// Use event delegation on the modal to catch dynamically loaded content
+		$('#subscan-modal').on('change', '#subscan-selection-container input[type="radio"], #subscan-selection-container input[type="checkbox"]', function() {
+			checkSubscanSelection();
 		});
-
-		// Clear task selections when workflow is selected
-		$('#secatorWorkflow').on('change', function() {
-			if ($(this).val() !== '') {
-				$('#secatorTasks input').prop('checked', false);
+		
+		// Also handle clicks on workflow/task tiles in detail panel (they use labels that trigger the input)
+		$('#subscan-modal').on('click', '#subscan-selection-container .workflow-tile, #subscan-selection-container .task-tile, #subscan-selection-container .scan-type-tile', function() {
+			const $tile = $(this);
+			const mode = $('#subscan-modal').find('.execution-mode-card.selected').data('mode');
+			
+			// Update list item active state
+			if (mode === 'workflow') {
+				const workflowId = $tile.find('input[type="radio"]').val();
+				$('#subscan-list-container').find(`[data-item-id="${workflowId}"]`).addClass('active').siblings().removeClass('active');
+			} else if (mode === 'scan') {
+				const scanType = $tile.find('input[type="radio"]').val();
+				$('#subscan-list-container').find(`[data-item-id="${scanType}"]`).addClass('active').siblings().removeClass('active');
+			} else if (mode === 'tasks') {
+				const taskId = $tile.find('input[type="checkbox"]').val();
+				const $listItem = $('#subscan-list-container').find(`[data-item-id="${taskId}"]`);
+				if ($tile.find('input[type="checkbox"]').is(':checked')) {
+					$listItem.addClass('active');
+				} else {
+					$listItem.removeClass('active');
+				}
+			}
+			
+			setTimeout(function() {
+				checkSubscanSelection();
+			}, 50);
+		});
+		
+		// Reset modal when it's closed
+		$(document).on('hidden.bs.modal', '#subscan-modal', function() {
+			const $modal = $('#subscan-modal');
+			$modal.find('.execution-mode-card').removeClass('selected');
+			$modal.removeClass('execution-mode-workflow execution-mode-tasks execution-mode-scan');
+			$('#subscan-selection-container').empty();
+			$('#subscan-list-container').empty();
+			$('#subscan-content-row').hide();
+			$('#subscan-target-elements').hide();
+			$('#btn-initiate-subtask').prop('disabled', true);
+		});
+	}
+	
+	function loadSubscanSelection(mode) {
+		const $listContainer = $('#subscan-list-container');
+		const $detailContainer = $('#subscan-selection-container');
+		const $contentRow = $('#subscan-content-row');
+		const $btn = $('#btn-initiate-subtask');
+		
+		// Disable button while loading
+		$btn.prop('disabled', true);
+		
+		// Show the two-column layout
+		$contentRow.show();
+		
+		// Use dedicated API endpoint with id_prefix for proper form handling
+		const ajaxUrl = window.SECATOR_SELECTION_URL + `?execution_mode=${mode}&id_prefix=subscan_`;
+		
+		// Get CSRF token
+		const csrfToken = typeof getCookie !== 'undefined' ? getCookie('csrftoken') : '';
+		
+		$.ajax({
+			url: ajaxUrl,
+			type: 'GET',
+			headers: {
+				'X-Requested-With': 'XMLHttpRequest',
+				'X-CSRFToken': csrfToken
+			},
+			beforeSend: function() {
+				$listContainer.html('<div class="text-center py-4"><i class="fas fa-spinner fa-spin"></i><p class="mt-2 small">Loading...</p></div>');
+				$detailContainer.html('<div class="text-center py-4"><i class="fas fa-spinner fa-spin"></i><p class="mt-2 small">Loading...</p></div>');
+			},
+			success: function(data) {
+				if (data.html) {
+					// Parse the HTML to extract items and create compact list
+					const $html = $(data.html);
+					
+					// Build compact list on the left
+					buildCompactList($html, mode, $listContainer);
+					
+					// Store full HTML for detail view
+					$detailContainer.data('full-html', data.html);
+					$detailContainer.html('<div class="text-muted text-center py-5"><i class="fas fa-hand-pointer fa-2x mb-3"></i><p>Select an item from the list to view details</p></div>');
+					
+					// Show target elements template
+					$('#subscan-target-elements').show();
+					
+					// Re-initialize tooltips if needed
+					if (typeof bootstrap !== 'undefined' && bootstrap.Tooltip) {
+						$listContainer.find('[data-bs-toggle="tooltip"]').each(function() {
+							new bootstrap.Tooltip(this);
+						});
+					}
+					
+					// Check selection after a short delay to ensure DOM is updated
+					setTimeout(function() {
+						checkSubscanSelection();
+					}, 100);
+				} else {
+					$listContainer.html('<div class="alert alert-danger">Error loading options</div>');
+					$detailContainer.html('');
+					$btn.prop('disabled', true);
+				}
+			},
+			error: function(xhr, status, error) {
+				console.error('Error loading subscan selection:', error);
+				$listContainer.html('<div class="alert alert-danger">Error loading options. Please try again.</div>');
+				$detailContainer.html('');
+				$btn.prop('disabled', true);
 			}
 		});
 	}
 	
+	function buildCompactList($html, mode, $listContainer) {
+		$listContainer.empty();
+		
+		if (mode === 'workflow') {
+			// Extract workflow tiles
+			const $workflows = $html.find('.workflow-tile');
+			if ($workflows.length === 0) {
+				$listContainer.html('<div class="alert alert-warning small">No workflows available</div>');
+				return;
+			}
+			
+			$workflows.each(function() {
+				const $tile = $(this);
+				const $input = $tile.find('input[type="radio"]');
+				const workflowId = $input.val();
+				const workflowName = $tile.find('.workflow-tile-title').text().trim();
+				const workflowDesc = $tile.find('.workflow-tile-description').text().trim();
+				const tasksCount = $tile.find('.workflow-tasks-count').text().trim();
+				
+				const $listItem = $('<div>')
+					.addClass('subscan-list-item')
+					.attr('data-item-id', workflowId)
+					.attr('data-item-type', 'workflow')
+					.html(`
+						<div class="d-flex align-items-center">
+							<div class="flex-grow-1">
+								<h6 class="mb-1 small fw-bold">${workflowName}</h6>
+								<p class="mb-0 small text-muted">${workflowDesc || 'No description'}</p>
+								${tasksCount ? `<span class="badge badge-soft-primary small">${tasksCount}</span>` : ''}
+							</div>
+							<i class="fas fa-chevron-right text-muted ms-2"></i>
+						</div>
+					`);
+				
+				$listItem.on('click', function() {
+					// Remove active class from all items
+					$listContainer.find('.subscan-list-item').removeClass('active');
+					// Add active class to clicked item
+					$listItem.addClass('active');
+					
+					// Show detail in right panel
+					showItemDetail($tile, mode, workflowId);
+				});
+				
+				$listContainer.append($listItem);
+			});
+		} else if (mode === 'tasks') {
+			// Extract task tiles grouped by category
+			const $categorySeparators = $html.find('.category-separator');
+			const $categoryRows = $html.find('[data-category]');
+			
+			if ($categoryRows.length === 0) {
+				$listContainer.html('<div class="alert alert-warning small">No tasks available</div>');
+				return;
+			}
+			
+			// Group tasks by category
+			const categories = {};
+			$categoryRows.each(function() {
+				const category = $(this).attr('data-category');
+				if (!categories[category]) {
+					categories[category] = [];
+				}
+				$(this).find('.task-tile').each(function() {
+					categories[category].push($(this));
+				});
+			});
+			
+			// Build list with categories
+			Object.keys(categories).forEach(function(category) {
+				if (categories[category].length === 0) return;
+				
+				const $categoryHeader = $('<div>')
+					.addClass('subscan-list-category-header')
+					.html(`<strong class="small text-muted">${category.charAt(0).toUpperCase() + category.slice(1)}</strong>`);
+				$listContainer.append($categoryHeader);
+				
+				categories[category].forEach(function($tile) {
+					const $input = $tile.find('input[type="checkbox"]');
+					const taskId = $input.val();
+					const taskName = $tile.find('.task-tile-title').text().trim();
+					const taskDesc = $tile.find('.task-tile-description').text().trim();
+					
+					const $listItem = $('<div>')
+						.addClass('subscan-list-item')
+						.attr('data-item-id', taskId)
+						.attr('data-item-type', 'task')
+						.html(`
+							<div class="d-flex align-items-center">
+								<div class="flex-grow-1">
+									<h6 class="mb-1 small fw-bold">${taskName}</h6>
+									<p class="mb-0 small text-muted">${taskDesc || 'No description'}</p>
+								</div>
+								<i class="fas fa-chevron-right text-muted ms-2"></i>
+							</div>
+						`);
+					
+					$listItem.on('click', function() {
+						// Toggle active class
+						$listItem.toggleClass('active');
+						
+						// Toggle checkbox
+						$input.prop('checked', $listItem.hasClass('active'));
+						
+						// Show detail in right panel
+						showItemDetail($tile, mode, taskId);
+						
+						// Trigger change event
+						$input.trigger('change');
+					});
+					
+					$listContainer.append($listItem);
+				});
+			});
+		} else if (mode === 'scan') {
+			// Extract scan type tiles
+			const $scans = $html.find('.scan-type-tile');
+			if ($scans.length === 0) {
+				$listContainer.html('<div class="alert alert-warning small">No scan types available</div>');
+				return;
+			}
+			
+			$scans.each(function() {
+				const $tile = $(this);
+				const $input = $tile.find('input[type="radio"]');
+				const scanType = $input.val();
+				const scanName = $tile.find('.scan-type-tile-title').text().trim();
+				const scanDesc = $tile.find('.scan-type-tile-description').text().trim();
+				
+				const $listItem = $('<div>')
+					.addClass('subscan-list-item')
+					.attr('data-item-id', scanType)
+					.attr('data-item-type', 'scan')
+					.html(`
+						<div class="d-flex align-items-center">
+							<div class="flex-grow-1">
+								<h6 class="mb-1 small fw-bold">${scanName}</h6>
+								<p class="mb-0 small text-muted">${scanDesc || 'No description'}</p>
+							</div>
+							<i class="fas fa-chevron-right text-muted ms-2"></i>
+						</div>
+					`);
+				
+				$listItem.on('click', function() {
+					// Remove active class from all items
+					$listContainer.find('.subscan-list-item').removeClass('active');
+					// Add active class to clicked item
+					$listItem.addClass('active');
+					
+					// Show detail in right panel
+					showItemDetail($tile, mode, scanType);
+				});
+				
+				$listContainer.append($listItem);
+			});
+		}
+	}
+	
+	function showItemDetail($tile, mode, itemId) {
+		const $detailContainer = $('#subscan-selection-container');
+		
+		// Clone the tile and show it in detail panel
+		const $detailTile = $tile.clone(true, true); // Deep clone with data and events
+		
+		// Make sure the input is properly configured
+		if (mode === 'workflow') {
+			$detailTile.find('input[type="radio"]').attr('name', 'workflow_id');
+		} else if (mode === 'tasks') {
+			$detailTile.find('input[type="checkbox"]').attr('name', 'task_ids');
+		} else if (mode === 'scan') {
+			$detailTile.find('input[type="radio"]').attr('name', 'secator_scan_type');
+		}
+		
+		// Show the detail tile
+		$detailContainer.html($detailTile);
+		
+		// Synchronize changes from detail panel back to original tile and list item
+		const $originalInput = $tile.find('input[type="radio"], input[type="checkbox"]');
+		const $detailInput = $detailTile.find('input[type="radio"], input[type="checkbox"]');
+		const $listItem = $('#subscan-list-container').find(`[data-item-id="${itemId}"]`);
+		
+		// Sync detail input changes to original tile and list item
+		$detailInput.on('change', function() {
+			const isChecked = $(this).is(':checked');
+			$originalInput.prop('checked', isChecked);
+			
+			// Update list item active state
+			if (mode === 'workflow' || mode === 'scan') {
+				if (isChecked) {
+					$('#subscan-list-container').find('.subscan-list-item').removeClass('active');
+					$listItem.addClass('active');
+				}
+			} else if (mode === 'tasks') {
+				if (isChecked) {
+					$listItem.addClass('active');
+				} else {
+					$listItem.removeClass('active');
+				}
+			}
+			
+			checkSubscanSelection();
+		});
+		
+		// Sync original input changes to detail input (if user interacts with original)
+		$originalInput.on('change', function() {
+			$detailInput.prop('checked', $(this).is(':checked'));
+			checkSubscanSelection();
+		});
+		
+		// Re-initialize tooltips
+		if (typeof bootstrap !== 'undefined' && bootstrap.Tooltip) {
+			$detailContainer.find('[data-bs-toggle="tooltip"]').each(function() {
+				new bootstrap.Tooltip(this);
+			});
+		}
+		
+		// Trigger change event to update button state
+		setTimeout(function() {
+			checkSubscanSelection();
+		}, 50);
+	}
+	
+	function checkSubscanSelection() {
+		const $btn = $('#btn-initiate-subtask');
+		const $modal = $('#subscan-modal');
+		const mode = $modal.find('.execution-mode-card.selected').data('mode');
+		
+		if (!mode) {
+			$btn.prop('disabled', true);
+			return;
+		}
+		
+		let hasSelection = false;
+		const $container = $('#subscan-selection-container');
+		
+		// Check for selections in the dynamically loaded container
+		if (mode === 'workflow') {
+			hasSelection = $container.find('input[name="workflow_id"]:checked').length > 0;
+		} else if (mode === 'tasks') {
+			hasSelection = $container.find('input[name="task_ids"]:checked').length > 0;
+		} else if (mode === 'scan') {
+			hasSelection = $container.find('input[name="secator_scan_type"]:checked').length > 0;
+		}
+		
+		$btn.prop('disabled', !hasSelection);
+	}
+	
 	// Initialize when DOM is ready
 	if (document.readyState === 'loading') {
-		document.addEventListener('DOMContentLoaded', initSecatorModeToggle);
+		document.addEventListener('DOMContentLoaded', initSubscanModal);
 	} else {
-		// DOM is already ready, but wait for jQuery
 		if (typeof $ !== 'undefined' && typeof $.fn.ready === 'function') {
-			$(document).ready(initSecatorModeToggle);
+			$(document).ready(initSubscanModal);
 		} else {
-			initSecatorModeToggle();
+			initSubscanModal();
 		}
 	}
 })();
+</script>
+<script>
+	// Provide Django-generated API route to JS (no hardcoded URLs)
+	window.SECATOR_SELECTION_URL = "{% url 'api:get_secator_selection' %}";
 </script>

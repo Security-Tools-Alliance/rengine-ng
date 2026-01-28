@@ -84,55 +84,14 @@ def initiate_secator_scan(
             if "delay" in secator_config:
                 config["delay"] = secator_config["delay"]
 
-        # Convert profiles array to dict for runner
-        # The profiles array contains profile names, we need to determine their category
-        profiles = {}
+        # Process profiles from secator_config - pass as list to runner
+        profiles = []
         if secator_config and "profiles" in secator_config:
             profile_list = secator_config.get("profiles", [])
-            if profile_list:
-                # Determine profile category by checking if it's a custom profile or builtin
-                from scanEngine.models import SecatorProfile
-
-                for profile_name in profile_list:
-                    if not profile_name:
-                        continue
-
-                    # Check if it's a custom profile to determine category
-                    custom_profile = SecatorProfile.objects.filter(
-                        name=profile_name, profile_type="custom", is_active=True
-                    ).first()
-
-                    if custom_profile:
-                        # Custom profile - use its category
-                        category = custom_profile.category
-                        if category not in profiles:
-                            profiles[category] = profile_name
-                            logger.info(f"Applied {category} profile: {profile_name}")
-                    else:
-                        # Builtin profile - try to determine category from common names
-                        # Speed profiles
-                        if profile_name in ["aggressive", "insane", "polite", "paranoid"]:
-                            if "speed" not in profiles:
-                                profiles["speed"] = profile_name
-                                logger.info(f"Applied speed profile: {profile_name}")
-                        # Evasion profiles
-                        elif profile_name in ["sneaky", "stealth", "tor"]:
-                            if "evasion" not in profiles:
-                                profiles["evasion"] = profile_name
-                                logger.info(f"Applied evasion profile: {profile_name}")
-                        # General profiles
-                        elif profile_name in ["active", "passive", "full"]:
-                            if "general" not in profiles:
-                                profiles["general"] = profile_name
-                                logger.info(f"Applied general profile: {profile_name}")
-                        # Network profiles
-                        elif profile_name in ["all_ports", "http_headless", "http_record"]:
-                            if "network" not in profiles:
-                                profiles["network"] = profile_name
-                                logger.info(f"Applied network profile: {profile_name}")
-                        else:
-                            # Unknown profile - log warning and skip
-                            logger.warning(f"Unknown profile name: {profile_name}, skipping")
+            if isinstance(profile_list, list):
+                # Convert all entries to strings defensively
+                profiles = [str(p) for p in profile_list if p is not None]
+                logger.info(f"Using {len(profiles)} profile(s): {', '.join(profiles) if profiles else 'none'}")
 
         # Set execution mode and configuration based on parameters
         if execution_mode == "workflow":

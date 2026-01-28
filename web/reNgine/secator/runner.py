@@ -10,6 +10,7 @@ Precedence of configuration:
 """
 
 import os
+from pathlib import Path
 from typing import Any, Dict, List
 
 from secator.runners import Scan, Task, Workflow
@@ -17,6 +18,7 @@ from secator.template import TemplateLoader
 
 from reNgine.settings import SECATOR_RESULTS
 from reNgine.utilities.logger import get_runner_logger
+from startScan.models import ScanHistory
 from targetApp.models import Domain
 
 
@@ -30,7 +32,6 @@ class SecatorRunner:
 
     def __init__(self):
         """Initialize the SecatorRunner."""
-        self.secator_config = {}
         self.runner_logger = get_runner_logger()
 
     def _load_workflow_template(self, workflow_name: str):
@@ -142,7 +143,7 @@ class SecatorRunner:
             if run_config is None:
                 run_config = {}
 
-            # Prepare Secator run_opts
+            # Prepare Secator run_opts from configuration
             run_opts = self._prepare_secator_config(run_config, profiles)
             self.runner_logger.log_config_preparation({}, run_opts, profiles)
 
@@ -198,6 +199,28 @@ class SecatorRunner:
                 )
 
                 runner = runner_class(config, inputs=targets, hooks=hooks, run_opts=run_opts, context=context)
+
+                # Calculate and save results_dir in ScanHistory
+                # Format: $HOME/.secator/reports/<workspace>/<runner_type>
+                # runner_type should be lowercase and plural: workflows, scans, tasks
+                runner_type_plural = f"{runner_type.lower()}s"
+                home_dir = str(Path.home())
+                results_dir = os.path.join(home_dir, ".secator", "reports", workspace, runner_type_plural)
+
+                try:
+                    scan_history = ScanHistory.objects.get(id=scan_history_id)
+                    scan_history.results_dir = results_dir
+                    scan_history.save(update_fields=["results_dir"])
+                    self.runner_logger.log_debug(
+                        self.runner_logger.PREFIX,
+                        "RESULTS_DIR",
+                        f"Saved results_dir for scan {scan_history_id}: {results_dir}",
+                    )
+                except ScanHistory.DoesNotExist:
+                    self.runner_logger.log_warning(
+                        f"ScanHistory {scan_history_id} not found, cannot save results_dir",
+                        {"prefix": self.runner_logger.PREFIX, "action": "RESULTS_DIR", "scan_id": scan_history_id},
+                    )
 
             except Exception as e:
                 self.runner_logger.log_runner_error(runner_type, e, {"runner_name": runner_name})
@@ -494,8 +517,7 @@ class SecatorRunner:
                 profile_type="custom",
                 is_active=True,
             ).first():
-                profile_opts = custom_profile._parse_opts()
-                if profile_opts:
+                if profile_opts := custom_profile._parse_opts():
                     for opt_key, opt_value in profile_opts.items():
                         secator_config[opt_key] = opt_value
 
@@ -512,81 +534,55 @@ class SecatorRunner:
             )
             self._add_profile_to_list(profile_name, profile_list, seen_profile_names)
 
-    def _prepare_secator_config(self, config: Dict[str, Any] = None, profiles: Dict[str, str] = None) -> Dict[str, Any]:
+    def _prepare_secator_config(self, config: Dict[str, Any] = None, profiles: List[str] = None) -> Dict[str, Any]:
         """
-        Prepare Secator configuration by merging with default config and profiles.
+        Prepare Secator run_opts configuration dictionary.
 
-        This method merges all keys from both config and profiles dictionaries.
-        If the same key exists in both, the value from profiles will overwrite the value from config.
-
-        Special key mappings:
-        - 'threads' and 'concurrency' both map to 'global.concurrency'
-        - 'threads' takes precedence over 'concurrency' when both are present and threads has a valid value
-        - 'threads' is considered invalid if None, empty string, or False (falls back to 'concurrency')
-        - 'rate_limit' maps to 'global.rate_limit'
-        - 'timeout' maps to 'global.timeout'
-        - Profiles are collected into a 'profiles' list that Secator expects
+        This method converts configuration parameters into the flat run_opts format
+        expected by Secator runners. It processes proxy settings, delay values, and
+        profile names into a standardized configuration dictionary.
 
         Args:
-            config: Configuration dictionary from reNgine. All keys are supported.
-            profiles: Speed/evasion/general/network profiles. Values are profile names.
+            config: Configuration dictionary with optional keys:
+                - proxy (str, optional): Proxy URL (e.g., "socks5://127.0.0.1:9050")
+                - delay (int, optional): Delay in seconds between requests (default: 0)
+            profiles: List of profile names as strings or TemplateLoader instances.
+                Each string represents a profile name (e.g., "polite", "full", "stealth").
+                Profiles are processed and converted to TemplateLoader instances if needed.
 
         Returns:
-            Merged configuration dictionary for Secator, containing all keys from both config and profiles.
+            Dictionary with flat run_opts structure:
+                - sync (bool): Always False (async execution)
+                - proxy (str|None): Proxy URL if provided, None otherwise
+                - delay (int): Delay in seconds (default: 0)
+                - profiles (List): List of profile TemplateLoader instances or strings
         """
-        import copy
-
-        secator_config = copy.deepcopy(self.secator_config)
+        run_opts: Dict[str, Any] = {
+            "sync": False,
+            "proxy": None,
+            "delay": 0,
+            "profiles": [],
+        }
 
         if config:
-            if "rate_limit" in config:
-                secator_config["global"]["rate_limit"] = config["rate_limit"]
-            if "threads" in config or "concurrency" in config:
-                if (
-                    "threads" in config
-                    and config["threads"] is not None
-                    and config["threads"] != ""
-                    and config["threads"] is not False
-                ):
-                    secator_config["global"]["concurrency"] = config["threads"]
+            run_opts["proxy"] = config.get("proxy")
+            run_opts["delay"] = config.get("delay", 0)
+
+        if profiles:
+            profile_list: List[Any] = []
+            seen_profile_names: set[str] = set()
+
+            for profile_item in profiles:
+                if isinstance(profile_item, str):
+                    # String profile name - check if custom or builtin
+                    self._process_profile(profile_item, profile_list, seen_profile_names, {})
                 else:
-                    secator_config["global"]["concurrency"] = config.get("concurrency", 20)
-            if "timeout" in config:
-                secator_config["global"]["timeout"] = config["timeout"]
+                    # Already a TemplateLoader or other object
+                    profile_list.append(profile_item)
 
-            for key, value in config.items():
-                if key not in ["rate_limit", "threads", "concurrency", "timeout"]:
-                    secator_config[key] = value
+            run_opts["profiles"] = profile_list
 
-            secator_config["sync"] = False
-
-        if not profiles:
-            secator_config["sync"] = False
-            return secator_config
-
-        # Map old "stealth" key to "evasion" for backward compatibility
-        if "stealth" in profiles and "evasion" not in profiles:
-            profiles["evasion"] = profiles.pop("stealth")
-
-        profile_list: List[Any] = []
-        seen_profile_names: set[str] = set()
-        profile_keys = ["speed", "evasion", "general", "network"]
-
-        # Process special profile keys first
-        for key in profile_keys:
-            if profile_name := profiles.get(key):
-                self._process_profile(profile_name, profile_list, seen_profile_names, secator_config)
-
-        # Process all other profile values as builtin profile names
-        for key, profile_name in profiles.items():
-            if key not in profile_keys and profile_name and isinstance(profile_name, str):
-                self._add_profile_to_list(profile_name, profile_list, seen_profile_names)
-
-        if profile_list:
-            secator_config["profiles"] = profile_list
-
-        secator_config["sync"] = False
-        return secator_config
+        return run_opts
 
     def run_scan(
         self,
