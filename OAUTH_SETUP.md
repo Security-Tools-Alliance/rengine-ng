@@ -214,7 +214,7 @@ python manage.py migrate
 ```
 
 ### Step 4: Configure Site Domain
-The django-allauth requires the Site domain to be set correctly:
+django-allauth requires the Site domain to be set correctly:
 
 ```bash
 docker-compose exec web python manage.py shell
