@@ -65,10 +65,21 @@ class DomainRepository:
     ) -> Optional[DomainInfo]:
         domain_name, whois = self._validate_and_extract_domain_data(item)
         if not domain_name or not whois:
+            logger.warning(
+                "Domain item rejected: missing domain_name or whois data (domain_name=%s, has_whois=%s)",
+                domain_name,
+                whois is not None,
+            )
             return None
 
         domain = self._validate_domain_and_scan(scan_history_id, domain_id, domain_name)
         if not domain:
+            logger.warning(
+                "Domain item rejected: scan/domain validation failed (scan_history_id=%s, domain_id=%s, domain_name=%s)",
+                scan_history_id,
+                domain_id,
+                domain_name,
+            )
             return None
 
         domain_info, created = self._get_or_create_domain_info(domain)
@@ -87,15 +98,22 @@ class DomainRepository:
         """Validate and extract domain name and WHOIS data from item."""
         domain_name = item.get("domain")
         if not isinstance(domain_name, str) or not domain_name.strip():
-            logger.warning("Domain item missing domain field")
+            logger.warning("Domain item missing or invalid domain field: %s", type(domain_name).__name__)
             return None, None
 
         whois = (item.get("extra_data", {}) or {}).get("whois")
-        if not isinstance(whois, dict):
-            logger.warning("Domain item missing extra_data.whois payload")
-            return None, None
+        if isinstance(whois, dict):
+            return domain_name.strip(), whois
 
-        return domain_name.strip(), whois
+        if whois := self._build_whois_from_flat_item(item):
+            logger.debug("Using synthetic whois from flat whois-go style item for domain %s", domain_name.strip())
+            return domain_name.strip(), whois
+
+        logger.warning(
+            "Domain item missing extra_data.whois and flat whois-go style fields for domain %s",
+            domain_name.strip(),
+        )
+        return None, None
 
     def _validate_domain_and_scan(self, scan_history_id: int, domain_id: int, domain_name: str) -> Optional[Domain]:
         """Validate scan history and domain, verify domain name matches."""
@@ -626,6 +644,112 @@ class DomainRepository:
         self._ensure_extra_data_initialized(domain_info)
         domain_info.extra_data.update(stored_data)
 
+    def _resolve_registrant_contact(
+        self,
+        registrant_info: Dict[str, Any],
+        admin_info: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """
+        Build a contact dict preferring registrant_info over admin_info for each key.
+
+        Precedence for each key: registrant_info[key] if present, else admin_info[key].
+        Used so synthetic WHOIS does not overwrite distinct registrant data with admin.
+        _build_whois_from_flat_item then uses this for: id, name, organization, email,
+        phone, country, street; handle/registrant name/organization also fall back to
+        item["registrant"], item["registrant_organization"], admin_info where documented.
+        """
+        resolved: Dict[str, Any] = {}
+        if not isinstance(registrant_info, dict):
+            registrant_info = {}
+        if not isinstance(admin_info, dict):
+            admin_info = {}
+        for key in set(registrant_info.keys()) | set(admin_info.keys()):
+            if registrant_info.get(key):
+                resolved[key] = registrant_info.get(key)
+            elif admin_info.get(key):
+                resolved[key] = admin_info.get(key)
+        return resolved
+
+    def _build_whois_from_flat_item(self, item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        Build a normalized whois-like dict from a flat whois-go style domain item.
+
+        Used when extra_data.whois is missing (e.g. Secator whois task output).
+        """
+        if not isinstance(item, dict) or not item.get("domain"):
+            return None
+
+        extra = item.get("extra_data") or {}
+        admin_info = item.get("administrative_info") or {}
+        tech_info = item.get("technical_info") or {}
+        registrant_info = item.get("registrant_info") or {}
+        raw_registrar = item.get("registrar_info") or {}
+
+        resolved_registrant = self._resolve_registrant_contact(
+            registrant_info, admin_info
+        )
+
+        details = dict(raw_registrar) if isinstance(raw_registrar, dict) else {}
+        if "email" in details and "e-mail" not in details:
+            details["e-mail"] = details.get("email", "")
+        if "referral_url" in details and "website" not in details:
+            details["website"] = details.get("referral_url", "")
+        if "fax" in details and "fax-no" not in details:
+            details["fax-no"] = details.get("fax", "")
+
+        status = item.get("status")
+        if isinstance(status, str):
+            statuses = [status]
+        elif isinstance(status, list):
+            statuses = [s for s in status if isinstance(s, str)]
+        else:
+            statuses = []
+
+        registrant_name = (
+            resolved_registrant.get("name")
+            or item.get("registrant")
+            or admin_info.get("name")
+            or ""
+        )
+        registrant_organization = (
+            resolved_registrant.get("organization")
+            or item.get("registrant_organization")
+            or admin_info.get("organization")
+            or ""
+        )
+
+        return {
+            "domain": {
+                "creation_date": item.get("creation_date"),
+                "expiration_date": item.get("expiration_date"),
+                "updated_date": item.get("updated_date"),
+                "statuses": statuses,
+                "name_servers": extra.get("name_servers") if isinstance(extra.get("name_servers"), list) else [],
+            },
+            "registrar": {
+                "name": item.get("registrar") or "",
+                "details": details,
+                "url": (raw_registrar.get("referral_url") or "") if isinstance(raw_registrar, dict) else "",
+            },
+            "contacts": {
+                "admin": {"handle": admin_info.get("id") or ""},
+                "tech": {"handle": tech_info.get("id") or ""},
+                "registrant": {
+                    "name": registrant_name,
+                    "organization": registrant_organization,
+                    "handle": resolved_registrant.get("id") or admin_info.get("id") or "",
+                    "email": resolved_registrant.get("email") or "",
+                    "phone": resolved_registrant.get("phone") or "",
+                    "country": resolved_registrant.get("country") or "",
+                    "street": resolved_registrant.get("street") or "",
+                },
+            },
+            "registry_ids": {
+                "registry_admin_id": admin_info.get("id") or "",
+                "registry_tech_id": tech_info.get("id") or "",
+            },
+        }
+
     def _build_extra_data_internal_from_whois(self, whois: Dict[str, Any]) -> Dict[str, Any]:
         """
         Build an internal extra_data dict from Secator's normalized WHOIS payload.
@@ -744,9 +868,7 @@ class DomainRepository:
             extra_data["nserver"] = nserver
 
         nic_hdl = fragments.get("nic_hdl", {})
-        if isinstance(nic_hdl, dict) and nic_hdl:
-            extra_data["nic_hdl"] = nic_hdl
-        elif isinstance(nic_hdl, list) and nic_hdl:
+        if (isinstance(nic_hdl, dict) and nic_hdl) or (isinstance(nic_hdl, list) and nic_hdl):
             extra_data["nic_hdl"] = nic_hdl
 
     def _extract_registrar_info(self, whois: Dict[str, Any], extra_data: Dict[str, Any]) -> None:

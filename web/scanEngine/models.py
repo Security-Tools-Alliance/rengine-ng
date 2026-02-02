@@ -253,7 +253,13 @@ class VulnerabilityReportSetting(models.Model):
 
 
 class SecatorWorkflow(models.Model):
-    """Secator workflow configuration (built-in or custom)"""
+    """
+    Secator workflow configuration (built-in or custom).
+
+    Optimization attributes (set by views/templatetags to avoid repeated computation):
+    - _precomputed_structured_tasks: result of get_structured_tasks() when set
+    - _precomputed_tasks_count: result of get_tasks_count() when set
+    """
 
     WORKFLOW_TYPE_CHOICES = [
         ("builtin", "Built-in"),
@@ -578,6 +584,10 @@ class SecatorScan(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.scan_config_type})"
+
+    def get_display_name(self):
+        """Return display name from name (underscores to spaces, preserve original case)."""
+        return self.name.replace("_", " ")
 
     def _parse_yaml_config(self):
         """Parse YAML configuration safely"""

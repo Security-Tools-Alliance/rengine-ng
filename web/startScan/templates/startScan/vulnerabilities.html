@@ -357,16 +357,6 @@ $(document).ready(function() {
 		window.localStorage.setItem('vuln_status_checkbox', $(this).is(':checked'));
 	});
 
-	$('#vulnerability_results').on('click', 'tr' , function (e) {
-		if ($(e.target).is('input[type="checkbox"]') || $(e.target).is('svg') || $(e.target).is('a') || $(e.target).is('th') || $(e.target).is('span')) {
-			return;
-		}
-		var data = vulnerability_table.row(this).data();
-		if (data) {
-			render_vuln_offcanvas(data);
-		}
-	});
-
 	var radioGroup = document.getElementsByName('grouping_vuln_row');
 	radioGroup.forEach(function(radioButton) {
 		radioButton.addEventListener('change', function() {

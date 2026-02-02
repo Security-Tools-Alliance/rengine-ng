@@ -1109,5 +1109,33 @@
     $(document).on('secator:contentLoaded', function() {
       SecatorScan.ensureButtonOutsideAdvancedConfig();
     });
+
+    // Off-then-on for namespaced handlers to avoid duplicate bindings on PJAX/content reloads.
+    $(document).off('click.secator_scan', '.scan-workflow-toggle');
+    $(document).on('click.secator_scan', '.scan-workflow-toggle', function(e) {
+      e.stopPropagation();
+    });
+    $(document).off('click.secator_scan', '.scan-expand-all');
+    $(document).on('click.secator_scan', '.scan-expand-all', function(e) {
+      e.stopPropagation();
+      const $tile = $(this).closest('.scan-type-tile');
+      $tile.find('.scan-workflow-collapse').each(function() {
+        if (typeof bootstrap !== 'undefined' && bootstrap.Collapse) {
+          const collapseInstance = bootstrap.Collapse.getOrCreateInstance(this, { toggle: false });
+          collapseInstance.show();
+        }
+      });
+    });
+    $(document).off('click.secator_scan', '.scan-collapse-all');
+    $(document).on('click.secator_scan', '.scan-collapse-all', function(e) {
+      e.stopPropagation();
+      const $tile = $(this).closest('.scan-type-tile');
+      $tile.find('.scan-workflow-collapse').each(function() {
+        if (typeof bootstrap !== 'undefined' && bootstrap.Collapse) {
+          const collapseInstance = bootstrap.Collapse.getOrCreateInstance(this, { toggle: false });
+          collapseInstance.hide();
+        }
+      });
+    });
   });
 })(jQuery);

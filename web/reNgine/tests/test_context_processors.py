@@ -8,7 +8,15 @@ from django.core.cache import cache
 from django.test import RequestFactory, TestCase
 
 from reNgine import settings
-from reNgine.context_processors import _get_external_ip_with_fallback, misc, version
+from reNgine import context_processors as context_processors_module
+from reNgine.context_processors import (
+    EXTERNAL_IP_CACHE_KEY,
+    _get_external_ip_with_fallback,
+    _get_cached_external_ip,
+    clear_external_ip_in_process_cache,
+    misc,
+    version,
+)
 
 
 class TestContextProcessors(TestCase):
@@ -18,6 +26,7 @@ class TestContextProcessors(TestCase):
         """Set up test fixtures"""
         self.factory = RequestFactory()
         cache.clear()
+        clear_external_ip_in_process_cache()
 
     def tearDown(self):
         """Clean up after tests"""
@@ -110,15 +119,27 @@ class TestContextProcessors(TestCase):
 
     @patch("reNgine.context_processors.cache.get")
     def test_misc_context_processor_with_cache_hit(self, mock_cache_get):
-        """Test misc context processor when IP is in cache"""
-        # Mock cache to return IP
+        """Test misc context processor when IP is in Django cache"""
         mock_cache_get.return_value = "203.0.113.5"
 
         request = self.factory.get("/")
         context = misc(request)
 
         self.assertEqual(context["external_ip"], "203.0.113.5")
-        mock_cache_get.assert_called_once_with("external_ip")
+        mock_cache_get.assert_called_once_with(EXTERNAL_IP_CACHE_KEY)
+
+    @patch("reNgine.context_processors._is_dummy_cache", return_value=True)
+    @patch("reNgine.context_processors._get_external_ip_with_fallback")
+    def test_get_cached_external_ip_uses_in_process_cache(self, mock_get_ip, _mock_dummy):
+        """Test that in-process cache avoids calling fetch when DummyCache is used."""
+        mock_get_ip.return_value = "203.0.113.10"
+        context_processors_module._cached_external_ip_value = "203.0.113.10"
+        context_processors_module._cached_external_ip_expires_at = 1e12
+
+        result = _get_cached_external_ip()
+
+        self.assertEqual(result, "203.0.113.10")
+        mock_get_ip.assert_not_called()
 
     @patch("reNgine.context_processors._get_external_ip_with_fallback")
     def test_misc_context_processor_with_cache_miss_success(self, mock_get_ip):

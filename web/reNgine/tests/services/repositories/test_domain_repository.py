@@ -141,6 +141,95 @@ class TestDomainRepository(BaseTestCase):
         self.domain.refresh_from_db()
         self.assertEqual(self.domain.domain_info.whois_server, "whois.nic.uk")
 
+    def test_save_from_secator_flat_whois_go_format(self):
+        """Flat whois-go style item without extra_data.whois is accepted and processed."""
+        item = {
+            "_type": "domain",
+            "domain": self.domain.name,
+            "alive": True,
+            "creation_date": "2020-09-24T09:16:34+00:00",
+            "expiration_date": "2026-09-24T09:16:34+00:00",
+            "updated_date": None,
+            "status": ["ACTIVE"],
+            "registrar": "SCALEWAY",
+            "registrar_info": {
+                "name": "SCALEWAY",
+                "street": "8, rue de la ville l'Eveque, 75008 PARIS",
+                "country": "FR",
+                "phone": "+33.184130069",
+                "email": "technical-afnic@bookmydomain.net",
+                "referral_url": "https://www.bookmyname.com",
+            },
+            "registrant": "",
+            "registrant_info": {"id": "ES6827-FRNIC"},
+            "administrative_info": {
+                "id": "ES6827-FRNIC",
+                "name": "easi services",
+                "street": "8 av de la fontvin, 34970 LATTES",
+                "country": "FR",
+                "phone": "+33.954537157",
+                "email": "f804c01cbdd3ece5.261539@spamfree.bookmyname.com",
+            },
+            "technical_info": {"id": "ES6827-FRNIC"},
+            "extra_data": {
+                "punycode": self.domain.name,
+                "name_servers": ["nsa.bookmyname.com", "nsb.bookmyname.com", "nsc.bookmyname.com"],
+            },
+        }
+
+        result = self.domain_repo.save_from_secator(item, self.scan_history.id, self.domain.id)
+
+        self.assertIsNotNone(result)
+        self.domain.refresh_from_db()
+        self.assertIsNotNone(self.domain.domain_info)
+        self.assertEqual(self.domain.domain_info.id, result.id)
+        self.assertIsNotNone(result.registrar)
+        self.assertEqual(result.registrar.name, "SCALEWAY")
+        self.assertIsNotNone(result.registrant)
+        self.assertEqual(result.registrant.name, "easi services")
+        self.assertEqual(result.registrant.id_str, "ES6827-FRNIC")
+        name_servers = list(result.name_servers.values_list("name", flat=True))
+        self.assertEqual(set(name_servers), {"nsa.bookmyname.com", "nsb.bookmyname.com", "nsc.bookmyname.com"})
+
+    def test_save_from_secator_flat_prefers_registrant_over_admin(self):
+        """Registrant-specific fields are used first; admin only as fallback."""
+        item = {
+            "_type": "domain",
+            "domain": self.domain.name,
+            "alive": True,
+            "creation_date": "2020-09-24T09:16:34+00:00",
+            "expiration_date": "2026-09-24T09:16:34+00:00",
+            "updated_date": None,
+            "status": ["ACTIVE"],
+            "registrar": "SCALEWAY",
+            "registrar_info": {"name": "SCALEWAY"},
+            "registrant_info": {
+                "id": "REG123-FRNIC",
+                "name": "Registrant Contact Name",
+                "organization": "Registrant Org Ltd",
+                "email": "registrant@example.org",
+                "street": "1 Registrant St",
+                "country": "GB",
+            },
+            "administrative_info": {
+                "id": "ADM456-FRNIC",
+                "name": "Admin Contact",
+                "organization": "Admin Org",
+                "email": "admin@example.org",
+                "street": "2 Admin Ave",
+                "country": "FR",
+            },
+            "technical_info": {"id": "TECH789-FRNIC"},
+            "extra_data": {"name_servers": []},
+        }
+
+        result = self.domain_repo.save_from_secator(item, self.scan_history.id, self.domain.id)
+
+        self.assertIsNotNone(result)
+        self.assertIsNotNone(result.registrant)
+        self.assertEqual(result.registrant.name, "Registrant Contact Name")
+        self.assertEqual(result.registrant.id_str, "REG123-FRNIC")
+
     def test_save_from_secator_with_registrar(self):
         """Test saving domain info with registrar."""
         registrar_details = {

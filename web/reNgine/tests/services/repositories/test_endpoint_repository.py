@@ -107,9 +107,7 @@ class EndpointRepositoryHttpStatusBreakdownTestCase(BaseTestCase):
         self.data_generator.create_scan_history(is_legacy=True)
         self.data_generator.create_subdomain(name="www.example.com", http_status=200)
         scan_secator = self.data_generator.create_scan_history(is_legacy=False)
-        sub_sec = self.data_generator.create_subdomain(
-            name="www.example.com", scan_history=scan_secator
-        )
+        sub_sec = self.data_generator.create_subdomain(name="www.example.com", scan_history=scan_secator)
         self.data_generator.create_endpoint(
             subdomain=sub_sec,
             scan_history=scan_secator,

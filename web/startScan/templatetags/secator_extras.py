@@ -191,6 +191,25 @@ def workflow_icon(workflow_name):
     )
 
 
+@register.filter
+def scan_icon(scan_name):
+    """Map scan names to FontAwesome icons (scan-type tiles). Fallback to workflow_icon."""
+    if not scan_name:
+        return "radar"
+    name_str = str(scan_name)
+    name_lower = name_str.lower()
+    scan_icons = {
+        "domain": "globe",
+        "host": "server",
+        "network": "network-wired",
+        "subdomain": "sitemap",
+        "url": "link",
+    }
+    if name_lower in scan_icons:
+        return scan_icons[name_lower]
+    return workflow_icon(name_str)
+
+
 @lru_cache(maxsize=128)
 def _get_task_info_from_db(task_name):
     """
@@ -301,3 +320,24 @@ def workflow_has_tag(workflow, tag):
     tag_lower = tag.lower() if isinstance(tag, str) else tag
     tags = getattr(workflow, "tags", None) or []
     return any((t or "").lower() == tag_lower for t in tags if isinstance(t, str))
+
+
+@register.filter
+def slice_from(value, start_index):
+    """Return list[start_index:]; used so limit is respected for remaining items."""
+    if value is None:
+        return []
+    try:
+        start = int(start_index)
+    except (TypeError, ValueError):
+        return list(value)
+    return list(value)[start:]
+
+
+@register.filter
+def subtract(value, arg):
+    """Return value - arg (for '+N more' count using limit)."""
+    try:
+        return int(value) - int(arg)
+    except (TypeError, ValueError):
+        return 0

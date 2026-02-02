@@ -76,45 +76,7 @@
                           </div>
                           <p class="workflow-tile-description">{{ workflow.description|truncatechars:80 }}</p>
                           
-                          <div class="workflow-tasks-compact">
-                            {% for item in workflow|get_structured_tasks|slice:":4" %}
-                              {% if item.type == "group" %}
-                                <div class="workflow-task-group">
-                                  <div class="workflow-task-group-header">
-                                    <i class="fas fa-layer-group text-primary me-1"></i>
-                                    <span class="workflow-task-group-name">{{ item.display_name|title }}</span>
-                                    <span class="workflow-task-group-count">({{ item.tasks|length }})</span>
-                                  </div>
-                                  <div class="workflow-task-group-items">
-                                    {% for task_name in item.tasks %}
-                                      {% get_task_info task_name as task_info %}
-                                      <span class="workflow-task-compact-item grouped" data-bs-toggle="tooltip" data-bs-placement="top" title="<strong>{{ task_info.name|title }}</strong><br>{{ task_info.description }}">
-                                        <i class="fas fa-{{ task_info.icon }} text-muted me-1"></i>
-                                        {{ task_info.name }}
-                                      </span>
-                                    {% endfor %}
-                                  </div>
-                                </div>
-                              {% else %}
-                                <div class="workflow-task-individual-wrapper">
-                                  {% get_task_info item.name as task_info %}
-                                  <span class="workflow-task-compact-item" data-bs-toggle="tooltip" data-bs-placement="top" title="<strong>{{ task_info.name|title }}</strong><br>{{ task_info.description }}">
-                                    <i class="fas fa-{{ task_info.icon }} text-muted me-1"></i>
-                                    {{ task_info.name }}
-                                  </span>
-                                </div>
-                              {% endif %}
-                            {% endfor %}
-                            {% with structured_tasks=workflow|get_structured_tasks %}
-                              {% if structured_tasks|length > 4 %}
-                                {% with remaining_items=structured_tasks|slice:"4:" %}
-                                  <span class="workflow-task-more-compact" data-bs-toggle="tooltip" data-bs-placement="top" title="Additional items: {% for item in remaining_items %}{% if item.type == "group" %}{{ item.display_name|title }}{% else %}{{ item.name }}{% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}">
-                                    +{{ structured_tasks|length|add:"-4" }} more
-                                  </span>
-                                {% endwith %}
-                              {% endif %}
-                            {% endwith %}
-                          </div>
+                          {% include "startScan/_items/_secator_tasks_compact.html" with structured_tasks=workflow|get_structured_tasks limit=4 %}
                         </div>
                         
                         <div class="workflow-tile-footer">

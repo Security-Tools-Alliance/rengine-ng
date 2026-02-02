@@ -347,7 +347,6 @@ class TestSecatorScan(BaseTestCase):
         super().setUp()
         self.scan_data = {
             "name": "Test Scan",
-            "alias": "domain",
             "description": "A test scan",
             "scan_type": "internet",
             "scan_config_type": "builtin",
@@ -405,6 +404,13 @@ input_types:
         input_types = scan.get_input_types()
         self.assertIsInstance(input_types, list)
         self.assertIn("domain", input_types)
+
+    def test_get_display_name(self):
+        """Test get_display_name returns name with underscores replaced by spaces, preserving case."""
+        scan = SecatorScan.objects.create(**self.scan_data)
+        self.assertEqual(scan.get_display_name(), "Test Scan")
+        scan.name = "subdomain_recon"
+        self.assertEqual(scan.get_display_name(), "subdomain recon")
 
     def test_builtin_scan_modification_blocked(self):
         """Test that built-in scans cannot be modified."""

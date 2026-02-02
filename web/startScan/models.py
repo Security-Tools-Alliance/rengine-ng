@@ -85,9 +85,7 @@ class ScanHistory(models.Model):
             .exclude(scan_history__id=last_scan_obj.id)
             .values_list("name", flat=True)
         )
-        names_q2 = set(
-            Subdomain.objects.filter(scan_history__id=last_scan_obj.id).values_list("name", flat=True)
-        )
+        names_q2 = set(Subdomain.objects.filter(scan_history__id=last_scan_obj.id).values_list("name", flat=True))
         new_subdomains = len(names_q2 - names_q1)
         removed_subdomains = len(names_q1 - names_q2)
         return [new_subdomains, removed_subdomains]
@@ -586,11 +584,7 @@ class Subdomain(models.Model):
         Uses a single Port queryset to avoid N+1 queries.
         """
         ip_qs = self.ip_addresses.all()
-        port_numbers = (
-            Port.objects.filter(ip_address__in=ip_qs)
-            .values_list("number", flat=True)
-            .distinct()
-        )
+        port_numbers = Port.objects.filter(ip_address__in=ip_qs).values_list("number", flat=True).distinct()
         return sorted(port_numbers)
 
     @property
@@ -604,11 +598,7 @@ class Subdomain(models.Model):
         result = {ip.address: {"ports": [], "is_cdn": ip.is_cdn} for ip in ip_qs}
         if not result:
             return {}
-        port_list = (
-            Port.objects.filter(ip_address__in=ip_qs)
-            .select_related("ip_address")
-            .order_by("number")
-        )
+        port_list = Port.objects.filter(ip_address__in=ip_qs).select_related("ip_address").order_by("number")
         for port in port_list:
             addr = port.ip_address.address if port.ip_address else None
             if addr is not None and addr in result:

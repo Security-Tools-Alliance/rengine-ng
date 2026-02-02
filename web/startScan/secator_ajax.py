@@ -21,7 +21,7 @@ class SecatorSelectionContext(TypedDict, total=False):
     all_tasks: Any
     tasks_dict: dict[str, SecatorTask]
     tasks: Any
-    scan_types: list[tuple[str, str]]
+    scans: list[Any]  # scan mode: list of {"scan": SecatorScan, "workflows": [{"workflow", "structured_tasks", "tasks_count"}, ...]}
 
 
 def get_secator_selection_template_and_context(execution_mode: str) -> tuple[str, SecatorSelectionContext]:
@@ -57,6 +57,7 @@ def get_secator_selection_template_and_context(execution_mode: str) -> tuple[str
         tasks_dict = {task.task_type: task for task in all_tasks}
 
         workflows_list = list(workflows_queryset)
+        # Precompute once so templates/templatetags avoid N+1 (get_structured_tasks/get_tasks_count).
         for workflow in workflows_list:
             workflow._precomputed_structured_tasks = workflow.get_structured_tasks()
             workflow._precomputed_tasks_count = workflow.get_tasks_count()
@@ -82,10 +83,57 @@ def get_secator_selection_template_and_context(execution_mode: str) -> tuple[str
         return "startScan/_items/secator_task_select.html", context
 
     if mode == "scan":
-        context["scan_types"] = [
-            (scan.name, scan.description)
-            for scan in SecatorScan.objects.filter(scan_config_type="builtin", is_active=True).order_by("name")
-        ]
+        scans_qs = (
+            SecatorScan.objects.filter(scan_config_type="builtin", is_active=True)
+            .only("name", "description", "long_description", "yaml_configuration")
+            .order_by("name")
+        )
+        scans_list = list(scans_qs)
+        workflow_names: set[str] = set()
+        for scan in scans_list:
+            workflow_names.update(scan.get_workflows().keys())
+        workflows_by_name: dict[str, SecatorWorkflow] = {}
+        if workflow_names:
+            workflows_qs = SecatorWorkflow.objects.filter(name__in=workflow_names).only(
+                "id",
+                "name",
+                "display_name",
+                "description",
+                "long_description",
+                "workflow_type",
+                "tags",
+                "yaml_configuration",
+            )
+            workflows_by_name = {w.name: w for w in workflows_qs}
+        all_tasks = SecatorTask.objects.filter(is_active=True).only(
+            "task_type",
+            "name",
+            "tags",
+            "description",
+        )
+        tasks_dict = {task.task_type: task for task in all_tasks}
+        scans_context: list[dict[str, Any]] = []
+        for scan in scans_list:
+            ordered_names = list(scan.get_workflows().keys())
+            workflow_contexts: list[dict[str, Any]] = []
+            for wf_name in ordered_names:
+                wf = workflows_by_name.get(wf_name)
+                if not wf:
+                    continue
+                structured_tasks = wf.get_structured_tasks()
+                tasks_count = wf.get_tasks_count()
+                wf._precomputed_structured_tasks = structured_tasks
+                wf._precomputed_tasks_count = tasks_count
+                workflow_contexts.append(
+                    {
+                        "workflow": wf,
+                        "structured_tasks": structured_tasks,
+                        "tasks_count": tasks_count,
+                    }
+                )
+            scans_context.append({"scan": scan, "workflows": workflow_contexts})
+        context["scans"] = scans_context
+        context["tasks_dict"] = tasks_dict
         return "startScan/_items/secator_scan_select.html", context
 
     raise ValueError(f"Invalid execution_mode: {execution_mode!r}")

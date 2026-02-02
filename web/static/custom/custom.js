@@ -182,6 +182,22 @@ function isExternalUrl(url) {
 // Initialize CSRF protection when DOM is ready
 $(document).ready(function() {
 	setupCSRFToken();
+
+	// Delegated handlers: always off-then-on for namespaced events so PJAX/content reloads
+	// do not stack duplicate bindings. Init order: this block runs once on document.ready.
+	$(document).off('click.vulnerability_results', '#vulnerability_results tbody tr');
+	$(document).on('click.vulnerability_results', '#vulnerability_results tbody tr', function(e) {
+		if ($(e.target).is('input[type="checkbox"]') || $(e.target).is('svg') || $(e.target).is('a') || $(e.target).is('th') || $(e.target).is('span')) {
+			return;
+		}
+		if (!$.fn.dataTable.isDataTable('#vulnerability_results')) {
+			return;
+		}
+		const rowData = $('#vulnerability_results').DataTable().row(this).data();
+		if (rowData) {
+			render_vuln_offcanvas(rowData);
+		}
+	});
 });
 
 /**
@@ -622,7 +638,9 @@ $('#select_all_checkbox').on('click', function() {
 	toggleMultipleVulnerabilitiesButton();
 });
 
-$("#vulnerability_results").on('click', '.btn-delete-vulnerability', function () {
+// Same off-then-on pattern for delete handler (see vulnerability row click above).
+$(document).off('click.vulnerability_results', '#vulnerability_results .btn-delete-vulnerability');
+$(document).on('click.vulnerability_results', '#vulnerability_results .btn-delete-vulnerability', function () {
 	const vulnerability_id = $(this).attr('id');
 	const data = {'vulnerability_ids': [vulnerability_id]};
 	const endpoint_url = $(this).attr('data-url');
@@ -668,8 +686,8 @@ $("#vulnerability_results").on('click', '.btn-delete-vulnerability', function ()
 				}
 			});
 		}
-	});;
-	$('a[data-toggle="tooltip"]').tooltip("hide")
+	});
+	$('a[data-toggle="tooltip"]').tooltip("hide");
 });
 
 
@@ -2981,8 +2999,13 @@ function render_vuln_offcanvas(vuln){
 			break;
 		default:
 	}
+	const offcanvasEl = document.getElementById('offcanvas');
 	const offcanvas_title = document.getElementById('offcanvas-title');
 	const offcanvas_body = document.getElementById('offcanvas-body');
+	if (!offcanvas_title || !offcanvas_body || !offcanvasEl) {
+		console.warn('Offcanvas elements not found in DOM');
+		return;
+	}
 	let title_content = '';
 	let body = '';
 	title_content += `<i class="mdi mdi-bug-outline me-1 text-${default_color}"></i>`;
@@ -3267,7 +3290,13 @@ function render_vuln_offcanvas(vuln){
 
 	offcanvas_title.innerHTML = title_content;
 	offcanvas_body.innerHTML = body;
-	$('#offcanvas').offcanvas('show');
+	if (offcanvasEl && typeof bootstrap !== 'undefined' && bootstrap.Offcanvas) {
+		// Same as ModalManager: ensure offcanvas is in body so it displays above tab content and modals
+		if (offcanvasEl.parentNode !== document.body) {
+			document.body.appendChild(offcanvasEl);
+		}
+		bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl).show();
+	}
 }
 
 
