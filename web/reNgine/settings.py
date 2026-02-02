@@ -240,7 +240,7 @@ LOGIN_REQUIRED_IGNORE_VIEW_NAMES = [
 ]
 
 LOGIN_REQUIRED_IGNORE_PATHS = [
-    r'/accounts/',
+    r"/accounts/",
 ]
 
 LOGIN_URL = "login"
@@ -294,18 +294,18 @@ SOCIALACCOUNT_PROVIDERS = {
         "APP": {
             "client_id": env("GOOGLE_OAUTH_CLIENT_ID", default=""),
             "secret": env("GOOGLE_OAUTH_CLIENT_SECRET", default=""),
-            "key": "",  
-        }
+            "key": "",
+        },
     },
     "github": {
         "SCOPE": [
             "user",
-            "email" ,
+            "email",
         ],
         "APP": {
             "client_id": env("GITHUB_OAUTH_CLIENT_ID", default=""),
             "secret": env("GITHUB_OAUTH_CLIENT_SECRET", default=""),
-        }
+        },
     },
     "microsoft": {
         "SCOPE": [
@@ -314,7 +314,7 @@ SOCIALACCOUNT_PROVIDERS = {
         "APP": {
             "client_id": env("MICROSOFT_OAUTH_CLIENT_ID", default=""),
             "secret": env("MICROSOFT_OAUTH_CLIENT_SECRET", default=""),
-        }
+        },
     },
     "gitlab": {
         "GITLAB_URL": env("GITLAB_URL", default="https://gitlab.com"),
@@ -322,11 +322,9 @@ SOCIALACCOUNT_PROVIDERS = {
         "APP": {
             "client_id": env("GITLAB_OAUTH_CLIENT_ID", default=""),
             "secret": env("GITLAB_OAUTH_CLIENT_SECRET", default=""),
-        }
+        },
     },
-    "openid_connect": {
-        "APPS": []
-    }
+    "openid_connect": {"APPS": []},
 }
 
 # Number of endpoints that have the same content_length

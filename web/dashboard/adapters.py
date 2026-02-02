@@ -2,12 +2,13 @@
 Custom OAuth adapter for reNgine-ng
 Handles user creation with minimal permissions and proper redirects
 """
+
+from allauth.account.adapter import DefaultAccountAdapter
+from allauth.socialaccount.adapter import DefaultSocialAccountAdapter
 from django.contrib import messages
 from django.urls import reverse
-from allauth.socialaccount.adapter import DefaultSocialAccountAdapter
-from allauth.account.adapter import DefaultAccountAdapter
-from rolepermissions.roles import assign_role
 from rolepermissions.checkers import has_role
+from rolepermissions.roles import assign_role
 
 from dashboard.models import Project
 
@@ -74,24 +75,24 @@ class AccountAdapter(DefaultAccountAdapter):
         """
         user = request.user
 
-        if (social_accounts := getattr(user, 'socialaccount_set', None)) and social_accounts.exists():
+        if (social_accounts := getattr(user, "socialaccount_set", None)) and social_accounts.exists():
             # Ensure OAuth users keep the minimum Auditor role
-            if not has_role(user, 'auditor'):
-                assign_role(user, 'auditor')
+            if not has_role(user, "auditor"):
+                assign_role(user, "auditor")
 
             # OAuth users should not be sent to onboarding; show assigned project if any
             user_project = Project.objects.filter(users=user).first()
             if user_project:
-                return reverse('dashboardIndex', kwargs={'slug': user_project.slug})
-            return reverse('list_projects')
+                return reverse("dashboardIndex", kwargs={"slug": user_project.slug})
+            return reverse("list_projects")
 
         if project := Project.objects.first():
-            return reverse('dashboardIndex', kwargs={'slug': project.slug})
+            return reverse("dashboardIndex", kwargs={"slug": project.slug})
 
         # No project exists
-        if user.is_superuser or has_role(user, 'sys_admin'):
+        if user.is_superuser or has_role(user, "sys_admin"):
             # Admins can create projects via onboarding
-            return reverse('onboarding')
+            return reverse("onboarding")
 
         # Non-admin users see projects list (read-only message)
-        return reverse('list_projects')
+        return reverse("list_projects")

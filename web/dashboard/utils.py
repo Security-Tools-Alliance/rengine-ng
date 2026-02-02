@@ -14,7 +14,7 @@ def get_user_projects(user):
 
     # SysAdmin users see all projects unless they are OAuth users, who only see explicit assignments
     if get_user_groups(user) == "sys_admin":
-        is_oauth_user = hasattr(user, 'socialaccount_set') and user.socialaccount_set.exists()
+        is_oauth_user = hasattr(user, "socialaccount_set") and user.socialaccount_set.exists()
         if is_oauth_user:
             return Project.objects.filter(users=user)
         return Project.objects.all().order_by("name")
