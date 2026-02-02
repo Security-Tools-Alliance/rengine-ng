@@ -96,8 +96,8 @@ class TestSecatorService(BaseTestCase):
         error = Exception("Test error message")
         handle_scan_error(self.scan_history, error)
 
-        mock_logger.error.assert_called_once()
-        self.assertIn("Test error message", str(mock_logger.error.call_args))
+        mock_logger.exception.assert_called_once()
+        self.assertIn("Test error message", str(mock_logger.exception.call_args))
 
     @patch("reNgine.secator.service.logger")
     def test_handle_scan_error_logs_debug_when_terminal(self, mock_logger):

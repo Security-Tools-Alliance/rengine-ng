@@ -232,6 +232,7 @@ class TestSecatorScanController(unittest.TestCase):
         result = self.controller.resume_scan()
         self.assertFalse(result)
 
+    @patch("reNgine.utilities.websocket.send_scan_status_update")
     @patch("reNgine.secator.control.SubScan")
     @patch("reNgine.secator.control.ScanActivity")
     @patch("reNgine.secator.control.SecatorRunner")
@@ -244,12 +245,12 @@ class TestSecatorScanController(unittest.TestCase):
         mock_secator_runner_class,
         mock_scan_activity_class,
         mock_subscan_class,
+        mock_send_status,
     ):
         """Test stopping a subscan with scoped runners based on subdomain."""
         mock_scan_repo = Mock()
         mock_scan_repo_class.return_value = mock_scan_repo
 
-        # Create mock subscan
         mock_subscan = Mock()
         mock_subscan.id = 456
         mock_subscan.subdomain = Mock()
@@ -257,6 +258,7 @@ class TestSecatorScanController(unittest.TestCase):
         mock_scan = Mock()
         mock_scan.id = self.scan_history_id
         mock_subscan.scan_history = mock_scan
+        mock_subscan.scan_history_id = self.scan_history_id
         mock_subscan_class.objects.filter.return_value.first.return_value = mock_subscan
 
         # Create mock activity with runner
@@ -307,29 +309,33 @@ class TestSecatorScanController(unittest.TestCase):
         self.assertFalse(result)
         mock_subscan_class.objects.filter.assert_called_once_with(id=999)
 
+    @patch("reNgine.utilities.websocket.send_scan_status_update")
     @patch("reNgine.secator.control.ScanActivity")
     @patch("reNgine.secator.control.SubScan")
     @patch("reNgine.secator.control.SecatorRunner")
     @patch("reNgine.secator.control.ScanRepository")
     def test_stop_subscan_no_runners(
-        self, mock_scan_repo_class, mock_secator_runner_class, mock_subscan_class, mock_scan_activity_class
+        self,
+        mock_scan_repo_class,
+        mock_secator_runner_class,
+        mock_subscan_class,
+        mock_scan_activity_class,
+        mock_send_status,
     ):
         """Test stopping a subscan with no runners."""
         mock_scan_repo = Mock()
         mock_scan_repo_class.return_value = mock_scan_repo
 
-        # Create mock subscan
         mock_subscan = Mock()
         mock_subscan.id = 456
         mock_scan = Mock()
         mock_scan.id = self.scan_history_id
         mock_subscan.scan_history = mock_scan
+        mock_subscan.scan_history_id = self.scan_history_id
         mock_subscan_class.objects.filter.return_value.first.return_value = mock_subscan
 
-        # Mock ScanActivity filter to return empty list
         mock_scan_activity_class.objects.filter.return_value.select_related.return_value = []
 
-        # No runners found
         mock_secator_runner_class.objects.filter.return_value = []
         mock_subscan_class.objects.filter.return_value.exclude.return_value.count.return_value = 0
 

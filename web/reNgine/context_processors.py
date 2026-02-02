@@ -82,16 +82,13 @@ def misc(request):
         "ABORTED_TASK": ABORTED_TASK,
         "RUNNING_BACKGROUND": RUNNING_BACKGROUND,
     }
-    # Attempt to retrieve the external IP address from the cache
     external_ip = cache.get("external_ip")
 
     if external_ip is None:
-        # external_ip = _get_external_ip_with_fallback()
-        # Cache the IP address for 1 hour (3600 seconds) only if successful
+        external_ip = _get_external_ip_with_fallback()
         if external_ip != "Unable to retrieve IP":
             cache.set("external_ip", external_ip, timeout=3600)
         else:
-            # Cache the failure for a shorter time (5 minutes) to avoid repeated failures
             cache.set("external_ip", external_ip, timeout=300)
 
     return {"external_ip": external_ip, "RENGINE_SCAN_STATUS": scan_status}

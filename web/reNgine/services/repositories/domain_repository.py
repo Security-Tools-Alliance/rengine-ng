@@ -746,6 +746,8 @@ class DomainRepository:
         nic_hdl = fragments.get("nic_hdl", {})
         if isinstance(nic_hdl, dict) and nic_hdl:
             extra_data["nic_hdl"] = nic_hdl
+        elif isinstance(nic_hdl, list) and nic_hdl:
+            extra_data["nic_hdl"] = nic_hdl
 
     def _extract_registrar_info(self, whois: Dict[str, Any], extra_data: Dict[str, Any]) -> None:
         """Extract registrar information with fallback logic."""

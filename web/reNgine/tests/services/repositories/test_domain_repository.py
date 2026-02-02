@@ -28,7 +28,7 @@ class TestDomainRepository(BaseTestCase):
         name_servers: list[str] | None = None,
         emails: list[str] | None = None,
         raw_by_server: dict | None = None,
-        nic_hdl: dict | None = None,
+        nic_hdl: dict | list | None = None,
         admin_handle: str = "",
         tech_handle: str = "",
         jswhois_full: dict | None = None,
@@ -39,7 +39,7 @@ class TestDomainRepository(BaseTestCase):
         name_servers = name_servers or []
         emails = emails or []
         raw_by_server = raw_by_server or {primary_server: "raw"}
-        nic_hdl = nic_hdl or {}
+        nic_hdl = nic_hdl if nic_hdl is not None else {}
         dnssec = dnssec or {"dnssec": "unsigned", "dnssec_keys": []}
         jswhois_full = jswhois_full or {"chain": [primary_server], primary_server: {}}
 
@@ -478,37 +478,30 @@ class TestDomainRepository(BaseTestCase):
         self.assertIsNone(result)
 
     def test_save_from_secator_with_admin_tech(self):
-        """Test saving domain info with admin and tech contacts."""
-        jswhois_full = {
-            "chain": ["whois.iana.org", "whois.nic.uk"],
-            "whois.nic.uk": {
-                "nic-hdl": [
-                    {
-                        "nic-hdl": "ADMIN456-GB",
-                        "contact": "Jane Doe",
-                        "type": "ORGANIZATION",
-                        "e-mail": "admin@testorganization.co.uk",
-                        "phone": "+44.2071111111",
-                        "country": "GB",
-                        "address": ["789 Admin Road", "Birmingham B1 1AA"],
-                    },
-                    {
-                        "nic-hdl": "TECH789-GB",
-                        "contact": "Tech Contact",
-                        "type": "ORGANIZATION",
-                        "e-mail": "tech@testorganization.co.uk",
-                        "phone": "+44.2071111112",
-                        "country": "GB",
-                        "address": ["789 Tech Road", "Birmingham B1 1AA"],
-                    },
-                ],
-            },
+        """Test saving domain info with admin and tech contacts (contacts + fragments.nic_hdl)."""
+        admin_nic = {
+            "nic-hdl": "ADMIN456-GB",
+            "contact": "Jane Doe",
+            "type": "ORGANIZATION",
+            "e-mail": "admin@testorganization.co.uk",
+            "phone": "+44.2071111111",
+            "country": "GB",
+            "address": ["789 Admin Road", "Birmingham B1 1AA"],
+        }
+        tech_nic = {
+            "nic-hdl": "TECH789-GB",
+            "contact": "Tech Contact",
+            "type": "ORGANIZATION",
+            "e-mail": "tech@testorganization.co.uk",
+            "phone": "+44.2071111112",
+            "country": "GB",
+            "address": ["789 Tech Road", "Birmingham B1 1AA"],
         }
         whois = self._build_whois_payload(
             primary_server="whois.nic.uk",
             admin_handle="ADMIN456-GB",
             tech_handle="TECH789-GB",
-            jswhois_full=jswhois_full,
+            nic_hdl=[admin_nic, tech_nic],
         )
         item = {
             "_type": "domain",
@@ -549,23 +542,16 @@ class TestDomainRepository(BaseTestCase):
         self.assertIsInstance(result.updated, datetime)
 
     def test_get_or_create_admin_tech(self):
-        """Test _get_or_create_admin_tech method."""
+        """Test _get_or_create_admin_tech method (extra_data.nic_hdl structure)."""
         extra_data = {
-            "jswhois_full": {
-                "chain": ["whois.nic.uk"],
-                "whois.nic.uk": {
-                    "nic-hdl": [
-                        {
-                            "nic-hdl": "ADMIN123-GB",
-                            "contact": "Robert Johnson",
-                            "type": "PERSON",
-                            "e-mail": "admin@testcompany.co.uk",
-                            "phone": "+44.2072222222",
-                            "country": "GB",
-                            "address": ["321 Admin Street", "Leeds LS1 1AA"],
-                        }
-                    ],
-                },
+            "nic_hdl": {
+                "nic-hdl": "ADMIN123-GB",
+                "contact": "Robert Johnson",
+                "type": "PERSON",
+                "e-mail": "admin@testcompany.co.uk",
+                "phone": "+44.2072222222",
+                "country": "GB",
+                "address": ["321 Admin Street", "Leeds LS1 1AA"],
             },
         }
 
@@ -811,64 +797,40 @@ class TestDomainRepository(BaseTestCase):
         registrar.refresh_from_db()
         self.assertEqual(registrar.phone, "existing")
 
-    def test_find_nic_hdl_in_jswhois(self):
-        """Test _find_nic_hdl_in_jswhois method."""
-        jswhois_full = {
-            "chain": ["whois.nic.uk"],
-            "whois.nic.uk": {
-                "nic-hdl": {
-                    "nic-hdl": "TEST123-GB",
-                    "contact": "John Doe",
-                }
-            },
-        }
-
-        result = self.domain_repo._find_nic_hdl_in_jswhois(jswhois_full, "TEST123-GB")
-
-        self.assertIsNotNone(result)
-        self.assertEqual(result["nic-hdl"], "TEST123-GB")
-
-    def test_find_nic_hdl_in_jswhois_list(self):
-        """Test _find_nic_hdl_in_jswhois with list of nic-hdl."""
-        jswhois_full = {
-            "chain": ["whois.nic.uk"],
-            "whois.nic.uk": {
-                "nic-hdl": [
-                    {"nic-hdl": "TEST123-GB", "contact": "John Doe"},
-                    {"nic-hdl": "TEST456-GB", "contact": "Jane Doe"},
-                ]
-            },
-        }
-
-        result = self.domain_repo._find_nic_hdl_in_jswhois(jswhois_full, "TEST123-GB")
-
-        self.assertIsNotNone(result)
-        self.assertEqual(result["nic-hdl"], "TEST123-GB")
-
-    def test_find_nic_hdl_in_jswhois_not_found(self):
-        """Test _find_nic_hdl_in_jswhois when not found."""
-        jswhois_full = {
-            "chain": ["whois.nic.uk"],
-            "whois.nic.uk": {"nic-hdl": {"nic-hdl": "OTHER123-GB", "contact": "John Doe"}},
-        }
-
-        result = self.domain_repo._find_nic_hdl_in_jswhois(jswhois_full, "TEST123-GB")
-
-        self.assertIsNone(result)
-
     def test_find_nic_hdl_in_extra_data(self):
-        """Test _find_nic_hdl_in_extra_data method."""
+        """Test _find_nic_hdl_in_extra_data with extra_data.nic_hdl dict."""
         extra_data = {
-            "jswhois_full": {
-                "chain": ["whois.nic.uk"],
-                "whois.nic.uk": {"nic-hdl": {"nic-hdl": "TEST123-GB", "contact": "John Doe"}},
-            }
+            "nic_hdl": {"nic-hdl": "TEST123-GB", "contact": "John Doe"},
         }
 
         result = self.domain_repo._find_nic_hdl_in_extra_data(extra_data, "TEST123-GB")
 
         self.assertIsNotNone(result)
         self.assertEqual(result["nic-hdl"], "TEST123-GB")
+
+    def test_find_nic_hdl_in_extra_data_list(self):
+        """Test _find_nic_hdl_in_extra_data with extra_data.nic_hdl list."""
+        extra_data = {
+            "nic_hdl": [
+                {"nic-hdl": "TEST123-GB", "contact": "John Doe"},
+                {"nic-hdl": "TEST456-GB", "contact": "Jane Doe"},
+            ],
+        }
+
+        result = self.domain_repo._find_nic_hdl_in_extra_data(extra_data, "TEST123-GB")
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result["nic-hdl"], "TEST123-GB")
+
+    def test_find_nic_hdl_in_extra_data_not_found(self):
+        """Test _find_nic_hdl_in_extra_data when nic_hdl_id not in list."""
+        extra_data = {
+            "nic_hdl": [{"nic-hdl": "OTHER123-GB", "contact": "John Doe"}],
+        }
+
+        result = self.domain_repo._find_nic_hdl_in_extra_data(extra_data, "TEST123-GB")
+
+        self.assertIsNone(result)
 
     def test_find_nic_hdl_in_extra_data_fallback(self):
         """Test _find_nic_hdl_in_extra_data with fallback to nic_hdl."""

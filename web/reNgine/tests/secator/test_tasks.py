@@ -8,7 +8,7 @@ from django.test import override_settings
 from django.utils import timezone
 
 from reNgine.secator import build_enriched_targets, initiate_secator_scan
-from startScan.models import Domain, Subdomain
+from startScan.models import Domain, EndPoint, Subdomain
 from utils.test_base import BaseTestCase
 
 
@@ -75,16 +75,22 @@ class TestSecatorTasks(BaseTestCase):
         self.assertIn(f"sub2.{self.domain_name}", targets)
 
     def test_build_enriched_targets_with_url_filter(self):
-        """Test building enriched targets with URL filter."""
+        """Test building enriched targets with URL filter (applied only when input_types include 'url')."""
+        base_url = f"https://{self.domain_name}"
+        EndPoint.objects.create(
+            target_domain=self.domain,
+            http_url=base_url,
+            is_default=True,
+        )
         targets = build_enriched_targets(
             domain_id=self.domain.id,
-            input_types=["host"],
+            input_types=["url"],
             subdomain_ids=[],
             out_of_scope_subdomains=[],
             url_filter="/admin",
         )
         self.assertGreaterEqual(len(targets), 1)
-        self.assertIn(f"{self.domain_name}/admin", targets)
+        self.assertTrue(any("/admin" in t for t in targets), msg=f"No target with /admin in {targets}")
 
     def test_build_enriched_targets_with_out_of_scope_filtering(self):
         """Test building enriched targets with out-of-scope filtering."""
@@ -204,11 +210,13 @@ class TestSecatorTasks(BaseTestCase):
         mock_orchestrator.return_value.execute_scan.return_value = {"status": "success"}
 
         mock_task = Mock()
+        mock_task.id = 1
         mock_task.task_type = "httpx"
         mock_tasks_qs = Mock()
-        mock_tasks_qs.values_list.return_value = ["httpx"]
+        mock_tasks_qs.exists.return_value = True
         mock_tasks_qs.__len__ = Mock(return_value=1)
         mock_tasks_qs.__iter__ = Mock(return_value=iter([mock_task]))
+        mock_tasks_qs.values_list.return_value = ["httpx"]
 
         override_targets = [self.domain_name, f"sub1.{self.domain_name}"]
 

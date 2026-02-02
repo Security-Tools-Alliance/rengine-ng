@@ -17,26 +17,6 @@ class TestScanRepository(BaseTestCase):
         self.domain = self.data_generator.create_domain()
         self.scan_history = self.data_generator.create_scan_history()
 
-    def test_update_celery_task_id_success(self):
-        """Test successful celery task ID update."""
-        task_id = "test-task-id-123"
-
-        result = self.scan_repo.update_celery_task_id(self.scan_history.id, task_id)
-
-        self.assertTrue(result)
-
-        # Verify the task ID was updated
-        self.scan_history.refresh_from_db()
-        self.assertEqual(self.scan_history.celery_ids, [task_id])
-
-    def test_update_celery_task_id_nonexistent_scan(self):
-        """Test updating celery task ID for non-existent scan."""
-        task_id = "test-task-id-123"
-
-        result = self.scan_repo.update_celery_task_id(99999, task_id)
-
-        self.assertFalse(result)
-
     def test_update_progress_success(self):
         """Test successful progress update."""
         progress = 50

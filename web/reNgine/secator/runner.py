@@ -575,12 +575,12 @@ class SecatorRunner:
             seen_profile_names: set[str] = set()
 
             for profile_item in profiles:
+                if profile_item is None:
+                    continue
                 if isinstance(profile_item, str):
-                    # String profile name - check if custom or builtin
                     self._process_profile(profile_item, profile_list, seen_profile_names, {})
                 else:
-                    # Already a TemplateLoader or other object
-                    profile_list.append(profile_item)
+                    profile_list.append(str(profile_item))
 
             run_opts["profiles"] = profile_list
 

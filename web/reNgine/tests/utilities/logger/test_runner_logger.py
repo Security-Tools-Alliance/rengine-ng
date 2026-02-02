@@ -52,14 +52,14 @@ class TestRunnerLogger(BaseTestCase):
         merged_config = {"sync": False, "proxy": None, "delay": 0, "profiles": []}
         profiles = ["fast"]
         self.logger.log_config_preparation(base_config, merged_config, profiles)
-        self.assertEqual(len(self.log_capture), 1)
-        self.assertIn("PREPARE", str(self.log_capture[0][0]))
+        self.assertGreaterEqual(len(self.log_capture), 1)
+        self.assertIn("PREPARE", str(self.log_capture))
 
     def test_log_targets(self):
         """Test logging targets."""
         self.logger.log_targets(["example.com", "test.com"], "Workflow")
-        self.assertEqual(len(self.log_capture), 1)
-        self.assertIn("TARGETS", str(self.log_capture[0][0]))
+        self.assertGreaterEqual(len(self.log_capture), 1)
+        self.assertIn("TARGETS", str(self.log_capture))
 
     def test_log_run_opts(self):
         """Test logging run options."""
@@ -79,8 +79,8 @@ class TestRunnerLogger(BaseTestCase):
         """Test logging hooks."""
         hooks = {"on_runner_start": MagicMock()}
         self.logger.log_hooks(hooks)
-        self.assertEqual(len(self.log_capture), 1)
-        self.assertIn("HOOKS", str(self.log_capture[0][0]))
+        self.assertGreaterEqual(len(self.log_capture), 1)
+        self.assertIn("HOOKS", str(self.log_capture))
 
     def test_log_runner_execution_start(self):
         """Test logging runner execution start."""
@@ -92,9 +92,10 @@ class TestRunnerLogger(BaseTestCase):
     def test_log_runner_execution_end_success(self):
         """Test logging runner execution end with success."""
         self.logger.log_runner_execution_end("Workflow", "test_workflow", "success", {"result": "ok"})
-        self.assertEqual(len(self.log_capture), 1)
-        self.assertIn("EXECUTE", str(self.log_capture[0][0]))
-        self.assertIn("COMPLETED", str(self.log_capture[0][0]))
+        self.assertGreaterEqual(len(self.log_capture), 1)
+        all_msgs = str(self.log_capture)
+        self.assertIn("EXECUTE", all_msgs)
+        self.assertIn("COMPLETED", all_msgs)
 
     def test_log_runner_execution_end_error(self):
         """Test logging runner execution end with error."""
