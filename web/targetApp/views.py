@@ -31,6 +31,7 @@ from reNgine.definitions import (
     RUNNING_TASK,
     SUCCESS_TASK,
 )
+from reNgine.services.repositories import EndpointRepository
 from reNgine.utilities.command import run_command
 from reNgine.utilities.dns import get_reverse_dns
 from reNgine.utilities.url import sanitize_url
@@ -986,10 +987,8 @@ def target_summary(request, slug, id):
     # Employees
     context["employees_count"] = Employee.objects.filter(employees__in=scan).count()
 
-    # HTTP Statuses
-    context["http_status_breakdown"] = (
-        subdomains.exclude(http_status=0).values("http_status").annotate(Count("http_status"))
-    )
+    # HTTP Statuses (legacy + Secator via default endpoints)
+    context["http_status_breakdown"] = EndpointRepository().get_http_status_breakdown(target)
 
     # CVEs
     context["most_common_cve"] = (

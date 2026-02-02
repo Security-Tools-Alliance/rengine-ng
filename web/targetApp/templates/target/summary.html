@@ -554,7 +554,7 @@ Target Summary
 					<div class="col-xl-5 col-lg-5 col-12">
 						<div class="card" style="height: 95%">
 							<div class="card-body">
-								<h4 class="header-title mb-0">HTTP Status Breakdown</h4>
+								<h4 class="header-title mb-0">HTTP Status (web server endpoints)</h4>
 								<div id="http_status_chart" class="apex-charts"></div>
 							</div>
 						</div>
@@ -784,9 +784,9 @@ $(document).ready(function(){
 	// http_status chart
 	var options = {
 		series: [{
-			name: 'Subdomains',
+			name: 'Web server endpoints',
 			data: [{% for status in http_status_breakdown %}
-				{{status.http_status__count}},
+				{{ status.http_status__count|floatformat:0 }},
 				{% endfor %}]
 			}],
 			chart: {
@@ -822,6 +822,11 @@ $(document).ready(function(){
 						colors: colors,
 						fontSize: '12px'
 					}
+				}
+			},
+			yaxis: {
+				labels: {
+					formatter: function(val) { return Math.round(val); }
 				}
 			}
 		};

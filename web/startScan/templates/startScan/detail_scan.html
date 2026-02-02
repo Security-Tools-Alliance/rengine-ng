@@ -1466,8 +1466,14 @@ Scan Findings
 <script type="text/javascript">
 $(document).ready(function() {
 	// Init
-	const ps = new PerfectScrollbar(document.querySelector('.mt-container'));
-	const ps1 = new PerfectScrollbar(document.querySelector('.endpoint-search'));
+	const mtContainer = document.querySelector('.mt-container');
+	if (mtContainer) {
+		new PerfectScrollbar(mtContainer);
+	}
+	const endpointSearch = document.querySelector('.endpoint-search');
+	if (endpointSearch) {
+		new PerfectScrollbar(endpointSearch);
+	}
 	$('[data-toggle="tooltip"]').tooltip();
 	$('#addTaskModal select').css('width', '100%');
 	$("#todoSubdomainDropdown").select2({
@@ -1498,7 +1504,7 @@ $(document).ready(function() {
 		series: [{
 			name: 'Subdomains',
 			data: [{% for status in http_status_breakdown %}
-				{{status.http_status__count}},
+				{{ status.http_status__count|floatformat:0 }},
 				{% endfor %}]
 			}],
 			chart: {
@@ -1535,10 +1541,16 @@ $(document).ready(function() {
 						fontSize: '12px'
 					}
 				}
+			},
+			yaxis: {
+				labels: {
+					formatter: function(val) { return Math.round(val); }
+				}
 			}
-	};
+		};
 	var chart = new ApexCharts(document.querySelector("#http_status_chart"), options);
 	chart.render();
+
 	// vulnerability summary pie chart
 	{% if total_vulnerability_count > 0 %}
 		{% include 'base/_items/most_common_cve_cwe_tags.js' %}

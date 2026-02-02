@@ -10,6 +10,118 @@ from startScan.models import DirectoryScan, EndPoint, ScanHistory, Subdomain, Su
 from utils.test_base import BaseTestCase
 
 
+class EndpointRepositoryHttpStatusBreakdownTestCase(BaseTestCase):
+    """Tests for get_http_status_breakdown (scan and domain)."""
+
+    def setUp(self):
+        """Set up test data."""
+        super().setUp()
+        self.repository = EndpointRepository()
+
+    def test_legacy_scan_returns_subdomain_breakdown(self):
+        """Legacy scan uses Subdomain.http_status."""
+        self.data_generator.create_scan_history(is_legacy=True)
+        self.data_generator.create_subdomain(http_status=200)
+        self.data_generator.create_subdomain(name="api.example.com", http_status=200)
+        self.data_generator.create_subdomain(name="www.example.com", http_status=404)
+        result = self.repository.get_http_status_breakdown(self.data_generator.scan_history)
+        by_status = {r["http_status"]: r["http_status__count"] for r in result}
+        self.assertEqual(by_status.get(200), 2)
+        self.assertEqual(by_status.get(404), 1)
+
+    def test_legacy_scan_empty_when_no_http_status(self):
+        """Legacy scan with all http_status=0 returns empty list."""
+        self.data_generator.create_scan_history(is_legacy=True)
+        self.data_generator.create_subdomain()
+        result = self.repository.get_http_status_breakdown(self.data_generator.scan_history)
+        self.assertEqual(result, [])
+
+    def test_secator_scan_returns_default_endpoint_breakdown(self):
+        """Secator scan uses EndPoint (is_default=True) http_status."""
+        self.data_generator.create_scan_history(is_legacy=False)
+        self.data_generator.create_subdomain()
+        self.data_generator.create_endpoint(is_default=True, http_status=200)
+        sub2 = self.data_generator.create_subdomain(name="api.example.com")
+        self.data_generator.create_endpoint(subdomain=sub2, name="ep2", http_status=301, is_default=True)
+        result = self.repository.get_http_status_breakdown(self.data_generator.scan_history)
+        by_status = {r["http_status"]: r["http_status__count"] for r in result}
+        self.assertEqual(by_status.get(200), 1)
+        self.assertEqual(by_status.get(301), 1)
+
+    def test_secator_scan_ignores_non_default_endpoints(self):
+        """Secator breakdown only counts is_default=True endpoints."""
+        self.data_generator.create_scan_history(is_legacy=False)
+        self.data_generator.create_subdomain()
+        self.data_generator.create_endpoint(is_default=True, http_status=200)
+        self.data_generator.create_endpoint(name="ep2", http_status=404, is_default=False)
+        result = self.repository.get_http_status_breakdown(self.data_generator.scan_history)
+        by_status = {r["http_status"]: r["http_status__count"] for r in result}
+        self.assertEqual(by_status.get(200), 1)
+        self.assertNotIn(404, by_status)
+
+    def test_secator_scan_empty_when_no_default_endpoints(self):
+        """Secator scan with no default endpoints with status returns empty."""
+        self.data_generator.create_scan_history(is_legacy=False)
+        self.data_generator.create_subdomain()
+        self.data_generator.create_endpoint(http_status=0)
+        result = self.repository.get_http_status_breakdown(self.data_generator.scan_history)
+        self.assertEqual(result, [])
+
+    def test_domain_merges_legacy_subdomains_and_secator_endpoints(self):
+        """Domain breakdown merges Subdomain and default EndPoint counts."""
+        self.data_generator.create_scan_history(is_legacy=True)
+        self.data_generator.create_subdomain(http_status=200)
+        self.data_generator.create_subdomain(name="api.example.com", http_status=404)
+        scan_secator = self.data_generator.create_scan_history(is_legacy=False)
+        sub_sec = self.data_generator.create_subdomain(name="www.example.com", scan_history=scan_secator)
+        self.data_generator.create_endpoint(
+            subdomain=sub_sec,
+            scan_history=scan_secator,
+            name="ep1",
+            is_default=True,
+            http_status=200,
+        )
+        result = self.repository.get_http_status_breakdown(self.data_generator.domain)
+        by_status = {r["http_status"]: r["http_status__count"] for r in result}
+        self.assertEqual(by_status.get(200), 2)
+        self.assertEqual(by_status.get(404), 1)
+
+    def test_domain_returns_sorted_by_http_status(self):
+        """Result is sorted by http_status for stable chart order."""
+        self.data_generator.create_scan_history(is_legacy=True)
+        self.data_generator.create_subdomain(http_status=404)
+        self.data_generator.create_subdomain(name="api.example.com", http_status=200)
+        result = self.repository.get_http_status_breakdown(self.data_generator.domain)
+        self.assertEqual([r["http_status"] for r in result], [200, 404])
+
+    def test_domain_empty_returns_empty_list(self):
+        """Domain with no subdomains/endpoints with status returns empty."""
+        domain = self.data_generator.domain
+        Subdomain.objects.filter(scan_history=self.data_generator.scan_history).delete()
+        EndPoint.objects.filter(scan_history=self.data_generator.scan_history).delete()
+        result = self.repository.get_http_status_breakdown(domain)
+        self.assertEqual(result, [])
+
+    def test_domain_same_subdomain_legacy_and_secator_counted_once(self):
+        """Domain: subdomain present in legacy and Secator (default endpoint) counts only once."""
+        self.data_generator.create_scan_history(is_legacy=True)
+        self.data_generator.create_subdomain(name="www.example.com", http_status=200)
+        scan_secator = self.data_generator.create_scan_history(is_legacy=False)
+        sub_sec = self.data_generator.create_subdomain(
+            name="www.example.com", scan_history=scan_secator
+        )
+        self.data_generator.create_endpoint(
+            subdomain=sub_sec,
+            scan_history=scan_secator,
+            name="ep_www",
+            is_default=True,
+            http_status=200,
+        )
+        result = self.repository.get_http_status_breakdown(self.data_generator.domain)
+        by_status = {r["http_status"]: r["http_status__count"] for r in result}
+        self.assertEqual(by_status.get(200), 1)
+
+
 class EndpointRepositoryIsDefaultTestCase(BaseTestCase):
     """Test cases for is_default endpoint logic."""
 

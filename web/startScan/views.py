@@ -34,6 +34,7 @@ from reNgine.definitions import (
     SUCCESS_TASK,
 )
 from reNgine.secator.service import run_per_task_secator_scans, start_secator_scan
+from reNgine.services.repositories import EndpointRepository
 from reNgine.settings import RENGINE_RESULTS
 from reNgine.utilities.command import run_command
 from reNgine.utilities.subdomain import get_interesting_subdomains
@@ -422,9 +423,6 @@ def detail_scan(request, id, slug):
     cves = CveId.objects.filter(cve_ids__in=vulns)
     cwes = CweId.objects.filter(cwe_ids__in=vulns)
 
-    # HTTP statuses
-    http_statuses = subdomains.exclude(http_status=0).values("http_status").annotate(Count("http_status"))
-
     # CVEs / CWes
     common_cves = cves.annotate(nused=Count("cve_ids")).order_by("-nused").values("name", "nused")[:10]
     common_cwes = cwes.annotate(nused=Count("cwe_ids")).order_by("-nused").values("name", "nused")[:10]
@@ -497,7 +495,7 @@ def detail_scan(request, id, slug):
         "email_count": emails.count(),
         "employees_count": employees.count(),
         "most_recent_scans": recent_scans.order_by("-start_scan_date")[:1],
-        "http_status_breakdown": http_statuses,
+        "http_status_breakdown": EndpointRepository().get_http_status_breakdown(scan),
         "most_common_cve": common_cves,
         "most_common_cwe": common_cwes,
         "most_common_tags": common_tags,

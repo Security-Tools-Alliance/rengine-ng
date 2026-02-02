@@ -3,14 +3,16 @@ Endpoint Repository - Data access for endpoint operations.
 Handles EndPoint database operations with enriched Secator integration.
 """
 
+from collections import defaultdict
 import contextlib
 import hashlib
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 from urllib.parse import urlparse
 
 from celery.utils.log import get_task_logger
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError, transaction
+from django.db.models import Count
 from django.utils import timezone
 import validators
 
@@ -596,3 +598,71 @@ class EndpointRepository:
         if fields_to_update:
             directory_file.save(update_fields=fields_to_update)
         return directory_file
+
+    def get_http_status_breakdown(self, scope: Union[ScanHistory, Domain]) -> List[Dict[str, int]]:
+        """
+        Return HTTP status breakdown for charts (detail_scan or target summary).
+
+        Legacy: counts from Subdomain.http_status.
+        Secator: counts from EndPoint.http_status where is_default=True.
+        Returns list of dicts {"http_status": int, "http_status__count": int}.
+        """
+        if isinstance(scope, ScanHistory):
+            if scope.is_legacy_scan:
+                qs = (
+                    Subdomain.objects.filter(scan_history=scope)
+                    .exclude(http_status=0)
+                    .values("http_status")
+                    .annotate(Count("http_status"))
+                )
+            else:
+                qs = (
+                    EndPoint.objects.filter(scan_history=scope, is_default=True)
+                    .exclude(http_status=0)
+                    .exclude(http_status__isnull=True)
+                    .values("http_status")
+                    .annotate(Count("http_status"))
+                )
+            return [
+                {
+                    "http_status": int(r["http_status"]),
+                    "http_status__count": int(r["http_status__count"]),
+                }
+                for r in qs
+            ]
+        if isinstance(scope, Domain):
+            return self._get_http_status_breakdown_for_domain(scope)
+        return []
+
+    def _get_http_status_breakdown_for_domain(self, scope: Domain) -> List[Dict[str, int]]:
+        """
+        HTTP status breakdown for domain: web server endpoints (per port) without double-counting.
+        Legacy subdomains that have at least one default EndPoint (Secator) are excluded from
+        Subdomain counts; only default EndPoints and legacy-only subdomains contribute.
+        """
+        subdomain_names_with_default = set(
+            EndPoint.objects.filter(scan_history__domain_id=scope.id, is_default=True)
+            .exclude(subdomain_id__isnull=True)
+            .values_list("subdomain__name", flat=True)
+            .distinct()
+        )
+        sub_qs = (
+            Subdomain.objects.filter(target_domain_id=scope.id)
+            .exclude(name__in=subdomain_names_with_default)
+            .exclude(http_status=0)
+            .values("http_status")
+            .annotate(Count("http_status"))
+        )
+        ep_qs = (
+            EndPoint.objects.filter(scan_history__domain_id=scope.id, is_default=True)
+            .exclude(http_status=0)
+            .exclude(http_status__isnull=True)
+            .values("http_status")
+            .annotate(Count("http_status"))
+        )
+        merged: Dict[int, int] = defaultdict(int)
+        for row in sub_qs:
+            merged[row["http_status"]] += row["http_status__count"]
+        for row in ep_qs:
+            merged[row["http_status"]] += row["http_status__count"]
+        return [{"http_status": int(k), "http_status__count": int(v)} for k, v in sorted(merged.items())]
