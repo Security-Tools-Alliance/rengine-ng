@@ -12,12 +12,7 @@ from unittest.mock import Mock, patch
 from django.test import TestCase
 
 from reNgine.tasks.geo import geo_localize_batch
-from reNgine.utilities.database import (
-    _collect_ip_for_geolocalization,
-    _thread_local,
-    save_ip_address,
-    with_batch_geolocalization,
-)
+from reNgine.utilities import dns
 from utils.test_utils import TestDataGenerator
 
 
@@ -43,9 +38,8 @@ class TestGeolocalizationPerformance(TestCase):
 
     def tearDown(self):
         """Clean up test data."""
-        # Clear thread-local storage
-        if hasattr(_thread_local, "geo_ip_collection"):
-            delattr(_thread_local, "geo_ip_collection")
+        if hasattr(dns._thread_local, "geo_ip_collection"):
+            delattr(dns._thread_local, "geo_ip_collection")
 
     @patch("reNgine.tasks.geo.geoiplookup")
     def test_batch_vs_individual_performance(self, mock_geoiplookup):
@@ -88,30 +82,24 @@ class TestGeolocalizationPerformance(TestCase):
             "172.16.0.1",  # Private
         ]
 
-        # Clear collection
-        if hasattr(_thread_local, "geo_ip_collection"):
-            delattr(_thread_local, "geo_ip_collection")
+        if hasattr(dns._thread_local, "geo_ip_collection"):
+            delattr(dns._thread_local, "geo_ip_collection")
 
-        # Measure time to collect IPs
+        from reNgine.services.repositories.ip_repository import IpRepository
+
         start_time = time.time()
         for ip in test_ips:
-            save_ip_address(ip, subdomain=self.subdomain)
+            IpRepository().get_or_create(ip)
         collection_time = time.time() - start_time
 
-        # Check that only public IPs were collected
-        if hasattr(_thread_local, "geo_ip_collection"):
-            collected_ips = list(_thread_local.geo_ip_collection)
+        if hasattr(dns._thread_local, "geo_ip_collection"):
+            collected_ips = list(dns._thread_local.geo_ip_collection)
         else:
             collected_ips = []
         public_ips = ["8.8.8.8", "1.1.1.1", "208.67.222.222"]
 
-        # Some IPs might already exist from previous tests, so we check that we have at least the new ones
-        # If no IPs were collected, it means they all already existed, which is fine
-        if len(collected_ips) == 0:
-            # This is acceptable - all IPs already existed
-            pass
-        else:
-            self.assertGreaterEqual(len(collected_ips), 1)  # At least some IPs were collected
+        if collected_ips:
+            self.assertGreaterEqual(len(collected_ips), 1)
         for ip in public_ips:
             if ip in collected_ips:
                 self.assertIn(ip, collected_ips)
@@ -119,23 +107,20 @@ class TestGeolocalizationPerformance(TestCase):
         # Collection should be fast
         self.assertLess(collection_time, 1.0)
 
-    @patch("reNgine.tasks.geo.geo_localize_batch.delay")
-    def test_decorator_performance(self, mock_delay):
+    @patch("reNgine.tasks.geo.geo_localize_batch")
+    def test_decorator_performance(self, mock_geo_batch):
         """Test that decorator doesn't add significant overhead."""
         mock_task = Mock()
         mock_task.id = "test-task-id"
-        mock_delay.return_value = mock_task
+        mock_geo_batch.delay = Mock(return_value=mock_task)
 
-        # Clear collection
-        if hasattr(_thread_local, "geo_ip_collection"):
-            delattr(_thread_local, "geo_ip_collection")
+        if hasattr(dns._thread_local, "geo_ip_collection"):
+            delattr(dns._thread_local, "geo_ip_collection")
 
-        # Test function without decorator
         def simple_function():
             return "result"
 
-        # Test function with decorator
-        @with_batch_geolocalization
+        @dns.with_batch_geolocalization
         def decorated_function():
             return "result"
 
@@ -161,18 +146,12 @@ class TestGeolocalizationPerformance(TestCase):
         """Test that thread isolation works correctly."""
 
         def worker_thread(thread_id, ips):
-            """Worker thread that collects IPs without database operations."""
-            # Clear collection for this thread
-            if hasattr(_thread_local, "geo_ip_collection"):
-                delattr(_thread_local, "geo_ip_collection")
-
-            # Simulate IP collection without database operations
+            if hasattr(dns._thread_local, "geo_ip_collection"):
+                delattr(dns._thread_local, "geo_ip_collection")
             for ip in ips:
-                _collect_ip_for_geolocalization(ip)
-
-            # Return collected IPs
-            if hasattr(_thread_local, "geo_ip_collection"):
-                return list(_thread_local.geo_ip_collection)
+                dns.collect_ip_for_geolocalization(ip)
+            if hasattr(dns._thread_local, "geo_ip_collection"):
+                return list(dns._thread_local.geo_ip_collection)
             return []
 
         # Test data for multiple threads
@@ -182,9 +161,8 @@ class TestGeolocalizationPerformance(TestCase):
             ["76.76.19.19", "185.199.108.153"],
         ]
 
-        # Clear main thread collection
-        if hasattr(_thread_local, "geo_ip_collection"):
-            delattr(_thread_local, "geo_ip_collection")
+        if hasattr(dns._thread_local, "geo_ip_collection"):
+            delattr(dns._thread_local, "geo_ip_collection")
 
         # Measure time to run multiple threads
         start_time = time.time()

@@ -302,7 +302,7 @@ function setDefaultProfile(profileId, profileName, isCurrentlyDefault) {
         return;
     }
 
-    const url = `{% url 'set_default_profile' 0 %}`.replace('0', profileId);
+    const url = `{% url "set_default_profile" 0 %}`.replace('0', profileId);
     
     Swal.fire({
         title: 'Set as Default?',
@@ -364,7 +364,7 @@ function setDefaultProfile(profileId, profileName, isCurrentlyDefault) {
 
 // Delete profile
 function deleteProfile(profileId, profileName) {
-    const url = `{% url 'delete_profile' 0 %}`.replace('0', profileId);
+    const url = `{% url "delete_profile" 0 %}`.replace('0', profileId);
     
     Swal.fire({
         title: 'Are you sure?',

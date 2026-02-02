@@ -1,3 +1,4 @@
+import contextlib
 from urllib.parse import urlparse
 
 from django.apps import apps
@@ -29,9 +30,7 @@ class HybridProperty:
         self.exp = None
 
     def __get__(self, instance, owner):
-        if instance is None:
-            return self
-        return self.func(instance)
+        return self if instance is None else self.func(instance)
 
     def __set__(self, instance, value):
         pass
@@ -71,19 +70,26 @@ class ScanHistory(models.Model):
         return Subdomain.objects.filter(scan_history__id=self.id).count()
 
     def get_subdomain_change_count(self):
-        last_scan = (
-            ScanHistory.objects.filter(id=self.id)
+        # Previous subdomain_discovery scan for the same domain (not the current scan)
+        last_scan_obj = (
+            ScanHistory.objects.filter(domain=self.domain)
             .filter(tasks__overlap=["subdomain_discovery"])
+            .filter(start_scan_date__lt=self.start_scan_date)
             .order_by("-start_scan_date")
+            .first()
         )
-        scanned_host_q1 = (
+        if last_scan_obj is None:
+            return [0, 0]
+        names_q1 = set(
             Subdomain.objects.filter(target_domain__id=self.domain.id)
-            .exclude(scan_history__id=last_scan[0].id)
-            .values("name")
+            .exclude(scan_history__id=last_scan_obj.id)
+            .values_list("name", flat=True)
         )
-        scanned_host_q2 = Subdomain.objects.filter(scan_history__id=last_scan[0].id).values("name")
-        new_subdomains = scanned_host_q2.difference(scanned_host_q1).count()
-        removed_subdomains = scanned_host_q1.difference(scanned_host_q2).count()
+        names_q2 = set(
+            Subdomain.objects.filter(scan_history__id=last_scan_obj.id).values_list("name", flat=True)
+        )
+        new_subdomains = len(names_q2 - names_q1)
+        removed_subdomains = len(names_q1 - names_q2)
         return [new_subdomains, removed_subdomains]
 
     def get_endpoint_count(self):
@@ -374,13 +380,11 @@ class ScanHistory(models.Model):
             scan_name = self.scan_name
             return self._format_display_label(scan_name) if scan_name else ""
 
-        main_runner = self._get_main_runner()
-        if main_runner:
+        if main_runner := self._get_main_runner():
             scan_name = main_runner.runner_name or "Secator"
             return self._format_display_label(scan_name) if scan_name else ""
 
-        task_names = self._get_task_runner_display_names()
-        if task_names:
+        if task_names := self._get_task_runner_display_names():
             return ", ".join(task_names)
 
         scan_name = self.scan_name
@@ -401,10 +405,7 @@ class ScanHistory(models.Model):
         if main_runner and main_runner.runner_type:
             return self._format_display_label(main_runner.runner_type)
 
-        if self._get_task_runner_display_names():
-            return "Task"
-
-        return ""
+        return "Task" if self._get_task_runner_display_names() else ""
 
     def get_time_ago(self, time):
         duration = timezone.now() - time
@@ -580,30 +581,46 @@ class Subdomain(models.Model):
 
     @property
     def get_ports(self):
-        """Get all ports associated with this subdomain's IP addresses"""
-        ports = []
-        for ip in self.ip_addresses.all():
-            ports.extend(port.number for port in ip.ports.all())
-        return sorted(list(set(ports)))
+        """
+        Get all unique ports associated with this subdomain's IP addresses.
+        Uses a single Port queryset to avoid N+1 queries.
+        """
+        ip_qs = self.ip_addresses.all()
+        port_numbers = (
+            Port.objects.filter(ip_address__in=ip_qs)
+            .values_list("number", flat=True)
+            .distinct()
+        )
+        return sorted(port_numbers)
 
     @property
     def get_ports_by_ip(self):
-        """Get ports grouped by IP address with their specific service information"""
-        return {
-            ip.address: {
-                "ports": [
+        """
+        Get ports grouped by IP address for this subdomain.
+        Returns a dict mapping IP address (string) -> {ports: [...], is_cdn: bool}.
+        Uses a single Port queryset with select_related to avoid N+1 queries.
+        """
+        ip_qs = self.ip_addresses.all().only("id", "address", "is_cdn")
+        result = {ip.address: {"ports": [], "is_cdn": ip.is_cdn} for ip in ip_qs}
+        if not result:
+            return {}
+        port_list = (
+            Port.objects.filter(ip_address__in=ip_qs)
+            .select_related("ip_address")
+            .order_by("number")
+        )
+        for port in port_list:
+            addr = port.ip_address.address if port.ip_address else None
+            if addr is not None and addr in result:
+                result[addr]["ports"].append(
                     {
                         "number": port.number,
                         "service_name": port.service_name,
                         "description": port.description,
                         "is_uncommon": port.is_uncommon,
                     }
-                    for port in ip.ports.all().order_by("number")
-                ],
-                "is_cdn": ip.is_cdn,
-            }
-            for ip in self.ip_addresses.all()
-        }
+                )
+        return result
 
     @property
     def _default_endpoint(self):
@@ -648,41 +665,56 @@ class Subdomain(models.Model):
 
     @classmethod
     def get_counts(cls, queryset):
-        """Get various subdomain counts in a single query"""
+        """Get various subdomain counts. IP vs hostname is detected in Python for portability."""
+        import ipaddress
 
-        # Use database-side filtering for better performance
-        # Count subdomains that match IP address patterns
-        ip_count = queryset.extra(
-            where=["name ~ '^(\\d{1,3}\\.){3}\\d{1,3}$' OR name ~ '^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$'"]
-        ).count()
-
-        # Total count minus IP count gives hostname count
         total_count = queryset.count()
+        with_ip_count = queryset.filter(ip_addresses__isnull=False).distinct().count()
+        alive_count = queryset.exclude(http_status__exact=0).count()
+
+        ip_count = 0
+        for name in queryset.values_list("name", flat=True).iterator():
+            if not name:
+                continue
+            with contextlib.suppress(ValueError):
+                ipaddress.ip_address(str(name).strip())
+                ip_count += 1
         hostname_count = total_count - ip_count
 
         return {
             "total": total_count,
-            "with_ip": queryset.filter(ip_addresses__isnull=False).count(),
-            "alive": queryset.exclude(http_status__exact=0).count(),
+            "with_ip": with_ip_count,
+            "alive": alive_count,
             "hostnames": hostname_count,
             "ip_addresses": ip_count,
         }
 
     @classmethod
     def get_all_counts(cls, queryset):
-        """Get all vulnerability counts in a single query - OPTIMIZED"""
-        # Get base counts first
+        """Get all vulnerability counts. Vuln counts are scoped to the given queryset (e.g. latest subdomains per project)."""
+        subdomain_ids = list(queryset.values_list("id", flat=True))
+        if not subdomain_ids:
+            return {
+                "total": 0,
+                "with_ip": 0,
+                "alive": 0,
+                "vuln_info": 0,
+                "vuln_low": 0,
+                "vuln_medium": 0,
+                "vuln_high": 0,
+                "vuln_critical": 0,
+                "vuln_unknown": 0,
+                "total_vuln_count": 0,
+                "total_vuln_ignore_info_count": 0,
+            }
+
         base_counts = queryset.aggregate(
             total=Count("id"),
-            with_ip=Count("id", filter=Q(ip_addresses__isnull=False)),
+            with_ip=Count("id", filter=Q(ip_addresses__isnull=False), distinct=True),
             alive=Count("id", filter=~Q(http_status=0)),
         )
 
-        # Get subdomain names instead of IDs to capture ALL vulnerabilities across scans
-        subdomain_names = queryset.values_list("name", flat=True)
-
-        # Get vulnerability counts by subdomain name (not ID) to include all scans
-        vuln_counts_raw = Vulnerability.objects.filter(subdomain__name__in=subdomain_names).aggregate(
+        vuln_counts_raw = Vulnerability.objects.filter(subdomain__in=subdomain_ids).aggregate(
             vuln_info=Count("id", filter=Q(severity=0)),
             vuln_low=Count("id", filter=Q(severity=1)),
             vuln_medium=Count("id", filter=Q(severity=2)),
@@ -756,11 +788,19 @@ class SubScan(models.Model):
     start_scan_date = models.DateTimeField()
     status = models.IntegerField()
     scan_history = models.ForeignKey(ScanHistory, on_delete=models.CASCADE)
-    subdomain = models.ForeignKey(Subdomain, on_delete=models.CASCADE)
+    subdomain = models.ForeignKey(Subdomain, on_delete=models.CASCADE, null=True, blank=True)
     stop_scan_date = models.DateTimeField(null=True, blank=True)
     error_message = models.CharField(max_length=300, blank=True, null=True)
     engine = models.ForeignKey(EngineType, on_delete=models.CASCADE, blank=True, null=True)
     subdomain_subscan_ids = models.ManyToManyField("Subdomain", related_name="subdomain_subscan_ids", blank=True)
+    secator_runner = models.OneToOneField(
+        "SecatorRunner",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="subscan",
+        help_text="Secator runner linked to this subscan (Secator scans only)",
+    )
 
     def get_completed_ago(self):
         if self.stop_scan_date:
@@ -775,6 +815,44 @@ class SubScan(models.Model):
 
     def get_task_name_str(self):
         return dict(ENGINE_DISPLAY_NAMES).get(self.type, "Unknown")
+
+    @property
+    def display_runner_type(self):
+        """
+        Human-friendly runner type for UI (Task, Workflow, Scan, or Legacy).
+        Aligns with ScanHistory.display_runner_type for consistent column display.
+        """
+        if self.engine:
+            return "Legacy"
+        runner = getattr(self, "secator_runner", None)
+        if runner and runner.runner_type:
+            return runner.runner_type.replace("_", " ").strip().title()
+        return "Task" if (runner or self.type) else ""
+
+    @property
+    def display_scan_name(self):
+        """
+        Human-friendly scan/engine name for UI.
+        Aligns with ScanHistory.display_scan_name for consistent column display.
+        """
+        if self.engine:
+            return self.engine.engine_name or "—"
+        if getattr(self, "secator_runner", None) and self.secator_runner.runner_name:
+            return self.secator_runner.runner_name
+        return self.type or self.get_task_name_str() or "—"
+
+    @property
+    def scan_engine_used(self):
+        """
+        Unified display string for the "Scan engine used" column: "Type: Name"
+        (e.g. "Task: nuclei", "Legacy: EngineName"), like ScanHistory in history.html.
+        Used for the single column and real-time WebSocket updates.
+        """
+        runner_type = self.display_runner_type
+        scan_name = self.display_scan_name
+        if runner_type and scan_name:
+            return f"{runner_type}: {scan_name}"
+        return scan_name or runner_type or "—"
 
     def _get_status_field_value(self):
         """Get the raw status field value to avoid recursion."""
@@ -810,6 +888,11 @@ class SubScan(models.Model):
         # Fallback: try to get from runner_data
         if main_runner and getattr(main_runner, "runner_data", None):
             return str(main_runner.runner_data.get("status", "")).upper()
+        # Task-only scan (no workflow/scan runner): use this subscan's secator_runner
+        if getattr(self, "secator_runner", None) and self.secator_runner.runner_data:
+            return str(self.secator_runner.runner_data.get("status", "")).upper()
+        if getattr(self, "secator_runner", None) and self.secator_runner.status:
+            return str(self.secator_runner.status).upper()
         # Final fallback: use the field value
         return str(self._get_status_field_value()).upper()
 
@@ -1358,8 +1441,11 @@ class Command(models.Model):
         Returns a dictionary with formatted output and metadata.
         """
         from html import escape
+        import logging
 
         from reNgine.utilities.output_formatter import format_output
+
+        logger = logging.getLogger(__name__)
 
         if not self.output:
             return {
@@ -1371,9 +1457,13 @@ class Command(models.Model):
 
         try:
             return format_output(self.output)
-        except Exception:
-            # Fallback to escaped raw output if formatting fails
-            # We must escape here to prevent XSS since templates use |safe
+        except Exception as exc:
+            logger.warning(
+                "Output formatting failed for command %s: %s",
+                self.command,
+                exc,
+                exc_info=True,
+            )
             escaped_output = escape(self.output)
             return {
                 "formatted": escaped_output,
@@ -1731,9 +1821,7 @@ class Certificate(models.Model):
 
     def is_expired(self):
         """Check if certificate is expired."""
-        if self.not_after:
-            return self.not_after < timezone.now()
-        return False
+        return self.not_after < timezone.now() if self.not_after else False
 
     def is_expired_soon(self, months=1):
         """Check if certificate expires soon."""

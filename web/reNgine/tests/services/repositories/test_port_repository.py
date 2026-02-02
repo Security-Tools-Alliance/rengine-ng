@@ -315,3 +315,56 @@ class TestPortRepository(BaseTestCase):
         self.assertIsNotNone(result)
         self.assertEqual(result.number, 80)
         self.assertEqual(result.confidence, "high")
+
+    def test_save_from_secator_port_as_string(self):
+        """Test saving port when port is provided as string (e.g. from JSON)."""
+        item = {
+            "_type": "port",
+            "port": "80",
+            "ip": "192.168.1.1",
+            "service_name": "http",
+        }
+
+        result = self.port_repo.save_from_secator(item, self.scan_history.id, self.domain.id)
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result.number, 80)
+        self.assertEqual(result.ip_address.address, "192.168.1.1")
+
+    def test_save_from_secator_uses_host_when_ip_missing(self):
+        """Test that host is used as IP when ip field is missing but host is valid IP."""
+        item = {
+            "_type": "port",
+            "port": 443,
+            "host": "10.0.0.2",
+            "service_name": "https",
+        }
+
+        result = self.port_repo.save_from_secator(item, self.scan_history.id, self.domain.id)
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result.number, 443)
+        self.assertEqual(result.ip_address.address, "10.0.0.2")
+
+    def test_save_from_secator_rejects_hostname_only(self):
+        """Test that port is rejected when only hostname is provided (no valid IP in ip or host)."""
+        item = {
+            "_type": "port",
+            "port": 80,
+            "host": "example.local",
+        }
+
+        result = self.port_repo.save_from_secator(item, self.scan_history.id, self.domain.id)
+
+        self.assertIsNone(result)
+
+    def test_process_secator_port_item_invalid_port_type(self):
+        """Test _process_secator_port_item rejects non-numeric port."""
+        item = {
+            "port": "not-a-number",
+            "ip": "192.168.1.1",
+        }
+
+        result = self.port_repo._process_secator_port_item(item, self.scan_history.id, self.domain.id)
+
+        self.assertIsNone(result)

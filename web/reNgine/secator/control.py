@@ -42,10 +42,7 @@ class SecatorScanController:
 
             # Update runner_data with REVOKED status to ensure consistency
             if runner.runner_data:
-                runner.runner_data["status"] = "REVOKED"
-                runner.runner_data["done"] = True
-                runner.save(update_fields=["runner_data"])
-
+                self._mark_runner_data_revoked(runner)
             # Get or create activity for this runner
             activity = None
             if activity_id:
@@ -158,8 +155,6 @@ class SecatorScanController:
             bool: True if successful, False otherwise
         """
         try:
-            from secator.celery import revoke_task
-
             subscan = SubScan.objects.filter(id=subscan_id).first()
             if not subscan:
                 logger.error(f"Subscan {subscan_id} not found")
@@ -181,115 +176,16 @@ class SecatorScanController:
                     f"other running subscan(s) for scan {scan.id} as they share the same runners"
                 )
 
-            # Get runners associated with activities for this specific subscan
-            # Note: ScanActivity is linked to ScanHistory, not SubScan, so we cannot
-            # directly filter activities by subscan_id. We attempt to scope by checking
-            # if runners have metadata linking them to this subscan's subdomain, but
-            # this is a best-effort approach. In the current architecture, subscans
-            # share runners with their parent scan, so stopping a subscan may affect
-            # other subscans sharing the same scan.
-            subscan_activities = ScanActivity.objects.filter(scan_of=scan, status=RUNNING_TASK).select_related(
-                "runner_id"
-            )
-
-            # Collect unique runners from activities, filtering by subdomain if possible
-            # Only include runners that explicitly match this subscan's subdomain
-            activity_runner_ids = set()
-            subscan_subdomain = subscan.subdomain
-            for activity in subscan_activities:
-                if activity.runner_id:
-                    # Try to verify runner is associated with this subscan's subdomain
-                    # by checking runner_data context for subdomain_id
-                    runner = activity.runner_id
-                    runner_context = runner.runner_data.get("context", {}) if runner.runner_data else {}
-                    runner_subdomain_id = runner_context.get("subdomain_id")
-
-                    # Only include runners that explicitly match this subscan's subdomain
-                    # Runners without subdomain_id are excluded from scoped list (will use fallback)
-                    if runner_subdomain_id is not None and runner_subdomain_id == subscan_subdomain.id:
-                        activity_runner_ids.add(runner.id)
-
-            # If we found activity-specific runners, use only those
-            # Otherwise, fall back to all runners for the scan (shared behavior)
-            if activity_runner_ids:
-                runners = list(SecatorRunner.objects.filter(id__in=activity_runner_ids, scan_history_id=scan.id))
-                logger.debug(f"Scoping subscan {subscan_id} stop to {len(runners)} activity-specific runner(s)")
-            else:
-                # Fallback: Get all SecatorRunner instances associated with the parent scan
-                # This is the shared behavior when activities don't provide specific runners
-                runners = list(SecatorRunner.objects.filter(scan_history_id=scan.id))
-                logger.debug(
-                    f"No activity-specific runners found for subscan {subscan_id}, "
-                    f"using all {len(runners)} runner(s) from parent scan {scan.id}"
-                )
-
+            runners = self._get_runners_to_revoke_for_subscan(subscan, scan)
             if not runners:
                 logger.warning(f"No SecatorRunner found for subscan {subscan_id}")
                 self._abort_subscan(subscan)
                 return True
 
-            # Revoke Celery tasks for the identified runners
-            revoked_count = 0
-            failed_count = 0
-
-            for runner in runners:
-                # Try to get celery_id from the runner's celery_id field first
-                celery_id = runner.celery_id
-
-                # If not found, try to extract from runner_data context
-                if not celery_id and runner.runner_data:
-                    context = runner.runner_data.get("context", {})
-                    celery_id = context.get("celery_id")
-
-                if celery_id:
-                    try:
-                        revoke_task(celery_id, task_name=f"subscan_{subscan_id}")
-                        revoked_count += 1
-                        logger.debug(f"Successfully revoked Celery task {celery_id} for subscan {subscan_id}")
-                    except Exception as e:
-                        failed_count += 1
-                        logger.error(f"Failed to revoke Celery task {celery_id} for subscan {subscan_id}: {e}")
-                else:
-                    logger.warning(
-                        f"Runner {runner.id} ({runner.runner_type}: {runner.runner_name}) has no celery_id to revoke"
-                    )
-
-                # Update runner status to REVOKED
-                runner.status = "REVOKED"
-                runner.save(update_fields=["status"])
-
-                # Update runner_data with REVOKED status to ensure consistency
-                if runner.runner_data:
-                    runner.runner_data["status"] = "REVOKED"
-                    runner.runner_data["done"] = True
-                    runner.save(update_fields=["runner_data"])
-
-                # Create or update Command for this runner to ensure it appears in logs
-                try:
-                    from reNgine.services.repositories.command_repository import CommandRepository
-
-                    # Get or create activity for this runner
-                    activity = None
-                    if runner.scan_history:
-                        # Try to find existing activity for this runner
-                        activity = ScanActivity.objects.filter(scan_of=runner.scan_history, runner_id=runner).first()
-
-                    # Create or update Command
-                    command_repo = CommandRepository()
-                    command_repo.save_from_secator(
-                        runner.runner_data or {},
-                        runner.scan_history.id if runner.scan_history else scan.id,
-                        activity.id if activity else None,
-                    )
-                except Exception as e:
-                    logger.warning(f"Failed to create/update Command for runner {runner.id}: {e}")
-
+            revoked_count = self._revoke_runners_for_subscan(runners, subscan_id, scan)
             self._abort_subscan(subscan)
             self.scan_repo.create_activity(scan.id, f"Subscan {subscan_id} aborted", ABORTED_TASK)
-
-            # Update running activities for this subscan to ABORTED_TASK
-            running_activities = ScanActivity.objects.filter(scan_of=scan, status=RUNNING_TASK)
-            running_activities.update(status=ABORTED_TASK)
+            ScanActivity.objects.filter(scan_of=scan, status=RUNNING_TASK).update(status=ABORTED_TASK)
 
             logger.info(f"Stopped subscan {subscan_id} (revoked {revoked_count}/{len(runners)} runners)")
             return True
@@ -298,6 +194,83 @@ class SecatorScanController:
             logger.error(f"Error stopping subscan {subscan_id}: {e}")
             return False
 
+    def _get_runners_to_revoke_for_subscan(self, subscan: SubScan, scan) -> list:
+        """
+        Collect SecatorRunner instances to revoke for this subscan.
+        Scopes by subdomain when subscan has a subdomain; otherwise uses domain-level runners only.
+        """
+        subscan_activities = ScanActivity.objects.filter(scan_of=scan, status=RUNNING_TASK).select_related("runner_id")
+        activity_runner_ids = set()
+        subscan_subdomain = subscan.subdomain
+        for activity in subscan_activities:
+            if not activity.runner_id:
+                continue
+            runner = activity.runner_id
+            runner_context = runner.runner_data.get("context", {}) if runner.runner_data else {}
+            runner_subdomain_id = runner_context.get("subdomain_id")
+            if subscan_subdomain is None:
+                if runner_subdomain_id is None:
+                    activity_runner_ids.add(runner.id)
+            elif runner_subdomain_id is not None and runner_subdomain_id == subscan_subdomain.id:
+                activity_runner_ids.add(runner.id)
+
+        if activity_runner_ids:
+            runners = list(SecatorRunner.objects.filter(id__in=activity_runner_ids, scan_history_id=scan.id))
+            logger.debug(f"Scoping subscan {subscan.id} stop to {len(runners)} activity-specific runner(s)")
+        else:
+            runners = list(SecatorRunner.objects.filter(scan_history_id=scan.id))
+            logger.debug(
+                f"No activity-specific runners found for subscan {subscan.id}, "
+                f"using all {len(runners)} runner(s) from parent scan {scan.id}"
+            )
+        return runners
+
+    def _revoke_runners_for_subscan(self, runners: list, subscan_id: int, scan) -> int:
+        """Revoke Celery tasks for runners, update status and Command; returns count of successfully revoked."""
+        from secator.celery import revoke_task
+
+        revoked_count = 0
+        for runner in runners:
+            if celery_id := runner.celery_id or (runner.runner_data or {}).get("context", {}).get("celery_id"):
+                try:
+                    revoke_task(celery_id, task_name=f"subscan_{subscan_id}")
+                    revoked_count += 1
+                    logger.debug(f"Successfully revoked Celery task {celery_id} for subscan {subscan_id}")
+                except Exception as e:
+                    logger.error(f"Failed to revoke Celery task {celery_id} for subscan {subscan_id}: {e}")
+            else:
+                logger.warning(
+                    f"Runner {runner.id} ({runner.runner_type}: {runner.runner_name}) has no celery_id to revoke"
+                )
+
+            runner.status = "REVOKED"
+            runner.save(update_fields=["status"])
+            if runner.runner_data:
+                self._mark_runner_data_revoked(runner)
+            try:
+                from reNgine.services.repositories.command_repository import CommandRepository
+
+                activity = (
+                    ScanActivity.objects.filter(scan_of=runner.scan_history, runner_id=runner).first()
+                    if runner.scan_history
+                    else None
+                )
+                CommandRepository().save_from_secator(
+                    runner.runner_data or {},
+                    runner.scan_history.id if runner.scan_history else scan.id,
+                    activity.id if activity else None,
+                )
+            except Exception as e:
+                logger.warning(f"Failed to create/update Command for runner {runner.id}: {e}")
+
+        return revoked_count
+
+    def _mark_runner_data_revoked(self, runner) -> None:
+        """Set runner_data status to REVOKED and persist."""
+        runner.runner_data["status"] = "REVOKED"
+        runner.runner_data["done"] = True
+        runner.save(update_fields=["runner_data"])
+
     def _abort_subscan(self, subscan: SubScan) -> None:
         """
         Mark a subscan as aborted and record the stop time.
@@ -305,9 +278,12 @@ class SecatorScanController:
         Args:
             subscan: SubScan instance to mark as aborted
         """
+        from reNgine.utilities.websocket import send_scan_status_update
+
         subscan.status = ABORTED_TASK
         subscan.stop_scan_date = timezone.now()
         subscan.save()
+        send_scan_status_update(subscan.scan_history_id)
 
     def stop_activity(self, activity_id: int) -> bool:
         """

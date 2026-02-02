@@ -22,6 +22,21 @@
     {% endif %}
 </div>
 
+<div class="form-group">
+    <label for="{{ form.tags.id_for_label }}">Tags</label>
+    {{ form.tags }}
+    {% if form.tags.help_text %}
+        <small class="form-text text-muted">{{ form.tags.help_text }}</small>
+    {% endif %}
+    {% if form.tags.errors %}
+        <div class="text-danger">
+            {% for error in form.tags.errors %}
+                <small>{{ error }}</small>
+            {% endfor %}
+        </div>
+    {% endif %}
+</div>
+
 <div class="row">
     <div class="col-md-6">
         <div class="form-group">

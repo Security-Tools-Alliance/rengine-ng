@@ -1,4 +1,5 @@
 from django import forms
+from django.contrib.postgres.forms import SimpleArrayField
 from django.core.exceptions import ValidationError
 from django_ace import AceWidget
 import yaml
@@ -723,9 +724,17 @@ The breakdown of the Vulnerabilities Identified in **{target_name}** by severity
 class SecatorWorkflowForm(forms.ModelForm):
     """Form for creating/editing Secator workflows."""
 
+    tags = SimpleArrayField(
+        forms.CharField(max_length=50, required=False),
+        required=False,
+        delimiter=",",
+        help_text="Comma-separated tags (e.g. http, recon, fuzz)",
+        widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "e.g. http, recon, fuzz"}),
+    )
+
     class Meta:
         model = SecatorWorkflow
-        fields = ["name", "alias", "description", "scan_type", "yaml_configuration", "is_active"]
+        fields = ["name", "alias", "description", "tags", "scan_type", "yaml_configuration", "is_active"]
 
     name = forms.CharField(
         required=True,
@@ -900,15 +909,22 @@ class SecatorWorkflowForm(forms.ModelForm):
 class SecatorTaskForm(forms.ModelForm):
     """Form for creating/editing Secator tasks."""
 
+    tags = SimpleArrayField(
+        forms.CharField(max_length=50, required=False),
+        required=False,
+        delimiter=",",
+        help_text="Comma-separated tags (e.g. url, fuzz, dns)",
+        widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "e.g. url, fuzz, dns"}),
+    )
+
     class Meta:
         model = SecatorTask
-        fields = ["name", "task_type", "category", "description", "yaml_configuration", "is_active"]
+        fields = ["name", "task_type", "tags", "description", "yaml_configuration", "is_active"]
         widgets = {
             "name": forms.TextInput(attrs={"class": "form-control", "placeholder": "Enter task name"}),
             "task_type": forms.TextInput(
                 attrs={"class": "form-control", "placeholder": "e.g., subfinder, nuclei, httpx"}
             ),
-            "category": forms.Select(attrs={"class": "form-control"}),
             "description": forms.Textarea(
                 attrs={"class": "form-control", "rows": 3, "placeholder": "Enter task description"}
             ),

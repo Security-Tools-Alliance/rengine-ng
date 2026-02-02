@@ -455,5 +455,65 @@ document.addEventListener('DOMContentLoaded', function() {
     Secator.init();
 });
 
+/**
+ * Refresh a Secator table body via partial URL (tasks or workflows).
+ * Used by tasks.html and workflows.html for dynamic search/filter without page reload.
+ *
+ * @param {string} partialUrl - URL that returns only tbody HTML (e.g. from Django url tag)
+ * @param {string} filterSelectId - ID of the filter <select>
+ * @param {string} searchInputId - ID of the search <input>
+ * @param {string} tbodyId - ID of the <tbody> to replace
+ * @param {number|function(): number} colCount - Number of columns or function returning it (for loading/error row colspan)
+ * @param {string} [errorMessage] - Message shown on fetch error
+ */
+window.refreshSecatorTable = function(partialUrl, filterSelectId, searchInputId, tbodyId, colCount, errorMessage) {
+    const filterEl = document.getElementById(filterSelectId);
+    const searchEl = document.getElementById(searchInputId);
+    const tbody = document.getElementById(tbodyId);
+    if (!filterEl || !searchEl || !tbody) return;
+
+    const cols = typeof colCount === 'function' ? colCount() : colCount;
+    const filter = filterEl.value;
+    const search = (searchEl.value || '').trim();
+    const params = new URLSearchParams();
+    params.set('filter', filter);
+    if (search) params.set('search', search);
+    const url = partialUrl + (params.toString() ? '?' + params.toString() : '');
+
+    tbody.innerHTML = '<tr><td colspan="' + cols + '" class="text-center"><i class="fas fa-spinner fa-spin"></i> Loading...</td></tr>';
+    fetch(url, { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+        .then(function(response) {
+            if (!response.ok) throw new Error('Request failed');
+            return response.text();
+        })
+        .then(function(html) { tbody.innerHTML = html; })
+        .catch(function() {
+            tbody.innerHTML = '<tr><td colspan="' + cols + '" class="text-center text-danger">' + (errorMessage || 'Error loading data. Please refresh the page.') + '</td></tr>';
+        });
+};
+
+/**
+ * Create a debounced handler that calls refreshSecatorTable after a delay.
+ * Used for search input to limit AJAX requests.
+ *
+ * @param {number} delayMs - Debounce delay in milliseconds
+ * @param {string} partialUrl - Same as refreshSecatorTable
+ * @param {string} filterSelectId - Same as refreshSecatorTable
+ * @param {string} searchInputId - Same as refreshSecatorTable
+ * @param {string} tbodyId - Same as refreshSecatorTable
+ * @param {number|function(): number} colCount - Same as refreshSecatorTable
+ * @param {string} [errorMessage] - Same as refreshSecatorTable
+ * @returns {function} Handler that can be called on input/change
+ */
+window.debouncedRefreshSecatorTable = function(delayMs, partialUrl, filterSelectId, searchInputId, tbodyId, colCount, errorMessage) {
+    let timer = null;
+    return function() {
+        clearTimeout(timer);
+        timer = setTimeout(function() {
+            window.refreshSecatorTable(partialUrl, filterSelectId, searchInputId, tbodyId, colCount, errorMessage);
+        }, delayMs);
+    };
+};
+
 // Export for use in other scripts
 window.SecatorUtils = Secator.utils;

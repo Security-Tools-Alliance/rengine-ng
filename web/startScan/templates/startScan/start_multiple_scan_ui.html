@@ -28,15 +28,16 @@ Initiate Scan for Multiple Targets
         {% for domain in domain_list %}
         <span class="badge badge-soft-primary m-1">{{domain}}</span>
         {% endfor %}
-        <form method="POST">
+        <form method="POST" id="start-multi-scan-form" data-secator-id-prefix="start_multi_scan">
           {% csrf_token %}
           {% include 'startScan/_items/secator_hidden_fields.html' with id_prefix='start_multi_scan_' %}
           <h4 class="header-title mt-4">Choose Execution Mode</h4>
-          {% include 'startScan/_items/secator_execution_mode_selector.html' with scan_icon='radar' scan_title='Scan Type' %}
-          
+          {% include 'startScan/_items/secator_execution_mode_selector.html' with scan_title='Scan Type' embed_selection_container=False %}
+          {% include 'startScan/_items/secator_view_toggle.html' with id_prefix='start_multi_scan' %}
+          {% include 'startScan/_items/secator_selection_layout.html' with id_prefix='start_multi_scan' %}
           <!-- Scan Options Accordion -->
           {% with first_domain=domain_list|first %}
-          {% include 'startScan/_items/secator_scan_options_accordion.html' with domain_name=first_domain.name|default:'selected targets' id_prefix='start_multi_scan_' id_suffix='_start_multi_scan' show_counts=False scan_target_title='Scan Existing Target Elements' scan_target_description='Scan the hostnames and IP addresses already discovered in the selected targets. This is particularly useful for internal network reconnaissance.' scan_target_note='When enabled, the scan will target all discovered hostnames and IP addresses in the selected targets, in addition to the main domains.' %}
+          {% include 'startScan/_items/secator_scan_options_accordion.html' with domain_name=first_domain.name|default:'selected targets' id_prefix='start_multi_scan_' id_suffix='_start_multi_scan' %}
           {% endwith %}
           
           <!-- Advanced Configuration Accordion -->
@@ -53,6 +54,20 @@ Initiate Scan for Multiple Targets
 
 
 {% block page_level_script %}
+<script>
+  window.SECATOR_INPUT_TYPES_TARGETS_URL = "{% url "api:get_secator_input_types_targets" %}";
+  window.SECATOR_SELECTION_URL = "{% url "api:get_secator_selection" %}";
+</script>
+<script src="{% static 'custom/secator/secator_scan_core.js' %}"></script>
+<script src="{% static 'custom/secator/secator_scan_targets.js' %}"></script>
+<script src="{% static 'custom/secator/secator_scan_tooltips.js' %}"></script>
+<script src="{% static 'custom/secator/secator_compact_list.js' %}"></script>
+<script src="{% static 'custom/secator/secator_selection_listeners.js' %}"></script>
+<script src="{% static 'custom/secator/secator_selection_ajax.js' %}"></script>
+<script src="{% static 'custom/secator/secator_selection_dom.js' %}"></script>
+<script src="{% static 'custom/secator/secator_form_submit.js' %}"></script>
+<script src="{% static 'custom/secator/secator_input_types_ajax.js' %}"></script>
+<script src="{% static 'custom/secator/secator_input_types_tasks.js' %}"></script>
 <script src="{% static 'custom/secator_scan.js' %}"></script>
 <script type="text/javascript">
 $(function(){

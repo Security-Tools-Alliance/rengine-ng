@@ -31,7 +31,7 @@ const subdomain_datatable_columns = [
   {'data': 'sources'}
 ];
 
-const subdomain_datatable_page_length = 50;
+const subdomain_datatable_page_length = 100;
 const subdomain_datatable_length_menu = [[50, 100, 500, 1000, -1], [50, 100, 500, 1000, 'All']];
 
 const subdomain_oLanguage = {

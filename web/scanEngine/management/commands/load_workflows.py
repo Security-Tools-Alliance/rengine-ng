@@ -103,6 +103,11 @@ class Command(SecatorLoaderBase):
                     long_description = workflow_data.get("long_description") or getattr(
                         workflow_loader, "long_description", None
                     )
+                    # Normalize tags from YAML to list of non-empty strings
+                    raw_tags = workflow_data.get("tags") or []
+                    tags = [
+                        str(t).strip() for t in (raw_tags if isinstance(raw_tags, (list, tuple)) else [raw_tags]) if t
+                    ]
 
                     # Determine scan type based on workflow content
                     scan_type = self._determine_scan_type_from_yaml(workflow_data)
@@ -123,6 +128,7 @@ class Command(SecatorLoaderBase):
                             "scan_type": scan_type,
                             "workflow_type": "builtin",
                             "is_active": True,
+                            "tags": tags,
                         },
                     )
 
@@ -140,6 +146,7 @@ class Command(SecatorLoaderBase):
                             long_description=long_description,
                             yaml_configuration=yaml_config,
                             scan_type=scan_type,
+                            tags=tags,
                         )
                         updated_count += 1
                         self.stdout.write(f"Updated built-in workflow: {display_name}")
@@ -188,6 +195,8 @@ class Command(SecatorLoaderBase):
                     continue
 
                 workflow_name = workflow_data["name"]
+                raw_tags = workflow_data.get("tags") or []
+                tags = [str(t).strip() for t in (raw_tags if isinstance(raw_tags, (list, tuple)) else [raw_tags]) if t]
                 workflow, created = SecatorWorkflow.objects.get_or_create(
                     name=workflow_name,
                     defaults={
@@ -197,6 +206,7 @@ class Command(SecatorLoaderBase):
                         "yaml_configuration": yaml.dump(workflow_data),
                         "scan_type": workflow_data.get("scan_type", "internet"),
                         "is_active": True,
+                        "tags": tags,
                     },
                 )
 
@@ -212,6 +222,7 @@ class Command(SecatorLoaderBase):
                         long_description=workflow_data.get("long_description", None),
                         yaml_configuration=yaml.dump(workflow_data),
                         scan_type=workflow_data.get("scan_type", "internet"),
+                        tags=tags,
                     )
                     updated_count += 1
                     self.stdout.write(f"Updated custom workflow: {workflow_name}")

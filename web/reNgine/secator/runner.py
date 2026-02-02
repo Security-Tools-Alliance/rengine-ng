@@ -167,6 +167,8 @@ class SecatorRunner:
                     "domain_id": domain_id,
                     "workspace_name": workspace,
                 }
+                if run_config and run_config.get("subscan_id") is not None:
+                    context["subscan_id"] = run_config["subscan_id"]
 
                 # Log context and hooks
                 self.runner_logger.log_context(context)

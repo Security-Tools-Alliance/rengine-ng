@@ -8,6 +8,7 @@ from django.conf import settings
 from django.http import QueryDict
 
 from reNgine.core.data import safe_bool_cast, safe_int_cast
+from reNgine.secator.selected_targets import resolve_selected_targets
 
 
 logger = logging.getLogger(__name__)
@@ -29,6 +30,8 @@ class ExecutionModeParams(TypedDict):
 class StartSecatorScanKwargs(ExecutionModeParams, total=False):
     scan_existing_elements: bool
     secator_config: SecatorConfig
+    targets_override: list[str]
+    selected_targets_per_task: dict[str, list[str]]
 
 
 def parse_secator_config(post: QueryDict) -> SecatorConfig:
@@ -91,29 +94,15 @@ def parse_secator_profiles(post: QueryDict) -> list[str]:
     """
     profiles = []
 
-    # Check if each profile category is enabled
-    use_speed_profile = safe_bool_cast(post.get("use_speed_profile"))
-    use_evasion_profile = safe_bool_cast(post.get("use_evasion_profile"))
-    use_general_profile = safe_bool_cast(post.get("use_general_profile"))
-    use_network_profile = safe_bool_cast(post.get("use_network_profile"))
-
-    # Parse profiles only if their switches are enabled
-    if use_speed_profile:
-        if speed_profile := post.get("speed_custom_profile") or post.get("speed_profile"):
-            profiles.append(speed_profile)
-
-    if use_evasion_profile:
-        if evasion_profile := post.get("evasion_custom_profile") or post.get("stealth_profile"):
-            profiles.append(evasion_profile)
-
-    if use_general_profile:
-        if general_profile := post.get("general_custom_profile") or post.get("general_profile"):
-            profiles.append(general_profile)
-
-    if use_network_profile:
-        if network_profile := post.get("network_custom_profile") or post.get("network_profile"):
-            profiles.append(network_profile)
-
+    profile_configs = [
+        (safe_bool_cast(post.get("use_speed_profile")), "speed_custom_profile", "speed_profile"),
+        (safe_bool_cast(post.get("use_evasion_profile")), "evasion_custom_profile", "stealth_profile"),
+        (safe_bool_cast(post.get("use_general_profile")), "general_custom_profile", "general_profile"),
+        (safe_bool_cast(post.get("use_network_profile")), "network_custom_profile", "network_profile"),
+    ]
+    for use_profile, custom_key, fallback_key in profile_configs:
+        if use_profile and (profile := post.get(custom_key) or post.get(fallback_key)):
+            profiles.append(profile)
     return profiles
 
 
@@ -171,26 +160,39 @@ def parse_execution_mode_params(post: QueryDict) -> ExecutionModeParams:
                 "task_ids": None,
                 "secator_scan_type": secator_scan_type,
             }
-
-        else:
-            raise ValueError("Please select a scan type.")
+        raise ValueError("Please select a scan type.")
     raise ValueError("Please select an execution mode.")
 
 
 def build_start_secator_scan_kwargs(post: QueryDict) -> StartSecatorScanKwargs:
     """
     Build normalized kwargs for reNgine's start_secator_scan service.
+
+    Uses resolve_selected_targets for parsing and precedence: tasks + selected_targets_per_task
+    => per-task mode (selected_targets ignored); otherwise single mode with targets_override.
     """
     mode_params = parse_execution_mode_params(post)
     secator_config = parse_secator_config(post)
     profiles = parse_secator_profiles(post)
-    # Add profiles to secator_config if not already present
     if profiles and "profiles" not in secator_config:
         secator_config["profiles"] = profiles
-    scan_existing_elements = post.get("scan_existing_elements") == "true"
 
-    return {
+    execution_mode = mode_params.get("execution_mode")
+    resolved = resolve_selected_targets(
+        post.get("selected_targets"),
+        post.get("selected_targets_per_task"),
+        execution_mode,
+    )
+
+    kwargs: StartSecatorScanKwargs = {
         **mode_params,
-        "scan_existing_elements": scan_existing_elements,
         "secator_config": secator_config,
     }
+    if resolved["use_per_task"]:
+        kwargs["selected_targets_per_task"] = resolved["selected_targets_per_task"]
+    elif resolved.get("targets_override") is not None:
+        kwargs["targets_override"] = resolved["targets_override"]
+    optional_scan_history_id = safe_int_cast(post.get("scan_history_id"))
+    if optional_scan_history_id is not None:
+        kwargs["scan_history_id"] = optional_scan_history_id
+    return kwargs

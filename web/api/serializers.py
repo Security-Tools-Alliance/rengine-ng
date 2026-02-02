@@ -133,13 +133,21 @@ class SubScanResultSerializer(serializers.ModelSerializer):
         ]
 
     def get_subdomain_name(self, subscan):
-        return subscan.subdomain.name
+        if subscan.subdomain:
+            return subscan.subdomain.name
+        if subscan.scan_history and subscan.scan_history.domain:
+            return f"Domain-level: {subscan.scan_history.domain.name}"
+        return ""
 
     def get_task_name(self, subscan):
         return subscan.type
 
     def get_engine_name(self, subscan):
-        return subscan.engine.engine_name if subscan.engine else ""
+        if subscan.engine:
+            return subscan.engine.engine_name
+        if subscan.secator_runner and subscan.secator_runner.runner_name:
+            return subscan.secator_runner.runner_name
+        return subscan.type or ""
 
 
 class ReconNoteSerializer(serializers.ModelSerializer):
@@ -188,6 +196,8 @@ class SubScanSerializer(serializers.ModelSerializer):
     elapsed_time = serializers.SerializerMethodField("get_elapsed_time")
     completed_ago = serializers.SerializerMethodField("get_completed_ago")
     engine = serializers.SerializerMethodField("get_engine_name")
+    formatted_task_name = serializers.SerializerMethodField("get_formatted_task_name")
+    effective_status = serializers.SerializerMethodField("get_effective_status")
 
     class Meta:
         model = SubScan
@@ -206,10 +216,16 @@ class SubScanSerializer(serializers.ModelSerializer):
             "time_taken",
             "elapsed_time",
             "completed_ago",
+            "formatted_task_name",
+            "effective_status",
         ]
 
     def get_subdomain_name(self, subscan):
-        return subscan.subdomain.name
+        if subscan.subdomain:
+            return subscan.subdomain.name
+        if subscan.scan_history and subscan.scan_history.domain:
+            return f"Domain-level: {subscan.scan_history.domain.name}"
+        return ""
 
     def get_total_time_taken(self, subscan):
         return subscan.get_total_time_taken()
@@ -221,7 +237,19 @@ class SubScanSerializer(serializers.ModelSerializer):
         return subscan.get_completed_ago()
 
     def get_engine_name(self, subscan):
-        return subscan.engine.engine_name if subscan.engine else ""
+        if subscan.engine:
+            return subscan.engine.engine_name
+        if subscan.secator_runner and subscan.secator_runner.runner_name:
+            return subscan.secator_runner.runner_name
+        return subscan.type or ""
+
+    def get_formatted_task_name(self, subscan):
+        """Unified display name for legacy (engine) and Secator (runner)."""
+        return subscan.display_scan_name or (subscan.type or "Unknown")
+
+    def get_effective_status(self, subscan):
+        """Status code for UI: from DB for legacy, from runner for Secator."""
+        return subscan.status_code
 
 
 class CommandSerializer(serializers.ModelSerializer):
@@ -288,11 +316,7 @@ class CommandSerializer(serializers.ModelSerializer):
             }
 
         try:
-            formatted_data = format_output(obj.output)
-            # Return as-is: HTML is already escaped in format_output
-            # JavaScript will insert it directly (it's safe since it only contains
-            # our controlled span tags with CSS classes, no user input)
-            return formatted_data
+            return format_output(obj.output)
         except Exception as e:
             # Fallback to escaped raw output if formatting fails
             # We must escape here to prevent XSS since the client inserts this into innerHTML
@@ -431,16 +455,15 @@ class ScanHistorySerializer(serializers.ModelSerializer):
 
     def get_scan_type_display(self, scan_history):
         """Get scan type display name using scan_name property."""
-        if scan_history.is_legacy_scan and scan_history.scan_type:
-            if hasattr(scan_history.scan_type, "get_scan_type_display"):
-                return scan_history.scan_type.get_scan_type_display()
-            elif hasattr(scan_history.scan_type, "scan_type"):
-                return scan_history.scan_type.scan_type
-            else:
-                return "internet"
-        else:
+        if not scan_history.is_legacy_scan or not scan_history.scan_type:
             # For Secator scans, return scan_name
             return scan_history.scan_name
+        if hasattr(scan_history.scan_type, "get_scan_type_display"):
+            return scan_history.scan_type.get_scan_type_display()
+        elif hasattr(scan_history.scan_type, "scan_type"):
+            return scan_history.scan_type.scan_type
+        else:
+            return "internet"
 
 
 class ScanActivitySerializer(serializers.ModelSerializer):
@@ -482,9 +505,7 @@ class ScanActivitySerializer(serializers.ModelSerializer):
         return scan_activity.scan_of.id if scan_activity.scan_of else None
 
     def get_engine_name(self, scan_activity):
-        if scan_activity.scan_of:
-            return scan_activity.scan_of.scan_name
-        return "Unknown"
+        return scan_activity.scan_of.scan_name if scan_activity.scan_of else "Unknown"
 
     def get_formatted_task_name(self, scan_activity):
         """Format task name for display"""
@@ -610,8 +631,7 @@ class SecatorRunnerSerializer(serializers.ModelSerializer):
         start_time = obj.created_at
         if obj.runner_data and "start_time" in obj.runner_data:
             start_time_str = obj.runner_data.get("start_time")
-            parsed_start = parse_datetime_iso(start_time_str)
-            if parsed_start:
+            if parsed_start := parse_datetime_iso(start_time_str):
                 start_time = parsed_start
 
         return get_time_taken(timezone.now(), start_time) if start_time else "0s"
@@ -632,8 +652,7 @@ class SecatorRunnerSerializer(serializers.ModelSerializer):
         start_time = obj.created_at
         if obj.runner_data and "start_time" in obj.runner_data:
             start_time_str = obj.runner_data.get("start_time")
-            parsed_start = parse_datetime_iso(start_time_str)
-            if parsed_start:
+            if parsed_start := parse_datetime_iso(start_time_str):
                 start_time = parsed_start
 
         if start_time:

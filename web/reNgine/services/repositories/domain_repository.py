@@ -29,7 +29,13 @@ logger = get_task_logger(__name__)
 class DomainRepository:
     """Repository for domain information-related database operations."""
 
-    def save_from_secator(self, item: Dict[str, Any], scan_history_id: int, domain_id: int) -> Optional[DomainInfo]:
+    def save_from_secator(
+        self,
+        item: Dict[str, Any],
+        scan_history_id: int,
+        domain_id: int,
+        rengine_context: Optional[Dict[str, Any]] = None,
+    ) -> Optional[DomainInfo]:
         """
         Save domain information from Secator Domain result.
 
@@ -37,6 +43,7 @@ class DomainRepository:
             item: Secator Domain item
             scan_history_id: ID of the scan history
             domain_id: ID of the domain
+            rengine_context: Optional context (unused)
 
         Returns:
             DomainInfo: Saved domain info object or None

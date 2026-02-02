@@ -1,29 +1,26 @@
-{# Scan Options Accordion - Contains Scan Target Elements, Import Subdomains, Out of Scope, Path Filters #}
-{# Params: domain_name (string), id_prefix (string, optional), id_suffix (string, optional), show_counts (bool, optional), scan_target_title (string, optional), scan_target_description (string, optional), scan_target_note (string, optional) #}
+{# Scan Options Accordion - Contains Import Subdomains, Out of Scope, Path Filters #}
+{# Params: domain_name (string), id_prefix (string, optional), id_suffix (string, optional), path_filters_only (bool, optional) - when True only show Path Filters (e.g. for subscan modal) #}
 <div class="scan-options-section mt-4">
   <div class="accordion">
     <div class="accordion-item">
-      <h2 class="accordion-header">
+      <div class="accordion-header">
         <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#{{ id_prefix|default:'' }}scanOptions" aria-expanded="false" aria-controls="{{ id_prefix|default:'' }}scanOptions">
           <i class="fas fa-cog me-2"></i> Scan Options
         </button>
-      </h2>
+      </div>
       <div id="{{ id_prefix|default:'' }}scanOptions" class="accordion-collapse collapse">
         <div class="accordion-body">
           <div class="row">
-            <!-- Scan Target Elements -->
-            <div class="col-lg-6 mb-4">
-              {% include 'startScan/_items/secator_scan_target_elements.html' with title=scan_target_title|default:"Scan Target Elements" description=scan_target_description|default:"Scan the hostnames and IP addresses already discovered in this target." note=scan_target_note|default:"When enabled, the scan will target all discovered hostnames and IP addresses in this target, in addition to the main domain." show_counts=show_counts|default:True card_class='card border-0 bg-soft-light h-100' id_suffix=id_suffix|default:id_prefix|default:'' %}
-            </div>
-
+            {% if not path_filters_only %}
             <!-- Import Subdomains -->
             {% include 'startScan/_items/secator_import_subdomains.html' with domain_name=domain_name id_prefix=id_prefix|default:'' %}
 
             <!-- Out of Scope Subdomains -->
             {% include 'startScan/_items/secator_out_of_scope_subdomains.html' with id_prefix=id_prefix|default:'' %}
+            {% endif %}
 
             <!-- Path Filters -->
-            {% include 'startScan/_items/secator_path_filters.html' with domain_name=domain_name id_prefix=id_prefix|default:'' %}
+            {% include 'startScan/_items/secator_path_filters.html' with domain_name=domain_name|default:'selected target(s)' id_prefix=id_prefix|default:'' %}
           </div>
         </div>
       </div>

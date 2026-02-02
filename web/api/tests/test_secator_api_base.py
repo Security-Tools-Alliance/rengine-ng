@@ -37,7 +37,12 @@ class TestSecatorAPIBase(BaseTestCase):
         """Test extraction of runner context."""
         runner_data = {
             "config": {"type": "workflow", "name": "test_workflow"},
-            "context": {"scan_history_id": 123, "domain_id": 1, "celery_id": "celery-123"},
+            "context": {
+                "scan_history_id": 123,
+                "domain_id": 1,
+                "subscan_id": 456,
+                "celery_id": "celery-123",
+            },
             "status": "RUNNING",
             "progress": 50,
             "done": False,
@@ -47,6 +52,7 @@ class TestSecatorAPIBase(BaseTestCase):
         self.assertEqual(context["runner_name"], "test_workflow")
         self.assertEqual(context["scan_history_id"], 123)
         self.assertEqual(context["domain_id"], 1)
+        self.assertEqual(context["subscan_id"], 456)
         self.assertEqual(context["celery_id"], "celery-123")
         self.assertEqual(context["status"], "RUNNING")
         self.assertEqual(context["progress"], 50)
@@ -61,6 +67,7 @@ class TestSecatorAPIBase(BaseTestCase):
         self.assertIn("runner_name", context)
         self.assertIn("scan_history_id", context)
         self.assertIn("domain_id", context)
+        self.assertIn("subscan_id", context)
         self.assertIn("celery_id", context)
         self.assertIn("status", context)
         self.assertIn("progress", context)
@@ -70,6 +77,7 @@ class TestSecatorAPIBase(BaseTestCase):
         self.assertIsNone(context["runner_name"])
         self.assertIsNone(context["scan_history_id"])
         self.assertIsNone(context["domain_id"])
+        self.assertIsNone(context["subscan_id"])
 
     def test_validate_request_data_with_prefix(self):
         """Test validation of request data with custom prefix."""
@@ -103,6 +111,34 @@ class TestSecatorAPIBase(BaseTestCase):
         self.assertEqual(context["scan_history_id"], 123)
         self.assertEqual(context["domain_id"], 1)
         self.assertEqual(context["task"], "subfinder")
+        self.assertIsNone(context.get("runner_id"))
+
+    def test_extract_finding_context_includes_runner_id_from_task_id(self):
+        """Test that runner_id is derived from task_id in _context."""
+        finding_data = {
+            "_type": "url",
+            "_context": {"scan_history_id": 1, "domain_id": 1, "task_id": 42},
+        }
+        context = self.base.extract_finding_context(finding_data)
+        self.assertEqual(context["runner_id"], 42)
+
+    def test_extract_finding_context_includes_runner_id_from_workflow_id(self):
+        """Test that runner_id is derived from workflow_id in _context."""
+        finding_data = {
+            "_type": "url",
+            "_context": {"scan_history_id": 1, "domain_id": 1, "workflow_id": 99},
+        }
+        context = self.base.extract_finding_context(finding_data)
+        self.assertEqual(context["runner_id"], 99)
+
+    def test_extract_finding_context_runner_id_prefers_task_over_workflow_over_scan(self):
+        """Test that task_id takes precedence over workflow_id and scan_id."""
+        finding_data = {
+            "_type": "url",
+            "_context": {"scan_history_id": 1, "domain_id": 1, "task_id": 1, "workflow_id": 2, "scan_id": 3},
+        }
+        context = self.base.extract_finding_context(finding_data)
+        self.assertEqual(context["runner_id"], 1)
 
     def test_validate_scan_context_success(self):
         """Test successful validation of scan context."""

@@ -10,6 +10,7 @@ Schedule Scan for Organization
 <link href="{% static 'plugins/jquery-step/jquery.steps.css' %}" rel="stylesheet" type="text/css" />
 <link href="{% static 'plugins/accordions/custom-accordions.css' %}" rel="stylesheet" type="text/css" />
 <link href="{% static 'plugins/flatpickr/flatpickr.min.css' %}" rel="stylesheet" type="text/css" />
+<link href="{% static 'custom/secator_scan.css' %}" rel="stylesheet" type="text/css" />
 {% endblock custom_js_css_link %}
 
 {% block breadcrumb_title %}
@@ -91,6 +92,21 @@ Scheduling scan for {{organization.name}}
 
 
 {% block page_level_script %}
+<script>
+  window.SECATOR_INPUT_TYPES_TARGETS_URL = "{% url "api:get_secator_input_types_targets" %}";
+  window.SECATOR_SELECTION_URL = "{% url "api:get_secator_selection" %}";
+</script>
+<script src="{% static 'custom/secator/secator_scan_core.js' %}"></script>
+<script src="{% static 'custom/secator/secator_scan_targets.js' %}"></script>
+<script src="{% static 'custom/secator/secator_scan_tooltips.js' %}"></script>
+<script src="{% static 'custom/secator/secator_compact_list.js' %}"></script>
+<script src="{% static 'custom/secator/secator_selection_listeners.js' %}"></script>
+<script src="{% static 'custom/secator/secator_selection_ajax.js' %}"></script>
+<script src="{% static 'custom/secator/secator_selection_dom.js' %}"></script>
+<script src="{% static 'custom/secator/secator_form_submit.js' %}"></script>
+<script src="{% static 'custom/secator/secator_input_types_ajax.js' %}"></script>
+<script src="{% static 'custom/secator/secator_input_types_tasks.js' %}"></script>
+<script src="{% static 'custom/secator_scan.js' %}"></script>
 <script src="{% static 'plugins/jquery-step/jquery.steps.min.js' %}"></script>
 <script src="{% static 'plugins/flatpickr/flatpickr.min.js' %}"></script>
 <script type="text/javascript">
@@ -117,8 +133,6 @@ function schedulerChanged(selectObject){
 
 
 var buttonEnabled = true;
-var globalTimeout = 0;
-
 
 function disableNext(){
   var nextButton = $(".actions ul li:nth-child(2) a");
@@ -134,19 +148,16 @@ function enableNext(){
 
 
 function updateButton(){
-  var text = $("input[type=radio][name=scan_mode]").val();
-  if(text === ''){
+  var prefix = document.getElementById('start-scan-form') && document.getElementById('start-scan-form').getAttribute('data-secator-id-prefix');
+  var name = prefix ? prefix.replace(/_/g, '-') + '-scan-mode' : 'scan_mode';
+  var text = $("input[type=radio][name=" + name + "]:checked").val();
+  if(text === '' || text === undefined){
     disableNext();
     return false;
   }else{
     enableNext();
     return true;
   }
-}
-
-function initTimer() {
-  if (globalTimeout) clearTimeout(globalTimeout);
-  globalTimeout = setTimeout(updateButton, 400);
 }
 
 $(function(){
@@ -171,7 +182,7 @@ $(function(){
     },
     onStepChanged: function (event, currentIndex, priorIndex) {
       if (currentIndex == 1){
-        $("input[type=radio][name=scan_mode]").change(initTimer).keyup(initTimer);
+        $('#start-scan-form').on('secator:executionModeChanged', updateButton);
         disableNext();
       }
     }

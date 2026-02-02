@@ -3,6 +3,25 @@ body[data-layout-mode=horizontal] .container-fluid {
   max-width: 100% !important;
 }
 
+/* Main page footer: fixed at bottom of viewport so visible on all pages (e.g. scan detail, target summary) */
+body[data-layout-mode=horizontal] .footer {
+  position: fixed !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  z-index: 100;
+}
+
+/* Reserve space so main content is not hidden behind the fixed footer */
+body[data-layout-mode=horizontal] .content-page {
+  padding-bottom: 4rem !important;
+}
+
+/* Hide main page footer when any modal is open */
+body.modal-open .footer {
+  display: none !important;
+}
+
 #topnav-menu-content .navbar-nav .nav-link {
   font-size: .90rem !important;
   padding: calc(33px / 2) 0.7rem !important;

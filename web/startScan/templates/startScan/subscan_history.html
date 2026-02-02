@@ -44,7 +44,7 @@ SubScan History
                   </select>
                 </div>
                 <div class="">
-                  <label for="filterByScanType" class="form-label">Filter by Scan Type</label>
+                  <label for="filterByScanType" class="form-label">Filter by Scan engine used</label>
                   <select class="form-control" id="filterByScanType">
                   </select>
                 </div>
@@ -77,52 +77,84 @@ SubScan History
             <th class="checkbox-column text-center">Serial Number</th>
             <th class="text-center">Serial Number</th>
             <th>Scanned Subdomain</th>
-            <th class="text-center">Task</th>
-            <th class="text-center">Engine</th>
+            <th class="text-center">Scan engine used</th>
             <th>Scan Started</th>
             <th class="text-center">Status</th>
+            <th class="text-center">Progress</th>
             <th class="text-center no-sorting">Action</th>
           </tr>
         </thead>
         <tbody>
           {% for subscan in subscans.all %}
-          <tr id="subscan_history_table_row_{{subscan.id}}">
+          <tr id="subscan_history_table_row_{{subscan.id}}" data-scan-id="{{ subscan.scan_history.id }}" data-subscan-id="{{ subscan.id }}">
             <td class="checkbox-column"> {{ subscan.id }} </td>
             <td class=""> {{ subscan.id }} </td>
             <td class="">
+              {% if subscan.subdomain %}
               <span class="" data-toggle="tooltip" data-placement="top" title="Scanned Subdomain">{{ subscan.subdomain.name }}</span>
+              {% else %}
+              <span class="text-muted" data-toggle="tooltip" data-placement="top" title="Domain-level scan">Domain-level: {{ subscan.scan_history.domain.name }}</span>
+              {% endif %}
             </br>
             <b><span data-toggle="tooltip" data-placement="top" title="Domain">{{ subscan.scan_history.domain.name }}</span></b>
             {% for organization in subscan.scan_history.domain.get_organization %}
               <span class="badge badge-soft-dark mt-1 me-1" data-toggle="tooltip" data-placement="top" title="Domain {{domain.name}} belongs to organization {{organization.name}}">{{ organization.name }}</span>
             {% endfor %}
           </br>
-          <a href="{% url 'detail_scan' current_project.slug subscan.scan_history.id %}" class="text-info">Recent Scan&nbsp;<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-external-link"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line>< svg></a>
+          <a href="{% url 'detail_scan' current_project.slug subscan.scan_history.id %}" class="text-info">Recent Scan&nbsp;<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-external-link"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg></a>
           </td>
-          <td class="text-center">
-            <span class="badge badge-soft-primary">{{ subscan.get_task_name_str }}</span>
-          </td>
-          <td class="text-center">
-            <span class="badge badge-soft-primary">{{ subscan.engine.engine_name }}</span>
+          <td class="text-center scan-engine-cell">
+            <span class="badge badge-soft-primary">{{ subscan.display_runner_type }}: {{ subscan.display_scan_name }}</span>
           </td>
           <td class="">
             <span data-toggle="tooltip" data-placement="top" title="{{subscan.start_scan_date}}">{{subscan.start_scan_date|naturaltime}}</br><small>({{subscan.start_scan_date}})</small></span>
           </td>
-          <td class="text-center">
-            {% if subscan.status == -1 %}
+          <td class="text-center scan-status-cell">
+            {% if subscan.status_code == -1 %}
             <span class="badge badge-soft-warning" data-toggle="tooltip" data-placement="top" title="Waiting for other scans to complete"><span class="spinner-border spinner-border-sm"></span> Pending</span>
-            {% elif subscan.status == 0 %}
+            {% elif subscan.status_code == 0 %}
             <span class="badge badge-soft-danger">Failed</span>
-            {% elif subscan.status == 1 %}
+            {% elif subscan.status_code == 1 %}
             <span class="badge badge-soft-info"><span class="spinner-border spinner-border-sm"></span> In Progress</span>
-            {% elif subscan.status == 2 %}
+            {% elif subscan.status_code == 2 %}
             <span class="badge badge-soft-success">Successful</span>
-            {% elif subscan.status == 3 %}
+            {% elif subscan.status_code == 3 %}
             <span class="badge badge-soft-danger">Aborted</span>
-            {% elif subscan.status == 4 %}
+            {% elif subscan.status_code == 4 %}
             <span class="badge badge-soft-info">Finalizing</span>
             {% else %}
             <span class="badge badge-soft-danger">Unknown</span>
+            {% endif %}
+          </td>
+          <td class="text-center scan-progress-cell">
+            {% if subscan.status_code == -1 %}
+            <div class="progress progress-md mt-1">
+              <div class="progress-bar bg-warning" role="progressbar" style="width: 10%" aria-valuenow="10" aria-valuemin="0" aria-valuemax="100"></div>
+            </div>
+            {% elif subscan.status_code == 0 %}
+            <div class="progress progress-md mt-1">
+              <div class="progress-bar bg-danger" role="progressbar" style="width: 100%" aria-valuemin="0" aria-valuemax="100"></div>
+            </div>
+            {% elif subscan.status_code == 1 %}
+            <div class="progress progress-md mt-1">
+              <div class="progress-bar bg-primary progress-bar-striped progress-bar-animated" role="progressbar" style="width: 50%" aria-valuemin="0" aria-valuemax="100"></div>
+            </div>
+            {% elif subscan.status_code == 2 %}
+            <div class="progress progress-md mt-1">
+              <div class="progress-bar bg-success" role="progressbar" style="width: 100%" aria-valuemin="0" aria-valuemax="100"></div>
+            </div>
+            {% elif subscan.status_code == 3 %}
+            <div class="progress progress-md mt-1">
+              <div class="progress-bar bg-danger progress-bar-striped" role="progressbar" style="width: 100%" aria-valuemin="0" aria-valuemax="100"></div>
+            </div>
+            {% elif subscan.status_code == 4 %}
+            <div class="progress progress-md mt-1">
+              <div class="progress-bar bg-info progress-bar-striped progress-bar-animated" role="progressbar" style="width: 90%" aria-valuemin="0" aria-valuemax="100"></div>
+            </div>
+            {% else %}
+            <div class="progress progress-md mt-1">
+              <div class="progress-bar bg-danger" role="progressbar" style="width: 100%" aria-valuemin="0" aria-valuemax="100"></div>
+            </div>
             {% endif %}
           </td>
           <td class="text-center">
@@ -135,7 +167,7 @@ SubScan History
                   </button>
                   <div class="dropdown-menu" style="">
                     {% if user|can:'initiate_scans_subscans' %}
-                      {% if subscan.status == 1 %}
+                      {% if subscan.status_code == 1 %}
                         <a href="#" class="dropdown-item text-danger" onclick="stop_scan('{% url 'api:stop_scan' %}', scan_id=null, subscan_id={{subscan.id}}, reload_scan_bar=false, reload_location=true)"><i class="fe-alert-triangle"></i>&nbsp;Stop Subscan</a>
                       {% endif %}
                     {% endif %}
@@ -301,11 +333,11 @@ $(document).ready(function() {
     var engine_filter = document.getElementById('filterByScanType');
     engine_filter.addEventListener('click', function() {
       table.search(this.value).draw();
-      document.getElementById('filteringText').innerHTML = `<span class="badge badge-soft-primary">Scan Engine: ${this.value}
+      document.getElementById('filteringText').innerHTML = `<span class="badge badge-soft-primary">Scan engine used: ${this.value}
       <span id="clearFilterChip" class="badge-link" onclick="document.getElementById('resetFilters').click()">X</span>
       </span>`;
       Snackbar.show({
-        text: `Filtering by Engine ${this.value}`,
+        text: `Filtering by Scan engine used ${this.value}`,
         pos: 'top-center'
       });
     }, false);
@@ -328,6 +360,24 @@ $(document).ready(function() {
       resetFilters(table);
     }, false);
 
+    // Connect to WebSocket for real-time subscan status updates
+    window.scanStatusApiUrls = window.scanStatusApiUrls || {};
+    window.scanStatusApiUrls.scanStatusUrl = window.scanStatusApiUrls.scanStatusUrl || '{% url "api:scan_status" %}';
+    window.scanStatusApiUrls.stopScanUrl = window.scanStatusApiUrls.stopScanUrl || '{% url "api:stop_scan" %}';
+    window.scanStatusApiUrls.stopActivityUrl = window.scanStatusApiUrls.stopActivityUrl || '{% url "api:stop_activity" %}';
+    window.scanStatusApiUrls.fetchSubscanUrl = window.scanStatusApiUrls.fetchSubscanUrl || '{% url "api:fetch_subscan_results" %}';
+
+    if (typeof connectScanStatusWebSocket === 'function') {
+      connectScanStatusWebSocket(null, '{{ current_project.slug }}', {
+        updateSubscanTable: function(data) {
+          updateSubscanRowInTable(table, data);
+        },
+        scanStatusUrl: '{% url "api:scan_status" %}',
+        stopScanUrl: '{% url "api:stop_scan" %}',
+        stopActivityUrl: '{% url "api:stop_activity" %}',
+        fetchSubscanUrl: '{% url "api:fetch_subscan_results" %}'
+      });
+    }
   });
 
   function resetFilters(table_obj) {

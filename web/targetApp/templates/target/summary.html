@@ -724,8 +724,9 @@ Target Summary
 {% include "base/_items/recon_note_modal.html" %}
 {% include "base/_items/subscan_modal.html" %}
 
-{# for passing subdomain id to initiate subtask scan #}
+{# for passing subdomain id and domain id to subscan modal #}
 <input type="hidden" name="subtask_subdomain_id" id="subtask_subdomain_id" value="0">
+<input type="hidden" id="subscan_domain_id" value="{{ target.id }}">
 
 {% endblock main_content %}
 
@@ -733,7 +734,6 @@ Target Summary
 <script src="https://cdnjs.cloudflare.com/ajax/libs/apexcharts/3.29.0/apexcharts.min.js" integrity="sha512-fe6OklXva8AWoqdwgkE7Ni4uWgHGWxFQWZx4lYehzY2Qrst5YfogjAbnLd6egsoTrnjGI9/LYt1Ont2cKNbP2A==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script src="https://apexcharts.com/samples/assets/irregular-data-series.js"></script>
 <script src="https://apexcharts.com/samples/assets/ohlc.js"></script>
-<script src="{% static 'custom/custom.js' %}"></script>
 <script src="{% static 'custom/subdomain.js' %}"></script>
 <script src="{% static 'custom/todo.js' %}"></script>
 <script src="{% static 'note/js/todo.js' %}"></script>
@@ -742,6 +742,17 @@ Target Summary
 <script src="{% static 'plugins/perfect-scrollbar/perfect-scrollbar.min.js' %}"></script>
 <script src="{% static 'startScan/js/subdomains-suggestions.js' %}"></script>
 <script src="{% static 'startScan/js/endpoint-datatables-suggestions.js' %}"></script>
+<script src="{% static 'custom/secator/secator_scan_core.js' %}"></script>
+<script src="{% static 'custom/secator/secator_scan_targets.js' %}"></script>
+<script src="{% static 'custom/secator/secator_scan_tooltips.js' %}"></script>
+<script src="{% static 'custom/secator/secator_compact_list.js' %}"></script>
+<script src="{% static 'custom/secator/secator_selection_listeners.js' %}"></script>
+<script src="{% static 'custom/secator/secator_selection_ajax.js' %}"></script>
+<script src="{% static 'custom/secator/secator_selection_dom.js' %}"></script>
+<script src="{% static 'custom/secator/secator_form_submit.js' %}"></script>
+<script src="{% static 'custom/secator/secator_input_types_ajax.js' %}"></script>
+<script src="{% static 'custom/secator/secator_input_types_tasks.js' %}"></script>
+<script src="{% static 'custom/secator_scan.js' %}"></script>
 <script src="{% static 'startScan/js/detail_scan.js' %}"></script>
 <script src="{% static 'plugins/lightbox/js/lightbox.js' %}"></script>
 <script src="{% static 'startScan/js/vulnerability-datatables-suggestions.js' %}"></script>
@@ -1011,7 +1022,7 @@ $(document).ready(function(){
 							var web_server = '';
 							var waf_badge = '';
 							if (row['technologies']){
-								tech_badge = '<div>' + parse_technology('{% url 'api:querySubdomains' %}', row['technologies'], "primary", scan_id=null, domain_id=null) + '</div>';
+								tech_badge = '<div>' + parse_technology('{% url "api:querySubdomains" %}', row['technologies'], "primary", scan_id=null, domain_id=null) + '</div>';
 							}
 							if(row['is_interesting'])
 							{
@@ -1155,8 +1166,8 @@ $(document).ready(function(){
 					{
 						"render": function ( data, type, row ) {
 							return renderBadge(data, {
-								api_ips_url: '{% url 'api:listIPs' %}',
-								api_subdomains_url: '{% url 'api:querySubdomains' %}',
+								api_ips_url: '{% url "api:listIPs" %}',
+								api_subdomains_url: '{% url "api:querySubdomains" %}',
 								scan_id: null,
 								domain_id: {{target.id}}
 							});
@@ -1334,18 +1345,17 @@ $(document).ready(function(){
 
 		$("#subdomain_scan_results").on('click', '.btn-scan-subdomain', function() {
 			$('input[type=checkbox]').prop('checked', false);
-			$('#subscan-modal').modal('show');
 			var subdomain_id = $(this).attr('id');
-			$('a[data-toggle="tooltip"]').tooltip("hide")
 			$('#subtask_subdomain_id').val(subdomain_id);
-			// to distinguish multiple subscan or single, put a extra attribute on button
 			$('#btn-initiate-subtask').attr('multiple-subscan', false);
+			$('a[data-toggle="tooltip"]').tooltip("hide");
+			if (window.ModalManager) ModalManager.showById(ModalManager.MODAL_IDS.SUBSCAN);
 		});
 
 	});
 
 	$("#pills-endpoints-tab").click(function() {
-		get_endpoints('{% url 'api:endpoints-list' %}', '{% url 'api:subdomains-list' %}', project='{{current_project.slug}}', scan_history=null, domain_id={{target.id}}, gf_tags=null);
+		get_endpoints('{% url "api:endpoints-list" %}', '{% url "api:subdomains-list" %}', project='{{current_project.slug}}', scan_history=null, domain_id={{target.id}}, gf_tags=null);
 	});
 
 	$("#pills-vulnerabilities-tab").click(function() {
@@ -1356,7 +1366,7 @@ $(document).ready(function(){
 		}
 		var is_grouping = false;
 		var grouping_col = 3;
-		var vuln_ajax_url = '{% url 'api:vulnerabilities-list' %}?target_id={{target.id}}&format=datatables';
+		var vuln_ajax_url = '{% url "api:vulnerabilities-list" %}?target_id={{target.id}}&format=datatables';
 		var vulnerability_table = $('#vulnerability_results').DataTable({
 			"destroy": false,
 			"oLanguage": {
@@ -1625,19 +1635,28 @@ $(document).ready(function(){
 			var radioGroup = document.getElementsByName('grouping_vuln_row');
 			radioGroup.forEach(function(radioButton) {
 				radioButton.addEventListener('change', function() {
-					if (this.checked) {
+					if (!this.checked) {
+						return;
+					}
+					if (this.value) {
 						var groupRows = document.querySelectorAll('tr.group');
-						// Remove each group row
 						groupRows.forEach(function(row) {
 							row.parentNode.removeChild(row);
 						});
 						var col_index = get_datatable_col_index(this.value, vuln_datatable_columns);
-						api.page.len(-1).draw();
 						api.order([col_index, 'asc']).draw();
 						is_grouping = true;
 						grouping_col = col_index;
 						Snackbar.show({
 							text: 'Vulnerabilities grouped by ' + this.value,
+							pos: 'top-right',
+							duration: 2500
+						});
+					} else {
+						is_grouping = false;
+						api.order([[get_datatable_col_index('cvss_score', vuln_datatable_columns), 'desc']]).draw();
+						Snackbar.show({
+							text: 'Grouping cleared',
 							pos: 'top-right',
 							duration: 2500
 						});
@@ -1732,14 +1751,14 @@ $(document).ready(function(){
 	});
 
 	// load scan history widget
-	loadSubscanHistoryWidget('{% url 'api:listSubScans' %}', scan_history_id=null, domain_id={{target.id}});
+	loadSubscanHistoryWidget('{% url "api:listSubScans" %}', scan_history_id=null, domain_id={{target.id}});
 
-	get_important_subdomains('{% url 'api:querySubdomains' %}', target_id={{target.id}}, scan_history_id=null);
-	get_recon_notes('{% url 'api:listTodoNotes' %}', target_id={{target.id}}, scan_history_id=null);
+	get_important_subdomains('{% url "api:querySubdomains" %}', target_id={{target.id}}, scan_history_id=null);
+	get_recon_notes('{% url "api:listTodoNotes" %}', target_id={{target.id}}, scan_history_id=null);
 
-	get_ips('{{ ip_addresses|safe }}', '{% url 'api:getIpDetails' %}', '{% url 'api:querySubdomains' %}', scan_id=null, domain_id={{target.id}});
-	get_technologies('{% url 'api:listTechnologies' %}', '{% url 'api:querySubdomains' %}', scan_id=null, domain_id={{target.id}});
-	get_ports('{{ ip_addresses }}', '{% url 'api:listIPs' %}', '{% url 'api:querySubdomains' %}', scan_id=null, domain_id={{target.id}});
+	get_ips('{{ ip_addresses|safe }}', '{% url "api:getIpDetails" %}', '{% url "api:querySubdomains" %}', scan_id=null, domain_id={{target.id}});
+	get_technologies('{% url "api:listTechnologies" %}', '{% url "api:querySubdomains" %}', scan_id=null, domain_id={{target.id}});
+	get_ports('{{ ip_addresses }}', '{% url "api:listIPs" %}', '{% url "api:querySubdomains" %}', scan_id=null, domain_id={{target.id}});
 
 	var clipboard = new Clipboard('.copyable');
 	clipboard.on('success', function(e) {
@@ -1747,7 +1766,7 @@ $(document).ready(function(){
 		hideTooltip(e.trigger);
 	});
 
-	get_most_vulnerable_target('{% url 'api:fetch_most_vulnerable' %}', '{% url 'all_vulns' current_project.slug %}', slug='{{current_project.slug}}', scan_id=null, target_id={{target.id}}, ignore_info=false);
+	get_most_vulnerable_target('{% url "api:fetch_most_vulnerable" %}', '{% url "all_vulns" current_project.slug %}', slug='{{current_project.slug}}', scan_id=null, target_id={{target.id}}, ignore_info=false);
 	// listener for info checkbox on most vulnerable target
 	$('#ignore_info_most_vuln_checkbox').change(function() {
 		if (this.checked) {
@@ -1756,7 +1775,7 @@ $(document).ready(function(){
 		else{
 			var text_msg = 'Informational Vulnerabilities included in Most Vulnerable Targets.';
 		}
-		get_most_vulnerable_target('{% url 'api:fetch_most_vulnerable' %}', '{% url 'all_vulns' current_project.slug %}', slug='{{current_project.slug}}', scan_id=null, target_id={{target.id}}, ignore_info=this.checked);
+		get_most_vulnerable_target('{% url "api:fetch_most_vulnerable" %}', '{% url "all_vulns" current_project.slug %}', slug='{{current_project.slug}}', scan_id=null, target_id={{target.id}}, ignore_info=this.checked);
 		Snackbar.show({
 			text: text_msg,
 			pos: 'top-right',
@@ -1764,7 +1783,7 @@ $(document).ready(function(){
 		});
 	});
 
-	get_most_common_vulnerability('{% url 'api:fetch_most_common_vulnerability' %}', '{% url 'all_vulns' current_project.slug %}', slug='{{current_project.slug}}', scan_id=null, target_id={{target.id}}, ignore_info=false);
+	get_most_common_vulnerability('{% url "api:fetch_most_common_vulnerability" %}', '{% url "all_vulns" current_project.slug %}', slug='{{current_project.slug}}', scan_id=null, target_id={{target.id}}, ignore_info=false);
 	// listener for info checkbox on most vulnerable target
 	$('#ignore_info_most_common_vuln_checkbox').change(function() {
 		if (this.checked) {
@@ -1773,7 +1792,7 @@ $(document).ready(function(){
 		else{
 			var text_msg = 'Informational Vulnerabilities included for Most Common Vulnerabilities.';
 		}
-		get_most_common_vulnerability('{% url 'api:fetch_most_common_vulnerability' %}', '{% url 'all_vulns' current_project.slug %}', slug='{{current_project.slug}}', scan_id=null, target_id={{target.id}}, ignore_info=this.checked);
+		get_most_common_vulnerability('{% url "api:fetch_most_common_vulnerability" %}', '{% url "all_vulns" current_project.slug %}', slug='{{current_project.slug}}', scan_id=null, target_id={{target.id}}, ignore_info=this.checked);
 		Snackbar.show({
 			text: text_msg,
 			pos: 'top-right',

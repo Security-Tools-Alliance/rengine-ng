@@ -11,6 +11,7 @@ Schedule Scan
 <link href="{% static 'plugins/jquery-step/jquery.steps.css' %}" rel="stylesheet" type="text/css" />
 <link href="{% static 'plugins/accordions/custom-accordions.css' %}" rel="stylesheet" type="text/css" />
 <link href="{% static 'plugins/flatpickr/flatpickr.min.css' %}" rel="stylesheet" type="text/css" />
+<link href="{% static 'custom/secator_scan.css' %}" rel="stylesheet" type="text/css" />
 {% endblock custom_js_css_link %}
 
 {% block breadcrumb_title %}
@@ -28,8 +29,10 @@ Scheduling scan for {{domain.name}}
   <div class="col-12">
     <div class="card">
       <div class="card-body">
-        <form method="POST" id="start-scan-form">
+        <form method="POST" id="start-scan-form" data-secator-id-prefix="schedule_scan">
           {% csrf_token %}
+          <input type="hidden" name="domain_id" value="{{ domain.id }}">
+          {% include 'startScan/_items/secator_hidden_fields.html' with id_prefix='schedule_scan_' %}
           <div id="schedule_scan_steps">
             <h3>Choose the scheduler</h3>
             <div class="">
@@ -76,8 +79,12 @@ Scheduling scan for {{domain.name}}
             </div>
             <h3>Choose Scan Engine</h3>
             <div class="">
-              <h4>Select Scan Engine</h4>
-              {% include "startScan/_items/scanEngine_select.html" %}
+              <h4>Choose Execution Mode</h4>
+              {% include 'startScan/_items/secator_execution_mode_selector.html' with scan_title='Scan' embed_selection_container=False %}
+              {% include 'startScan/_items/secator_view_toggle.html' with id_prefix='schedule_scan' %}
+              {% include 'startScan/_items/secator_selection_layout.html' with id_prefix='schedule_scan' %}
+              {% include 'startScan/_items/secator_scan_options_accordion.html' with domain_name=domain.name id_prefix='schedule_scan_' %}
+              {% include 'startScan/_items/secator_advanced_config_accordion.html' with id_prefix='schedule_scan_' show_random_proxy=False %}
             </div>
             <h3>Import/Ignore Subdomains</h3>
             <div class="">
@@ -112,6 +119,21 @@ Scheduling scan for {{domain.name}}
 
 
 {% block page_level_script %}
+<script>
+  window.SECATOR_INPUT_TYPES_TARGETS_URL = "{% url "api:get_secator_input_types_targets" %}";
+  window.SECATOR_SELECTION_URL = "{% url "api:get_secator_selection" %}";
+</script>
+<script src="{% static 'custom/secator/secator_scan_core.js' %}"></script>
+<script src="{% static 'custom/secator/secator_scan_targets.js' %}"></script>
+<script src="{% static 'custom/secator/secator_scan_tooltips.js' %}"></script>
+<script src="{% static 'custom/secator/secator_compact_list.js' %}"></script>
+<script src="{% static 'custom/secator/secator_selection_listeners.js' %}"></script>
+<script src="{% static 'custom/secator/secator_selection_ajax.js' %}"></script>
+<script src="{% static 'custom/secator/secator_selection_dom.js' %}"></script>
+<script src="{% static 'custom/secator/secator_form_submit.js' %}"></script>
+<script src="{% static 'custom/secator/secator_input_types_ajax.js' %}"></script>
+<script src="{% static 'custom/secator/secator_input_types_tasks.js' %}"></script>
+<script src="{% static 'custom/secator_scan.js' %}"></script>
 <script src="{% static 'plugins/jquery-step/jquery.steps.min.js' %}"></script>
 <script src="{% static 'plugins/flatpickr/flatpickr.min.js' %}"></script>
 <script type="text/javascript">
@@ -155,19 +177,14 @@ function enableNext(){
 
 
 function updateButton(){
-  var text = $("input[type=radio][name=scan_mode]").val();
-  if(text === ''){
+  var $form = $('#start-scan-form');
+  var text = $form.find('input[name="execution_mode"]').val();
+  if (!text || text === ''){
     disableNext();
     return false;
-  }else{
-    enableNext();
-    return true;
   }
-}
-
-function initTimer() {
-  if (globalTimeout) clearTimeout(globalTimeout);
-  globalTimeout = setTimeout(updateButton, 400);
+  enableNext();
+  return true;
 }
 
 $(function(){
@@ -192,7 +209,7 @@ $(function(){
     },
     onStepChanged: function (event, currentIndex, priorIndex) {
       if (currentIndex == 1){
-        $("input[type=radio][name=scan_mode]").change(initTimer).keyup(initTimer);
+        $('#start-scan-form').one('secator:executionModeChanged', updateButton);
         disableNext();
       }
     }

@@ -203,7 +203,7 @@ Quick Scan History
                         {% endif %}
                         {% if scan_history.scan_status != -1%}
                           <a href="#" class="dropdown-item text-dark" onclick="initiate_report(
-                              '{% url 'create_report' current_project.slug scan_history.id %}',
+                              '{% url "create_report" current_project.slug scan_history.id %}',
                               {{scan_history.id}},
                               '{% if scan_history.is_legacy_scan %}{% if 'subdomain_discovery' in scan_history.tasks %}True{% endif %}{% else %}True{% endif %}',
                               '{% if scan_history.is_legacy_scan %}{% if 'vulnerability_scan' in scan_history.tasks %}True{% endif %}{% else %}True{% endif %}',
@@ -257,7 +257,6 @@ Quick Scan History
 
 
 {% block page_level_script %}
-<script src="{% static 'custom/scan_status_websocket.js' %}"></script>
 <script>
   $(document).ready(function() {
     var table = $('#scan_history_table').DataTable({
@@ -432,10 +431,10 @@ Quick Scan History
     // Connect to WebSocket for real-time scan status updates
     // Set API URLs for scan status functions
     window.scanStatusApiUrls = {
-      scanStatusUrl: '{% url 'api:scan_status' %}',
-      stopScanUrl: '{% url 'api:stop_scan' %}',
-      stopActivityUrl: '{% url 'api:stop_activity' %}',
-      fetchSubscanUrl: '{% url 'api:fetch_subscan_results' %}'
+      scanStatusUrl: '{% url "api:scan_status" %}',
+      stopScanUrl: '{% url "api:stop_scan" %}',
+      stopActivityUrl: '{% url "api:stop_activity" %}',
+      fetchSubscanUrl: '{% url "api:fetch_subscan_results" %}'
     };
 
     if (typeof connectScanStatusWebSocket === 'function') {
@@ -443,10 +442,10 @@ Quick Scan History
         updateTable: function(data) {
           updateScanRowInTable(table, data);
         },
-        scanStatusUrl: '{% url 'api:scan_status' %}',
-        stopScanUrl: '{% url 'api:stop_scan' %}',
-        stopActivityUrl: '{% url 'api:stop_activity' %}',
-        fetchSubscanUrl: '{% url 'api:fetch_subscan_results' %}'
+        scanStatusUrl: '{% url "api:scan_status" %}',
+        stopScanUrl: '{% url "api:stop_scan" %}',
+        stopActivityUrl: '{% url "api:stop_activity" %}',
+        fetchSubscanUrl: '{% url "api:fetch_subscan_results" %}'
       });
     }
 
@@ -532,7 +531,7 @@ Quick Scan History
 });
 
   function initiate_report(url, id, is_subdomain_scan, is_vulnerability_scan, is_port_scan, domain_name) {
-    $('#generateReportModal').modal('show');
+    if (window.ModalManager) ModalManager.showById(ModalManager.MODAL_IDS.GENERATE_REPORT);
     $('#report_alert_message').empty();
     $('#report_type_select').empty();
     if (is_subdomain_scan == 'True'  && is_vulnerability_scan == 'True' && is_port_scan == 'True') {
@@ -588,7 +587,7 @@ Quick Scan History
     if ($('#report_ignore_info_vuln').is(":checked")) {
       url += `&ignore_info_vuln`
     }
-    $('#generateReportModal').modal('hide');
+    if (window.ModalManager) ModalManager.hide(ModalManager.MODAL_IDS.GENERATE_REPORT);
     window.open(url, '_blank').focus();
   }
 
@@ -598,7 +597,7 @@ Quick Scan History
     if ($('#report_ignore_info_vuln').is(":checked")) {
       url += `&ignore_info_vuln`
     }
-    $('#generateReportModal').modal('hide');
+    if (window.ModalManager) ModalManager.hide(ModalManager.MODAL_IDS.GENERATE_REPORT);
     swal.queue([{
       title: 'Generating Report!',
       text: `Please wait until we generate a report for you!`,

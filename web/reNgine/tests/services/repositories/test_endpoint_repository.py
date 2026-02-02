@@ -3,8 +3,10 @@ Unit tests for EndpointRepository.
 Tests the is_default logic for endpoints.
 """
 
+from django.utils import timezone
+
 from reNgine.services.repositories.endpoint_repository import EndpointRepository
-from startScan.models import EndPoint, ScanHistory, Subdomain
+from startScan.models import DirectoryScan, EndPoint, ScanHistory, Subdomain, SubScan
 from utils.test_base import BaseTestCase
 
 
@@ -77,8 +79,8 @@ class EndpointRepositoryIsDefaultTestCase(BaseTestCase):
         self.assertTrue(endpoint1.is_default, "First endpoint should remain default")
 
     def test_only_one_default_per_subdomain(self):
-        """Test that only one endpoint can be default per subdomain."""
-        # Create multiple endpoints
+        """Test that only one endpoint can be default per subdomain when all share the same port."""
+        # Create multiple endpoints (all port 443)
         urls = [
             "https://test.example.com/",
             "https://test.example.com/page1",
@@ -94,12 +96,35 @@ class EndpointRepositoryIsDefaultTestCase(BaseTestCase):
         # Count default endpoints for this subdomain
         default_count = EndPoint.objects.filter(subdomain=self.subdomain, is_default=True).count()
 
-        self.assertEqual(default_count, 1, "Only one endpoint should be marked as default per subdomain")
+        self.assertEqual(default_count, 1, "Only one endpoint should be marked as default per subdomain (same port)")
 
         # Verify it's the first one
         self.assertTrue(endpoints[0].is_default)
         self.assertFalse(endpoints[1].is_default)
         self.assertFalse(endpoints[2].is_default)
+
+    def test_first_per_port_gets_default(self):
+        """Test that the first endpoint per (subdomain, port) becomes default; different ports each get one."""
+        # First endpoint on port 443
+        ep443_1 = self._save_secator_endpoint("https://test.example.com/")
+        ep443_1.refresh_from_db()
+        self.assertTrue(ep443_1.is_default)
+
+        # First endpoint on port 80 (different port)
+        ep80_1 = self._save_secator_endpoint("http://test.example.com/")
+        ep80_1.refresh_from_db()
+        self.assertTrue(ep80_1.is_default, "First endpoint on port 80 should be default")
+
+        # Second endpoint on port 443 should not become default
+        ep443_2 = self._save_secator_endpoint("https://test.example.com/api")
+        ep443_2.refresh_from_db()
+        self.assertFalse(ep443_2.is_default, "Second endpoint on port 443 should not override default")
+
+        ep443_1.refresh_from_db()
+        ep80_1.refresh_from_db()
+        self.assertTrue(ep443_1.is_default)
+        self.assertTrue(ep80_1.is_default)
+        self.assertEqual(EndPoint.objects.filter(subdomain=self.subdomain, is_default=True).count(), 2)
 
     def test_process_secator_endpoint_item_valid(self):
         """Test _process_secator_endpoint_item with valid data."""
@@ -255,3 +280,45 @@ class EndpointRepositoryIsDefaultTestCase(BaseTestCase):
 
         created_subdomain = Subdomain.objects.get(name=missing_hostname, scan_history=self.scan_history)
         self.assertEqual(endpoint.subdomain_id, created_subdomain.id)
+
+    def test_save_from_secator_directory_links_dir_subscan_ids(self):
+        """When saving a directory URL from Secator with subscan_id, DirectoryScan and dir_subscan_ids are populated."""
+        subscan = SubScan.objects.create(
+            start_scan_date=timezone.now(),
+            scan_history=self.scan_history,
+            subdomain=self.subdomain,
+            status=1,
+        )
+        item = {
+            "url": "https://test.example.com/admin/",
+            "status_code": 200,
+            "is_directory": True,
+            "content_length": 1024,
+            "words": 50,
+            "lines": 10,
+            "content_type": "text/html",
+        }
+        rengine_context = {"subscan_id": subscan.id}
+
+        result = self.repository.save_from_secator(
+            item,
+            self.scan_history.id,
+            self.data_generator.domain.id,
+            rengine_context=rengine_context,
+        )
+
+        self.assertIsNotNone(result)
+        self.assertTrue(result.is_directory)
+
+        dir_scans = DirectoryScan.objects.filter(dir_subscan_ids=subscan)
+        self.assertEqual(dir_scans.count(), 1)
+        directory_scan = dir_scans.first()
+        self.assertIn(subscan, directory_scan.dir_subscan_ids.all())
+        self.assertEqual(directory_scan.directory_files.count(), 1)
+        directory_file = directory_scan.directory_files.first()
+        self.assertEqual(directory_file.url, "https://test.example.com/admin/")
+        self.assertEqual(directory_file.http_status, 200)
+        self.assertEqual(directory_file.name, "admin")
+
+        self.subdomain.refresh_from_db()
+        self.assertIn(directory_scan, self.subdomain.directories.all())

@@ -99,6 +99,7 @@ class SecatorAPIBase(APIView, ABC):
             "runner_name": runner_data.get("config", {}).get("name") or runner_data.get("name"),
             "scan_history_id": context.get("scan_history_id"),
             "domain_id": context.get("domain_id"),
+            "subscan_id": context.get("subscan_id"),
             "celery_id": context.get("celery_id"),
             "status": runner_data.get("status"),
             "progress": runner_data.get("progress"),
@@ -109,18 +110,23 @@ class SecatorAPIBase(APIView, ABC):
         """
         Extract context information from finding data.
 
+        Secator API hook stores the reNgine runner id in context as task_id,
+        workflow_id, or scan_id depending on runner type.
+
         Args:
             finding_data: Finding data dictionary
 
         Returns:
-            dict: Extracted context information
+            dict: Extracted context information (includes runner_id when present)
         """
         context = finding_data.get("_context", {})
+        runner_id = context.get("task_id") or context.get("workflow_id") or context.get("scan_id")
         return {
             "finding_type": finding_data.get("_type"),
             "scan_history_id": context.get("scan_history_id"),
             "domain_id": context.get("domain_id"),
             "task": context.get("task"),
+            "runner_id": runner_id,
         }
 
     def validate_scan_context(

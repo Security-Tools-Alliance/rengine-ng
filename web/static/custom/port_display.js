@@ -154,37 +154,26 @@ function get_ports(ip_addresses, ip_url, subdomain_url, scan_id=null, domain_id=
 }
 
 function setupModal(title, tabs) {
-    $('#modal_dialog .modal-title').html(title);
-    $('#modal_dialog .modal-text').empty();
-    $('#modal-tabs').empty();
-    $('#modal_dialog .modal-text').append(`<ul class='nav nav-tabs nav-bordered' id="modal_tab_nav"></ul><div id="modal_tab_content" class="tab-content"></div>`);
-
+    let navHtml = '<ul class="nav nav-tabs nav-bordered" id="modal_tab_nav">';
+    let contentHtml = '<div id="modal_tab_content" class="tab-content">';
     tabs.forEach((tab, index) => {
         const isActive = index === 0 ? 'active' : '';
         const expanded = index === 0 ? 'true' : 'false';
-        $('#modal_tab_nav').append(`
-            <li class="nav-item">
-                <a class="nav-link ${isActive}" data-bs-toggle="tab" href="#modal_content_${tab.id}" aria-expanded="${expanded}" data-tab-id="${tab.id}">
-                    <span id="modal-${tab.id}-count"></span>${tab.label} &nbsp;${tab.loader}
-                </a>
-            </li>
-        `);
-        $('#modal_tab_content').append(`<div class="tab-pane ${isActive ? 'show active' : ''}" id="modal_content_${tab.id}"></div>`);
+        navHtml += `<li class="nav-item"><a class="nav-link ${isActive}" data-bs-toggle="tab" href="#modal_content_${tab.id}" aria-expanded="${expanded}" data-tab-id="${tab.id}"><span id="modal-${tab.id}-count"></span>${tab.label} &nbsp;${tab.loader}</a></li>`;
+        contentHtml += `<div class="tab-pane ${isActive ? 'show active' : ''}" id="modal_content_${tab.id}"></div>`;
     });
-    
-    // Add event listener for subdomain tab clicks to load screenshots
-    $('#modal_tab_nav').off('shown.bs.tab').on('shown.bs.tab', 'a[data-tab-id="subdomain"]', function() {
-        // Trigger screenshot loading when subdomain tab is shown
+    navHtml += '</ul>';
+    contentHtml += '</div>';
+    const bodyHtml = navHtml + contentHtml;
+    if (window.ModalManager) ModalManager.showDialog({ title, bodyHtml, footerHtml: '' });
+    $('#modal_tab_nav').off('shown.bs.tab').on('shown.bs.tab', 'a[data-tab-id="subdomain"]', function () {
         setTimeout(() => {
             const containerId = 'modal_content_subdomain';
             if (window.currentModalData) {
                 const { port, scan_id, domain_id } = window.currentModalData;
-                
                 if (port !== undefined) {
-                    // Port modal: use specific port
                     loadVisibleScreenshots(containerId, port, scan_id, domain_id);
                 } else {
-                    // IP modal: use ports 80, 443
                     loadVisibleScreenshotsForIP(containerId, scan_id, domain_id);
                 }
             }
@@ -370,11 +359,10 @@ async function getScreenshotThumbnail(subdomain_id, subdomain_name, port, scan_i
     if (!subdomain_id) {
         return '-';
     }
-    
-    // If no scan_id but we have domain_id, try to get screenshots from any scan for this target
+    const fetchScreenshotsBase = (window.RENGINE_API_URLS && window.RENGINE_API_URLS.fetchScreenshots) || '/api/fetchScreenshots/';
     if (!scan_id && domain_id) {
         try {
-            const url = `/api/fetchScreenshots/?target_id=${domain_id}&subdomain_id=${subdomain_id}&port=${port}`;
+            const url = `${fetchScreenshotsBase}?target_id=${domain_id}&subdomain_id=${subdomain_id}&port=${port}`;
             const response = await fetch(url);
             const data = await response.json();
             
@@ -392,7 +380,7 @@ async function getScreenshotThumbnail(subdomain_id, subdomain_name, port, scan_i
     }
     
     try {
-        const url = `/api/fetchScreenshots/?scan_id=${scan_id}&subdomain_id=${subdomain_id}&port=${port}`;
+        const url = `${fetchScreenshotsBase}?scan_id=${scan_id}&subdomain_id=${subdomain_id}&port=${port}`;
         const response = await fetch(url);
         const data = await response.json();
         
@@ -626,7 +614,7 @@ function showScreenshotImageModal(screenshotPath, httpUrl = '') {
 
         $('#xl-modal-title').html('Screenshot');
         $('#xl-modal-content').html($content);
-        $('#modal_xl_scroll_dialog').modal('show');
+        if (window.ModalManager) ModalManager.showXlOnly();
     } catch (e) {
         console.error('Error showing screenshot modal:', e);
         window.open('/media/' + screenshotPath, '_blank');
@@ -639,7 +627,8 @@ function get_port_details(endpoint_ip_url, endpoint_subdomain_url, port, scan_id
     
     // Store modal data globally for tab click events
     window.currentModalData = { port: port, scan_id: scan_id, domain_id: domain_id };
-    $.getJSON('/api/uncommon-web-ports/', function(portsData) {
+    const uncommonPortsUrl = (window.RENGINE_API_URLS && window.RENGINE_API_URLS.uncommonWebPorts) || '/api/uncommon-web-ports/';
+    $.getJSON(uncommonPortsUrl, function (portsData) {
         const webPorts = [...portsData.uncommon_web_ports, ...portsData.common_web_ports];
         
         let ip_url = `${endpoint_ip_url}?port=${port}`;
@@ -766,7 +755,6 @@ function get_port_details(endpoint_ip_url, endpoint_subdomain_url, port, scan_id
             $("#subdomain-modal-loader").remove();
         });
 
-        $('#modal_dialog').modal('show');
     });
 }
 
@@ -842,8 +830,6 @@ function get_ip_details(endpoint_ip_url, endpoint_subdomain_url, ip_address, sca
             }
             $("#subdomain-modal-loader").remove();
         });
-
-        $('#modal_dialog').modal('show');
 }
 
 // Specialized DataTable function for IP details with lazy loading of screenshots for ports 80,443

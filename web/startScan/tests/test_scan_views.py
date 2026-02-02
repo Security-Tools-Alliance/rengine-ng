@@ -176,7 +176,6 @@ class TestSecatorProfilesContext(BaseTestCase):
         self.assertIn("default_profiles", response.context)
         self.assertIn("custom_profiles_by_category", response.context)
         self.assertIn(b'id="start_scan_execution_mode"', response.content)
-        self.assertIn(b'id="scan_existing_elements_start_scan"', response.content)
 
     def test_start_organization_scan_has_profiles_context(self):
         """start_organization_scan should always provide profile context keys."""
@@ -190,7 +189,6 @@ class TestSecatorProfilesContext(BaseTestCase):
         self.assertIn("default_profiles", response.context)
         self.assertIn("custom_profiles_by_category", response.context)
         self.assertIn(b'id="start_org_scan_execution_mode"', response.content)
-        self.assertIn(b'id="scan_existing_elements_start_org_scan"', response.content)
 
     def test_start_multiple_scan_renders_custom_profile_option(self):
         """start_multiple_scan should render custom profile options when they exist."""
@@ -213,7 +211,6 @@ class TestSecatorProfilesContext(BaseTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(profile_name.encode(), response.content)
         self.assertIn(b'id="start_multi_scan_execution_mode"', response.content)
-        self.assertIn(b'id="scan_existing_elements_start_multi_scan"', response.content)
 
     @override_settings(DEBUG=True)
     def test_build_secator_profiles_context_raises_on_unknown_category_in_debug(self):

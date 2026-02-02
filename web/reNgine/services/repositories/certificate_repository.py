@@ -23,7 +23,13 @@ logger = get_task_logger(__name__)
 class CertificateRepository:
     """Repository for certificate-related database operations."""
 
-    def save_from_secator(self, item: Dict[str, Any], scan_history_id: int, domain_id: int) -> Optional[Certificate]:
+    def save_from_secator(
+        self,
+        item: Dict[str, Any],
+        scan_history_id: int,
+        domain_id: int,
+        rengine_context: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Certificate]:
         """
         Save certificate from Secator certificate result.
 
@@ -31,6 +37,7 @@ class CertificateRepository:
             item: Secator certificate item
             scan_history_id: ID of the scan history
             domain_id: ID of the domain
+            rengine_context: Optional context (unused)
 
         Returns:
             Certificate: Saved certificate object or None
@@ -43,9 +50,9 @@ class CertificateRepository:
         except IntegrityError as e:
             logger.error(f"Integrity error saving certificate: {e}")
             return None
-        except Exception as e:
-            logger.error(f"Error saving certificate from Secator: {e}")
-            return None
+        except Exception:
+            logger.exception("Error saving certificate from Secator")
+            raise
 
     def _process_secator_certificate_item(
         self, item: Dict[str, Any], scan_history_id: int, domain_id: int

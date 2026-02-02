@@ -6,86 +6,133 @@
   </h5>
   
   {% if workflows %}
+    {% with workflow_tags=workflows|workflow_tags_union %}
+    <div class="category-filter mb-4">
+      <div class="d-flex flex-wrap gap-2 align-items-center">
+        <span class="text-muted me-2">Filter by tag:</span>
+        <button type="button" class="btn btn-sm btn-outline-secondary category-filter-btn active" data-category="all">
+          <i class="fas fa-th-large me-1"></i>All
+          <span class="badge badge-soft-secondary ms-1">{{ workflows|length }}</span>
+        </button>
+        {% for tag in workflow_tags %}
+          <button type="button" class="btn btn-sm category-filter-btn" data-category="{{ tag|lower }}">
+            <i class="fas fa-{{ tag|category_icon }} me-1"></i>
+            {{ tag|title }}
+            {% if tag == 'url' %}
+              <span class="badge badge-soft-primary ms-1">{{ workflows|workflow_count_for_tag:tag }}</span>
+            {% elif tag == 'exploit' %}
+              <span class="badge badge-soft-info ms-1">{{ workflows|workflow_count_for_tag:tag }}</span>
+            {% elif tag == 'ip' %}
+              <span class="badge badge-soft-success ms-1">{{ workflows|workflow_count_for_tag:tag }}</span>
+            {% elif tag == 'dns' %}
+              <span class="badge badge-soft-warning ms-1">{{ workflows|workflow_count_for_tag:tag }}</span>
+            {% elif tag == 'port' %}
+              <span class="badge badge-soft-danger ms-1">{{ workflows|workflow_count_for_tag:tag }}</span>
+            {% elif tag == 'vuln' %}
+              <span class="badge badge-soft-dark ms-1">{{ workflows|workflow_count_for_tag:tag }}</span>
+            {% elif tag == 'pattern' or tag == 'secret' or tag == 'user' or tag == 'waf' %}
+              <span class="badge badge-soft-secondary ms-1">{{ workflows|workflow_count_for_tag:tag }}</span>
+            {% else %}
+              <span class="badge badge-soft-primary ms-1">{{ workflows|workflow_count_for_tag:tag }}</span>
+            {% endif %}
+          </button>
+        {% endfor %}
+      </div>
+    </div>
+    {% endwith %}
+
     <div class="workflow-tiles-container">
-      <div class="row">
-        {% for workflow in workflows %}
-          <div class="col-xxl-3 col-xl-4 col-lg-6 col-md-6 col-sm-12 mb-3">
-            <div class="workflow-tile" data-workflow-id="{{ workflow.id }}">
-              <div class="form-check">
-                <input class="form-check-input" type="radio" name="workflow_id" id="workflow_{{ workflow.id }}" value="{{ workflow.id }}" required>
-                <label class="form-check-label w-100" for="workflow_{{ workflow.id }}">
-                  <div class="workflow-tile-content">
-                    <div class="workflow-tile-header">
-                      <div class="tile-icon">
-                        <i class="fas fa-{{ workflow.name|workflow_icon }}"></i>
-                      </div>
-                    </div>
-                    
-                    <div class="workflow-tile-body">
-                      <div class="workflow-tile-title-row">
-                        <h6 class="workflow-tile-title"  data-bs-toggle="tooltip" data-bs-placement="top" title="<strong>{{ workflow.get_display_name|title }}</strong><br>{{ workflow.long_description }}">{{ workflow.get_display_name }}</h6>
-                        <div class="workflow-tasks-inline">
-                          <span class="workflow-tasks-count">{{ workflow.get_tasks_count }} tasks</span>
+      {% for tag in workflows|workflow_tags_union %}
+        <div class="category-separator" data-category="{{ tag|lower }}">
+          <div class="category-separator-line"></div>
+          <div class="category-separator-label">
+            <i class="fas fa-{{ tag|category_icon }} me-2"></i>
+            {{ tag|title }}
+          </div>
+          <div class="category-separator-line"></div>
+        </div>
+
+        <div class="row mb-4" data-category="{{ tag|lower }}">
+          {% for workflow in workflows %}
+            {% if workflow|workflow_has_tag:tag %}
+              <div class="col-xxl-3 col-xl-4 col-lg-6 col-md-6 col-sm-12 mb-3">
+                <div class="workflow-tile" data-workflow-id="{{ workflow.id }}" data-secator-icon="{{ workflow.name|workflow_icon }}" data-tags="{% if workflow.tags %}{{ workflow.tags|join:' ' }}{% endif %}">
+                  <div class="form-check">
+                    <input class="form-check-input" type="radio" name="workflow_id" id="workflow_{{ workflow.id }}_{{ tag }}" value="{{ workflow.id }}" required>
+                    <label class="form-check-label w-100" for="workflow_{{ workflow.id }}_{{ tag }}">
+                      <div class="workflow-tile-content">
+                        <div class="workflow-tile-header">
+                          <div class="tile-icon">
+                            <i class="fas fa-{{ workflow.name|workflow_icon }}"></i>
+                          </div>
                         </div>
-                      </div>
-                      <p class="workflow-tile-description">{{ workflow.description|truncatechars:80 }}</p>
-                      
-                      <!-- Tasks list compact -->
-                      <div class="workflow-tasks-compact">
-                        {% for item in workflow|get_structured_tasks|slice:":4" %}
-                          {% if item.type == "group" %}
-                            <div class="workflow-task-group">
-                              <div class="workflow-task-group-header">
-                                <i class="fas fa-layer-group text-primary me-1"></i>
-                                <span class="workflow-task-group-name">{{ item.display_name|title }}</span>
-                                <span class="workflow-task-group-count">({{ item.tasks|length }})</span>
-                              </div>
-                              <div class="workflow-task-group-items">
-                                {% for task_name in item.tasks %}
-                                  {% get_task_info task_name as task_info %}
-                                  <span class="workflow-task-compact-item grouped" data-bs-toggle="tooltip" data-bs-placement="top" title="<strong>{{ task_info.name|title }}</strong><br>{{ task_info.description }}">
+                        
+                        <div class="workflow-tile-body">
+                          <div class="workflow-tile-title-row">
+                            <h6 class="workflow-tile-title" data-bs-toggle="tooltip" data-bs-placement="top" title="<strong>{{ workflow.get_display_name|title }}</strong><br>{{ workflow.long_description }}">{{ workflow.get_display_name }}</h6>
+                            <div class="workflow-tasks-inline">
+                              <span class="workflow-tasks-count">{{ workflow.get_tasks_count }} tasks</span>
+                            </div>
+                          </div>
+                          <p class="workflow-tile-description">{{ workflow.description|truncatechars:80 }}</p>
+                          
+                          <div class="workflow-tasks-compact">
+                            {% for item in workflow|get_structured_tasks|slice:":4" %}
+                              {% if item.type == "group" %}
+                                <div class="workflow-task-group">
+                                  <div class="workflow-task-group-header">
+                                    <i class="fas fa-layer-group text-primary me-1"></i>
+                                    <span class="workflow-task-group-name">{{ item.display_name|title }}</span>
+                                    <span class="workflow-task-group-count">({{ item.tasks|length }})</span>
+                                  </div>
+                                  <div class="workflow-task-group-items">
+                                    {% for task_name in item.tasks %}
+                                      {% get_task_info task_name as task_info %}
+                                      <span class="workflow-task-compact-item grouped" data-bs-toggle="tooltip" data-bs-placement="top" title="<strong>{{ task_info.name|title }}</strong><br>{{ task_info.description }}">
+                                        <i class="fas fa-{{ task_info.icon }} text-muted me-1"></i>
+                                        {{ task_info.name }}
+                                      </span>
+                                    {% endfor %}
+                                  </div>
+                                </div>
+                              {% else %}
+                                <div class="workflow-task-individual-wrapper">
+                                  {% get_task_info item.name as task_info %}
+                                  <span class="workflow-task-compact-item" data-bs-toggle="tooltip" data-bs-placement="top" title="<strong>{{ task_info.name|title }}</strong><br>{{ task_info.description }}">
                                     <i class="fas fa-{{ task_info.icon }} text-muted me-1"></i>
                                     {{ task_info.name }}
                                   </span>
-                                {% endfor %}
-                              </div>
-                            </div>
-                          {% else %}
-                            <div class="workflow-task-individual-wrapper">
-                              {% get_task_info item.name as task_info %}
-                              <span class="workflow-task-compact-item" data-bs-toggle="tooltip" data-bs-placement="top" title="<strong>{{ task_info.name|title }}</strong><br>{{ task_info.description }}">
-                                <i class="fas fa-{{ task_info.icon }} text-muted me-1"></i>
-                                {{ task_info.name }}
-                              </span>
-                            </div>
-                          {% endif %}
-                        {% endfor %}
-                        {% with structured_tasks=workflow|get_structured_tasks %}
-                          {% if structured_tasks|length > 4 %}
-                            {% with remaining_items=structured_tasks|slice:"4:" %}
-                              <span class="workflow-task-more-compact" data-bs-toggle="tooltip" data-bs-placement="top" title="Additional items: {% for item in remaining_items %}{% if item.type == "group" %}{{ item.display_name|title }}{% else %}{{ item.name }}{% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}">
-                                +{{ structured_tasks|length|add:"-4" }} more
-                              </span>
+                                </div>
+                              {% endif %}
+                            {% endfor %}
+                            {% with structured_tasks=workflow|get_structured_tasks %}
+                              {% if structured_tasks|length > 4 %}
+                                {% with remaining_items=structured_tasks|slice:"4:" %}
+                                  <span class="workflow-task-more-compact" data-bs-toggle="tooltip" data-bs-placement="top" title="Additional items: {% for item in remaining_items %}{% if item.type == "group" %}{{ item.display_name|title }}{% else %}{{ item.name }}{% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}">
+                                    +{{ structured_tasks|length|add:"-4" }} more
+                                  </span>
+                                {% endwith %}
+                              {% endif %}
                             {% endwith %}
-                          {% endif %}
-                        {% endwith %}
+                          </div>
+                        </div>
+                        
+                        <div class="workflow-tile-footer">
+                          <div class="workflow-tile-meta">
+                            <span class="badge badge-soft-{% if workflow.workflow_type == 'builtin' %}primary{% else %}secondary{% endif %}">
+                              {{ workflow.get_workflow_type_display }}
+                            </span>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                    
-                    <div class="workflow-tile-footer">
-                      <div class="workflow-tile-meta">
-                        <span class="badge badge-soft-{% if workflow.workflow_type == 'builtin' %}primary{% else %}secondary{% endif %}">
-                          {{ workflow.get_workflow_type_display }}
-                        </span>
-                      </div>
-                    </div>
+                    </label>
                   </div>
-                </label>
+                </div>
               </div>
-            </div>
-          </div>
-        {% endfor %}
-      </div>
+            {% endif %}
+          {% endfor %}
+        </div>
+      {% endfor %}
     </div>
   {% else %}
     <div class="alert alert-warning">
@@ -94,4 +141,3 @@
     </div>
   {% endif %}
 </div>
-

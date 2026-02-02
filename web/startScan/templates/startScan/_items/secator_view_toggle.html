@@ -1,0 +1,12 @@
+{# Toggle list / grid view - place just below suggestions box #}
+{# Params: id_prefix (string, e.g. 'subscan', 'start_scan') #}
+<div class="secator-view-toggle mb-2" data-content-row="#{{ id_prefix }}-content-row">
+  <div class="btn-group btn-group-sm" role="group" aria-label="View mode">
+    <button type="button" class="btn btn-outline-secondary secator-view-list-btn active" data-view="list" title="List view">
+      <i class="fas fa-list"></i>
+    </button>
+    <button type="button" class="btn btn-outline-secondary secator-view-grid-btn" data-view="grid" title="Grid view">
+      <i class="fas fa-th-large"></i>
+    </button>
+  </div>
+</div>

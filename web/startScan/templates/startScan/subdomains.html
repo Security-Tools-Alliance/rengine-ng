@@ -26,6 +26,17 @@ All subdomains
 {% block page_level_script %}
 <script src="{% static 'custom/todo.js' %}"></script>
 <script src="{% static 'note/js/todo.js' %}"></script>
+<script src="{% static 'custom/secator/secator_scan_core.js' %}"></script>
+<script src="{% static 'custom/secator/secator_scan_targets.js' %}"></script>
+<script src="{% static 'custom/secator/secator_scan_tooltips.js' %}"></script>
+<script src="{% static 'custom/secator/secator_compact_list.js' %}"></script>
+<script src="{% static 'custom/secator/secator_selection_listeners.js' %}"></script>
+<script src="{% static 'custom/secator/secator_selection_ajax.js' %}"></script>
+<script src="{% static 'custom/secator/secator_selection_dom.js' %}"></script>
+<script src="{% static 'custom/secator/secator_form_submit.js' %}"></script>
+<script src="{% static 'custom/secator/secator_input_types_ajax.js' %}"></script>
+<script src="{% static 'custom/secator/secator_input_types_tasks.js' %}"></script>
+<script src="{% static 'custom/secator_scan.js' %}"></script>
 <script src="{% static 'startScan/js/detail_scan.js' %}"></script>
 <script src="{% static 'plugins/lightbox/js/lightbox.js' %}"></script>
 <script src="{% static 'plugins/perfect-scrollbar/perfect-scrollbar.min.js' %}"></script>
@@ -133,7 +144,7 @@ $(document).ready(function() {
 						var web_server = '';
 						var waf_badge = '';
 						if (row['technologies']){
-							tech_badge = '<div>' + parse_technology('{% url 'api:querySubdomains' %}', row['technologies'], "primary", scan_id=null, domain_id=null) + '</div>';
+							tech_badge = '<div>' + parse_technology('{% url "api:querySubdomains" %}', row['technologies'], "primary", scan_id=null, domain_id=null) + '</div>';
 						}
 						if(row['is_interesting'])
 						{
@@ -275,8 +286,8 @@ $(document).ready(function() {
 				{
 					"render": function ( data, type, row ) {
 						return renderBadge(data, {
-							api_ips_url: '{% url 'api:listIPs' %}',
-							api_subdomains_url: '{% url 'api:querySubdomains' %}',
+							api_ips_url: '{% url "api:listIPs" %}',
+							api_subdomains_url: '{% url "api:querySubdomains" %}',
 							scan_id: null,
 							domain_id: null
 						});
@@ -453,12 +464,11 @@ $(document).ready(function() {
 
 		$("#subdomain_scan_results").on('click', '.btn-scan-subdomain', function () {
 			$('input[type=checkbox]').prop('checked',false);
-			$('#subscan-modal').modal('show');
 			var subdomain_id = $(this).attr('id');
-			$('a[data-toggle="tooltip"]').tooltip("hide")
 			$('#subtask_subdomain_id').val(subdomain_id);
-			// to distinguish multiple subscan or single, put a extra attribute on button
 			$('#btn-initiate-subtask').attr('multiple-subscan', false);
+			$('a[data-toggle="tooltip"]').tooltip("hide");
+			if (window.ModalManager) ModalManager.showById(ModalManager.MODAL_IDS.SUBSCAN);
 		});
 
 		var subdomain_cols = [

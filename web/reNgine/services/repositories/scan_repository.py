@@ -1,6 +1,6 @@
 """
 Scan Repository - Data access for scan-related operations.
-Handles ScanHistory and ScanActivity database operations.
+Handles ScanHistory, ScanActivity and SubScan database operations.
 """
 
 from celery.utils.log import get_task_logger
@@ -9,7 +9,7 @@ from django.utils import timezone
 
 from dashboard.models import User
 from reNgine.definitions import INITIATED_TASK
-from startScan.models import Domain, ScanActivity, ScanHistory
+from startScan.models import Domain, ScanActivity, ScanHistory, SubScan
 
 
 logger = get_task_logger(__name__)
@@ -298,3 +298,17 @@ class ScanRepository:
 
         send_scan_status_update(scan_history_id)
         return True
+
+    def mark_subscans_finished_for_runner(self, runner_id: int, status: int) -> None:
+        """
+        Set stop_scan_date and status on all SubScans linked to this Secator runner.
+        Called when a runner reaches a terminal status (SUCCESS, FAILURE, FAILED, REVOKED)
+        so that time_taken and completed_ago are available in the UI.
+
+        Args:
+            runner_id: ID of the SecatorRunner
+            status: reNgine status code (SUCCESS_TASK, FAILED_TASK, ABORTED_TASK, etc.)
+        """
+        now = timezone.now()
+        if updated := SubScan.objects.filter(secator_runner_id=runner_id).update(status=status, stop_scan_date=now):
+            logger.debug(f"Marked {updated} subscan(s) finished for runner {runner_id} (status={status})")

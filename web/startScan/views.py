@@ -21,13 +21,19 @@ from weasyprint import CSS, HTML
 from api.serializers import IpSerializer
 from reNgine.core.data import safe_int_cast
 from reNgine.definitions import (
+    ABORTED_TASK,
+    FAILED_TASK,
     FOUR_OH_FOUR_URL,
     PERM_INITATE_SCANS_SUBSCANS,
     PERM_MODIFY_SCAN_REPORT,
     PERM_MODIFY_SCAN_RESULTS,
     PERM_MODIFY_SYSTEM_CONFIGURATIONS,
+    RUNNING_BACKGROUND,
+    RUNNING_TASK,
     SCHEDULED_SCAN,
+    SUCCESS_TASK,
 )
+from reNgine.secator.service import run_per_task_secator_scans, start_secator_scan
 from reNgine.settings import RENGINE_RESULTS
 from reNgine.utilities.command import run_command
 from reNgine.utilities.subdomain import get_interesting_subdomains
@@ -79,24 +85,64 @@ def _parse_domain_id_list(raw_domain_ids: str) -> tuple[list[int], list[str]]:
     return domain_id_list, invalid_domain_ids
 
 
-def _start_secator_scans_for_domain_ids(request, domain_ids: list[int], secator_kwargs: dict) -> tuple[int, int]:
-    from reNgine.secator.service import start_secator_scan
+def _run_secator_scan_or_per_task(
+    request,
+    domain_id: int,
+    secator_kwargs: dict,
+    *,
+    imported_subdomains: list | None = None,
+    out_of_scope_subdomains: list | None = None,
+    url_filter: str = "",
+) -> tuple[int, int]:
+    """
+    Run one start_secator_scan (single mode) or N scans per task (per_task mode).
 
+    When secator_kwargs contains selected_targets_per_task and execution_mode is "tasks",
+    runs one scan per (task_type, targets) via run_per_task_secator_scans; otherwise
+    runs a single start_secator_scan. Returns (success_count, failed_count).
+    """
+    kwargs_copy = dict(secator_kwargs)
+    selected_targets_per_task = kwargs_copy.pop("selected_targets_per_task", None)
+    scan_history_id = kwargs_copy.pop("scan_history_id", None)
+    if selected_targets_per_task and kwargs_copy.get("execution_mode") == "tasks":
+        result = run_per_task_secator_scans(
+            domain_id=domain_id,
+            user_id=request.user.id,
+            selected_targets_per_task=selected_targets_per_task,
+            task_type_to_id=None,
+            imported_subdomains=imported_subdomains or [],
+            out_of_scope_subdomains=out_of_scope_subdomains or [],
+            url_filter=url_filter,
+            secator_config=kwargs_copy.get("secator_config") or {},
+            scan_history_id=scan_history_id,
+        )
+        if result["validation_errors"]:
+            logger.warning(
+                "Per-task validation errors for domain_id=%s: %s",
+                domain_id,
+                [e["task_type"] for e in result["validation_errors"]],
+            )
+        return result["success_count"], result["failed_count"]
+
+    result = start_secator_scan(
+        domain_id=domain_id,
+        user_id=request.user.id,
+        imported_subdomains=imported_subdomains or [],
+        out_of_scope_subdomains=out_of_scope_subdomains or [],
+        url_filter=url_filter,
+        scan_history_id=scan_history_id,
+        **kwargs_copy,
+    )
+    return (1, 0) if result.get("status") else (0, 1)
+
+
+def _start_secator_scans_for_domain_ids(request, domain_ids: list[int], secator_kwargs: dict) -> tuple[int, int]:
     scan_count = 0
     failed_count = 0
     for domain_id in domain_ids:
-        result = start_secator_scan(
-            domain_id=domain_id,
-            user_id=request.user.id,
-            imported_subdomains=[],
-            out_of_scope_subdomains=[],
-            url_filter="",
-            **secator_kwargs,
-        )
-        if result.get("status"):
-            scan_count += 1
-        else:
-            failed_count += 1
+        sc, fc = _run_secator_scan_or_per_task(request, domain_id, secator_kwargs)
+        scan_count += sc
+        failed_count += fc
     return scan_count, failed_count
 
 
@@ -249,7 +295,11 @@ def scan_history(request, slug):
 
 
 def subscan_history(request, slug):
-    subscans = SubScan.objects.filter(scan_history__domain__project__slug=slug).order_by("-start_scan_date")
+    subscans = (
+        SubScan.objects.filter(scan_history__domain__project__slug=slug)
+        .select_related("secator_runner")
+        .order_by("-start_scan_date")
+    )
     context = {"scan_history_active": "active", "subscans": subscans}
     return render(request, "startScan/subscan_history.html", context)
 
@@ -355,7 +405,20 @@ def detail_scan(request, id, slug):
     ip_addresses = IpAddress.objects.filter(ip_addresses__in=subdomains).distinct("address")
     ip_serializer = IpSerializer(ip_addresses.all(), many=True, context={"scan_id": id, "target_id": domain_id})
     geo_isos = CountryISO.objects.filter(ipaddress__in=ip_addresses)
-    scan_activity = ScanActivity.objects.filter(scan_of__id=id).order_by("time")
+    timeline_status_order = Case(
+        When(status=RUNNING_TASK, then=Value(0)),
+        When(status=RUNNING_BACKGROUND, then=Value(0)),
+        When(status=FAILED_TASK, then=Value(1)),
+        When(status=SUCCESS_TASK, then=Value(2)),
+        When(status=ABORTED_TASK, then=Value(3)),
+        default=Value(4),
+        output_field=IntegerField(),
+    )
+    scan_activity = (
+        ScanActivity.objects.filter(scan_of__id=id)
+        .annotate(sort_priority=timeline_status_order)
+        .order_by("sort_priority", "-time")
+    )
     cves = CveId.objects.filter(cve_ids__in=vulns)
     cwes = CweId.objects.filter(cwe_ids__in=vulns)
 
@@ -454,6 +517,9 @@ def detail_scan(request, id, slug):
         last_scan = last_scans.order_by("-start_scan_date")[1]
         ctx["last_scan"] = last_scan
 
+    # Secator profiles context for subscan modal (Advanced config > profiles)
+    ctx.update(build_secator_profiles_context())
+
     return render(request, "startScan/detail_scan.html", ctx)
 
 
@@ -470,6 +536,7 @@ def all_subdomains(request, slug):
         "alive_count": alive_subdomains.values("name").distinct().count(),
         "important_count": important_subdomains,
     }
+    context.update(build_secator_profiles_context())
     return render(request, "startScan/subdomains.html", context)
 
 
@@ -504,26 +571,21 @@ def start_scan_ui(request, slug, domain_id):
             messages.error(request, str(exc))
             return redirect("start_scan", slug=slug, domain_id=domain_id)
 
-        # Call shared service to start scan
-        from reNgine.secator.service import start_secator_scan
-
-        result = start_secator_scan(
-            domain_id=domain.id,
-            user_id=request.user.id,
+        scan_count, failed_count = _run_secator_scan_or_per_task(
+            request,
+            domain.id,
+            secator_kwargs,
             imported_subdomains=subdomains_in,
             out_of_scope_subdomains=subdomains_out,
             url_filter=filter_path,
-            **secator_kwargs,
         )
 
-        # Check result
-        if result.get("status"):
+        if scan_count >= 1:
             messages.add_message(request, messages.INFO, f"Scan Started for {domain.name}")
             return HttpResponseRedirect(reverse("scan_history", kwargs={"slug": slug}))
-        else:
-            error_msg = result.get("error", "Unknown error")
-            messages.add_message(request, messages.ERROR, f"Failed to start scan: {error_msg}")
-            return HttpResponseRedirect(reverse("start_scan", kwargs={"slug": slug, "domain_id": domain_id}))
+        error_msg = "Unknown error" if failed_count else "No scan started"
+        messages.add_message(request, messages.ERROR, f"Failed to start scan: {error_msg}")
+        return HttpResponseRedirect(reverse("start_scan", kwargs={"slug": slug, "domain_id": domain_id}))
 
     # GET request
     # Get engines based on scan type (default to bug_bounty for backward compatibility)
@@ -550,18 +612,6 @@ def start_scan_ui(request, slug, domain_id):
 
     # Handle AJAX requests
     if request.headers.get("X-Requested-With") == "XMLHttpRequest":
-        # Handle request for existing elements count
-        if request.GET.get("get_elements_count"):
-            from startScan.models import Subdomain
-
-            # Get all subdomains for this domain
-            subdomains = Subdomain.objects.filter(target_domain=domain)
-
-            # Use the extended get_counts method
-            counts = Subdomain.get_counts(subdomains)
-
-            return JsonResponse({"hostname_count": counts["hostnames"], "ip_count": counts["ip_addresses"]})
-
         # Handle Secator AJAX requests
         if request.GET.get("ajax") == "true":
             return render_secator_selection_json(request)
@@ -897,25 +947,10 @@ def start_organization_scan(request, id, slug):
         domain_list = organization.get_domains()
         scan_count = 0
         failed_count = 0
-
         for domain in domain_list:
-            # Call shared service to start scan
-            from reNgine.secator.service import start_secator_scan
-
-            result = start_secator_scan(
-                domain_id=domain.id,
-                user_id=request.user.id,
-                imported_subdomains=[],
-                out_of_scope_subdomains=[],
-                url_filter="",
-                **secator_kwargs,
-            )
-
-            if result.get("status"):
-                scan_count += 1
-            else:
-                failed_count += 1
-                logger.error(f"Failed to start scan for {domain.name}: {result.get('error')}")
+            sc, fc = _run_secator_scan_or_per_task(request, domain.id, secator_kwargs)
+            scan_count += sc
+            failed_count += fc
 
         if scan_count > 0:
             messages.add_message(

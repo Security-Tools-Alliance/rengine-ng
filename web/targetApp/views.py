@@ -10,7 +10,7 @@ from django import http
 from django.conf import settings
 from django.contrib import messages
 from django.core.serializers.json import DjangoJSONEncoder
-from django.db.models import Count
+from django.db.models import Case, Count, IntegerField, Value, When
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
@@ -23,8 +23,13 @@ from api.serializers import IpSerializer
 from reNgine.core.data import get_ip_info, get_ips_from_cidr_range
 from reNgine.core.validators import is_valid_cidr
 from reNgine.definitions import (
+    ABORTED_TASK,
+    FAILED_TASK,
     FOUR_OH_FOUR_URL,
     PERM_MODIFY_TARGETS,
+    RUNNING_BACKGROUND,
+    RUNNING_TASK,
+    SUCCESS_TASK,
 )
 from reNgine.utilities.command import run_command
 from reNgine.utilities.dns import get_reverse_dns
@@ -44,6 +49,7 @@ from startScan.models import (
     Vulnerability,
     VulnerabilityTags,
 )
+from startScan.secator_profiles import build_secator_profiles_context
 from targetApp.forms import (
     AddOrganizationForm,
     AddTargetForm,
@@ -908,9 +914,20 @@ def target_summary(request, slug, id):
     target = get_object_or_404(Domain, id=id)
     context["target"] = target
 
-    # Scan History
+    # Scan History: running first, then error, success, aborted/skipped; within group by most recent first
     scan = ScanHistory.objects.filter(domain__id=id)
-    context["recent_scans"] = scan.order_by("-start_scan_date")[:4]
+    scan_status_order = Case(
+        When(scan_status=RUNNING_TASK, then=Value(0)),
+        When(scan_status=RUNNING_BACKGROUND, then=Value(0)),
+        When(scan_status=FAILED_TASK, then=Value(1)),
+        When(scan_status=SUCCESS_TASK, then=Value(2)),
+        When(scan_status=ABORTED_TASK, then=Value(3)),
+        default=Value(4),
+        output_field=IntegerField(),
+    )
+    context["recent_scans"] = scan.annotate(sort_priority=scan_status_order).order_by(
+        "sort_priority", "-start_scan_date"
+    )[:4]
     context["scan_count"] = scan.count()
     last_week = timezone.now() - timedelta(days=7)
     context["this_week_scan_count"] = scan.filter(start_scan_date__gte=last_week).count()
@@ -1000,6 +1017,7 @@ def target_summary(request, slug, id):
         CountryISO.objects.filter(ipaddress__in=ip_addresses).annotate(count=Count("iso")).order_by("-count")
     )
 
+    context.update(build_secator_profiles_context())
     return render(request, "target/summary.html", context)
 
 

@@ -27,7 +27,7 @@ const vuln_datatable_columns = [
 	{'data': 'reference'}              // Reference
 ];
 
-const vuln_datatable_page_length = 50;
+const vuln_datatable_page_length = 100;
 const vuln_datatable_length_menu = [[50, 100, 500, 1000, -1], [50, 100, 500, 1000, 'All']];
 
 

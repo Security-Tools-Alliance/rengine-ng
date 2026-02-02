@@ -30,14 +30,14 @@
                     <!-- Filters -->
                     <div class="row mb-3">
                         <div class="col-md-4">
-                            <select class="form-control" id="filterSelect" onchange="filterWorkflows()">
-                                <option value="all">All Workflows</option>
-                                <option value="builtin">Built-in</option>
-                                <option value="custom">Custom</option>
+                            <select class="form-control" id="filterSelect">
+                                <option value="all" {% if filter_type == 'all' %}selected{% endif %}>All Workflows</option>
+                                <option value="builtin" {% if filter_type == 'builtin' %}selected{% endif %}>Built-in</option>
+                                <option value="custom" {% if filter_type == 'custom' %}selected{% endif %}>Custom</option>
                             </select>
                         </div>
                         <div class="col-md-6">
-                            <input type="text" class="form-control" id="searchInput" placeholder="Search workflows..." onkeyup="searchWorkflows()">
+                            <input type="text" class="form-control" id="searchInput" placeholder="Search workflows..." value="{{ search_query|default:'' }}">
                         </div>
                         <div class="col-md-2">
                             <button type="button" class="btn btn-secondary btn-block" onclick="clearFilters()">
@@ -48,11 +48,12 @@
                     
                     <!-- Workflows Table -->
                     <div class="table-responsive">
-                        <table class="table table-striped" id="workflowsTable">
+                        <table class="table table-striped table-hover" id="workflowsTable">
                             <thead>
                                 <tr>
                                     <th>Name</th>
                                     <th>Type</th>
+                                    <th>Tags</th>
                                     <th>Scan Type</th>
                                     <th>Long Description</th>
                                     <th>Status</th>
@@ -60,99 +61,11 @@
                                     <th>Actions</th>
                                 </tr>
                             </thead>
-                            <tbody>
-                                {% for workflow in page_obj %}
-                                <tr>
-                                    <td>
-                                        <strong>{{ workflow.get_display_name }}</strong>
-                                        {% if workflow.name %}
-                                        <br><small class="text-info"><i class="fas fa-tag"></i> {{ workflow.name }}</small>
-                                        {% endif %}
-                                        {% if workflow.description %}
-                                        <br><small class="text-muted">{{ workflow.description|truncatechars:100 }}</small>
-                                        {% endif %}
-                                    </td>
-                                    <td>
-                                        <span class="badge badge-soft-{% if workflow.workflow_type == 'builtin' %}primary{% else %}secondary{% endif %}">
-                                            {{ workflow.get_workflow_type_display }}
-                                        </span>
-                                    </td>
-                                    <td>
-                                        <span class="badge badge-soft-info">{{ workflow.get_scan_type_display }}</span>
-                                    </td>
-                                    <td>
-                                        {% if workflow.long_description %}
-                                            <small class="text-muted">{{ workflow.long_description }}</small>
-                                        {% else %}
-                                            <span class="text-muted">-</span>
-                                        {% endif %}
-                                    </td>
-                                    <td>
-                                        {% if workflow.is_active %}
-                                        <span class="badge badge-soft-success">Active</span>
-                                        {% else %}
-                                        <span class="badge badge-soft-danger">Inactive</span>
-                                        {% endif %}
-                                    </td>
-                                    <td>{{ workflow.created_at|date:"M d, Y" }}</td>
-                                    <td>
-                                        <div class="btn-group btn-group-sm">
-                                            <a href="{% url 'workflow_detail' workflow.id %}" class="btn btn-info btn-sm">
-                                                <i class="fas fa-eye"></i>
-                                            </a>
-                                            {% if workflow.workflow_type == 'custom' %}
-                                            <a href="{% url 'update_workflow' workflow.id %}" class="btn btn-warning btn-sm">
-                                                <i class="fas fa-edit"></i>
-                                            </a>
-                                            <button type="button" class="btn btn-danger btn-sm" onclick="deleteWorkflow({{ workflow.id }}, '{{ workflow.get_display_name }}')">
-                                                <i class="fas fa-trash"></i>
-                                            </button>
-                                            {% endif %}
-                                        </div>
-                                    </td>
-                                </tr>
-                                {% empty %}
-                                <tr>
-                                    <td colspan="8" class="text-center text-muted">
-                                        <i class="fas fa-inbox fa-2x mb-2"></i><br>
-                                        No workflows found. Create one or load built-in workflows.
-                                    </td>
-                                </tr>
-                                {% endfor %}
+                            <tbody id="workflowsTableBody">
+                                {% include "scanEngine/_workflows_table_body.html" with workflows=workflows %}
                             </tbody>
                         </table>
                     </div>
-                    
-                    <!-- Pagination -->
-                    {% if page_obj.has_other_pages %}
-                    <nav aria-label="Workflows pagination">
-                        <ul class="pagination justify-content-center">
-                            {% if page_obj.has_previous %}
-                            <li class="page-item">
-                                <a class="page-link" href="?page={{ page_obj.previous_page_number }}">Previous</a>
-                            </li>
-                            {% endif %}
-                            
-                            {% for num in page_obj.paginator.page_range %}
-                            {% if page_obj.number == num %}
-                            <li class="page-item active">
-                                <span class="page-link">{{ num }}</span>
-                            </li>
-                            {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
-                            <li class="page-item">
-                                <a class="page-link" href="?page={{ num }}">{{ num }}</a>
-                            </li>
-                            {% endif %}
-                            {% endfor %}
-                            
-                            {% if page_obj.has_next %}
-                            <li class="page-item">
-                                <a class="page-link" href="?page={{ page_obj.next_page_number }}">Next</a>
-                            </li>
-                            {% endif %}
-                        </ul>
-                    </nav>
-                    {% endif %}
                 </div>
             </div>
         </div>
@@ -164,67 +77,33 @@
 {% block page_level_script %}
 <script src="{% static 'scanEngine/js/secator.js' %}"></script>
 <script>
-// Initialize page
+const WORKFLOWS_PARTIAL_URL = '{% url "workflows_table_partial" %}';
+const SEARCH_DEBOUNCE_MS = 300;
+
+/** Returns column count from table header so loading/error row colspan stays in sync when columns change. */
+function getWorkflowsTableCols() {
+    return document.querySelectorAll('#workflowsTable thead th').length;
+}
+
+function refreshWorkflowsTable() {
+    window.refreshSecatorTable(WORKFLOWS_PARTIAL_URL, 'filterSelect', 'searchInput', 'workflowsTableBody', getWorkflowsTableCols, 'Error loading workflows. Please refresh the page.');
+}
+
+const onSearchInput = window.debouncedRefreshSecatorTable(SEARCH_DEBOUNCE_MS, WORKFLOWS_PARTIAL_URL, 'filterSelect', 'searchInput', 'workflowsTableBody', getWorkflowsTableCols, 'Error loading workflows. Please refresh the page.');
+
+function clearFilters() {
+    document.getElementById('filterSelect').value = 'all';
+    document.getElementById('searchInput').value = '';
+    refreshWorkflowsTable();
+}
+
 document.addEventListener('DOMContentLoaded', function() {
-    // Set current filter
-    const urlParams = new URLSearchParams(window.location.search);
-    const filter = urlParams.get('filter') || 'all';
-    document.getElementById('filterSelect').value = filter;
-    
-    // Set current search
-    const search = urlParams.get('search') || '';
-    document.getElementById('searchInput').value = search;
+    document.getElementById('filterSelect').addEventListener('change', refreshWorkflowsTable);
+    document.getElementById('searchInput').addEventListener('input', onSearchInput);
 });
 
-// Filter workflows
-function filterWorkflows() {
-    const filter = document.getElementById('filterSelect').value;
-    const search = document.getElementById('searchInput').value;
-    const url = new URL(window.location);
-    
-    if (filter !== 'all') {
-        url.searchParams.set('filter', filter);
-    } else {
-        url.searchParams.delete('filter');
-    }
-    
-    if (search) {
-        url.searchParams.set('search', search);
-    } else {
-        url.searchParams.delete('search');
-    }
-    
-    window.location.href = url.toString();
-}
-
-// Search workflows
-function searchWorkflows() {
-    const search = document.getElementById('searchInput').value;
-    const filter = document.getElementById('filterSelect').value;
-    const url = new URL(window.location);
-    
-    if (search) {
-        url.searchParams.set('search', search);
-    } else {
-        url.searchParams.delete('search');
-    }
-    
-    if (filter !== 'all') {
-        url.searchParams.set('filter', filter);
-    } else {
-        url.searchParams.delete('filter');
-    }
-    
-    // Debounce search
-    clearTimeout(window.searchTimeout);
-    window.searchTimeout = setTimeout(() => {
-        window.location.href = url.toString();
-    }, 500);
-}
-
-// Clear filters
-function clearFilters() {
-    window.location.href = '{% url "workflows" %}';
+function getCookie(name) {
+    return (typeof Secator !== 'undefined' && Secator.getCookie) ? Secator.getCookie(name) : null;
 }
 
 // Load built-in workflows
@@ -283,7 +162,7 @@ function loadBuiltinWorkflows() {
 
 // Delete workflow
 function deleteWorkflow(workflowId, workflowName) {
-    const url = `{% url 'delete_workflow' 0 %}`.replace('0', workflowId);
+    const url = `{% url "delete_workflow" 0 %}`.replace('0', workflowId);
     
     Swal.fire({
         title: 'Are you sure?',
@@ -339,22 +218,6 @@ function deleteWorkflow(workflowId, workflowName) {
             });
         }
     });
-}
-
-// Utility functions
-function getCookie(name) {
-    let cookieValue = null;
-    if (document.cookie && document.cookie !== '') {
-        const cookies = document.cookie.split(';');
-        for (let i = 0; i < cookies.length; i++) {
-            const cookie = cookies[i].trim();
-            if (cookie.substring(0, name.length + 1) === (name + '=')) {
-                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-                break;
-            }
-        }
-    }
-    return cookieValue;
 }
 
 function showAlert(type, message) {

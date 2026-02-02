@@ -11,6 +11,11 @@ from scanEngine.models import SecatorScan, SecatorTask, SecatorWorkflow
 _INVALID_EXECUTION_MODE_HTML = '<div class="alert alert-warning">Invalid execution mode</div>'
 
 
+def normalize_secator_id_prefix(raw: str) -> str:
+    """Normalize id_prefix for use in templates and DOM IDs (single convention: underscores)."""
+    return (raw or "").strip().replace("-", "_")
+
+
 class SecatorSelectionContext(TypedDict, total=False):
     workflows: list[SecatorWorkflow]
     all_tasks: Any
@@ -38,6 +43,7 @@ def get_secator_selection_template_and_context(execution_mode: str) -> tuple[str
                 "description",
                 "long_description",
                 "workflow_type",
+                "tags",
                 "yaml_configuration",
             )
             .order_by("workflow_type", "name")
@@ -45,7 +51,7 @@ def get_secator_selection_template_and_context(execution_mode: str) -> tuple[str
         all_tasks = SecatorTask.objects.filter(is_active=True).only(
             "task_type",
             "name",
-            "category",
+            "tags",
             "description",
         )
         tasks_dict = {task.task_type: task for task in all_tasks}
@@ -61,11 +67,17 @@ def get_secator_selection_template_and_context(execution_mode: str) -> tuple[str
         return "startScan/_items/secator_workflow_select.html", context
 
     if mode == "tasks":
-        tasks = (
+        tasks = list(
             SecatorTask.objects.filter(is_active=True)
-            .only("id", "name", "task_type", "category", "description")
-            .order_by("category", "name")
+            .only("id", "name", "task_type", "tags", "description")
+            .order_by("name")
         )
+
+        # Sort by first tag so regroup in template groups consecutive items
+        def _first_tag(t):
+            return (t.tags[0] if t.tags else "unknown").lower()
+
+        tasks.sort(key=lambda t: (_first_tag(t), t.name))
         context["tasks"] = tasks
         return "startScan/_items/secator_task_select.html", context
 
@@ -89,7 +101,7 @@ def render_secator_selection_json(request: HttpRequest) -> JsonResponse:
     try:
         template, context = get_secator_selection_template_and_context(execution_mode)
         if id_prefix:
-            context["id_prefix"] = id_prefix
+            context["id_prefix"] = normalize_secator_id_prefix(id_prefix)
     except ValueError:
         return JsonResponse({"html": _INVALID_EXECUTION_MODE_HTML})
 

@@ -43,35 +43,43 @@ class TestSecatorCommands(BaseTestCase):
         """Set up test data."""
         super().setUp()
 
+    @patch("scanEngine.management.commands.load_tasks.discover_tasks")
     @patch("scanEngine.management.commands.load_tasks.get_configs_by_type")
-    def test_load_tasks_command(self, mock_get_configs):
+    def test_load_tasks_command(self, mock_get_configs, mock_discover_tasks):
         """Test the load_tasks management command."""
-        # Mock TemplateLoader objects for tasks
         mock_task1 = MagicMock()
         mock_task1.name = "subfinder"
         mock_task1.description = "Subdomain discovery tool."
-        mock_task1.category = "dns/recon"
 
         mock_task2 = MagicMock()
         mock_task2.name = "httpx"
         mock_task2.description = "HTTP probe tool."
-        mock_task2.category = "url/probe"
 
         mock_task3 = MagicMock()
         mock_task3.name = "nuclei"
         mock_task3.description = "Vulnerability scanner."
-        mock_task3.category = "vuln/scan"
 
         mock_get_configs.return_value = [mock_task1, mock_task2, mock_task3]
 
-        # Run the command
+        mock_cls1 = MagicMock()
+        mock_cls1.__name__ = "subfinder"
+        mock_cls1.tags = ["dns", "recon"]
+        mock_cls2 = MagicMock()
+        mock_cls2.__name__ = "httpx"
+        mock_cls2.tags = ["url", "probe"]
+        mock_cls3 = MagicMock()
+        mock_cls3.__name__ = "nuclei"
+        mock_cls3.tags = ["vuln", "scan"]
+        mock_discover_tasks.return_value = [mock_cls1, mock_cls2, mock_cls3]
+
         out = StringIO()
         call_command("load_tasks", stdout=out)
 
-        # Check that tasks were created
         self.assertTrue(SecatorTask.objects.filter(task_type="subfinder").exists())
         self.assertTrue(SecatorTask.objects.filter(task_type="httpx").exists())
         self.assertTrue(SecatorTask.objects.filter(task_type="nuclei").exists())
+        task = SecatorTask.objects.get(task_type="subfinder")
+        self.assertEqual(task.tags, ["dns", "recon"])
 
     @patch("scanEngine.management.commands.load_workflows.get_configs_by_type")
     @patch(
@@ -366,9 +374,9 @@ tasks:
         """
         Test updating existing built-in workflows.
         """
-        # Create an existing workflow (using name as key)
+        # Create an existing workflow (name must match loader name for get_or_create to find it)
         existing_workflow = SecatorWorkflow.objects.create(
-            name="Subdomain Recon",
+            name="subdomain_recon",
             alias="subdomain_recon",
             description="Old description",
             workflow_type="builtin",
@@ -447,43 +455,44 @@ class TestLoadTasksCommand(BaseTestCase):
         """
         super().setUp()
 
+    @patch("scanEngine.management.commands.load_tasks.discover_tasks")
     @patch("scanEngine.management.commands.load_tasks.get_configs_by_type")
-    def test_load_builtin_tasks_success(self, mock_get_configs):
-        """
-        Test successful loading of built-in tasks from Secator.
-        """
-        # Mock TemplateLoader objects for tasks
+    def test_load_builtin_tasks_success(self, mock_get_configs, mock_discover_tasks):
+        """Test successful loading of built-in tasks from Secator."""
         mock_task1 = MagicMock()
         mock_task1.name = "subfinder"
         mock_task1.description = "Subdomain discovery tool."
-        mock_task1.category = "dns/recon"
 
         mock_task2 = MagicMock()
         mock_task2.name = "httpx"
         mock_task2.description = "HTTP probe tool."
-        mock_task2.category = None  # Task without category
 
         mock_get_configs.return_value = [mock_task1, mock_task2]
 
-        # Clear existing tasks
+        mock_cls1 = MagicMock()
+        mock_cls1.__name__ = "subfinder"
+        mock_cls1.tags = ["dns", "recon"]
+        mock_cls2 = MagicMock()
+        mock_cls2.__name__ = "httpx"
+        mock_cls2.tags = ["url", "probe"]
+        mock_discover_tasks.return_value = [mock_cls1, mock_cls2]
+
         SecatorTask.objects.filter(is_builtin=True).delete()
 
-        # Call the command
         out = get_test_stdout()
         call_command("load_tasks", stdout=out)
 
-        # Verify tasks were created (using name as key)
         task1 = SecatorTask.objects.get(name="subfinder")
         self.assertEqual(task1.task_type, "subfinder")
         self.assertEqual(task1.description, "Subdomain discovery tool.")
-        self.assertEqual(task1.category, "dns/recon")
+        self.assertEqual(task1.tags, ["dns", "recon"])
         self.assertTrue(task1.is_builtin)
         self.assertTrue(task1.is_active)
 
         task2 = SecatorTask.objects.get(name="httpx")
         self.assertEqual(task2.task_type, "httpx")
         self.assertEqual(task2.description, "HTTP probe tool.")
-        self.assertIsNone(task2.category)
+        self.assertEqual(task2.tags, ["url", "probe"])
         self.assertTrue(task2.is_builtin)
         self.assertTrue(task2.is_active)
 
@@ -536,67 +545,95 @@ class TestLoadTasksCommand(BaseTestCase):
         self.assertEqual(SecatorTask.objects.filter(is_builtin=True).count(), 1)
         self.assertTrue(SecatorTask.objects.filter(name="valid_task").exists())
 
+    @patch("scanEngine.management.commands.load_tasks.discover_tasks")
     @patch("scanEngine.management.commands.load_tasks.get_configs_by_type")
-    def test_load_builtin_tasks_category_as_object(self, mock_get_configs):
-        """
-        Test handling of category that is a TemplateLoader object.
-        """
-        # Mock category as TemplateLoader object (real case encountered)
-        mock_category = MagicMock()
-        mock_category.__str__ = lambda x: "dns/recon"
-
+    def test_load_builtin_tasks_tags_from_discover(self, mock_get_configs, mock_discover_tasks):
+        """Test that tags are loaded from Secator task classes (discover_tasks)."""
         mock_task = MagicMock()
         mock_task.name = "subfinder"
         mock_task.description = "Subdomain discovery tool."
-        mock_task.category = mock_category  # Category is an object
 
         mock_get_configs.return_value = [mock_task]
 
-        # Clear existing tasks
+        mock_cls = MagicMock()
+        mock_cls.__name__ = "subfinder"
+        mock_cls.tags = ["dns", "recon"]
+        mock_discover_tasks.return_value = [mock_cls]
+
         SecatorTask.objects.filter(is_builtin=True).delete()
 
-        # Call the command
         out = get_test_stdout()
         call_command("load_tasks", stdout=out)
 
-        # Verify task was created with category converted to string
         task = SecatorTask.objects.get(name="subfinder")
-        self.assertEqual(task.category, "dns/recon")
+        self.assertEqual(task.tags, ["dns", "recon"])
 
+    @patch("scanEngine.management.commands.load_tasks.discover_tasks")
     @patch("scanEngine.management.commands.load_tasks.get_configs_by_type")
-    def test_load_builtin_tasks_update_existing(self, mock_get_configs):
-        """
-        Test updating existing built-in tasks.
-        """
-        # Create an existing task (using name as key)
+    def test_load_builtin_tasks_update_existing(self, mock_get_configs, mock_discover_tasks):
+        """Test updating existing built-in tasks."""
         existing_task = SecatorTask.objects.create(
             name="subfinder",
             task_type="subfinder",
             description="Old description",
-            category="old/category",
+            tags=["old", "category"],
             is_builtin=True,
             is_active=False,
         )
 
-        # Mock TemplateLoader object for task with new data
         mock_task = MagicMock()
         mock_task.name = "subfinder"
         mock_task.description = "New description"
-        mock_task.category = "dns/recon"
 
         mock_get_configs.return_value = [mock_task]
 
-        # Call the command
+        mock_cls = MagicMock()
+        mock_cls.__name__ = "subfinder"
+        mock_cls.tags = ["dns", "recon"]
+        mock_discover_tasks.return_value = [mock_cls]
+
         out = get_test_stdout()
         call_command("load_tasks", stdout=out)
 
-        # Verify task was updated via QuerySet.update() (not save())
         existing_task.refresh_from_db()
         self.assertEqual(existing_task.name, "subfinder")
         self.assertEqual(existing_task.description, "New description")
-        self.assertEqual(existing_task.category, "dns/recon")
+        self.assertEqual(existing_task.tags, ["dns", "recon"])
         self.assertTrue(existing_task.is_builtin)
-        self.assertTrue(existing_task.is_active)  # Updated to True
+        self.assertTrue(existing_task.is_active)
+
+    @patch("scanEngine.management.commands.load_tasks.discover_tasks")
+    @patch("scanEngine.management.commands.load_tasks.get_configs_by_type")
+    def test_load_builtin_tasks_name_collision_skips_update(self, mock_get_configs, mock_discover_tasks):
+        """Custom task with same name as Secator task is not overwritten; warning is logged."""
+        custom_task = SecatorTask.objects.create(
+            name="subfinder",
+            task_type="subfinder",
+            description="Custom description",
+            tags=["custom"],
+            is_builtin=False,
+            is_active=True,
+        )
+
+        mock_task = MagicMock()
+        mock_task.name = "subfinder"
+        mock_task.description = "Secator description"
+
+        mock_get_configs.return_value = [mock_task]
+
+        mock_cls = MagicMock()
+        mock_cls.__name__ = "subfinder"
+        mock_cls.tags = ["dns", "recon"]
+        mock_discover_tasks.return_value = [mock_cls]
+
+        out = StringIO()
+        call_command("load_tasks", stdout=out)
+
+        custom_task.refresh_from_db()
+        self.assertEqual(custom_task.description, "Custom description")
+        self.assertEqual(custom_task.tags, ["custom"])
+        self.assertFalse(custom_task.is_builtin)
+        self.assertIn("Name collision", out.getvalue())
 
 
 class TestLoadScansCommand(BaseTestCase):

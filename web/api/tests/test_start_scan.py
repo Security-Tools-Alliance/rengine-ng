@@ -18,7 +18,7 @@ class TestStartScanAPI(BaseTestCase):
         super().setUp()
         self.url = reverse("api:start_scan")
 
-    @patch("reNgine.secator.service.start_secator_scan")
+    @patch("api.views.start_secator_scan")
     def test_start_scan_success(self, mock_start_scan):
         """Test successful scan start returns http_status 200."""
         mock_start_scan.return_value = {
@@ -71,7 +71,7 @@ class TestStartScanAPI(BaseTestCase):
         self.assertEqual(response.data["http_status"], 404)
         self.assertIn("not found", response.data["error"].lower())
 
-    @patch("reNgine.secator.service.start_secator_scan")
+    @patch("api.views.start_secator_scan")
     def test_start_scan_secator_scan_not_found(self, mock_start_scan):
         """Test scan start with non-existent secator_scan_id returns http_status 404."""
         mock_start_scan.return_value = {
@@ -102,7 +102,7 @@ class TestStartScanAPI(BaseTestCase):
         self.assertEqual(response.data["http_status"], 400)
         self.assertIn("secator_scan_id or execution_mode", response.data["error"])
 
-    @patch("reNgine.secator.service.start_secator_scan")
+    @patch("api.views.start_secator_scan")
     def test_start_scan_server_error(self, mock_start_scan):
         """Test scan start with server error returns http_status 500."""
         mock_start_scan.return_value = {
@@ -122,7 +122,7 @@ class TestStartScanAPI(BaseTestCase):
         self.assertFalse(response.data["status"])
         self.assertEqual(response.data["http_status"], 500)
 
-    @patch("reNgine.secator.service.start_secator_scan")
+    @patch("api.views.start_secator_scan")
     def test_start_scan_backward_compatibility_no_http_status(self, mock_start_scan):
         """Test backward compatibility when http_status is missing in result."""
         # Simulate old code that doesn't return http_status
@@ -144,7 +144,7 @@ class TestStartScanAPI(BaseTestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data["status"])
 
-    @patch("reNgine.secator.service.start_secator_scan")
+    @patch("api.views.start_secator_scan")
     def test_start_scan_backward_compatibility_error_no_http_status(self, mock_start_scan):
         """Test backward compatibility for errors when http_status is missing."""
         # Simulate old code that doesn't return http_status
@@ -164,3 +164,52 @@ class TestStartScanAPI(BaseTestCase):
         # Should default to 500 for errors
         self.assertEqual(response.status_code, status.HTTP_500_INTERNAL_SERVER_ERROR)
         self.assertFalse(response.data["status"])
+
+    @patch("api.views.start_secator_scan")
+    def test_start_scan_with_selected_targets_passes_targets_override(self, mock_start_scan):
+        """When selected_targets is provided for workflow, start_secator_scan receives targets_override."""
+        mock_start_scan.return_value = {"status": True, "scan_id": 1, "http_status": 200}
+        data = {
+            "domain_id": self.data_generator.domain.id,
+            "execution_mode": "workflow",
+            "workflow_id": 1,
+            "selected_targets": ["https://example.com", "https://test.example.com"],
+        }
+        response = self.client.post(self.url, data, content_type="application/json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        mock_start_scan.assert_called_once()
+        call_kwargs = mock_start_scan.call_args[1]
+        self.assertEqual(call_kwargs["targets_override"], ["https://example.com", "https://test.example.com"])
+
+    @patch("reNgine.secator.service.start_secator_scan")
+    @patch("reNgine.secator.service.ScanRepository")
+    def test_start_scan_with_selected_targets_per_task_starts_one_scan_per_task(
+        self, mock_scan_repo_cls, mock_start_scan
+    ):
+        """When selected_targets_per_task is provided, one shared ScanHistory for all tasks."""
+        self.data_generator.create_secator_task()
+        task_type = self.data_generator.secator_task.task_type
+        shared_scan_id = 42
+        mock_scan_repo_cls.return_value.create_scan.return_value = shared_scan_id
+        mock_start_scan.return_value = {"status": True, "scan_id": shared_scan_id}
+        data = {
+            "domain_id": self.data_generator.domain.id,
+            "execution_mode": "tasks",
+            "task_ids": [self.data_generator.secator_task.id],
+            "selected_targets_per_task": {
+                task_type: [self.data_generator.domain.name, "sub.example.com"],
+            },
+        }
+        response = self.client.post(self.url, data, content_type="application/json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["status"])
+        self.assertEqual(response.data["scan_id"], shared_scan_id)
+        self.assertIn("results", response.data)
+        self.assertEqual(len(response.data["results"]), 1)
+        self.assertEqual(response.data["results"][0]["scan_id"], shared_scan_id)
+        mock_start_scan.assert_called_once()
+        call_kwargs = mock_start_scan.call_args[1]
+        self.assertEqual(call_kwargs["execution_mode"], "tasks")
+        self.assertEqual(call_kwargs["task_ids"], [self.data_generator.secator_task.id])
+        self.assertEqual(call_kwargs["scan_history_id"], shared_scan_id)
+        self.assertEqual(call_kwargs["targets_override"], [self.data_generator.domain.name, "sub.example.com"])

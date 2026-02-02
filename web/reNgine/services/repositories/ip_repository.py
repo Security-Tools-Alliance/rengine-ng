@@ -20,7 +20,13 @@ logger = get_task_logger(__name__)
 class IpRepository:
     """Repository for IP address-related database operations."""
 
-    def save_from_secator(self, item: Dict[str, Any], scan_history_id: int, domain_id: int) -> Optional[IpAddress]:
+    def save_from_secator(
+        self,
+        item: Dict[str, Any],
+        scan_history_id: int,
+        domain_id: int,
+        rengine_context: Optional[Dict[str, Any]] = None,
+    ) -> Optional[IpAddress]:
         """
         Save IP address from Secator result.
 
@@ -28,12 +34,13 @@ class IpRepository:
             item: Secator IP item
             scan_history_id: ID of the scan history
             domain_id: ID of the domain
+            rengine_context: Optional context (e.g. subscan_id for SubScan linking)
 
         Returns:
             IpAddress: Saved IP address object or None
         """
         try:
-            return self._process_secator_ip_item(item, scan_history_id, domain_id)
+            return self._process_secator_ip_item(item, scan_history_id, domain_id, rengine_context or {})
         except ObjectDoesNotExist as e:
             logger.error(f"Object not found when saving IP address: {e}")
             return None
@@ -45,34 +52,23 @@ class IpRepository:
             return None
 
     def _process_secator_ip_item(
-        self, item: Dict[str, Any], scan_history_id: int, domain_id: int
+        self,
+        item: Dict[str, Any],
+        scan_history_id: int,
+        domain_id: int,
+        rengine_context: Optional[Dict[str, Any]] = None,
     ) -> Optional[IpAddress]:
-        ip_address = item.get("ip") or item.get("target") or item.get("host")
-
+        rengine_context = rengine_context or {}
+        ip_address = self._resolve_valid_ip_from_item(item)
         if not ip_address:
-            logger.warning("IP item missing IP address field")
-            return None
-
-        if not is_valid_ip(ip_address):
-            logger.warning(f"Invalid IP address: {ip_address}")
             return None
 
         # Validate scan_history and domain exist
         ScanHistory.objects.get(id=scan_history_id)
         Domain.objects.get(id=domain_id)
 
-        # Compute version once and reuse for both version and protocol
         version = self._get_ip_version(ip_address)
-        protocol = item.get("protocol", "")
-        if protocol:
-            # Validate and normalize protocol if provided
-            from reNgine.core.validators import validate_ip_protocol
-
-            validated_protocol = validate_ip_protocol(protocol)
-            protocol = validated_protocol if validated_protocol else ""
-        if not protocol:
-            # Derive protocol from version
-            protocol = "IPv6" if version == 6 else "IPv4"
+        protocol = self._resolve_protocol(version, item.get("protocol"))
 
         # Get or create IP address
         ip_obj, created = IpAddress.objects.get_or_create(
@@ -93,10 +89,25 @@ class IpRepository:
         else:
             logger.debug(f"IP address already exists: {ip_address}")
 
-        # Associate with subdomain if hostname provided
-        hostname = item.get("host")
-        if hostname and not is_valid_ip(hostname):  # hostname is not an IP
+        # Associate with subdomain if hostname provided (use value not used as IP when applicable)
+        hostname = self._resolve_hostname_for_association(item, ip_address)
+        if hostname:
             self._associate_with_subdomain(ip_obj, hostname, scan_history_id)
+
+        # Ensure an endpoint exists for this IP so it can be used as a Secator target (e.g. subscans)
+        from reNgine.services.repositories.endpoint_repository import EndpointRepository
+
+        EndpointRepository().create_endpoint_for_ip(ip_address, scan_history_id, domain_id)
+
+        subscan_id = rengine_context.get("subscan_id")
+        if subscan_id:
+            from startScan.models import SubScan
+
+            try:
+                subscan = SubScan.objects.get(id=subscan_id)
+                ip_obj.ip_subscan_ids.add(subscan)
+            except SubScan.DoesNotExist:
+                pass
 
         return ip_obj
 
@@ -116,17 +127,8 @@ class IpRepository:
                 logger.warning(f"Invalid IP address: {address}")
                 return None, False
 
-            # Compute version once and derive protocol from it if not provided
             version = self._get_ip_version(address)
-            protocol = kwargs.get("protocol", "")
-            if protocol:
-                # Validate and normalize protocol if provided
-                from reNgine.core.validators import validate_ip_protocol
-
-                validated_protocol = validate_ip_protocol(protocol)
-                protocol = validated_protocol if validated_protocol else ""
-            if not protocol:
-                protocol = "IPv6" if version == 6 else "IPv4"
+            protocol = self._resolve_protocol(version, kwargs.get("protocol"))
 
             defaults = {
                 "is_cdn": False,
@@ -230,6 +232,39 @@ class IpRepository:
             logger.error(f"Error updating IP geolocation: {e}")
             return False
 
+    def _resolve_valid_ip_from_item(self, item: Dict[str, Any]) -> Optional[str]:
+        """
+        Resolve a valid IP address from item, checking ip, target, then host.
+        Used when Secator sends e.g. PTR with ip=hostname and host=IP; we take the valid IP.
+        """
+        for candidate in (item.get("ip"), item.get("target"), item.get("host")):
+            if candidate and is_valid_ip(candidate):
+                return candidate
+        if any(item.get(k) for k in ("ip", "target", "host")):
+            logger.warning(
+                "Invalid IP address: no valid IP in ip/target/host (values: ip=%r, target=%r, host=%r)",
+                item.get("ip"),
+                item.get("target"),
+                item.get("host"),
+            )
+        else:
+            logger.warning("IP item missing IP address field")
+        return None
+
+    def _resolve_hostname_for_association(self, item: Dict[str, Any], ip_address_used: str) -> Optional[str]:
+        """Return hostname for subdomain association (value that is not an IP, or host if it is not the IP used)."""
+        host = item.get("host")
+        ip_val = item.get("ip")
+        if host and host != ip_address_used and not is_valid_ip(host):
+            return host
+        if ip_val and ip_val != ip_address_used and not is_valid_ip(ip_val):
+            return ip_val
+        if host and not is_valid_ip(host):
+            return host
+        if ip_val and not is_valid_ip(ip_val):
+            return ip_val
+        return None
+
     def _is_private_ip(self, ip_address: str) -> bool:
         """
         Check if IP address is private.
@@ -265,6 +300,21 @@ class IpRepository:
             return ip_obj.version
         except (ValueError, ipaddress.AddressValueError):
             return 4  # Default to IPv4
+
+    def _resolve_protocol(self, version: int, protocol: Optional[str]) -> str:
+        """
+        Resolve protocol string from version and optional protocol.
+        Validates and normalizes protocol if provided; otherwise derives from version (IPv4/IPv6).
+        """
+        from reNgine.core.validators import validate_ip_protocol
+
+        resolved = ""
+        if protocol:
+            validated = validate_ip_protocol(protocol)
+            resolved = validated or ""
+        if not resolved:
+            resolved = "IPv6" if version == 6 else "IPv4"
+        return resolved
 
     def _associate_with_subdomain(self, ip_obj: IpAddress, hostname: str, scan_history_id: int) -> None:
         """

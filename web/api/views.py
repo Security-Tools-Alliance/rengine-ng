@@ -24,7 +24,7 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.parsers import JSONParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from rest_framework.status import HTTP_400_BAD_REQUEST
+from rest_framework.status import HTTP_200_OK, HTTP_400_BAD_REQUEST
 from rest_framework.views import APIView
 import validators
 
@@ -50,7 +50,8 @@ from reNgine.llm.llm import LLMAttackSuggestionGenerator
 from reNgine.llm.utils import convert_markdown_to_html, get_default_llm_model, is_empty_attack_surface
 
 # NOTE: Legacy task functions removed - functionality now in Secator
-from reNgine.secator.service import start_secator_scan
+from reNgine.secator.selected_targets import resolve_selected_targets
+from reNgine.secator.service import run_per_task_secator_scans, start_secator_scan
 from reNgine.services.repositories.scan_repository import ScanRepository
 from reNgine.settings import RENGINE_CURRENT_VERSION
 from reNgine.tasks import (
@@ -124,6 +125,9 @@ from .serializers import (
 logger = logging.getLogger(__name__)
 
 
+PAGINATION_MAX_LENGTH = 10000
+
+
 def parse_pagination_params(start=None, length=None, page=None, page_size=None):
     """
     Validate and parse pagination parameters from query string.
@@ -153,10 +157,12 @@ def parse_pagination_params(start=None, length=None, page=None, page_size=None):
 
             if start_val < 0:
                 raise ValueError("Start offset must be non-negative")
-            if length_val <= 0:
-                raise ValueError("Length must be positive")
-            if length_val > 10000:
-                raise ValueError("Length exceeds maximum allowed value (10000)")
+            if length_val < -1 or length_val == 0:
+                raise ValueError("Length must be positive or -1 for all")
+            if length_val == -1:
+                length_val = PAGINATION_MAX_LENGTH
+            elif length_val > PAGINATION_MAX_LENGTH:
+                raise ValueError(f"Length exceeds maximum allowed value ({PAGINATION_MAX_LENGTH})")
 
             return {"type": "datatables", "start": start_val, "length": length_val}
 
@@ -168,8 +174,8 @@ def parse_pagination_params(start=None, length=None, page=None, page_size=None):
                 raise ValueError("Page number must be at least 1")
             if page_size_val <= 0:
                 raise ValueError("Page size must be positive")
-            if page_size_val > 10000:
-                raise ValueError("Page size exceeds maximum allowed value (10000)")
+            if page_size_val > PAGINATION_MAX_LENGTH:
+                raise ValueError(f"Page size exceeds maximum allowed value ({PAGINATION_MAX_LENGTH})")
 
             start_val = (page_val - 1) * page_size_val
             return {"type": "rest", "start": start_val, "length": page_size_val, "page": page_val}
@@ -673,8 +679,7 @@ class LLMVulnerabilityReportGenerator(APIView):
             )
 
         force_regenerate = request.query_params.get("force_regenerate") == "true"
-        task = llm_vulnerability_report.apply_async(args=(vulnerability_id, None, force_regenerate))
-        response = task.wait()
+        response = llm_vulnerability_report(vulnerability_id, None, force_regenerate)
         return Response(response)
 
     def delete(self, request):
@@ -1161,23 +1166,30 @@ class FetchSubscanResults(APIView):
         task_name = subscan_data["type"]
         subscan_results = []
 
-        if task_name == "port_scan":
+        # Legacy and Secator task types mapped to result sets
+        port_scan_types = ("port_scan", "naabu")
+        vuln_scan_types = ("vulnerability_scan", "nuclei")
+        fetch_url_types = ("fetch_url", "httpx")
+        dir_fuzz_types = ("dir_file_fuzz",)
+        subdomain_types = ("subdomain_discovery", "subfinder", "dnsx")
+
+        if task_name in port_scan_types:
             ips_in_subscan = IpAddress.objects.filter(ip_subscan_ids__in=subscan)
             subscan_results = IpSerializer(ips_in_subscan, many=True).data
 
-        elif task_name == "vulnerability_scan":
+        elif task_name in vuln_scan_types:
             vulns_in_subscan = Vulnerability.objects.filter(vuln_subscan_ids__in=subscan)
             subscan_results = VulnerabilitySerializer(vulns_in_subscan, many=True).data
 
-        elif task_name == "fetch_url":
+        elif task_name in fetch_url_types:
             endpoints_in_subscan = EndPoint.objects.filter(endpoint_subscan_ids__in=subscan)
             subscan_results = EndpointSerializer(endpoints_in_subscan, many=True).data
 
-        elif task_name == "dir_file_fuzz":
+        elif task_name in dir_fuzz_types:
             dirs_in_subscan = DirectoryScan.objects.filter(dir_subscan_ids__in=subscan)
             subscan_results = DirectoryScanSerializer(dirs_in_subscan, many=True).data
 
-        elif task_name == "subdomain_discovery":
+        elif task_name in subdomain_types:
             subdomains_in_subscan = Subdomain.objects.filter(subdomain_subscan_ids__in=subscan)
             subscan_results = SubdomainSerializer(subdomains_in_subscan, many=True).data
 
@@ -1389,7 +1401,6 @@ class StartScan(APIView):
             - imported_subdomains (list): List of subdomains to import
             - out_of_scope_subdomains (list): List of subdomains to exclude
             - url_filter (str): URL filter/path to scan
-            - scan_existing_elements (bool): Whether to scan existing elements
 
         Returns:
             JSON response with scan details or error message
@@ -1425,15 +1436,103 @@ class StartScan(APIView):
             imported_subdomains = data.get("imported_subdomains", [])
             out_of_scope_subdomains = data.get("out_of_scope_subdomains", [])
             url_filter = data.get("url_filter", "")
-            scan_existing_elements = data.get("scan_existing_elements", False)
+            raw_selected_targets = data.get("selected_targets") or []
+            raw_selected_targets_per_task = data.get("selected_targets_per_task") or {}
+            scan_history_id = safe_int_cast(data.get("scan_history_id"), default=None)
         else:
             secator_config = {}
             imported_subdomains = []
             out_of_scope_subdomains = []
             url_filter = ""
-            scan_existing_elements = False
+            raw_selected_targets = []
+            raw_selected_targets_per_task = {}
+            scan_history_id = None
 
-        # Call shared service to start scan
+        try:
+            resolved = resolve_selected_targets(
+                raw_selected_targets,
+                raw_selected_targets_per_task,
+                execution_mode,
+            )
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=HTTP_400_BAD_REQUEST)
+
+        if resolved["use_per_task"]:
+            selected_targets_per_task = resolved["selected_targets_per_task"]
+            run_result = run_per_task_secator_scans(
+                domain_id=domain_id,
+                user_id=request.user.id,
+                selected_targets_per_task=selected_targets_per_task,
+                task_type_to_id=None,
+                imported_subdomains=imported_subdomains,
+                out_of_scope_subdomains=out_of_scope_subdomains,
+                url_filter=url_filter,
+                secator_config=secator_config,
+                scan_history_id=scan_history_id,
+            )
+            per_task_results = [
+                {
+                    "task_type": err["task_type"],
+                    "status": "error",
+                    "reason": err["reason"],
+                    "detail": err["detail"],
+                }
+                for err in run_result["validation_errors"]
+            ]
+            for item in run_result["results"]:
+                if item["status"] == "success":
+                    per_task_results.append(
+                        {
+                            "task_type": item["task_type"],
+                            "status": "success",
+                            "scan_id": item.get("scan_id"),
+                        }
+                    )
+                else:
+                    per_task_results.append(
+                        {
+                            "task_type": item["task_type"],
+                            "status": "error",
+                            "reason": "start_failed",
+                            "detail": item.get("detail", item.get("error", "Unknown error")),
+                        }
+                    )
+
+            has_unknown_tasks = any(e["reason"] == "unknown_task_type" for e in run_result["validation_errors"])
+            if has_unknown_tasks:
+                return Response(
+                    {
+                        "status": False,
+                        "error": "One or more requested task types are not known or not active",
+                        "results": per_task_results,
+                    },
+                    status=HTTP_400_BAD_REQUEST,
+                )
+
+            if not per_task_results:
+                return Response(
+                    {
+                        "status": False,
+                        "error": "No task with selected targets. Select at least one target per task.",
+                        "results": per_task_results,
+                    },
+                    status=HTTP_400_BAD_REQUEST,
+                )
+
+            return Response(
+                {
+                    "status": True,
+                    "scan_id": run_result.get("scan_id"),
+                    "message": f"Scans started for {len(per_task_results)} task(s)",
+                    "results": per_task_results,
+                },
+                status=HTTP_200_OK,
+            )
+
+        targets_override = resolved.get("targets_override")
+        if targets_override is not None and not targets_override:
+            targets_override = None
+
         result = start_secator_scan(
             domain_id=domain_id,
             user_id=request.user.id,
@@ -1445,8 +1544,9 @@ class StartScan(APIView):
             imported_subdomains=imported_subdomains,
             out_of_scope_subdomains=out_of_scope_subdomains,
             url_filter=url_filter,
-            scan_existing_elements=scan_existing_elements,
             secator_config=secator_config,
+            targets_override=targets_override,
+            scan_history_id=scan_history_id,
         )
 
         # Convert result to Response
@@ -1456,6 +1556,28 @@ class StartScan(APIView):
             # Backward compatibility / safety net: derive a status code if not provided
             http_status = 200 if result.get("status") else 500
         return Response(result, status=http_status)
+
+
+class GetSubdomainNames(APIView):
+    """
+    Returns subdomain id and name for given IDs (from database).
+    Used by the subscan modal header to display target names.
+    """
+
+    def get(self, request):
+        ids_param = request.query_params.get("ids", "")
+        if not ids_param:
+            return Response({"results": []})
+        try:
+            subdomain_ids = [int(x.strip()) for x in ids_param.split(",") if x.strip()]
+        except ValueError:
+            return Response({"results": []}, status=HTTP_400_BAD_REQUEST)
+        if not subdomain_ids:
+            return Response({"results": []})
+        subdomains = Subdomain.objects.filter(id__in=subdomain_ids)
+        id_to_subdomain = {s.id: s for s in subdomains}
+        results = [{"id": sid, "name": id_to_subdomain[sid].name} for sid in subdomain_ids if sid in id_to_subdomain]
+        return Response({"results": results})
 
 
 class InitiateSubTask(APIView):
@@ -1471,6 +1593,7 @@ class InitiateSubTask(APIView):
     def post(self, request):
         data = request.data
         subdomain_ids = safe_int_cast(data.get("subdomain_ids", []))
+        scan_history_id = safe_int_cast(data.get("scan_history_id"), default=None)
 
         # Secator parameters
         workflow_id = safe_int_cast(data.get("workflow_id"))
@@ -1520,6 +1643,7 @@ class InitiateSubTask(APIView):
                 missing = set(unique_task_names) - found_task_types
                 return Response({"status": False, "error": f"Some tasks not found: {', '.join(missing)}"}, status=404)
             task_ids_for_scan = list(tasks.values_list("id", flat=True))
+            task_type_to_id = dict(tasks.values_list("task_type", "id"))
         elif secator_scan_type:
             # Secator scan mode
             execution_mode = "scan"
@@ -1548,13 +1672,110 @@ class InitiateSubTask(APIView):
         except Exception as e:
             return Response({"status": False, "error": f"Error retrieving subdomains: {str(e)}"}, status=400)
 
-        # Create scan history for each subdomain and start scan
+        # selected_targets_per_task only (no selected_targets here). Use resolve_selected_targets for consistent parsing.
+        try:
+            resolved = resolve_selected_targets(
+                None,
+                data.get("selected_targets_per_task") or {},
+                "tasks",
+            )
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=HTTP_400_BAD_REQUEST)
+
+        selected_targets_per_task = resolved["selected_targets_per_task"]
         scan_results = []
+
+        if execution_mode == "tasks" and selected_targets_per_task:
+            run_result = run_per_task_secator_scans(
+                domain_id=domain_id,
+                user_id=request.user.id,
+                selected_targets_per_task=selected_targets_per_task,
+                task_type_to_id=task_type_to_id,
+                imported_subdomains=[],
+                out_of_scope_subdomains=[],
+                url_filter="",
+                secator_config=secator_config,
+                subdomain_ids=subdomain_ids,
+                scan_history_id=scan_history_id,
+            )
+            for err in run_result["validation_errors"]:
+                scan_results.append({"task_type": err["task_type"], "status": "error", "error": err["detail"]})
+            for item in run_result["results"]:
+                if item["status"] == "success":
+                    scan_results.append(
+                        {
+                            "task_type": item["task_type"],
+                            "scan_id": item.get("scan_id"),
+                            "status": "success",
+                        }
+                    )
+                else:
+                    scan_results.append(
+                        {
+                            "task_type": item["task_type"],
+                            "status": "error",
+                            "error": item.get("error", item.get("detail", "Unknown error")),
+                        }
+                    )
+            if not run_result["results"]:
+                return Response(
+                    {
+                        "status": False,
+                        "error": "No task with selected targets. Select at least one target per task.",
+                        "results": scan_results,
+                    },
+                    status=400,
+                )
+            return Response(
+                {
+                    "status": True,
+                    "scan_id": run_result.get("scan_id"),
+                    "message": f"Subscans initiated for {len(scan_results)} task(s)",
+                    "results": scan_results,
+                },
+            )
+
+        # Default: one scan per subdomain; reuse scan_history_id when provided (create SubScans under one ScanHistory)
+        scan = None
+        subscan_type = ""
+        if scan_history_id is not None:
+            try:
+                scan = ScanHistory.objects.get(pk=scan_history_id)
+                if scan.domain_id != domain_id:
+                    return Response(
+                        {"status": False, "error": f"ScanHistory {scan_history_id} does not belong to this domain"},
+                        status=400,
+                    )
+                if execution_mode == "workflow" and workflow_id_for_scan:
+                    subscan_type = SecatorWorkflow.objects.get(pk=workflow_id_for_scan).name
+                elif execution_mode == "scan" and secator_scan_type:
+                    subscan_type = secator_scan_type
+                else:
+                    subscan_type = execution_mode or "subscan"
+            except ScanHistory.DoesNotExist:
+                return Response(
+                    {"status": False, "error": f"ScanHistory {scan_history_id} not found"},
+                    status=404,
+                )
+            except SecatorWorkflow.DoesNotExist:
+                return Response(
+                    {"status": False, "error": f"Workflow {workflow_id_for_scan} not found"},
+                    status=404,
+                )
 
         for subdomain in subdomains:
             try:
-                # Start scan using start_secator_scan service
-                # Pass subdomain.name as imported_subdomains so it's the only target
+                subscan_id_arg = None
+                if scan is not None:
+                    subscan = SubScan.objects.create(
+                        scan_history=scan,
+                        subdomain=subdomain,
+                        type=subscan_type,
+                        start_scan_date=timezone.now(),
+                        status=RUNNING_TASK,
+                    )
+                    subscan_id_arg = subscan.id
+
                 result = start_secator_scan(
                     domain_id=domain_id,
                     user_id=request.user.id,
@@ -1565,8 +1786,10 @@ class InitiateSubTask(APIView):
                     imported_subdomains=[subdomain.name],
                     out_of_scope_subdomains=[],
                     url_filter="",
-                    scan_existing_elements=False,
+                    subdomain_ids=[subdomain.id],
                     secator_config=secator_config,
+                    scan_history_id=scan_history_id if scan else None,
+                    subscan_id=subscan_id_arg,
                 )
 
                 if result.get("status"):
@@ -1603,8 +1826,126 @@ class InitiateSubTask(APIView):
                 "status": True,
                 "message": f"Subscans initiated for {len(subdomain_ids)} subdomain(s)",
                 "results": scan_results,
-            }
+            },
         )
+
+
+class GetSecatorInputTypesAndTargets(APIView):
+    """
+    API endpoint to get input_types and proposed targets for a Secator workflow/scan/task.
+
+    Used by the scan launch UI to display required input types and the targets that will be sent.
+    """
+
+    http_method_names = ["get"]
+    permission_classes = [IsAuthenticated]
+
+    # Limit targets returned in response to avoid huge payloads; UI can show "first N of total"
+    TARGETS_DISPLAY_LIMIT = 500
+
+    def get(self, request):
+        workflow_id = request.query_params.get("workflow_id")
+        scan_id = request.query_params.get("scan_id")
+        task_id = request.query_params.get("task_id")
+        domain_id_param = request.query_params.get("domain_id")
+        subdomain_ids_param = request.query_params.get("subdomain_ids")
+
+        subdomain_ids = []
+        if subdomain_ids_param:
+            if isinstance(subdomain_ids_param, str):
+                subdomain_ids = [int(x.strip()) for x in subdomain_ids_param.split(",") if x.strip()]
+            else:
+                subdomain_ids = safe_int_cast(subdomain_ids_param)
+            if isinstance(subdomain_ids, int):
+                subdomain_ids = [subdomain_ids]
+
+        if domain_id_param:
+            try:
+                domain_id = int(domain_id_param)
+            except (TypeError, ValueError):
+                return Response(
+                    {"error": "domain_id must be an integer"},
+                    status=HTTP_400_BAD_REQUEST,
+                )
+        elif subdomain_ids:
+            domain_ids = list(
+                Subdomain.objects.filter(id__in=subdomain_ids).values_list("target_domain_id", flat=True).distinct()
+            )
+            if not domain_ids or None in domain_ids:
+                return Response(
+                    {"error": "Could not resolve domain from subdomain_ids"},
+                    status=HTTP_400_BAD_REQUEST,
+                )
+            if len(domain_ids) > 1:
+                return Response(
+                    {"error": "All subdomain_ids must belong to the same domain"},
+                    status=HTTP_400_BAD_REQUEST,
+                )
+            domain_id = domain_ids[0]
+        else:
+            return Response(
+                {"error": "domain_id or subdomain_ids is required"},
+                status=HTTP_400_BAD_REQUEST,
+            )
+
+        workflow_name = request.query_params.get("workflow_name") or ""
+        scan_name = request.query_params.get("scan_name") or ""
+        task_name = request.query_params.get("task_name") or ""
+        has_workflow = (workflow_id is not None and workflow_id != "") or bool(workflow_name.strip())
+        has_scan = (scan_id is not None and scan_id != "") or bool(scan_name.strip())
+        has_task = (task_id is not None and task_id != "") or bool(task_name.strip())
+        provided = sum([has_workflow, has_scan, has_task])
+        if provided != 1:
+            return Response(
+                {
+                    "error": "Exactly one of workflow_id/workflow_name, scan_id/scan_name, or task_id/task_name must be provided"
+                },
+                status=HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            from reNgine.secator.services.input_type_service import InputTypeService
+            from reNgine.secator.services.target_builder_service import TargetBuilderService
+
+            if has_workflow:
+                if workflow_id:
+                    input_types = InputTypeService.get_input_types(workflow_id=int(workflow_id))
+                else:
+                    input_types = InputTypeService.get_input_types(workflow_name=workflow_name.strip())
+            elif has_scan:
+                if scan_id:
+                    input_types = InputTypeService.get_input_types(scan_id=int(scan_id))
+                else:
+                    input_types = InputTypeService.get_input_types(scan_name=scan_name.strip())
+            else:
+                if task_id:
+                    input_types = InputTypeService.get_input_types(task_id=int(task_id))
+                else:
+                    input_types = InputTypeService.get_input_types(task_name=task_name.strip())
+
+            builder = TargetBuilderService(domain_id=domain_id, subdomain_ids=subdomain_ids)
+            targets_by_type = builder.build_targets_by_type(input_types)
+            flat_targets = builder.build_flat_targets(input_types)
+            total_count = len(flat_targets)
+            proposed_targets = flat_targets[: self.TARGETS_DISPLAY_LIMIT]
+            truncated = total_count > self.TARGETS_DISPLAY_LIMIT
+
+            return Response(
+                {
+                    "input_types": input_types,
+                    "targets_by_type": targets_by_type,
+                    "proposed_targets": proposed_targets,
+                    "total_count": total_count,
+                    "truncated": truncated,
+                }
+            )
+        except (SecatorWorkflow.DoesNotExist, SecatorScan.DoesNotExist, SecatorTask.DoesNotExist):
+            return Response({"error": "Workflow, scan or task not found"}, status=404)
+        except ValueError:
+            return Response({"error": "Invalid request parameters"}, status=HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            logger.exception("GetSecatorInputTypesAndTargets error: %s", e)
+            return Response({"error": "Unexpected error building targets"}, status=500)
 
 
 class GetSecatorSelection(APIView):
@@ -3659,9 +4000,8 @@ class LoadBuiltinTasks(APIView):
 
             from django.core.management import call_command
 
-            # Capture output
             out = StringIO()
-            call_command("load_secator_defaults", stdout=out)
+            call_command("load_tasks", stdout=out)
 
             return Response(
                 {"status": "success", "message": "Built-in tasks loaded successfully", "output": out.getvalue()}
@@ -3998,7 +4338,7 @@ class SecatorRunnerCreate(SecatorAPIBase):
 
     def post(self, request):
         try:
-            from startScan.models import Domain, ScanHistory, SecatorRunner
+            from startScan.models import Domain, ScanHistory, SecatorRunner, SubScan
 
             runner_data = request.data
 
@@ -4049,6 +4389,25 @@ class SecatorRunnerCreate(SecatorAPIBase):
             # Save runner and get its ID
             secator_runner.save()
             runner_id = str(secator_runner.id)
+
+            # Link SubScan to this runner when subscan_id is in context (per-task subscans)
+            subscan_id = safe_int_cast(context.get("subscan_id"))
+            if subscan_id is not None:
+                updated = SubScan.objects.filter(id=subscan_id).update(secator_runner_id=secator_runner.id)
+                if updated:
+                    self.logger.log_runner_sync(
+                        "CREATE",
+                        runner_name or "unknown",
+                        runner_type,
+                        "LINKED_SUBSCAN",
+                        scan_history_id,
+                        {"runner_id": runner_id, "subscan_id": subscan_id},
+                    )
+                else:
+                    self.logger.log_warning(
+                        f"SubScan {subscan_id} not found, skipping runner link",
+                        {"prefix": self.logger.PREFIX_SYNC, "action": "CREATE", "subscan_id": subscan_id},
+                    )
 
             # Log success
             self.logger.log_runner_sync(
@@ -4245,6 +4604,7 @@ class SecatorRunnerUpdate(SecatorAPIBase):
             "FAILURE": FAILED_TASK,
             "FAILED": FAILED_TASK,
             "PENDING": INITIATED_TASK,
+            "REVOKED": ABORTED_TASK,
         }
         rengine_status = status_map.get(runner_status, INITIATED_TASK)
 
@@ -4439,6 +4799,11 @@ class SecatorRunnerUpdate(SecatorAPIBase):
                     {"prefix": self.logger.PREFIX_SYNC, "action": "SYNC", "runner": runner_name},
                 )
 
+        # Mark subscans linked to this runner as finished (stop_scan_date, status) when runner is terminal
+        from reNgine.secator import SecatorProgressSync
+
+        SecatorProgressSync._sync_subscans_if_terminal(secator_runner.id, runner_status, rengine_status)
+
         self.logger.log_runner_sync(
             "SYNC",
             runner_name,
@@ -4506,7 +4871,22 @@ class SecatorFindingCreate(SecatorAPIBase):
             finding_type = context_info["finding_type"]
             scan_history_id = context_info["scan_history_id"]
             domain_id = context_info["domain_id"]
-            context = finding_data.get("_context", {})
+            context = dict(finding_data.get("_context", {}))
+            runner_id = context_info.get("runner_id")
+            if runner_id is not None:
+                try:
+                    runner_id = int(runner_id)
+                except (TypeError, ValueError):
+                    runner_id = None
+                if runner_id:
+                    from startScan.models import SecatorRunner
+
+                    try:
+                        runner = SecatorRunner.objects.get(id=runner_id)
+                        if getattr(runner, "subscan_id", None):
+                            context["subscan_id"] = runner.subscan_id
+                    except SecatorRunner.DoesNotExist:
+                        pass
 
             if not finding_type:
                 return Response({"status": False, "error": "Missing _type in finding data"}, status=400)
@@ -4543,11 +4923,9 @@ class SecatorFindingCreate(SecatorAPIBase):
                     self.logger.log_debug(
                         self.logger.PREFIX_FINDING, "CREATE", f"Saving subdomain with context: {context}"
                     )
-                    saved_object = repository.save_from_secator(
-                        finding_data, scan_history_id, domain_id, rengine_context=context
-                    )
-                else:
-                    saved_object = repository.save_from_secator(finding_data, scan_history_id, domain_id)
+                saved_object = repository.save_from_secator(
+                    finding_data, scan_history_id, domain_id, rengine_context=context
+                )
 
                 # Check if save was successful
                 if saved_object is None:
@@ -4652,6 +5030,22 @@ class SecatorFindingUpdate(SecatorAPIBase):
             finding_type = context_info["finding_type"]
             scan_history_id = context_info["scan_history_id"]
             domain_id = context_info["domain_id"]
+            context = dict(finding_data.get("_context", {}))
+            runner_id = context_info.get("runner_id")
+            if runner_id is not None:
+                try:
+                    runner_id = int(runner_id)
+                except (TypeError, ValueError):
+                    runner_id = None
+                if runner_id:
+                    from startScan.models import SecatorRunner
+
+                    try:
+                        runner = SecatorRunner.objects.get(id=runner_id)
+                        if getattr(runner, "subscan_id", None):
+                            context["subscan_id"] = runner.subscan_id
+                    except SecatorRunner.DoesNotExist:
+                        pass
 
             if not finding_type:
                 self.logger.log_warning(
@@ -4698,11 +5092,9 @@ class SecatorFindingUpdate(SecatorAPIBase):
                             f"Saving subdomain with context: {context}, finding_id: {finding_id}",
                         )
                     )
-                    saved_object = repository.save_from_secator(
-                        finding_data, scan_history_id, domain_id, rengine_context=context
-                    )
-                else:
-                    saved_object = repository.save_from_secator(finding_data, scan_history_id, domain_id)
+                saved_object = repository.save_from_secator(
+                    finding_data, scan_history_id, domain_id, rengine_context=context
+                )
 
                 # Check if save was successful
                 if saved_object is None:

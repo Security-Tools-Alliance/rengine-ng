@@ -70,6 +70,19 @@ class TestIpRepository(BaseTestCase):
 
         self.assertIsNone(result)
 
+    def test_save_from_secator_uses_host_when_ip_is_hostname(self):
+        """When ip is hostname (e.g. PTR result) and host is valid IP, use host as the IP."""
+        item = {
+            "_type": "ip",
+            "ip": "ptr-result.example.com",
+            "host": "192.0.2.1",
+        }
+
+        result = self.ip_repo.save_from_secator(item, self.scan_history.id, self.domain.id)
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result.address, "192.0.2.1")
+
     def test_get_or_create_valid_ip(self):
         """Test get_or_create with valid IP."""
         ip_address = "10.0.0.1"

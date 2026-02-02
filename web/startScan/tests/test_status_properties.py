@@ -244,6 +244,98 @@ class TestSubScanStatusProperties(BaseTestCase):
         self.assertEqual(status_str, "REVOKED")
 
 
+class TestSubScanScanEngineUsed(BaseTestCase):
+    """Test scan_engine_used property for SubScan model."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        super().setUp()
+        if self.data_generator.subscans and len(self.data_generator.subscans) > 0:
+            self.subscan = self.data_generator.subscans[0]
+        else:
+            subscans = self.data_generator.create_subscan()
+            self.subscan = subscans[-1] if subscans else None
+        if not self.subscan:
+            self.subscan = SubScan.objects.create(
+                scan_history=self.data_generator.scan_history,
+                subdomain=self.data_generator.subdomain,
+                type="subfinder",
+                status=1,
+            )
+
+    def test_scan_engine_used_legacy_with_engine(self):
+        """Test scan_engine_used for legacy subscan shows Legacy: engine_name."""
+        from scanEngine.models import EngineType
+
+        engine = EngineType.objects.filter(engine_name__isnull=False).first() or EngineType.objects.create(
+            engine_name="Test Legacy Engine",
+            scan_type="internet",
+            yaml_configuration="",
+        )
+        self.subscan.engine = engine
+        self.subscan.secator_runner = None
+        self.subscan.save()
+        self.assertEqual(self.subscan.display_runner_type, "Legacy")
+        self.assertEqual(self.subscan.display_scan_name, engine.engine_name)
+        self.assertEqual(self.subscan.scan_engine_used, f"Legacy: {engine.engine_name}")
+
+    def test_scan_engine_used_legacy_without_engine_uses_type(self):
+        """Test scan_engine_used for legacy subscan without engine shows Task: type."""
+        self.subscan.engine = None
+        self.subscan.secator_runner = None
+        self.subscan.type = "nuclei"
+        self.subscan.save()
+        self.assertEqual(self.subscan.display_runner_type, "Task")
+        self.assertIn(
+            self.subscan.display_scan_name,
+            ("nuclei", self.subscan.get_task_name_str()),
+        )
+        self.assertTrue(
+            self.subscan.scan_engine_used.startswith("Task: "),
+            f"scan_engine_used should start with 'Task: ', got {self.subscan.scan_engine_used!r}",
+        )
+
+    def test_scan_engine_used_secator_with_runner_name(self):
+        """Test scan_engine_used for Secator subscan shows Task: runner_name."""
+        runner = SecatorRunner.objects.create(
+            scan_history=self.data_generator.scan_history,
+            runner_type="task",
+            runner_name="nuclei",
+            status="RUNNING",
+            celery_id="test-celery-id",
+        )
+        self.subscan.secator_runner = runner
+        self.subscan.engine = None
+        self.subscan.type = "nuclei"
+        self.subscan.save()
+        self.assertEqual(self.subscan.display_runner_type, "Task")
+        self.assertEqual(self.subscan.display_scan_name, "nuclei")
+        self.assertEqual(self.subscan.scan_engine_used, "Task: nuclei")
+
+    def test_scan_engine_used_secator_without_runner_name_uses_type(self):
+        """Test scan_engine_used for Secator subscan without runner_name shows Task: type."""
+        runner = SecatorRunner.objects.create(
+            scan_history=self.data_generator.scan_history,
+            runner_type="task",
+            runner_name="",
+            status="RUNNING",
+            celery_id="test-celery-id",
+        )
+        self.subscan.secator_runner = runner
+        self.subscan.engine = None
+        self.subscan.type = "httpx"
+        self.subscan.save()
+        self.assertEqual(self.subscan.display_runner_type, "Task")
+        self.assertIn(
+            self.subscan.display_scan_name,
+            ("httpx", self.subscan.get_task_name_str()),
+        )
+        self.assertTrue(
+            self.subscan.scan_engine_used.startswith("Task: "),
+            f"scan_engine_used should start with 'Task: ', got {self.subscan.scan_engine_used!r}",
+        )
+
+
 class TestScanActivityStatusProperties(BaseTestCase):
     """Test status properties for ScanActivity model."""
 

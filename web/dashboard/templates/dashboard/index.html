@@ -11,7 +11,6 @@ Dashboard
 {% endblock page_title %}
 
 {% block custom_js_css_link %}
-<link rel="stylesheet" type="text/css" href="{% static 'custom/custom.css' %}">
 <link rel="stylesheet" type="text/css" href="{% static 'plugins/j-map/jquery-jvectormap.css' %}">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/flag-icon-css/6.6.3/css/flag-icons.min.css" integrity="sha512-uvXdJud8WaOlQFjlz9B15Yy2Au/bMAvz79F7Xa6OakCl2jvQPdHD0hb3dEqZRdSwG4/sknePXlE7GiarwA/9Wg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
 {% endblock custom_js_css_link %}
@@ -166,7 +165,7 @@ Dashboard
 								text-info
 								{% endif %}"></i>
 								<div class="w-100">
-									<a href='{% url 'detail_vuln_scan' current_project.slug item.scan_history.id %}' class="mt-1 font-14 text-muted">
+									<a href='{% url "detail_vuln_scan" current_project.slug item.scan_history.id %}' class="mt-1 font-14 text-muted">
 										<strong class="
 										{% if item.severity == 0 %}
 										text-primary
@@ -308,8 +307,8 @@ Dashboard
 <script type="text/javascript">
 
 $(document).ready(function() {
-	get_most_vulnerable_target('{% url 'api:fetch_most_vulnerable' %}', '{% url 'all_vulns' current_project.slug %}', slug='{{current_project.slug}}', scan_id=null, target_id=null, ignore_info=false);
-	get_most_common_vulnerability('{% url 'api:fetch_most_common_vulnerability' %}', '{% url 'all_vulns' current_project.slug %}', slug='{{current_project.slug}}', scan_id=null, target_id=null, ignore_info=false);
+	get_most_vulnerable_target('{% url "api:fetch_most_vulnerable" %}', '{% url "all_vulns" current_project.slug %}', slug='{{current_project.slug}}', scan_id=null, target_id=null, ignore_info=false);
+	get_most_common_vulnerability('{% url "api:fetch_most_common_vulnerability" %}', '{% url "all_vulns" current_project.slug %}', slug='{{current_project.slug}}', scan_id=null, target_id=null, ignore_info=false);
 	// listener for info checkbox on most vulnerable target
 
 	$('#ignore_info_most_vuln_checkbox').change(function() {
@@ -319,8 +318,7 @@ $(document).ready(function() {
 		else{
 			var text_msg = 'Informational Vulnerabilities included in Most Vulnerable Targets.';
 		}
-		get_most_vulnerable_target('{% url 'api:fetch_most_vulnerable' %}', '{% url 'all_vulns' current_project.slug %}', slug='{{current_project.slug}}', scan_id=null, target_id=null, ignore_info=this.checked);
-		get_most_vulnerable_target('{% url 'api:fetch_most_vulnerable' %}', '{% url 'all_vulns' current_project.slug %}', slug='{{current_project.slug}}', scan_id=null, target_id=null, ignore_info=this.checked);
+		get_most_vulnerable_target('{% url "api:fetch_most_vulnerable" %}', '{% url "all_vulns" current_project.slug %}', slug='{{current_project.slug}}', scan_id=null, target_id=null, ignore_info=this.checked);
 		Snackbar.show({
 			text: text_msg,
 			pos: 'top-right',
@@ -335,7 +333,7 @@ $(document).ready(function() {
 		else{
 			var text_msg = 'Informational Vulnerabilities included for Most Common Vulnerabilities.';
 		}
-		get_most_common_vulnerability('{% url 'api:fetch_most_common_vulnerability' %}', '{% url 'all_vulns' current_project.slug %}', slug='{{current_project.slug}}', scan_id=null, target_id=null, ignore_info=this.checked);
+		get_most_common_vulnerability('{% url "api:fetch_most_common_vulnerability" %}', '{% url "all_vulns" current_project.slug %}', slug='{{current_project.slug}}', scan_id=null, target_id=null, ignore_info=this.checked);
 		Snackbar.show({
 			text: text_msg,
 			pos: 'top-right',

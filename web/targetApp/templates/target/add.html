@@ -301,7 +301,6 @@ Add or Import Targets
 
 
 {% block page_level_script %}
-<script src="{% static 'custom/custom.js' %}"></script>
 <script type="text/javascript">
   $(document).ready(function(){
     // Global variables for two-step workflow
@@ -1259,7 +1258,7 @@ Add or Import Targets
               window.location.href = response.redirect_url;
             } else {
               // Assume success and redirect to targets list
-              window.location.href = "{% url 'list_target' current_project.slug %}";
+              window.location.href = "{% url "list_target" current_project.slug %}";
             }
           }, 1500); // 1.5 second delay
         },
@@ -1308,7 +1307,7 @@ Add or Import Targets
     // check if target exists or not
     var domain = document.getElementById("domainName").value;
     if (domain) {
-      get_domain_whois('{% url 'api:whois' %}', domain, '{% url 'api:addTarget' %}', '{{current_project.slug}}', true);
+      get_domain_whois('{% url "api:whois" %}', domain, '{% url "api:addTarget" %}', '{{current_project.slug}}', true);
     }
   }
 

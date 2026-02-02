@@ -10,7 +10,7 @@
       <div class="row">
         {% for value, label in scan_types %}
           <div class="col-xxl-3 col-xl-4 col-lg-6 col-md-6 col-sm-12 mb-3">
-            <div class="scan-type-tile" data-scan-type="{{ value }}">
+            <div class="scan-type-tile" data-scan-type="{{ value }}" data-secator-icon="{% if value == 'domain' %}globe{% elif value == 'host' %}server{% elif value == 'network' %}network-wired{% elif value == 'subdomain' %}sitemap{% elif value == 'url' %}link{% else %}{{ value|category_icon }}{% endif %}">
               <div class="form-check">
                 <input class="form-check-input" type="radio" name="secator_scan_type" id="scan_type_{{ value }}" value="{{ value }}" required>
                 <label class="form-check-label w-100" for="scan_type_{{ value }}">

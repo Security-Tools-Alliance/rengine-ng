@@ -2,6 +2,7 @@
 This file contains the test cases for the API views.
 """
 
+import json
 from unittest.mock import patch
 
 from django.urls import reverse
@@ -188,7 +189,93 @@ class TestStopActivity(BaseTestCase):
         self.assertFalse(response.data["status"])
 
 
-# TestInitiateSubTask removed - functionality migrated to Secator
+# TestInitiateSubTask - Secator subscan (workflow/scan/tasks) with optional selected_targets_per_task
+
+
+class TestInitiateSubTask(BaseTestCase):
+    """Test InitiateSubTask API with tasks mode and selected_targets_per_task."""
+
+    def setUp(self):
+        super().setUp()
+        self.data_generator.create_secator_task()
+
+    @patch("reNgine.secator.service.start_secator_scan")
+    @patch("reNgine.secator.service.ScanRepository")
+    def test_initiate_subtask_tasks_mode_with_selected_targets_per_task(self, mock_scan_repo_cls, mock_start_scan):
+        """When selected_targets_per_task is provided, one shared ScanHistory for all tasks."""
+        shared_scan_id = 42
+        mock_scan_repo_cls.return_value.create_scan.return_value = shared_scan_id
+        mock_start_scan.return_value = {"status": True, "scan_id": shared_scan_id}
+
+        subdomain = self.data_generator.subdomain
+        task_type = self.data_generator.secator_task.task_type
+        url = reverse("api:initiate_subscan")
+        data = {
+            "subdomain_ids": [subdomain.id],
+            "task_names": [task_type],
+            "selected_targets_per_task": {
+                task_type: [self.data_generator.domain.name, subdomain.name],
+            },
+        }
+
+        response = self.client.post(url, data=json.dumps(data), content_type="application/json")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data["status"])
+        self.assertEqual(response.data["scan_id"], shared_scan_id)
+        self.assertEqual(response.data["message"], "Subscans initiated for 1 task(s)")
+        self.assertEqual(len(response.data["results"]), 1)
+        self.assertEqual(response.data["results"][0]["task_type"], task_type)
+        self.assertEqual(response.data["results"][0]["scan_id"], shared_scan_id)
+
+        mock_start_scan.assert_called_once()
+        call_kwargs = mock_start_scan.call_args[1]
+        self.assertEqual(call_kwargs["execution_mode"], "tasks")
+        self.assertEqual(call_kwargs["task_ids"], [self.data_generator.secator_task.id])
+        self.assertEqual(call_kwargs["scan_history_id"], shared_scan_id)
+        self.assertEqual(
+            call_kwargs["targets_override"],
+            [self.data_generator.domain.name, subdomain.name],
+        )
+
+    @patch("api.views.start_secator_scan")
+    def test_initiate_subtask_workflow_mode_with_scan_history_id_creates_subscans(self, mock_start_scan):
+        """When workflow_id and scan_history_id are provided, one SubScan per subdomain and start_secator_scan receives scan_history_id and subscan_id."""
+        self.data_generator.create_secator_workflow()
+        scan = self.data_generator.scan_history
+        subdomain = self.data_generator.subdomain
+        mock_start_scan.return_value = {"status": True, "scan_id": scan.id}
+
+        url = reverse("api:initiate_subscan")
+        data = {
+            "subdomain_ids": [subdomain.id],
+            "workflow_id": self.data_generator.secator_workflow.id,
+            "scan_history_id": scan.id,
+        }
+
+        response = self.client.post(url, data=json.dumps(data), content_type="application/json")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data["status"])
+        self.assertEqual(len(response.data["results"]), 1)
+        self.assertEqual(response.data["results"][0]["status"], "success")
+
+        mock_start_scan.assert_called_once()
+        call_kwargs = mock_start_scan.call_args[1]
+        self.assertEqual(call_kwargs["execution_mode"], "workflow")
+        self.assertEqual(call_kwargs["scan_history_id"], scan.id)
+        self.assertIsNotNone(call_kwargs["subscan_id"])
+
+        from startScan.models import SubScan
+
+        subscans = list(
+            SubScan.objects.filter(
+                scan_history=scan, subdomain=subdomain, type=self.data_generator.secator_workflow.name
+            )
+        )
+        self.assertGreaterEqual(len(subscans), 1)
+        created_ids = [s.id for s in subscans]
+        self.assertIn(call_kwargs["subscan_id"], created_ids)
 
 
 class TestListEngines(BaseTestCase):
@@ -321,6 +408,30 @@ class TestFetchSubscanResults(BaseTestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("subscan", response.data)
         self.assertIn("result", response.data)
+        self.assertIsInstance(response.data["result"], list)
+
+    def test_fetch_subscan_results_invalid_id(self):
+        """Test fetching results with non-existent subscan_id returns error."""
+        api_url = reverse("api:fetch_subscan_results")
+        response = self.client.get(api_url, {"subscan_id": 999999})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(response.data.get("status", True))
+        self.assertIn("error", response.data)
+
+    def test_fetch_subscan_results_secator_type_returns_list(self):
+        """Test fetching results for Secator task type returns result list and engine fallback."""
+        subscan = self.data_generator.subscans[-1]
+        subscan.type = "nuclei"
+        subscan.save()
+        api_url = reverse("api:fetch_subscan_results")
+        response = self.client.get(api_url, {"subscan_id": subscan.id})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("subscan", response.data)
+        self.assertIn("result", response.data)
+        self.assertIsInstance(response.data["result"], list)
+        self.assertEqual(response.data["subscan"]["type"], "nuclei")
+        self.assertIn("engine", response.data["subscan"])
+        self.assertEqual(response.data["subscan"]["engine"], "nuclei")
 
 
 class TestListInterestingKeywords(BaseTestCase):

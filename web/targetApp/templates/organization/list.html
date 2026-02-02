@@ -97,7 +97,6 @@ Organizations
 
 
 {% block page_level_script %}
-<script src="{% static 'custom/custom.js' %}"></script>
 <script src="{% static 'targetApp/js/custom_organization.js' %}"></script>
 <script>
 $(document).ready(function() {
@@ -121,23 +120,24 @@ $(document).ready(function() {
   multiCheck(list_organization_table);
 });
 
-function get_target_modal(organization_id){
-  $('.modal-title').html(`<b>Loading targets...</b>`);
-  $('#modal_dialog').modal('show');
-  $('.modal-text').empty();
-  $('.modal-text').append(`<div class='outer-div' id="modal-loader"><span class="inner-div spinner-border text-info align-self-center loader-sm"></span></div>`);
-  $.getJSON(`/api/queryTargetsInOrganization/?organization_id=${organization_id}&format=json`, function(data) {
-    organization_name = htmlEncode(data['organization'][0]['name']);
-    $('#modal_dialog #modal-loader').empty();
-    $('.modal-title').html(`${data['domains'].length} targets in organization ${organization_name}`);
-    $('#modal_dialog .modal-text').append(`<ul id="target-detail-modal-ul"></ul>`);
-    for (domain in data['domains']){
-      domain_obj = data['domains'][domain];
-      $("#target-detail-modal-ul").append(`<li>${domain_obj['name']}</li>`);
+function get_target_modal(organization_id) {
+  const loaderHtml = `<div class='outer-div' id="modal-loader"><span class="inner-div spinner-border text-info align-self-center loader-sm"></span></div>`;
+  ModalManager.showDialog({
+    title: '<b>Loading targets...</b>',
+    bodyHtml: loaderHtml,
+    footerHtml: ''
+  });
+  $.getJSON(`/api/queryTargetsInOrganization/?organization_id=${organization_id}&format=json`, function (data) {
+    const organization_name = htmlEncode(data['organization'][0]['name']);
+    const ul = $('<ul id="target-detail-modal-ul"></ul>');
+    for (const domain in data['domains']) {
+      const domain_obj = data['domains'][domain];
+      ul.append(`<li>${domain_obj['name']}</li>`);
     }
-  }).fail(function(){
-    $('#modal_dialog #modal-loader').empty();
-    $("#modal_dialog .modal-text").append(`<p class='text-danger'>Error loading Vulnerabilities Summary</p>`);
+    $('#' + ModalManager.MODAL_DIALOG_TITLE).html(`${data['domains'].length} targets in organization ${organization_name}`);
+    $('#' + ModalManager.MODAL_DIALOG_BODY).empty().append(ul);
+  }).fail(function () {
+    $('#' + ModalManager.MODAL_DIALOG_BODY).html(`<p class='text-danger'>Error loading Vulnerabilities Summary</p>`);
   });
 }
 

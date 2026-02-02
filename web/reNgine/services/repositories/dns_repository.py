@@ -37,14 +37,21 @@ class DnsRepository:
         "AXFR",  # Zone transfer - security finding
     }
 
-    def save_from_secator(self, item: Dict[str, Any], scan_history_id: int, domain_id: int) -> Optional[DNSRecord]:
+    def save_from_secator(
+        self,
+        item: Dict[str, Any],
+        scan_history_id: int,
+        domain_id: int,
+        rengine_context: Optional[Dict[str, Any]] = None,
+    ) -> Optional[DNSRecord]:
         """
-        Save DNS record from Secator result.
+        Save DNS record from Secator result (Secator Record format: name, type, host).
 
         Args:
             item: Secator record item
             scan_history_id: ID of the scan history
             domain_id: ID of the domain
+            rengine_context: Optional context (unused for DNS records)
 
         Returns:
             DNSRecord: Saved DNS record object or None
@@ -63,7 +70,7 @@ class DnsRepository:
 
     def _process_secator_dns_record_item(self, item: Dict[str, Any], domain_id: int) -> Optional[DNSRecord]:
         record_name = item.get("name")
-        record_type = item.get("type", "").upper()
+        record_type = (item.get("type") or "").upper()
         host = item.get("host")
 
         if not record_name:
@@ -87,8 +94,8 @@ class DnsRepository:
         name_value = record_name
         extra_data = item.get("extra_data", {}) or {}
 
-        # Get or create domain info atomically to prevent race conditions
-        # Use select_for_update within transaction to lock the domain row
+        # Get or create domain info and DNS record atomically to prevent race conditions.
+        # select_for_update locks the domain row until the transaction commits.
         with transaction.atomic():
             domain = Domain.objects.select_for_update().get(id=domain_id)
             domain_info = domain.domain_info if hasattr(domain, "domain_info") and domain.domain_info else None
@@ -99,26 +106,22 @@ class DnsRepository:
                 domain.save()
                 logger.debug(f"Created domain info for domain {domain.name}")
 
-        if existing_record := (
-            domain_info.dns_records.filter(type=record_type, name=name_value).first()
-            or domain_info.dns_records.filter(type=record_type, name=host).first()
-        ):
-            # Update existing record
-            if existing_record.name != name_value:
-                existing_record.name = name_value
-                logger.info(f"Updated DNS record name from {host} to {name_value} ({record_type})")
-            else:
-                logger.debug(f"Updated DNS record: {name_value} ({record_type})")
-            self._update_dns_record_extra_data(extra_data, existing_record)
-            return existing_record
+            if existing_record := (
+                domain_info.dns_records.filter(type=record_type, name=name_value).first()
+                or domain_info.dns_records.filter(type=record_type, name=host).first()
+            ):
+                if existing_record.name != name_value:
+                    existing_record.name = name_value
+                    logger.info(f"Updated DNS record name from {host} to {name_value} ({record_type})")
+                else:
+                    logger.debug(f"Updated DNS record: {name_value} ({record_type})")
+                self._update_dns_record_extra_data(extra_data, existing_record)
+                return existing_record
 
-        # Create new record
-        dns_record = DNSRecord.objects.create(name=name_value, type=record_type, extra_data=extra_data)
-        # Associate with domain info
-        domain_info.dns_records.add(dns_record)
-        logger.info(f"Created DNS record: {name_value} ({record_type})")
-
-        return dns_record
+            dns_record = DNSRecord.objects.create(name=name_value, type=record_type, extra_data=extra_data)
+            domain_info.dns_records.add(dns_record)
+            logger.info(f"Created DNS record: {name_value} ({record_type})")
+            return dns_record
 
     def _update_dns_record_extra_data(self, extra_data: Dict[str, Any], dns_record: DNSRecord) -> None:
         """

@@ -9,10 +9,13 @@ from celery.utils.log import get_task_logger
 from django.utils import timezone
 
 from reNgine.definitions import ABORTED_TASK, FAILED_TASK, INITIATED_TASK, RUNNING_TASK, SUCCESS_TASK
+from reNgine.services.repositories.scan_repository import ScanRepository
 from startScan.models import ScanActivity, ScanHistory, SecatorRunner
 
 
 logger = get_task_logger(__name__)
+
+TERMINAL_RUNNER_STATUSES = frozenset({"SUCCESS", "FAILURE", "FAILED", "REVOKED"})
 
 
 class SecatorProgressSync:
@@ -192,6 +195,72 @@ class SecatorProgressSync:
             return False
 
     @staticmethod
+    def _get_runner(runner_id: Optional[int]) -> Optional[SecatorRunner]:
+        if runner_id is None:
+            return None
+        try:
+            return SecatorRunner.objects.get(id=runner_id)
+        except SecatorRunner.DoesNotExist:
+            logger.warning(f"SecatorRunner {runner_id} not found when syncing progress")
+            return None
+
+    @staticmethod
+    def _sync_subscans_if_terminal(runner_id: Optional[int], runner_status: str, rengine_status: int) -> None:
+        if runner_id is not None and runner_status in TERMINAL_RUNNER_STATUSES:
+            ScanRepository().mark_subscans_finished_for_runner(runner_id, rengine_status)
+
+    @staticmethod
+    def _update_existing_activity(
+        existing_activity: ScanActivity,
+        runner: Optional[SecatorRunner],
+        runner_name: str,
+        runner_status: str,
+        activity_title: str,
+        rengine_status: int,
+        runner_id: Optional[int],
+    ) -> int:
+        if runner is not None:
+            runner.status = runner_status.upper()
+            runner.save(update_fields=["status"])
+        existing_activity.status = rengine_status
+        existing_activity.time = timezone.now()
+        if runner_status in {"SUCCESS", "FAILURE", "FAILED"}:
+            existing_activity.title = f"{activity_title} - Completed"
+        elif runner_status == "REVOKED":
+            existing_activity.title = f"{activity_title} - Aborted"
+        existing_activity.save(update_fields=["status", "time", "title"])
+        SecatorProgressSync._sync_subscans_if_terminal(runner_id, runner_status, rengine_status)
+        logger.debug(f"Updated ScanActivity {existing_activity.id} for runner {runner_name}")
+        return existing_activity.id
+
+    @staticmethod
+    def _create_new_activity(
+        scan_history: ScanHistory,
+        runner: Optional[SecatorRunner],
+        runner_name: str,
+        runner_type: str,
+        runner_status: str,
+        activity_title: str,
+        rengine_status: int,
+        runner_id: Optional[int],
+    ) -> int:
+        from reNgine.services.repositories.scan_repository import ScanRepository
+
+        scan_repo = ScanRepository()
+        activity_id = scan_repo.create_activity(scan_history.id, activity_title, rengine_status)
+        if runner is not None:
+            try:
+                new_activity = ScanActivity.objects.get(id=activity_id)
+                new_activity.runner_id = runner
+                new_activity.name = runner_name
+                new_activity.save(update_fields=["runner_id", "name"])
+            except ScanActivity.DoesNotExist as e:
+                logger.warning(f"Could not link runner to activity: {e}")
+        SecatorProgressSync._sync_subscans_if_terminal(runner_id, runner_status, rengine_status)
+        logger.debug(f"Created ScanActivity {activity_id} for runner {runner_name}")
+        return activity_id
+
+    @staticmethod
     def create_or_update_scan_activity(
         scan_history_id: int,
         runner_name: str,
@@ -210,73 +279,40 @@ class SecatorProgressSync:
             runner_id: Optional ID of the SecatorRunner
 
         Returns:
-            int: ID of the created/updated ScanActivity or None
+            ID of the created/updated ScanActivity or None on error.
         """
         try:
-            from reNgine.services.repositories.scan_repository import ScanRepository
-
             scan_history = ScanHistory.objects.get(id=scan_history_id)
-            scan_repo = ScanRepository()
-
             rengine_status = SecatorProgressSync.map_secator_status_to_rengine(runner_status)
             activity_title = f"{runner_type.title()}: {runner_name}"
-
-            # Check if activity already exists
-            existing_activity = None
-            if runner_id:
-                try:
-                    from startScan.models import SecatorRunner
-
-                    runner = SecatorRunner.objects.get(id=runner_id)
-                    existing_activity = (
-                        ScanActivity.objects.filter(scan_of=scan_history, name=runner_name, runner_id=runner)
-                        .order_by("-time")
-                        .first()
-                    )
-                except SecatorRunner.DoesNotExist:
-                    logger.warning(f"SecatorRunner {runner_id} not found when syncing progress")
-                    existing_activity = None
-
+            runner = SecatorProgressSync._get_runner(runner_id)
+            existing_activity = (
+                ScanActivity.objects.filter(scan_of=scan_history, name=runner_name, runner_id=runner)
+                .order_by("-time")
+                .first()
+                if runner
+                else None
+            )
             if existing_activity:
-                # Update runner status if runner_id is available
-                if runner_id:
-                    try:
-                        from startScan.models import SecatorRunner
-
-                        runner = SecatorRunner.objects.get(id=runner_id)
-                        runner.status = runner_status.upper()
-                        runner.save(update_fields=["status"])
-                    except SecatorRunner.DoesNotExist:
-                        logger.warning(f"SecatorRunner {runner_id} not found when updating status")
-
-                # Update existing activity (for legacy compatibility)
-                existing_activity.status = rengine_status
-                existing_activity.time = timezone.now()
-                if runner_status in {"SUCCESS", "FAILURE", "FAILED"}:
-                    existing_activity.title = f"{activity_title} - Completed"
-                elif runner_status == "REVOKED":
-                    existing_activity.title = f"{activity_title} - Aborted"
-                existing_activity.save(update_fields=["status", "time", "title"])
-                logger.debug(f"Updated ScanActivity {existing_activity.id} for runner {runner_name}")
-                return existing_activity.id
-            else:
-                # Create new activity
-                activity_id = scan_repo.create_activity(scan_history.id, activity_title, rengine_status)
-                if runner_id:
-                    try:
-                        from startScan.models import SecatorRunner
-
-                        runner = SecatorRunner.objects.get(id=runner_id)
-                        new_activity = ScanActivity.objects.get(id=activity_id)
-                        new_activity.runner_id = runner
-                        new_activity.name = runner_name
-                        new_activity.save(update_fields=["runner_id", "name"])
-                    except (SecatorRunner.DoesNotExist, ScanActivity.DoesNotExist) as e:
-                        logger.warning(f"Could not link runner to activity: {e}")
-
-                logger.debug(f"Created ScanActivity {activity_id} for runner {runner_name}")
-                return activity_id
-
+                return SecatorProgressSync._update_existing_activity(
+                    existing_activity,
+                    runner,
+                    runner_name,
+                    runner_status,
+                    activity_title,
+                    rengine_status,
+                    runner_id,
+                )
+            return SecatorProgressSync._create_new_activity(
+                scan_history,
+                runner,
+                runner_name,
+                runner_type,
+                runner_status,
+                activity_title,
+                rengine_status,
+                runner_id,
+            )
         except ScanHistory.DoesNotExist:
             logger.error(f"ScanHistory {scan_history_id} not found")
             return None

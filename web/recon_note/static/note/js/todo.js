@@ -54,7 +54,7 @@ const addTaskBtnListener = function(project) {
 
     $('.add-tsk').show();
     $('.edit-tsk').hide();
-    $('#addTaskModal').modal('show');
+    if (window.ModalManager) ModalManager.showById(ModalManager.MODAL_IDS.ADD_TASK);
     const ps = new PerfectScrollbar('.todo-box-scroll', {
       suppressScrollX: true
     });
@@ -141,7 +141,7 @@ const addTaskPopupListener = function(project) {
         const $newTodo = $('<div class="todo-item all-list"></div>').append(todoHTML);
 
         $("#ct").prepend($newTodo);
-        $('#addTaskModal').modal('hide');
+        if (window.ModalManager) ModalManager.hide(ModalManager.MODAL_IDS.ADD_TASK);
         checkBtnListener();
         todoItemListener();
         importantBtnListener();
@@ -323,7 +323,7 @@ const todoItemListener = function() {
     $('.task-heading').text($_taskTitle);
     $('.task-text').html(`<span class="text-success">${$_taskTarget}</span><br>` + htmlEncode($todoDescription));
 
-    $('#todoShowListItem').modal('show');
+    if (window.ModalManager) ModalManager.showById(ModalManager.MODAL_IDS.TODO_SHOW_LIST_ITEM);
   });
 }
 

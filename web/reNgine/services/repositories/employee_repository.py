@@ -22,7 +22,13 @@ logger = get_task_logger(__name__)
 class EmployeeRepository:
     """Repository for employee-related database operations."""
 
-    def save_from_secator(self, item: Dict[str, Any], scan_history_id: int, domain_id: int) -> Optional[Employee]:
+    def save_from_secator(
+        self,
+        item: Dict[str, Any],
+        scan_history_id: int,
+        domain_id: int,
+        rengine_context: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Employee]:
         """
         Save employee from Secator UserAccount result.
 
@@ -30,6 +36,7 @@ class EmployeeRepository:
             item: Secator UserAccount item
             scan_history_id: ID of the scan history
             domain_id: ID of the domain
+            rengine_context: Optional context (unused)
 
         Returns:
             Employee: Saved employee object or None

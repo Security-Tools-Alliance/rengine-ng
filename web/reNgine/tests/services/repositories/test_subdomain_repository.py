@@ -2,7 +2,10 @@
 Tests for Subdomain repository functionality.
 """
 
+from django.utils import timezone
+
 from reNgine.services.repositories.subdomain_repository import SubdomainRepository
+from startScan.models import Subdomain, SubScan
 from utils.test_base import BaseTestCase
 
 
@@ -109,6 +112,31 @@ class TestSubdomainRepository(BaseTestCase):
 
         self.assertIsNotNone(result)
         self.assertFalse(result.is_imported_subdomain)
+
+    def test_save_from_secator_with_subscan_id_links_subdomain_subscan_ids(self):
+        """When saving subdomain from Secator with subscan_id, subdomain is added to subscan.subdomain_subscan_ids."""
+        existing_subdomain = Subdomain.objects.create(
+            name="existing.example.com",
+            scan_history=self.scan_history,
+            target_domain=self.domain,
+        )
+        subscan = SubScan.objects.create(
+            start_scan_date=timezone.now(),
+            scan_history=self.scan_history,
+            subdomain=existing_subdomain,
+            status=1,
+        )
+        rengine_context = {"subscan_id": subscan.id}
+        item = {"_type": "subdomain", "host": "subscan-link.example.com"}
+
+        result = self.subdomain_repo.save_from_secator(
+            item, self.scan_history.id, self.domain.id, rengine_context=rengine_context
+        )
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result.name, "subscan-link.example.com")
+        subscan.refresh_from_db()
+        self.assertIn(result, subscan.subdomain_subscan_ids.all())
 
     def test_map_extra_data_to_subdomain_fields(self):
         """Test _map_extra_data_to_subdomain_fields method."""

@@ -7,12 +7,11 @@ from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
 from celery.utils.log import get_task_logger
-from django.core.exceptions import ObjectDoesNotExist
-from django.db import IntegrityError
+from django.core.exceptions import MultipleObjectsReturned, ObjectDoesNotExist
+from django.db import DatabaseError, IntegrityError
 
 from reNgine.core.validators import is_valid_domain, is_valid_url
-from startScan.models import EndPoint, ScanHistory, Subdomain, Technology
-from targetApp.models import Domain
+from startScan.models import EndPoint, Subdomain, Technology
 
 
 logger = get_task_logger(__name__)
@@ -21,7 +20,13 @@ logger = get_task_logger(__name__)
 class TechnologyRepository:
     """Repository for technology-related database operations."""
 
-    def save_from_secator(self, item: Dict[str, Any], scan_history_id: int, domain_id: int) -> Optional[Technology]:
+    def save_from_secator(
+        self,
+        item: Dict[str, Any],
+        scan_history_id: int,
+        domain_id: int,
+        rengine_context: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Technology]:
         """
         Save technology from Secator tag result.
 
@@ -29,6 +34,7 @@ class TechnologyRepository:
             item: Secator tag item (represents technology)
             scan_history_id: ID of the scan history
             domain_id: ID of the domain
+            rengine_context: Optional context (unused)
 
         Returns:
             Technology: Saved technology object or None
@@ -41,14 +47,14 @@ class TechnologyRepository:
         except IntegrityError as e:
             logger.error(f"Integrity error saving technology: {e}")
             return None
-        except Exception as e:
-            logger.error(f"Error saving technology from Secator: {e}")
+        except DatabaseError as e:
+            logger.error(f"Database error saving technology from Secator: {e}")
             return None
 
     def _process_secator_technology_item(
         self, item: Dict[str, Any], scan_history_id: int, domain_id: int
     ) -> Optional[Technology]:
-        tech_name = item.get("name")
+        tech_name = (item.get("name") or "").strip()
         # Secator Tag type uses 'match' field for the target where technology was found
         match_target = item.get("match")
 
@@ -59,10 +65,6 @@ class TechnologyRepository:
         if not match_target:
             logger.warning(f"Technology item missing match field. Available fields: {list(item.keys())}")
             return None
-
-        # Validate scan_history and domain exist
-        ScanHistory.objects.get(id=scan_history_id)
-        Domain.objects.get(id=domain_id)
 
         # Get or create technology
         tech_obj, created = Technology.objects.get_or_create(
@@ -104,33 +106,44 @@ class TechnologyRepository:
 
             return tech_obj, created
 
-        except Exception as e:
+        except (IntegrityError, DatabaseError) as e:
             logger.error(f"Error in get_or_create technology: {e}")
             return None, False
 
     def bulk_create(self, technologies: List[str]) -> List[Technology]:
         """
-        Bulk create technologies.
+        Bulk create technologies efficiently.
+
+        Normalizes and de-duplicates the input list, fetches existing technologies
+        in a single query, creates only missing ones via Django's bulk_create,
+        then returns all requested Technology objects (existing + newly created).
 
         Args:
             technologies: List of technology names
 
         Returns:
-            list: List of created Technology objects
+            list: List of Technology objects (existing + newly created)
         """
+        normalized_names = {t.strip() for t in (technologies or []) if t and t.strip()}
+        if not normalized_names:
+            logger.info("No valid technology names provided for bulk_create")
+            return []
+
         try:
-            created_technologies = []
-            for tech_name in technologies:
-                if tech_name and tech_name.strip():
-                    # Use get_or_create to avoid duplicates
-                    tech, created = Technology.objects.get_or_create(name=tech_name.strip())
-                    if created:
-                        created_technologies.append(tech)
+            existing_technologies = list(Technology.objects.filter(name__in=normalized_names))
+            existing_names = {tech.name for tech in existing_technologies}
+            missing_names = normalized_names - existing_names
 
-            logger.info(f"Created {len(created_technologies)} new technologies")
-            return created_technologies
+            if missing_names:
+                new_instances = [Technology(name=name) for name in missing_names]
+                Technology.objects.bulk_create(new_instances)
+                logger.info(
+                    f"Bulk created {len(new_instances)} new technologies out of {len(normalized_names)} requested"
+                )
 
-        except Exception as e:
+            return list(Technology.objects.filter(name__in=normalized_names))
+
+        except DatabaseError as e:
             logger.error(f"Error in bulk create technologies: {e}")
             return []
 
@@ -157,7 +170,7 @@ class TechnologyRepository:
                 logger.warning(f"Subdomain {subdomain_name} not found in scan {scan_history_id}")
                 return False
 
-        except Exception as e:
+        except (IntegrityError, DatabaseError) as e:
             logger.error(f"Error associating technology with subdomain: {e}")
             return False
 
@@ -165,8 +178,11 @@ class TechnologyRepository:
         """
         Associate technology with a specific endpoint.
 
+        Expects at most one EndPoint per (http_url, scan_history_id); logs and returns False
+        if multiple endpoints exist (data integrity issue).
+
         Args:
-            tech_name: Technology name
+            tech_name: Technology name (will be stripped for consistency)
             endpoint_url: Endpoint URL
             scan_history_id: Scan history ID
 
@@ -174,17 +190,28 @@ class TechnologyRepository:
             bool: True if successful, False otherwise
         """
         try:
-            tech_obj, _ = Technology.objects.get_or_create(name=tech_name)
-
-            if endpoint := EndPoint.objects.filter(http_url=endpoint_url, scan_history_id=scan_history_id).first():
-                endpoint.techs.add(tech_obj)
-                logger.debug(f"Associated technology {tech_name} with endpoint {endpoint_url}")
-                return True
-            else:
-                logger.warning(f"Endpoint {endpoint_url} not found in scan {scan_history_id}")
+            normalized_name = (tech_name or "").strip()
+            if not normalized_name:
+                logger.warning("Technology name is empty in associate_with_endpoint")
                 return False
 
-        except Exception as e:
+            tech_obj, _ = Technology.objects.get_or_create(name=normalized_name)
+
+            endpoint = EndPoint.objects.get(http_url=endpoint_url, scan_history_id=scan_history_id)
+            endpoint.techs.add(tech_obj)
+            logger.debug(f"Associated technology {normalized_name} with endpoint {endpoint_url}")
+            return True
+
+        except EndPoint.DoesNotExist:
+            logger.warning(f"Endpoint {endpoint_url} not found in scan {scan_history_id}")
+            return False
+        except MultipleObjectsReturned:
+            logger.error(
+                f"Multiple endpoints found for (http_url={endpoint_url!r}, scan_history_id={scan_history_id}); "
+                "cannot associate technology unambiguously"
+            )
+            return False
+        except (IntegrityError, DatabaseError) as e:
             logger.error(f"Error associating technology with endpoint: {e}")
             return False
 
@@ -234,6 +261,9 @@ class TechnologyRepository:
         """
         Associate technology with subdomain or endpoint based on match target.
 
+        For URL targets, expects at most one EndPoint per (http_url, scan_history_id);
+        logs and falls back to subdomain association if multiple endpoints exist.
+
         Args:
             tech_obj: Technology object
             match_target: Match target (URL or hostname)
@@ -243,23 +273,28 @@ class TechnologyRepository:
             # Check if match_target is a URL
             if match_target.startswith(("http://", "https://")):
                 if is_valid_url(match_target):
-                    if endpoint := EndPoint.objects.filter(
-                        http_url=match_target, scan_history_id=scan_history_id
-                    ).first():
+                    try:
+                        endpoint = EndPoint.objects.get(http_url=match_target, scan_history_id=scan_history_id)
                         endpoint.techs.add(tech_obj)
                         logger.debug(f"Associated technology {tech_obj.name} with endpoint {match_target}")
                         return
-                    else:
+                    except EndPoint.DoesNotExist:
                         logger.debug(f"Endpoint {match_target} not found, trying subdomain association")
+                    except MultipleObjectsReturned:
+                        logger.error(
+                            f"Multiple endpoints for (http_url={match_target!r}, scan_history_id={scan_history_id}); "
+                            "skipping endpoint association"
+                        )
+                        return
 
-                        if hostname := urlparse(match_target).hostname:
-                            self._associate_with_subdomain_by_hostname(tech_obj, hostname, scan_history_id)
+                    if hostname := urlparse(match_target).hostname:
+                        self._associate_with_subdomain_by_hostname(tech_obj, hostname, scan_history_id)
             elif is_valid_domain(match_target):
                 self._associate_with_subdomain_by_hostname(tech_obj, match_target, scan_history_id)
             else:
                 logger.warning(f"Invalid match target for technology association: {match_target}")
 
-        except Exception as e:
+        except DatabaseError as e:
             logger.error(f"Error associating technology: {e}")
 
     def _associate_with_subdomain_by_hostname(self, tech_obj: Technology, hostname: str, scan_history_id: int) -> None:
@@ -300,6 +335,6 @@ class TechnologyRepository:
 
             return technologies
 
-        except Exception as e:
+        except (IntegrityError, DatabaseError) as e:
             logger.error(f"Error extracting technologies from list: {e}")
             return []

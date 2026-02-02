@@ -24,6 +24,7 @@ class TestSecatorViews(BaseTestCase):
             name="Test Workflow",
             alias="test_workflow",
             description="A test workflow",
+            tags=["recon", "dns"],
             scan_type="internet",
             workflow_type="builtin",
             yaml_configuration="""
@@ -41,7 +42,7 @@ tasks:
         self.task = SecatorTask.objects.create(
             name="Test Task",
             task_type="subfinder",
-            category="dns/recon",
+            tags=["dns", "recon"],
             description="A test task",
             is_builtin=True,
             is_active=True,
@@ -80,6 +81,17 @@ input_types:
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Test Workflow")
         self.assertContains(response, "test_workflow")
+        self.assertContains(response, "recon")
+        self.assertContains(response, "dns")
+
+    def test_secator_workflows_table_partial(self):
+        """Test the workflows table partial view (dynamic search/filter)."""
+        response = self.client.get(reverse("workflows_table_partial"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Test Workflow")
+        response_filter = self.client.get(reverse("workflows_table_partial") + "?filter=builtin&search=Test")
+        self.assertEqual(response_filter.status_code, 200)
+        self.assertContains(response_filter, "Test Workflow")
 
     def test_secator_tasks_view(self):
         """Test the secator tasks list view."""

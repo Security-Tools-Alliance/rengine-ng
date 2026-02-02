@@ -33,11 +33,11 @@
           <i class="fas fa-th-large me-1"></i>All
           <span class="badge badge-soft-secondary ms-1">{{ tasks|length }}</span>
         </button>
-        {% regroup tasks by category|parent_category as parent_category_groups %}
+        {% regroup tasks by tags|tags_parent_category as parent_category_groups %}
         {% for parent_category_group in parent_category_groups %}
           <button type="button" class="btn btn-sm category-filter-btn" data-category="{{ parent_category_group.grouper }}">
             <i class="fas fa-{{ parent_category_group.grouper|category_icon }} me-1"></i>
-            {{ parent_category_group.grouper|title }}
+            {{ parent_category_group.grouper|category_display_label|title }}
             {% if parent_category_group.grouper == 'url' %}
               <span class="badge badge-soft-primary ms-1">{{ parent_category_group.list|length }}</span>
             {% elif parent_category_group.grouper == 'exploit' %}
@@ -87,7 +87,7 @@
           <div class="category-separator-line"></div>
           <div class="category-separator-label">
             <i class="fas fa-{{ parent_category_group.grouper|category_icon }} me-2"></i>
-            {{ parent_category_group.grouper|title }}
+            {{ parent_category_group.grouper|category_display_label|title }}
           </div>
           <div class="category-separator-line"></div>
         </div>
@@ -96,14 +96,14 @@
         <div class="row mb-4" data-category="{{ parent_category_group.grouper }}">
           {% for task in parent_category_group.list %}
             <div class="col-xxl-3 col-xl-4 col-lg-6 col-md-6 col-sm-12 mb-3">
-              <div class="task-tile" data-task-id="{{ task.id }}" data-task-type="{{ task.task_type }}">
+              <div class="task-tile" data-task-id="{{ task.id }}" data-task-type="{{ task.task_type }}" data-secator-icon="{{ task.tags|tags_icon }}">
                 <div class="form-check">
                   <input class="form-check-input" type="checkbox" name="task_ids" id="task_{{ task.id }}" value="{{ task.id }}" data-task-type="{{ task.task_type }}">
                   <label class="form-check-label w-100" for="task_{{ task.id }}">
                     <div class="task-tile-content">
                       <div class="task-tile-header">
                         <div class="tile-icon">
-                          <i class="fas fa-{{ task.category|category_icon }}"></i>
+                          <i class="fas fa-{{ task.tags|tags_icon }}"></i>
                         </div>
                         {% if task.is_builtin %}
                           <i class="fas fa-star text-warning task-tile-badge" title="Built-in task"></i>
@@ -111,14 +111,14 @@
                       </div>
                       
                       <div class="task-tile-body">
-                        <h6 class="task-tile-title" data-bs-toggle="tooltip" data-bs-placement="top" title="<strong>{{ task.category|title }}</strong><br>{{ task.description }}">{{ task.name }}</h6>
+                        <h6 class="task-tile-title" data-bs-toggle="tooltip" data-bs-placement="top" title="<strong>{{ task.tags|tags_parent_category|title }}</strong><br>{{ task.description }}">{{ task.name }}</h6>
                         <p class="task-tile-description">{{ task.description|truncatechars:60 }}</p>
                       </div>
                       
                       <div class="task-tile-footer">
                         <div class="task-tile-meta">
                           <span class="badge badge-soft-info small">{{ task.task_type }}</span>
-                          <span class="badge badge-soft-secondary small">{{ task.category|slice:":10" }}</span>
+                          <span class="badge badge-soft-secondary small">{{ task.tags|tags_parent_category|slice:":10" }}</span>
                         </div>
                       </div>
                     </div>

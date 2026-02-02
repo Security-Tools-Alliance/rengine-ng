@@ -3,6 +3,7 @@ Subdomain Repository - Data access for subdomain operations.
 Handles Subdomain database operations with enriched Secator integration.
 """
 
+import contextlib
 from typing import Any, Dict, Optional
 
 from celery.utils.log import get_task_logger
@@ -11,6 +12,7 @@ from django.db import IntegrityError
 from django.utils import timezone
 
 from reNgine.core.validators import is_valid_domain, is_valid_ip
+from reNgine.services.repositories.endpoint_repository import EndpointRepository
 from startScan.models import IpAddress, ScanHistory, Subdomain, Technology
 from targetApp.models import Domain
 
@@ -105,6 +107,13 @@ class SubdomainRepository:
         else:
             logger.debug(f"Subdomain already exists: {subdomain_name}")
 
+        rengine_context = rengine_context or {}
+        if subscan_id := rengine_context.get("subscan_id"):
+            from startScan.models import SubScan
+
+            with contextlib.suppress(SubScan.DoesNotExist):
+                subscan = SubScan.objects.get(id=subscan_id)
+                subscan.subdomain_subscan_ids.add(subdomain)
         return subdomain
 
     def _map_extra_data_to_subdomain_fields(self, extra_data: Dict[str, Any], defaults: Dict[str, Any]) -> None:
@@ -251,20 +260,21 @@ class SubdomainRepository:
 
     def _associate_ip_addresses(self, subdomain: Subdomain, item: Dict[str, Any], scan_history_id: int) -> None:
         """
-        Associate IP addresses with subdomain.
-
-        Args:
-            subdomain: Subdomain object
-            item: Secator item
-            scan_history_id: Scan history ID
+        Associate IP addresses with subdomain and ensure an endpoint exists for each IP.
+        Endpoint creation is idempotent (get_or_create); we avoid duplicate calls for
+        the same (ip, scan_history_id, target_domain_id) within this run via a local cache.
         """
         try:
-            # Check if there are IP addresses in extra_data
             extra_data = item.get("extra_data", {})
             ip_addresses = extra_data.get("ip_addresses", [])
 
             if not ip_addresses and isinstance(ip_addresses, list):
                 return
+
+            endpoint_repo = EndpointRepository()
+            created_endpoints_cache: set[tuple[str, int, int]] = set()
+            sid = subdomain.scan_history_id
+            did = subdomain.target_domain_id
 
             for ip_address in ip_addresses:
                 if is_valid_ip(ip_address):
@@ -278,6 +288,10 @@ class SubdomainRepository:
                     )
                     subdomain.ip_addresses.add(ip_obj)
                     logger.debug(f"Associated IP {ip_address} with subdomain {subdomain.name}")
+                    cache_key = (ip_address, sid, did)
+                    if cache_key not in created_endpoints_cache:
+                        endpoint_repo.create_endpoint_for_ip(ip_address, sid, did)
+                        created_endpoints_cache.add(cache_key)
 
         except Exception as e:
             logger.error(f"Error associating IP addresses with subdomain: {e}")

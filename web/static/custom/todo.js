@@ -1,11 +1,10 @@
 function todoCheckboxListener(){
   $('.detail-scan-todo-item').click(function() {
-    var note_id = parseInt(this.id.split('_')[1]);
+    const note_id = parseInt(this.id.split('_')[1], 10);
     console.log(note_id);
     if ($(this).is(":checked")) {
       $("#todo_parent_"+note_id).addClass('text-strike');
-    }
-    else if ($(this).is(":not(:checked)")) {
+    } else {
       $("#todo_parent_"+note_id).removeClass('text-strike');
     }
     fetch('../../recon_note/flip_todo_status', {
@@ -89,60 +88,60 @@ function change_todo_priority(todo_id, imp_type){
 
 
 function list_subdomain_todos(subdomain_id, subdomain_name){
-  $('.modal-title').html(`Todos for subdomain ${subdomain_name}`);
-  $('#modal_dialog').modal('show');
-  $('#modal_dialog .modal-text').empty();
-   $('#modal_dialog .modal-footer').empty();
-  $('#modal_dialog .modal-text').append(`<div class='outer-div' id="modal-loader"><span class="inner-div spinner-border text-info align-self-center loader-sm"></span></div>`);
-  // query subdomains
+  const safeName = typeof htmlEncode === 'function' ? htmlEncode(subdomain_name) : subdomain_name;
+  const titleHtml = 'Todos for subdomain ' + safeName;
+  const loaderHtml = '<div class="outer-div" id="modal-loader"><span class="inner-div spinner-border text-info align-self-center loader-sm"></span></div>';
+  if (window.ModalManager) {
+    ModalManager.showDialog({ title: titleHtml, bodyHtml: loaderHtml, footerHtml: '' });
+  } else {
+    $('#modal-dialog-title').html(titleHtml);
+    $('#modal-dialog-body').html(loaderHtml);
+    $('#modal-dialog-footer').empty();
+    $('#modal-dialog').modal('show');
+  }
   $.getJSON(`/api/listTodoNotes/?subdomain_id=${subdomain_id}&format=json`, function(data) {
-    $('#modal_dialog #modal-loader').empty();
-    $('#modal_dialog .modal-text').empty();
-    $('#modal_dialog .modal-text').append(`<ul id="todo-modal-content-ul"></ul>`);
-    for (todo in data['notes']){
-      todo_obj = data['notes'][todo];
-      important_badge = '';
-      if (todo_obj['is_important']) {
-        important_badge = `<span class="text-danger bs-tooltip" title="Important Task">
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-alert-octagon"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12" y2="16"></line></svg>
-        </span>`;
-      }
-      is_done = '';
-      if (todo_obj['is_done']) {
-        is_done = 'text-strike'
-      }
-
-      $("#todo-modal-content-ul").append(`<li class="${is_done}">
-      ${important_badge}<b>&nbsp;${htmlEncode(todo_obj['title'])}</b>
-      <br />
-      ${htmlEncode(todo_obj['description'])}
-
-      </li>`);
+    const importantBadgeSvg = '<span class="text-danger bs-tooltip" title="Important Task"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-alert-octagon"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12" y2="16"></line></svg></span>';
+    const notes = data['notes'] || [];
+    let listItems = '';
+    for (let i = 0; i < notes.length; i++) {
+      const todo_obj = notes[i];
+      const important_badge = todo_obj['is_important'] ? importantBadgeSvg : '';
+      const is_done = todo_obj['is_done'] ? 'text-strike' : '';
+      listItems += '<li class="' + is_done + '">' + important_badge + '<b>&nbsp;' + htmlEncode(todo_obj['title']) + '</b><br />' + htmlEncode(todo_obj['description']) + '</li>';
     }
+    $('#modal-dialog-body').html('<ul id="todo-modal-content-ul">' + listItems + '</ul>');
     $('.bs-tooltip').tooltip();
   }).fail(function(){
-    $('#modal_dialog #modal-loader').empty();
+    $('#modal-dialog-body').html('');
   });
 }
 
-function get_task_details(todo_id){
-  $('#modal_dialog').modal('show');
-  $('.modal-text').empty(); $('#modal_dialog .modal-footer').empty();
-  $('.modal-text').append(`<div class='outer-div' id="modal-loader"><span class="inner-div spinner-border text-info align-self-center loader-sm"></span></div>`);
-  $.getJSON(`/api/listTodoNotes/?todo_id=${todo_id}&format=json`, function(data) {
-    $('.modal-text').empty(); $('#modal_dialog .modal-footer').empty();
-    note = data['notes'][0];
-    subdomain_name = '';
-    if (note['subdomain_name']) {
-      subdomain_name = '<small class="text-success"> Subdomain: ' + note['subdomain_name'] + '</small></br>';
+function get_task_details(todo_id) {
+  const loaderHtml = '<div class="outer-div" id="modal-loader"><span class="inner-div spinner-border text-info align-self-center loader-sm"></span></div>';
+  if (window.ModalManager) ModalManager.showDialog({ title: '', bodyHtml: loaderHtml, footerHtml: '' });
+  const baseUrl = (window.RENGINE_API_URLS && window.RENGINE_API_URLS.listTodoNotes) || '/api/listTodoNotes/';
+  const url = `${baseUrl}?todo_id=${todo_id}&format=json`;
+  $.getJSON(url, function (data) {
+    const notes = data.notes || [];
+    const note = notes[0];
+    if (!note) {
+      if (window.ModalManager) ModalManager.setDialogLoading('<p class="text-muted">No note found.</p>');
+      return;
     }
-    $('.modal-title').html(`<b>${htmlEncode(note['title'])}</b>`);
-    $('#modal_dialog .modal-text').append(`<p>${subdomain_name} ${htmlEncode(note['description'])}</p>`);
+    const subdomain_name = note.subdomain_name ? `<small class="text-success"> Subdomain: ${htmlEncode(note.subdomain_name)}</small><br />` : '';
+    const title = `<b>${htmlEncode(note.title)}</b>`;
+    const bodyHtml = `<p>${subdomain_name}${htmlEncode(note.description)}</p>`;
+    if (window.ModalManager) {
+      ModalManager.setDialogTitle(title);
+      ModalManager.setDialogLoading(bodyHtml);
+    }
+  }).fail(function () {
+    if (window.ModalManager) ModalManager.setDialogLoading('<p class="text-danger">Error loading task details.</p>');
   });
 }
 
 function get_recon_notes(endpoint, target_id, scan_id){
-  var url = `${endpoint}?`;
+  let url = `${endpoint}?`;
 
   if (target_id) {
     url += `target_id=${target_id}`;
@@ -159,7 +158,7 @@ function get_recon_notes(endpoint, target_id, scan_id){
     $('#todo-list').empty();
     if (data['notes'].length > 0){
       $('#todo-list').append(`<li class="list-group-item border-0 ps-0" id="todo_list_${target_id}"></li>`);
-      for (var val in data['notes']){
+      for (const val in data['notes']){
         note = data['notes'][val];
         div_id = 'todo_' + note['id'];
         subdomain_name = '';

@@ -240,7 +240,7 @@ $.getJSON(`/api/listTodoNotes?format=json&project={{current_project.slug}}`, fun
   populateTodo(project='{{current_project.slug}}');
   $('.bs-tooltip').tooltip();
   $('.modal-footer .btn-secondary').on('click', function() {
-    $('#addTaskModal').modal('hide');
+    if (window.ModalManager) ModalManager.hide(ModalManager.MODAL_IDS.ADD_TASK);
   });
 });
 </script>

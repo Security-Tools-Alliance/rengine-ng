@@ -26,24 +26,20 @@ Initiating scan for {{domain.name}}
   <div class="col-12">
     <div class="card">
       <div class="card-body start-scan-card-body">
-        <form method="POST" id="start-scan-form">
+        <form method="POST" id="start-scan-form" data-secator-id-prefix="start_scan">
           {% csrf_token %}
           <input type="hidden" id="domain_id" name="domain_id" value="{{ domain.id }}">
           {% include 'startScan/_items/secator_hidden_fields.html' with id_prefix='start_scan_' %}
           <div id="select_engine">
-            
             <h4>Choose Execution Mode</h4>
-            {% include 'startScan/_items/secator_execution_mode_selector.html' with scan_icon='satellite-dish' scan_title='Scan' %}
-            
+            {% include 'startScan/_items/secator_execution_mode_selector.html' with scan_title='Scan' embed_selection_container=False %}
+            {% include 'startScan/_items/secator_view_toggle.html' with id_prefix='start_scan' %}
+            {% include 'startScan/_items/secator_selection_layout.html' with id_prefix='start_scan' %}
             <!-- Scan Options Accordion -->
             {% include 'startScan/_items/secator_scan_options_accordion.html' with domain_name=domain.name id_prefix='start_scan_' id_suffix='_start_scan' show_counts=True %}
-            
             <!-- Advanced Configuration Accordion -->
             {% include 'startScan/_items/secator_advanced_config_accordion.html' with id_prefix='start_scan_' show_random_proxy=True %}
           </div>
-          <!-- End of select_engine -->
-          
-          <!-- Start Scan Button - Outside of select_engine and advanced-config-section -->
           {% include 'startScan/_items/secator_start_scan_button.html' %}
         </form>
       </div>
@@ -55,58 +51,21 @@ Initiating scan for {{domain.name}}
 
 {% block page_level_script %}
 <script>
-  // Provide Django-generated API route to JS (no hardcoded URLs)
-  window.SECATOR_START_SCAN_URL = "{% url 'api:start_scan' %}";
-  // Project slug is needed for redirect after starting scan
+  window.SECATOR_START_SCAN_URL = "{% url "api:start_scan" %}";
   window.PROJECT_SLUG = "{{ current_project.slug|default:domain.project.slug }}";
-  // History URL for redirect can also be provided explicitly
-  window.SCAN_HISTORY_URL = "{% url 'scan_history' current_project.slug %}";
+  window.SCAN_HISTORY_URL = "{% url "scan_history" current_project.slug %}";
+  window.SECATOR_INPUT_TYPES_TARGETS_URL = "{% url "api:get_secator_input_types_targets" %}";
+  window.SECATOR_SELECTION_URL = "{% url "api:get_secator_selection" %}";
 </script>
+<script src="{% static 'custom/secator/secator_scan_core.js' %}"></script>
+<script src="{% static 'custom/secator/secator_scan_targets.js' %}"></script>
+<script src="{% static 'custom/secator/secator_scan_tooltips.js' %}"></script>
+<script src="{% static 'custom/secator/secator_compact_list.js' %}"></script>
+<script src="{% static 'custom/secator/secator_selection_listeners.js' %}"></script>
+<script src="{% static 'custom/secator/secator_selection_ajax.js' %}"></script>
+<script src="{% static 'custom/secator/secator_selection_dom.js' %}"></script>
+<script src="{% static 'custom/secator/secator_form_submit.js' %}"></script>
+<script src="{% static 'custom/secator/secator_input_types_ajax.js' %}"></script>
+<script src="{% static 'custom/secator/secator_input_types_tasks.js' %}"></script>
 <script src="{% static 'custom/secator_scan.js' %}"></script>
-<script type="text/javascript">
-$(function(){
-  // Handle existing elements checkbox
-  $('#scan_existing_elements_start_scan').change(function() {
-    updateExistingElementsInfo();
-  });
-  
-  // Load existing elements count on page load
-  loadExistingElementsCount();
-});
-
-function updateExistingElementsInfo() {
-  // Show/hide the existing elements info based on checkbox state
-  var isChecked = $('#scan_existing_elements_start_scan').is(':checked');
-  if (isChecked) {
-    $('#existing-elements-info_start_scan').show();
-  } else {
-    $('#existing-elements-info_start_scan').hide();
-  }
-}
-
-function loadExistingElementsCount() {
-  // Load the count of existing hostnames and IP addresses via AJAX
-  $.ajax({
-    url: '{% url "start_scan" current_project.slug domain.id %}',
-    type: 'GET',
-    data: {
-      'get_elements_count': 'true'
-    },
-    headers: {
-      'X-Requested-With': 'XMLHttpRequest'
-    },
-    success: function(data) {
-      if (data.hostname_count !== undefined) {
-        $('#hostname-count_start_scan').text(data.hostname_count);
-      }
-      if (data.ip_count !== undefined) {
-        $('#ip-count_start_scan').text(data.ip_count);
-      }
-    },
-    error: function() {
-      console.log('Error loading existing elements count');
-    }
-  });
-}
-</script>
 {% endblock page_level_script %}

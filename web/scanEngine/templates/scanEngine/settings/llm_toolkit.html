@@ -298,7 +298,7 @@ LLM Toolkit
             </div>
         `);
 
-        $('#addModelModal').modal('show');
+        if (window.ModalManager) ModalManager.showById(ModalManager.MODAL_IDS.ADD_MODEL);
 
     } catch (error) {
         console.error('Error loading models:', error);

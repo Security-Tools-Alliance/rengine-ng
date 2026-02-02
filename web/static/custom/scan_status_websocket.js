@@ -12,7 +12,19 @@
         return;
     }
     window.scanStatusWebSocketInitialized = true;
-    
+
+    if (!window.RENGINE_SCAN_STATUS) {
+        const el = document.getElementById('rengine-scan-status');
+        if (el && el.textContent) {
+            try {
+                window.RENGINE_SCAN_STATUS = JSON.parse(el.textContent);
+            } catch (e) {
+                window.RENGINE_SCAN_STATUS = {};
+            }
+        } else {
+            window.RENGINE_SCAN_STATUS = {};
+        }
+    }
     const scanStatusWebSockets = {};
     const scanStatusReconnectAttempts = {};
     const scanStatusReconnectTimeouts = {};
@@ -53,7 +65,7 @@ const connectScanStatusWebSocket = function(scanId, projectSlug, options) {
     // Check if connection already exists and is open or connecting
     const existingSocket = scanStatusWebSockets[key];
     if (existingSocket) {
-        const readyState = existingSocket.readyState;
+        const { readyState } = existingSocket;
         // WebSocket.CONNECTING = 0, WebSocket.OPEN = 1, WebSocket.CLOSING = 2, WebSocket.CLOSED = 3
         if (readyState === WebSocket.OPEN) {
             // Merge options with existing connection
@@ -70,6 +82,12 @@ const connectScanStatusWebSocket = function(scanId, projectSlug, options) {
                 }
                 if (options.updateSidebar && !scanStatusOptions[key].updateSidebar) {
                     scanStatusOptions[key].updateSidebar = options.updateSidebar;
+                }
+                if (options.updateSubscanTable && !scanStatusOptions[key].updateSubscanTable) {
+                    scanStatusOptions[key].updateSubscanTable = options.updateSubscanTable;
+                }
+                if (options.subscanTable && !scanStatusOptions[key].subscanTable) {
+                    scanStatusOptions[key].subscanTable = options.subscanTable;
                 }
                 // Store API URLs if provided
                 if (options.scanStatusUrl) {
@@ -117,6 +135,12 @@ const connectScanStatusWebSocket = function(scanId, projectSlug, options) {
                 }
                 if (options.updateSidebar && !scanStatusOptions[key].updateSidebar) {
                     scanStatusOptions[key].updateSidebar = options.updateSidebar;
+                }
+                if (options.updateSubscanTable && !scanStatusOptions[key].updateSubscanTable) {
+                    scanStatusOptions[key].updateSubscanTable = options.updateSubscanTable;
+                }
+                if (options.subscanTable && !scanStatusOptions[key].subscanTable) {
+                    scanStatusOptions[key].subscanTable = options.subscanTable;
                 }
                 // Store API URLs if provided
                 if (options.scanStatusUrl) {
@@ -171,6 +195,12 @@ const connectScanStatusWebSocket = function(scanId, projectSlug, options) {
             }
             if (options.updateSidebar && !scanStatusOptions[key].updateSidebar) {
                 scanStatusOptions[key].updateSidebar = options.updateSidebar;
+            }
+            if (options.updateSubscanTable && !scanStatusOptions[key].updateSubscanTable) {
+                scanStatusOptions[key].updateSubscanTable = options.updateSubscanTable;
+            }
+            if (options.subscanTable && !scanStatusOptions[key].subscanTable) {
+                scanStatusOptions[key].subscanTable = options.subscanTable;
             }
             // Store API URLs if provided
             if (options.scanStatusUrl) {
@@ -277,14 +307,14 @@ const updateCommandOutputs = function(data) {
     }
     
     // Check if the logs modal is open
-    const modal = document.getElementById('modal_xl_scroll_dialog');
+    const modal = document.getElementById('modal-xl-scroll-dialog');
     if (!modal) {
         return;
     }
     
     // Check if modal is visible (Bootstrap adds 'show' class and removes 'display: none')
     const isModalOpen = modal.classList.contains('show') && 
-                       (typeof $ !== 'undefined' ? $('#modal_xl_scroll_dialog').is(':visible') : 
+                       (typeof $ !== 'undefined' ? $('#modal-xl-scroll-dialog').is(':visible') : 
                         window.getComputedStyle(modal).display !== 'none');
     
     if (!isModalOpen) {
@@ -312,9 +342,7 @@ const updateCommandOutputs = function(data) {
             return false;
         }
 
-        const scrollTop = container.scrollTop;
-        const scrollHeight = container.scrollHeight;
-        const clientHeight = container.clientHeight;
+        const { scrollTop, scrollHeight, clientHeight } = container;
 
         // Consider "near bottom" if within 100px of bottom
         const nearBottom = (scrollHeight - scrollTop - clientHeight) < 100;
@@ -323,14 +351,10 @@ const updateCommandOutputs = function(data) {
         // if they scroll up, we stop auto-scrolling for this container.
         if (nearBottom) {
             container.dataset.autoScroll = 'true';
+        } else if (container.dataset.autoScroll === undefined) {
+            container.dataset.autoScroll = 'true';
         } else {
-            // If user scrolled away from bottom, disable auto-scroll
-            // But initialize to true on first check if not yet set
-            if (container.dataset.autoScroll === undefined) {
-                container.dataset.autoScroll = 'true';
-            } else {
-                container.dataset.autoScroll = 'false';
-            }
+            container.dataset.autoScroll = 'false';
         }
 
         return container.dataset.autoScroll === 'true';
@@ -465,6 +489,14 @@ const handleScanStatusUpdate = function(data, options) {
             // Auto-update sidebar (already done above, but keep for explicit requests)
             updateRightSidebar(data);
         }
+
+        if (data.subscans && Array.isArray(data.subscans) && data.subscans.length > 0) {
+            if (options.updateSubscanTable && typeof options.updateSubscanTable === 'function') {
+                options.updateSubscanTable(data);
+            } else if (options.updateSubscanTable && options.subscanTable) {
+                updateSubscanRowInTable(options.subscanTable, data);
+            }
+        }
     }
 };
 
@@ -568,6 +600,71 @@ const updateScanRowInTable = function(table, data) {
         }
     } catch (e) {
         console.error('Error updating scan row in table:', e);
+    }
+};
+
+/**
+ * Update subscan rows in DataTable (for subscan_history.html).
+ * If a subscan has no row in the DOM (new subscan), triggers a page reload with debounce.
+ * @param {DataTable} table - DataTable instance
+ * @param {object} data - Update data with subscans array
+ */
+const updateSubscanRowInTable = function(table, data) {
+    if (!table || !data || !data.subscans || !Array.isArray(data.subscans)) {
+        return;
+    }
+
+    try {
+        let hasNewSubscan = false;
+        data.subscans.forEach(function(item) {
+            const subscanId = item.subscan_id;
+            if (subscanId == null) {
+                return;
+            }
+
+            const rowNode = document.querySelector('tr[data-subscan-id="' + subscanId + '"]');
+            if (!rowNode) {
+                hasNewSubscan = true;
+                return;
+            }
+
+            const status = item.status != null ? item.status : -1;
+            const progress = item.progress != null ? item.progress : 0;
+            const currentTask = item.task_name || '';
+
+            const statusCell = $(rowNode).find('.scan-status-cell');
+            if (statusCell.length) {
+                statusCell.html(getStatusBadgeHtml(status, currentTask, null));
+            }
+
+            const progressCell = $(rowNode).find('.scan-progress-cell');
+            if (progressCell.length) {
+                progressCell.html(getProgressBarHtml(status, progress));
+            }
+
+            if (item.scan_engine_used != null && item.scan_engine_used !== '') {
+                const engineCell = $(rowNode).find('.scan-engine-cell');
+                if (engineCell.length) {
+                    const engineHtml = '<span class="badge badge-soft-primary">' + escapeHtml(String(item.scan_engine_used)) + '</span>';
+                    engineCell.html(engineHtml);
+                }
+            }
+
+            if (typeof $ !== 'undefined' && $.fn.tooltip) {
+                $(rowNode).find('[data-toggle="tooltip"]').tooltip();
+            }
+        });
+
+        if (hasNewSubscan) {
+            if (!window._subscanTableReloadTimeout) {
+                window._subscanTableReloadTimeout = setTimeout(function() {
+                    window.location.reload();
+                    window._subscanTableReloadTimeout = null;
+                }, 500);
+            }
+        }
+    } catch (e) {
+        console.error('Error updating subscan row in table:', e);
     }
 };
 
@@ -818,8 +915,19 @@ const updateScanTimeline = function(data) {
             });
         }
         
-        // Sort by time (newest first)
+        // Sort: running first, then error, then success, then aborted/skipped/other; within each group by most recent first (uses definitions.py constants)
+        const statusConst = window.RENGINE_SCAN_STATUS || {};
+        const statusOrder = function(s) {
+            if (s === statusConst.RUNNING_TASK || s === statusConst.RUNNING_BACKGROUND) return 0;
+            if (s === statusConst.FAILED_TASK) return 1;
+            if (s === statusConst.SUCCESS_TASK) return 2;
+            if (s === statusConst.ABORTED_TASK) return 3;
+            return 4; // INITIATED_TASK, skipped, other
+        };
         itemsToRender.sort(function(a, b) {
+            const orderA = statusOrder(a.status);
+            const orderB = statusOrder(b.status);
+            if (orderA !== orderB) return orderA - orderB;
             const timeA = new Date(a.time || 0).getTime();
             const timeB = new Date(b.time || 0).getTime();
             return timeB - timeA;
@@ -833,8 +941,17 @@ const updateScanTimeline = function(data) {
         const stopActivityUrl = (scanStatusOptions['scan-' + data.scan_id] && scanStatusOptions['scan-' + data.scan_id].stopActivityUrl) || 
                                 window.scanStatusApiUrls?.stopActivityUrl || 
                                 '/api/stop-activity/';
+        const dateTimeFormatOpts = {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric',
+            hour: 'numeric',
+            minute: '2-digit',
+            hour12: true
+        };
+        const dateTimeLocale = 'en-US';
         
-        // Update or add timeline items
+        // Update or add timeline items; new items are stored in map so we can reorder DOM after
         itemsToRender.forEach(function(item) {
             let listItem = existingItemsMap[item.id];
             const isNew = !listItem;
@@ -845,11 +962,9 @@ const updateScanTimeline = function(data) {
                 if (item.activity_id) {
                     listItem.setAttribute('data-activity-id', item.activity_id);
                 }
-            } else {
-                // Update existing item attributes
-                if (item.activity_id) {
-                    listItem.setAttribute('data-activity-id', item.activity_id);
-                }
+                existingItemsMap[item.id] = listItem;
+            } else if (item.activity_id) {
+                listItem.setAttribute('data-activity-id', item.activity_id);
             }
             
             // Determine class based on status
@@ -881,8 +996,9 @@ const updateScanTimeline = function(data) {
                 statusText = 'Aborted';
             }
             
-            // Format time
+            // Format time: relative (e.g. "6 minutes ago") and absolute (e.g. "Feb. 1, 2026, 11:36 p.m.")
             let timeText = '';
+            let timeAbsoluteText = '';
             if (item.time) {
                 try {
                     const timeDate = new Date(item.time);
@@ -899,10 +1015,12 @@ const updateScanTimeline = function(data) {
                     } else if (diffHour < 24) {
                         timeText = diffHour + ' hours ago';
                     } else {
-                        timeText = timeDate.toLocaleString();
+                        timeText = timeDate.toLocaleString(dateTimeLocale, dateTimeFormatOpts);
                     }
+                    timeAbsoluteText = timeDate.toLocaleString(dateTimeLocale, dateTimeFormatOpts);
                 } catch (e) {
                     timeText = item.time;
+                    timeAbsoluteText = item.time;
                 }
             }
             
@@ -936,15 +1054,18 @@ const updateScanTimeline = function(data) {
                 (item.status === 1 ? '<span class="active-dot dot"></span>' : '') +
                 '</span></h5>' +
                 '<p class="text-muted mb-0">' + timeText + 
-                (item.time ? '<br><small class="text-muted mb-0">' + escapeHtml(item.time) + '</small>' : '') +
+                (timeAbsoluteText ? '<br><small class="text-muted mb-0">' + escapeHtml(timeAbsoluteText) + '</small>' : '') +
                 '</p>' +
                 progressHtml +
                 stopButtonHtml +
                 logsLinkHtml +
                 errorHtml;
-            
-            // Only append if it's a new item
-            if (isNew) {
+        });
+
+        // Reorder DOM to match sorted order (running first, then by time) so "In progress" moves to top on WebSocket update
+        itemsToRender.forEach(function(item) {
+            const listItem = existingItemsMap[item.id];
+            if (listItem) {
                 timelineList.appendChild(listItem);
             }
         });
@@ -966,8 +1087,10 @@ const updateRightSidebar = function(data) {
         // Check if scan is completed (status 2 = SUCCESS, 3 = ABORTED, 0 = FAILED)
         const isCompleted = data.status === 2 || data.status === 3 || data.status === 0;
         
-        // Find scan card in sidebar
-        const scanCard = document.querySelector('#scan-card-' + data.scan_id);
+        // Find scan card in sidebar first to avoid updating wrong element on pages with duplicate IDs
+        const sidebar = document.querySelector('.right-bar[data-scan-sidebar="true"]');
+        const scanCard = (sidebar && sidebar.querySelector('#scan-card-' + data.scan_id))
+            || document.querySelector('#scan-card-' + data.scan_id);
         
         // If scan card doesn't exist, it might be a new scan - reload sidebar immediately
         if (!scanCard && typeof getScanStatusSidebar === 'function') {
@@ -992,7 +1115,7 @@ const updateRightSidebar = function(data) {
                 const stopActivityUrl = window.scanStatusApiUrls?.stopActivityUrl;
                 const fetchSubscanUrl = window.scanStatusApiUrls?.fetchSubscanUrl;
                 if (endpointUrl && stopScanUrl && stopActivityUrl && fetchSubscanUrl) {
-                    getScanStatusSidebar(endpointUrl, stopScanUrl, stopActivityUrl, fetchSubscanUrl, projectSlug, false);
+                    getScanStatusSidebar(endpointUrl, stopScanUrl, stopActivityUrl, fetchSubscanUrl, { project: projectSlug, reload: false });
                 } else {
                     console.warn('scan_status_websocket: API URLs not available. Please ensure URLs are passed from template.');
                 }
@@ -1408,12 +1531,8 @@ const disconnectAllScanStatusWebSockets = function() {
             scan_id: scan_id
         };
         
-        // Get project slug from global variable if not provided
-        if (!project_slug && typeof current_project_slug !== 'undefined') {
-            project_slug = current_project_slug;
-        }
-        
-        const url = `/scan/${project_slug || ''}/logs/?activity_id=${activity_id}`;
+        const effectiveProjectSlug = project_slug || (typeof current_project_slug !== 'undefined' ? current_project_slug : '');
+        const url = `/scan/${effectiveProjectSlug}/logs/?activity_id=${activity_id}`;
         const title = `Logs for activity #${activity_id}`;
         
         // Clear modal
@@ -1442,41 +1561,27 @@ const disconnectAllScanStatusWebSockets = function() {
                 swal.close();
             }
             $('#xl-modal-title').html(title);
-            
-            // Insert the HTML directly (it's already escaped and formatted by Django template)
             if (html && html.trim()) {
                 $('#xl-modal-content').html(html);
-                
-                // After HTML is inserted, automatically expand all collapses
-                // Use setTimeout to ensure DOM is ready and Bootstrap is initialized
                 setTimeout(function() {
                     const modalContent = document.getElementById('xl-modal-content');
                     if (modalContent) {
-                        // Find all collapse elements and expand them
                         const collapseElements = modalContent.querySelectorAll('.collapse');
                         collapseElements.forEach(function(collapseElement) {
-                            // Add 'show' class to make it visible
                             collapseElement.classList.add('show');
-                            
-                            // Trigger Bootstrap collapse show event
                             if (typeof bootstrap !== 'undefined' && bootstrap.Collapse) {
-                                // Bootstrap 5
                                 try {
                                     const bsCollapse = bootstrap.Collapse.getInstance(collapseElement);
                                     if (bsCollapse) {
                                         bsCollapse.show();
                                     } else {
-                                        const newCollapse = new bootstrap.Collapse(collapseElement, {
-                                            toggle: false
-                                        });
+                                        const newCollapse = new bootstrap.Collapse(collapseElement, { toggle: false });
                                         newCollapse.show();
                                     }
                                 } catch (e) {
-                                    // If Bootstrap collapse fails, just ensure show class is present
                                     collapseElement.classList.add('show');
                                 }
                             } else if (typeof $ !== 'undefined' && $.fn.collapse) {
-                                // Bootstrap 4/jQuery fallback
                                 $(collapseElement).collapse('show');
                             }
                         });
@@ -1484,6 +1589,10 @@ const disconnectAllScanStatusWebSockets = function() {
                 }, 150);
             } else {
                 $('#xl-modal-content').html('<p class="text-muted">No logs available.</p>');
+            }
+            if (window.ModalManager) ModalManager.showXlOnly();
+            if (typeof $ !== 'undefined') {
+                $("body").tooltip({ selector: '[data-toggle=tooltip]' });
             }
         })
         .catch(error => {
@@ -1493,15 +1602,11 @@ const disconnectAllScanStatusWebSockets = function() {
             console.error('Error fetching logs:', error);
             $('#xl-modal-title').html(title);
             $('#xl-modal-content').html('<p class="text-danger">Error loading logs. Please try again.</p>');
+            if (window.ModalManager) ModalManager.showXlOnly();
+            if (typeof $ !== 'undefined') {
+                $("body").tooltip({ selector: '[data-toggle=tooltip]' });
+            }
         });
-        
-        // Show modal
-        $('#modal_xl_scroll_dialog').modal('show');
-        if (typeof $ !== 'undefined') {
-            $("body").tooltip({
-                selector: '[data-toggle=tooltip]'
-            });
-        }
     };
     
     // Expose functions globally so they can be called from other scripts
@@ -1509,6 +1614,7 @@ const disconnectAllScanStatusWebSockets = function() {
     window.handleScanStatusUpdate = handleScanStatusUpdate;
     window.updateCommandOutputs = updateCommandOutputs;
     window.updateScanRowInTable = updateScanRowInTable;
+    window.updateSubscanRowInTable = updateSubscanRowInTable;
     window.updateScanDetailPage = updateScanDetailPage;
     window.updateRightSidebar = updateRightSidebar;
     window.disconnectAllScanStatusWebSockets = disconnectAllScanStatusWebSockets;

@@ -1,5 +1,5 @@
 function show_whois_lookup_modal(){
-	$('#whoisLookupModal').modal('show');
+	if (window.ModalManager) ModalManager.showById(ModalManager.MODAL_IDS.WHOIS_LOOKUP);
 }
 
 $(document).on('click', '#search_whois_toolbox_btn', function(){
@@ -19,7 +19,7 @@ $(document).on('click', '#search_whois_toolbox_btn', function(){
 
 
 function cms_detector(){
-	$('#cmsDetectorModal').modal('show');
+	if (window.ModalManager) ModalManager.showById(ModalManager.MODAL_IDS.CMS_DETECTOR);
 }
 
 
@@ -191,7 +191,7 @@ function cms_detector_api_call(cmsDetectorUrl, url){
 			content += '</div>'
 
 			$('#cmsDetectorResultModal .modal-body').append(content);
-			$('#cmsDetectorResultModal').modal('show');
+			if (window.ModalManager) ModalManager.showById(ModalManager.MODAL_IDS.CMS_DETECTOR_RESULT);
 		} else {
 			Swal.fire({
 				title: 'Oops!',
@@ -204,7 +204,7 @@ function cms_detector_api_call(cmsDetectorUrl, url){
 
 
 function toolbox_cve_detail(){
-	$('#cveDetailModal').modal('show');
+	if (window.ModalManager) ModalManager.showById(ModalManager.MODAL_IDS.CVE_DETAIL);
 }
 
 
@@ -225,7 +225,7 @@ $(document).on('click', '#cve_detail_submit_btn', function(){
 
 
 function toolbox_waf_detector(){
-	$('#wafDetectorModal').modal('show');
+	if (window.ModalManager) ModalManager.showById(ModalManager.MODAL_IDS.WAF_DETECTOR);
 }
 
 

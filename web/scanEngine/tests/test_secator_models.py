@@ -286,7 +286,7 @@ class TestSecatorTask(BaseTestCase):
         self.task_data = {
             "name": "Test Task",
             "task_type": "subfinder",
-            "category": "dns/recon",
+            "tags": ["dns", "recon"],
             "description": "A test task",
             "is_builtin": True,
             "is_active": True,

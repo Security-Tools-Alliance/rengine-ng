@@ -129,7 +129,6 @@ Initiating Scan for Organization
   font-weight: 500;
 }
 
-/* Styles for existing elements section */
 .bg-soft-light {
   background-color: rgba(248, 249, 250, 0.8) !important;
 }
@@ -191,22 +190,19 @@ Initiating scan for {{organization.name}}
         {% for domain in domain_list %}
         <span class="badge bg-dark m-1">{{domain.name}}</span>
         {% endfor %}
-        <form method="POST">
+        <form method="POST" id="start-org-scan-form" data-secator-id-prefix="start_org_scan">
           {% csrf_token %}
           {% include 'startScan/_items/secator_hidden_fields.html' with id_prefix='start_org_scan_' %}
           <div class="form-row">
             <div class="col-md-12 mb-4">
               <h4>Choose Execution Mode</h4>
-              {% include 'startScan/_items/secator_execution_mode_selector.html' with scan_icon='radar' scan_title='Scan' %}
-              
-              <!-- Scan Options Accordion -->
+              {% include 'startScan/_items/secator_execution_mode_selector.html' with scan_title='Scan' embed_selection_container=False %}
+              {% include 'startScan/_items/secator_view_toggle.html' with id_prefix='start_org_scan' %}
+              {% include 'startScan/_items/secator_selection_layout.html' with id_prefix='start_org_scan' %}
               {% with first_domain=domain_list|first %}
-              {% include 'startScan/_items/secator_scan_options_accordion.html' with domain_name=first_domain.name|default:organization.name id_prefix='start_org_scan_' id_suffix='_start_org_scan' show_counts=False scan_target_title='Scan Existing Target Elements' scan_target_description='Scan the hostnames and IP addresses already discovered in the organization targets. This is particularly useful for internal network reconnaissance.' scan_target_note='When enabled, the scan will target all discovered hostnames and IP addresses in the organization targets, in addition to the main domains.' %}
+              {% include 'startScan/_items/secator_scan_options_accordion.html' with domain_name=first_domain.name|default:organization.name id_prefix='start_org_scan_' id_suffix='_start_org_scan' %}
               {% endwith %}
-              
-              <!-- Advanced Configuration Accordion -->
               {% include 'startScan/_items/secator_advanced_config_accordion.html' with id_prefix='start_org_scan_' show_random_proxy=False %}
-              
               {% include 'startScan/_items/secator_start_scan_button.html' %}
             </div>
             <input type="hidden" name="list_of_domain_id" value="{{domain_ids}}">
@@ -219,6 +215,20 @@ Initiating scan for {{organization.name}}
 
 
 {% block page_level_script %}
+<script>
+  window.SECATOR_INPUT_TYPES_TARGETS_URL = "{% url "api:get_secator_input_types_targets" %}";
+  window.SECATOR_SELECTION_URL = "{% url "api:get_secator_selection" %}";
+</script>
+<script src="{% static 'custom/secator/secator_scan_core.js' %}"></script>
+<script src="{% static 'custom/secator/secator_scan_targets.js' %}"></script>
+<script src="{% static 'custom/secator/secator_scan_tooltips.js' %}"></script>
+<script src="{% static 'custom/secator/secator_compact_list.js' %}"></script>
+<script src="{% static 'custom/secator/secator_selection_listeners.js' %}"></script>
+<script src="{% static 'custom/secator/secator_selection_ajax.js' %}"></script>
+<script src="{% static 'custom/secator/secator_selection_dom.js' %}"></script>
+<script src="{% static 'custom/secator/secator_form_submit.js' %}"></script>
+<script src="{% static 'custom/secator/secator_input_types_ajax.js' %}"></script>
+<script src="{% static 'custom/secator/secator_input_types_tasks.js' %}"></script>
 <script src="{% static 'custom/secator_scan.js' %}"></script>
 <script type="text/javascript">
 $(function(){

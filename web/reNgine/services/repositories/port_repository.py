@@ -7,9 +7,10 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from celery.utils.log import get_task_logger
 from django.core.exceptions import ObjectDoesNotExist
-from django.db import IntegrityError
+from django.db import DatabaseError, IntegrityError
 
 from reNgine.core.validators import is_valid_ip, is_valid_port
+from reNgine.services.repositories.endpoint_repository import EndpointRepository
 from startScan.models import IpAddress, Port, ScanHistory
 from targetApp.models import Domain
 
@@ -20,7 +21,13 @@ logger = get_task_logger(__name__)
 class PortRepository:
     """Repository for port-related database operations."""
 
-    def save_from_secator(self, item: Dict[str, Any], scan_history_id: int, domain_id: int) -> Optional[Port]:
+    def save_from_secator(
+        self,
+        item: Dict[str, Any],
+        scan_history_id: int,
+        domain_id: int,
+        rengine_context: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Port]:
         """
         Save port from Secator result.
 
@@ -28,6 +35,7 @@ class PortRepository:
             item: Secator port item
             scan_history_id: ID of the scan history
             domain_id: ID of the domain
+            rengine_context: Optional context (unused for ports)
 
         Returns:
             Port: Saved port object or None
@@ -40,28 +48,45 @@ class PortRepository:
         except IntegrityError as e:
             logger.error(f"Integrity error saving port: {e}")
             return None
-        except Exception as e:
-            logger.error(f"Error saving port from Secator: {e}")
+        except DatabaseError as e:
+            logger.error(f"Database error saving port from Secator: {e}")
             return None
 
     def _process_secator_port_item(self, item: Dict[str, Any], scan_history_id: int, domain_id: int) -> Optional[Port]:
-        port_number = item.get("port")
-        ip_address = item.get("ip") or item.get("host")
+        raw_port = item.get("port")
+        raw_ip = item.get("ip")
+        raw_host = item.get("host")
 
-        if not port_number:
+        if raw_port is None:
             logger.warning("Port item missing port number field")
+            return None
+
+        try:
+            port_number = int(raw_port)
+        except (TypeError, ValueError):
+            logger.warning(f"Invalid port number type/value: {raw_port!r}")
             return None
 
         if not is_valid_port(port_number):
             logger.warning(f"Invalid port number: {port_number}")
             return None
 
-        if not ip_address:
-            logger.warning("Port item missing IP address field")
-            return None
-
-        if not is_valid_ip(ip_address):
-            logger.warning(f"Invalid IP address for port: {ip_address}")
+        ip_address: Optional[str] = None
+        if raw_ip:
+            if is_valid_ip(raw_ip):
+                ip_address = raw_ip
+            else:
+                logger.warning(f"Invalid IP address in 'ip' field for port: {raw_ip}")
+        if ip_address is None and raw_host:
+            if is_valid_ip(raw_host):
+                ip_address = raw_host
+            else:
+                logger.info("Port item host is not an IP address; treating 'host' as hostname: %s", raw_host)
+        if ip_address is None:
+            if raw_ip is None and raw_host is None:
+                logger.warning("Port item missing both 'ip' and 'host' fields")
+            else:
+                logger.warning("Port item does not contain a valid IP address in either 'ip' or 'host' fields")
             return None
 
         # Get or create IP address first
@@ -133,7 +158,7 @@ class PortRepository:
 
             return port_obj, created
 
-        except Exception as e:
+        except (IntegrityError, DatabaseError) as e:
             logger.error(f"Error in get_or_create port: {e}")
             return None, False
 
@@ -154,7 +179,7 @@ class PortRepository:
         except ObjectDoesNotExist as e:
             logger.error(f"Object not found: {e}")
             return []
-        except Exception as e:
+        except DatabaseError as e:
             logger.error(f"Error in bulk create ports: {e}")
             return []
 
@@ -164,6 +189,7 @@ class PortRepository:
         Domain.objects.get(id=domain_id)
 
         port_objects = []
+        seen_ips = set()
         for port_data in ports:
             port_number = port_data.get("port")
             ip_address = port_data.get("ip")
@@ -178,6 +204,9 @@ class PortRepository:
                         "version": self._get_ip_version(ip_address),
                     },
                 )
+                if ip_address not in seen_ips:
+                    seen_ips.add(ip_address)
+                    EndpointRepository().create_endpoint_for_ip(ip_address, scan_history_id, domain_id)
 
                 port_objects.append(
                     Port(
@@ -222,7 +251,7 @@ class PortRepository:
         except ObjectDoesNotExist:
             logger.error(f"Port with ID {port_id} not found")
             return False
-        except Exception as e:
+        except DatabaseError as e:
             logger.error(f"Error updating port service info: {e}")
             return False
 
@@ -253,7 +282,7 @@ class PortRepository:
 
             return ip_obj
 
-        except Exception as e:
+        except (IntegrityError, DatabaseError) as e:
             logger.error(f"Error getting or creating IP for port: {e}")
             return None
 

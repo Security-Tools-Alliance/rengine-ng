@@ -1,4 +1,3 @@
-from contextlib import suppress
 import glob
 import json
 import logging
@@ -11,7 +10,8 @@ from django import http
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import CharField, F, Func, Q, Value
+from django.db.models.functions import Coalesce, Lower
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 import requests
@@ -79,16 +79,6 @@ def index(request):
     return render(request, "scanEngine/index.html", context)
 
 
-def clean_quotes(data):
-    if isinstance(data, dict):
-        return {key: clean_quotes(value) for key, value in data.items()}
-    elif isinstance(data, list):
-        return [clean_quotes(item) for item in data]
-    elif isinstance(data, str):
-        return data.replace('"', "")
-    return data
-
-
 @has_permission_decorator(PERM_MODIFY_SCAN_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
 def add_engine(request):
     form = AddEngineForm()
@@ -100,8 +90,7 @@ def add_engine(request):
     if request.method == "POST":
         form = AddEngineForm(request.POST)
         if form.is_valid():
-            cleaned_data = {key: clean_quotes(value) for key, value in form.cleaned_data.items()}
-            for key, value in cleaned_data.items():
+            for key, value in form.cleaned_data.items():
                 setattr(form.instance, key, value)
             form.instance.save()
             messages.add_message(request, messages.INFO, "Scan Engine Added successfully")
@@ -170,10 +159,9 @@ def update_engine(request, id):
     if request.method == "POST":
         form = UpdateEngineForm(request.POST, instance=engine)
         if form.is_valid():
-            cleaned_data = {key: clean_quotes(value) for key, value in form.cleaned_data.items()}
-            for key, value in cleaned_data.items():
+            for key, value in form.cleaned_data.items():
                 setattr(form.instance, key, value)
-            form.save()  # Use form.save() instead of form.instance.save()
+            form.save()
             messages.add_message(request, messages.INFO, "Engine edited successfully")
             return http.HttpResponseRedirect(reverse("scan_engine_index"))
     context = {"scan_engine_nav_active": "active", "form": form}
@@ -311,7 +299,7 @@ def handle_file_upload(request, file_key, directory, expected_extension, pattern
         file_path = Path.home() / directory / filename
         with open(file_path, "w", encoding="utf-8") as file:
             file.write(uploaded_file.read().decode("utf-8"))
-        messages.info(request, f"{pattern_name} {uploaded_file.name[:4]} successfully uploaded")
+        messages.info(request, f"{pattern_name} {filename} successfully uploaded")
 
 
 def update_config(request, tool_name, display_name, file_name="config", file_extension=".yaml"):
@@ -330,7 +318,6 @@ def get_gf_patterns(request):
     return []
 
 
-@has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
 @has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
 def rengine_settings(request):
     total, used, _ = shutil.disk_usage("/")
@@ -392,15 +379,56 @@ def proxy_settings(request):
 
 @has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
 def test_hackerone(request):
-    if request.method == "POST":
-        body = json.loads(request.body)
+    if request.method != "POST":
+        return http.JsonResponse({"error": "Method not allowed"}, status=405)
+
+    try:
+        body = json.loads(request.body or "{}")
+    except (TypeError, ValueError):
+        return http.JsonResponse(
+            {"error": "Invalid JSON payload"},
+            status=400,
+        )
+
+    username = body.get("username")
+    api_key = body.get("api_key")
+    if not username or not api_key:
+        return http.JsonResponse(
+            {"error": "Missing required credentials: 'username' and 'api_key'"},
+            status=400,
+        )
+
+    try:
         response = requests.get(
             "https://api.hackerone.com/v1/hackers/payments/balance",
-            auth=(body["username"], body["api_key"]),
+            auth=(username, api_key),
             headers={"Accept": "application/json"},
+            timeout=10,
         )
-        return http.JsonResponse({"status": response.status_code})
-    return http.JsonResponse({"status": 401})
+    except requests.exceptions.Timeout as exc:
+        return http.JsonResponse(
+            {
+                "error": "Timeout while connecting to HackerOne API",
+                "detail": str(exc),
+            },
+            status=504,
+        )
+    except requests.exceptions.RequestException as exc:
+        return http.JsonResponse(
+            {
+                "error": "Failed to reach HackerOne API",
+                "detail": str(exc),
+            },
+            status=502,
+        )
+
+    data = {"status": response.status_code, "ok": response.ok}
+    try:
+        data["response"] = response.json()
+    except ValueError:
+        data["response_text"] = response.text[:500]
+
+    return http.JsonResponse(data, status=response.status_code)
 
 
 @has_permission_decorator(PERM_MODIFY_SCAN_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
@@ -457,17 +485,35 @@ def report_settings(request):
 
 @has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
 def api_vault_delete(request):
-    response = {"status": "error"}
-    if request.method == "POST":
-        handler = {"key_openai": OpenAiAPIKey, "key_netlas": NetlasAPIKey}
-        response["deleted"] = []
-        for key in json.loads(request.body.decode("utf-8"))["keys"]:
-            with suppress(KeyError):
-                handler[key].objects.first().delete()
-                response["deleted"].append(key)
-        response["status"] = "OK"
-    else:
+    response = {"status": "error", "deleted": [], "skipped": []}
+    if request.method != "POST":
         response["message"] = "Method not allowed"
+        return http.JsonResponse(response, status=405)
+
+    try:
+        body = json.loads(request.body.decode("utf-8"))
+        keys = body.get("keys", [])
+    except (TypeError, ValueError, KeyError):
+        response["message"] = "Invalid JSON or missing 'keys' array"
+        return http.JsonResponse(response, status=400)
+
+    if not isinstance(keys, list):
+        response["message"] = "'keys' must be an array"
+        return http.JsonResponse(response, status=400)
+
+    handler = {"key_openai": OpenAiAPIKey, "key_netlas": NetlasAPIKey}
+    for key in keys:
+        if key not in handler:
+            response["skipped"].append({"key": key, "reason": "unknown key type"})
+            continue
+        obj = handler[key].objects.first()
+        if obj is None:
+            response["skipped"].append({"key": key, "reason": "no record to delete"})
+            continue
+        obj.delete()
+        response["deleted"].append(key)
+
+    response["status"] = "OK"
     return http.JsonResponse(response)
 
 
@@ -528,54 +574,61 @@ def api_vault(request):
 # =============================================================================
 
 
+def _get_filtered_workflows(filter_type, search_query):
+    """Return SecatorWorkflow queryset filtered by filter_type and search_query."""
+    valid_filter_types = {"all", "builtin", "custom"}
+    if filter_type not in valid_filter_types:
+        filter_type = "all"
+    workflows = SecatorWorkflow.objects.all()
+    if filter_type == "builtin":
+        workflows = workflows.filter(workflow_type="builtin")
+    elif filter_type == "custom":
+        workflows = workflows.filter(workflow_type="custom")
+    if search_query:
+        cleaned_query = search_query.strip()
+        lower_cleaned_query = cleaned_query.lower()
+        workflows = workflows.annotate(
+            tags_search=Lower(
+                Coalesce(
+                    Func(F("tags"), Value(" "), function="array_to_string", output_field=CharField()),
+                    Value(""),
+                )
+            )
+        ).filter(
+            Q(name__icontains=cleaned_query)
+            | Q(description__icontains=cleaned_query)
+            | Q(display_name__icontains=cleaned_query)
+            | Q(tags_search__icontains=lower_cleaned_query)
+        )
+    return workflows.order_by("workflow_type", "name")
+
+
 @login_required
 def secator_workflows(request):
     """List workflows with filtering."""
     filter_type = request.GET.get("filter", "all")
     search_query = request.GET.get("search", "")
-
-    # Validate filter_type
-    valid_filter_types = {"all", "builtin", "custom"}
-    if filter_type not in valid_filter_types:
-        filter_type = "all"
-
-    workflows = SecatorWorkflow.objects.all()
-
-    # Apply filters
-    if filter_type == "builtin":
-        workflows = workflows.filter(workflow_type="builtin")
-    elif filter_type == "custom":
-        workflows = workflows.filter(workflow_type="custom")
-
-    # Apply search
-    if search_query:
-        workflows = workflows.filter(Q(name__icontains=search_query) | Q(description__icontains=search_query))
-
-    workflows = workflows.order_by("workflow_type", "name")
-
-    # Pagination
-    paginator = Paginator(workflows, 20)
-    page_number = request.GET.get("page")
-    page_obj = paginator.get_page(page_number)
-
+    workflows = _get_filtered_workflows(filter_type, search_query)
     context = {
-        "page_obj": page_obj,
+        "workflows": workflows,
         "filter_type": filter_type,
         "search_query": search_query,
     }
-
     return render(request, "scanEngine/workflows.html", context)
 
 
 @login_required
-def secator_tasks(request):
-    """List tasks with filtering."""
+def secator_workflows_table_partial(request):
+    """Return only the workflows table body HTML for dynamic search/filter (no page reload)."""
     filter_type = request.GET.get("filter", "all")
     search_query = request.GET.get("search", "")
+    workflows = _get_filtered_workflows(filter_type, search_query)
+    return render(request, "scanEngine/_workflows_table_body.html", {"workflows": workflows})
 
+
+def _get_filtered_tasks(filter_type, search_query):
+    """Return SecatorTask queryset filtered by filter_type and search_query."""
     tasks = SecatorTask.objects.all()
-
-    # Apply filters
     if filter_type == "builtin":
         tasks = tasks.filter(is_builtin=True)
     elif filter_type == "custom":
@@ -584,26 +637,37 @@ def secator_tasks(request):
         tasks = tasks.filter(is_active=True)
     elif filter_type == "inactive":
         tasks = tasks.filter(is_active=False)
-
-    # Apply search
     if search_query:
         tasks = tasks.filter(
             Q(name__icontains=search_query)
             | Q(task_type__icontains=search_query)
             | Q(description__icontains=search_query)
-            | Q(category__icontains=search_query)
+            | Q(tags__contains=[search_query.strip()])
         )
+    return tasks.order_by("name")
 
-    # Sort alphabetically by name
-    tasks = tasks.order_by("name")
 
+@login_required
+def secator_tasks(request):
+    """List tasks with filtering."""
+    filter_type = request.GET.get("filter", "all")
+    search_query = request.GET.get("search", "")
+    tasks = _get_filtered_tasks(filter_type, search_query)
     context = {
         "tasks": tasks,
         "filter_type": filter_type,
         "search_query": search_query,
     }
-
     return render(request, "scanEngine/tasks.html", context)
+
+
+@login_required
+def secator_tasks_table_partial(request):
+    """Return only the tasks table body HTML for dynamic search/filter (no page reload)."""
+    filter_type = request.GET.get("filter", "all")
+    search_query = request.GET.get("search", "")
+    tasks = _get_filtered_tasks(filter_type, search_query)
+    return render(request, "scanEngine/_tasks_table_body.html", {"tasks": tasks})
 
 
 @login_required
@@ -659,17 +723,7 @@ def secator_scans(request):
 def secator_workflow_detail(request, workflow_id):
     """Detail view for a workflow."""
     workflow = get_object_or_404(SecatorWorkflow, id=workflow_id)
-
-    # Find scans that use this workflow in their YAML configuration
-    related_scans = []
-    for scan in SecatorScan.objects.all():
-        try:
-            workflows = scan.get_workflows()
-            if workflow.alias in workflows:
-                related_scans.append(scan)
-        except Exception:
-            # Skip scans with invalid YAML
-            continue
+    related_scans = list(SecatorScan.objects.filter_by_workflow(workflow))
 
     context = {
         "workflow": workflow,
@@ -684,15 +738,17 @@ def secator_scan_detail(request, scan_id):
     """Detail view for a scan configuration."""
     scan = get_object_or_404(SecatorScan, id=scan_id)
 
-    # Get recent scan history using this configuration
+    # TODO: Filter by this SecatorScan when ScanHistory is linked to SecatorScan.
+    # Until then, recent_scans is unfiltered (last 10 non-legacy scans globally).
     recent_scans = ScanHistory.objects.filter(
-        scan_type__isnull=False,  # This will need to be updated when we link SecatorScan to ScanHistory
+        scan_type__isnull=False,
         is_legacy_scan=False,
     ).order_by("-start_scan_date")[:10]
 
     context = {
         "scan": scan,
         "recent_scans": recent_scans,
+        "recent_scans_unfiltered": True,
     }
 
     return render(request, "scanEngine/scan_detail.html", context)
@@ -706,8 +762,7 @@ def add_workflow(request):
     if request.method == "POST":
         form = SecatorWorkflowForm(request.POST)
         if form.is_valid():
-            cleaned_data = {key: clean_quotes(value) for key, value in form.cleaned_data.items()}
-            for key, value in cleaned_data.items():
+            for key, value in form.cleaned_data.items():
                 setattr(form.instance, key, value)
             # Custom workflows are not built-in
             form.instance.workflow_type = "custom"
@@ -734,6 +789,7 @@ def update_workflow(request, workflow_id):
             "name": workflow.name,
             "alias": workflow.alias,
             "description": workflow.description,
+            "tags": workflow.tags or [],
             "scan_type": workflow.scan_type,
             "yaml_configuration": workflow.yaml_configuration,
             "is_active": workflow.is_active,
@@ -744,8 +800,7 @@ def update_workflow(request, workflow_id):
         form = SecatorWorkflowForm(request.POST, instance=workflow)
         if form.is_valid():
             try:
-                cleaned_data = {key: clean_quotes(value) for key, value in form.cleaned_data.items()}
-                for key, value in cleaned_data.items():
+                for key, value in form.cleaned_data.items():
                     setattr(form.instance, key, value)
                 form.save()
                 messages.add_message(request, messages.INFO, "Workflow updated successfully")
@@ -793,8 +848,7 @@ def add_scan(request):
     if request.method == "POST":
         form = SecatorScanForm(request.POST)
         if form.is_valid():
-            cleaned_data = {key: clean_quotes(value) for key, value in form.cleaned_data.items()}
-            for key, value in cleaned_data.items():
+            for key, value in form.cleaned_data.items():
                 setattr(form.instance, key, value)
             # Custom scan configurations are not built-in
             form.instance.scan_config_type = "custom"
@@ -833,8 +887,7 @@ def update_scan(request, scan_id):
         form = SecatorScanForm(request.POST, instance=scan)
         if form.is_valid():
             try:
-                cleaned_data = {key: clean_quotes(value) for key, value in form.cleaned_data.items()}
-                for key, value in cleaned_data.items():
+                for key, value in form.cleaned_data.items():
                     setattr(form.instance, key, value)
                 form.save()
                 messages.add_message(request, messages.INFO, "Scan configuration updated successfully")
@@ -939,8 +992,7 @@ def add_profile(request):
         form = SecatorProfileForm(request.POST)
         if form.is_valid():
             try:
-                cleaned_data = {key: clean_quotes(value) for key, value in form.cleaned_data.items()}
-                for key, value in cleaned_data.items():
+                for key, value in form.cleaned_data.items():
                     setattr(form.instance, key, value)
                 # Custom profiles are not built-in
                 form.instance.profile_type = "custom"
@@ -983,8 +1035,7 @@ def update_profile(request, profile_id):
         form = SecatorProfileForm(request.POST, instance=profile)
         if form.is_valid():
             try:
-                cleaned_data = {key: clean_quotes(value) for key, value in form.cleaned_data.items()}
-                for key, value in cleaned_data.items():
+                for key, value in form.cleaned_data.items():
                     setattr(form.instance, key, value)
                 form.save()
 

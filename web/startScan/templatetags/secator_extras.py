@@ -1,3 +1,5 @@
+from functools import lru_cache
+
 from django import template
 
 from scanEngine.models import SecatorTask
@@ -7,13 +9,21 @@ register = template.Library()
 
 
 @register.filter
+def category_display_label(category):
+    """Display label for category; use 'Untagged' for unknown/empty so untagged tasks are clear."""
+    if not category or (isinstance(category, str) and category.lower() == "unknown"):
+        return "Untagged"
+    return category
+
+
+@register.filter
 def category_icon(category):
     """Map category names to FontAwesome icons"""
     if not category:
-        return "folder"
-
-    # Convert to lowercase for matching
+        return "tag"
     cat_lower = category.lower()
+    if cat_lower == "unknown":
+        return "tag"
 
     # Priority mapping for specific categories with more representative icons
     priority_map = {
@@ -68,13 +78,7 @@ def category_icon(category):
         "username": "user-secret",  # Username
     }
 
-    # Try partial matches
-    for key, icon in icon_map.items():
-        if key in cat_lower:
-            return icon
-
-    # Default icon
-    return "folder"
+    return next((icon for key, icon in icon_map.items() if key in cat_lower), "folder")
 
 
 @register.filter
@@ -181,54 +185,73 @@ def workflow_icon(workflow_name):
         "service": "cogs",  # Service operations
     }
 
-    # Try partial matches
-    for key, icon in icon_map.items():
-        if key in name_lower:
-            return icon
+    return next(
+        (icon for key, icon in icon_map.items() if key in name_lower),
+        "project-diagram",
+    )
 
-    # Default icon
-    return "project-diagram"
+
+@lru_cache(maxsize=128)
+def _get_task_info_from_db(task_name):
+    """
+    Look up SecatorTask by task_type and return metadata dict.
+    Memoized so repeated template tag calls for the same task_name reuse the result.
+    """
+    if not task_name:
+        return {"name": task_name or "", "category": "Unknown", "description": "", "icon": "tools"}
+    task = SecatorTask.objects.filter(task_type=task_name, is_active=True).only("name", "tags", "description").first()
+    if not task:
+        return {"name": task_name, "category": "Unknown", "description": f"Secator task: {task_name}", "icon": "tools"}
+    cat = tags_parent_category(task.tags) if task.tags else "unknown"
+    return {
+        "name": task.name,
+        "category": cat,
+        "description": task.description,
+        "icon": tags_icon(task.tags),
+    }
 
 
 @register.simple_tag(takes_context=True)
 def get_task_info(context, task_name):
-    """Get task information by task name"""
-    # Check if tasks_dict is available in context (passed from view)
-    tasks_dict = context.get("tasks_dict")
-    if tasks_dict:
-        task = tasks_dict.get(task_name)
-        if task:
+    """Get task information by task name."""
+    if tasks_dict := context.get("tasks_dict"):
+        if task := tasks_dict.get(task_name):
+            cat = tags_parent_category(task.tags) if getattr(task, "tags", None) else "unknown"
             return {
                 "name": task.name,
-                "category": task.category,
+                "category": cat,
                 "description": task.description,
-                "icon": category_icon(task.category),
+                "icon": tags_icon(task.tags) if getattr(task, "tags", None) else "folder",
             }
 
-    # Fallback to database query if not in context
-    task = (
-        SecatorTask.objects.filter(task_type=task_name, is_active=True).only("name", "category", "description").first()
-    )
-    if not task:
-        return {"name": task_name, "category": "Unknown", "description": f"Secator task: {task_name}", "icon": "tools"}
-
-    return {
-        "name": task.name,
-        "category": task.category,
-        "description": task.description,
-        "icon": category_icon(task.category),
-    }
+    return _get_task_info_from_db(task_name or "")
 
 
 @register.filter
 def parent_category(category):
-    """Extract parent category (part before the first slash)"""
+    """Extract parent category (part before the first slash). Kept for backward compatibility."""
     if not category:
         return "unknown"
-
-    # Split by '/' and take the first part
     parts = category.split("/")
     return parts[0].lower()
+
+
+@register.filter
+def tags_icon(tags):
+    """Map first task tag to FontAwesome icon (same logic as category_icon)."""
+    primary = tags_parent_category(tags)
+    return category_icon(primary)
+
+
+@register.filter
+def tags_parent_category(tags):
+    """Return first tag for grouping/filtering; used when tasks use tags instead of category."""
+    if not tags:
+        return "unknown"
+    if isinstance(tags, (list, tuple)):
+        first = next((t for t in tags if t), None)
+        return (first or "unknown").lower() if isinstance(first, str) else "unknown"
+    return "unknown"
 
 
 @register.filter
@@ -241,3 +264,40 @@ def get_structured_tasks(workflow):
     if not hasattr(workflow, "get_structured_tasks"):
         return []
     return workflow.get_structured_tasks()
+
+
+@register.filter
+def workflow_tags_union(workflows):
+    """Return sorted list of unique tags across workflows for filter bar (lowercase for CSS/JS)."""
+    if not workflows:
+        return []
+    seen = set()
+    for w in workflows:
+        tags = getattr(w, "tags", None) or []
+        for t in tags:
+            if t and isinstance(t, str):
+                seen.add(t.lower())
+    return sorted(seen)
+
+
+@register.filter
+def workflow_count_for_tag(workflows, tag):
+    """Return count of workflows that have the given tag (case-insensitive)."""
+    if not tag or not workflows:
+        return 0
+    tag_lower = tag.lower() if isinstance(tag, str) else tag
+    return sum(
+        1
+        for w in workflows
+        if any((t or "").lower() == tag_lower for t in (getattr(w, "tags", None) or []) if isinstance(t, str))
+    )
+
+
+@register.filter
+def workflow_has_tag(workflow, tag):
+    """Return True if workflow has the given tag (case-insensitive)."""
+    if not tag:
+        return False
+    tag_lower = tag.lower() if isinstance(tag, str) else tag
+    tags = getattr(workflow, "tags", None) or []
+    return any((t or "").lower() == tag_lower for t in tags if isinstance(t, str))

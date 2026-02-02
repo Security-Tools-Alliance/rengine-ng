@@ -1016,20 +1016,25 @@ function get_dorks(scan_id){
 // }
 
 
-function get_dork_details(dork_type, scan_id){
-	// render tab modal
-	$('#modal_dialog .modal-title').html('Dorking Results in category: <b>' + dork_type + '</b>');
-	$('#modal_dialog').modal('show');
-	$('#modal_dialog .modal-text').empty(); $('#modal_dialog .modal-footer').empty();
-	$('#modal_dialog .modal-text').append(`<div class='outer-div' id="modal-loader"><span class="inner-div spinner-border text-primary align-self-center loader-sm"></span></div>`);
-	$.getJSON(`/api/queryDorks/?scan_id=${scan_id}&type=${dork_type}&format=json`, function(data) {
-		$('#modal_dialog #modal-loader').empty();
-		$('#modal_dialog .modal-text').append(`<b>${data['dorks'].length} results found in this dork category.</b>`);
-		$('#modal_dialog .modal-text').append(`<ul id="dork-detail-modal-ul"></ul>`);
-		for (dork in data['dorks']){
-			dork_obj = data['dorks'][dork];
-			$("#dork-detail-modal-ul").append(`<li><a href="${dork_obj['url']}" target="_blank" class="text-primary">${dork_obj['description']}</a></li>`);
+function get_dork_details(dork_type, scan_id) {
+	const title = 'Dorking Results in category: <b>' + dork_type + '</b>';
+	const loaderHtml = '<div class="outer-div" id="modal-loader"><span class="inner-div spinner-border text-primary align-self-center loader-sm"></span></div>';
+	if (window.ModalManager) ModalManager.showDialog({ title, bodyHtml: loaderHtml, footerHtml: '' });
+	const baseUrl = (window.RENGINE_API_URLS && window.RENGINE_API_URLS.queryDorks) || '/api/queryDorks/';
+	const url = `${baseUrl}?scan_id=${scan_id}&type=${encodeURIComponent(dork_type)}&format=json`;
+	$.getJSON(url, function (data) {
+		let listHtml = '<ul id="dork-detail-modal-ul">';
+		for (const dork_obj of data.dorks || []) {
+			listHtml += `<li><a href="${dork_obj.url}" target="_blank" class="text-primary">${dork_obj.description}</a></li>`;
 		}
+		listHtml += '</ul>';
+		const bodyHtml = `<b>${(data.dorks || []).length} results found in this dork category.</b>${listHtml}`;
+		if (window.ModalManager) {
+			ModalManager.setDialogTitle(title);
+			ModalManager.setDialogLoading(bodyHtml);
+		}
+	}).fail(function () {
+		if (window.ModalManager) ModalManager.setDialogLoading('<p class="text-danger">Error loading dork results.</p>');
 	});
 }
 
@@ -1049,38 +1054,34 @@ function get_vulnerability_modal(endpoint_url, scan_id=null, severity=null, subd
 		url += `&subdomain_id=${subdomain_id}`;
 	}
 
-
-	// else{
-	// 	url = `${endpoint_url}?severity=${severity}&subdomain_name=${subdomain_name}&format=json`;
-	// }
+	let severity_title = '';
 	switch (severity) {
-		case 0:
-		severity_title = 'Informational'
-		break;
-		case 1:
-		severity_title = 'Low'
-		break;
-		case 2:
-		severity_title = 'Medium'
-		break;
-		case 3:
-		severity_title = 'High'
-		break;
-		case 4:
-		severity_title = 'Critical'
-		break;
-		default:
-		severity_title = ''
+		case 0: severity_title = 'Informational'; break;
+		case 1: severity_title = 'Low'; break;
+		case 2: severity_title = 'Medium'; break;
+		case 3: severity_title = 'High'; break;
+		case 4: severity_title = 'Critical'; break;
+		default: severity_title = '';
 	}
 
-	$('#xl-modal-title').empty();
-	$('#xl-modal-content').empty();
-	$('#xl-modal-footer').empty();
-
-	Swal.fire({
-		title: `Fetching ${severity_title} vulnerabilities for ${subdomain_name}...`
-	});
-	Swal.showLoading();
+	const loadingTitle = `Fetching ${severity_title} vulnerabilities for ${subdomain_name}...`;
+	const loadingBody = '<p class="text-muted">Loading...</p>';
+	if (window.ModalManager) {
+		ModalManager.setXlTitle(loadingTitle);
+		ModalManager.setXlLoading(loadingBody);
+		ModalManager.setXlContent({ footerHtml: '' });
+		if (!ModalManager.showXlOnly()) {
+			$('#xl-modal-title').html(loadingTitle);
+			$('#xl-modal-content').html(loadingBody);
+			$('#xl-modal-footer').html('');
+			ModalManager.showXlOnly();
+		}
+	} else {
+		$('#xl-modal-title').html(loadingTitle);
+		$('#xl-modal-content').html(loadingBody);
+		$('#xl-modal-footer').html('');
+		ModalManager.showXlOnly();
+	}
 
 	fetch(url, {
 		method: 'GET',
@@ -1090,37 +1091,52 @@ function get_vulnerability_modal(endpoint_url, scan_id=null, severity=null, subd
 			'Content-Type': 'application/json'
 		},
 	}).then(response => response.json()).then(function(response) {
-		Swal.close();
-		$('#xl-modal-title').html(`${subdomain_name}`);
-		render_vulnerability_in_xl_modal(endpoint_url, response['count'], subdomain_name, response['results'])
+		render_vulnerability_in_xl_modal(endpoint_url, response['count'], subdomain_name, response['results']);
+		if (window.ModalManager) {
+			ModalManager.setXlTitle(subdomain_name);
+		} else {
+			$('#xl-modal-title').html(subdomain_name);
+			ModalManager.showXlOnly();
+		}
+		$("body").tooltip({ selector: '[data-toggle=tooltip]' });
+	}).catch(function() {
+		const errTitle = severity_title || 'Error';
+		const errBody = '<p class="text-danger">Error loading data. Please try again.</p>';
+		if (window.ModalManager) {
+			ModalManager.setXlContent({ title: errTitle, bodyHtml: errBody });
+		} else {
+			$('#xl-modal-title').html(errTitle);
+			$('#xl-modal-content').html(errBody);
+			ModalManager.showXlOnly();
+		}
+		$("body").tooltip({ selector: '[data-toggle=tooltip]' });
 	});
-	$('#modal_xl_scroll_dialog').modal('show');
-	$("body").tooltip({
-		selector: '[data-toggle=tooltip]'
-	});
-
 }
 
 
 function get_endpoint_modal(endpoint_url, project, scan_id, subdomain_id, subdomain_name){
-	// This function will display a xl modal with datatable for displaying endpoints
-	// associated with the subdomain
-	$('#xl-modal-title').empty();
-	$('#xl-modal-content').empty();
-	$('#xl-modal-footer').empty();
+	const loadingTitle = `Fetching Endpoints for ${subdomain_name}...`;
+	const loadingBody = '<p class="text-muted">Loading...</p>';
+	let url = scan_id
+		? `${endpoint_url}?project=${project}&scan_id=${scan_id}&subdomain_id=${subdomain_id}&format=json`
+		: `${endpoint_url}?project=${project}&subdomain_id=${subdomain_id}&format=json`;
 
-	let url = '';
-	if (scan_id) {
-		url = `${endpoint_url}?project=${project}&scan_id=${scan_id}&subdomain_id=${subdomain_id}&format=json`
+	if (window.ModalManager) {
+		ModalManager.setXlTitle(loadingTitle);
+		ModalManager.setXlLoading(loadingBody);
+		ModalManager.setXlContent({ footerHtml: '' });
+		if (!ModalManager.showXlOnly()) {
+			$('#xl-modal-title').html(loadingTitle);
+			$('#xl-modal-content').html(loadingBody);
+			$('#xl-modal-footer').html('');
+			ModalManager.showXlOnly();
+		}
+	} else {
+		$('#xl-modal-title').html(loadingTitle);
+		$('#xl-modal-content').html(loadingBody);
+		$('#xl-modal-footer').html('');
+		ModalManager.showXlOnly();
 	}
-	else{
-		url = `${endpoint_url}?project=${project}&subdomain_id=${subdomain_id}&format=json`
-	}
-
-	Swal.fire({
-		title: `Fetching Endpoints for ${subdomain_name}...`
-	});
-	Swal.showLoading();
 
 	fetch(url, {
 		method: 'GET',
@@ -1130,36 +1146,51 @@ function get_endpoint_modal(endpoint_url, project, scan_id, subdomain_id, subdom
 			'Content-Type': 'application/json'
 		},
 	}).then(response => response.json()).then(function(response) {
-		Swal.close();
-		$('#xl-modal-title').html(`${subdomain_name}`);
-		render_endpoint_in_xl_modal(response['count'], subdomain_name, response['results'])
+		render_endpoint_in_xl_modal(response['count'], subdomain_name, response['results']);
+		if (window.ModalManager) {
+			ModalManager.setXlTitle(subdomain_name);
+		} else {
+			$('#xl-modal-title').html(subdomain_name);
+			ModalManager.showXlOnly();
+		}
+		$("body").tooltip({ selector: '[data-toggle=tooltip]' });
+	}).catch(function() {
+		const errTitle = subdomain_name || 'Error';
+		const errBody = '<p class="text-danger">Error loading endpoints. Please try again.</p>';
+		if (window.ModalManager) {
+			ModalManager.setXlContent({ title: errTitle, bodyHtml: errBody });
+		} else {
+			$('#xl-modal-title').html(errTitle);
+			$('#xl-modal-content').html(errBody);
+			ModalManager.showXlOnly();
+		}
+		$("body").tooltip({ selector: '[data-toggle=tooltip]' });
 	});
-	$('#modal_xl_scroll_dialog').modal('show');
-	$("body").tooltip({
-		selector: '[data-toggle=tooltip]'
-	});
-
 }
 
 function get_directory_modal(endpoint_url, scan_id=null, subdomain_id=null, subdomain_name=null){
-	// This function will display a xl modal with datatable for displaying endpoints
-	// associated with the subdomain
-	$('#xl-modal-title').empty();
-	$('#xl-modal-content').empty();
-	$('#xl-modal-footer').empty();
+	const loadingTitle = `Fetching Directories for ${subdomain_name}...`;
+	const loadingBody = '<p class="text-muted">Loading...</p>';
+	const url = scan_id
+		? `${endpoint_url}?scan_id=${scan_id}&subdomain_id=${subdomain_id}&format=json`
+		: `${endpoint_url}?subdomain_id=${subdomain_id}&format=json`;
 
-	let url = '';
-	if (scan_id) {
-		url = `${endpoint_url}?scan_id=${scan_id}&subdomain_id=${subdomain_id}&format=json`
+	if (window.ModalManager) {
+		ModalManager.setXlTitle(loadingTitle);
+		ModalManager.setXlLoading(loadingBody);
+		ModalManager.setXlContent({ footerHtml: '' });
+		if (!ModalManager.showXlOnly()) {
+			$('#xl-modal-title').html(loadingTitle);
+			$('#xl-modal-content').html(loadingBody);
+			$('#xl-modal-footer').html('');
+			ModalManager.showXlOnly();
+		}
+	} else {
+		$('#xl-modal-title').html(loadingTitle);
+		$('#xl-modal-content').html(loadingBody);
+		$('#xl-modal-footer').html('');
+		ModalManager.showXlOnly();
 	}
-	else{
-		url = `${endpoint_url}?subdomain_id=${subdomain_id}&format=json`
-	}
-
-	Swal.fire({
-		title: `Fetching Directories for ${subdomain_name}...`
-	});
-	Swal.showLoading();
 
 	fetch(url, {
 		method: 'GET',
@@ -1169,13 +1200,25 @@ function get_directory_modal(endpoint_url, scan_id=null, subdomain_id=null, subd
 			'Content-Type': 'application/json'
 		},
 	}).then(response => response.json()).then(function(response) {
-		Swal.close();
-		$('#xl-modal-title').html(`${subdomain_name}`);
-		render_directories_in_xl_modal(response['count'], subdomain_name, response['results'])
-	});
-	$('#modal_xl_scroll_dialog').modal('show');
-	$("body").tooltip({
-		selector: '[data-toggle=tooltip]'
+		render_directories_in_xl_modal(response['count'], subdomain_name, response['results']);
+		if (window.ModalManager) {
+			ModalManager.setXlTitle(subdomain_name);
+		} else {
+			$('#xl-modal-title').html(subdomain_name);
+			ModalManager.showXlOnly();
+		}
+		$("body").tooltip({ selector: '[data-toggle=tooltip]' });
+	}).catch(function() {
+		const errTitle = subdomain_name || 'Error';
+		const errBody = '<p class="text-danger">Error loading directories. Please try again.</p>';
+		if (window.ModalManager) {
+			ModalManager.setXlContent({ title: errTitle, bodyHtml: errBody });
+		} else {
+			$('#xl-modal-title').html(errTitle);
+			$('#xl-modal-content').html(errBody);
+			ModalManager.showXlOnly();
+		}
+		$("body").tooltip({ selector: '[data-toggle=tooltip]' });
 	});
 }
 
@@ -1347,70 +1390,68 @@ function create_log_element(log) {
 }
 
 function get_logs_modal(scan_id=null, activity_id=null, project_slug=null) {
+	const slug = project_slug || (typeof current_project_slug !== 'undefined' ? current_project_slug : '');
+	const url = scan_id
+		? `/scan/${slug}/logs/?scan_id=${scan_id}`
+		: `/scan/${slug}/logs/?activity_id=${activity_id}`;
+	const title = scan_id ? `Logs for scan #${scan_id}` : `Logs for activity #${activity_id}`;
 
-	// This function will display a xl modal with formatted command logs
-	// Uses Django template for proper formatting and security (MVC pattern)
-	$('#xl-modal-title').empty();
-	$('#xl-modal-content').empty();
-	$('#xl-modal-footer').empty();
-
-	// Get project slug from global variable if not provided
-	if (!project_slug && typeof current_project_slug !== 'undefined') {
-		project_slug = current_project_slug;
+	const loadingTitle = 'Fetching logs...';
+	const loadingBody = '<p class="text-muted">Loading...</p>';
+	if (window.ModalManager) {
+		ModalManager.setXlTitle(loadingTitle);
+		ModalManager.setXlLoading(loadingBody);
+		ModalManager.setXlContent({ footerHtml: '' });
+		if (!ModalManager.showXlOnly()) {
+			$('#xl-modal-title').html(loadingTitle);
+			$('#xl-modal-content').html(loadingBody);
+			$('#xl-modal-footer').html('');
+			ModalManager.showXlOnly();
+		}
+	} else {
+		$('#xl-modal-title').html(loadingTitle);
+		$('#xl-modal-content').html(loadingBody);
+		$('#xl-modal-footer').html('');
+		ModalManager.showXlOnly();
 	}
 
-	let url, title;
-	if (scan_id) {
-		url = `/scan/${project_slug || ''}/logs/?scan_id=${scan_id}`
-		title = `Logs for scan #${scan_id}`
-	}
-	else{
-		url = `/scan/${project_slug || ''}/logs/?activity_id=${activity_id}`
-		title = `Logs for activity #${activity_id}`
-	}
-
-	Swal.fire({
-		title: 'Fetching logs...'
-	});
-	Swal.showLoading();
-
-	// Get formatted HTML logs from Django view
 	fetch(url)
-	.then(response => {
-		if (!response.ok) {
-			throw new Error(`HTTP error! status: ${response.status}`);
-		}
-		return response.text();
-	})
-	.then(html => {
-		Swal.close();
-		$('#xl-modal-title').html(title);
-		
-		// Insert the HTML directly (it's already escaped and formatted by Django template)
-		if (html && html.trim()) {
-			$('#xl-modal-content').html(html);
-		} else {
-			$('#xl-modal-content').html('<p class="text-muted">No logs available.</p>');
-		}
-	})
-	.catch(error => {
-		Swal.close();
-		console.error('Error fetching logs:', error);
-		$('#xl-modal-title').html(title);
-		$('#xl-modal-content').html('<p class="text-danger">Error loading logs. Please try again.</p>');
-	});
-	
-	$('#modal_xl_scroll_dialog').modal('show');
-	$("body").tooltip({
-		selector: '[data-toggle=tooltip]'
-	});
+		.then(response => {
+			if (!response.ok) {
+				throw new Error(`HTTP error! status: ${response.status}`);
+			}
+			return response.text();
+		})
+		.then(html => {
+			const bodyHtml = (html && html.trim()) ? html : '<p class="text-muted">No logs available.</p>';
+			if (window.ModalManager) {
+				ModalManager.setXlContent({ title, bodyHtml });
+			} else {
+				$('#xl-modal-title').html(title);
+				$('#xl-modal-content').html(bodyHtml);
+				ModalManager.showXlOnly();
+			}
+			$("body").tooltip({ selector: '[data-toggle=tooltip]' });
+		})
+		.catch(error => {
+			console.error('Error fetching logs:', error);
+			const errBody = '<p class="text-danger">Error loading logs. Please try again.</p>';
+			if (window.ModalManager) {
+				ModalManager.setXlContent({ title, bodyHtml: errBody });
+			} else {
+				$('#xl-modal-title').html(title);
+				$('#xl-modal-content').html(errBody);
+				ModalManager.showXlOnly();
+			}
+			$("body").tooltip({ selector: '[data-toggle=tooltip]' });
+		});
 }
 
 function add_todo_for_scanhistory_modal(scan_history_id){
 	$("#todoTitle").val('');
 	$("#todoDescription").val('');
 
-	$('#addTaskModal').modal('show');
+	if (window.ModalManager) ModalManager.showById(ModalManager.MODAL_IDS.ADD_TASK);
 	subdomain_dropdown = document.getElementById('todoSubdomainDropdown');
 	$.getJSON(`/api/querySubdomains?scan_id=${scan_history_id}&no_lookup_interesting&format=json`, function(data) {
 		document.querySelector("#selectedSubdomainCount").innerHTML = data['subdomains'].length + ' Subdomains';
@@ -1465,7 +1506,7 @@ $(".add-scan-history-todo").click(function(){
 				button: "Okay",
 			});
 		}
-		$('#addTaskModal').modal('hide');
+		if (window.ModalManager) ModalManager.hide(ModalManager.MODAL_IDS.ADD_TASK);
 		get_recon_notes(null, scan_id);
 	});
 });
@@ -1479,7 +1520,7 @@ function add_note_for_subdomain(subdomain_id, subdomain_name, current_project){
 	$('#add-todo-subdomain-submit-button').attr('onClick', `add_note_for_subdomain_handler(${subdomain_id}, '${current_project}');`);
 
 
-	$('#addSubdomainTaskModal').modal('show');
+	if (window.ModalManager) ModalManager.showById(ModalManager.MODAL_IDS.ADD_SUBDOMAIN_TASK);
 
 }
 
@@ -1520,265 +1561,129 @@ function add_note_for_subdomain_handler(subdomain_id, current_project){
 			});
 		}
 		$('#subdomain_scan_results').DataTable().ajax.reload();
-		$('#addSubdomainTaskModal').modal('hide');
+		if (window.ModalManager) ModalManager.hide(ModalManager.MODAL_IDS.ADD_SUBDOMAIN_TASK);
 	});
 
 }
 
-function download_subdomains(scan_id=null, domain_id=null, domain_name=null){
-	Swal.fire({
-		title: 'Querying Subdomains...'
-	});
+function download_subdomains(scan_id = null, domain_id = null, domain_name = null) {
+	Swal.fire({ title: 'Querying Subdomains...' });
 	Swal.showLoading();
-	count = `<span class="modal_count"></span>`;
-	let url = `/api/querySubdomains?format=json&no_lookup_interesting`;
-	if (scan_id) {
-		url += `&scan_id=${scan_id}`;
-	}
-	else if(domain_id){
-		url += `&target_id=${domain_id}`;
-	}
-
-	if (domain_name) {
-		$('.modal-title').html(count + ' Subdomains for : <b>' + domain_name + '</b>');
-	}
-	else{
-		$('.modal-title').html(count + ' Subdomains');
-	}
-
-	$('.modal-text').empty(); $('#modal_dialog .modal-footer').empty();
-	$('.modal-text').append(`<div class='outer-div' id="modal-loader"></div>`);
-	// query subdomains
-	$.getJSON(url, function(data) {
+	const baseUrl = (window.RENGINE_API_URLS && window.RENGINE_API_URLS.querySubdomains) || '/api/querySubdomains/';
+	let url = `${baseUrl}?format=json&no_lookup_interesting`;
+	if (scan_id) url += `&scan_id=${scan_id}`;
+	else if (domain_id) url += `&target_id=${domain_id}`;
+	$.getJSON(url, function (data) {
 		Swal.close();
-		if (data['subdomains'].length) {
-			$('#modal_dialog').modal('show');
-			$('.modal_count').html(data['subdomains'].length);
-			$('#modal_dialog .modal-text').empty();
-			subdomains = '';
-			$('#modal_dialog .modal-text').append(`<textarea class="form-control clipboard copy-txt" id="all_subdomains_text_area" rows="10" spellcheck="false"></textarea>`);
-			for (subdomain in data['subdomains']){
-				subdomain_obj = data['subdomains'][subdomain];
-				subdomains += subdomain_obj['name'] + '\n'
-			}
-			$('#all_subdomains_text_area').append(subdomains);
-			$("#modal_dialog .modal-footer").empty();
-			$("#modal_dialog .modal-footer").append(`<a href="javascript:download('subdomains-${domain_name}.txt', subdomains);" class="m-1 btn btn-dark copyable float-end btn-md"><i class="fe-download me-1"></i> Download Subdomains as txt</a>`);
-			$("#modal_dialog .modal-footer").append(`<a href="javascript:;" data-clipboard-action="copy" class="m-1 btn btn-primary copyable float-end btn-md" data-toggle="tooltip" data-placement="top" title="Copy Subdomains!" data-clipboard-target="#all_subdomains_text_area"><i class="fe-copy me-1"></i> Copy Subdomains</a>`);
+		const list = data.subdomains || [];
+		if (list.length) {
+			const count = list.length;
+			const subdomains = list.map(s => s.name).join('\n');
+			const title = `<span class="modal_count">${count}</span> Subdomains for : <b>${domain_name || ''}</b>`.trim() || `<span class="modal_count">${count}</span> Subdomains`;
+			const bodyHtml = `<textarea class="form-control clipboard copy-txt" id="all_subdomains_text_area" rows="10" spellcheck="false">${subdomains}</textarea>`;
+			const footerHtml = `<a href="javascript:download('subdomains-${domain_name || 'all'}.txt', document.getElementById('all_subdomains_text_area').value);" class="m-1 btn btn-dark copyable float-end btn-md"><i class="fe-download me-1"></i> Download Subdomains as txt</a><a href="javascript:;" data-clipboard-action="copy" class="m-1 btn btn-primary copyable float-end btn-md" data-toggle="tooltip" data-placement="top" title="Copy Subdomains!" data-clipboard-target="#all_subdomains_text_area"><i class="fe-copy me-1"></i> Copy Subdomains</a>`;
+			if (window.ModalManager) ModalManager.showDialog({ title, bodyHtml, footerHtml });
+		} else {
+			Swal.fire('No Subdomains', 'Could not find any subdomains.', 'warning', { button: 'Okay' });
 		}
-		else{
-			Swal.fire("No Subdomains", "Could not find any subdomains.", "warning", {
-				button: "Okay",
-			});
-		}
-	}).fail(function(){
-		Swal.fire("No Subdomains", "Could not find any subdomains.", "warning", {
-			button: "Okay",
-		});
+	}).fail(function () {
+		Swal.fire('No Subdomains', 'Could not find any subdomains.', 'warning', { button: 'Okay' });
 	});
 }
 
-function download_interesting_subdomains(project, scan_id=null, domain_id=null, domain_name=null){
-	Swal.fire({
-		title: 'Querying Interesting Subdomains...'
-	});
+function download_interesting_subdomains(project, scan_id = null, domain_id = null, domain_name = null) {
+	Swal.fire({ title: 'Querying Interesting Subdomains...' });
 	Swal.showLoading();
-	count = `<span class="modal_count"></span>`;
-	let url = `/api/queryInterestingSubdomains/?format=json&project=${project}`;
-	if (scan_id) {
-		url += `&scan_id=${scan_id}`;
-	}
-	else if(domain_id){
-		url += `&target_id=${domain_id}`;
-	}
-
-	if (domain_name) {
-		$('.modal-title').html( count + ' Interesting Subdomains for : <b>' + domain_name + '</b>');
-	}
-	else{
-		$('.modal-title').html( count + ' Interesting Subdomains');
-	}
-	$('.modal-text').empty(); $('#modal_dialog .modal-footer').empty();
-	// query subdomains
-	$.getJSON(url, function(data) {
-		Swal.close()
-		if (data.length) {
-			$('#modal_dialog').modal('show');
-			$('.modal_count').html(data.length);
-			$('#modal_dialog .modal-text').empty();
-			subdomains = '';
-			$('#modal_dialog .modal-text').append(`<textarea class="form-control clipboard copy-txt" id="interesting_subdomains_text_area" rows="10" spellcheck="false"></textarea>`);
-			for (subdomain in data){
-				subdomains += data[subdomain]['name'] + '\n'
-			}
-			$('#interesting_subdomains_text_area').append(subdomains);
-			$("#modal_dialog .modal-footer").empty();
-			$("#modal_dialog .modal-footer").append(`<a href="javascript:download('interesting_subdomains-${domain_name}.txt', subdomains);" class="m-1 btn btn-dark copyable float-end btn-md"><i class="fe-download me-1"></i> Download Subdomains as txt</a>`);
-			$("#modal_dialog .modal-footer").append(`<a href="javascript:;" data-clipboard-action="copy" class="m-1 btn btn-primary copyable float-end btn-md" data-toggle="tooltip" data-placement="top" title="Copy Subdomains!" data-clipboard-target="#interesting_subdomains_text_area"><i class="fe-copy me-1"></i> Copy Subdomains</a>`);
-		}
-		else{
-			Swal.fire("No Interesting Subdomains", "Could not find any interesting subdomains.", "warning", {
-				button: "Okay",
-			});
-		}
-
-	}).fail(function(){
-		Swal.fire("No Interesting Subdomains", "Could not find any interesting subdomains.", "warning", {
-			button: "Okay",
-		});
-	});
-}
-
-function download_interesting_endpoints(scan_id, domain_name){
-	Swal.fire({
-		title: 'Querying Interesting Endpoints...'
-	});
-	Swal.showLoading();
-	count = `<span class="modal_count"></span>`;
-	if (scan_id) {
-		url = `/api/listInterestingEndpoints/?scan_id=${scan_id}&format=json&no_page`;
-	}
-	else{
-		url = `/api/listInterestingEndpoints/?format=json&no_page`;
-	}
-	if (domain_name) {
-		$('.modal-title').html( count + ' Interesting Endpoints for : <b>' + domain_name + '</b>');
-	}
-	else{
-		$('.modal-title').html( count + ' Interesting Endpoints');
-	}
-	$('.modal-text').empty(); $('#modal_dialog .modal-footer').empty();
-	// query subdomains
-	$.getJSON(url, function(data) {
+	const baseUrl = (window.RENGINE_API_URLS && window.RENGINE_API_URLS.queryInterestingSubdomains) || '/api/queryInterestingSubdomains/';
+	let url = `${baseUrl}?format=json&project=${encodeURIComponent(project)}`;
+	if (scan_id) url += `&scan_id=${scan_id}`;
+	else if (domain_id) url += `&target_id=${domain_id}`;
+	$.getJSON(url, function (data) {
 		Swal.close();
-		if (data.length) {
-			$('#modal_dialog').modal('show');
-			$('.modal_count').html(data.length);
-			$('#modal_dialog .modal-text').empty();
-			endpoints = '';
-			$('#modal_dialog .modal-text').append(`<textarea class="form-control clipboard copy-txt" id="interesting_endpoints_text_area" rows="10" spellcheck="false"></textarea>`);
-			for (endpoint in data){
-				endpoints += data[endpoint]['http_url'] + '\n'
-			}
-			$('#interesting_endpoints_text_area').append(endpoints);
-			$("#modal_dialog .modal-footer").empty();
-			$("#modal_dialog .modal-footer").append(`<a href="javascript:download('interesting_endpoints-${domain_name}.txt', endpoints);" class="m-1 btn btn-dark copyable float-end btn-md"><i class="fe-download me-1"></i> Download Endpoints as txt</a>`);
-			$("#modal_dialog .modal-footer").append(`<a href="javascript:;" data-clipboard-action="copy" class="m-1 btn btn-primary copyable float-end btn-md" data-toggle="tooltip" data-placement="top" title="Copy Endpoints!" data-clipboard-target="#interesting_endpoints_text_area"><i class="fe-copy me-1"></i> Copy Endpoints</a>`);
+		const list = Array.isArray(data) ? data : [];
+		if (list.length) {
+			const count = list.length;
+			const subdomains = list.map(s => s.name).join('\n');
+			const title = `<span class="modal_count">${count}</span> Interesting Subdomains for : <b>${domain_name || ''}</b>`.trim() || `<span class="modal_count">${count}</span> Interesting Subdomains`;
+			const bodyHtml = `<textarea class="form-control clipboard copy-txt" id="interesting_subdomains_text_area" rows="10" spellcheck="false">${subdomains}</textarea>`;
+			const footerHtml = `<a href="javascript:download('interesting_subdomains-${domain_name || 'all'}.txt', document.getElementById('interesting_subdomains_text_area').value);" class="m-1 btn btn-dark copyable float-end btn-md"><i class="fe-download me-1"></i> Download Subdomains as txt</a><a href="javascript:;" data-clipboard-action="copy" class="m-1 btn btn-primary copyable float-end btn-md" data-toggle="tooltip" data-placement="top" title="Copy Subdomains!" data-clipboard-target="#interesting_subdomains_text_area"><i class="fe-copy me-1"></i> Copy Subdomains</a>`;
+			if (window.ModalManager) ModalManager.showDialog({ title, bodyHtml, footerHtml });
+		} else {
+			Swal.fire('No Interesting Subdomains', 'Could not find any interesting subdomains.', 'warning', { button: 'Okay' });
 		}
-		else{
-			Swal.fire("No Interesting Endpoints", "Could not find any interesting Endpoints.", "warning", {
-				button: "Okay",
-			});
-		}
+	}).fail(function () {
+		Swal.fire('No Interesting Subdomains', 'Could not find any interesting subdomains.', 'warning', { button: 'Okay' });
+	});
+}
 
-	}).fail(function(){
-		Swal.fire("No Interesting Endpoints", "Could not find any interesting Endpoints.", "warning", {
-			button: "Okay",
-		});
+function download_interesting_endpoints(scan_id, domain_name) {
+	Swal.fire({ title: 'Querying Interesting Endpoints...' });
+	Swal.showLoading();
+	const baseUrl = (window.RENGINE_API_URLS && window.RENGINE_API_URLS.interestingEndpointsList) || '/api/listInterestingEndpoints/';
+	const url = scan_id ? `${baseUrl}?scan_id=${scan_id}&format=json&no_page` : `${baseUrl}?format=json&no_page`;
+	$.getJSON(url, function (data) {
+		Swal.close();
+		const list = Array.isArray(data) ? data : [];
+		if (list.length) {
+			const count = list.length;
+			const endpoints = list.map(e => e.http_url).join('\n');
+			const title = `<span class="modal_count">${count}</span> Interesting Endpoints for : <b>${domain_name || ''}</b>`.trim() || `<span class="modal_count">${count}</span> Interesting Endpoints`;
+			const bodyHtml = `<textarea class="form-control clipboard copy-txt" id="interesting_endpoints_text_area" rows="10" spellcheck="false">${endpoints}</textarea>`;
+			const footerHtml = `<a href="javascript:download('interesting_endpoints-${domain_name || 'all'}.txt', document.getElementById('interesting_endpoints_text_area').value);" class="m-1 btn btn-dark copyable float-end btn-md"><i class="fe-download me-1"></i> Download Endpoints as txt</a><a href="javascript:;" data-clipboard-action="copy" class="m-1 btn btn-primary copyable float-end btn-md" data-toggle="tooltip" data-placement="top" title="Copy Endpoints!" data-clipboard-target="#interesting_endpoints_text_area"><i class="fe-copy me-1"></i> Copy Endpoints</a>`;
+			if (window.ModalManager) ModalManager.showDialog({ title, bodyHtml, footerHtml });
+		} else {
+			Swal.fire('No Interesting Endpoints', 'Could not find any interesting Endpoints.', 'warning', { button: 'Okay' });
+		}
+	}).fail(function () {
+		Swal.fire('No Interesting Endpoints', 'Could not find any interesting Endpoints.', 'warning', { button: 'Okay' });
 	});
 }
 
 
-function download_important_subdomains(scan_id=null, domain_id=null, domain_name=null){
-	Swal.fire({
-		title: 'Querying Interesting Subdomains...'
-	});
+function download_important_subdomains(scan_id = null, domain_id = null, domain_name = null) {
+	Swal.fire({ title: 'Querying Interesting Subdomains...' });
 	Swal.showLoading();
-	count = `<span class="modal_count"></span>`;
-	let url = `/api/querySubdomains?format=json&no_lookup_interesting&only_important`;
-	if (scan_id) {
-		url = `/api/querySubdomains?format=json&no_lookup_interesting&only_important&scan_id=${scan_id}`;
-	}
-	else if (domain_id){
-		url = `/api/querySubdomains?format=json&no_lookup_interesting&only_important&target_id=${domain_id}`;
-	}
-	if (domain_name) {
-		$('.modal-title').html(count + ' Subdomains marked as important : <b>' + domain_name + '</b>');
-	}
-	else{
-		$('.modal-title').html(count + ' Subdomains marked as important');
-	}
-	$('.modal-text').empty(); $('#modal_dialog .modal-footer').empty();
-	// query subdomains
-	$.getJSON(url, function(data) {
+	const baseUrl = (window.RENGINE_API_URLS && window.RENGINE_API_URLS.querySubdomains) || '/api/querySubdomains/';
+	let url = `${baseUrl}?format=json&no_lookup_interesting&only_important`;
+	if (scan_id) url += `&scan_id=${scan_id}`;
+	else if (domain_id) url += `&target_id=${domain_id}`;
+	$.getJSON(url, function (data) {
 		Swal.close();
-		if (data['subdomains'].length) {
-			$('#modal_dialog').modal('show');
-			$('.modal_count').html(data['subdomains'].length);
-			$('#modal_dialog .modal-text').empty();
-			subdomains = '';
-			$('#modal_dialog .modal-text').append(`<textarea class="form-control clipboard copy-txt" id="all_subdomains_text_area" rows="10" spellcheck="false"></textarea>`);
-			for (subdomain in data['subdomains']){
-				subdomain_obj = data['subdomains'][subdomain];
-				subdomains += subdomain_obj['name'] + '\n'
-			}
-			$('#all_subdomains_text_area').append(subdomains);
-			$("#modal_dialog .modal-footer").empty();
-			$("#modal_dialog .modal-footer").append(`<a href="javascript:download('important-subdomains-${domain_name}.txt', subdomains);" class="m-1 btn btn-primary copyable float-end btn-md"><i class="fe-download me-1"></i> Download Subdomains as txt</a>`);
-			$("#modal_dialog .modal-footer").append(`<a href="javascript:;" data-clipboard-action="copy" class="m-1 btn btn-dark copyable float-end btn-md" data-toggle="tooltip" data-placement="top" title="Copy Subdomains!" data-clipboard-target="#all_subdomains_text_area"><i class="fe-copy me-1"></i> Copy Subdomains</a>`);
+		const list = (data && data.subdomains) || [];
+		if (list.length) {
+			const count = list.length;
+			const subdomains = list.map(s => s.name).join('\n');
+			const title = `<span class="modal_count">${count}</span> Subdomains marked as important : <b>${domain_name || ''}</b>`.trim() || `<span class="modal_count">${count}</span> Subdomains marked as important`;
+			const bodyHtml = `<textarea class="form-control clipboard copy-txt" id="all_subdomains_text_area" rows="10" spellcheck="false">${subdomains}</textarea>`;
+			const footerHtml = `<a href="javascript:download('important-subdomains-${domain_name || 'all'}.txt', document.getElementById('all_subdomains_text_area').value);" class="m-1 btn btn-primary copyable float-end btn-md"><i class="fe-download me-1"></i> Download Subdomains as txt</a><a href="javascript:;" data-clipboard-action="copy" class="m-1 btn btn-dark copyable float-end btn-md" data-toggle="tooltip" data-placement="top" title="Copy Subdomains!" data-clipboard-target="#all_subdomains_text_area"><i class="fe-copy me-1"></i> Copy Subdomains</a>`;
+			if (window.ModalManager) ModalManager.showDialog({ title, bodyHtml, footerHtml });
+		} else {
+			Swal.fire('No Important Endpoints', 'No subdomains has been marked as important.', 'warning', { button: 'Okay' });
 		}
-		else{
-			Swal.fire("No Important Endpoints", "No subdomains has been marked as important.", "warning", {
-				button: "Okay",
-			});
-		}
-	}).fail(function(){
-		Swal.fire("No Important Endpoints", "No subdomains has been marked as important.", "warning", {
-			button: "Okay",
-		});
+	}).fail(function () {
+		Swal.fire('No Important Endpoints', 'No subdomains has been marked as important.', 'warning', { button: 'Okay' });
 	});
 }
 
-function download_endpoints(scan_id=null, domain_id=null, domain_name='', pattern=null){
-	Swal.fire({
-		title: 'Querying Endpoints...'
-	});
+function download_endpoints(scan_id = null, domain_id = null, domain_name = '', pattern = null) {
+	Swal.fire({ title: 'Querying Endpoints...' });
 	Swal.showLoading();
-	const count = `<span class="modal_count">Loading... </span>`;
-
-	let url = `/api/queryEndpoints/?format=json&only_urls`;
-
-	if (scan_id) {
-		url += `&scan_id=${scan_id}`;
-	}
-	else if (domain_id) {
-		url += `&target_id=${domain_id}`;
-	}
-
-	if (pattern) {
-		url += `&pattern=${pattern}`;
-	}
-
-	if (domain_name) {
-		$('.modal-title').html( count + ' Endpoints for : <b>' + domain_name + '</b>');
-	}
-	else{
-		$('.modal-title').html(count + ' Endpoints');
-	}
-	$('.modal-text').empty(); $('#modal_dialog .modal-footer').empty();
-	// query subdomains
-	$.getJSON(url, function(data) {
+	const baseUrl = (window.RENGINE_API_URLS && window.RENGINE_API_URLS.queryEndpoints) || '/api/queryEndpoints/';
+	let url = `${baseUrl}?format=json&only_urls`;
+	if (scan_id) url += `&scan_id=${scan_id}`;
+	else if (domain_id) url += `&target_id=${domain_id}`;
+	if (pattern) url += `&pattern=${encodeURIComponent(pattern)}`;
+	$.getJSON(url, function (data) {
 		Swal.close();
-		$('#modal_dialog').modal('show');
-		$('.modal_count').html(data['endpoints'].length);
-		$('#modal_dialog .modal-text').empty();
-		endpoints = '';
-		$('#modal_dialog .modal-text').append(`<textarea class="form-control clipboard copy-txt" id="all_endpoints_text_area" rows="10" spellcheck="false"></textarea>`);
-		for (endpoint in data['endpoints']){
-			endpoint_obj = data['endpoints'][endpoint];
-			endpoints += endpoint_obj['http_url'] + '\n'
-		}
-		$('#all_endpoints_text_area').append(endpoints);
-		$("#modal_dialog .modal-footer").empty();
-		if (domain_name) {
-			$("#modal_dialog .modal-footer").append(`<a href="javascript:download('endpoints-${domain_name}.txt', endpoints);" class="m-1 btn btn-dark copyable float-end btn-md"><i class="fe-download me-1"></i> Download Endpoints as txt</a>`);
-		}
-		else{
-			$("#modal_dialog .modal-footer").append(`<a href="javascript:download('endpoints-all.txt', endpoints);" class="m-1 btn btn-primary copyable float-end btn-md"><i class="fe-download me-1"></i> Download Endpoints as txt</a>`);
-		}
-		$("#modal_dialog .modal-footer").append(`<a href="javascript:;" data-clipboard-action="copy" class="m-1 btn btn-primary copyable float-end btn-md" data-toggle="tooltip" data-placement="top" title="Copy Subdomains!" data-clipboard-target="#all_endpoints_text_area"><i class="fe-copy me-1"></i> Copy Endpoints</a>`);
-	}).fail(function(){
-	});
+		const list = (data && data.endpoints) || [];
+		const count = list.length;
+		const endpoints = list.map(e => e.http_url).join('\n');
+		const title = `<span class="modal_count">${count}</span> Endpoints for : <b>${domain_name || ''}</b>`.trim() || `<span class="modal_count">${count}</span> Endpoints`;
+		const bodyHtml = `<textarea class="form-control clipboard copy-txt" id="all_endpoints_text_area" rows="10" spellcheck="false">${endpoints}</textarea>`;
+		const downloadLabel = domain_name ? `endpoints-${domain_name}.txt` : 'endpoints-all.txt';
+		const footerHtml = `<a href="javascript:download('${downloadLabel}', document.getElementById('all_endpoints_text_area').value);" class="m-1 btn btn-dark copyable float-end btn-md"><i class="fe-download me-1"></i> Download Endpoints as txt</a><a href="javascript:;" data-clipboard-action="copy" class="m-1 btn btn-primary copyable float-end btn-md" data-toggle="tooltip" data-placement="top" title="Copy Endpoints!" data-clipboard-target="#all_endpoints_text_area"><i class="fe-copy me-1"></i> Copy Endpoints</a>`;
+		if (window.ModalManager) ModalManager.showDialog({ title, bodyHtml, footerHtml });
+	}).fail(function () {});
 }
 
 function initiate_subscan(subdomain_ids){
@@ -1814,7 +1719,6 @@ function initiate_subscan(subdomain_ids){
 	} else if (executionMode === 'tasks') {
 		const taskNames = [];
 		$container.find('input[name="task_ids"]:checked').each(function(){
-			// Get task_type from data attribute for stability
 			const taskType = $(this).attr('data-task-type') || $(this).closest('.task-tile').attr('data-task-type');
 			if (taskType) {
 				taskNames.push(taskType);
@@ -1829,6 +1733,19 @@ function initiate_subscan(subdomain_ids){
 			return;
 		}
 		data['task_names'] = taskNames;
+		const selectedTargetsPerTask = {};
+		$('#subscan-modal').find('.secator-task-targets-block[data-task-type]').each(function() {
+			const taskType = $(this).attr('data-task-type');
+			if (!taskType) return;
+			const targets = [];
+			$(this).find('.subscan-target-checkbox:checked').each(function() {
+				targets.push($(this).val());
+			});
+			selectedTargetsPerTask[taskType] = targets;
+		});
+		if (Object.keys(selectedTargetsPerTask).length > 0) {
+			data['selected_targets_per_task'] = selectedTargetsPerTask;
+		}
 	} else if (executionMode === 'scan') {
 		const scanType = $container.find('input[name="secator_scan_type"]:checked').val();
 		if (!scanType) {
@@ -1849,6 +1766,11 @@ function initiate_subscan(subdomain_ids){
 		profiles: []
 	};
 	data['secator_config'] = secatorConfig;
+
+	const $scanHistoryIdEl = $('#subscan_scan_history_id');
+	if ($scanHistoryIdEl.length && $scanHistoryIdEl.val()) {
+		data['scan_history_id'] = parseInt($scanHistoryIdEl.val(), 10);
+	}
 	
 	Swal.fire({
 		title: 'Initiating subscan...',
@@ -1911,7 +1833,7 @@ function initiate_subscan(subdomain_ids){
 
 // initiate sub scan
 $('#btn-initiate-subtask').on('click', function(){
-	$('#subscan-modal').modal('hide');
+	if (window.ModalManager) ModalManager.hide(ModalManager.MODAL_IDS.SUBSCAN);
 	if ($('#btn-initiate-subtask').attr('multiple-subscan') === 'true') {
 		const subdomain_item = document.getElementsByClassName("subdomain_checkbox");
 		const subdomain_ids = [];
@@ -1970,19 +1892,19 @@ function downloadSelectedSubdomains(domain_name){
 		.then(function (response) {
 			Swal.close();
 			if (response['status']) {
-				$('#modal_dialog').modal('show');
-				$('.modal_count').html(response['results'].length);
-				$('#modal_dialog .modal-text').empty();
+				if (window.ModalManager) ModalManager.showDialog({});
+				$('#modal-dialog-title .modal_count').html(response['results'].length);
+				$('#modal-dialog-body').empty();
 				subdomains = '';
-				$('#modal_dialog .modal-text').append(`<textarea class="form-control clipboard copy-txt" id="selected_subdomains_text_area" rows="10" spellcheck="false"></textarea>`);
+				$('#modal-dialog-body').append(`<textarea class="form-control clipboard copy-txt" id="selected_subdomains_text_area" rows="10" spellcheck="false"></textarea>`);
 				for (subdomain in response['results']){
 					subdomain_obj = response['results'][subdomain];
 					subdomains += subdomain_obj + '\n'
 				}
 				$('#selected_subdomains_text_area').append(subdomains);
-				$("#modal_dialog .modal-footer").empty();
-				$("#modal_dialog .modal-footer").append(`<a href="javascript:download('subdomains-${domain_name}.txt', subdomains);" class="m-1 btn btn-dark copyable float-end btn-md"><i class="fe-download me-1"></i> Download Subdomains as txt</a>`);
-				$("#modal_dialog .modal-footer").append(`<a href="javascript:;" data-clipboard-action="copy" class="m-1 btn btn-primary copyable float-end btn-md" data-toggle="tooltip" data-placement="top" title="Copy Subdomains!" data-clipboard-target="#selected_subdomains_text_area"><i class="fe-copy me-1"></i> Copy Subdomains</a>`);
+				$("#modal-dialog-footer").empty();
+				$("#modal-dialog-footer").append(`<a href="javascript:download('subdomains-${domain_name}.txt', subdomains);" class="m-1 btn btn-dark copyable float-end btn-md"><i class="fe-download me-1"></i> Download Subdomains as txt</a>`);
+				$("#modal-dialog-footer").append(`<a href="javascript:;" data-clipboard-action="copy" class="m-1 btn btn-primary copyable float-end btn-md" data-toggle="tooltip" data-placement="top" title="Copy Subdomains!" data-clipboard-target="#selected_subdomains_text_area"><i class="fe-copy me-1"></i> Copy Subdomains</a>`);
 			}
 			else{
 				Swal.fire({
@@ -2065,10 +1987,9 @@ function deleteMultipleSubdomains(){
 
 
 function initiateMultipleSubscan(){
-		$('#subscan-modal').modal('show');
-		$('a[data-toggle="tooltip"]').tooltip("hide")
-		// to distinguish multiple subscan or single, put a extra attribute on button
 		$('#btn-initiate-subtask').attr('multiple-subscan', true);
+		$('a[data-toggle="tooltip"]').tooltip("hide");
+		if (window.ModalManager) ModalManager.showById(ModalManager.MODAL_IDS.SUBSCAN);
 }
 
 
@@ -2102,158 +2023,166 @@ $(document).on('click', '.detect_subdomain_cms_link', function(){
 });
 
 function show_port_screenshots(subdomain_id, subdomain_name, port, scan_id, domain_id = null) {
-	// Show loading modal
-	Swal.fire({
-		title: `Loading screenshots for ${subdomain_name}:${port}...`,
-		allowOutsideClick: false
-	});
-	Swal.showLoading();
-	
-	// Build API URL based on available parameters
 	let apiUrl = `/api/fetchScreenshots/?subdomain_id=${subdomain_id}&port=${port}`;
 	if (scan_id && scan_id !== 'null') {
 		apiUrl += `&scan_id=${scan_id}`;
 	} else if (domain_id) {
 		apiUrl += `&target_id=${domain_id}`;
 	} else {
-		Swal.close();
-		Swal.fire({
-			title: 'Error',
-			text: 'No scan or target information available',
-			icon: 'error'
-		});
+		if (window.ModalManager) {
+			ModalManager.showXl({ title: 'Error', bodyHtml: '<p class="text-danger">No scan or target information available</p>', footerHtml: '' });
+		} else {
+			Swal.fire({ title: 'Error', text: 'No scan or target information available', icon: 'error' });
+		}
 		return;
 	}
-	
-	// Fetch screenshots for this subdomain and port
+
+	const loadingTitle = `Loading screenshots for ${subdomain_name}:${port}...`;
+	const loadingBody = '<p class="text-muted">Loading...</p>';
+	if (window.ModalManager) {
+		ModalManager.setXlTitle(loadingTitle);
+		ModalManager.setXlLoading(loadingBody);
+		ModalManager.setXlContent({ footerHtml: '' });
+		if (!ModalManager.showXlOnly()) {
+			$('#xl-modal-title').html(loadingTitle);
+			$('#xl-modal-content').html(loadingBody);
+			$('#xl-modal-footer').html('');
+			ModalManager.showXlOnly();
+		}
+	} else {
+		Swal.fire({ title: loadingTitle, allowOutsideClick: false });
+		Swal.showLoading();
+	}
+
 	fetch(apiUrl)
-	.then(response => response.json())
-	.then(data => {
-		Swal.close();
-		
-		if (data && Object.keys(data).length > 0) {
-			// Create modal content with screenshots
+		.then(response => response.json())
+		.then(data => {
 			let modalContent = '';
 			let screenshotCount = 0;
-			
-			for (let key in data) {
-				const endpoint = data[key];
-				// Use the port from API response instead of checking URL
-				if (endpoint.screenshot_path && endpoint.port == port) {
-					screenshotCount++;
-					modalContent += `
+			if (data && Object.keys(data).length > 0) {
+				for (let key in data) {
+					const endpoint = data[key];
+					if (endpoint.screenshot_path && endpoint.port == port) {
+						screenshotCount++;
+						modalContent += `
 						<div class="mb-4 text-center">
 							<h6><a href="${endpoint.http_url}" target="_blank" class="text-primary">${endpoint.http_url}</a></h6>
 							<div class="d-flex justify-content-center">
-								<img src="/media/${endpoint.screenshot_path}" class="img-fluid rounded screenshot-popup" 
-									 style="max-width: 90%; max-height: 80vh; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.15);" 
+								<img src="/media/${endpoint.screenshot_path}" class="img-fluid rounded screenshot-popup"
+									 style="max-width: 90%; max-height: 80vh; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.15);"
 									 onclick="window.open('/media/${endpoint.screenshot_path}', '_blank')">
 							</div>
 						</div>
 					`;
+					}
 				}
 			}
-			
-			if (screenshotCount > 0) {
-				$('#xl-modal-title').html(`Screenshots for ${subdomain_name}:${port} (${screenshotCount})`);
-				$('#xl-modal-content').html(modalContent);
-				$('#xl-modal-footer').html('');
-				$('#modal_xl_scroll_dialog').modal('show');
+			const title = screenshotCount > 0
+				? `Screenshots for ${subdomain_name}:${port} (${screenshotCount})`
+				: 'No screenshots';
+			const bodyHtml = screenshotCount > 0
+				? modalContent
+				: `<p class="text-muted">No screenshots found for ${subdomain_name}:${port}</p>`;
+			if (window.ModalManager) {
+				ModalManager.setXlContent({ title, bodyHtml, footerHtml: '' });
 			} else {
-				Swal.fire({
-					title: 'No screenshots',
-					text: `No screenshots found for ${subdomain_name}:${port}`,
-					icon: 'info'
-				});
+				Swal.close();
+				if (screenshotCount > 0) {
+					$('#xl-modal-title').html(title);
+					$('#xl-modal-content').html(modalContent);
+					$('#xl-modal-footer').html('');
+					if (window.ModalManager) ModalManager.showXlOnly();
+				} else {
+					Swal.fire({ title: 'No screenshots', text: `No screenshots found for ${subdomain_name}:${port}`, icon: 'info' });
+				}
 			}
-		} else {
-			Swal.fire({
-				title: 'No screenshots',
-				text: `No screenshots found for ${subdomain_name}:${port}`,
-				icon: 'info'
-			});
-		}
-	})
-	.catch(error => {
-		Swal.close();
-		console.error('Error loading screenshots:', error);
-		Swal.fire({
-			title: 'Error',
-			text: 'Unable to load screenshots',
-			icon: 'error'
+		})
+		.catch(error => {
+			console.error('Error loading screenshots:', error);
+			const errBody = '<p class="text-danger">Unable to load screenshots</p>';
+			if (window.ModalManager) {
+				ModalManager.setXlContent({ title: 'Error', bodyHtml: errBody, footerHtml: '' });
+			} else {
+				Swal.close();
+				Swal.fire({ title: 'Error', text: 'Unable to load screenshots', icon: 'error' });
+			}
 		});
-	});
 }
 
 function show_subdomain_screenshots(subdomain_id, subdomain_name, scan_id) {
-	// Show loading modal
-	Swal.fire({
-		title: `Loading screenshots for ${subdomain_name}...`,
-		allowOutsideClick: false
-	});
-	Swal.showLoading();
-	
-	// Fetch screenshots for this subdomain
+	const loadingTitle = `Loading screenshots for ${subdomain_name}...`;
+	const loadingBody = '<p class="text-muted">Loading...</p>';
+	if (window.ModalManager) {
+		ModalManager.setXlTitle(loadingTitle);
+		ModalManager.setXlLoading(loadingBody);
+		ModalManager.setXlContent({ footerHtml: '' });
+		if (!ModalManager.showXlOnly()) {
+			$('#xl-modal-title').html(loadingTitle);
+			$('#xl-modal-content').html(loadingBody);
+			$('#xl-modal-footer').html('');
+			ModalManager.showXlOnly();
+		}
+	} else {
+		Swal.fire({ title: loadingTitle, allowOutsideClick: false });
+		Swal.showLoading();
+	}
+
 	fetch(`/api/fetchScreenshots/?scan_id=${scan_id}&subdomain_id=${subdomain_id}`)
-	.then(response => response.json())
-	.then(data => {
-		Swal.close();
-		
-		if (data && Object.keys(data).length > 0) {
-			// Create modal content with screenshots
+		.then(response => response.json())
+		.then(data => {
 			let modalContent = '';
 			let screenshotCount = 0;
-			
-			for (let key in data) {
-				const endpoint = data[key];
-				if (endpoint.screenshot_path) {
-					screenshotCount++;
-					const portDisplay = endpoint.port ? `:${endpoint.port}` : '';
-					modalContent += `
+			if (data && Object.keys(data).length > 0) {
+				for (let key in data) {
+					const endpoint = data[key];
+					if (endpoint.screenshot_path) {
+						screenshotCount++;
+						modalContent += `
 						<div class="mb-4 text-center">
 							<h6>
 								<a href="${endpoint.http_url}" target="_blank" class="text-primary">${endpoint.http_url}</a>
 								<span class="badge badge-soft-info ms-2">Port ${endpoint.port}</span>
 							</h6>
 							<div class="d-flex justify-content-center">
-								<img src="/media/${endpoint.screenshot_path}" class="img-fluid rounded screenshot-popup" 
-									 style="max-width: 90%; max-height: 80vh; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.15);" 
+								<img src="/media/${endpoint.screenshot_path}" class="img-fluid rounded screenshot-popup"
+									 style="max-width: 90%; max-height: 80vh; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.15);"
 									 onclick="window.open('/media/${endpoint.screenshot_path}', '_blank')">
 							</div>
 						</div>
 					`;
+					}
 				}
 			}
-			
-			if (screenshotCount > 0) {
-				$('#xl-modal-title').html(`Screenshots for ${subdomain_name} (${screenshotCount})`);
-				$('#xl-modal-content').html(modalContent);
-				$('#xl-modal-footer').html('');
-				$('#modal_xl_scroll_dialog').modal('show');
+			const title = screenshotCount > 0
+				? `Screenshots for ${subdomain_name} (${screenshotCount})`
+				: 'No screenshots';
+			const bodyHtml = screenshotCount > 0
+				? modalContent
+				: `<p class="text-muted">No screenshots found for ${subdomain_name}</p>`;
+			if (window.ModalManager) {
+				ModalManager.setXlContent({ title, bodyHtml, footerHtml: '' });
 			} else {
-				Swal.fire({
-					title: 'No screenshots',
-					text: `No screenshots found for ${subdomain_name}`,
-					icon: 'info'
-				});
+				Swal.close();
+				if (screenshotCount > 0) {
+					$('#xl-modal-title').html(title);
+					$('#xl-modal-content').html(modalContent);
+					$('#xl-modal-footer').html('');
+					if (window.ModalManager) ModalManager.showXlOnly();
+				} else {
+					Swal.fire({ title: 'No screenshots', text: `No screenshots found for ${subdomain_name}`, icon: 'info' });
+				}
 			}
-		} else {
-			Swal.fire({
-				title: 'No screenshots',
-				text: `No screenshots found for ${subdomain_name}`,
-				icon: 'info'
-			});
-		}
-	})
-	.catch(error => {
-		Swal.close();
-		console.error('Error loading screenshots:', error);
-		Swal.fire({
-			title: 'Error',
-			text: 'Unable to load screenshots',
-			icon: 'error'
+		})
+		.catch(error => {
+			console.error('Error loading screenshots:', error);
+			const errBody = '<p class="text-danger">Unable to load screenshots</p>';
+			if (window.ModalManager) {
+				ModalManager.setXlContent({ title: 'Error', bodyHtml: errBody, footerHtml: '' });
+			} else {
+				Swal.close();
+				Swal.fire({ title: 'Error', text: 'Unable to load screenshots', icon: 'error' });
+			}
 		});
-	});
 }
 
 

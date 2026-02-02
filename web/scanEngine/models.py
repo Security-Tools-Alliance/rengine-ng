@@ -1,6 +1,8 @@
 import logging
 
-from django.db import models
+from django.contrib.postgres.fields import ArrayField
+from django.core.exceptions import PermissionDenied, ValidationError
+from django.db import IntegrityError, models, transaction
 import yaml
 
 
@@ -101,7 +103,8 @@ class EngineType(models.Model):
         try:
             config = yaml.safe_load(self.yaml_configuration)
             return config if isinstance(config, dict) else {}
-        except Exception:
+        except yaml.YAMLError as e:
+            logger.warning("Failed to parse YAML configuration: %s", e, exc_info=True)
             return {}
 
     @HybridProperty
@@ -309,6 +312,12 @@ class SecatorWorkflow(models.Model):
         null=True,
         help_text="User-friendly display name for the workflow",
     )
+    tags = ArrayField(
+        models.CharField(max_length=50, blank=True),
+        default=list,
+        blank=True,
+        help_text="Secator workflow tags for filtering and grouping (e.g. http, recon, fuzz)",
+    )
 
     def get_display_name(self):
         """Return display_name if available, otherwise format name"""
@@ -327,7 +336,8 @@ class SecatorWorkflow(models.Model):
         try:
             config = yaml.safe_load(self.yaml_configuration)
             return config if isinstance(config, dict) else {}
-        except Exception:
+        except yaml.YAMLError as e:
+            logger.warning("Failed to parse YAML configuration: %s", e, exc_info=True)
             return {}
 
     def get_tasks(self):
@@ -363,9 +373,7 @@ class SecatorWorkflow(models.Model):
                     group_tasks = list(value.keys())
 
                 # Extract display name: remove "_group" prefix and any following "/" or ":"
-                display_name = key.replace("_group", "", 1).lstrip("/:").strip()
-                if not display_name:
-                    display_name = "tasks"
+                display_name = key.replace("_group", "", 1).lstrip("/:").strip() or "tasks"
 
                 structured.append({"type": "group", "name": key, "display_name": display_name, "tasks": group_tasks})
             else:
@@ -385,15 +393,7 @@ class SecatorWorkflow(models.Model):
             return self._precomputed_tasks_count
 
         structured = self.get_structured_tasks()
-        count = 0
-
-        for item in structured:
-            if item["type"] == "group":
-                count += len(item["tasks"])
-            else:
-                count += 1
-
-        return count
+        return sum(len(item["tasks"]) if item["type"] == "group" else 1 for item in structured)
 
     def can_modify(self):
         """Check if this workflow can be modified"""
@@ -411,26 +411,17 @@ class SecatorWorkflow(models.Model):
             return
 
         if self.pk is not None:
-            # This is an update operation
             try:
                 orig = SecatorWorkflow.objects.get(pk=self.pk)
                 if orig.workflow_type == "builtin":
-                    # Check if this is a bulk operation (admin actions)
-                    if kwargs.get("update_fields"):
-                        # For bulk operations, log the attempt but don't raise exception
-                        import logging
-
-                        logger = logging.getLogger(__name__)
-                        logger.warning(
-                            f"Attempted to modify built-in workflow '{self.name}' (ID: {self.pk}) - operation blocked"
-                        )
-                        return  # Skip the save operation silently
-                    else:
-                        # For regular operations, raise exception with clear message
-                        raise PermissionError("Built-in workflows cannot be modified!")
-            except SecatorWorkflow.DoesNotExist:
-                # If original doesn't exist, allow save (shouldn't happen in normal cases)
-                pass
+                    raise PermissionDenied("Built-in workflows cannot be modified!")
+            except SecatorWorkflow.DoesNotExist as e:
+                logger.error(
+                    "SecatorWorkflow pk=%s no longer exists in database; cannot check built-in constraint on save.",
+                    self.pk,
+                    exc_info=True,
+                )
+                raise e
         super().save(*args, **kwargs)
 
     def delete(self, *args, **kwargs):
@@ -441,7 +432,7 @@ class SecatorWorkflow(models.Model):
             return
 
         if self.workflow_type == "builtin":
-            raise PermissionError("Built-in workflows cannot be deleted!")
+            raise PermissionDenied("Built-in workflows cannot be deleted!")
         super().delete(*args, **kwargs)
 
     class Meta:
@@ -451,33 +442,14 @@ class SecatorWorkflow(models.Model):
 class SecatorTask(models.Model):
     """Secator individual task configuration"""
 
-    TASK_CATEGORY_CHOICES = [
-        ("url/fuzz/params", "URL/Fuzz/Params"),
-        ("vuln/scan", "Vulnerability Scan"),
-        ("url/bypass", "URL Bypass"),
-        ("url/crawl", "URL Crawl"),
-        ("url/fuzz", "URL Fuzz"),
-        ("dns/fuzz", "DNS Fuzz"),
-        ("ip/recon", "IP Recon"),
-        ("pattern/scan", "Pattern Scan"),
-        ("secret/scan", "Secret Scan"),
-        ("user/recon/email", "User Recon/Email"),
-        ("url/probe", "URL Probe"),
-        ("user/recon/username", "User Recon/Username"),
-        ("exploit/attack", "Exploit/Attack"),
-        ("port/scan", "Port Scan"),
-        ("exploit/recon", "Exploit/Recon"),
-        ("dns/recon", "DNS Recon"),
-        ("dns/recon/tls", "DNS Recon/TLS"),
-        ("waf/scan", "WAF Scan"),
-        ("vuln/scan/wordpress", "Vulnerability Scan/WordPress"),
-    ]
-
     id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=200, unique=True)
     task_type = models.CharField(max_length=100, help_text="Secator task type (e.g., subfinder, nuclei)")
-    category = models.CharField(
-        max_length=50, choices=TASK_CATEGORY_CHOICES, blank=True, null=True, help_text="Category of the task"
+    tags = ArrayField(
+        models.CharField(max_length=50, blank=True),
+        default=list,
+        blank=True,
+        help_text="Secator task tags for filtering and grouping (e.g. url, fuzz, dns)",
     )
     description = models.TextField(blank=True, null=True)
     is_builtin = models.BooleanField(default=True, help_text="Whether this is a built-in Secator task")
@@ -509,8 +481,10 @@ class SecatorTask(models.Model):
             try:
                 orig = SecatorTask.objects.get(pk=self.pk)
                 if orig.is_builtin:
-                    # Check if this is a bulk operation (admin actions)
-                    if kwargs.get("update_fields"):
+                    if not kwargs.get("update_fields"):
+                        # For regular operations, raise exception with clear message
+                        raise PermissionDenied("Built-in tasks cannot be modified!")
+                    else:
                         # For bulk operations, log the attempt but don't raise exception
                         import logging
 
@@ -519,12 +493,13 @@ class SecatorTask(models.Model):
                             f"Attempted to modify built-in task '{self.name}' (ID: {self.pk}) - operation blocked"
                         )
                         return  # Skip the save operation silently
-                    else:
-                        # For regular operations, raise exception with clear message
-                        raise PermissionError("Built-in tasks cannot be modified!")
-            except SecatorTask.DoesNotExist:
-                # If original doesn't exist, allow save (shouldn't happen in normal cases)
-                pass
+            except SecatorTask.DoesNotExist as e:
+                logger.error(
+                    "SecatorTask pk=%s no longer exists in database; cannot check built-in constraint on save.",
+                    self.pk,
+                    exc_info=True,
+                )
+                raise e
         super().save(*args, **kwargs)
 
     def delete(self, *args, **kwargs):
@@ -535,11 +510,28 @@ class SecatorTask(models.Model):
             return
 
         if self.is_builtin:
-            raise PermissionError("Built-in tasks cannot be deleted!")
+            raise PermissionDenied("Built-in tasks cannot be deleted!")
         super().delete(*args, **kwargs)
 
     class Meta:
-        ordering = ["category", "name"]
+        ordering = ["name"]
+
+
+class SecatorScanQuerySet(models.QuerySet):
+    """Custom queryset for SecatorScan with workflow filtering."""
+
+    def filter_by_workflow(self, workflow):
+        """Return scans whose YAML configuration references the given workflow (by alias or name)."""
+        identifiers = [x for x in [workflow.alias, workflow.name] if x]
+        if not identifiers:
+            return self.none()
+        return self.filter(workflow_identifiers__overlap=identifiers)
+
+
+class SecatorScanManager(models.Manager.from_queryset(SecatorScanQuerySet)):
+    """Manager for SecatorScan using SecatorScanQuerySet."""
+
+    pass
 
 
 class SecatorScan(models.Model):
@@ -565,6 +557,12 @@ class SecatorScan(models.Model):
         help_text="Type of scan configuration: built-in or custom",
     )
     yaml_configuration = models.TextField(default="")
+    workflow_identifiers = ArrayField(
+        models.CharField(max_length=255, blank=True),
+        default=list,
+        blank=True,
+        help_text="Denormalized list of workflow identifiers (aliases/names) from YAML for DB-side filtering.",
+    )
     is_default = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True, help_text="Whether this scan configuration is available for use")
     created_at = models.DateTimeField(auto_now_add=True)
@@ -575,6 +573,8 @@ class SecatorScan(models.Model):
         default="internet",
         help_text="Type of scan this configuration is designed for",
     )
+
+    objects = SecatorScanManager()
 
     def __str__(self):
         return f"{self.name} ({self.scan_config_type})"
@@ -587,13 +587,18 @@ class SecatorScan(models.Model):
         try:
             config = yaml.safe_load(self.yaml_configuration)
             return config if isinstance(config, dict) else {}
-        except Exception:
+        except yaml.YAMLError as e:
+            logger.warning("Failed to parse YAML configuration: %s", e, exc_info=True)
             return {}
 
     def get_workflows(self):
-        """Return list of workflows in this scan"""
+        """Return dict of workflows in this scan (from YAML)."""
         config = self._parse_yaml_config()
         return config.get("workflows", {})
+
+    def update_workflow_identifiers(self):
+        """Refresh workflow_identifiers from YAML so DB-side filtering works."""
+        self.workflow_identifiers = list(self.get_workflows().keys())
 
     def get_input_types(self):
         """Return list of input types for this scan"""
@@ -616,26 +621,18 @@ class SecatorScan(models.Model):
             return
 
         if self.pk is not None:
-            # This is an update operation
             try:
                 orig = SecatorScan.objects.get(pk=self.pk)
                 if orig.scan_config_type == "builtin":
-                    # Check if this is a bulk operation (admin actions)
-                    if kwargs.get("update_fields"):
-                        # For bulk operations, log the attempt but don't raise exception
-                        import logging
-
-                        logger = logging.getLogger(__name__)
-                        logger.warning(
-                            f"Attempted to modify built-in scan configuration '{self.name}' (ID: {self.pk}) - operation blocked"
-                        )
-                        return  # Skip the save operation silently
-                    else:
-                        # For regular operations, raise exception with clear message
-                        raise PermissionError("Built-in scan configurations cannot be modified!")
-            except SecatorScan.DoesNotExist:
-                # If original doesn't exist, allow save (shouldn't happen in normal cases)
-                pass
+                    raise PermissionDenied("Built-in scan configurations cannot be modified!")
+            except SecatorScan.DoesNotExist as e:
+                logger.error(
+                    "SecatorScan pk=%s no longer exists in database; cannot check built-in constraint on save.",
+                    self.pk,
+                    exc_info=True,
+                )
+                raise e
+        self.update_workflow_identifiers()
         super().save(*args, **kwargs)
 
     def delete(self, *args, **kwargs):
@@ -646,7 +643,7 @@ class SecatorScan(models.Model):
             return
 
         if self.scan_config_type == "builtin":
-            raise PermissionError("Built-in scan configurations cannot be deleted!")
+            raise PermissionDenied("Built-in scan configurations cannot be deleted!")
         super().delete(*args, **kwargs)
 
     class Meta:
@@ -734,38 +731,32 @@ class SecatorProfile(models.Model):
         """Override save to prevent modification of built-in profiles"""
         bypass_builtin = kwargs.pop("bypass_builtin_constraints", False)
 
-        if not bypass_builtin:
-            if self.pk is not None:
-                # This is an update operation
-                try:
-                    orig = SecatorProfile.objects.get(pk=self.pk)
-                    if orig.profile_type == "builtin":
-                        # Check if this is a bulk operation (admin actions)
-                        if kwargs.get("update_fields"):
-                            # For bulk operations, log the attempt but don't raise exception
-                            import logging
+        if not bypass_builtin and self.pk is not None:
+            try:
+                orig = SecatorProfile.objects.get(pk=self.pk)
+                if orig.profile_type == "builtin":
+                    raise PermissionDenied("Built-in profiles cannot be modified!")
+            except SecatorProfile.DoesNotExist as e:
+                logger.error(
+                    "SecatorProfile pk=%s no longer exists in database; cannot check built-in constraint on save.",
+                    self.pk,
+                    exc_info=True,
+                )
+                raise e
 
-                            logger = logging.getLogger(__name__)
-                            logger.warning(
-                                f"Attempted to modify built-in profile '{self.name}' (ID: {self.pk}) - operation blocked"
-                            )
-                            return  # Skip the save operation silently
-                        else:
-                            # For regular operations, raise exception with clear message
-                            raise PermissionError("Built-in profiles cannot be modified!")
-                except SecatorProfile.DoesNotExist:
-                    # If original doesn't exist, allow save (shouldn't happen in normal cases)
-                    pass
-
-        # Handle default uniqueness: if setting this profile as default,
-        # unset other defaults in the same category
-        # This must run for both builtin and custom profiles
-        if self.is_default:
-            SecatorProfile.objects.filter(category=self.category, is_default=True).exclude(
-                pk=self.pk if self.pk else None
-            ).update(is_default=False)
-
-        super().save(*args, **kwargs)
+        try:
+            with transaction.atomic():
+                if self.is_default:
+                    SecatorProfile.objects.filter(
+                        category=self.category,
+                        is_default=True,
+                    ).exclude(pk=self.pk or None).update(is_default=False)
+                super().save(*args, **kwargs)
+        except IntegrityError as exc:
+            raise ValidationError(
+                "Failed to save SecatorProfile: another profile is already marked as "
+                "default for this category. Please retry your request."
+            ) from exc
 
     def delete(self, *args, **kwargs):
         """Override delete to prevent deletion of built-in profiles"""
@@ -775,7 +766,7 @@ class SecatorProfile(models.Model):
             return
 
         if self.profile_type == "builtin":
-            raise PermissionError("Built-in profiles cannot be deleted!")
+            raise PermissionDenied("Built-in profiles cannot be deleted!")
         super().delete(*args, **kwargs)
 
     @classmethod
@@ -813,11 +804,9 @@ class SecatorProfile(models.Model):
 
         defaults_by_category = {row["category"]: row["name"] for row in qs}
 
-        # Build final mapping with fallback handling
-        result = {}
-        for category in categories:
-            result[category] = defaults_by_category.get(category, fallback_defaults.get(category, ""))
-        return result
+        return {
+            category: defaults_by_category.get(category, fallback_defaults.get(category, "")) for category in categories
+        }
 
     class Meta:
         ordering = ["profile_type", "category", "name"]

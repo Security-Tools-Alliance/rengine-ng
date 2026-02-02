@@ -58,6 +58,15 @@
                                             {{ workflow.workflow_type|title }}
                                         </span>
                                     </p>
+                                    <p><strong>Tags:</strong>
+                                        {% if workflow.tags %}
+                                        {% for tag in workflow.tags %}
+                                        <span class="badge badge-soft-secondary me-1">{{ tag }}</span>
+                                        {% endfor %}
+                                        {% else %}
+                                        <span class="text-muted">None</span>
+                                        {% endif %}
+                                    </p>
                                     <p><strong>Scan Type:</strong> {{ workflow.get_scan_type_display }}</p>
                                     <p><strong>Status:</strong> 
                                         <span class="badge badge-soft-{% if workflow.is_active %}success{% else %}danger{% endif %}">

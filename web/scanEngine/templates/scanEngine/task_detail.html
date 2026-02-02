@@ -41,10 +41,12 @@
                                             <td><code>{{ task.task_type }}</code></td>
                                         </tr>
                                         <tr>
-                                            <td><strong>Category:</strong></td>
+                                            <td><strong>Tags:</strong></td>
                                             <td>
-                                                {% if task.category %}
-                                                <span class="badge badge-secondary">{{ task.get_category_display }}</span>
+                                                {% if task.tags %}
+                                                {% for tag in task.tags %}
+                                                <span class="badge badge-secondary me-1">{{ tag }}</span>
+                                                {% endfor %}
                                                 {% else %}
                                                 <span class="text-muted">Not specified</span>
                                                 {% endif %}

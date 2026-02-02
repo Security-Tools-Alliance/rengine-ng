@@ -17,8 +17,8 @@ function escapeHtml(str) {
 }
 
 function checkall(clickchk, relChkbox) {
-	var checker = $('#' + clickchk);
-	var multichk = $('.' + relChkbox);
+	const checker = $('#' + clickchk);
+	const multichk = $('.' + relChkbox);
 	checker.click(function() {
 		multichk.prop('checked', $(this).prop('checked'));
 	});
@@ -26,7 +26,7 @@ function checkall(clickchk, relChkbox) {
 
 function multiCheck(tb_var) {
 	tb_var.on("change", ".chk-parent", function() {
-			var e = $(this).closest("table").find("td:first-child .child-chk"),
+			const e = $(this).closest("table").find("td:first-child .child-chk"),
 				a = $(this).is(":checked");
 			$(e).each(function() {
 				a ? ($(this).prop("checked", !0), $(this).closest("tr").addClass("active")) : ($(this).prop("checked", !1), $(this).closest("tr").removeClass("active"))
@@ -38,8 +38,8 @@ function multiCheck(tb_var) {
 }
 
 function GetIEVersion() {
-	var sAgent = window.navigator.userAgent;
-	var Idx = sAgent.indexOf("MSIE");
+	const sAgent = window.navigator.userAgent;
+	const Idx = sAgent.indexOf("MSIE");
 	// If IE, return version number.
 	if (Idx > 0) return parseInt(sAgent.substring(Idx + 5, sAgent.indexOf(".", Idx)));
 	// If IE 11 then look for Updated user agent string.
@@ -52,12 +52,12 @@ function truncate(str, n) {
 };
 
 function return_str_if_not_null(val) {
-	return val ? val : '';
+	return val || '';
 }
 // separate hostname and url
 // Referenced from https://stackoverflow.com/questions/736513/how-do-i-parse-a-url-into-hostname-and-path-in-javascript
 function getParsedURL(url) {
-	var parser = new URL(url);
+	const parser = new URL(url);
 	return parser.pathname + parser.search;
 };
 
@@ -93,11 +93,11 @@ function getCookie(name) {
  * Internal function to get cookie from document.cookie
  */
 function getCookieFromDocument(name) {
-	var cookieValue = null;
+	let cookieValue = null;
 	if (document.cookie && document.cookie !== '') {
-		var cookies = document.cookie.split(';');
-		for (var i = 0; i < cookies.length; i++) {
-			var cookie = jQuery.trim(cookies[i]);
+		const cookies = document.cookie.split(';');
+		for (let i = 0; i < cookies.length; i++) {
+			const cookie = cookies[i].trim();
 			// Does this cookie string begin with the name we want?
 			if (cookie.substring(0, name.length + 1) === (name + '=')) {
 				cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
@@ -113,7 +113,7 @@ function getCookieFromDocument(name) {
  * This ensures all AJAX requests automatically include the CSRF token
  */
 function setupCSRFToken() {
-	var csrftoken = getCSRFToken();
+	const csrftoken = getCSRFToken();
 	
 	// Setup for jQuery AJAX requests
 	if (typeof $ !== 'undefined' && $.ajaxSetup) {
@@ -136,11 +136,8 @@ function setupCSRFToken() {
 			
 			// Add CSRF token for non-safe methods
 			const method = (options.method || 'GET').toUpperCase();
-			if (!csrfSafeMethod(method) && !isExternalUrl(url)) {
-				// Only add CSRF token if not already present
-				if (!options.headers['X-CSRFToken'] && !options.headers['X-Csrftoken']) {
-					options.headers['X-CSRFToken'] = csrftoken;
-				}
+			if (!csrfSafeMethod(method) && !isExternalUrl(url) && !options.headers['X-CSRFToken'] && !options.headers['X-Csrftoken']) {
+				options.headers['X-CSRFToken'] = csrftoken;
 			}
 			
 			// Ensure credentials are included for same-origin requests
@@ -322,27 +319,30 @@ function change_vuln_status(endpoint_url) {
 // Souce: https://stackoverflow.com/a/52395960
 function split_into_lines(str, maxWidth) {
 	const newLineStr = "</br>";
-	done = false;
-	res = '';
+	let remaining = str;
+	let done = false;
+	let res = '';
+	let found;
+	let i;
 	do {
 		found = false;
 		// Inserts new line at first whitespace of the line
 		for (i = maxWidth - 1; i >= 0; i--) {
-			if (test_white_space(str.charAt(i))) {
-				res = res + [str.slice(0, i), newLineStr].join('');
-				str = str.slice(i + 1);
+			if (test_white_space(remaining.charAt(i))) {
+				res += [remaining.slice(0, i), newLineStr].join('');
+				remaining = remaining.slice(i + 1);
 				found = true;
 				break;
 			}
 		}
 		// Inserts new line at maxWidth position, the word is too long to wrap
 		if (!found) {
-			res += [str.slice(0, maxWidth), newLineStr].join('');
-			str = str.slice(maxWidth);
+			res += [remaining.slice(0, maxWidth), newLineStr].join('');
+			remaining = remaining.slice(maxWidth);
 		}
-		if (str.length < maxWidth) done = true;
+		if (remaining.length < maxWidth) done = true;
 	} while (!done);
-	return res + str;
+	return res + remaining;
 }
 
 function test_white_space(x) {
@@ -352,8 +352,8 @@ function test_white_space(x) {
 // span values function will separate the values by comma and put badge around it
 function parse_comma_values_into_span(data, color, outline = null) {
 	if (data) {
-		var badge = `<span class='badge badge-soft-` + color + ` m-1'>`;
-		var data_with_span = "";
+		const badge = `<span class='badge badge-soft-` + color + ` m-1'>`;
+		let data_with_span = "";
 		data.split(/\s*,\s*/).forEach(function(split_vals) {
 			data_with_span += badge + split_vals + "</span>";
 		});
@@ -388,7 +388,7 @@ function get_severity_badge(severity) {
 // Source: https://stackoverflow.com/a/54733055
 function typingEffect(words, id, i) {
 	let word = words[i].split("");
-	var loopTyping = function() {
+	const loopTyping = function() {
 		if (word.length > 0) {
 			let elem = document.getElementById(id);
 			elem.setAttribute('placeholder', elem.getAttribute('placeholder') + word.shift());
@@ -403,17 +403,13 @@ function typingEffect(words, id, i) {
 
 function deletingEffect(words, id, i) {
 	let word = words[i].split("");
-	var loopDeleting = function() {
+	const loopDeleting = function() {
 		if (word.length > 0) {
 			word.pop();
 			document.getElementById(id).setAttribute('placeholder', word.join(""));
 		} else {
-			if (words.length > (i + 1)) {
-				i++;
-			} else {
-				i = 0;
-			};
-			typingEffect(words, id, i);
+			const nextIndex = words.length > (i + 1) ? i + 1 : 0;
+			typingEffect(words, id, nextIndex);
 			return false;
 		};
 		timer = setTimeout(loopDeleting, 90);
@@ -517,11 +513,11 @@ function hide_all_tooltips() {
 
 function get_response_time_text(response_time) {
 	if (response_time) {
-		var text_color = 'danger';
+		let text_color = 'danger';
 		if (response_time < 0.5) {
-			text_color = 'success'
+			text_color = 'success';
 		} else if (response_time >= 0.5 && response_time < 1) {
-			text_color = 'warning'
+			text_color = 'warning';
 		}
 		return `<span class="text-${text_color}">${response_time.toFixed(4)}s</span>`;
 	}
@@ -529,9 +525,9 @@ function get_response_time_text(response_time) {
 }
 
 function parse_technology(endpoint_url, data, color, scan_id = null, domain_id=null, link=true) {
-	var badge = `<span data-toggle="tooltip" title="Technology" class='badge-link badge badge-soft-` + color + ` mt-1 me-1'`;
-	var data_with_span = "";
-	for (var key in data) {
+	const badge = `<span data-toggle="tooltip" title="Technology" class='badge-link badge badge-soft-` + color + ` mt-1 me-1'`;
+	let data_with_span = "";
+	for (let key in data) {
 		let onclick = '';
 		let tooltip = `Technology: ${data[key]['name']}`;
 		if (data[key]['value']) {
@@ -549,12 +545,10 @@ function parse_technology(endpoint_url, data, color, scan_id = null, domain_id=n
 }
 // span values function will separate the values by comma and put badge around it
 function parse_ip(data, cdn) {
-	if (cdn) {
-		var badge = `<span class='badge badge-soft-warning m-1 bs-tooltip' title="CDN IP Address">`;
-	} else {
-		var badge = `<span class='badge badge-soft-primary m-1'>`;
-	}
-	var data_with_span = "";
+	const badge = cdn
+		? `<span class='badge badge-soft-warning m-1 bs-tooltip' title="CDN IP Address">`
+		: `<span class='badge badge-soft-primary m-1'>`;
+	let data_with_span = "";
 	data.split(/\s*,\s*/).forEach(function(split_vals) {
 		data_with_span += badge + split_vals + "</span>";
 	});
@@ -566,7 +560,7 @@ function removeImageElement(element) {
 }
 // https://stackoverflow.com/a/18197341/9338140
 function download(filename, text) {
-	var element = document.createElement('a');
+	const element = document.createElement('a');
 	element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text));
 	element.setAttribute('download', filename);
 	element.style.display = 'none';
@@ -629,10 +623,10 @@ $('#select_all_checkbox').on('click', function() {
 });
 
 $("#vulnerability_results").on('click', '.btn-delete-vulnerability', function () {
-	var vulnerability_id = $(this).attr('id');
-	var data = {'vulnerability_ids': [vulnerability_id]};
-	var endpoint_url = $(this).attr('data-url');
-	var row = this;
+	const vulnerability_id = $(this).attr('id');
+	const data = {'vulnerability_ids': [vulnerability_id]};
+	const endpoint_url = $(this).attr('data-url');
+	const row = this;
 	Swal.fire({
 		showCancelButton: true,
 		title: 'Delete Vulnerability!',
@@ -681,13 +675,13 @@ $("#vulnerability_results").on('click', '.btn-delete-vulnerability', function ()
 
 $("#bulk_delete_vulnerabilities").on('click', function () {
 	//btn-delete-vulnerability contains vuln id to delete
-	var vulnerabilities = $('.vulnerability_checkbox:checked').parents("tr").find('.btn-delete-vulnerability')
-	var vulnerabilities_ids = Array();
-	var endpoint_url = $(this).attr('data-url');
+	const vulnerabilities = $('.vulnerability_checkbox:checked').parents("tr").find('.btn-delete-vulnerability')
+	const vulnerabilities_ids = Array();
+	const endpoint_url = $(this).attr('data-url');
 	Array.from(vulnerabilities).forEach(vuln => {
 		vulnerabilities_ids.push($(vuln).attr('id'));
 	});		
-	var data = {'vulnerability_ids': vulnerabilities_ids};
+	const data = {'vulnerability_ids': vulnerabilities_ids};
 	Swal.fire({
 		showCancelButton: true,
 		title: 'Bulk Delete Vulnerabilities!',
@@ -803,6 +797,7 @@ function report_hackerone(endpoint_url, vulnerability_id, severity) {
 }
 
 function get_interesting_subdomains(endpoint_url, project, target_id, scan_history_id) {
+	let url;
 	if (target_id) {
 		url = `${endpoint_url}?project=${project}&target_id=${target_id}&format=datatables`;
 		non_orderable_targets = [0, 1, 2, 3];
@@ -810,7 +805,7 @@ function get_interesting_subdomains(endpoint_url, project, target_id, scan_histo
 		url = `${endpoint_url}?project=${project}&scan_id=${scan_history_id}&format=datatables`;
 		non_orderable_targets = [];
 	}
-	var interesting_subdomain_table = $('#interesting_subdomains').DataTable({
+	const interesting_subdomain_table = $('#interesting_subdomains').DataTable({
 		"drawCallback": function(settings, start, end, max, total, pre) {
 			// if no interesting subdomains are found, hide the datatable and show no interesting subdomains found badge
 			if (this.fnSettings().fnRecordsTotal() == 0) {
@@ -855,7 +850,7 @@ function get_interesting_subdomains(endpoint_url, project, target_id, scan_histo
 			[3, "desc"]
 		],
 		"lengthMenu": [[50, 100, 200, 500, -1], [50, 100, 200, 500, 'All']],
-		"pageLength": 50,
+		"pageLength": 100,
 		"columns": [{
 			'data': 'name'
 		}, {
@@ -885,7 +880,7 @@ function get_interesting_subdomains(endpoint_url, project, target_id, scan_histo
 			"targets": [2]
 		}, {
 			"render": function(data, type, row) {
-				tech_badge = '';
+				let tech_badge = '';
 				if (row['technologies']) {
 					// tech_badge = `</br>` + parse_technology( endpoint_url, row['technologies'], "primary", outline=true, scan_id=null);
 				}
@@ -915,7 +910,8 @@ function get_interesting_subdomains(endpoint_url, project, target_id, scan_histo
 }
 
 function get_interesting_endpoints(endpoint_url, project, target_id, scan_history_id) {
-	var non_orderable_targets = [];
+	const non_orderable_targets = [];
+	let url;
 	if (target_id) {
 		url = `${endpoint_url}/?project=${project}&target_id=${target_id}&format=datatables`;
 		// non_orderable_targets = [0, 1, 2, 3];
@@ -972,7 +968,7 @@ function get_interesting_endpoints(endpoint_url, project, target_id, scan_histor
 			"targets": [2]
 		}, {
 			"render": function(data, type, row) {
-				var url = split_into_lines(data, 70);
+				const url = split_into_lines(data, 70);
 				return "<a href='" + data + "' target='_blank' class='text-primary'>" + url + "</a>";
 			},
 			"targets": 0
@@ -1003,7 +999,7 @@ function get_interesting_endpoints(endpoint_url, project, target_id, scan_histor
 }
 
 function get_important_subdomains(endpoint_url, target_id, scan_history_id) {
-	var url = `${endpoint_url}?only_important&no_lookup_interesting&format=json`;
+	let url = `${endpoint_url}?only_important&no_lookup_interesting&format=json`;
 	if (target_id) {
 		url += `&target_id=${target_id}`;
 	} else if (scan_history_id) {
@@ -1014,7 +1010,7 @@ function get_important_subdomains(endpoint_url, target_id, scan_history_id) {
 		$('#important-subdomains-list').empty();
 		if (data['subdomains'].length > 0) {
 			$('#important-count').html(`<span class="badge badge-soft-primary ms-1 me-1">${data['subdomains'].length}</span>`);
-			for (var val in data['subdomains']) {
+			for (let val in data['subdomains']) {
 				subdomain = data['subdomains'][val];
 				div_id = 'important_' + subdomain['id'];
 				$("#important-subdomains-list").append(`
@@ -1049,7 +1045,7 @@ function mark_important_subdomain(url, row, subdomain_id) {
 		}
 	}
 
-	var data = {'subdomain_id': subdomain_id}
+	const data = {'subdomain_id': subdomain_id}
 
 	if ($("#important_subdomain_" + subdomain_id).length == 0) {
 		$("#subdomain-" + subdomain_id).prepend(`<span id="important_subdomain_${subdomain_id}"></span>`);
@@ -1104,10 +1100,10 @@ function delete_scan(url) {
 function stop_scan(url, scan_id=null, subscan_id=null, reload_scan_bar=true, reload_location=false) {
 
 	if (scan_id) {
-		var data = {'scan_id': scan_id}
+		const data = {'scan_id': scan_id}
 	}
 	else if (subscan_id) {
-		var data = {'subscan_id': subscan_id}
+		const data = {'subscan_id': subscan_id}
 	}
 	swal.queue([{
 		title: 'Are you sure you want to stop this scan?',
@@ -1185,7 +1181,7 @@ function stop_activity(url, activity_id=null, reload_scan_bar=true, reload_locat
 		return;
 	}
 
-	var data = {'activity_id': activity_id}
+	const data = {'activity_id': activity_id}
 	swal.queue([{
 		title: 'Are you sure you want to stop this activity?',
 		text: "You won't be able to revert this!",
@@ -1236,7 +1232,7 @@ function stop_activity(url, activity_id=null, reload_scan_bar=true, reload_locat
 }
 
 function extractContent(s) {
-	var span = document.createElement('span');
+	const span = document.createElement('span');
 	span.innerHTML = s;
 	return span.textContent || span.innerText;
 };
@@ -1248,8 +1244,8 @@ function delete_datatable_rows(table_id, rows_id, show_snackbar = true, snackbar
 	//     rows id will always follow this pattern: datatable_id_row_n
 	// show_snackbar = bool => whether to show snackbar or not!
 	// snackbar_title: str => snackbar title if show_snackbar = True
-	var table = $(table_id).DataTable();
-	for (var row in rows_id) {
+	const table = $(table_id).DataTable();
+	for (let row in rows_id) {
 		table.row(table_id + '_row_' + rows_id[row]).remove().draw();
 	}
 	Snackbar.show({
@@ -1264,7 +1260,7 @@ function delete_datatable_rows(table_id, rows_id, show_snackbar = true, snackbar
 function delete_subscan(endpoint_url,subscan_id) {
 	// This function will delete the sunscans using rest api
 	// Supported method: POST
-	var data = {
+	const data = {
 		'type': 'subscan',
 		'rows': [subscan_id]
 	}
@@ -1304,7 +1300,7 @@ function delete_subscan(endpoint_url,subscan_id) {
 function show_subscan_results(endpoint_url, subscan_id) {
 	// This function will popup a modal and show the subscan results
 	// modal being used is from base
-	var api_url = endpoint_url + '?format=json&subscan_id=' + subscan_id;
+	const api_url = endpoint_url + '?format=json&subscan_id=' + subscan_id;
 	Swal.fire({
 		title: 'Fetching Results...'
 	});
@@ -1327,21 +1323,26 @@ function show_subscan_results(endpoint_url, subscan_id) {
 		$('#xl-modal-title').empty();
 		$('#xl-modal-content').empty();
 		$('#xl-modal-footer').empty();
-		var task_name = '';
-		if (response['subscan']['task'] == 'port_scan') {
-			task_name = 'Port Scan';
-		} else if (response['subscan']['task'] == 'vulnerability_scan') {
-			task_name = 'Vulnerability Scan';
-		} else if (response['subscan']['task'] == 'fetch_url') {
-			task_name = 'Fetch URLs';
-		} else if (response['subscan']['task'] == 'dir_file_fuzz') {
-			task_name = 'Directory and Files Fuzzing';
-		}
+		const taskDisplayNames = {
+			port_scan: 'Port Scan',
+			naabu: 'Naabu',
+			vulnerability_scan: 'Vulnerability Scan',
+			nuclei: 'Nuclei',
+			fetch_url: 'Fetch URLs',
+			httpx: 'Httpx',
+			dir_file_fuzz: 'Directory and Files Fuzzing',
+			subdomain_discovery: 'Subdomain Discovery',
+			subfinder: 'Subfinder',
+			dnsx: 'Dnsx',
+			screenshot: 'Screenshot'
+		};
+		const task = response['subscan']['task'] || response['subscan']['type'] || '';
+		const task_name = taskDisplayNames[task] || (task ? task.charAt(0).toUpperCase() + task.slice(1) : 'Task');
 		$('#xl-modal-title').html(`${task_name} Results on ${response['subscan']['subdomain_name']}`);
-		var scan_status = '';
-		var badge_color = 'danger';
+		let scan_status = '';
+		let badge_color = 'danger';
 		if (response['subscan']['status'] == 1) {
-			var badge_color = 'info';
+			badge_color = 'info';
 			scan_status = 'Running';
 		}
 		else if (response['subscan']['status'] == 0) {
@@ -1358,19 +1359,25 @@ function show_subscan_results(endpoint_url, subscan_id) {
 			scan_status = 'Unknown';
 		}
 		$('#xl-modal-content').append(`<div>Scan Status: <span class="badge bg-${badge_color}">${scan_status}</span></div>`);
-		$('#xl-modal-content').append(`<div class="mt-1">Engine Used: <span class="badge bg-primary">${htmlEncode(response['subscan']['engine'])}</span></div>`);
+		const engineLabel = response['subscan']['engine'] ? htmlEncode(response['subscan']['engine']) : '—';
+		$('#xl-modal-content').append(`<div class="mt-1">Engine Used: <span class="badge bg-primary">${engineLabel}</span></div>`);
+		const resultTask = response['subscan']['task'] || response['subscan']['type'];
+		const isPortScanResult = resultTask === 'port_scan' || resultTask === 'naabu';
+		const isVulnResult = resultTask === 'vulnerability_scan' || resultTask === 'nuclei';
+		const isEndpointResult = resultTask === 'fetch_url' || resultTask === 'httpx';
+		const isDirFuzzResult = resultTask === 'dir_file_fuzz';
 		if (response['result'].length > 0) {
-			if (response['subscan']['task'] == 'port_scan') {
+			if (isPortScanResult) {
 				$('#xl-modal-content').append(`<div id="port_results_li"></div>`);
-				for (var ip in response['result']) {
-					var ip_addr = response['result'][ip]['address'];
-					var underscore_ip = ip_addr.replaceAll('.', '_');
-					var id_name = `ip_${underscore_ip}`;
+				for (let ip in response['result']) {
+					const ip_addr = response['result'][ip]['address'];
+					const underscore_ip = ip_addr.replaceAll('.', '_');
+					const id_name = `ip_${underscore_ip}`;
 					$('#port_results_li').append(`<h5>IP Address: ${ip_addr}</br></br>${response['result'][ip]['ports'].length} Ports Open</h5>`);
 					$('#port_results_li').append(`<ul id="${id_name}"></ul>`);
-					for (var port_obj in response['result'][ip]['ports']) {
-						var port = response['result'][ip]['ports'][port_obj];
-						var port_color = 'primary';
+					for (let port_obj in response['result'][ip]['ports']) {
+						const port = response['result'][ip]['ports'][port_obj];
+						let port_color = 'primary';
 						if (port["is_uncommon"]) {
 							port_color = 'danger';
 						}
@@ -1378,11 +1385,11 @@ function show_subscan_results(endpoint_url, subscan_id) {
 					}
 				}
 				$('#xl-modal-footer').append(`<span class="text-danger">* Uncommon Ports</span>`);
-			} else if (response['subscan']['task'] == 'vulnerability_scan') {
+			} else if (isVulnResult) {
 				render_vulnerability_in_xl_modal(vuln_count = response['result'].length, subdomain_name = response['subscan']['subdomain_name'], result = response['result']);
-			} else if (response['subscan']['task'] == 'fetch_url') {
+			} else if (isEndpointResult) {
 				render_endpoint_in_xl_modal(endpoint_count = response['result'].length, subdomain_name = response['subscan']['subdomain_name'], result = response['result']);
-			} else if (response['subscan']['task'] == 'dir_file_fuzz') {
+			} else if (isDirFuzzResult) {
 				if (response['result'][0]['directory_files'].length == 0) {
 					$('#xl-modal-content').append(`
 						<div class="alert alert-info mt-2" role="alert">
@@ -1394,13 +1401,16 @@ function show_subscan_results(endpoint_url, subscan_id) {
 				}
 			}
 		} else {
+			const noResultsMsg = (response['subscan']['status'] === 2)
+				? `${task_name} completed with no findings.`
+				: `${task_name} could not fetch any results.`;
 			$('#xl-modal-content').append(`
 				<div class="alert alert-info mt-2" role="alert">
-				<i class="mdi mdi-alert-circle-outline me-2"></i> ${task_name} could not fetch any results.
+				<i class="mdi mdi-alert-circle-outline me-2"></i> ${noResultsMsg}
 				</div>
 				`);
 		}
-		$('#modal_xl_scroll_dialog').modal('show');
+		if (window.ModalManager) ModalManager.showXlOnly();
 		$("body").tooltip({
 			selector: '[data-toggle=tooltip]'
 		});
@@ -1422,6 +1432,8 @@ function get_http_status_badge(data) {
 function render_endpoint_in_xl_modal(endpoint_count, subdomain_name, result) {
 	// This function renders endpoints datatable in xl modal
 	// Used in Subscan results and subdomain to endpoints modal
+	// Clear loading state so "Loading..." is not shown with the content
+	$('#xl-modal-content').empty();
 	$('#xl-modal-content').append(`<h5> ${endpoint_count} Endpoints Discovered on subdomain ${subdomain_name}</h5>`);
 	$('#xl-modal-content').append(`
 		<div class="">
@@ -1443,20 +1455,20 @@ function render_endpoint_in_xl_modal(endpoint_count, subdomain_name, result) {
 		</div>
 	`);
 	$('#endpoint_tbody').empty();
-	for (var endpoint_obj in result) {
-		var endpoint = result[endpoint_obj];
-		var tech_badge = '';
-		var web_server = '';
+	for (let endpoint_obj in result) {
+		const endpoint = result[endpoint_obj];
+		let tech_badge = '';
+		let web_server = '';
 		if (endpoint['techs']) {
 			tech_badge = '<div>' + parse_technology('', endpoint['techs'], "primary", true, false, false);
 		}
 		if (endpoint['webserver']) {
 			web_server = `<span class='m-1 badge badge-soft-info' data-toggle="tooltip" data-placement="top" title="Web Server">${endpoint['webserver']}</span>`;
 		}
-		var url = split_into_lines(endpoint['http_url'], 70);
-		var rand_id = get_randid();
+		const url = split_into_lines(endpoint['http_url'], 70);
+		const rand_id = get_randid();
 		tech_badge += web_server + '</div>';
-		var http_url_td = "<a href='" + endpoint['http_url'] + `' target='_blank' class='text-primary'>` + url + "</a>" + tech_badge;
+		const http_url_td = "<a href='" + endpoint['http_url'] + `' target='_blank' class='text-primary'>` + url + "</a>" + tech_badge;
 		$('#endpoint_tbody').append(`
 			<tr>
 			<td>${http_url_td}</td>
@@ -1492,6 +1504,7 @@ function render_endpoint_in_xl_modal(endpoint_count, subdomain_name, result) {
 
 function render_vulnerability_in_xl_modal(endpoint_url, vuln_count, subdomain_name, result) {
 	// This function will render the vulnerability datatable in xl modal
+	$('#xl-modal-content').empty();
 	$('#xl-modal-content').append(`<h5> ${vuln_count} Vulnerabilities Discovered on subdomain ${subdomain_name}</h5>`);
 	$('#xl-modal-content').append(`<ol id="vuln_results_ol" class="list-group list-group-numbered"></ol>`);
 	$('#xl-modal-content').append(`
@@ -1514,11 +1527,13 @@ function render_vulnerability_in_xl_modal(endpoint_url, vuln_count, subdomain_na
 		</div>
 		`);
 	$('#vuln_tbody').empty();
-	for (var vuln in result) {
-		var vuln_obj = result[vuln];
-		var vuln_type = vuln_obj['type'] ? `<span class="badge badge-soft-primary">&nbsp;&nbsp;${vuln_obj['type'].toUpperCase()}&nbsp;&nbsp;</span>` : '';
-		var tags = '';
-		var cvss_metrics_badge = '';
+	for (let vuln in result) {
+		const vuln_obj = result[vuln];
+		const vuln_type = vuln_obj['type'] ? `<span class="badge badge-soft-primary">&nbsp;&nbsp;${vuln_obj['type'].toUpperCase()}&nbsp;&nbsp;</span>` : '';
+		let tags = '';
+		let cvss_metrics_badge = '';
+		let color;
+		let badge_color;
 		switch (vuln_obj['severity']) {
 			case 'Info':
 				color = 'primary'
@@ -1552,9 +1567,9 @@ function render_vulnerability_in_xl_modal(endpoint_url, vuln_count, subdomain_na
 		if (vuln_obj['cvss_metrics']) {
 			cvss_metrics_badge = `<div><span class="badge badge-outline-primary my-1" data-toggle="tooltip" data-placement="top" title="CVSS Metrics">${vuln_obj['cvss_metrics']}</span></div>`;
 		}
-		var vuln_title = `<b class="text-${color}">` + vuln_obj['name'] + `</b>` + cvss_metrics_badge + tags;
-		var badge = 'danger';
-		var cvss_score = '';
+		const vuln_title = `<b class="text-${color}">` + vuln_obj['name'] + `</b>` + cvss_metrics_badge + tags;
+		let badge = 'danger';
+		let cvss_score = '';
 		if (vuln_obj['cvss_score']) {
 			if (vuln_obj['cvss_score'] > 0.1 && vuln_obj['cvss_score'] <= 3.9) {
 				badge = 'info';
@@ -1565,7 +1580,7 @@ function render_vulnerability_in_xl_modal(endpoint_url, vuln_count, subdomain_na
 			}
 			cvss_score = `<span class="badge badge-outline-${badge}" data-toggle="tooltip" data-placement="top" title="CVSS Score">${vuln_obj['cvss_score']}</span>`;
 		}
-		var cve_cwe_badge = '<div>';
+		let cve_cwe_badge = '<div>';
 		if (vuln_obj['cve_ids']) {
 			vuln_obj['cve_ids'].forEach(cve => {
 				cve_cwe_badge += `<a href="https://google.com/search?q=${cve.name.toUpperCase()}" target="_blank" class="badge badge-outline-primary me-1 mt-1" data-toggle="tooltip" data-placement="top" title="CVE ID">${cve.name.toUpperCase()}</a>`;
@@ -1577,8 +1592,8 @@ function render_vulnerability_in_xl_modal(endpoint_url, vuln_count, subdomain_na
 			});
 		}
 		cve_cwe_badge += '</div>';
-		var http_url = vuln_obj['http_url'].includes('http') ? "<a href='" + htmlEncode(vuln_obj['http_url']) + "' target='_blank' class='text-danger'>" + htmlEncode(vuln_obj['http_url']) + "</a>" : vuln_obj['http_url'];
-		var action_icon = vuln_obj['hackerone_report_id'] ? '' : `
+		const http_url = vuln_obj['http_url'].includes('http') ? "<a href='" + htmlEncode(vuln_obj['http_url']) + "' target='_blank' class='text-danger'>" + htmlEncode(vuln_obj['http_url']) + "</a>" : vuln_obj['http_url'];
+		const action_icon = vuln_obj['hackerone_report_id'] ? '' : `
 		<div class="btn-group mb-2 dropstart">
 		<a href="#" class="text-dark dropdown-toggle float-end" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
 		<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-more-horizontal"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg>
@@ -1621,6 +1636,7 @@ function render_vulnerability_in_xl_modal(endpoint_url, vuln_count, subdomain_na
 }
 
 function render_directories_in_xl_modal(directory_count, subdomain_name, result) {
+	$('#xl-modal-content').empty();
 	$('#xl-modal-content').append(`<h5> ${directory_count} Directories Discovered on subdomain ${subdomain_name}</h5>`);
 	$('#xl-modal-content').append(`
 		<div class="">
@@ -1641,9 +1657,9 @@ function render_directories_in_xl_modal(directory_count, subdomain_name, result)
 		</div>
 	`);
 	$('#directory_tbody').empty();
-	for (var dir_obj in result) {
-		var dir = result[dir_obj];
-		var base_url = new URL(dir.url).origin;
+	for (let dir_obj in result) {
+		const dir = result[dir_obj];
+		const base_url = new URL(dir.url).origin;
 		$('#directory_tbody').append(`
 			<tr>
 			<td><a href="${base_url}" target="_blank">${base_url}</a></td>
@@ -1655,8 +1671,8 @@ function render_directories_in_xl_modal(directory_count, subdomain_name, result)
 			</tr>
 		`);
 	}
-	var interesting_keywords_array = [];
-	var dir_modal_table = $("#directory-modal-datatable").DataTable({
+	const interesting_keywords_array = [];
+	const dir_modal_table = $("#directory-modal-datatable").DataTable({
 		"oLanguage": {
 			"oPaginate": {
 				"sPrevious": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-left"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>',
@@ -1690,91 +1706,88 @@ function render_directories_in_xl_modal(directory_count, subdomain_name, result)
 
 
 function get_and_render_subscan_history(endpoint, subdomain_id, subdomain_name) {
-	// This function displays the subscan history in a modal for any particular subdomain
-	var data = {
-		'subdomain_id': subdomain_id
-	};
-
+	const payload = { subdomain_id: subdomain_id };
 	fetch(endpoint + '?format=json', {
 		method: 'POST',
-		credentials: "same-origin",
-		body: JSON.stringify(data),
+		credentials: 'same-origin',
+		body: JSON.stringify(payload),
 		headers: {
-			"X-CSRFToken": getCookie("csrftoken"),
-			"Content-Type": 'application/json',
+			'X-CSRFToken': getCookie('csrftoken'),
+			'Content-Type': 'application/json'
 		}
-	}).then(function(response) {
-		return response.json();
-	}).then(function(data) {
-		if (data['status']) {
-			$('#modal_dialog .modal-title').html('Subscan History for subdomain ' + subdomain_name);
-			$('#modal_dialog .modal-text').empty();
-			$('#modal_dialog .modal-text').append(`<div id="subscan_history_table"></div>`);
+	}).then(function (response) { return response.json(); }).then(function (data) {
+		if (!data.status) return;
+		const title = 'Subscan History for subdomain ' + subdomain_name;
+		let cardsHtml = '';
+		const results = data.results || [];
+		for (let i = 0; i < results.length; i++) {
+			const result_obj = results[i];
+			const status = result_obj.effective_status !== undefined && result_obj.effective_status !== null
+				? result_obj.effective_status : result_obj.status;
+			const task_name = typeof get_task_name === 'function' ? get_task_name(result_obj) : (result_obj.formatted_task_name || result_obj.type || 'Unknown');
+			const subdomain_label = result_obj.subdomain_name != null && result_obj.subdomain_name !== '' ? result_obj.subdomain_name : '—';
+			const engine_label = result_obj.engine != null && result_obj.engine !== '' ? result_obj.engine : '—';
+			const hasCompletedAgo = result_obj.completed_ago != null && result_obj.completed_ago !== '';
+			const hasTimeTaken = result_obj.time_taken != null && result_obj.time_taken !== '';
+			const completed_ago = hasCompletedAgo ? result_obj.completed_ago : null;
+			const time_taken = hasTimeTaken ? result_obj.time_taken : null;
+			const errMsg = result_obj.error_message != null && result_obj.error_message !== ''
+				? `</br><span class="text-danger">Error: ${result_obj.error_message}</span>` : '';
 
-			$('#subscan_history_table').empty();
-
-			for (var result in data['results']) {
-
-				var result_obj = data['results'][result];
-				var error_message = '';
-				var task_name = result_obj.type;
-
-				if (result_obj.status == 0) {
-					color = 'danger';
-					bg_color = 'bg-soft-danger';
-					status_badge = '<span class="float-end badge bg-danger">Failed</span>';
-					error_message = `</br><span class="text-danger">Error: ${result_obj.error_message}`;
-				} else if (result_obj.status == 3) {
-					color = 'danger';
-					bg_color = 'bg-soft-danger';
-					status_badge = '<span class="float-end badge bg-danger">Aborted</span>';
-				} else if (result_obj.status == 2) {
-					color = 'success';
-					bg_color = 'bg-soft-success';
-					status_badge = '<span class="float-end badge bg-success">Task Completed</span>';
-				} else if (result_obj.status == 1) {
-					color = 'primary';
-					bg_color = 'bg-soft-primary';
-					status_badge = '<span class="float-end badge bg-primary">Running</span>';
-				} else if (result_obj.status == 4) {
-					color = 'info';
-					bg_color = 'bg-soft-info';
-					status_badge = '<span class="float-end badge bg-info">Finalizing</span>';
-				}
-
-				$('#subscan_history_table').append(`
-					<div class="card border-${color} border mini-card">
-					<a href="#" class="text-reset item-hovered" onclick="show_subscan_results(${data['endpoint']}, ${result_obj['id']})">
-					<div class="card-header ${bg_color} text-${color} mini-card-header">
-					${task_name} on <b>${result_obj.subdomain_name}</b> using engine <b>${htmlEncode(result_obj.engine)}</b>
-					</div>
-					<div class="card-body mini-card-body">
-					<p class="card-text">
-					${status_badge}
-					<span class="">
-					Task Completed ${result_obj.completed_ago} ago
-					</span>
-					Took ${result_obj.time_taken}
-					${error_message}
-					</p>
-					</div>
-					</a>
-					</div>
-					`);
+			let color = 'secondary';
+			let bg_color = 'bg-soft-secondary';
+			let status_badge = '<span class="float-end badge bg-secondary">—</span>';
+			if (status === 0) {
+				color = 'danger';
+				bg_color = 'bg-soft-danger';
+				status_badge = '<span class="float-end badge bg-danger">Failed</span>';
+			} else if (status === 3) {
+				color = 'danger';
+				bg_color = 'bg-soft-danger';
+				status_badge = '<span class="float-end badge bg-danger">Aborted</span>';
+			} else if (status === 2) {
+				color = 'success';
+				bg_color = 'bg-soft-success';
+				status_badge = '<span class="float-end badge bg-success">Task Completed</span>';
+			} else if (status === 1) {
+				color = 'primary';
+				bg_color = 'bg-soft-primary';
+				status_badge = '<span class="float-end badge bg-primary">Running</span>';
+			} else if (status === 4) {
+				color = 'info';
+				bg_color = 'bg-soft-info';
+				status_badge = '<span class="float-end badge bg-info">Finalizing</span>';
 			}
-
-
-			$('#modal_dialog').modal('show');
+			let statusLine;
+			if (status === 1 || status === 4) {
+				statusLine = 'In progress';
+			} else if (status === 2 && completed_ago && time_taken) {
+				statusLine = 'Task Completed ' + completed_ago + ' ago — Took ' + time_taken;
+			} else if (status === 2 && completed_ago) {
+				statusLine = 'Task Completed ' + completed_ago + ' ago';
+			} else if (status === 2 && time_taken) {
+				statusLine = 'Took ' + time_taken;
+			} else if (completed_ago) {
+				statusLine = 'Task Completed ' + completed_ago + ' ago';
+			} else if (time_taken) {
+				statusLine = 'Took ' + time_taken;
+			} else {
+				statusLine = '—';
+			}
+			const safeEngine = typeof htmlEncode === 'function' ? htmlEncode(engine_label) : engine_label;
+			cardsHtml += `<div class="card border-${color} border mini-card"><a href="#" class="text-reset item-hovered" onclick="show_subscan_results('${(endpoint || '').replace(/'/g, "\\'")}', ${result_obj.id})"><div class="card-header ${bg_color} text-${color} mini-card-header">${task_name} on <b>${subdomain_label}</b> using engine <b>${safeEngine}</b></div><div class="card-body mini-card-body"><p class="card-text">${status_badge}<span class="">${statusLine}</span>${errMsg}</p></div></a></div>`;
 		}
+		const bodyHtml = `<div id="subscan_history_table">${cardsHtml}</div>`;
+		if (window.ModalManager) ModalManager.showDialog({ title, bodyHtml, footerHtml: '' });
 	});
 }
 
 function fetch_whois(endpoint_url, domain_name, force_reload_whois=false) {
 	// this function will fetch WHOIS record for any subdomain and also display
 	// snackbar once whois is fetched
-	var url = `${endpoint_url}?format=json&ip_domain=${domain_name}`;
+	let url = `${endpoint_url}?format=json&ip_domain=${domain_name}`;
 	if (force_reload_whois) {
-		url+='&is_reload=true'
+		url += '&is_reload=true';
 	}
 	$('[data-toggle="tooltip"]').tooltip('hide');
 	Snackbar.show({
@@ -1792,7 +1805,7 @@ function fetch_whois(endpoint_url, domain_name, force_reload_whois=false) {
 			document.getElementById('ip_geolocation').innerHTML = response['domain']['geolocation'];
 
 			document.getElementById('registrant_name').innerHTML = response['registrant']['name'];
-			document.getElementById('registrant_organization').innerHTML = response['registrant']['organization'] ? response['registrant']['organization'] : ' ';
+			document.getElementById('registrant_organization').innerHTML = response['registrant']['organization'] || ' ';
 			document.getElementById('registrant_address').innerHTML = response['registrant']['address'] + ' ' + response['registrant']['city'] + ' ' + response['registrant']['state'] + ' ' + response['registrant']['country'];
 			document.getElementById('registrant_phone_numbers').innerHTML = response['registrant']['tel'];
 			document.getElementById('registrant_fax').innerHTML = response['registrant']['fax'];
@@ -1815,7 +1828,7 @@ function fetch_whois(endpoint_url, domain_name, force_reload_whois=false) {
 }
 
 function get_target_whois(endpoint_url, domain_name) {
-	var url = `${endpoint_url}?format=json&ip_domain=${domain_name}`
+	const url = `${endpoint_url}?format=json&ip_domain=${domain_name}`
 	Swal.fire({
 		title: `Fetching WHOIS details for ${domain_name}...`
 	});
@@ -1858,11 +1871,11 @@ function get_target_whois(endpoint_url, domain_name) {
 function get_domain_whois(whoisLookupUrl, domain_name, addTargetUrl, project_slug, show_add_target_btn=false) {
 	// this function will get whois for domains that are not targets, this will
 	// not store whois into db nor create target
-	var url = `${whoisLookupUrl}?format=json&ip_domain=${domain_name}`
+	const url = `${whoisLookupUrl}?format=json&ip_domain=${domain_name}`
 	Swal.fire({
 		title: `Fetching WHOIS details for ${domain_name}...`
 	});
-	$('.modal').modal('hide');
+	ModalManager.hide(ModalManager.MODAL_IDS.DIALOG);
 	swal.showLoading();
 	fetch(url, {
 		method: 'GET',
@@ -1874,7 +1887,7 @@ function get_domain_whois(whoisLookupUrl, domain_name, addTargetUrl, project_slu
 	}).then(response => response.json()).then(function(response) {
 		swal.close();
 		if (response.status) {
-			display_whois_on_modal(response, addTargetUrl, project_slug, show_add_target_btn=show_add_target_btn);
+			display_whois_on_modal(response, addTargetUrl, project_slug, show_add_target_btn);
 		} else {
 			Swal.fire({
 				title: 'Oops!',
@@ -1887,7 +1900,7 @@ function get_domain_whois(whoisLookupUrl, domain_name, addTargetUrl, project_slu
 
 function display_whois_on_modal(response, addTargetUrl, project_slug, show_add_target_btn=false) {
 	// this function will display whois data on modal, should be followed after get_domain_whois()
-	$('#whoisLookupResultModal').modal('show');
+	if (window.ModalManager) ModalManager.showById(ModalManager.MODAL_IDS.WHOIS_LOOKUP_RESULT);
 	$('#whoisLookupResultModal .modal-body').empty();
 	$("#whoisLookupResultModal .modal-footer").empty();
 
@@ -1957,8 +1970,8 @@ function display_whois_on_modal(response, addTargetUrl, project_slug, show_add_t
 					</div>
 				</div>`;
 
-				for (var status in response.status) {
-					var status_object = response.status[status];
+				for (let status in response.status) {
+					const status_object = response.status[status];
 					if (status_object.includes('prohibited')) {
 						content += `<span class="badge badge-soft-danger me-1 mt-1">${status_object}</span>`;
 					}
@@ -2113,19 +2126,19 @@ function display_whois_on_modal(response, addTargetUrl, project_slug, show_add_t
 				content += `
 				<div class="tab-pane fade tab-pane-300" id="v-pills-dns" role="tabpanel" aria-labelledby="v-pills-dns-tab" data-simplebar>
 					<h4>A Records</h4>`;
-					for (var a in response.dns.a) {
-						var a_object = response.dns.a[a];
+					for (let a in response.dns.a) {
+						const a_object = response.dns.a[a];
 						content += `<span class="badge badge-soft-primary me-1 mt-1">${a_object}</span>`;
 					}
 					content += `<h4>MX Records</h4>`;
 
-					for (var mx in response.dns.mx) {
-						var mx_object = response.dns.mx[mx];
+					for (let mx in response.dns.mx) {
+						const mx_object = response.dns.mx[mx];
 						content += `<span class="badge badge-soft-primary me-1 mt-1">${mx_object}</span>`;
 					}
 					content += `<h4>TXT Records</h4>`;
-					for (var txt in response.dns.txt) {
-						var txt_object = response.dns.txt[txt];
+					for (let txt in response.dns.txt) {
+						const txt_object = response.dns.txt[txt];
 						content += `<span class="badge badge-soft-secondary me-1 mt-1">${txt_object}</span>`;
 					}
 					content += `</div>`;
@@ -2143,8 +2156,8 @@ function display_whois_on_modal(response, addTargetUrl, project_slug, show_add_t
 							</thead>
 							<tbody>`;
 
-							for (var ip in response.historical_ips) {
-								var ip_object = response.historical_ips[ip];
+							for (let ip in response.historical_ips) {
+								const ip_object = response.historical_ips[ip];
 								content += `<tr>
 									<td><b>${ip_object.ip}</b></td>
 									<td>${ip_object.location}</td>
@@ -2163,8 +2176,8 @@ function display_whois_on_modal(response, addTargetUrl, project_slug, show_add_t
 					if (response.nameservers && response.nameservers.length > 0) {
 						content += `<div class="alert alert-success">${response.nameservers.length} NameServers identified</div>`;
 					
-						for (var ns in response.nameservers) {
-							var ns_object = response.nameservers[ns];
+						for (let ns in response.nameservers) {
+							const ns_object = response.nameservers[ns];
 							content += `<span class="badge badge-soft-primary me-1 mt-1">${ns_object}</span>`;
 						}
 					} else {
@@ -2174,15 +2187,15 @@ function display_whois_on_modal(response, addTargetUrl, project_slug, show_add_t
 					content += `</div><div class="tab-pane fade tab-pane-300-scroll" id="v-pills-similar" role="tabpanel" aria-labelledby="v-pills-similar-tab" data-simplebar>`;
 
 					if (response.related_tlds.length > 0) {
-						for (var domain in response.related_tlds) {
-							var dom_object = response.related_tlds[domain];
+						for (let domain in response.related_tlds) {
+							const dom_object = response.related_tlds[domain];
 							// Generate unique ID for secure event handling
-							var badgeId = `tld-badge-${Math.random().toString(36).substr(2, 9)}`;
+							const badgeId = `tld-badge-${Math.random().toString(36).substr(2, 9)}`;
 							content += `<span id="${badgeId}" class="badge badge-soft-primary badge-link waves-effect waves-light me-1" data-toggle="tooltip" title="Add ${escapeHtml(dom_object)} as target." data-add-url="${escapeHtml(addTargetUrl)}" data-project="${escapeHtml(project_slug)}" data-domain="${escapeHtml(dom_object)}">${escapeHtml(dom_object)}</span>`;
 							
 							// Add secure event listener after DOM insertion
 							setTimeout(function() {
-								var badgeElement = document.getElementById(badgeId);
+								const badgeElement = document.getElementById(badgeId);
 								if (badgeElement) {
 									badgeElement.addEventListener('click', function() {
 										add_target(this.dataset.addUrl, this.dataset.project, this.dataset.domain);
@@ -2200,15 +2213,15 @@ function display_whois_on_modal(response, addTargetUrl, project_slug, show_add_t
 					content += `<div class="tab-pane fade tab-pane-300-scroll" id="v-pills-related" role="tabpanel" aria-labelledby="v-pills-related-tab" data-simplebar>`;
 
 					if (response.related_domains.length > 0) {
-						for (var domain in response.related_domains) {
-							var dom_object = response.related_domains[domain];
+						for (let domain in response.related_domains) {
+							const dom_object = response.related_domains[domain];
 							// Generate unique ID for secure event handling
-							var relatedBadgeId = `related-badge-${Math.random().toString(36).substr(2, 9)}`;
+							const relatedBadgeId = `related-badge-${Math.random().toString(36).substr(2, 9)}`;
 							content += `<span id="${relatedBadgeId}" class="badge badge-soft-primary badge-link waves-effect waves-light me-1" data-toggle="tooltip" title="Add ${escapeHtml(dom_object)} as target." data-add-url="${escapeHtml(addTargetUrl)}" data-project="${escapeHtml(project_slug)}" data-domain="${escapeHtml(dom_object)}">${escapeHtml(dom_object)}</span>`;
 							
 							// Add secure event listener after DOM insertion
 							setTimeout(function() {
-								var relatedBadgeElement = document.getElementById(relatedBadgeId);
+								const relatedBadgeElement = document.getElementById(relatedBadgeId);
 								if (relatedBadgeElement) {
 									relatedBadgeElement.addEventListener('click', function() {
 										add_target(this.dataset.addUrl, this.dataset.project, this.dataset.domain);
@@ -2242,19 +2255,19 @@ function display_whois_on_modal(response, addTargetUrl, project_slug, show_add_t
 }
 
 function show_quick_add_target_modal() {
-	$('#addTargetModal').modal('show');
+	if (window.ModalManager) ModalManager.showById(ModalManager.MODAL_IDS.ADD_TARGET);
 }
 
 $(document).on('click', '#add_target_modal', function(){
 	// this function will be a onclick for add target button on add_target modal
-	$('#addTargetModal').modal('hide');
-	var endpoint_url = $(this).data('url');
-	var current_slug = $(this).data('slug');
-	var domain_name = $('#target_name_modal').val();
-	var description = $('#target_description_modal').val();
-	var h1_handle = $('#h1_handle_modal').val();
-	var organization = $('#target_organization_modal').val();
-	add_target(endpoint_url, current_slug, domain_name, h1_handle = h1_handle, description = description, organization = organization);
+	if (window.ModalManager) ModalManager.hide(ModalManager.MODAL_IDS.ADD_TARGET);
+	const endpoint_url = $(this).data('url');
+	const current_slug = $(this).data('slug');
+	const domain_name = $('#target_name_modal').val();
+	const description = $('#target_description_modal').val();
+	const h1_handle = $('#h1_handle_modal').val();
+	const organization = $('#target_organization_modal').val();
+	add_target(endpoint_url, current_slug, domain_name, h1_handle, description, organization);
 });
 
 
@@ -2320,16 +2333,12 @@ function add_target(endpoint_url, current_slug, domain_name, h1_handle = null, d
 
 function loadSubscanHistoryWidget(endpoint, scan_history_id = null, domain_id = null) {
 	// This function will load the subscan history widget
+	let data = {};
 	if (scan_history_id) {
-		var data = {
-			'scan_history_id': scan_history_id
-		}
+		data = { 'scan_history_id': scan_history_id };
 	}
-
 	if (domain_id) {
-		var data = {
-			'domain_id': domain_id
-		}
+		data = { 'domain_id': domain_id };
 	}
 
 	fetch(endpoint + '?format=json', {
@@ -2344,51 +2353,78 @@ function loadSubscanHistoryWidget(endpoint, scan_history_id = null, domain_id = 
 		return response.json();
 	}).then(function(data) {
 		$('#subscan_history_widget').empty();
-		if (data['status']) {
-			$('#sub_scan_history_count').append(`
-				<span class="badge badge-soft-primary me-1">${data['results'].length}</span>
-			`)
-			for (var result in data['results']) {
-				var error_message = '';
-				var result_obj = data['results'][result];
-				var task_name = get_task_name(result_obj);
-				if (result_obj.status == 0) {
+		$('#sub_scan_history_count').empty();
+		if (data['status'] && Array.isArray(data['results']) && data['results'].length > 0) {
+			$('#sub_scan_history_count').append(
+				`<span class="badge badge-soft-primary me-1">${data['results'].length}</span>`
+			);
+			for (let result in data['results']) {
+				const result_obj = data['results'][result];
+				const status = result_obj.effective_status !== undefined && result_obj.effective_status !== null
+					? result_obj.effective_status : result_obj.status;
+				const task_name = get_task_name(result_obj);
+				const subdomain_label = result_obj.subdomain_name != null && result_obj.subdomain_name !== ''
+					? result_obj.subdomain_name : '—';
+				const hasCompletedAgo = result_obj.completed_ago != null && result_obj.completed_ago !== '';
+				const hasTimeTaken = result_obj.time_taken != null && result_obj.time_taken !== '';
+				const completed_ago = hasCompletedAgo ? result_obj.completed_ago : null;
+				const time_taken = hasTimeTaken ? result_obj.time_taken : null;
+				const errMsg = result_obj.error_message != null && result_obj.error_message !== ''
+					? `</br><span class="text-danger">Error: ${result_obj.error_message}</span>` : '';
+
+				let color = 'secondary';
+				let bg_color = 'bg-soft-secondary';
+				let status_badge = '<span class="float-end badge bg-secondary">—</span>';
+				if (status === 0) {
 					color = 'danger';
 					bg_color = 'bg-soft-danger';
 					status_badge = '<span class="float-end badge bg-danger">Failed</span>';
-					error_message = `</br><span class="text-danger">Error: ${result_obj.error_message}`;
-				} else if (result_obj.status == 3) {
+				} else if (status === 3) {
 					color = 'danger';
 					bg_color = 'bg-soft-danger';
 					status_badge = '<span class="float-end badge bg-danger">Aborted</span>';
-				} else if (result_obj.status == 2) {
+				} else if (status === 2) {
 					color = 'success';
 					bg_color = 'bg-soft-success';
 					status_badge = '<span class="float-end badge bg-success">Task Completed</span>';
-				} else if (result_obj.status == 1) {
+				} else if (status === 1) {
 					color = 'primary';
 					bg_color = 'bg-soft-primary';
 					status_badge = '<span class="float-end badge bg-primary">Running</span>';
-				} else if (result_obj.status == 4) {
+				} else if (status === 4) {
 					color = 'info';
 					bg_color = 'bg-soft-info';
 					status_badge = '<span class="float-end badge bg-info">Finalizing</span>';
+				}
+
+				let statusLine;
+				if (status === 1 || status === 4) {
+					statusLine = 'In progress';
+				} else if (status === 2 && completed_ago && time_taken) {
+					statusLine = 'Task Completed ' + completed_ago + ' ago — Took ' + time_taken;
+				} else if (status === 2 && completed_ago) {
+					statusLine = 'Task Completed ' + completed_ago + ' ago';
+				} else if (status === 2 && time_taken) {
+					statusLine = 'Took ' + time_taken;
+				} else if (completed_ago) {
+					statusLine = 'Task Completed ' + completed_ago + ' ago';
+				} else if (time_taken) {
+					statusLine = 'Took ' + time_taken;
+				} else {
+					statusLine = '—';
 				}
 
 				$('#subscan_history_widget').append(`
 					<div class="card border-${color} border mini-card">
 					<a href="#" class="text-reset item-hovered" onclick="show_subscan_results(${result_obj['id']})">
 					<div class="card-header ${bg_color} text-${color} mini-card-header">
-					${task_name} on <b>${result_obj.subdomain_name}</b>
+					${task_name} on <b>${subdomain_label}</b>
 					</div>
 					<div class="card-body mini-card-body">
 					<p class="card-text">
 					${status_badge}
-					<span class="">
-					Task Completed ${result_obj.completed_ago} ago
-					</span>
-					Took ${result_obj.time_taken}
-					${error_message}
+					<span class="">${statusLine}</span>
+					${errMsg}
 					</p>
 					</div>
 					</a>
@@ -2396,9 +2432,9 @@ function loadSubscanHistoryWidget(endpoint, scan_history_id = null, domain_id = 
 					`);
 			}
 		} else {
-			$('#sub_scan_history_count').append(`
-					<span class="badge badge-soft-primary me-1">0</span>
-				`)
+			$('#sub_scan_history_count').append(
+				'<span class="badge badge-soft-primary me-1">0</span>'
+			);
 			$('#subscan_history_widget').append(`
 					<div class="alert alert-warning alert-dismissible fade show mt-2" role="alert">
 					<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
@@ -2411,7 +2447,7 @@ function loadSubscanHistoryWidget(endpoint, scan_history_id = null, domain_id = 
 
 function get_technologies(endpoint_url, subdomain_endpoint_url, scan_id=null, domain_id=null){
 	// this function will fetch and render tech in widget
-	var url = `${endpoint_url}?`;
+	let url = `${endpoint_url}?`;
 
 	if (scan_id) {
 		url += `scan_id=${scan_id}`;
@@ -2425,7 +2461,7 @@ function get_technologies(endpoint_url, subdomain_endpoint_url, scan_id=null, do
 
 	$.getJSON(url, function(data) {
 		$('#technologies-count').empty();
-		for (var val in data['technologies']){
+		for (let val in data['technologies']){
 			tech = data['technologies'][val]
 			if (scan_id) {
 				$("#technologies").append(`<span class='badge badge-soft-primary  m-1 badge-link' data-toggle="tooltip" title="${tech['count']} Subdomains use this technology." onclick="get_tech_details('${subdomain_endpoint_url}', '${tech['name']}', scan_id=${scan_id}, domain_id=null)">${tech['name']}</span>`);
@@ -2441,7 +2477,7 @@ function get_technologies(endpoint_url, subdomain_endpoint_url, scan_id=null, do
 
 function get_tech_details(endpoint_subdomain_url, tech, scan_id=null, domain_id=null){
 
-	var url = `${endpoint_subdomain_url}?tech=${tech}`;
+	let url = `${endpoint_subdomain_url}?tech=${tech}`;
 
 	if (scan_id) {
 		url += `&scan_id=${scan_id}`;
@@ -2452,46 +2488,47 @@ function get_tech_details(endpoint_subdomain_url, tech, scan_id=null, domain_id=
 
 	url += `&format=json`;
 
-	var interesting_badge = `<span class="m-1 badge  badge-soft-danger bs-tooltip" title="Interesting Subdomain">Interesting</span>`;
-	// render tab modal
-	$('#modal_dialog .modal-title').html('Details for Technology: <b>' + tech + '</b>');
-	$('#modal_dialog').modal('show');
+	const safeTech = typeof htmlEncode === 'function' ? htmlEncode(tech) : tech;
+	const titleHtml = 'Details for Technology: <b>' + safeTech + '</b>';
+	const loaderHtml = '<div class="outer-div" id="modal-loader"><span class="inner-div spinner-border text-primary align-self-center loader-sm"></span></div>';
+	if (window.ModalManager) {
+		ModalManager.showDialog({ title: titleHtml, bodyHtml: loaderHtml, footerHtml: '' });
+	} else {
+		$('#modal-dialog-title').html(titleHtml);
+		$('#modal-dialog-body').html(loaderHtml);
+		$('#modal-dialog-footer').empty();
+		$('#modal-dialog').modal('show');
+	}
 
-	$('#modal_dialog .modal-text').empty();
-	$('#modal_dialog .modal-footer').empty();
-	$('#modal_dialog .modal-text').append(`<div class='outer-div' id="modal-loader"><span class="inner-div spinner-border text-primary align-self-center loader-sm"></span></div>`);
-	// query subdomains
 	$.getJSON(url, function(data) {
-		$('#modal_dialog #modal-loader').empty();
-		$('#modal_dialog .modal-text').empty();
-		$('#modal_dialog .modal-text').append(`${data['subdomains'].length} Subdomains are using ${tech}`);
-		const subdomainList = $('<ul></ul>');
-		for (subdomain in data['subdomains']){
-			subdomain_obj = data['subdomains'][subdomain];
-			badge_color = subdomain_obj['http_status'] >= 400 ? 'danger' : '';
-			li_id = get_randid();
+		const interesting_badge = '<span class="m-1 badge badge-soft-danger bs-tooltip" title="Interesting Subdomain">Interesting</span>';
+		const subdomains = data['subdomains'] || [];
+		let listHtml = '';
+		for (let i = 0; i < subdomains.length; i++) {
+			const subdomain_obj = subdomains[i];
+			const badge_color = subdomain_obj['http_status'] >= 400 ? 'danger' : '';
+			const li_id = get_randid();
+			const safeName = typeof htmlEncode === 'function' ? htmlEncode(subdomain_obj['name']) : subdomain_obj['name'];
+			let liContent = '';
 			if (subdomain_obj['http_url']) {
-				subdomainList.append(`<li id="${li_id}"><a href='${subdomain_obj['http_url']}' target="_blank" class="text-${badge_color}">${subdomain_obj['name']}</a></li>`)
+				liContent = `<a href="${subdomain_obj['http_url'].replace(/"/g, '&quot;')}" target="_blank" class="text-${badge_color}">${safeName}</a>`;
+			} else {
+				liContent = `<span class="text-${badge_color}">${safeName}</span>`;
 			}
-			else {
-				subdomainList.append(`<li class="text-${badge_color}" id="${li_id}">${subdomain_obj['name']}</li>`);
-			}
-
 			if (subdomain_obj['http_status']) {
-				$("#"+li_id).append(get_http_badge(subdomain_obj['http_status']));
-				$('.bs-tooltip').tooltip();
+				const badge = get_http_badge(subdomain_obj['http_status']);
+				liContent += badge || '';
 			}
-
 			if (subdomain_obj['is_interesting']) {
-				$("#"+li_id).append(interesting_badge)
+				liContent += interesting_badge;
 			}
-
+			listHtml += `<li id="${li_id}">${liContent}</li>`;
 		}
-		$("#modal_dialog .modal-text").append(subdomainList);
-		$("#modal_dialog .modal-text").append(`<span class="float-end text-danger">*Subdomains highlighted are 40X HTTP Status</span>`);
-		$("#subdomain-modal-loader").remove();
+		const bodyHtml = `${subdomains.length} Subdomains are using ${safeTech}<div class="modal-text"><ul>${listHtml}</ul><span class="float-end text-danger">*Subdomains highlighted are 40X HTTP Status</span></div>`;
+		$('#modal-dialog-body').html(bodyHtml);
+		$('.bs-tooltip').tooltip();
 	}).fail(function(){
-		$('#modal_dialog #modal-loader').empty();
+		$('#modal-dialog-body').html('');
 	});
 }
 
@@ -2518,7 +2555,7 @@ function get_http_badge(http_status){
 
 
 function get_and_render_cve_details(endpoint_url, cve_id){
-	var api_url = `${endpoint_url}?cve_id=${cve_id}&format=json`;
+	const api_url = `${endpoint_url}?cve_id=${cve_id}&format=json`;
 	Swal.fire({
 		title: 'Fetching CVE Details...'
 	});
@@ -2538,7 +2575,7 @@ function get_and_render_cve_details(endpoint_url, cve_id){
 			$('#xl-modal-footer').empty();
 			$('#xl-modal-title').text(`CVE Details of ${cve_id}`);
 
-			var cvss_score_badge = 'danger';
+			const cvss_score_badge = 'danger';
 
 			if (response.result.cvss > 0.1 && response.result.cvss <= 3.9) {
 				cvss_score_badge = 'info';
@@ -2574,37 +2611,37 @@ function get_and_render_cve_details(endpoint_url, cve_id){
 						</tr>
 						<tr>
 							<td>CVSS Score</td>
-							<td><span class="badge badge-soft-${cvss_score_badge}">${response.result.cvss ? response.result.cvss: "-"}</span></td>
+							<td><span class="badge badge-soft-${cvss_score_badge}">${response.result.cvss || "-"}</span></td>
 						</tr>
 						<tr>
 							<td>Confidentiality Impact</td>
-							<td>${response.result.impact.confidentiality ? response.result.impact.confidentiality: "N/A"}</td>
+							<td>${response.result.impact.confidentiality || "N/A"}</td>
 						</tr>
 						<tr>
 							<td>Integrity Impact</td>
-							<td>${response.result.impact.integrity ? response.result.impact.integrity: "N/A"}</td>
+							<td>${response.result.impact.integrity || "N/A"}</td>
 						</tr>
 						<tr>
 							<td>Availability Impact</td>
-							<td>${response.result.impact.availability ? response.result.impact.availability: "N/A"}</td>
+							<td>${response.result.impact.availability || "N/A"}</td>
 						</tr>
 						<tr>
 							<td>Access Complexity</td>
-							<td>${response.result.access.complexity ? response.result.access.complexity: "N/A"}</td>
+							<td>${response.result.access.complexity || "N/A"}</td>
 						</tr>
 						<tr>
 							<td>Authentication</td>
-							<td>${response.result.access.authentication ? response.result.access.authentication: "N/A"}</td>
+							<td>${response.result.access.authentication || "N/A"}</td>
 						</tr>
 						<tr>
 							<td>CWE ID</td>
-							<td><span class="badge badge-outline-danger">${response.result.cwe ? response.result.cwe: "N/A"}</span></td>
+							<td><span class="badge badge-outline-danger">${response.result.cwe || "N/A"}</span></td>
 						</tr>
 					</table>
 				</div>
 				`;
 
-				let references = response.result.references;
+				let { references } = response.result;
 
 				// Check if references is a string representation of an array
 				if (typeof references === 'string' && references.startsWith('[') && references.endsWith(']')) {
@@ -2631,7 +2668,7 @@ function get_and_render_cve_details(endpoint_url, cve_id){
 				content += `<div class="tab-pane fade tab-pane-600-scroll" id="v-pills-affected-products" role="tabpanel" aria-labelledby="v-pills-affected-products-tab" data-simplebar>
 				<ul>`;
 
-				for (var prod in response.result.vulnerable_product) {
+				for (let prod in response.result.vulnerable_product) {
 					content += `<li>${response.result.vulnerable_product[prod]}</li>`;
 				}
 
@@ -2640,7 +2677,7 @@ function get_and_render_cve_details(endpoint_url, cve_id){
 				content += `<div class="tab-pane fade tab-pane-600-scroll" id="v-pills-affected-versions" role="tabpanel" aria-labelledby="v-pills-affected-versions-tab" data-simplebar>
 				<ul>`;
 
-				for (var conf in response.result.vulnerable_configuration) {
+				for (let conf in response.result.vulnerable_configuration) {
 					content += `<li>${response.result.vulnerable_configuration[conf]['id']}</li>`;
 				}
 
@@ -2650,7 +2687,7 @@ function get_and_render_cve_details(endpoint_url, cve_id){
 
 			$('#xl-modal-content').append(content);
 
-			$('#modal_xl_scroll_dialog').modal('show');
+			if (window.ModalManager) ModalManager.showXlOnly();
 			$("body").tooltip({
 				selector: '[data-toggle=tooltip]'
 			});
@@ -2667,7 +2704,7 @@ function get_and_render_cve_details(endpoint_url, cve_id){
 function get_most_vulnerable_target(endpoint_url, endpoint_vuln_url, slug=null, scan_id=null, target_id=null, ignore_info=false, limit=50){
 	$('#most_vulnerable_target_div').empty();
 	$('#most_vulnerable_spinner').append(`<div class="spinner-border text-primary m-2" role="status"></div>`);
-	var data = {};
+	const data = {};
 	if (scan_id) {
 		data['scan_history_id'] = scan_id;
 	}
@@ -2706,12 +2743,11 @@ function get_most_vulnerable_target(endpoint_url, endpoint_vuln_url, slug=null, 
 				</table>
 				`);
 
-			for (var res in response.result) {
-				var targ_obj = response.result[res];
-				var tr = `<tr onclick="window.location='${endpoint_vuln_url}?domain=${targ_obj.name}';" class="clickable-row">`;
-				if (scan_id || target_id) {
-					tr = `<tr onclick="window.location='${endpoint_vuln_url}?subdomain=${targ_obj.name}';" class="clickable-row">`;
-				}
+			for (let res in response.result) {
+				const targ_obj = response.result[res];
+				const tr = (scan_id || target_id)
+					? `<tr onclick="window.location='${endpoint_vuln_url}?subdomain=${targ_obj.name}';" class="clickable-row">`
+					: `<tr onclick="window.location='${endpoint_vuln_url}?domain=${targ_obj.name}';" class="clickable-row">`;
 				$('#most_vulnerable_target_tbody').append(`
 					${tr}
 						<td>
@@ -2739,7 +2775,7 @@ function get_most_vulnerable_target(endpoint_url, endpoint_vuln_url, slug=null, 
 function get_most_common_vulnerability(endpoint_url, endpoint_vuln_url, slug=null, scan_id=null, target_id=null, ignore_info=false, limit=50){
 	$('#most_common_vuln_div').empty();
 	$('#most_common_vuln_spinner').append(`<div class="spinner-border text-primary m-2" role="status"></div>`);
-	var data = {};
+	const data = {};
 	if (scan_id) {
 		data['scan_history_id'] = scan_id;
 	}
@@ -2779,9 +2815,9 @@ function get_most_common_vulnerability(endpoint_url, endpoint_vuln_url, slug=nul
 				</table>
 			`);
 
-			for (var res in response.result) {
-				var vuln_obj = response.result[res];
-				var vuln_badge = '';
+			for (let res in response.result) {
+				const vuln_obj = response.result[res];
+				let vuln_badge = '';
 				switch (vuln_obj.severity) {
 					case -1:
 						vuln_badge = get_severity_badge('Unknown');
@@ -2833,14 +2869,14 @@ function get_most_common_vulnerability(endpoint_url, endpoint_vuln_url, slug=nul
 
 function highlight_search(search_keyword, content){
 	// this function will send the highlighted text from search keyword
-	var reg = new RegExp('('+search_keyword+')', 'gi');
+	const reg = new RegExp('('+search_keyword+')', 'gi');
 	return content.replace(reg, '<mark>$1</mark>');
 }
 
 
 function validURL(str) {
 	// checks for valid http url
-	var pattern = new RegExp('^(https?:\\/\\/)?'+ // protocol
+	const pattern = new RegExp('^(https?:\\/\\/)?'+ // protocol
 		'((([a-z\\d]([a-z\\d-]*[a-z\\d])*)\\.)+[a-z]{2,}|'+ // domain name
 		'((\\\d{1,3}\\.){3}\\d{1,3}))'+ // OR ip (v4) address
 		'(\\\:\\d+)?(\\/[-a-z\\d%_.~+]*)*'+ // port and path
@@ -2852,9 +2888,9 @@ function validURL(str) {
 
 function shadeColor(color, percent) {
 	//https://stackoverflow.com/a/13532993
-	var R = parseInt(color.substring(1,3),16);
-	var G = parseInt(color.substring(3,5),16);
-	var B = parseInt(color.substring(5,7),16);
+	let R = parseInt(color.substring(1,3),16);
+	let G = parseInt(color.substring(3,5),16);
+	let B = parseInt(color.substring(5,7),16);
 
 	R = parseInt(R * (100 + percent) / 100);
 	G = parseInt(G * (100 + percent) / 100);
@@ -2864,9 +2900,9 @@ function shadeColor(color, percent) {
 	G = (G<255)?G:255;
 	B = (B<255)?B:255;
 
-	var RR = ((R.toString(16).length==1)?"0"+R.toString(16):R.toString(16));
-	var GG = ((G.toString(16).length==1)?"0"+G.toString(16):G.toString(16));
-	var BB = ((B.toString(16).length==1)?"0"+B.toString(16):B.toString(16));
+	const RR = ((R.toString(16).length==1)?"0"+R.toString(16):R.toString(16));
+	const GG = ((G.toString(16).length==1)?"0"+G.toString(16):G.toString(16));
+	const BB = ((B.toString(16).length==1)?"0"+B.toString(16):B.toString(16));
 
 	return "#"+RR+GG+BB;
 }
@@ -2916,8 +2952,8 @@ function reloadPage(){
 
 function render_vuln_offcanvas(vuln){
 	$('#offcanvas').addClass('offcanvas-size-lg');
-	var default_color = 'primary';
-	var default_badge_color = 'soft-primary';
+	let default_color = 'primary';
+	let default_badge_color = 'soft-primary';
 	switch (vuln.severity) {
 		case 'Info':
 			default_color = 'primary';
@@ -2945,10 +2981,10 @@ function render_vuln_offcanvas(vuln){
 			break;
 		default:
 	}
-	var offcanvas_title = document.getElementById('offcanvas-title');
-	var offcanvas_body = document.getElementById('offcanvas-body');
-	var title_content = '';
-	var body = '';
+	const offcanvas_title = document.getElementById('offcanvas-title');
+	const offcanvas_body = document.getElementById('offcanvas-body');
+	let title_content = '';
+	let body = '';
 	title_content += `<i class="mdi mdi-bug-outline me-1 text-${default_color}"></i>`;
 	title_content += `<span class="badge badge-${default_badge_color} text-${default_color}">${vuln.severity}</span>`;
 	title_content += `<span class="text-${default_color} ms-1">${vuln.name}</span>`;
@@ -2956,8 +2992,8 @@ function render_vuln_offcanvas(vuln){
 	body += `<p><b>ID: </b>${vuln.id}</p>`;
 	body += `<p><b>Discovered on: </b>${vuln.discovered_date}</p>`;
 	body += `<p><b>URL: </b><a href="${vuln.http_url}" target="_blank">${vuln.http_url}</a></p>`;
-	var type_display = vuln.type ? vuln.type.toUpperCase() : 'N/A';
-	var source_display = vuln.source ? vuln.source.toUpperCase() : 'N/A';
+	const type_display = vuln.type ? vuln.type.toUpperCase() : 'N/A';
+	const source_display = vuln.source ? vuln.source.toUpperCase() : 'N/A';
 	body += `<p><b>Severity: </b>${vuln.severity}<br><b>Type: </b>${type_display}<br><b>Source: </b> ${source_display}</p>`;
 
 	if (vuln.description) {
@@ -3054,7 +3090,7 @@ function render_vuln_offcanvas(vuln){
 	}
 
 	if (vuln.cvss_score) {
-		var badge = 'danger';
+		let badge = 'danger';
 		if (vuln.cvss_score > 0.1 && vuln.cvss_score <= 3.9) {
 			badge = 'info';
 		}
@@ -3159,8 +3195,8 @@ function render_vuln_offcanvas(vuln){
 		</div>`;
 	}
 
-	var http_request = vuln.request ? vuln.request : '';
-	var http_response = vuln.response ? vuln.response : '';
+	const http_request = vuln.request || '';
+	const http_response = vuln.response || '';
 
 	body += `<div class="accordion custom-accordion mt-2">
 	<h5 class="m-0 position-relative">
@@ -3190,7 +3226,7 @@ function render_vuln_offcanvas(vuln){
 	</div>
 	</div>`;
 
-	let references = vuln.references;
+	let { references } = vuln;
 
 	// Check if references is a string representation of an array
 	if (typeof references === 'string' && references.startsWith('[') && references.endsWith(']')) {
@@ -3305,8 +3341,8 @@ async function send_llm_api_request(endpoint_url, vuln_id){
 
 
 async function fetch_llm_vuln_details(endpoint_url, id, title) {
-	var loader_title = "Loading...";
-	var text = 'Please wait while the LLM is generating vulnerability description.';
+	const loader_title = "Loading...";
+	const text = 'Please wait while the LLM is generating vulnerability description.';
 	try {
 		showSwalLoader(loader_title, text);
         const data = await send_llm_api_request(endpoint_url, id);
@@ -3339,58 +3375,36 @@ async function fetch_llm_vuln_details(endpoint_url, id, title) {
 
 
 function render_llm_vuln_modal(data, title, endpoint_url, vuln_id){
-    // Change modal size to xl
-    $('#modal_dialog .modal-dialog').removeClass('modal-lg').addClass('modal-xl');
-
-    $('#modal_dialog .modal-title').empty();
-    $('#modal_dialog .modal-text').empty();
-    $('#modal_dialog .modal-footer').empty();
-    // Set title as text to prevent XSS
-    $('#modal_dialog .modal-title').text('Vulnerability detail for ' + title);
-
-    // Create badge element using textContent assignment to prevent XSS
-    let $modelBadge = null;
-    const safeModel = data.llm_model ? DOMPurify.sanitize(String(data.llm_model), {ALLOWED_TAGS: [], ALLOWED_ATTR: []}) : null;
-    if (safeModel) {
-        $modelBadge = $('<span>')
-            .addClass('badge bg-soft-primary text-primary mb-3 d-inline-block')
-            .text(`Generated by ${safeModel}`);
-    }
-    const bodyHtml = `
-        <h4>Description</h4>
-        <p>${data.description}</p>
-        <h4>Impact</h4>
-        <p>${data.impact}</p>
-        <h4>Remediation</h4>
-        <p>${data.remediation}</p>
-        <h4>References</h4>
-        <p>${data.references}</p>
-        <div class="text-center mt-4">
-            <div class="btn-group" role="group">
-                <button class="btn btn-primary" id="btn-regenerate-vuln-llm">
-                    <i class="fe-refresh-cw me-1"></i>
-                    Generate New Analysis
-                </button>
-                <button class="btn btn-danger" id="btn-delete-vuln-llm">
-                    <i class="fe-trash-2 me-1"></i>
-                    Delete Current Analysis
-                </button>
-            </div>
-        </div>`;
-
-    const $modalText = $('#modal_dialog .modal-text');
-    if ($modelBadge) {
-        $modalText.append($modelBadge);
-    }
-    $modalText.append(
-        DOMPurify.sanitize(bodyHtml)
+    const safeTitle = DOMPurify.sanitize(String(title || ''), { ALLOWED_TAGS: [], ALLOWED_ATTR: [] });
+    const titleText = 'Vulnerability detail for ' + safeTitle;
+    const safeModel = data.llm_model ? DOMPurify.sanitize(String(data.llm_model), { ALLOWED_TAGS: [], ALLOWED_ATTR: [] }) : '';
+    const badgeHtml = safeModel ? `<span class="badge bg-soft-primary text-primary mb-3 d-inline-block">Generated by ${safeModel}</span>` : '';
+    const bodyHtml = DOMPurify.sanitize(
+        badgeHtml +
+        '<h4>Description</h4><p>' + (data.description || '') + '</p>' +
+        '<h4>Impact</h4><p>' + (data.impact || '') + '</p>' +
+        '<h4>Remediation</h4><p>' + (data.remediation || '') + '</p>' +
+        '<h4>References</h4><p>' + (data.references || '') + '</p>' +
+        '<div class="text-center mt-4"><div class="btn-group" role="group">' +
+        '<button class="btn btn-primary" id="btn-regenerate-vuln-llm"><i class="fe-refresh-cw me-1"></i> Generate New Analysis</button>' +
+        '<button class="btn btn-danger" id="btn-delete-vuln-llm"><i class="fe-trash-2 me-1"></i> Delete Current Analysis</button>' +
+        '</div></div>'
     );
-    $('#modal_dialog').modal('show');
+
+    if (window.ModalManager) {
+        ModalManager.showDialog({ title: titleText, bodyHtml: bodyHtml, footerHtml: '' });
+    } else {
+        $('#modal-dialog-title').text(titleText);
+        $('#modal-dialog-body').html(bodyHtml);
+        $('#modal-dialog-footer').empty();
+        $('#modal-dialog').modal('show');
+    }
+    $('#modal-dialog .modal-dialog').removeClass('modal-lg').addClass('modal-xl');
 
     // Bind actions
     $('#btn-regenerate-vuln-llm').off('click').on('click', async () => {
         const $btn = $('#btn-regenerate-vuln-llm');
-        const $modal = $('#modal_dialog');
+        const $modal = $('#modal-dialog');
         let $spinner = $modal.find('.modal-spinner');
         if ($spinner.length === 0) {
             $spinner = $('<div class="modal-spinner text-center my-3"><span class="spinner-border" role="status" aria-hidden="true"></span> Regenerating...</div>');
@@ -3428,7 +3442,7 @@ function render_llm_vuln_modal(data, title, endpoint_url, vuln_id){
             Swal.close();
             if (js.status) {
                 Swal.fire({ icon: 'success', title: 'Deleted!', text: 'The analysis has been deleted successfully.', showConfirmButton: false, timer: 1500 });
-                $('#modal_dialog').modal('hide');
+                if (window.ModalManager) ModalManager.hide(ModalManager.MODAL_IDS.DIALOG);
             } else {
                 throw new Error(js.error || 'Failed to delete analysis');
             }
@@ -3442,45 +3456,37 @@ function render_llm_vuln_modal(data, title, endpoint_url, vuln_id){
 // Show configuration choice dialog when LLM config is missing/invalid
 function showLLMConfigChoiceDialog(endpoint_url, vuln_id, title, info){
     const options = [];
-    // Option: add GPT API key (if GPT selected without key)
     if (info && info.is_gpt_selected && info.openai_key_missing) {
-        options.push(`
-            <button class="btn btn-primary w-100 mb-2" id="btn-add-openai-key" type="button">
-                Add OpenAI API Key
-            </button>
-        `);
+        options.push(
+            '<button class="btn btn-primary w-100 mb-2" id="btn-add-openai-key" type="button">Add OpenAI API Key</button>'
+        );
     }
-    // Option: choose Ollama model (if server reachable and at least one model)
     if (info && info.ollama_available && info.has_ollama_models) {
-        options.push(`
-            <button class="btn btn-success w-100 mb-2" id="btn-choose-ollama-model" type="button">
-                Choose Ollama Model
-            </button>
-        `);
+        options.push(
+            '<button class="btn btn-success w-100 mb-2" id="btn-choose-ollama-model" type="button">Choose Ollama Model</button>'
+        );
     }
-    // Always include cancel
-    options.push(`
-        <button class="btn btn-outline-secondary w-100" id="btn-cancel-llm-config" type="button">Cancel</button>
-    `);
+    options.push(
+        '<button class="btn btn-outline-secondary w-100" id="btn-cancel-llm-config" type="button">Cancel</button>'
+    );
 
-    $('#modal_dialog .modal-dialog').removeClass('modal-xl').addClass('modal-lg');
-    $('#modal_dialog .modal-title').text('LLM configuration required');
-    $('#modal_dialog .modal-text').html(`
-        <p>
-            The current LLM configuration is incomplete. Please choose an option:
-        </p>
-        <div class="d-grid gap-2">
-            ${options.join('')}
-        </div>
-    `);
-    $('#modal_dialog .modal-footer').empty();
-    $('#modal_dialog').modal('show');
+    const titleText = 'LLM configuration required';
+    const bodyHtml = '<p>The current LLM configuration is incomplete. Please choose an option:</p><div class="d-grid gap-2">' + options.join('') + '</div>';
+    if (window.ModalManager) {
+        ModalManager.showDialog({ title: titleText, bodyHtml: bodyHtml, footerHtml: '' });
+    } else {
+        $('#modal-dialog-title').text(titleText);
+        $('#modal-dialog-body').html(bodyHtml);
+        $('#modal-dialog-footer').empty();
+        $('#modal-dialog').modal('show');
+    }
+    $('#modal-dialog .modal-dialog').removeClass('modal-xl').addClass('modal-lg');
 
     // Bind click handlers safely (no inline JS)
     const chooseBtn = document.getElementById('btn-choose-ollama-model');
     if (chooseBtn) {
         chooseBtn.addEventListener('click', function() {
-            $('#modal_dialog').modal('hide');
+            if (window.ModalManager) ModalManager.hide(ModalManager.MODAL_IDS.DIALOG);
             showModelSelectionDialog(endpoint_url, vuln_id, {
                 mode: 'vuln',
                 force_regenerate: false,
@@ -3499,7 +3505,7 @@ function showLLMConfigChoiceDialog(endpoint_url, vuln_id, title, info){
     const cancelBtn = document.getElementById('btn-cancel-llm-config');
     if (cancelBtn) {
         cancelBtn.addEventListener('click', function() {
-            $('#modal_dialog').modal('hide');
+            if (window.ModalManager) ModalManager.hide(ModalManager.MODAL_IDS.DIALOG);
         });
     }
 }
@@ -3610,7 +3616,7 @@ async function showModelSelectionDialog(endpoint_url, id, optsOrForce = false) {
         }
 
         // Change modal size to xl
-        $('#modal_dialog .modal-dialog').removeClass('modal-lg').addClass('modal-xl');
+        $('#modal-dialog .modal-dialog').removeClass('modal-lg').addClass('modal-xl');
 
         // Resolve options for reuse in attack surface and vulnerabilities
         let mode = 'attack';
@@ -3654,8 +3660,8 @@ async function showModelSelectionDialog(endpoint_url, id, optsOrForce = false) {
 				}
                 if (mode === 'attack') {
                     // Then proceed with attack surface analysis
-                    var loader_title = 'Loading...';
-                    var text = 'Please wait while the LLM is generating attack surface.';
+                    const loader_title = 'Loading...';
+                    const text = 'Please wait while the LLM is generating attack surface.';
                     showSwalLoader(loader_title, text);
                     const result = await send_llm__attack_surface_api_request(endpoint_url, id, force_regenerate, false, selectedModel);
                     Swal.close();
@@ -3671,7 +3677,7 @@ async function showModelSelectionDialog(endpoint_url, id, optsOrForce = false) {
                     }
                 } else {
                     // Vulnerability details flow: close modal and retry fetch
-                    $('#modal_dialog').modal('hide');
+                    if (window.ModalManager) ModalManager.hide(ModalManager.MODAL_IDS.DIALOG);
                     await fetch_llm_vuln_details(endpoint_url, id, vuln_title);
                 }
             } catch (error) {
@@ -3709,7 +3715,7 @@ async function showModelSelectionDialog(endpoint_url, id, optsOrForce = false) {
                                         ${modelName === selectedModel ? '<span class="badge bg-soft-primary text-primary ms-2">Selected</span>' : ''}
                                     </span>
                                 </h5>
-                                <p>${!isLocal ? '<span class="badge bg-soft-warning text-warning mt-auto">Remote Model - API Key Required</span>' : '<span class="badge bg-soft-success text-success mt-auto">Locally installed model</span>'}</p>
+                                <p>${isLocal ? '<span class="badge bg-soft-success text-success mt-auto">Locally installed model</span>' : '<span class="badge bg-soft-warning text-warning mt-auto">Remote Model - API Key Required</span>'}</p>
                                 <p class="mb-1 small flex-grow-1">
                                     <span class="pe-2 text-nowrap d-inline-block">
                                         <i class="mdi mdi-database text-info"></i>
@@ -3744,9 +3750,7 @@ async function showModelSelectionDialog(endpoint_url, id, optsOrForce = false) {
                 </div>`;
         });
 
-        $('#modal_dialog .modal-title').html('Select LLM Model');
-        $('#modal_dialog .modal-text').empty();
-        $('#modal_dialog .modal-text').append(`
+        const bodyHtml = `
             <div class="mb-3 row">
                 <p>Select the LLM model to use:</p>
                 ${modelOptions}
@@ -3754,9 +3758,14 @@ async function showModelSelectionDialog(endpoint_url, id, optsOrForce = false) {
             <div class="mb-3 text-center">
                 <button class="btn btn-primary" type="button" onclick="window.confirmLLMModelSelection()">Continue</button>
             </div>
-        `);
-        
-        $('#modal_dialog').modal('show');
+        `;
+        if (window.ModalManager) {
+            ModalManager.showDialog({
+                title: 'Select LLM Model',
+                bodyHtml: bodyHtml,
+                footerHtml: ''
+            });
+        }
     } catch (error) {
         console.error(error);
         Swal.fire({
@@ -3802,7 +3811,7 @@ async function deleteAttackSurfaceAnalysis(endpoint_url, id) {
                     showConfirmButton: false,
                     timer: 1500
                 });
-                $('#modal_dialog').modal('hide');
+                if (window.ModalManager) ModalManager.hide(ModalManager.MODAL_IDS.DIALOG);
             } else {
                 throw new Error(data.error || 'Failed to delete analysis');
             }
@@ -3819,13 +3828,8 @@ async function deleteAttackSurfaceAnalysis(endpoint_url, id) {
 
 function showAttackSurfaceModal(data, endpoint_url, id) {
     const header = 'Attack Surface Suggestion for ' + data.subdomain_name;
-    const html = data.description;
-    $('#modal_dialog .modal-dialog').removeClass('modal-lg').addClass('modal-xl');
-    // Use text() to avoid HTML injection via subdomain name
-    $('#modal_dialog .modal-title').text(header);
-    $('#modal_dialog .modal-text').empty();
-    $('#modal_dialog .modal-text').append(
-        DOMPurify.sanitize(html) +
+    const bodyHtml =
+        DOMPurify.sanitize(data.description) +
         `<div class="text-center mt-4">
             <div class="btn-group" role="group">
                 <button class="btn btn-primary" id="btn-as-regenerate">
@@ -3837,13 +3841,19 @@ function showAttackSurfaceModal(data, endpoint_url, id) {
                     Delete Current Analysis
                 </button>
             </div>
-        </div>`
-    );
-    $('#modal_dialog').modal('show');
+        </div>`;
+    $('#modal-dialog .modal-dialog').removeClass('modal-lg').addClass('modal-xl');
+    if (window.ModalManager) {
+        ModalManager.showDialog({
+            title: escapeHtml(header),
+            bodyHtml: bodyHtml,
+            footerHtml: ''
+        });
+    }
     $('#btn-as-regenerate').off('click').on('click', async () => {
         const $btn = $('#btn-as-regenerate');
         const $otherBtn = $('#btn-as-delete');
-        const $modal = $('#modal_dialog');
+        const $modal = $('#modal-dialog');
         let $spinner = $modal.find('.modal-spinner');
         if ($spinner.length === 0) {
             $spinner = $('<div class="modal-spinner text-center my-3"><span class="spinner-border" role="status" aria-hidden="true"></span> Regenerating...</div>');
@@ -3870,7 +3880,7 @@ function showAttackSurfaceModal(data, endpoint_url, id) {
     $('#btn-as-delete').off('click').on('click', async () => {
         const $btn = $('#btn-as-delete');
         const $otherBtn = $('#btn-as-regenerate');
-        const $modal = $('#modal_dialog');
+        const $modal = $('#modal-dialog');
         let $spinner = $modal.find('.modal-spinner');
         if ($spinner.length === 0) {
             $spinner = $('<div class="modal-spinner text-center my-3"><span class="spinner-border" role="status" aria-hidden="true"></span> Deleting...</div>');
@@ -3902,13 +3912,11 @@ function convertToCamelCase(inputString) {
 	const words = inputString.split('_');
 
 	// Capitalize the first letter of each word and join them with a space
-	const camelCaseString = words.map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
-
-	return camelCaseString;
+	return words.map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
 }
 function handleHashInUrl(){
 	// this function handles hash in url used to tab navigation
-	const hash = window.location.hash;
+	const { hash } = window.location;
 	if (hash) {
 		const targetId = hash.substring(1);
 		const tabLink = $(`a[href="#${targetId}"][data-bs-toggle="tab"]`);
@@ -3921,43 +3929,22 @@ function handleHashInUrl(){
 	}
 }
 
+let _pendingLLMModalCallback = null;
+
 function showLLMModelSelectionModal(callback) {
-    $('#modal_dialog .modal-title').html('Select LLM Model');
-    $('#modal_dialog .modal-text').empty();
-    
-    // Get available models
-    fetch('/api/tool/ollama/')
+    _pendingLLMModalCallback = typeof callback === 'function' ? callback : null;
+    const ollamaUrl = (window.RENGINE_API_URLS && window.RENGINE_API_URLS.toolOllama) || '/api/tool/ollama/';
+    fetch(ollamaUrl)
         .then(response => response.json())
         .then(data => {
-            const models = data.models;
-            const selectedModel = data.selected_model;
-            
+            const { models, selected_model: selectedModel } = data;
             let modelOptions = '';
-            models.forEach(model => {
-                modelOptions += `
-                    <div class="form-check">
-                        <input class="form-check-input" type="radio" name="llm_model" 
-                            id="${model.name}" value="${model.name}" 
-                            ${model.name === selectedModel ? 'checked' : ''}>
-                        <label class="form-check-label" for="${model.name}">
-                            ${model.name} (${model.details.family})
-                        </label>
-                    </div>`;
+            (models || []).forEach(model => {
+                modelOptions += `<div class="form-check"><input class="form-check-input" type="radio" name="llm_model" id="${htmlEncode(model.name)}" value="${htmlEncode(model.name)}" ${model.name === selectedModel ? 'checked' : ''}><label class="form-check-label" for="${htmlEncode(model.name)}">${htmlEncode(model.name)} (${htmlEncode((model.details && model.details.family) || '')})</label></div>`;
             });
-
-            $('#modal_dialog .modal-text').append(`
-                <div class="mb-3">
-                    <p>Select the LLM model to use for vulnerability analysis:</p>
-                    ${modelOptions}
-                </div>
-                <div class="mb-3 text-center">
-                    <button class="btn btn-primary float-end" type="submit" onclick="selectLLMModel()">
-                        Continue
-                    </button>
-                </div>
-            `);
-            
-            $('#modal_dialog').modal('show');
+            const title = 'Select LLM Model';
+            const bodyHtml = `<div class="mb-3"><p>Select the LLM model to use for vulnerability analysis:</p>${modelOptions}</div><div class="mb-3 text-center"><button class="btn btn-primary float-end" type="submit" onclick="selectLLMModel()">Continue</button></div>`;
+            if (window.ModalManager) ModalManager.showDialog({ title, bodyHtml, footerHtml: '' });
         });
 }
 
@@ -3985,9 +3972,13 @@ function selectLLMModel() {
     .then(response => response.json())
     .then(data => {
         if (data.status) {
-            $('#modal_dialog').modal('hide');
-            // Continue with scan
-            startScan();
+            if (window.ModalManager) ModalManager.hide(ModalManager.MODAL_IDS.DIALOG);
+            if (_pendingLLMModalCallback) {
+                _pendingLLMModalCallback(selectedModel);
+                _pendingLLMModalCallback = null;
+            } else {
+                startScan();
+            }
         } else {
             Swal.fire({
                 title: 'Error',
@@ -4027,15 +4018,11 @@ function initMobileMenu() {
     
     // Close mobile menu when clicking outside
     document.addEventListener('click', function(e) {
-        if (mobileNavMenu && mobileNavMenu.classList.contains('show')) {
-            // Check if click is outside the mobile menu and hamburger button
-            if (!mobileNavMenu.contains(e.target) && !mobileHamburger.contains(e.target)) {
-                // Close the mobile menu
-                const bsCollapse = new bootstrap.Collapse(mobileNavMenu, {
-                    toggle: false
-                });
-                bsCollapse.hide();
-            }
+        if (mobileNavMenu && mobileNavMenu.classList.contains('show') && !mobileNavMenu.contains(e.target) && !mobileHamburger.contains(e.target)) {
+            const bsCollapse = new bootstrap.Collapse(mobileNavMenu, {
+                toggle: false
+            });
+            bsCollapse.hide();
         }
     });
 }

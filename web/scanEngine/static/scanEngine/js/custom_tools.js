@@ -1,68 +1,45 @@
-function load_gf_template(pattern_name){
-  Swal.fire({
-		title: `Fetching GF template ${pattern_name}...`,
-	});
-	swal.showLoading();
-
-  $.getJSON(`/api/getFileContents?gf_pattern&name=${pattern_name}&format=json`, function(response) {
+function load_gf_template(pattern_name) {
+  Swal.fire({ title: `Fetching GF template ${pattern_name}...` });
+  swal.showLoading();
+  const baseUrl = (window.RENGINE_API_URLS && window.RENGINE_API_URLS.getFileContents) || '/api/getFileContents/';
+  const url = `${baseUrl}?gf_pattern&name=${encodeURIComponent(pattern_name)}&format=json`;
+  $.getJSON(url, function (response) {
     swal.close();
     if (response.status) {
-      $('#modal_dialog .modal-title').empty();
-      $('#modal_dialog .modal-text').empty();
-      $("#modal_dialog .modal-footer").empty();
-
-      $('#modal_dialog .modal-title').html(`GF Pattern ` + htmlEncode(pattern_name));
-
-      $('#modal_dialog .modal-text').append(`<pre>${htmlEncode(response['content'])}</pre>`);
-      $('#modal_dialog').modal('show');
+      const title = 'GF Pattern ' + htmlEncode(pattern_name);
+      const bodyHtml = `<pre>${htmlEncode(response.content)}</pre>`;
+      if (window.ModalManager) ModalManager.showDialog({ title, bodyHtml, footerHtml: '' });
+    } else {
+      swal.fire('Error!', response.message, 'error', { button: 'Okay' });
     }
-    else{
-      swal.fire("Error!", response.message, "error", {
-        button: "Okay",
-      });
-    }
-
-  }).fail(function(){
-    swal.fire("Error!", 'Error loading gf pattern!', "error", {
-      button: "Okay",
-    });
+  }).fail(function () {
+    swal.fire('Error!', 'Error loading gf pattern!', 'error', { button: 'Okay' });
   });
 }
 
-function load_nuclei_template(pattern_name){
-  Swal.fire({
-		title: `Fetching Nuclei template ${pattern_name}...`,
-	});
-	swal.showLoading();
-
-  $.getJSON(`/api/getFileContents?nuclei_template&name=${pattern_name}&format=json`, function(response) {
+function load_nuclei_template(pattern_name) {
+  Swal.fire({ title: `Fetching Nuclei template ${pattern_name}...` });
+  swal.showLoading();
+  const baseUrl = (window.RENGINE_API_URLS && window.RENGINE_API_URLS.getFileContents) || '/api/getFileContents/';
+  const url = `${baseUrl}?nuclei_template&name=${encodeURIComponent(pattern_name)}&format=json`;
+  $.getJSON(url, function (response) {
     swal.close();
     if (response.status) {
-      $('#modal_dialog .modal-title').empty();
-      $('#modal_dialog .modal-text').empty();
-      $("#modal_dialog .modal-footer").empty();
-
-      $('#modal_dialog .modal-title').html(`Nuclei Template: ` + htmlEncode(pattern_name));
-
-      $('#modal_dialog .modal-text').append(`<pre>${htmlEncode(response['content'])}</pre>`);
-      $('#modal_dialog').modal('show');
+      const title = 'Nuclei Template: ' + htmlEncode(pattern_name);
+      const bodyHtml = `<pre>${htmlEncode(response.content)}</pre>`;
+      if (window.ModalManager) ModalManager.showDialog({ title, bodyHtml, footerHtml: '' });
+    } else {
+      swal.fire('Error!', response.message, 'error', { button: 'Okay' });
     }
-    else{
-      swal.fire("Error!", response.message, "error", {
-        button: "Okay",
-      });
-    }
-
-  }).fail(function(){
-    swal.fire("Error!", 'Error loading Nuclei Template!', "error", {
-      button: "Okay",
-    });
+  }).fail(function () {
+    swal.fire('Error!', 'Error loading Nuclei Template!', 'error', { button: 'Okay' });
   });
 }
 
 
 // get nuclei config
-$.getJSON(`/api/getFileContents?nuclei_config&format=json`, function(data) {
+const getFileContentsBase = () => (window.RENGINE_API_URLS && window.RENGINE_API_URLS.getFileContents) || '/api/getFileContents/';
+$.getJSON(`${getFileContentsBase()}?nuclei_config&format=json`, function(data) {
   $("#nuclei_config_text_area").attr("rows", 17);
   $("textarea#nuclei_config_text_area").html(data['content']);
 }).fail(function(){
@@ -96,7 +73,7 @@ $("#subfinder_config_text_area").dblclick(function() {
 });
 
 // get Naabu config
-$.getJSON(`/api/getFileContents?naabu_config&format=json`, function(data) {
+$.getJSON(`${getFileContentsBase()}?naabu_config&format=json`, function(data) {
   $("#naabu_config_text_area").attr("rows", 14);
   $("textarea#naabu_config_text_area").html(htmlEncode(data['content']));
 }).fail(function(){
@@ -114,7 +91,7 @@ $("#naabu_config_text_area").dblclick(function() {
 
 
 // get amass config
-$.getJSON(`/api/getFileContents?amass_config&format=json`, function(data) {
+$.getJSON(`${getFileContentsBase()}?amass_config&format=json`, function(data) {
   $("#amass_config_text_area").attr("rows", 14);
   $("textarea#amass_config_text_area").html(htmlEncode(data['content']));
 }).fail(function(){
@@ -147,7 +124,7 @@ $("#theHarvester_config_text_area").dblclick(function() {
   }
 });
 
-$.getJSON(`/api/getFileContents?gau_config&format=json`, function(data) {
+$.getJSON(`${getFileContentsBase()}?gau_config&format=json`, function(data) {
   $("#gau_config_text_area").attr("rows", 14);
   $("textarea#gau_config_text_area").html(htmlEncode(data['content']));
 }).fail(function(){

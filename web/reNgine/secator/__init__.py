@@ -17,7 +17,11 @@ from reNgine.secator.orchestrator import ScanOrchestrator
 from reNgine.secator.parser import SecatorParser
 from reNgine.secator.progress import SecatorProgressSync
 from reNgine.secator.runner import SecatorRunner
-from reNgine.secator.service import handle_scan_error, start_secator_scan
+from reNgine.secator.service import (
+    handle_scan_error,
+    run_per_task_secator_scans,
+    start_secator_scan,
+)
 from reNgine.secator.tasks import build_enriched_targets, initiate_secator_scan
 
 
@@ -32,4 +36,5 @@ __all__ = [
     "build_enriched_targets",
     "start_secator_scan",
     "handle_scan_error",
+    "run_per_task_secator_scans",
 ]

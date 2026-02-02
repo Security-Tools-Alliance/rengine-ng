@@ -2,10 +2,14 @@
 Tests for Secator service functionality.
 """
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, Mock, patch
 
 from reNgine.definitions import ABORTED_TASK, FAILED_TASK, INITIATED_TASK, RUNNING_TASK, SUCCESS_TASK
-from reNgine.secator.service import handle_scan_error
+from reNgine.secator.service import (
+    handle_scan_error,
+    run_per_task_secator_scans,
+    start_secator_scan,
+)
 from utils.test_base import BaseTestCase
 
 
@@ -123,3 +127,288 @@ class TestSecatorService(BaseTestCase):
         # Should skip update because refresh_from_db detected SUCCESS status
         self.scan_history.refresh_from_db()
         self.assertEqual(self.scan_history.scan_status, SUCCESS_TASK)
+
+    @patch("reNgine.secator.service.threading.Thread")
+    def test_start_secator_scan_passes_targets_override_to_initiate(self, mock_thread):
+        """Test that start_secator_scan passes targets_override to initiate_secator_scan."""
+        domain = self.data_generator.domain
+        mock_scan_repo = Mock()
+        mock_scan_repo.create_scan.return_value = self.scan_history.id
+
+        def run_target_and_return_mock(*args, **kwargs):
+            kwargs.get("target", lambda: None)()
+            return Mock()
+
+        mock_thread.side_effect = run_target_and_return_mock
+
+        with patch("reNgine.secator.service.Domain.objects.get", return_value=domain):
+            with patch("reNgine.secator.service.ScanRepository", return_value=mock_scan_repo):
+                with patch("reNgine.secator.service.ScanHistory.objects.get", return_value=self.scan_history):
+                    with patch("reNgine.secator.service.initiate_secator_scan") as mock_initiate:
+                        result = start_secator_scan(
+                            domain_id=domain.id,
+                            user_id=self.user.id,
+                            execution_mode="tasks",
+                            task_ids=[1],
+                            targets_override=["host1.example.com", "host2.example.com"],
+                        )
+                        self.assertTrue(result.get("status"))
+                        mock_initiate.assert_called_once()
+                        call_kwargs = mock_initiate.call_args[1]
+                        self.assertEqual(
+                            call_kwargs.get("targets_override"),
+                            ["host1.example.com", "host2.example.com"],
+                        )
+
+    @patch("reNgine.secator.service.threading.Thread")
+    def test_start_secator_scan_with_scan_history_id_reuses_existing_scan(self, mock_thread):
+        """When scan_history_id is provided, no new scan is created and thread uses that id."""
+        domain = self.data_generator.domain
+        self.scan_history.domain_id = domain.id
+        self.scan_history.save()
+
+        def run_target_and_return_mock(*args, **kwargs):
+            kwargs.get("target", lambda: None)()
+            return Mock()
+
+        mock_thread.side_effect = run_target_and_return_mock
+
+        with patch("reNgine.secator.service.Domain.objects.get", return_value=domain):
+            with patch("reNgine.secator.service.ScanHistory.objects.get", return_value=self.scan_history):
+                with patch("reNgine.secator.service.initiate_secator_scan") as mock_initiate:
+                    result = start_secator_scan(
+                        domain_id=domain.id,
+                        user_id=self.user.id,
+                        execution_mode="tasks",
+                        task_ids=[1],
+                        targets_override=["host1.example.com"],
+                        scan_history_id=self.scan_history.id,
+                    )
+                    self.assertTrue(result.get("status"))
+                    self.assertEqual(result.get("scan_id"), self.scan_history.id)
+                    mock_initiate.assert_called_once()
+                    self.assertEqual(mock_initiate.call_args[1]["scan_history_id"], self.scan_history.id)
+                    self.assertEqual(mock_initiate.call_args[1]["task_ids"], [1])
+
+
+class TestRunPerTaskSecatorScans(BaseTestCase):
+    """Test cases for run_per_task_secator_scans."""
+
+    def setUp(self):
+        super().setUp()
+        self.domain = self.data_generator.domain
+        self.task = self.data_generator.create_secator_task()
+        self.task_type_to_id = {self.task.task_type: self.task.id}
+
+    @patch("reNgine.secator.service.ScanHistory.objects.get")
+    @patch("reNgine.secator.service.start_secator_scan")
+    @patch("reNgine.secator.service.ScanRepository")
+    def test_valid_tasks_all_succeed(self, mock_scan_repo_cls, mock_start, mock_scan_get):
+        """When selected_targets_per_task is valid, one ScanHistory is created and shared."""
+        shared_scan_id = 123
+        mock_scan_repo_cls.return_value.create_scan.return_value = shared_scan_id
+        mock_scan_get.return_value = MagicMock(id=shared_scan_id)
+        mock_start.return_value = {"status": True, "scan_id": shared_scan_id}
+        selected = {self.task.task_type: ["host1.example.com"]}
+        result = run_per_task_secator_scans(
+            domain_id=self.domain.id,
+            user_id=self.user.id,
+            selected_targets_per_task=selected,
+            task_type_to_id=self.task_type_to_id,
+        )
+        self.assertEqual(result["validation_errors"], [])
+        self.assertEqual(result["success_count"], 1)
+        self.assertEqual(result["failed_count"], 0)
+        self.assertEqual(result["scan_id"], shared_scan_id)
+        self.assertEqual(len(result["results"]), 1)
+        self.assertEqual(result["results"][0]["task_type"], self.task.task_type)
+        self.assertEqual(result["results"][0]["status"], "success")
+        self.assertEqual(result["results"][0]["scan_id"], shared_scan_id)
+        mock_start.assert_called_once()
+        self.assertEqual(mock_start.call_args[1]["scan_history_id"], shared_scan_id)
+
+    def test_unknown_task_type_fills_validation_errors_no_scan(self):
+        """Unknown task_type yields validation_errors and no start_secator_scan call."""
+        selected = {"unknown_task": ["host1.example.com"]}
+        with patch("reNgine.secator.service.start_secator_scan") as mock_start:
+            result = run_per_task_secator_scans(
+                domain_id=self.domain.id,
+                user_id=self.user.id,
+                selected_targets_per_task=selected,
+                task_type_to_id=self.task_type_to_id,
+            )
+        self.assertEqual(len(result["validation_errors"]), 1)
+        self.assertEqual(result["validation_errors"][0]["task_type"], "unknown_task")
+        self.assertEqual(result["validation_errors"][0]["reason"], "unknown_task_type")
+        self.assertEqual(result["success_count"], 0)
+        self.assertEqual(result["failed_count"], 0)
+        self.assertIsNone(result["scan_id"])
+        self.assertEqual(result["results"], [])
+        mock_start.assert_not_called()
+
+    def test_empty_targets_fills_validation_errors_no_scan(self):
+        """Task with empty targets yields validation_errors and no start_secator_scan call."""
+        selected = {self.task.task_type: []}
+        with patch("reNgine.secator.service.start_secator_scan") as mock_start:
+            result = run_per_task_secator_scans(
+                domain_id=self.domain.id,
+                user_id=self.user.id,
+                selected_targets_per_task=selected,
+                task_type_to_id=self.task_type_to_id,
+            )
+        self.assertEqual(len(result["validation_errors"]), 1)
+        self.assertEqual(result["validation_errors"][0]["task_type"], self.task.task_type)
+        self.assertEqual(result["validation_errors"][0]["reason"], "no_targets")
+        self.assertEqual(result["success_count"], 0)
+        self.assertEqual(result["failed_count"], 0)
+        self.assertIsNone(result["scan_id"])
+        self.assertEqual(result["results"], [])
+        mock_start.assert_not_called()
+
+    @patch("reNgine.secator.service.ScanHistory.objects.get")
+    @patch("reNgine.secator.service.start_secator_scan")
+    @patch("reNgine.secator.service.ScanRepository")
+    def test_mix_valid_and_invalid_one_success_one_validation_error(
+        self, mock_scan_repo_cls, mock_start, mock_scan_get
+    ):
+        """One valid task runs and succeeds; one unknown task only adds validation error."""
+        shared_scan_id = 99
+        mock_scan_repo_cls.return_value.create_scan.return_value = shared_scan_id
+        mock_scan_get.return_value = MagicMock(id=shared_scan_id)
+        mock_start.return_value = {"status": True, "scan_id": shared_scan_id}
+        task2_type = "other_unknown"
+        selected = {
+            self.task.task_type: ["host1.example.com"],
+            task2_type: ["host2.example.com"],
+        }
+        result = run_per_task_secator_scans(
+            domain_id=self.domain.id,
+            user_id=self.user.id,
+            selected_targets_per_task=selected,
+            task_type_to_id=self.task_type_to_id,
+        )
+        self.assertEqual(len(result["validation_errors"]), 1)
+        self.assertEqual(result["validation_errors"][0]["task_type"], task2_type)
+        self.assertEqual(result["success_count"], 1)
+        self.assertEqual(result["failed_count"], 0)
+        self.assertEqual(result["scan_id"], shared_scan_id)
+        self.assertEqual(len(result["results"]), 1)
+        self.assertEqual(result["results"][0]["task_type"], self.task.task_type)
+        self.assertEqual(result["results"][0]["status"], "success")
+        self.assertEqual(result["results"][0]["scan_id"], shared_scan_id)
+        mock_start.assert_called_once()
+        self.assertEqual(mock_start.call_args[1]["scan_history_id"], shared_scan_id)
+
+    @patch("reNgine.secator.service.ScanHistory.objects.get")
+    @patch("reNgine.secator.service.start_secator_scan")
+    @patch("reNgine.secator.service.ScanRepository")
+    def test_start_returns_error_appends_error_result(self, mock_scan_repo_cls, mock_start, mock_scan_get):
+        """When start_secator_scan returns status False, result has status error and failed_count increments."""
+        shared_scan_id = 55
+        mock_scan_repo_cls.return_value.create_scan.return_value = shared_scan_id
+        mock_scan_get.return_value = MagicMock(id=shared_scan_id)
+        mock_start.return_value = {"status": False, "error": "Domain not found"}
+        selected = {self.task.task_type: ["host1.example.com"]}
+        result = run_per_task_secator_scans(
+            domain_id=self.domain.id,
+            user_id=self.user.id,
+            selected_targets_per_task=selected,
+            task_type_to_id=self.task_type_to_id,
+        )
+        self.assertEqual(result["validation_errors"], [])
+        self.assertEqual(result["success_count"], 0)
+        self.assertEqual(result["failed_count"], 1)
+        self.assertEqual(result["scan_id"], shared_scan_id)
+        self.assertEqual(len(result["results"]), 1)
+        self.assertEqual(result["results"][0]["task_type"], self.task.task_type)
+        self.assertEqual(result["results"][0]["status"], "error")
+        self.assertEqual(result["results"][0]["error"], "Domain not found")
+
+    @patch("reNgine.secator.service.ScanHistory.objects.get")
+    @patch("reNgine.secator.service.start_secator_scan")
+    @patch("reNgine.secator.service.ScanRepository")
+    def test_start_raises_exception_appends_error_result(self, mock_scan_repo_cls, mock_start, mock_scan_get):
+        """When start_secator_scan raises, result has status error and failed_count increments."""
+        shared_scan_id = 66
+        mock_scan_repo_cls.return_value.create_scan.return_value = shared_scan_id
+        mock_scan_get.return_value = MagicMock(id=shared_scan_id)
+        mock_start.side_effect = ValueError("Invalid config")
+        selected = {self.task.task_type: ["host1.example.com"]}
+        result = run_per_task_secator_scans(
+            domain_id=self.domain.id,
+            user_id=self.user.id,
+            selected_targets_per_task=selected,
+            task_type_to_id=self.task_type_to_id,
+        )
+        self.assertEqual(result["validation_errors"], [])
+        self.assertEqual(result["success_count"], 0)
+        self.assertEqual(result["failed_count"], 1)
+        self.assertEqual(result["scan_id"], shared_scan_id)
+        self.assertEqual(len(result["results"]), 1)
+        self.assertEqual(result["results"][0]["task_type"], self.task.task_type)
+        self.assertEqual(result["results"][0]["status"], "error")
+        self.assertIn("Invalid config", result["results"][0]["error"])
+
+    @patch("reNgine.secator.service.ScanHistory.objects.get")
+    @patch("reNgine.secator.service.start_secator_scan")
+    @patch("reNgine.secator.service.ScanRepository")
+    def test_loads_task_type_to_id_when_none(self, mock_scan_repo_cls, mock_start, mock_scan_get):
+        """When task_type_to_id is None, it is loaded from SecatorTask."""
+        shared_scan_id = 1
+        mock_scan_repo_cls.return_value.create_scan.return_value = shared_scan_id
+        mock_scan_get.return_value = MagicMock(id=shared_scan_id)
+        mock_start.return_value = {"status": True, "scan_id": shared_scan_id}
+        selected = {self.task.task_type: ["host.example.com"]}
+        result = run_per_task_secator_scans(
+            domain_id=self.domain.id,
+            user_id=self.user.id,
+            selected_targets_per_task=selected,
+            task_type_to_id=None,
+        )
+        self.assertEqual(result["success_count"], 1)
+        self.assertEqual(result["scan_id"], shared_scan_id)
+        self.assertEqual(len(result["results"]), 1)
+        mock_start.assert_called_once()
+        call_kwargs = mock_start.call_args[1]
+        self.assertEqual(call_kwargs["task_ids"], [self.task.id])
+        self.assertEqual(call_kwargs["scan_history_id"], shared_scan_id)
+
+    @patch("reNgine.secator.service.start_secator_scan")
+    @patch("reNgine.secator.service.ScanRepository")
+    def test_reuses_scan_history_id_when_provided_and_valid(self, mock_scan_repo_cls, mock_start):
+        """When scan_history_id is provided and exists for domain, that scan is reused; create_scan is not called."""
+        existing_scan = self.data_generator.create_scan_history()
+        mock_start.return_value = {"status": True, "scan_id": existing_scan.id}
+        selected = {self.task.task_type: ["host.example.com"]}
+        result = run_per_task_secator_scans(
+            domain_id=self.domain.id,
+            user_id=self.user.id,
+            selected_targets_per_task=selected,
+            task_type_to_id=self.task_type_to_id,
+            scan_history_id=existing_scan.id,
+        )
+        mock_scan_repo_cls.return_value.create_scan.assert_not_called()
+        self.assertEqual(result["scan_id"], existing_scan.id)
+        self.assertEqual(result["success_count"], 1)
+        self.assertEqual(mock_start.call_args[1]["scan_history_id"], existing_scan.id)
+
+    @patch("reNgine.secator.service.ScanHistory.objects.get")
+    @patch("reNgine.secator.service.start_secator_scan")
+    @patch("reNgine.secator.service.ScanRepository")
+    def test_creates_scan_when_scan_history_id_invalid(self, mock_scan_repo_cls, mock_start, mock_scan_get):
+        """When scan_history_id is provided but does not exist for domain, a new scan is created."""
+        new_scan_id = 999
+        mock_scan_repo_cls.return_value.create_scan.return_value = new_scan_id
+        mock_scan_get.return_value = MagicMock(id=new_scan_id)
+        mock_start.return_value = {"status": True, "scan_id": new_scan_id}
+        selected = {self.task.task_type: ["host.example.com"]}
+        result = run_per_task_secator_scans(
+            domain_id=self.domain.id,
+            user_id=self.user.id,
+            selected_targets_per_task=selected,
+            task_type_to_id=self.task_type_to_id,
+            scan_history_id=0,
+        )
+        mock_scan_repo_cls.return_value.create_scan.assert_called_once()
+        self.assertEqual(result["scan_id"], new_scan_id)
+        self.assertEqual(result["success_count"], 1)

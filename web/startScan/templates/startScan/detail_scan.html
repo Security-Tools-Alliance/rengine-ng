@@ -16,11 +16,13 @@ Detailed Scan
 <link href="{% static 'plugins/lightbox/css/lightbox.css' %}" rel="stylesheet" />
 <link href="{% static 'custom/secator_scan.css' %}" rel="stylesheet" type="text/css" />
 <script src="{% static 'plugins/gridzy/gridzy.js' %}"></script>
+<script>
+(function(){ if (window.Gridzy && Gridzy._defaultOptions) { Gridzy._defaultOptions.autoInitOnDomMutation = false; } })();
+</script>
 <script src="https://d3js.org/d3.v3.min.js"></script>
 <script src="https://cdn.rawgit.com/eligrey/canvas-toBlob.js/f1a01896135ab378aa5c0118eadd81da55e698d8/canvas-toBlob.js"></script>
 <script src="https://cdn.rawgit.com/eligrey/FileSaver.js/e9d941381475b5df8b7d7691013401e171014e89/FileSaver.min.js"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/flag-icon-css/6.6.3/css/flag-icons.min.css" integrity="sha512-uvXdJud8WaOlQFjlz9B15Yy2Au/bMAvz79F7Xa6OakCl2jvQPdHD0hb3dEqZRdSwG4/sknePXlE7GiarwA/9Wg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
-<script src="{% static 'custom/scan_status_websocket.js' %}"></script>
 {% endblock custom_js_css_link %}
 
 {% block breadcrumb_title %}
@@ -1416,8 +1418,10 @@ Scan Findings
 {% include "base/_items/recon_note_modal.html" %}
 {% include "base/_items/subscan_modal.html" with detail_scan=True %}
 
-{# for passing subdomain id to initiate subtask scan #}
+{# for passing subdomain id, domain id and scan_history_id to subscan modal #}
 <input type="hidden" name="subtask_subdomain_id" id="subtask_subdomain_id" value="0">
+<input type="hidden" id="subscan_domain_id" value="{{ history.domain.id }}">
+<input type="hidden" id="subscan_scan_history_id" value="{{ scan_history_id }}">
 
 {% endblock main_content %}
 
@@ -1428,6 +1432,17 @@ Scan Findings
 <script src="{% static 'custom/todo.js' %}"></script>
 <script src="{% static 'note/js/todo.js' %}"></script>
 <script src="{% static 'custom/subdomain.js' %}"></script>
+<script src="{% static 'custom/secator/secator_scan_core.js' %}"></script>
+<script src="{% static 'custom/secator/secator_scan_targets.js' %}"></script>
+<script src="{% static 'custom/secator/secator_scan_tooltips.js' %}"></script>
+<script src="{% static 'custom/secator/secator_compact_list.js' %}"></script>
+<script src="{% static 'custom/secator/secator_selection_listeners.js' %}"></script>
+<script src="{% static 'custom/secator/secator_selection_ajax.js' %}"></script>
+<script src="{% static 'custom/secator/secator_selection_dom.js' %}"></script>
+<script src="{% static 'custom/secator/secator_form_submit.js' %}"></script>
+<script src="{% static 'custom/secator/secator_input_types_ajax.js' %}"></script>
+<script src="{% static 'custom/secator/secator_input_types_tasks.js' %}"></script>
+<script src="{% static 'custom/secator_scan.js' %}"></script>
 <script src="{% static 'startScan/js/detail_scan.js' %}"></script>
 <script src="{% static 'plugins/lightbox/js/lightbox.js' %}"></script>
 <script src="{% static 'plugins/perfect-scrollbar/perfect-scrollbar.min.js' %}"></script>
@@ -1625,7 +1640,7 @@ $(document).ready(function() {
 			}
 			var is_grouping = false;
 			var grouping_col = 3;
-			var vuln_ajax_url = '{% url 'api:vulnerabilities-list' %}?scan_history={{scan_history_id}}&format=datatables';
+			var vuln_ajax_url = '{% url "api:vulnerabilities-list" %}?scan_history={{scan_history_id}}&format=datatables';
 			var vulnerability_table = $('#vulnerability_results').DataTable({
 				"destroy": true,
 				"oLanguage": {
@@ -1916,14 +1931,24 @@ $(document).ready(function() {
 			var radioGroup = document.getElementsByName('grouping_vuln_row');
 			radioGroup.forEach(function(radioButton) {
 				radioButton.addEventListener('change', function() {
-					if (this.checked) {
-						var groupRows = document.querySelectorAll('tr.group');
+					if (!this.checked) {
+						return;
+					}
+					if (this.value) {
 						var col_index = get_datatable_col_index(this.value, vuln_datatable_columns);
-						api.page.len(-1).draw();
+						vulnerability_table.rowGroup().enable();
 						api.order([col_index, 'asc']).draw();
 						vulnerability_table.rowGroup().dataSrc(this.value);
 						Snackbar.show({
 							text: 'Vulnerabilities grouped by ' + this.value,
+							pos: 'top-right',
+							duration: 2500
+						});
+					} else {
+						vulnerability_table.rowGroup().disable();
+						api.order([[get_datatable_col_index('cvss_score', vuln_datatable_columns), 'desc']]).draw();
+						Snackbar.show({
+							text: 'Grouping cleared',
 							pos: 'top-right',
 							duration: 2500
 						});
@@ -2002,7 +2027,7 @@ $(document).ready(function() {
 				"processing": true,
 				"stripeClasses": [],
 				"lengthMenu": [20, 50, 100, 500, 1000],
-				"pageLength": 20,
+				"pageLength": 100,
 				'serverSide': true,
 				"ajax": '/api/listDatatableSubdomain/?project={{current_project.slug}}&scan_id={{scan_history_id}}&format=datatables&only_directory',
 				"order": [[ 5, "desc" ]],
@@ -2174,7 +2199,7 @@ $(document).ready(function() {
 			if($('#screenshots-table').children().length > 0) {
 				return false;
 			}
-			get_screenshot('{% url 'api:fetchScreenshots' %}', {{scan_history_id}});
+			get_screenshot('{% url "api:fetchScreenshots" %}', {{scan_history_id}});
 
 			//animate search placeholder
 			const words = ["Search by Page Title   ",
@@ -2187,22 +2212,22 @@ $(document).ready(function() {
 	{% endif %}
 
 	//populate widgets
-	get_important_subdomains('{% url 'api:querySubdomains' %}', target_id=null, scan_history_id={{scan_history_id}});
-	get_recon_notes('{% url 'api:listTodoNotes' %}', target_id=null, scan_history_id={{scan_history_id}});
+	get_important_subdomains('{% url "api:querySubdomains" %}', target_id=null, scan_history_id={{scan_history_id}});
+	get_recon_notes('{% url "api:listTodoNotes" %}', target_id=null, scan_history_id={{scan_history_id}});
 
-	get_ips('{{ ip_addresses|safe }}', '{% url 'api:getIpDetails' %}', '{% url 'api:querySubdomains' %}', scan_id={{scan_history_id}}, domain_id=null);
-	get_technologies('{% url 'api:listTechnologies' %}', '{% url 'api:querySubdomains' %}', scan_id={{scan_history_id}}, domain_id=null);
-	get_ports('{{ ip_addresses|safe }}', '{% url 'api:listIPs' %}', '{% url 'api:querySubdomains' %}', scan_id={{scan_history_id}}, domain_id=null);
+	get_ips('{{ ip_addresses|safe }}', '{% url "api:getIpDetails" %}', '{% url "api:querySubdomains" %}', scan_id={{scan_history_id}}, domain_id=null);
+	get_technologies('{% url "api:listTechnologies" %}', '{% url "api:querySubdomains" %}', scan_id={{scan_history_id}}, domain_id=null);
+	get_ports('{{ ip_addresses|safe }}', '{% url "api:listIPs" %}', '{% url "api:querySubdomains" %}', scan_id={{scan_history_id}}, domain_id=null);
 
-	get_subdomain_changes('{% url 'api:subdomain-changes-list' %}', {{scan_history_id}});
-	get_endpoint_changes('{% url 'api:endpoint-changes-list' %}', {{scan_history_id}});
+	get_subdomain_changes('{% url "api:subdomain-changes-list" %}', {{scan_history_id}});
+	get_endpoint_changes('{% url "api:endpoint-changes-list" %}', {{scan_history_id}});
 
-	get_interesting_subdomains('{% url 'api:interesting-subdomains-list' %}', project='{{current_project.slug}}', null, {{scan_history_id}});
-	get_interesting_endpoints('{% url 'api:interesting-endpoints-list' %}', project='{{current_project.slug}}', null, {{scan_history_id}});
+	get_interesting_subdomains('{% url "api:interesting-subdomains-list" %}', project='{{current_project.slug}}', null, {{scan_history_id}});
+	get_interesting_endpoints('{% url "api:interesting-endpoints-list" %}', project='{{current_project.slug}}', null, {{scan_history_id}});
 
-	loadSubscanHistoryWidget('{% url 'api:listSubScans' %}', scan_history_id={{scan_history_id}}, domain_id=null);
+	loadSubscanHistoryWidget('{% url "api:listSubScans" %}', scan_history_id={{scan_history_id}}, domain_id=null);
 
-	get_most_vulnerable_target('{% url 'api:fetch_most_vulnerable' %}', '{% url 'all_vulns' current_project.slug %}', slug='{{current_project.slug}}', scan_id={{scan_history_id}}, target_id=null, ignore_info=false);
+	get_most_vulnerable_target('{% url "api:fetch_most_vulnerable" %}', '{% url "all_vulns" current_project.slug %}', slug='{{current_project.slug}}', scan_id={{scan_history_id}}, target_id=null, ignore_info=false);
 	// listener for info checkbox on most vulnerable target
 	$('#ignore_info_most_vuln_checkbox').change(function() {
 		if (this.checked) {
@@ -2211,7 +2236,7 @@ $(document).ready(function() {
 		else{
 			var text_msg = 'Informational Vulnerabilities included in Most Vulnerable Targets.';
 		}
-		get_most_vulnerable_target('{% url 'api:fetch_most_vulnerable' %}', '{% url 'all_vulns' current_project.slug %}', slug='{{current_project.slug}}', scan_id={{scan_history_id}}, target_id=null, ignore_info=this.checked);
+		get_most_vulnerable_target('{% url "api:fetch_most_vulnerable" %}', '{% url "all_vulns" current_project.slug %}', slug='{{current_project.slug}}', scan_id={{scan_history_id}}, target_id=null, ignore_info=this.checked);
 		Snackbar.show({
 			text: text_msg,
 			pos: 'top-right',
@@ -2219,7 +2244,7 @@ $(document).ready(function() {
 		});
 	});
 
-	get_most_common_vulnerability('{% url 'api:fetch_most_common_vulnerability' %}', '{% url 'all_vulns' current_project.slug %}', slug='{{current_project.slug}}', scan_id={{scan_history_id}}, target_id=null, ignore_info=false);
+	get_most_common_vulnerability('{% url "api:fetch_most_common_vulnerability" %}', '{% url "all_vulns" current_project.slug %}', slug='{{current_project.slug}}', scan_id={{scan_history_id}}, target_id=null, ignore_info=false);
 	// listener for info checkbox on most vulnerable target
 	$('#ignore_info_most_common_vuln_checkbox').change(function() {
 		if (this.checked) {
@@ -2228,7 +2253,7 @@ $(document).ready(function() {
 		else{
 			var text_msg = 'Informational Vulnerabilities included for Most Common Vulnerabilities.';
 		}
-		get_most_common_vulnerability('{% url 'api:fetch_most_common_vulnerability' %}', '{% url 'all_vulns' current_project.slug %}', slug='{{current_project.slug}}', scan_id={{scan_history_id}}, target_id=null, ignore_info=this.checked);
+		get_most_common_vulnerability('{% url "api:fetch_most_common_vulnerability" %}', '{% url "all_vulns" current_project.slug %}', slug='{{current_project.slug}}', scan_id={{scan_history_id}}, target_id=null, ignore_info=this.checked);
 		Snackbar.show({
 			text: text_msg,
 			pos: 'top-right',
@@ -2265,13 +2290,13 @@ $(document).ready(function() {
 	});
 
 	$("#pills-endpoints-tab").click(function() {
-		get_endpoints('{% url 'api:endpoints-list' %}', '{% url 'api:subdomains-list' %}', project='{{current_project.slug}}', scan_history={{scan_history_id}}, null, gf_tags=null);
+		get_endpoints('{% url "api:endpoints-list" %}', '{% url "api:subdomains-list" %}', project='{{current_project.slug}}', scan_history={{scan_history_id}}, null, gf_tags=null);
 	});
 
 	{% if 'fetch_url' in history.tasks and history.used_gf_patterns %}
 		{% for pattern in history.used_gf_patterns|split:"," %}
 			$("#pills-{{pattern}}-tab").click(function() {
-				get_endpoints('{% url 'api:endpoints-list' %}', '{% url 'api:subdomains-list' %}', project='{{current_project.slug}}', scan_history={{scan_history_id}}, domain_id=null, gf_tags='{{pattern}}');
+				get_endpoints('{% url "api:endpoints-list" %}', '{% url "api:subdomains-list" %}', project='{{current_project.slug}}', scan_history={{scan_history_id}}, domain_id=null, gf_tags='{{pattern}}');
 			});
 		{% endfor %}
 	{% endif %}
@@ -2382,7 +2407,7 @@ $(document).ready(function() {
 							var web_server = '';
 							var waf_badge = '';
 							if (row['technologies']){
-								tech_badge = '<div>' + parse_technology('{% url 'api:querySubdomains' %}', row['technologies'], "primary", scan_id={{scan_history_id}}, domain_id=null) + '</div>';
+								tech_badge = '<div>' + parse_technology('{% url "api:querySubdomains" %}', row['technologies'], "primary", scan_id={{scan_history_id}}, domain_id=null) + '</div>';
 							}
 							if(row['is_interesting'])
 							{
@@ -2525,8 +2550,8 @@ $(document).ready(function() {
 					{
 						"render": function ( data, type, row ) {
 							return renderBadge(data, {
-								api_ips_url: '{% url 'api:listIPs' %}',
-								api_subdomains_url: '{% url 'api:querySubdomains' %}',
+								api_ips_url: '{% url "api:listIPs" %}',
+								api_subdomains_url: '{% url "api:querySubdomains" %}',
 								scan_id: {{scan_history_id}},
 								domain_id: null
 							});
@@ -2703,12 +2728,11 @@ $(document).ready(function() {
 
 			$("#subdomain_scan_results").on('click', '.btn-scan-subdomain', function () {
 				$('input[type=checkbox]').prop('checked',false);
-				$('#subscan-modal').modal('show');
 				var subdomain_id = $(this).attr('id');
-				$('a[data-toggle="tooltip"]').tooltip("hide")
 				$('#subtask_subdomain_id').val(subdomain_id);
-				// to distinguish multiple subscan or single, put a extra attribute on button
 				$('#btn-initiate-subtask').attr('multiple-subscan', false);
+				$('a[data-toggle="tooltip"]').tooltip("hide");
+				if (window.ModalManager) ModalManager.showById(ModalManager.MODAL_IDS.SUBSCAN);
 			});
 
 			// if screenshot is not taken remove screenshot row
@@ -2786,10 +2810,10 @@ $(document).ready(function() {
 
 	// Set API URLs for scan status functions
 	window.scanStatusApiUrls = {
-		scanStatusUrl: '{% url 'api:scan_status' %}',
-		stopScanUrl: '{% url 'api:stop_scan' %}',
-		stopActivityUrl: '{% url 'api:stop_activity' %}',
-		fetchSubscanUrl: '{% url 'api:fetch_subscan_results' %}'
+		scanStatusUrl: '{% url "api:scan_status" %}',
+		stopScanUrl: '{% url "api:stop_scan" %}',
+		stopActivityUrl: '{% url "api:stop_activity" %}',
+		fetchSubscanUrl: '{% url "api:fetch_subscan_results" %}'
 	};
 
 	// Connect to WebSocket for real-time scan status updates
@@ -2798,10 +2822,10 @@ $(document).ready(function() {
 			updateDetail: function(data) {
 				updateScanDetailPage(data);
 			},
-			scanStatusUrl: '{% url 'api:scan_status' %}',
-			stopScanUrl: '{% url 'api:stop_scan' %}',
-			stopActivityUrl: '{% url 'api:stop_activity' %}',
-			fetchSubscanUrl: '{% url 'api:fetch_subscan_results' %}'
+			scanStatusUrl: '{% url "api:scan_status" %}',
+			stopScanUrl: '{% url "api:stop_scan" %}',
+			stopActivityUrl: '{% url "api:stop_activity" %}',
+			fetchSubscanUrl: '{% url "api:fetch_subscan_results" %}'
 		});
 	}
 
@@ -2820,7 +2844,7 @@ $(document).ready(function() {
 		},
 		"stripeClasses": [],
 		"lengthMenu": [[50, 100, 200, 300, 400, -1], [50, 100, 200, 300, 400, 'All']],
-		"pageLength": 50,
+		"pageLength": 100,
 	});
 
 });
