@@ -14,6 +14,7 @@ from .definitions import (
     INITIATED_TASK,
     RUNNING_BACKGROUND,
     RUNNING_TASK,
+    SKIPPED_TASK,
     SUCCESS_TASK,
 )
 
@@ -159,6 +160,7 @@ def misc(request):
         "SUCCESS_TASK": SUCCESS_TASK,
         "ABORTED_TASK": ABORTED_TASK,
         "RUNNING_BACKGROUND": RUNNING_BACKGROUND,
+        "SKIPPED_TASK": SKIPPED_TASK,
     }
     external_ip = _get_cached_external_ip()
     return {"external_ip": external_ip, "RENGINE_SCAN_STATUS": scan_status}

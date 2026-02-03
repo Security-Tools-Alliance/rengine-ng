@@ -8,7 +8,7 @@ Context variables:
 - indent_level: Optional integer for indentation level (default: 0)
 {% endcomment %}
 
-<div class="command-log-entry mb-1" data-command-id="{{ command.id }}" data-runner-type="{{ command.runner_type|default:'' }}" data-has-parent="{{ command.has_parent|yesno:'true,false' }}">
+<div class="command-log-entry mb-1" data-command-id="{{ command.id }}" data-runner-type="{{ command.runner_type|default:'' }}" data-has-parent="{{ command.has_parent|yesno:'true,false' }}" data-command-name="{{ command.name|default:command.workflow_name|default:'' }}">
   <div class="command-log-header" data-bs-toggle="collapse" data-bs-target="#collapse-command-{{ command.id }}" style="cursor: pointer;">
     <div class="d-flex align-items-center gap-2">
       {% if command.runner_type == "scan" %}
@@ -47,7 +47,7 @@ Context variables:
       {% endif %}
       
       {% if command.elapsed %}
-        <span class="text-muted small">
+        <span class="text-muted small command-log-header-duration">
           ({{ command.elapsed|floatformat:2 }}s)
         </span>
       {% endif %}
@@ -73,6 +73,12 @@ Context variables:
         {% if command.end_time %}
           <div class="mb-2">
             <strong>End Time:</strong> {{ command.end_time|naturaltime }}
+          </div>
+        {% endif %}
+        
+        {% if command.elapsed is not None %}
+          <div class="mb-2">
+            <strong>Duration:</strong> {{ command.elapsed|floatformat:1 }}s
           </div>
         {% endif %}
         

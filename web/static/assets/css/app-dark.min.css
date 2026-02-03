@@ -3728,6 +3728,14 @@ body.authentication-bg-pattern {
   border-color: #3283f6
 }
 
+.track-order-list ul li.failed {
+  border-color: #dc3545
+}
+
+.track-order-list ul li.skipped {
+  border-color: #17a2b8
+}
+
 .track-order-list ul li .active-dot.dot {
   top: -9px;
   left: -16px;

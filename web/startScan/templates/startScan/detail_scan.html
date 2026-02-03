@@ -235,7 +235,7 @@ Scan Findings
 								<ul class="list-unstyled">
 									{% if history.is_legacy_scan %}
 										{% for activity in scan_activity %}
-										<li class="{% if activity.status == 2 %}completed{% elif activity.status == 1 %}running{% else %}pending{% endif %}">
+										<li class="{% if activity.status == 2 %}completed{% elif activity.status == 1 %}running{% elif activity.status == 0 %}failed{% else %}pending{% endif %}">
 											<h5 class="mt-0 mb-1">{{activity.title}}
 												<span class="float-end mt-1 badge {% if activity.status == 0 %}badge-soft-danger {% elif activity.status == 1 %}badge-soft-info{% elif activity.status == 2 %}badge-soft-success{% endif %}">
 													{% if activity.status == 0 %}Failed
@@ -259,13 +259,14 @@ Scan Findings
 									{% else %}
 										{% for activity in scan_activity %}
 										{% if activity.runner_id %}
-										<li class="{% if activity.status_string == 'SUCCESS' %}completed{% elif activity.status_string == 'RUNNING' %}running{% elif activity.status_string == 'REVOKED' %}aborted{% else %}pending{% endif %}" data-runner-id="{{activity.runner_id.id}}">
+										<li class="{% if activity.status_string == 'SUCCESS' %}completed{% elif activity.status_string == 'RUNNING' %}running{% elif activity.status_string == 'REVOKED' %}aborted{% elif activity.status_string == 'FAILURE' or activity.status_string == 'FAILED' %}failed{% elif activity.status_string == 'SKIPPED' %}skipped{% else %}pending{% endif %}" data-runner-id="{{activity.runner_id.id}}">
 											<h5 class="mt-0 mb-1">{{activity.title}}
-												<span class="float-end mt-1 badge {% if activity.status_string == 'FAILURE' or activity.status_string == 'FAILED' %}badge-soft-danger {% elif activity.status_string == 'RUNNING' %}badge-soft-info{% elif activity.status_string == 'SUCCESS' %}badge-soft-success{% elif activity.status_string == 'REVOKED' %}badge-soft-danger{% else %}badge-soft-secondary{% endif %}">
+												<span class="float-end mt-1 badge {% if activity.status_string == 'FAILURE' or activity.status_string == 'FAILED' %}badge-soft-danger {% elif activity.status_string == 'RUNNING' %}badge-soft-info{% elif activity.status_string == 'SUCCESS' %}badge-soft-success{% elif activity.status_string == 'REVOKED' %}badge-soft-danger{% elif activity.status_string == 'SKIPPED' %}badge-soft-info{% else %}badge-soft-secondary{% endif %}">
 													{% if activity.status_string == 'FAILURE' or activity.status_string == 'FAILED' %}Failed
 													{% elif activity.status_string == 'RUNNING' %}In progress<span class="active-dot dot"></span>
 													{% elif activity.status_string == 'SUCCESS' %}Completed
 													{% elif activity.status_string == 'REVOKED' %}Aborted
+													{% elif activity.status_string == 'SKIPPED' %}Skipped
 													{% else %}Pending
 													{% endif %}
 												</span>
@@ -277,7 +278,7 @@ Scan Findings
 											{% if activity.status_string == 'RUNNING' %}
 												<span class="float-end"><a href="#" onclick="stop_activity('{% url 'api:stop_activity' %}', activity_id={{activity.id}}, reload_scan_bar=true, reload_location=true); return false;" class="btn btn-xs btn-soft-danger waves-effect waves-light"><i class="fe-alert-triangle"></i> Stop</a></span>
 											{% endif %}
-											<span><a href="javascript:get_logs_modal(null, {{activity.id}}, '{{current_project.slug}}')"><i class="fe-file"></i> Logs</a></span>
+											<span><a href="javascript:get_logs_modal(null, {{activity.id}}, '{{current_project.slug}}', {{activity.runner_id.id}})"><i class="fe-file"></i> Logs</a></span>
 											{% if activity.status_string == 'FAILURE' or activity.status_string == 'FAILED' %}
 												{% if activity.error_message %}
 													<p class="badge badge-soft-danger">Error: {{activity.error_message}}</p>

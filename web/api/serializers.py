@@ -253,6 +253,9 @@ class SubScanSerializer(serializers.ModelSerializer):
 
 
 class CommandSerializer(serializers.ModelSerializer):
+    activity_id = serializers.SerializerMethodField()
+    runner_id = serializers.SerializerMethodField()
+    status_string = serializers.SerializerMethodField()
     elapsed = serializers.SerializerMethodField()
     formatted_output = serializers.SerializerMethodField()
     indent_level = serializers.SerializerMethodField()
@@ -263,6 +266,9 @@ class CommandSerializer(serializers.ModelSerializer):
             "id",
             "scan_history",
             "activity",
+            "activity_id",
+            "runner_id",
+            "status_string",
             "command",
             "return_code",
             "output",
@@ -285,6 +291,19 @@ class CommandSerializer(serializers.ModelSerializer):
             "indent_level",
         ]
         depth = 1
+
+    def get_activity_id(self, obj):
+        """Return activity FK id for modal context filtering."""
+        return obj.activity_id
+
+    def get_runner_id(self, obj):
+        """Return runner FK id from activity for modal context filtering."""
+        activity = getattr(obj, "activity", None)
+        return activity.runner_id_id if activity is not None else None
+
+    def get_status_string(self, obj):
+        """Return effective status (from runner for Secator) for display."""
+        return obj.status_string
 
     def get_elapsed(self, obj):
         """Return elapsed field as float."""
@@ -597,6 +616,7 @@ class SecatorRunnerSerializer(serializers.ModelSerializer):
             "FAILED": "Failed",
             "PENDING": "Pending",
             "REVOKED": "Aborted",
+            "SKIPPED": "Skipped",
         }
         return status_map.get(status.upper(), "Unknown")
 

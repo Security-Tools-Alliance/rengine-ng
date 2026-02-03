@@ -8,7 +8,14 @@ from typing import Optional
 from celery.utils.log import get_task_logger
 from django.utils import timezone
 
-from reNgine.definitions import ABORTED_TASK, FAILED_TASK, INITIATED_TASK, RUNNING_TASK, SUCCESS_TASK
+from reNgine.definitions import (
+    ABORTED_TASK,
+    FAILED_TASK,
+    INITIATED_TASK,
+    RUNNING_TASK,
+    SKIPPED_TASK,
+    SUCCESS_TASK,
+)
 from reNgine.services.repositories.scan_repository import ScanRepository
 from startScan.models import ScanActivity, ScanHistory, SecatorRunner
 
@@ -17,17 +24,20 @@ logger = get_task_logger(__name__)
 
 TERMINAL_RUNNER_STATUSES = frozenset({"SUCCESS", "FAILURE", "FAILED", "REVOKED"})
 
+UNKNOWN_SECATOR_STATUS_FALLBACK = INITIATED_TASK
+
 
 class SecatorProgressSync:
     """Service for synchronizing Secator runner progress with ScanHistory."""
 
     @staticmethod
-    def map_secator_status_to_rengine(secator_status: str) -> int:
+    def map_secator_status_to_rengine(secator_status: Optional[str]) -> int:
         """
         Map Secator status to reNgine status.
 
         Args:
-            secator_status: Secator status string (RUNNING, SUCCESS, FAILURE, etc.)
+            secator_status: Secator status string (RUNNING, SUCCESS, FAILURE, etc.).
+                None or empty string map to UNKNOWN_SECATOR_STATUS_FALLBACK.
 
         Returns:
             int: reNgine status code
@@ -39,8 +49,18 @@ class SecatorProgressSync:
             "FAILED": FAILED_TASK,
             "PENDING": INITIATED_TASK,
             "REVOKED": ABORTED_TASK,
+            "SKIPPED": SKIPPED_TASK,
         }
-        return status_map.get(secator_status.upper(), INITIATED_TASK)
+        if secator_status is None or not secator_status.strip():
+            return UNKNOWN_SECATOR_STATUS_FALLBACK
+        normalized = secator_status.upper()
+        if normalized not in status_map:
+            logger.warning(
+                "Unknown Secator status %r, using fallback %s",
+                secator_status,
+                UNKNOWN_SECATOR_STATUS_FALLBACK,
+            )
+        return status_map.get(normalized, UNKNOWN_SECATOR_STATUS_FALLBACK)
 
     @staticmethod
     def calculate_workflow_progress(scan_history_id: int) -> float:

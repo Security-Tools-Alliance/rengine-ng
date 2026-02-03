@@ -31,6 +31,7 @@ from reNgine.definitions import (
     RUNNING_BACKGROUND,
     RUNNING_TASK,
     SCHEDULED_SCAN,
+    SKIPPED_TASK,
     SUCCESS_TASK,
 )
 from reNgine.secator.service import run_per_task_secator_scans, start_secator_scan
@@ -412,13 +413,22 @@ def detail_scan(request, id, slug):
         When(status=FAILED_TASK, then=Value(1)),
         When(status=SUCCESS_TASK, then=Value(2)),
         When(status=ABORTED_TASK, then=Value(3)),
-        default=Value(4),
+        When(status=SKIPPED_TASK, then=Value(4)),
+        default=Value(5),
+        output_field=IntegerField(),
+    )
+    hierarchy_order = Case(
+        When(runner_id__runner_type="scan", then=Value(0)),
+        When(runner_id__runner_type="workflow", then=Value(1)),
+        When(runner_id__runner_type="task", then=Value(2)),
+        default=Value(3),
         output_field=IntegerField(),
     )
     scan_activity = (
         ScanActivity.objects.filter(scan_of__id=id)
-        .annotate(sort_priority=timeline_status_order)
-        .order_by("sort_priority", "-time")
+        .select_related("runner_id")
+        .annotate(sort_priority=timeline_status_order, hierarchy_order=hierarchy_order)
+        .order_by("sort_priority", "hierarchy_order", "-time")
     )
     cves = CveId.objects.filter(cve_ids__in=vulns)
     cwes = CweId.objects.filter(cwe_ids__in=vulns)

@@ -1223,6 +1223,9 @@ function get_directory_modal(endpoint_url, scan_id=null, subdomain_id=null, subd
 }
 
 function escapeHtml(text) {
+	if (typeof window !== 'undefined' && window.CommandLogHelpers && window.CommandLogHelpers.escapeHtml) {
+		return window.CommandLogHelpers.escapeHtml(text);
+	}
 	if (!text) return '';
 	const div = document.createElement('div');
 	div.textContent = text;
@@ -1242,51 +1245,77 @@ function getRunnerIcon(runnerType) {
 
 function getStatusBadge(status) {
 	if (!status) return '';
-	let badgeClass = 'secondary';
-	if (status === 'SUCCESS') {
-		badgeClass = 'success';
-	} else if (status === 'FAILURE' || status === 'FAILED') {
-		badgeClass = 'danger';
-	} else if (status === 'RUNNING') {
-		badgeClass = 'primary';
+	const H = (typeof window !== 'undefined' && window.CommandLogHelpers) || {};
+	const info = H.getStatusBadgeInfo ? H.getStatusBadgeInfo(status) : null;
+	if (info) {
+		return `<span class="badge ${info.class}">${escapeHtml(info.text)}</span>`;
 	}
-	return `<span class="badge badge-soft-${badgeClass} ms-2">${escapeHtml(status)}</span>`;
+	const s = (status || '').toUpperCase();
+	let badgeClass = 'secondary';
+	let label = s;
+	if (s === 'SUCCESS') {
+		badgeClass = 'success';
+	} else if (s === 'FAILURE' || s === 'FAILED') {
+		badgeClass = 'danger';
+		label = 'FAILED';
+	} else if (s === 'RUNNING') {
+		badgeClass = 'primary';
+	} else if (s === 'REVOKED') {
+		badgeClass = 'danger';
+		label = 'ABORTED';
+	} else if (s === 'SKIPPED') {
+		badgeClass = 'info';
+	}
+	return `<span class="badge badge-soft-${badgeClass}">${escapeHtml(label)}</span>`;
 }
 
 function create_log_element(log) {
 	const logElement = document.createElement("div");
-	logElement.className = "command-log-entry mb-2";
+	logElement.className = "command-log-entry mb-1";
 	logElement.setAttribute("data-command-id", log.id);
-	
-	const displayName = (log.name && log.name.trim().length > 0) ? log.name : (log.command || 'Unknown');
 	const runnerType = log.runner_type || '';
+	const commandName = log.name || log.workflow_name || '';
+	if (runnerType) {
+		logElement.setAttribute("data-runner-type", runnerType);
+	}
+	logElement.setAttribute("data-has-parent", (log.has_parent || false) ? 'true' : 'false');
+	if (commandName) {
+		logElement.setAttribute("data-command-name", commandName);
+	}
+
+	const displayName = (log.name && log.name.trim().length > 0) ? log.name : (log.command || 'Unknown');
 	const hasParent = log.has_parent || false;
-	const indentLevel = hasParent ? 1 : 0;
-	
+	const effectiveStatus = log.status_string != null && log.status_string !== '' ? log.status_string : log.status;
+
 	// Build hierarchy prefix
 	let hierarchyPrefix = '';
 	if (hasParent) {
 		hierarchyPrefix = '<span class="text-muted">└─</span> ';
 	}
-	
+
 	// Get icon based on runner type
 	const icon = getRunnerIcon(runnerType);
-	
-	// Build header
-	let headerHTML = `
-		<div class="command-log-header d-flex align-items-center" data-bs-toggle="collapse" data-bs-target="#collapse-command-${log.id}" style="cursor: pointer; margin-left: ${indentLevel * 20}px;">
+
+	// Build header: same structure as command_log.html (header > d-flex align-items-center gap-2 > icon, name, badge, duration)
+	let innerFlexContent = `
 			${icon}
 			<span class="command-log-name fw-bold">
 				${hierarchyPrefix}${escapeHtml(displayName)}
 			</span>
-			${getStatusBadge(log.status)}
+			${getStatusBadge(effectiveStatus)}
 	`;
-	
-	if (log.elapsed !== null && log.elapsed !== undefined) {
-		headerHTML += `<span class="text-muted ms-2 small">(${parseFloat(log.elapsed).toFixed(2)}s)</span>`;
+	const durationSec = (typeof window !== 'undefined' && window.CommandLogHelpers && window.CommandLogHelpers.getDurationSeconds)
+		? window.CommandLogHelpers.getDurationSeconds(log)
+		: (log.elapsed != null && typeof log.elapsed === 'number' ? log.elapsed : null);
+	if (durationSec != null) {
+		innerFlexContent += `<span class="text-muted small command-log-header-duration">(${Number(durationSec).toFixed(2)}s)</span>`;
 	}
-	
-	headerHTML += `</div>`;
+	const headerHTML = `
+		<div class="command-log-header" data-bs-toggle="collapse" data-bs-target="#collapse-command-${log.id}" style="cursor: pointer;">
+			<div class="d-flex align-items-center gap-2">
+				${innerFlexContent}
+			</div>
+		</div>`;
 	
 	// Build content
 	let contentHTML = '';
@@ -1317,6 +1346,19 @@ function create_log_element(log) {
 			contentHTML += `
 				<div class="mb-2">
 					<strong>End Time:</strong> ${escapeHtml(log.end_time)}
+				</div>`;
+		}
+		
+		const detailDurationSec = (typeof window !== 'undefined' && window.CommandLogHelpers && window.CommandLogHelpers.getDurationSeconds)
+			? window.CommandLogHelpers.getDurationSeconds(log)
+			: (log.elapsed != null && typeof log.elapsed === 'number' ? log.elapsed : null);
+		if (detailDurationSec != null) {
+			const durStr = (typeof window !== 'undefined' && window.CommandLogHelpers && window.CommandLogHelpers.formatDuration)
+				? window.CommandLogHelpers.formatDuration(detailDurationSec)
+				: (typeof log.elapsed === 'number' ? log.elapsed.toFixed(1) + 's' : String(log.elapsed) + 's');
+			contentHTML += `
+				<div class="mb-2">
+					<strong>Duration:</strong> ${escapeHtml(durStr)}
 				</div>`;
 		}
 		
@@ -1389,12 +1431,17 @@ function create_log_element(log) {
 	return logElement;
 }
 
-function get_logs_modal(scan_id=null, activity_id=null, project_slug=null) {
+if (typeof window !== 'undefined') {
+	window.create_log_element = create_log_element;
+}
+
+function get_logs_modal(scan_id = null, activity_id = null, project_slug = null, runner_id = null) {
 	const slug = project_slug || (typeof current_project_slug !== 'undefined' ? current_project_slug : '');
 	const url = scan_id
 		? `/scan/${slug}/logs/?scan_id=${scan_id}`
 		: `/scan/${slug}/logs/?activity_id=${activity_id}`;
 	const title = scan_id ? `Logs for scan #${scan_id}` : `Logs for activity #${activity_id}`;
+	const expandForActivity = activity_id != null || runner_id != null;
 
 	const loadingTitle = 'Fetching logs...';
 	const loadingBody = '<p class="text-muted">Loading...</p>';
@@ -1430,6 +1477,45 @@ function get_logs_modal(scan_id=null, activity_id=null, project_slug=null) {
 				$('#xl-modal-title').html(title);
 				$('#xl-modal-content').html(bodyHtml);
 				ModalManager.showXlOnly();
+			}
+			if (expandForActivity) {
+				window.currentLogsModalContext = {
+					activity_id: activity_id,
+					runner_id: runner_id,
+					scan_id: scan_id,
+				};
+				const runExpandCollapses = function () {
+					const modalContent = document.getElementById('xl-modal-content');
+					if (!modalContent) return;
+					const collapseElements = modalContent.querySelectorAll('.collapse');
+					collapseElements.forEach(function (collapseElement) {
+						const id = collapseElement.id;
+						if (!id) return;
+						collapseElement.classList.add('show');
+						const trigger = modalContent.querySelector('.command-log-header[data-bs-target="#' + id + '"]');
+						if (trigger) {
+							trigger.setAttribute('aria-expanded', 'true');
+						}
+						if (typeof bootstrap !== 'undefined' && bootstrap.Collapse) {
+							try {
+								let bsCollapse = bootstrap.Collapse.getInstance(collapseElement);
+								if (!bsCollapse) {
+									bsCollapse = new bootstrap.Collapse(collapseElement, { toggle: false });
+								}
+								bsCollapse.show();
+							} catch (e) {
+								collapseElement.classList.add('show');
+							}
+						} else if (typeof $ !== 'undefined' && $.fn.collapse) {
+							$(collapseElement).collapse('show');
+						}
+					});
+				};
+				setTimeout(function () {
+					requestAnimationFrame(runExpandCollapses);
+				}, 250);
+			} else {
+				window.currentLogsModalContext = null;
 			}
 			$("body").tooltip({ selector: '[data-toggle=tooltip]' });
 		})

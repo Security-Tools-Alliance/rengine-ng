@@ -5,10 +5,12 @@ WebSocket utility functions for sending scan status updates.
 from datetime import datetime
 import logging
 import re
+from typing import Optional
 
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
-from django.db.models import Count, Prefetch, Q
+from django.db.models import Case, Count, F, IntegerField, Prefetch, Q, Value, When
+from django.db.models.functions import Coalesce
 
 from api.serializers import CommandSerializer, ScanActivitySerializer, SecatorRunnerSerializer
 from reNgine.definitions import (
@@ -16,6 +18,7 @@ from reNgine.definitions import (
     FAILED_TASK,
     RUNNING_BACKGROUND,
     RUNNING_TASK,
+    SKIPPED_TASK,
     SUCCESS_TASK,
 )
 from startScan.models import (
@@ -46,6 +49,13 @@ SEVERITY_UNKNOWN = -1
 # Max items in WebSocket payload to bound DB load and message size
 _MAX_RUNNING_COMMANDS = 30
 _MAX_SUBSCANS = 30
+
+try:
+    from django.conf import settings
+
+    _MAX_COMMANDS_LOGS = getattr(settings, "WEBSOCKET_MAX_COMMANDS_LOGS", 100)
+except Exception:  # pragma: no cover - settings may not be available in some contexts
+    _MAX_COMMANDS_LOGS = 100
 
 
 def _clean_channel_name(name: str) -> str:
@@ -98,7 +108,9 @@ def _build_scan_status_payload(scan_history_id: int) -> dict:
     else:
         _add_secator_runners_to_message(scan, message)
 
-    message["commands"] = _get_running_commands_payload(scan)
+    # Only include the most recent commands (bounded by _MAX_COMMANDS_LOGS) in the
+    # WebSocket payload to keep bandwidth and UI work manageable for long scans.
+    message["commands"] = _get_commands_payload(scan, limit=_MAX_COMMANDS_LOGS)
     timeline = message.get("timeline", [])
     _sort_timeline_by_priority(timeline)
     message["timeline"] = timeline
@@ -110,7 +122,7 @@ def _build_scan_status_payload(scan_history_id: int) -> dict:
 
 
 def _timeline_status_order(status) -> int:
-    """Priority for timeline sort: running first, then error, success, aborted, other (0=top)."""
+    """Priority for timeline sort: running first, then error, success, aborted, skipped, other (0=top)."""
     if status in (RUNNING_TASK, RUNNING_BACKGROUND):
         return 0
     if status == FAILED_TASK:
@@ -119,7 +131,9 @@ def _timeline_status_order(status) -> int:
         return 2
     if status == ABORTED_TASK:
         return 3
-    return 4  # INITIATED_TASK, skipped, other
+    if status == SKIPPED_TASK:
+        return 4
+    return 5  # INITIATED_TASK, other
 
 
 def _parse_timeline_time(value) -> float:
@@ -134,11 +148,26 @@ def _parse_timeline_time(value) -> float:
         return 0.0
 
 
+def _timeline_hierarchy_order(runner_type: str | None) -> int:
+    """Order by hierarchy: scan (0), workflow (1), task (2), other (3)."""
+    if not runner_type:
+        return 3
+    t = runner_type.lower()
+    if t == "scan":
+        return 0
+    if t == "workflow":
+        return 1
+    if t == "task":
+        return 2
+    return 3
+
+
 def _sort_timeline_by_priority(timeline: list) -> None:
-    """Sort timeline in place: running first, then error, success, aborted, other; within group by most recent first."""
+    """Sort timeline in place: status, then hierarchy (scan > workflow > task), then most recent first."""
     timeline.sort(
         key=lambda i: (
             _timeline_status_order(i.get("status")),
+            _timeline_hierarchy_order(i.get("type")),
             -_parse_timeline_time(i.get("time")),
         )
     )
@@ -238,14 +267,34 @@ def _build_base_status_message(
     }
 
 
-def _get_running_commands_payload(scan: ScanHistory) -> list:
-    """Return serialized running commands for the scan (up to _MAX_RUNNING_COMMANDS)."""
-    running_commands = (
-        Command.objects.filter(scan_history=scan)
-        .filter(Q(status="RUNNING") | Q(end_time__isnull=True))
-        .order_by("-time")[:_MAX_RUNNING_COMMANDS]
+def _get_commands_payload(scan: ScanHistory, *, limit: Optional[int] = None) -> list:
+    """Return serialized commands for the scan (up to limit), same order as scan_logs_view.
+    UIs must not assume only running commands are sent; all commands up to limit are included.
+    """
+    if limit is None:
+        limit = _MAX_COMMANDS_LOGS
+    type_order_case = Case(
+        When(runner_type="scan", then=Value(0)),
+        When(runner_type="workflow", then=Value(1)),
+        When(runner_type="task", then=Value(2)),
+        default=Value(3),
+        output_field=IntegerField(),
     )
-    return CommandSerializer(running_commands, many=True).data if running_commands.exists() else []
+    queryset = (
+        Command.objects.filter(scan_history=scan)
+        .select_related("activity")
+        .annotate(
+            type_order=type_order_case,
+            group_key=Coalesce(
+                F("ancestor_id"),
+                F("workflow_name"),
+                F("name"),
+                Value(""),
+            ),
+        )
+        .order_by("type_order", "group_key", "time", "id")[:limit]
+    )
+    return CommandSerializer(list(queryset), many=True).data
 
 
 def _build_subscan_item(

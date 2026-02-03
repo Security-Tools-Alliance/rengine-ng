@@ -393,54 +393,226 @@ const updateCommandOutputs = function(data) {
         });
     }
     
-    // Update each command output
+    const H = (typeof window !== 'undefined' && window.CommandLogHelpers) || {};
+    const statusToBadge = H.getStatusBadgeInfo || function(s) {
+        return { class: 'badge-soft-secondary', text: (s || 'PENDING') + '' };
+    };
+    const effectiveStatus = H.getEffectiveCommandStatus || function(cmd) {
+        return (cmd.status_string != null && cmd.status_string !== '') ? cmd.status_string : cmd.status;
+    };
+    const escapeHtml = H.escapeHtml || function(text) {
+        if (text == null || text === '') return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    };
+    const formatRelativeTime = H.formatRelativeTime || function(iso) { return iso || ''; };
+    const formatDuration = H.formatDuration || function(sec) { return sec != null ? sec.toFixed(1) + 's' : ''; };
+    const getDurationSeconds = H.getDurationSeconds || function() { return null; };
+    const findDetailRow = H.findDetailRow || function() { return null; };
+    const setDetailRow = H.setDetailRow || function() {};
+    const setReturnCodeRow = H.setReturnCodeRow || function() {};
+    const setDurationRow = H.setDurationRow || function() {};
+
+    const ensureDetailBlock = function(commandElement, command) {
+        const collapseId = 'collapse-command-' + command.id;
+        let collapseEl = commandElement.querySelector('.collapse#' + collapseId);
+        if (collapseEl) {
+            const body = collapseEl.querySelector('.card-body');
+            if (body) return body;
+        }
+        const hasAny = command.time || command.end_time != null || command.elapsed != null ||
+            command.return_code != null || command.output ||
+            (command.formatted_output && command.formatted_output.formatted) ||
+            command.command || command.cwd;
+        if (!hasAny) return null;
+        collapseEl = document.createElement('div');
+        collapseEl.className = 'collapse';
+        collapseEl.id = collapseId;
+        const cardBody = document.createElement('div');
+        cardBody.className = 'card card-body mt-2';
+        collapseEl.appendChild(cardBody);
+        commandElement.appendChild(collapseEl);
+        return cardBody;
+    };
+
+    /**
+     * Find the .command-log-children container for the workflow identified by ancestorId.
+     * Uses data-attribute comparison instead of querySelector with escaped strings to avoid
+     * breakage on special characters. DOM: each .command-log-group contains one
+     * .command-log-entry (scan/workflow/task); workflows have data-command-name set.
+     */
+    const findWorkflowChildrenContainer = function(container, ancestorId) {
+        const groups = container.querySelectorAll('.command-log-group');
+        for (let i = 0; i < groups.length; i++) {
+            const entry = groups[i].querySelector('.command-log-entry[data-runner-type="workflow"]');
+            if (entry && entry.getAttribute('data-command-name') === ancestorId) {
+                let children = groups[i].querySelector(':scope > .command-log-children');
+                if (!children) {
+                    children = document.createElement('div');
+                    children.className = 'command-log-children ms-3';
+                    groups[i].appendChild(children);
+                }
+                return children;
+            }
+        }
+        return null;
+    };
+
+    /**
+     * Insert a new command row into the logs modal. DOM structure:
+     * - modalContent contains .command-log-group elements; each group has one .command-log-entry (scan | workflow | task).
+     * - Scan groups are at top level. Workflow groups are under the last scan group, inside .command-log-children.
+     * - Task groups are under their parent workflow group (matched by ancestor_id === workflow's data-command-name), inside .command-log-children.
+     */
+    const insertCommandRow = function(cmd) {
+        const createEl = typeof window.create_log_element === 'function' ? window.create_log_element : null;
+        if (!createEl) {
+            return;
+        }
+        const entryEl = createEl(cmd);
+        const runnerType = (cmd.runner_type || '').toLowerCase();
+
+        if (runnerType === 'scan') {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'command-log-group';
+            wrapper.appendChild(entryEl);
+            modalContent.appendChild(wrapper);
+            return;
+        }
+        if (runnerType === 'workflow') {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'command-log-group';
+            wrapper.appendChild(entryEl);
+            const scanGroups = modalContent.querySelectorAll('.command-log-group');
+            let lastScanGroup = null;
+            for (let i = scanGroups.length - 1; i >= 0; i--) {
+                const entry = scanGroups[i].querySelector('.command-log-entry[data-runner-type="scan"]');
+                if (entry) {
+                    lastScanGroup = scanGroups[i];
+                    break;
+                }
+            }
+            if (!lastScanGroup) {
+                modalContent.appendChild(wrapper);
+                return;
+            }
+            let children = lastScanGroup.querySelector(':scope > .command-log-children');
+            if (!children) {
+                children = document.createElement('div');
+                children.className = 'command-log-children ms-3';
+                lastScanGroup.appendChild(children);
+            }
+            children.appendChild(wrapper);
+            return;
+        }
+        if (runnerType === 'task') {
+            const ancestorId = cmd.ancestor_id || '';
+            const parentChildren = findWorkflowChildrenContainer(modalContent, ancestorId);
+            if (parentChildren) {
+                parentChildren.appendChild(entryEl);
+            } else {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'command-log-group';
+                wrapper.appendChild(entryEl);
+                modalContent.appendChild(wrapper);
+            }
+        } else {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'command-log-group';
+            wrapper.appendChild(entryEl);
+            modalContent.appendChild(wrapper);
+        }
+    };
+
+    // Update each command output and status badge
     commandsToUpdate.forEach(function(command) {
         if (!command.id) {
             return;
         }
-        
-        // Find the command element by data-command-id
-        const commandElement = modalContent.querySelector('[data-command-id="' + command.id + '"]');
+
+        let commandElement = modalContent.querySelector('[data-command-id="' + command.id + '"]');
         if (!commandElement) {
-            // Command doesn't exist in DOM yet (newly created)
-            // Could optionally add it dynamically, but for now we skip
+            insertCommandRow(command);
             return;
         }
-        
-        // Find the output pre element
-        const outputElement = commandElement.querySelector('.command-output');
-        if (!outputElement) {
-            return;
+
+        const statusForBadge = effectiveStatus(command);
+        if (statusForBadge !== undefined && statusForBadge !== null) {
+            const header = commandElement.querySelector('.command-log-header');
+            if (header) {
+                const badge = header.querySelector('.badge');
+                if (badge) {
+                    const badgeInfo = statusToBadge(statusForBadge);
+                    badge.className = 'badge ' + badgeInfo.class;
+                    badge.textContent = badgeInfo.text;
+                }
+            }
         }
-        
-        // Skip if command is not running (has end_time and status is not RUNNING)
-        if (command.end_time && command.status !== 'RUNNING') {
-            return;
+
+        const durationSec = getDurationSeconds(command);
+        const header = commandElement.querySelector('.command-log-header');
+        if (header) {
+            let headerDurationSpan = header.querySelector('.command-log-header-duration');
+            if (durationSec != null) {
+                const headerDurationStr = '(' + durationSec.toFixed(2) + 's)';
+                if (headerDurationSpan) {
+                    headerDurationSpan.textContent = headerDurationStr;
+                } else {
+                    headerDurationSpan = document.createElement('span');
+                    headerDurationSpan.className = 'text-muted small command-log-header-duration';
+                    headerDurationSpan.textContent = headerDurationStr;
+                    const badge = header.querySelector('.badge');
+                    (badge ? badge.parentNode : header).appendChild(headerDurationSpan);
+                }
+            } else if (headerDurationSpan) {
+                headerDurationSpan.remove();
+            }
         }
-        
-        // Get formatted output or fallback to raw output
-        let outputHtml = '';
-        if (command.formatted_output && command.formatted_output.formatted) {
-            outputHtml = command.formatted_output.formatted;
-        } else if (command.output) {
-            // Escape HTML if no formatted output
-            const div = document.createElement('div');
-            div.textContent = command.output;
-            outputHtml = div.innerHTML;
+
+        const cardBody = ensureDetailBlock(commandElement, command);
+        if (cardBody) {
+            setDetailRow(cardBody, 'Time:', command.time ? formatRelativeTime(command.time) : null);
+            setDetailRow(cardBody, 'End Time:', command.end_time ? formatRelativeTime(command.end_time) : null);
+            setDurationRow(cardBody, durationSec != null ? formatDuration(durationSec) : null);
+            setReturnCodeRow(cardBody, command.return_code);
         }
-        
-        // Track the last rendered output to avoid relying on innerHTML normalization
-        if (typeof outputElement._lastRenderedHtml === 'undefined') {
-            outputElement._lastRenderedHtml = '';
+
+        let outputElement = commandElement.querySelector('.command-output');
+        const hasOutput = command.output || (command.formatted_output && command.formatted_output.formatted);
+        if (hasOutput && !outputElement && cardBody) {
+            const outputWrap = document.createElement('div');
+            outputWrap.className = 'mb-2';
+            outputWrap.innerHTML = '<strong>Output:</strong>';
+            const pre = document.createElement('pre');
+            pre.className = 'command-output mt-2 p-3 bg-dark text-light rounded';
+            pre.setAttribute('style', 'font-family: \'Courier New\', monospace; font-size: 0.875rem; white-space: pre-wrap; word-wrap: break-word; max-height: 500px; overflow-y: auto;');
+            outputWrap.appendChild(pre);
+            cardBody.appendChild(outputWrap);
+            outputElement = pre;
         }
-        
-        // Update the output content only when the effective HTML changes
-        if (outputHtml !== outputElement._lastRenderedHtml) {
-            outputElement.innerHTML = outputHtml;
-            outputElement._lastRenderedHtml = outputHtml;
-            
-            // Auto-scroll this specific container if user is near its bottom
-            maybeAutoScrollContainer(outputElement);
+
+        if (outputElement) {
+            const statusStr = (command.status_string != null && command.status_string !== '') ? command.status_string : command.status;
+            const skipOutputUpdate = command.end_time && statusStr !== 'RUNNING';
+            if (!skipOutputUpdate) {
+                let outputHtml = '';
+                if (command.formatted_output && command.formatted_output.formatted) {
+                    outputHtml = command.formatted_output.formatted;
+                } else if (command.output) {
+                    const div = document.createElement('div');
+                    div.textContent = command.output;
+                    outputHtml = div.innerHTML;
+                }
+                if (typeof outputElement._lastRenderedHtml === 'undefined') {
+                    outputElement._lastRenderedHtml = '';
+                }
+                if (outputHtml !== outputElement._lastRenderedHtml) {
+                    outputElement.innerHTML = outputHtml;
+                    outputElement._lastRenderedHtml = outputHtml;
+                    maybeAutoScrollContainer(outputElement);
+                }
+            }
         }
     });
 };
@@ -915,19 +1087,30 @@ const updateScanTimeline = function(data) {
             });
         }
         
-        // Sort: running first, then error, then success, then aborted/skipped/other; within each group by most recent first (uses definitions.py constants)
+        // Sort: running first, then error, success, aborted, skipped, other; within each group by hierarchy (scan > workflow > task) then most recent first
         const statusConst = window.RENGINE_SCAN_STATUS || {};
         const statusOrder = function(s) {
             if (s === statusConst.RUNNING_TASK || s === statusConst.RUNNING_BACKGROUND) return 0;
             if (s === statusConst.FAILED_TASK) return 1;
             if (s === statusConst.SUCCESS_TASK) return 2;
             if (s === statusConst.ABORTED_TASK) return 3;
-            return 4; // INITIATED_TASK, skipped, other
+            if (s === statusConst.SKIPPED_TASK) return 4;
+            return 5; // INITIATED_TASK, other
+        };
+        const hierarchyOrder = function(type) {
+            const t = (type || '').toLowerCase();
+            if (t === 'scan') return 0;
+            if (t === 'workflow') return 1;
+            if (t === 'task') return 2;
+            return 3;
         };
         itemsToRender.sort(function(a, b) {
             const orderA = statusOrder(a.status);
             const orderB = statusOrder(b.status);
             if (orderA !== orderB) return orderA - orderB;
+            const typeA = hierarchyOrder(a.type || a.runner_type);
+            const typeB = hierarchyOrder(b.type || b.runner_type);
+            if (typeA !== typeB) return typeA - typeB;
             const timeA = new Date(a.time || 0).getTime();
             const timeB = new Date(b.time || 0).getTime();
             return timeB - timeA;
@@ -968,13 +1151,17 @@ const updateScanTimeline = function(data) {
             }
             
             // Determine class based on status
-            // status: -1 = PENDING, 0 = FAILURE, 1 = RUNNING, 2 = SUCCESS, 3 = REVOKED
+            // status: -1 = PENDING, 0 = FAILURE, 1 = RUNNING, 2 = SUCCESS, 3 = REVOKED, 5 = SKIPPED_TASK
             if (item.status === 2) {
                 listItem.className = 'completed';
             } else if (item.status === 1) {
                 listItem.className = 'running';
             } else if (item.status === 3) {
                 listItem.className = 'aborted';
+            } else if (item.status === 0) {
+                listItem.className = 'failed';
+            } else if (item.status === statusConst.SKIPPED_TASK) {
+                listItem.className = 'skipped';
             } else {
                 listItem.className = 'pending';
             }
@@ -982,9 +1169,12 @@ const updateScanTimeline = function(data) {
             // Determine badge class and text
             let statusClass = 'badge-soft-secondary';
             let statusText = 'Pending';
-            if (item.status === 0 || item.status === -1) {
+            if (item.status === 0) {
                 statusClass = 'badge-soft-danger';
-                statusText = item.status === 0 ? 'Failed' : 'Pending';
+                statusText = 'Failed';
+            } else if (item.status === -1) {
+                statusClass = 'badge-soft-secondary';
+                statusText = 'Pending';
             } else if (item.status === 1) {
                 statusClass = 'badge-soft-info';
                 statusText = 'In progress';
@@ -994,6 +1184,9 @@ const updateScanTimeline = function(data) {
             } else if (item.status === 3) {
                 statusClass = 'badge-soft-danger';
                 statusText = 'Aborted';
+            } else if (item.status === statusConst.SKIPPED_TASK) {
+                statusClass = 'badge-soft-info';
+                statusText = 'Skipped';
             }
             
             // Format time: relative (e.g. "6 minutes ago") and absolute (e.g. "Feb. 1, 2026, 11:36 p.m.")
@@ -1039,7 +1232,7 @@ const updateScanTimeline = function(data) {
             // Build logs link HTML
             let logsLinkHtml = '';
             if (item.activity_id && projectSlug) {
-                logsLinkHtml = '<span><a href="javascript:get_logs_modal_realtime(null, ' + item.activity_id + ', \'' + projectSlug + '\', ' + item.id + ')"><i class="fe-file"></i> Logs</a></span>';
+                logsLinkHtml = '<span><a href="javascript:get_logs_modal(null, ' + item.activity_id + ', \'' + projectSlug + '\', ' + item.id + ')"><i class="fe-file"></i> Logs</a></span>';
             }
             
             // Build error message HTML if failed
@@ -1476,9 +1669,10 @@ const updateCounterupElement = function(element, newValue) {
 };
 
 const escapeHtml = function(text) {
-    if (!text) {
-        return '';
+    if (typeof window !== 'undefined' && window.CommandLogHelpers && window.CommandLogHelpers.escapeHtml) {
+        return window.CommandLogHelpers.escapeHtml(text);
     }
+    if (!text) return '';
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
@@ -1515,99 +1709,6 @@ const disconnectAllScanStatusWebSockets = function() {
     window.addEventListener('beforeunload', function() {
         disconnectAllScanStatusWebSockets();
     });
-    
-    /**
-     * Open logs modal for a specific activity with real-time updates
-     * @param {number|null} scan_id - Scan ID (optional)
-     * @param {number} activity_id - Activity ID
-     * @param {string} project_slug - Project slug
-     * @param {number} runner_id - Runner ID for filtering commands
-     */
-    window.get_logs_modal_realtime = function(scan_id, activity_id, project_slug, runner_id) {
-        // Store current activity context for filtering commands
-        window.currentLogsModalContext = {
-            activity_id: activity_id,
-            runner_id: runner_id,
-            scan_id: scan_id
-        };
-        
-        const effectiveProjectSlug = project_slug || (typeof current_project_slug !== 'undefined' ? current_project_slug : '');
-        const url = `/scan/${effectiveProjectSlug}/logs/?activity_id=${activity_id}`;
-        const title = `Logs for activity #${activity_id}`;
-        
-        // Clear modal
-        $('#xl-modal-title').empty();
-        $('#xl-modal-content').empty();
-        $('#xl-modal-footer').empty();
-        
-        // Show loading
-        if (typeof Swal !== 'undefined') {
-            Swal.fire({
-                title: 'Fetching logs...'
-            });
-            swal.showLoading();
-        }
-        
-        // Fetch logs
-        fetch(url)
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            return response.text();
-        })
-        .then(html => {
-            if (typeof Swal !== 'undefined') {
-                swal.close();
-            }
-            $('#xl-modal-title').html(title);
-            if (html && html.trim()) {
-                $('#xl-modal-content').html(html);
-                setTimeout(function() {
-                    const modalContent = document.getElementById('xl-modal-content');
-                    if (modalContent) {
-                        const collapseElements = modalContent.querySelectorAll('.collapse');
-                        collapseElements.forEach(function(collapseElement) {
-                            collapseElement.classList.add('show');
-                            if (typeof bootstrap !== 'undefined' && bootstrap.Collapse) {
-                                try {
-                                    const bsCollapse = bootstrap.Collapse.getInstance(collapseElement);
-                                    if (bsCollapse) {
-                                        bsCollapse.show();
-                                    } else {
-                                        const newCollapse = new bootstrap.Collapse(collapseElement, { toggle: false });
-                                        newCollapse.show();
-                                    }
-                                } catch (e) {
-                                    collapseElement.classList.add('show');
-                                }
-                            } else if (typeof $ !== 'undefined' && $.fn.collapse) {
-                                $(collapseElement).collapse('show');
-                            }
-                        });
-                    }
-                }, 150);
-            } else {
-                $('#xl-modal-content').html('<p class="text-muted">No logs available.</p>');
-            }
-            if (window.ModalManager) ModalManager.showXlOnly();
-            if (typeof $ !== 'undefined') {
-                $("body").tooltip({ selector: '[data-toggle=tooltip]' });
-            }
-        })
-        .catch(error => {
-            if (typeof Swal !== 'undefined') {
-                swal.close();
-            }
-            console.error('Error fetching logs:', error);
-            $('#xl-modal-title').html(title);
-            $('#xl-modal-content').html('<p class="text-danger">Error loading logs. Please try again.</p>');
-            if (window.ModalManager) ModalManager.showXlOnly();
-            if (typeof $ !== 'undefined') {
-                $("body").tooltip({ selector: '[data-toggle=tooltip]' });
-            }
-        });
-    };
     
     // Expose functions globally so they can be called from other scripts
     window.connectScanStatusWebSocket = connectScanStatusWebSocket;
