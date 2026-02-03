@@ -7,12 +7,12 @@ from unittest.mock import Mock, patch
 from django.core.cache import cache
 from django.test import RequestFactory, TestCase
 
-from reNgine import settings
 from reNgine import context_processors as context_processors_module
+from reNgine import settings
 from reNgine.context_processors import (
     EXTERNAL_IP_CACHE_KEY,
-    _get_external_ip_with_fallback,
     _get_cached_external_ip,
+    _get_external_ip_with_fallback,
     clear_external_ip_in_process_cache,
     misc,
     version,

@@ -120,10 +120,7 @@ def _get_cached_external_ip() -> str:
     with _cached_external_ip_lock:
         if use_in_process:
             now = time.monotonic()
-            if (
-                _cached_external_ip_value is not None
-                and now < _cached_external_ip_expires_at
-            ):
+            if _cached_external_ip_value is not None and now < _cached_external_ip_expires_at:
                 return _cached_external_ip_value
 
         external_ip = cache.get(EXTERNAL_IP_CACHE_KEY)
@@ -139,11 +136,7 @@ def _get_cached_external_ip() -> str:
             return external_ip
 
         external_ip = _get_external_ip_with_fallback()
-        ttl = (
-            EXTERNAL_IP_CACHE_TTL_SUCCESS
-            if external_ip != "Unable to retrieve IP"
-            else EXTERNAL_IP_CACHE_TTL_FAILURE
-        )
+        ttl = EXTERNAL_IP_CACHE_TTL_SUCCESS if external_ip != "Unable to retrieve IP" else EXTERNAL_IP_CACHE_TTL_FAILURE
         cache.set(EXTERNAL_IP_CACHE_KEY, external_ip, timeout=ttl)
         if use_in_process:
             _cached_external_ip_value = external_ip

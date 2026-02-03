@@ -21,7 +21,9 @@ class SecatorSelectionContext(TypedDict, total=False):
     all_tasks: Any
     tasks_dict: dict[str, SecatorTask]
     tasks: Any
-    scans: list[Any]  # scan mode: list of {"scan": SecatorScan, "workflows": [{"workflow", "structured_tasks", "tasks_count"}, ...]}
+    scans: list[
+        Any
+    ]  # scan mode: list of {"scan": SecatorScan, "workflows": [{"workflow", "structured_tasks", "tasks_count"}, ...]}
 
 
 def get_secator_selection_template_and_context(execution_mode: str) -> tuple[str, SecatorSelectionContext]:

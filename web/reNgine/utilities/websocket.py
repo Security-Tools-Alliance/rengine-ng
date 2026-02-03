@@ -9,7 +9,7 @@ from typing import Optional
 
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
-from django.db.models import Case, Count, F, IntegerField, Prefetch, Q, Value, When
+from django.db.models import Case, Count, F, IntegerField, Prefetch, Value, When
 from django.db.models.functions import Coalesce
 
 from api.serializers import CommandSerializer, ScanActivitySerializer, SecatorRunnerSerializer

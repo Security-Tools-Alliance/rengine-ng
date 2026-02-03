@@ -685,9 +685,7 @@ class DomainRepository:
         registrant_info = item.get("registrant_info") or {}
         raw_registrar = item.get("registrar_info") or {}
 
-        resolved_registrant = self._resolve_registrant_contact(
-            registrant_info, admin_info
-        )
+        resolved_registrant = self._resolve_registrant_contact(registrant_info, admin_info)
 
         details = dict(raw_registrar) if isinstance(raw_registrar, dict) else {}
         if "email" in details and "e-mail" not in details:
@@ -705,12 +703,7 @@ class DomainRepository:
         else:
             statuses = []
 
-        registrant_name = (
-            resolved_registrant.get("name")
-            or item.get("registrant")
-            or admin_info.get("name")
-            or ""
-        )
+        registrant_name = resolved_registrant.get("name") or item.get("registrant") or admin_info.get("name") or ""
         registrant_organization = (
             resolved_registrant.get("organization")
             or item.get("registrant_organization")
