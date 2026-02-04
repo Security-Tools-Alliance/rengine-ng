@@ -1,10 +1,10 @@
-from reNgine.utilities.logger import get_module_logger
 from django.utils import timezone
 
 from reNgine.definitions import (
     FAILED_TASK,
     SUCCESS_TASK,
 )
+from reNgine.utilities.logger import get_module_logger
 from startScan.models import ScanActivity, ScanHistory, SubScan
 
 

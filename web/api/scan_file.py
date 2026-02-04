@@ -53,6 +53,7 @@ from reNgine.core.path import is_safe_path
 from reNgine.settings import RENGINE_RESULTS, SECATOR_REPORTS_PREFIX
 from startScan.models import EndPoint, Subdomain, Technology
 
+
 logger = logging.getLogger(__name__)
 
 # Route name for scan file serving; single source for URL building
@@ -99,9 +100,7 @@ def get_project_for_scan_file_path(relative_path: str):
     """
     # 1. EndPoint path: EndPoint.scan_history -> ScanHistory.domain -> Domain.project
     endpoint = (
-        EndPoint.objects.filter(
-            Q(screenshot_path=relative_path) | Q(stored_response_path=relative_path)
-        )
+        EndPoint.objects.filter(Q(screenshot_path=relative_path) | Q(stored_response_path=relative_path))
         .select_related("scan_history__domain__project")
         .first()
     )

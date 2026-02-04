@@ -5,11 +5,11 @@ Handles IpAddress database operations with Secator integration.
 
 from typing import Any, Dict, Optional, Tuple
 
-from reNgine.utilities.logger import get_module_logger
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError
 
 from reNgine.core.validators import is_valid_ip
+from reNgine.utilities.logger import get_module_logger
 from startScan.models import IpAddress, ScanHistory, Subdomain
 from targetApp.models import Domain
 

@@ -27,8 +27,8 @@ from startScan.models import (
     ScanActivity,
     ScanHistory,
     SecatorRunner,
-    SubScan,
     Subdomain,
+    SubScan,
     Technology,
     Vulnerability,
     VulnerabilityTags,
@@ -791,7 +791,17 @@ class CommandAdmin(admin.ModelAdmin):
         ),
         (
             "Secator",
-            {"fields": ("runner_type", "workflow_name", "node_id", "ancestor_id", "scan_type", "has_parent", "has_children")},
+            {
+                "fields": (
+                    "runner_type",
+                    "workflow_name",
+                    "node_id",
+                    "ancestor_id",
+                    "scan_type",
+                    "has_parent",
+                    "has_children",
+                )
+            },
         ),
         (
             "Details",

@@ -9,7 +9,6 @@ import hashlib
 from typing import Any, Dict, List, Optional, Tuple, Union
 from urllib.parse import urlparse
 
-from reNgine.utilities.logger import get_module_logger
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError, transaction
 from django.db.models import Count
@@ -19,6 +18,7 @@ import validators
 from reNgine.core.validators import is_valid_domain, is_valid_url
 from reNgine.secator.path_utils import strip_secator_reports_prefix
 from reNgine.utilities.distributed_lock import DistributedLock
+from reNgine.utilities.logger import get_module_logger
 from startScan.models import DirectoryFile, EndPoint, ScanHistory, Subdomain, Technology
 from targetApp.models import Domain
 

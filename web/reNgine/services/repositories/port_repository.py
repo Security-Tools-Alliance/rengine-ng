@@ -5,12 +5,12 @@ Handles Port database operations with IP dependency from Secator.
 
 from typing import Any, Dict, List, Optional, Tuple
 
-from reNgine.utilities.logger import get_module_logger
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import DatabaseError, IntegrityError
 
 from reNgine.core.validators import is_valid_ip, is_valid_port
 from reNgine.services.repositories.endpoint_repository import EndpointRepository
+from reNgine.utilities.logger import get_module_logger
 from startScan.models import IpAddress, Port, ScanHistory
 from targetApp.models import Domain
 

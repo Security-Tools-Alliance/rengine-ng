@@ -10,6 +10,7 @@ models so admin list_display and fieldsets stay in sync when models evolve.
 
 from django.contrib import admin
 
+
 # Common readonly fields for models with auto-managed timestamps
 READONLY_TIMESTAMPS = ("created_at", "updated_at")
 
@@ -122,10 +123,17 @@ class SimpleLookupModelAdmin(admin.ModelAdmin):
         super().__init__(model, admin_site)
         exclude = set(self.list_display_exclude or [])
         names = get_concrete_field_names(self.model, exclude=exclude, include_m2m=False)
-        if self.list_display_include_id and "id" not in names and hasattr(self.model._meta, "pk") and self.model._meta.pk.name == "id":
+        if (
+            self.list_display_include_id
+            and "id" not in names
+            and hasattr(self.model._meta, "pk")
+            and self.model._meta.pk.name == "id"
+        ):
             names.insert(0, "id")
         self.list_display = names
-        self.fieldsets = (build_single_fieldset_from_model(self.model, title=self.fieldset_title, exclude=self.fieldset_exclude),)
+        self.fieldsets = (
+            build_single_fieldset_from_model(self.model, title=self.fieldset_title, exclude=self.fieldset_exclude),
+        )
         if self.search_fields_override is None:
             search_exclude = set(self.search_fields_exclude or [])
             self.search_fields = get_searchable_field_names(self.model, exclude=search_exclude) or ["id"]

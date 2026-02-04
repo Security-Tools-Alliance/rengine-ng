@@ -4,15 +4,16 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('startScan', '0088_alter_scanhistory_scan_status'),
+        ("startScan", "0088_alter_scanhistory_scan_status"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='secatorrunner',
-            name='workspace_name',
-            field=models.CharField(blank=True, help_text='Secator workspace (e.g. project_slug/domain_name)', max_length=500, null=True),
+            model_name="secatorrunner",
+            name="workspace_name",
+            field=models.CharField(
+                blank=True, help_text="Secator workspace (e.g. project_slug/domain_name)", max_length=500, null=True
+            ),
         ),
     ]

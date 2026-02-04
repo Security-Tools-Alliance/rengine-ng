@@ -4,9 +4,8 @@ test_secator_profiles.py
 This file contains unit tests for the SecatorProfile model.
 """
 
-import yaml
-
 from django.core.exceptions import PermissionDenied
+import yaml
 
 from scanEngine.models import SecatorProfile
 from utils.test_base import BaseTestCase

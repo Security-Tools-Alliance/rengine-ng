@@ -4,10 +4,10 @@ import socket
 import subprocess
 import threading
 
-from reNgine.utilities.logger import get_module_logger
 import validators
 
 from reNgine.settings import DEFAULT_THREADS
+from reNgine.utilities.logger import get_module_logger
 
 
 # Thread-local storage for geolocalization collection

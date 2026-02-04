@@ -22,7 +22,6 @@ def backfill_null_initiated_by(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
         ("startScan", "0092_scanschedule_arrayfields_not_null"),

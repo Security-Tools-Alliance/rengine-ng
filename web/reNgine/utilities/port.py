@@ -1,6 +1,5 @@
-from reNgine.utilities.logger import get_module_logger
-
 from reNgine.definitions import UNCOMMON_WEB_PORTS
+from reNgine.utilities.logger import get_module_logger
 from startScan.models import Port
 
 

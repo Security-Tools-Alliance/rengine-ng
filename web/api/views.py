@@ -2,7 +2,6 @@ from collections import defaultdict
 from datetime import datetime
 import json
 import logging
-import mimetypes
 import os.path
 from pathlib import Path
 import re
@@ -13,7 +12,6 @@ from channels.layers import get_channel_layer
 from django.core.cache import cache
 from django.db.models import Case, CharField, Count, F, IntegerField, Prefetch, Q, Value, When
 from django.db.models.functions import Coalesce
-from django.http import FileResponse
 from django.shortcuts import get_object_or_404
 from django.template.defaultfilters import slugify
 from django.urls import reverse
@@ -34,7 +32,6 @@ from api.permissions import HasAPIKeyOrIsAuthenticated
 from api.scan_file import get_scan_file_urls
 from api.secator_api_base import SecatorAPIBase
 from dashboard.models import OllamaSettings, OpenAiAPIKey, Project, SearchHistory
-from dashboard.utils import get_user_projects
 from recon_note.models import TodoNote
 
 # NOTE: Legacy tasks removed (query_ip_history, query_reverse_whois, query_whois,
@@ -57,7 +54,7 @@ from reNgine.llm.utils import convert_markdown_to_html, get_default_llm_model, i
 from reNgine.secator.selected_targets import resolve_selected_targets
 from reNgine.secator.service import run_per_task_secator_scans, start_secator_scan
 from reNgine.services.repositories.scan_repository import ScanRepository
-from reNgine.settings import RENGINE_CURRENT_VERSION, RENGINE_RESULTS
+from reNgine.settings import RENGINE_CURRENT_VERSION
 from reNgine.tasks import (
     llm_vulnerability_report,
     send_hackerone_report,
@@ -3858,9 +3855,7 @@ class FetchScreenshots(APIView):
             stored_response_urls = get_scan_file_urls(endpoint.stored_response_path, req)
             screenshot_url = screenshot_urls.absolute
             stored_response_url = stored_response_urls.absolute
-            port_is_uncommon = (
-                endpoint_port is not None and endpoint_port in UNCOMMON_WEB_PORTS
-            )
+            port_is_uncommon = endpoint_port is not None and endpoint_port in UNCOMMON_WEB_PORTS
             # Frontend uses screenshot_url (and stored_response_url) for display; screenshot_path
             # is included for API consumers that need the stored path (e.g. export/debug).
             screenshots_data[subdomain_key] = {

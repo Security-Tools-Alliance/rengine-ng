@@ -4,15 +4,25 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('startScan', '0087_subscan_secator_runner_and_subdomain_nullable'),
+        ("startScan", "0087_subscan_secator_runner_and_subdomain_nullable"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='scanhistory',
-            name='scan_status',
-            field=models.IntegerField(choices=[(-1, 'Pending'), (0, 'Queued'), (1, 'Running'), (2, 'Completed'), (3, 'Failed'), (4, 'Running Background'), (5, 'Skipped')], default=-1),
+            model_name="scanhistory",
+            name="scan_status",
+            field=models.IntegerField(
+                choices=[
+                    (-1, "Pending"),
+                    (0, "Queued"),
+                    (1, "Running"),
+                    (2, "Completed"),
+                    (3, "Failed"),
+                    (4, "Running Background"),
+                    (5, "Skipped"),
+                ],
+                default=-1,
+            ),
         ),
     ]

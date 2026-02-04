@@ -5,10 +5,10 @@ Handles DNSRecord database operations from Secator Record type.
 
 from typing import Any, Dict, List, Optional, Tuple
 
-from reNgine.utilities.logger import get_module_logger
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError, transaction
 
+from reNgine.utilities.logger import get_module_logger
 from targetApp.models import DNSRecord, Domain, DomainInfo
 
 

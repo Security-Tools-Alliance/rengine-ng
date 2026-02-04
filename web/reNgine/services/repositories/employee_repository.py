@@ -6,12 +6,12 @@ Handles Employee database operations from Secator UserAccount type.
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
-from reNgine.utilities.logger import get_module_logger
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError
 from django.utils import timezone
 
 from reNgine.core.validators import is_valid_domain, is_valid_email, is_valid_url
+from reNgine.utilities.logger import get_module_logger
 from startScan.models import Email, Employee, EndPoint, ScanHistory, Subdomain
 from targetApp.models import Domain
 

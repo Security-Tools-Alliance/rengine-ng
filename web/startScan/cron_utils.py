@@ -26,10 +26,12 @@ import subprocess
 
 from reNgine.utilities.logger import get_module_logger
 
+
 logger = get_module_logger(__name__)
 
 # Marker comment to detect our cron line (stable even if script path changes)
 CRON_LINE_MARKER = "# run_scheduled_scans"
+
 
 # Default script path (set by entrypoint in Docker: $HOME/run_scheduled_scans.sh)
 def _get_cron_script_path() -> str:

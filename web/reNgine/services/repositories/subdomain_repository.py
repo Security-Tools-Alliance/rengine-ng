@@ -6,13 +6,13 @@ Handles Subdomain database operations with enriched Secator integration.
 import contextlib
 from typing import Any, Dict, Optional
 
-from reNgine.utilities.logger import get_module_logger
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError
 from django.utils import timezone
 
 from reNgine.core.validators import is_valid_domain, is_valid_ip
 from reNgine.services.repositories.endpoint_repository import EndpointRepository
+from reNgine.utilities.logger import get_module_logger
 from startScan.models import IpAddress, ScanHistory, Subdomain, Technology
 from targetApp.models import Domain
 

@@ -7,16 +7,11 @@ from django.db import migrations, models
 def backfill_null_arrays_to_empty(apps, schema_editor):
     """Set NULL imported_subdomains/out_of_scope_subdomains to [] before adding NOT NULL."""
     ScanSchedule = apps.get_model("startScan", "ScanSchedule")
-    ScanSchedule.objects.filter(imported_subdomains__isnull=True).update(
-        imported_subdomains=[]
-    )
-    ScanSchedule.objects.filter(out_of_scope_subdomains__isnull=True).update(
-        out_of_scope_subdomains=[]
-    )
+    ScanSchedule.objects.filter(imported_subdomains__isnull=True).update(imported_subdomains=[])
+    ScanSchedule.objects.filter(out_of_scope_subdomains__isnull=True).update(out_of_scope_subdomains=[])
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("startScan", "0091_scan_schedule_secator_kwargs"),
     ]

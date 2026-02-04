@@ -1,8 +1,6 @@
 from typing import Optional, Tuple
 from urllib.parse import urlparse
 
-from reNgine.utilities.logger import get_module_logger
-
 from reNgine.llm.llm import LLMVulnerabilityReportGenerator
 from reNgine.llm.utils import (
     convert_markdown_to_html,
@@ -10,6 +8,7 @@ from reNgine.llm.utils import (
     is_empty_llm_report,
     is_empty_text,
 )
+from reNgine.utilities.logger import get_module_logger
 from startScan.models import LLMVulnerabilityReport, Vulnerability
 
 

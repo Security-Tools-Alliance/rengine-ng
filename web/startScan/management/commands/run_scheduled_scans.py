@@ -5,8 +5,8 @@ Run periodically via CRON (e.g. every minute):
   * * * * * cd /path && python manage.py run_scheduled_scans
 """
 
-import traceback
 from datetime import timedelta
+import traceback
 
 from django.core.management.base import BaseCommand
 from django.utils import timezone
@@ -14,6 +14,7 @@ from django.utils import timezone
 from reNgine.secator.service import run_per_task_secator_scans, start_secator_scan
 from reNgine.utilities.logger import get_module_logger
 from startScan.models import ScanSchedule
+
 
 logger = get_module_logger(__name__)
 
@@ -39,9 +40,7 @@ def _run_secator_with_secator_kwargs(
     url_filter = kwargs_copy.pop("url_filter", "") or ""
     selected_targets_per_task = kwargs_copy.pop("selected_targets_per_task", None)
     kwargs_copy.pop("scan_history_id", None)
-    use_per_task = bool(
-        selected_targets_per_task and kwargs_copy.get("execution_mode") == "tasks"
-    )
+    use_per_task = bool(selected_targets_per_task and kwargs_copy.get("execution_mode") == "tasks")
 
     if use_per_task:
         result = run_per_task_secator_scans(
@@ -90,9 +89,7 @@ def _run_secator_with_scan_type(
         out_of_scope_subdomains=out_of_scope,
     )
     if not result.get("status"):
-        raise RuntimeError(
-            result.get("error", "start_secator_scan failed")
-        )
+        raise RuntimeError(result.get("error", "start_secator_scan failed"))
 
 
 def _run_secator_for_schedule(
@@ -128,9 +125,7 @@ class Command(BaseCommand):
 
         if dry_run:
             for schedule in due:
-                self.stdout.write(
-                    f"Would run: id={schedule.id} name={schedule.name} next_run={schedule.next_run}"
-                )
+                self.stdout.write(f"Would run: id={schedule.id} name={schedule.name} next_run={schedule.next_run}")
             self.stdout.write(self.style.SUCCESS(f"Dry run: {due.count()} schedule(s) due."))
             return
 
@@ -149,11 +144,7 @@ class Command(BaseCommand):
                     e,
                 )
                 tb = traceback.format_exc()
-                self.stderr.write(
-                    self.style.ERROR(
-                        f"Schedule id={schedule_id} name={schedule_name!r}: {e}\n{tb}"
-                    )
-                )
+                self.stderr.write(self.style.ERROR(f"Schedule id={schedule_id} name={schedule_name!r}: {e}\n{tb}"))
 
         if run_count:
             self.stdout.write(self.style.SUCCESS(f"Started {run_count} scheduled scan(s)."))

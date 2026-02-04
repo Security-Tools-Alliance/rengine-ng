@@ -1,6 +1,6 @@
-from reNgine.utilities.logger import get_module_logger
 from django.db.models import Q
 
+from reNgine.utilities.logger import get_module_logger
 from startScan.models import ScanHistory, Subdomain
 from targetApp.models import Domain
 

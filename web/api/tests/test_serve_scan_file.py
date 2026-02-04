@@ -4,14 +4,14 @@ Covers edge cases: endpoints without projects, mixed EndPoint/Technology referen
 and attempts to access another project's file.
 """
 
-import tempfile
 from pathlib import Path
+import tempfile
 from unittest.mock import patch
 
 from rest_framework import status
 
 from api.scan_file import ServeScanFile, build_scan_file_url, get_project_for_scan_file_path
-from startScan.models import EndPoint, Technology
+from startScan.models import Technology
 from utils.test_base import BaseTestCase
 from utils.test_utils import TestDataGenerator
 
@@ -81,9 +81,7 @@ class GetProjectForScanFilePathTestCase(BaseTestCase):
         self.data_generator.create_domain()
         self.data_generator.create_scan_history()
         subdomain = self.data_generator.create_subdomain(scan_history=None)
-        tech = Technology.objects.create(
-            name="TechNoScan", stored_response_path="tech/response.html"
-        )
+        tech = Technology.objects.create(name="TechNoScan", stored_response_path="tech/response.html")
         subdomain.technologies.add(tech)
         result = get_project_for_scan_file_path("tech/response.html")
         self.assertIsNotNone(result)
@@ -97,9 +95,7 @@ class GetProjectForScanFilePathTestCase(BaseTestCase):
         self.data_generator.create_subdomain()
         rel_path = "shared/path/file.txt"
         self.data_generator.create_endpoint(stored_response_path=rel_path)
-        tech = Technology.objects.create(
-            name="OtherTech", stored_response_path=rel_path
-        )
+        tech = Technology.objects.create(name="OtherTech", stored_response_path=rel_path)
         self.data_generator.subdomain.technologies.add(tech)
         result = get_project_for_scan_file_path(rel_path)
         self.assertIsNotNone(result)
@@ -136,9 +132,7 @@ class ServeScanFileViewTestCase(BaseTestCase):
         self.assertEqual(response.data.get("error"), "Invalid path")
 
     def test_returns_404_when_file_does_not_exist(self):
-        response = self.client.get(
-            self._url("nonexistent/workspace/domain/screenshot.png")
-        )
+        response = self.client.get(self._url("nonexistent/workspace/domain/screenshot.png"))
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
         self.assertEqual(response.data.get("error"), "Not found")
 
@@ -148,17 +142,15 @@ class ServeScanFileViewTestCase(BaseTestCase):
             secret_file = base / "secret.txt"
             secret_file.write_text("secret")
             with patch("api.scan_file.RENGINE_RESULTS", str(base)):
-                response = self.client.get(
-                    self._url("secret.txt")
-                )
+                response = self.client.get(self._url("secret.txt"))
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertEqual(response.data.get("error"), "Forbidden")
 
     def test_returns_403_when_authenticated_user_has_no_access_to_project(self):
         from django.contrib.auth import get_user_model
 
-        User = get_user_model()
-        limited_user = User.objects.create_user(
+        user_model = get_user_model()
+        limited_user = user_model.objects.create_user(
             username="limiteduser",
             email="limited@test.com",
             password="testpass123",
@@ -170,7 +162,6 @@ class ServeScanFileViewTestCase(BaseTestCase):
         gen.create_domain()
         gen.create_scan_history()
         gen.create_subdomain()
-        project_owning_file = gen.project
         rel_path = "other/screenshot.png"
         gen.create_endpoint(screenshot_path=rel_path)
         member_only_project = self.data_generator.project
@@ -195,9 +186,7 @@ class ServeScanFileViewTestCase(BaseTestCase):
             link_inside = base / "link"
             link_inside.symlink_to(outside)
             with patch("api.scan_file.RENGINE_RESULTS", str(base)):
-                response = self.client.get(
-                    self._url("link/leak.txt")
-                )
+                response = self.client.get(self._url("link/leak.txt"))
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertEqual(response.data.get("error"), "Forbidden")
 

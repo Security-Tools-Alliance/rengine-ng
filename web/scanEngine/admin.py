@@ -3,7 +3,6 @@ from django.contrib import admin
 
 from reNgine.admin_common import (
     FIELDSET_CONFIGURATION_YAML,
-    FIELDSET_TIMESTAMPS,
     SimpleLookupModelAdmin,
     TimestampedModelAdminMixin,
     build_fieldsets_with_timestamps,

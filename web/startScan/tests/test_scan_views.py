@@ -6,18 +6,14 @@ import json
 from unittest.mock import patch
 import uuid
 
+from django.core.exceptions import ValidationError
+from django.http import QueryDict
 from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from django.http import QueryDict
-
 from scanEngine.models import SecatorProfile
 from startScan.models import Command, ScanSchedule, Subdomain
-from django.core.exceptions import ValidationError
-from django.utils import timezone
-
-from startScan.models import ScanSchedule
 from startScan.views import (
     SCHEDULE_MODE_REQUIRED_MSG,
     _parse_scheduled_time_utc,

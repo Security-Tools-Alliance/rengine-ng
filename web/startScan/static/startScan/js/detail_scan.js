@@ -1486,16 +1486,53 @@ $(".add-scan-history-todo").click(function(){
 
 
 function add_note_for_subdomain(subdomain_id, subdomain_name, current_project){
+	const projectSlug = current_project !== undefined && current_project !== null
+		? current_project
+		: (document.body.dataset.projectSlug || '');
 	$('#todo-modal-subdomain-name').html(subdomain_name);
 	$("#subdomainTodoTitle").val('');
 	$("#subdomainTodoDescription").val('');
-
-	$('#add-todo-subdomain-submit-button').attr('onClick', `add_note_for_subdomain_handler(${subdomain_id}, '${current_project}');`);
-
-
+	$('#add-todo-subdomain-submit-button').data('subdomainId', subdomain_id).data('projectSlug', projectSlug);
 	if (window.ModalManager) ModalManager.showById(ModalManager.MODAL_IDS.ADD_SUBDOMAIN_TASK);
-
 }
+
+$(function() {
+	$(document.body).on('click', '.js-logs-modal-link', function(e) {
+		e.preventDefault();
+		const el = e.currentTarget;
+		const scanId = el.dataset.scanId ? parseInt(el.dataset.scanId, 10) : null;
+		const activityId = el.dataset.activityId ? parseInt(el.dataset.activityId, 10) : null;
+		const runnerId = el.dataset.runnerId ? parseInt(el.dataset.runnerId, 10) : null;
+		const projectSlug = document.body.dataset.projectSlug || null;
+		get_logs_modal(scanId, activityId, projectSlug, runnerId);
+	});
+	$(document.body).on('click', '.js-add-target-link', function(e) {
+		e.preventDefault();
+		const el = e.currentTarget;
+		const url = el.dataset.addTargetUrl;
+		const domain = el.dataset.domain;
+		const slug = document.body.dataset.projectSlug || '';
+		if (url && domain && typeof add_target === 'function') {
+			add_target(url, slug, domain);
+		}
+	});
+	$(document.body).on('click', '.js-add-note-subdomain', function(e) {
+		e.preventDefault();
+		const el = e.currentTarget;
+		const subdomainId = el.dataset.subdomainId ? parseInt(el.dataset.subdomainId, 10) : null;
+		const subdomainName = el.dataset.subdomainName || '';
+		if (subdomainId !== null) {
+			add_note_for_subdomain(subdomainId, subdomainName);
+		}
+	});
+	$('#add-todo-subdomain-submit-button').on('click', function() {
+		const subdomainId = $(this).data('subdomainId');
+		const projectSlug = $(this).data('projectSlug');
+		if (subdomainId !== undefined && projectSlug !== undefined) {
+			add_note_for_subdomain_handler(subdomainId, projectSlug);
+		}
+	});
+});
 
 
 function add_note_for_subdomain_handler(subdomain_id, current_project){

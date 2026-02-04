@@ -2,10 +2,10 @@ import os
 from pathlib import Path
 
 from bs4 import BeautifulSoup
-from reNgine.utilities.logger import get_module_logger
 import requests
 
 from dashboard.models import NetlasAPIKey, OpenAiAPIKey
+from reNgine.utilities.logger import get_module_logger
 
 
 logger = get_module_logger(__name__)

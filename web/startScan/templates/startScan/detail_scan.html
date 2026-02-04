@@ -37,6 +37,7 @@ Scan Findings
 
 {% block main_content %}
 <span aria-current="page" style="display: none">{{history.domain.name}}</span>
+<span id="vuln-status-config" data-change-vuln-status-url="{% url 'change_vuln_status' current_project.slug 0 %}" aria-hidden="true" class="d-none"></span>
 <div class="row">
 	<div class="col-12">
 		<div class="card">
@@ -221,7 +222,7 @@ Scan Findings
 						{% endif %}
 
 						<h6 class="font-13 text-muted text-uppercase mt-3">Scan Logs</h6>
-						<span><a href="javascript:get_logs_modal({{history.id}}, null, '{{current_project.slug}}')"><i class="fe-file"></i> Logs</a></span>
+						<span><a href="#" class="js-logs-modal-link" data-scan-id="{{ history.id }}" data-activity-id="" data-runner-id=""><i class="fe-file"></i> Logs</a></span>
 
 						{% if history.scan_status == 1 %}
 						<div class="mt-3 mb-2">
@@ -250,7 +251,7 @@ Scan Findings
 													<p class="badge badge-soft-danger">Error: {{activity.error_message}}</p>
 												{% endif %}
 											{% endif %}
-											<span><a href="javascript:get_logs_modal(null, {{activity.id}}, '{{current_project.slug}}')"><i class="fe-file"></i> Logs</a></span>
+											<span><a href="#" class="js-logs-modal-link" data-scan-id="" data-activity-id="{{ activity.id }}" data-runner-id=""><i class="fe-file"></i> Logs</a></span>
 											{% if activity.status == 1 and activity.runner_id %}
 											<span class="float-end"><a href="#" onclick="stop_activity('{% url 'api:stop_activity' %}', activity_id={{activity.id}}, reload_scan_bar=true, reload_location=true); return false;" class="btn btn-xs btn-soft-danger waves-effect waves-light"><i class="fe-alert-triangle"></i> Stop</a></span>
 											{% endif %}
@@ -278,7 +279,7 @@ Scan Findings
 											{% if activity.status_string == 'RUNNING' %}
 												<span class="float-end"><a href="#" onclick="stop_activity('{% url 'api:stop_activity' %}', activity_id={{activity.id}}, reload_scan_bar=true, reload_location=true); return false;" class="btn btn-xs btn-soft-danger waves-effect waves-light"><i class="fe-alert-triangle"></i> Stop</a></span>
 											{% endif %}
-											<span><a href="javascript:get_logs_modal(null, {{activity.id}}, '{{current_project.slug}}', {{activity.runner_id.id}})"><i class="fe-file"></i> Logs</a></span>
+											<span><a href="#" class="js-logs-modal-link" data-scan-id="" data-activity-id="{{ activity.id }}" data-runner-id="{{ activity.runner_id.id }}"><i class="fe-file"></i> Logs</a></span>
 											{% if activity.status_string == 'FAILURE' or activity.status_string == 'FAILED' %}
 												{% if activity.error_message %}
 													<p class="badge badge-soft-danger">Error: {{activity.error_message}}</p>
@@ -806,7 +807,7 @@ Scan Findings
 												{% if history.domain.domain_info.related_domains.all %}
 													<div class="alert alert-success">{{history.domain.domain_info.related_domains.all.count}} Related Domains identified</div>
 													{% for domain in history.domain.domain_info.related_domains.all %}
-														<span class="badge badge-soft-primary badge-link waves-effect waves-light me-1" data-toggle="tooltip" title="Add {{domain}} as target." onclick="add_target('{% url 'api:addTarget' %}', '{{current_project.slug}}', '{{domain}}')">{{domain}}</span>
+														<span class="badge badge-soft-primary badge-link waves-effect waves-light me-1 js-add-target-link" data-toggle="tooltip" title="Add {{ domain }} as target." data-add-target-url="{% url 'api:addTarget' %}" data-domain="{{ domain }}">{{domain}}</span>
 													{% endfor %}
 												{% else %}
 													<div class="alert alert-info">No Related Domains identified</div>
@@ -816,7 +817,7 @@ Scan Findings
 												{% if history.domain.domain_info.related_tlds.all %}
 													<div class="alert alert-success">{{history.domain.domain_info.related_tlds.all.count}} Related TLDs identified</div>
 													{% for domain in history.domain.domain_info.related_tlds.all %}
-														<span class="badge badge-soft-primary badge-link waves-effect waves-light me-1" data-toggle="tooltip" title="Add {{domain}} as target." onclick="add_target('{% url 'api:addTarget' %}', '{{current_project.slug}}', '{{domain}}')">{{domain}}</span>
+														<span class="badge badge-soft-primary badge-link waves-effect waves-light me-1 js-add-target-link" data-toggle="tooltip" title="Add {{ domain }} as target." data-add-target-url="{% url 'api:addTarget' %}" data-domain="{{ domain }}">{{domain}}</span>
 													{% endfor %}
 												{% else %}
 													<div class="alert alert-info">No Related TLDs identified</div>
@@ -1711,11 +1712,14 @@ $(document).ready(function() {
 					{"className": "text-center", "targets": []},
 					{
 						"render": function ( data, type, row ) {
+							const vulnStatusConfig = document.getElementById('vuln-status-config');
+							const baseUrl = vulnStatusConfig ? (vulnStatusConfig.dataset.changeVulnStatusUrl || '') : '';
+							const vulnUrl = baseUrl.replace(/\/0\/?$/, '/' + data + '/').replace(/'/g, "\\'");
 							if(row['open_status']){
-								return `<div class="form-check mb-2 form-check-primary"><input type="checkbox" name="targets_checkbox['+ e + ']" class="float-start form-check-input" onchange="vuln_status_change('{% url 'change_vuln_status' current_project.slug 0 %}\', this, `+data+`);">\n<span class="new-control-indicator"></span><span style="visibility:hidden">c</span></div>`;
+								return `<div class="form-check mb-2 form-check-primary"><input type="checkbox" name="targets_checkbox['+ e + ']" class="float-start form-check-input" onchange="vuln_status_change('${vulnUrl}', this, `+data+`);">\n<span class="new-control-indicator"></span><span style="visibility:hidden">c</span></div>`;
 							}
 							else{
-								return `<div class="form-check mb-2 form-check-primary"><input type="checkbox" checked name="targets_checkbox['+ e + ']" class="float-start form-check-input" onchange="vuln_status_change('{% url 'change_vuln_status' current_project.slug 0 %}\', this, `+data+`);">\n<span class="new-control-indicator"></span><span style="visibility:hidden">c</span></div>`;
+								return `<div class="form-check mb-2 form-check-primary"><input type="checkbox" checked name="targets_checkbox['+ e + ']" class="float-start form-check-input" onchange="vuln_status_change('${vulnUrl}', this, `+data+`);">\n<span class="new-control-indicator"></span><span style="visibility:hidden">c</span></div>`;
 							}
 						},
 											"targets": get_datatable_col_index('id', vuln_datatable_columns),
@@ -2591,7 +2595,7 @@ $(document).ready(function() {
 							<div class="btn-group mt-2">
 							<button type="button" data-toggle="tooltip" data-placement="top" title="Show Attack Surface" class="btn btn-primary me-1 bs-tooltip" onclick="show_attack_surface_modal('{% url 'api:llm_get_possible_attacks' %}', ${row['id']})"><i class="fe-eye"></i></button>
 							<button type="button" data-toggle="tooltip" data-placement="top" title="Further Scan Subdomain" class="btn btn-primary btn-scan-subdomain me-1" id="${row['id']}"><i class="fe-zap"></i></button>
-							<button type="button" data-toggle="tooltip" data-placement="top" title="Add Recon To-do/Note" class="btn btn-primary me-1" id="${row['id']}" onclick="add_note_for_subdomain(${row['id']}, '${row['name']}', '{{current_project.slug}}')"><i class="fe-file-plus"></i></button>
+							<button type="button" data-toggle="tooltip" data-placement="top" title="Add Recon To-do/Note" class="btn btn-primary me-1 js-add-note-subdomain" data-subdomain-id="${row['id']}" data-subdomain-name="${(row['name'] || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')}"><i class="fe-file-plus"></i></button>
 							<button class="btn btn-primary me-1 dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false"><i class="mdi mdi-dots-horizontal"></i></button>
 							<div class="dropdown-menu dropdown-menu-end">
 							<a class="dropdown-item" href="#" onclick="mark_important_subdomain('{% url 'api:toggle_subdomain' %}', this, ${row['id']})" id="${row['id']}"><i class="mdi mdi-alert-rhombus-outline me-2 text-muted font-18 vertical-middle"></i>Mark Important Subdomain</a>

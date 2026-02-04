@@ -24,17 +24,11 @@ def get_secator_prefix_diagnostic(sample_size: int = 20) -> dict:
       - count_total_with_path: total count of endpoints/technologies with a path set
       - ok: True if no issues detected
     """
-    prefix = getattr(
-        settings, "SECATOR_REPORTS_PREFIX", "/home/secator/.secator/reports"
-    )
-    rengine_results = getattr(
-        settings, "RENGINE_RESULTS", str(Path.home() / "scan_results")
-    )
+    prefix = getattr(settings, "SECATOR_REPORTS_PREFIX", "/home/secator/.secator/reports")
+    rengine_results = getattr(settings, "RENGINE_RESULTS", str(Path.home() / "scan_results"))
     base = Path(rengine_results).resolve()
     rengine_results_exists = base.exists()
-    rengine_results_readable = (
-        rengine_results_exists and base.is_dir() and os.access(base, os.R_OK)
-    )
+    rengine_results_readable = rengine_results_exists and base.is_dir() and os.access(base, os.R_OK)
 
     from startScan.models import EndPoint, Technology
 
@@ -58,32 +52,19 @@ def get_secator_prefix_diagnostic(sample_size: int = 20) -> dict:
             if has_prefix(val):
                 count_paths_still_with_prefix += 1
                 if len(paths_still_with_prefix) < sample_size:
-                    paths_still_with_prefix.append(
-                        f"{val[:200]}…" if len(val) > 200 else val
-                    )
+                    paths_still_with_prefix.append(f"{val[:200]}…" if len(val) > 200 else val)
 
-    ep_screenshot = EndPoint.objects.filter(
-        screenshot_path__isnull=False
-    ).exclude(screenshot_path="")
-    ep_stored = EndPoint.objects.filter(
-        stored_response_path__isnull=False
-    ).exclude(stored_response_path="")
-    tech_stored = Technology.objects.filter(
-        stored_response_path__isnull=False
-    ).exclude(stored_response_path="")
+    ep_screenshot = EndPoint.objects.filter(screenshot_path__isnull=False).exclude(screenshot_path="")
+    ep_stored = EndPoint.objects.filter(stored_response_path__isnull=False).exclude(stored_response_path="")
+    tech_stored = Technology.objects.filter(stored_response_path__isnull=False).exclude(stored_response_path="")
 
-    count_total_with_path = (
-        ep_screenshot.count() + ep_stored.count() + tech_stored.count()
-    )
+    count_total_with_path = ep_screenshot.count() + ep_stored.count() + tech_stored.count()
 
     collect_with_prefix(ep_screenshot, "screenshot_path")
     collect_with_prefix(ep_stored, "stored_response_path")
     collect_with_prefix(tech_stored, "stored_response_path")
 
-    ok = (
-        rengine_results_readable
-        and count_paths_still_with_prefix == 0
-    )
+    ok = rengine_results_readable and count_paths_still_with_prefix == 0
 
     return {
         "prefix_configured": prefix or "(empty)",

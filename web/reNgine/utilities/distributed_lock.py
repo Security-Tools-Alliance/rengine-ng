@@ -29,8 +29,9 @@ import hashlib
 import time
 from typing import Any, Callable, Optional
 
-from reNgine.utilities.logger import get_module_logger
 from django.conf import settings
+
+from reNgine.utilities.logger import get_module_logger
 
 
 logger = get_module_logger(__name__)

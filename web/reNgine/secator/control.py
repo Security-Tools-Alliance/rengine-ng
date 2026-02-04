@@ -5,11 +5,11 @@ Provides start, stop, pause functionality.
 
 from typing import Optional
 
-from reNgine.utilities.logger import get_module_logger
 from django.utils import timezone
 
 from reNgine.definitions import ABORTED_TASK, RUNNING_TASK
 from reNgine.services.repositories.scan_repository import ScanRepository
+from reNgine.utilities.logger import get_module_logger
 from startScan.models import ScanActivity, SecatorRunner, SubScan
 
 

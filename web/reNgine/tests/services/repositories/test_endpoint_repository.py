@@ -384,9 +384,7 @@ class EndpointRepositoryIsDefaultTestCase(BaseTestCase):
             "request_headers": {"User-Agent": "Secator/1.0", "Accept": "text/html"},
         }
 
-        result = self.repository.save_from_secator(
-            item, self.scan_history.id, self.data_generator.domain.id
-        )
+        result = self.repository.save_from_secator(item, self.scan_history.id, self.data_generator.domain.id)
 
         self.assertIsNotNone(result)
         result.refresh_from_db()
@@ -407,17 +405,11 @@ class EndpointRepositoryIsDefaultTestCase(BaseTestCase):
             "screenshot_path": full_screenshot,
             "stored_response_path": full_response,
         }
-        result = self.repository.save_from_secator(
-            item, self.scan_history.id, self.data_generator.domain.id
-        )
+        result = self.repository.save_from_secator(item, self.scan_history.id, self.data_generator.domain.id)
         self.assertIsNotNone(result)
         result.refresh_from_db()
-        self.assertEqual(
-            result.screenshot_path, "2sec/2sec.fr/tasks/200/.outputs/screenshot/foo.png"
-        )
-        self.assertEqual(
-            result.stored_response_path, "2sec/2sec.fr/tasks/200/.outputs/response.html"
-        )
+        self.assertEqual(result.screenshot_path, "2sec/2sec.fr/tasks/200/.outputs/screenshot/foo.png")
+        self.assertEqual(result.stored_response_path, "2sec/2sec.fr/tasks/200/.outputs/response.html")
 
     def test_build_secator_endpoint_defaults_truncates_long_paths(self):
         """Long screenshot_path and stored_response_path are truncated to 1000 chars."""

@@ -8,9 +8,8 @@ import unittest
 os.environ["RENGINE_SECRET_KEY"] = "secret"
 os.environ["CELERY_ALWAYS_EAGER"] = "True"
 
-from reNgine.utilities.logger import get_module_logger
-
 from reNgine.settings import CELERY_DEBUG
+from reNgine.utilities.logger import get_module_logger
 from reNgine.utilities.parser import parse_nmap_results
 
 

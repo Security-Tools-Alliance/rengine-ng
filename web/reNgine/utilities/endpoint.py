@@ -9,10 +9,10 @@ For new code, use Secator workflows/tasks directly via SecatorRunner.
 
 from urllib.parse import urlparse
 
-from reNgine.utilities.logger import get_module_logger
 from django.db.models import Q
 
 from reNgine.settings import RENGINE_HOME
+from reNgine.utilities.logger import get_module_logger
 from startScan.models import EndPoint, ScanHistory, Subdomain
 from targetApp.models import Domain
 

@@ -1,8 +1,7 @@
-from datetime import datetime, timedelta
+from datetime import datetime
 import json
 from pathlib import Path
 
-from reNgine.utilities.logger import get_module_logger
 from django.contrib import messages
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db.models import Case, Count, F, IntegerField, Q, Value, When
@@ -29,7 +28,6 @@ from reNgine.definitions import (
     PERM_MODIFY_SYSTEM_CONFIGURATIONS,
     RUNNING_BACKGROUND,
     RUNNING_TASK,
-    SCHEDULED_SCAN,
     SKIPPED_TASK,
     SUCCESS_TASK,
 )
@@ -37,6 +35,7 @@ from reNgine.secator.service import run_per_task_secator_scans, start_secator_sc
 from reNgine.services.repositories import EndpointRepository
 from reNgine.settings import RENGINE_RESULTS
 from reNgine.utilities.command import run_command
+from reNgine.utilities.logger import get_module_logger
 from reNgine.utilities.subdomain import get_interesting_subdomains
 from reNgine.utilities.time import local_to_utc_aware
 from scanEngine.models import (
@@ -602,8 +601,7 @@ def detail_scan(request, id, slug):
     # Show Screenshots tab when scan had screenshot task (legacy) or has endpoints with screenshots (e.g. Secator)
     tasks = scan.tasks or []
     has_screenshots = (
-        "screenshot" in tasks
-        or endpoints.filter(screenshot_path__isnull=False).exclude(screenshot_path="").exists()
+        "screenshot" in tasks or endpoints.filter(screenshot_path__isnull=False).exclude(screenshot_path="").exists()
     )
 
     # Build render context
@@ -945,15 +943,17 @@ def schedule_scan(request, host_id, slug):
         mode_label = secator_kwargs.get("execution_mode", "secator")
         task_name = f"Secator {mode_label} for {domain.name}: {timestr}"
         common = _build_scan_schedule_common(
-            task_name, domain, request.user, subdomains_in, subdomains_out,
+            task_name,
+            domain,
+            request.user,
+            subdomains_in,
+            subdomains_out,
             secator_kwargs=kwargs_stored,
         )
 
         if scheduled_mode == ScanSchedule.SCHEDULE_MODE_PERIODIC:
             frequency_value, frequency_type = _normalize_periodic_frequency_from_post(request.POST)
-            next_run = ScanSchedule.compute_next_run_from_frequency(
-                timezone.now(), frequency_value, frequency_type
-            )
+            next_run = ScanSchedule.compute_next_run_from_frequency(timezone.now(), frequency_value, frequency_type)
             ScanSchedule.objects.create(
                 **common,
                 schedule_mode=ScanSchedule.SCHEDULE_MODE_PERIODIC,
@@ -1125,16 +1125,17 @@ def schedule_organization_scan(request, slug, id):
             timestr = str(datetime.strftime(timezone.now(), "%Y_%m_%d_%H_%M_%S"))
             task_name = f"{engine.engine_name} for {domain.name}: {timestr}"
             common = _build_scan_schedule_common(
-                task_name, domain, request.user, [], [], scan_type=engine,
+                task_name,
+                domain,
+                request.user,
+                [],
+                [],
+                scan_type=engine,
             )
 
             if scheduled_mode == ScanSchedule.SCHEDULE_MODE_PERIODIC:
-                frequency_value, frequency_type = _normalize_periodic_frequency_from_post(
-                    request.POST
-                )
-                next_run = ScanSchedule.compute_next_run_from_frequency(
-                    timezone.now(), frequency_value, frequency_type
-                )
+                frequency_value, frequency_type = _normalize_periodic_frequency_from_post(request.POST)
+                next_run = ScanSchedule.compute_next_run_from_frequency(timezone.now(), frequency_value, frequency_type)
                 ScanSchedule.objects.create(
                     **common,
                     schedule_mode=ScanSchedule.SCHEDULE_MODE_PERIODIC,

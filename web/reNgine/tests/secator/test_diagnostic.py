@@ -2,8 +2,8 @@
 Tests for Secator path configuration diagnostic (get_secator_prefix_diagnostic).
 """
 
-import tempfile
 from pathlib import Path
+import tempfile
 from unittest.mock import patch
 
 from reNgine.secator.diagnostic import get_secator_prefix_diagnostic

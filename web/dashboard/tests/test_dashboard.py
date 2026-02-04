@@ -62,9 +62,7 @@ class TestDashboardViews(BaseTestCase):
 
     def test_edit_project_view(self):
         """Test the edit project view."""
-        response = self.client.get(
-            reverse("edit_project", kwargs={"slug": self.data_generator.project.slug})
-        )
+        response = self.client.get(reverse("edit_project", kwargs={"slug": self.data_generator.project.slug}))
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "dashboard/edit_project.html")
 

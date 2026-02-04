@@ -2,7 +2,6 @@ import random
 import re
 
 from reNgine.utilities.logger import get_module_logger
-
 from scanEngine.models import Proxy
 
 

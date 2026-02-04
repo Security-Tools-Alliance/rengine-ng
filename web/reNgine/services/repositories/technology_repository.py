@@ -6,12 +6,12 @@ Handles Technology database operations with ManyToMany associations from Secator
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
-from reNgine.utilities.logger import get_module_logger
 from django.core.exceptions import MultipleObjectsReturned, ObjectDoesNotExist
 from django.db import DatabaseError, IntegrityError
 
 from reNgine.core.validators import is_valid_domain, is_valid_url
 from reNgine.secator.path_utils import strip_secator_reports_prefix
+from reNgine.utilities.logger import get_module_logger
 from startScan.models import EndPoint, Subdomain, Technology
 
 
@@ -72,9 +72,7 @@ class TechnologyRepository:
         raw_stored_path = item.get("stored_response_path") or ""
         path_max_length = Technology._meta.get_field("stored_response_path").max_length
         stored_response_path = (
-            strip_secator_reports_prefix(raw_stored_path, max_length=path_max_length)
-            if raw_stored_path
-            else ""
+            strip_secator_reports_prefix(raw_stored_path, max_length=path_max_length) if raw_stored_path else ""
         )
         tech_obj, created = Technology.objects.get_or_create(
             name=tech_name,

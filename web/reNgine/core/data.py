@@ -8,8 +8,9 @@ import ipaddress
 import re
 import subprocess
 
-from reNgine.utilities.logger import get_module_logger
 import validators
+
+from reNgine.utilities.logger import get_module_logger
 
 
 logger = get_module_logger(__name__)

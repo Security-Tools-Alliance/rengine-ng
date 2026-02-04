@@ -5,7 +5,6 @@ Handles synchronization between Secator runner data and ScanHistory.
 
 from typing import Optional
 
-from reNgine.utilities.logger import get_module_logger
 from django.utils import timezone
 
 from reNgine.definitions import (
@@ -17,6 +16,7 @@ from reNgine.definitions import (
     SUCCESS_TASK,
 )
 from reNgine.services.repositories.scan_repository import ScanRepository
+from reNgine.utilities.logger import get_module_logger
 from startScan.models import ScanActivity, ScanHistory, SecatorRunner
 
 

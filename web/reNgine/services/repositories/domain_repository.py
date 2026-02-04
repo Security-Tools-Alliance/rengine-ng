@@ -7,10 +7,10 @@ import contextlib
 from datetime import datetime
 from typing import Any, Dict, Optional, Tuple
 
-from reNgine.utilities.logger import get_module_logger
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError
 
+from reNgine.utilities.logger import get_module_logger
 from reNgine.utilities.time import ensure_timezone_aware, parse_datetime_iso
 from startScan.models import ScanHistory
 from targetApp.models import (

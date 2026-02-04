@@ -2,7 +2,6 @@ import json
 import pickle
 from time import sleep
 
-from reNgine.utilities.logger import get_module_logger
 from discord_webhook import DiscordEmbed, DiscordWebhook
 from django.utils import timezone
 import humanize
@@ -11,6 +10,7 @@ import requests
 
 from reNgine.definitions import DISCORD_SEVERITY_COLORS
 from reNgine.settings import DOMAIN_NAME, SECATOR_CELERY_BROKER_URL
+from reNgine.utilities.logger import get_module_logger
 from scanEngine.models import Notification
 
 

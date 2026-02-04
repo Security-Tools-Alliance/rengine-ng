@@ -36,7 +36,7 @@
                             
                             <h5>YAML Configuration</h5>
                             <div class="bg-light p-3 rounded">
-                                <div id="yaml-editor-readonly">{{ scan.yaml_configuration }}</div>
+                                <div id="yaml-editor-readonly" data-yaml-config="{{ scan.yaml_configuration|escape }}"></div>
                             </div>
                         </div>
                         
@@ -125,10 +125,12 @@
 <script type="text/javascript">
 $(document).ready(function() {
     // Initialize ACE editor for YAML display (read-only)
+    const editorElement = document.getElementById("yaml-editor-readonly");
     const editor = ace.edit("yaml-editor-readonly");
     editor.setTheme("ace/theme/tomorrow_night_eighties");
     editor.session.setMode("ace/mode/yaml");
     editor.setReadOnly(true);
+    editor.session.setValue(editorElement.dataset.yamlConfig || "");
     editor.setOptions({
         fontSize: "14px",
         showInvisibles: true,

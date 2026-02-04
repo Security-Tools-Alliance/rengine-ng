@@ -4,8 +4,8 @@ from urllib.parse import urlparse
 
 from django.apps import apps
 from django.contrib.auth.models import User
-from django.core.exceptions import ValidationError
 from django.contrib.postgres.fields import ArrayField
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Count, Q
 from django.db.models.functions import TruncDay
@@ -13,11 +13,11 @@ from django.utils import timezone
 
 from reNgine.core.time import get_time_taken
 from reNgine.definitions import (
-    SCAN_STATUSES,
     CONFIDENCE_CHOICES,
     ENGINE_DISPLAY_NAMES,
     IP_PROTOCOL_CHOICES,
     NUCLEI_REVERSE_SEVERITY_MAP,
+    SCAN_STATUSES,
 )
 from reNgine.llm.utils import convert_markdown_to_html
 from reNgine.utilities.time import date_to_aware_datetime
@@ -1864,27 +1864,15 @@ class ScanSchedule(models.Model):
 
     name = models.CharField(max_length=255)
     domain = models.ForeignKey(Domain, on_delete=models.CASCADE)
-    scan_type = models.ForeignKey(
-        EngineType, on_delete=models.CASCADE, null=True, blank=True
-    )
+    scan_type = models.ForeignKey(EngineType, on_delete=models.CASCADE, null=True, blank=True)
     secator_kwargs = models.JSONField(null=True, blank=True)
-    initiated_by = models.ForeignKey(
-        User, on_delete=models.CASCADE, related_name="scheduled_scans"
-    )
-    imported_subdomains = ArrayField(
-        models.CharField(max_length=255), blank=True, default=list
-    )
-    out_of_scope_subdomains = ArrayField(
-        models.CharField(max_length=255), blank=True, default=list
-    )
+    initiated_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name="scheduled_scans")
+    imported_subdomains = ArrayField(models.CharField(max_length=255), blank=True, default=list)
+    out_of_scope_subdomains = ArrayField(models.CharField(max_length=255), blank=True, default=list)
 
-    schedule_mode = models.CharField(
-        max_length=20, choices=SCHEDULE_MODE_CHOICES, default=SCHEDULE_MODE_PERIODIC
-    )
+    schedule_mode = models.CharField(max_length=20, choices=SCHEDULE_MODE_CHOICES, default=SCHEDULE_MODE_PERIODIC)
     frequency_value = models.PositiveIntegerField(null=True, blank=True)
-    frequency_type = models.CharField(
-        max_length=20, choices=FREQUENCY_TYPE_CHOICES, null=True, blank=True
-    )
+    frequency_type = models.CharField(max_length=20, choices=FREQUENCY_TYPE_CHOICES, null=True, blank=True)
     scheduled_time = models.DateTimeField(null=True, blank=True)
 
     next_run = models.DateTimeField(db_index=True)
@@ -1903,25 +1891,15 @@ class ScanSchedule(models.Model):
         """Enforce required fields per schedule_mode and initiated_by for audit trail."""
         super().clean()
         if self.initiated_by_id is None:
-            raise ValidationError(
-                {"initiated_by": "Scheduled scans require an initiated_by user for audit trail."}
-            )
+            raise ValidationError({"initiated_by": "Scheduled scans require an initiated_by user for audit trail."})
         if self.schedule_mode == self.SCHEDULE_MODE_PERIODIC:
             if self.frequency_value is None or self.frequency_value < 1:
-                raise ValidationError(
-                    {"frequency_value": "Periodic schedules require a positive frequency value."}
-                )
-            if not self.frequency_type or self.frequency_type not in {
-                c[0] for c in self.FREQUENCY_TYPE_CHOICES
-            }:
-                raise ValidationError(
-                    {"frequency_type": "Periodic schedules require a valid frequency type."}
-                )
+                raise ValidationError({"frequency_value": "Periodic schedules require a positive frequency value."})
+            if not self.frequency_type or self.frequency_type not in {c[0] for c in self.FREQUENCY_TYPE_CHOICES}:
+                raise ValidationError({"frequency_type": "Periodic schedules require a valid frequency type."})
         elif self.schedule_mode == self.SCHEDULE_MODE_CLOCKED:
             if self.scheduled_time is None:
-                raise ValidationError(
-                    {"scheduled_time": "One-time (clocked) schedules require a scheduled time."}
-                )
+                raise ValidationError({"scheduled_time": "One-time (clocked) schedules require a scheduled time."})
 
     def save(self, *args, **kwargs):
         """
@@ -1988,9 +1966,7 @@ class ScanSchedule(models.Model):
         """
         now = from_time if from_time is not None else timezone.now()
         if schedule_mode == ScanSchedule.SCHEDULE_MODE_PERIODIC and frequency_value and frequency_type:
-            return ScanSchedule.compute_next_run_from_frequency(
-                now, frequency_value, frequency_type
-            )
+            return ScanSchedule.compute_next_run_from_frequency(now, frequency_value, frequency_type)
         if schedule_mode == ScanSchedule.SCHEDULE_MODE_CLOCKED and scheduled_time is not None:
             return scheduled_time
         return now + timedelta(days=1)

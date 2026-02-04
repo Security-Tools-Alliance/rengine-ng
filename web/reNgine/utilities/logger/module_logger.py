@@ -67,6 +67,7 @@ def get_module_logger(name: str) -> ModuleLogger:
     LOGGING in reNgine.settings applies (reNgine.* or root). Example::
 
         from reNgine.utilities.logger import get_module_logger
+
         logger = get_module_logger(__name__)
 
     Drop-in replacement for get_task_logger(__name__). Do not pass ad-hoc

@@ -1,10 +1,10 @@
 import os
 
-from reNgine.utilities.logger import get_module_logger
 from discord_webhook import DiscordWebhook
 import requests
 
 from reNgine.definitions import NUCLEI_SEVERITY_MAP, STATUS_TO_SEVERITIES
+from reNgine.utilities.logger import get_module_logger
 from reNgine.utilities.notification import (
     enrich_notification,
     get_scan_fields,

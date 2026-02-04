@@ -3,12 +3,12 @@ Scan Repository - Data access for scan-related operations.
 Handles ScanHistory, ScanActivity and SubScan database operations.
 """
 
-from reNgine.utilities.logger import get_module_logger
 from django.core.exceptions import ObjectDoesNotExist
 from django.utils import timezone
 
 from dashboard.models import User
 from reNgine.definitions import INITIATED_TASK
+from reNgine.utilities.logger import get_module_logger
 from startScan.models import Domain, ScanActivity, ScanHistory, SubScan
 
 

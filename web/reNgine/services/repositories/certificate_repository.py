@@ -8,10 +8,10 @@ from datetime import datetime
 from datetime import timezone as dt_timezone
 from typing import Any, Dict, Optional
 
-from reNgine.utilities.logger import get_module_logger
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError
 
+from reNgine.utilities.logger import get_module_logger
 from reNgine.utilities.time import ensure_timezone_aware, parse_datetime_iso
 from startScan.models import Certificate, IpAddress, ScanHistory, Subdomain
 from targetApp.models import Domain

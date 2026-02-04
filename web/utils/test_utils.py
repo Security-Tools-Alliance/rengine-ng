@@ -2,9 +2,9 @@
 This file contains the test cases
 """
 
+from datetime import timedelta
 import json
 import logging
-from datetime import timedelta
 
 from django.template import Template
 from django.template.loader import get_template

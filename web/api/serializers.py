@@ -4,12 +4,11 @@ import logging
 from django.contrib.humanize.templatetags.humanize import naturalday, naturaltime
 from django.db.models import F, JSONField, Value
 from rest_framework import serializers
+import yaml
 
 # Scan file URLs: build_scan_file_url (api.scan_file) yields paths served by ServeScanFile
 # with project-scoped access; do not build scan file URLs outside this helper.
 from api.scan_file import build_scan_file_url
-import yaml
-
 from dashboard.models import (
     Project,
     SearchHistory,

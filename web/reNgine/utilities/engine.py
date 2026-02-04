@@ -2,7 +2,6 @@ import os
 import re
 import uuid
 
-from reNgine.utilities.logger import get_module_logger
 import yaml
 
 from reNgine.definitions import (
@@ -14,6 +13,7 @@ from reNgine.definitions import (
     HTTP_PRE_CRAWL_UNCOMMON_PORTS,
     HTTP_THREADS,
 )
+from reNgine.utilities.logger import get_module_logger
 from scanEngine.models import EngineType
 
 

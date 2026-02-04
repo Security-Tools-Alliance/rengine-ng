@@ -1,6 +1,6 @@
-from reNgine.utilities.logger import get_module_logger
 from django.core.exceptions import ObjectDoesNotExist
 
+from reNgine.utilities.logger import get_module_logger
 from reNgine.utilities.url import get_subdomain_from_url
 from startScan.models import ScanHistory
 from targetApp.models import Domain

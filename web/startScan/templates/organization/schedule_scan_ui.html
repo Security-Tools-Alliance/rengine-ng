@@ -171,7 +171,10 @@ $(function(){
     labels: {finish: "Start Scan"},
     onInit :function (event, current) {
       $('a[role="menuitem"]').addClass('text-white');
-      $(".actions ul li:nth-child(3) a").attr('onclick', `$(this).closest('form').submit()`);
+      $(".actions ul li:nth-child(3) a").on('click', function(e) {
+        e.preventDefault();
+        $(this).closest('form').submit();
+      });
       flatpickr(document.getElementById('clockedTime'), {
         enableTime: true,
         dateFormat: "Y-m-d H:i",

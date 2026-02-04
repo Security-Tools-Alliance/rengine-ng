@@ -266,9 +266,7 @@ class TestTargetAppViews(BaseTestCase):
         # Verify that the organization data has not changed
         self.data_generator.organization.refresh_from_db()
         self.assertEqual(self.data_generator.organization.name, original_name)
-        self.assertEqual(
-            self.data_generator.organization.description or "", original_description
-        )
+        self.assertEqual(self.data_generator.organization.description or "", original_description)
 
     def test_delete_non_existent_target(self):
         """
@@ -376,9 +374,7 @@ class TestTargetAppViews(BaseTestCase):
         # Verify that the organization data has not changed
         self.data_generator.organization.refresh_from_db()
         self.assertEqual(self.data_generator.organization.name, original_name)
-        self.assertEqual(
-            self.data_generator.organization.description or "", original_description
-        )
+        self.assertEqual(self.data_generator.organization.description or "", original_description)
 
     def test_add_organization_with_duplicate_name(self):
         """

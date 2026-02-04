@@ -1,10 +1,11 @@
 from urllib.parse import urlparse
 
-from reNgine.utilities.logger import get_module_logger
 from django.core.exceptions import ValidationError
 from django.core.validators import URLValidator
 import tldextract
 import validators
+
+from reNgine.utilities.logger import get_module_logger
 
 
 logger = get_module_logger(__name__)
