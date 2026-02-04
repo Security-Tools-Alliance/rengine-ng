@@ -5,6 +5,7 @@ from reNgine.definitions import logger
 
 class StartscanConfig(AppConfig):
     name = "startScan"
+    label = "startScan"
     default_auto_field = "django.db.models.BigAutoField"
 
     def ready(self):

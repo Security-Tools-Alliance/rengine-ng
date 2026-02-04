@@ -1747,6 +1747,9 @@ class SecatorRunner(models.Model):
     id = models.AutoField(primary_key=True)
     runner_type = models.CharField(max_length=50, help_text="Type of runner: workflow, scan, or task")
     runner_name = models.CharField(max_length=500, null=True, blank=True)
+    workspace_name = models.CharField(
+        max_length=500, null=True, blank=True, help_text="Secator workspace (e.g. project_slug/domain_name)"
+    )
     scan_history = models.ForeignKey(ScanHistory, on_delete=models.CASCADE, null=True, blank=True)
     domain = models.ForeignKey(Domain, on_delete=models.CASCADE, null=True, blank=True)
     runner_data = models.JSONField(default=dict, help_text="Full runner data from Secator")

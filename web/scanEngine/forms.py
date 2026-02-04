@@ -1053,7 +1053,7 @@ class SecatorProfileForm(forms.ModelForm):
 
     class Meta:
         model = SecatorProfile
-        fields = ["name", "category", "description", "enforce", "opts", "is_active"]
+        fields = ["name", "category", "description", "enforce", "opts", "is_default", "is_active"]
 
     name = forms.CharField(
         required=True,
@@ -1096,6 +1096,11 @@ class SecatorProfileForm(forms.ModelForm):
             attrs={"id": "profile_opts_editor"},
         ),
         help_text="YAML configuration options for the profile",
+    )
+    is_default = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "form-check-input", "id": "profile_is_default"}),
+        initial=False,
     )
     is_active = forms.BooleanField(
         required=False,

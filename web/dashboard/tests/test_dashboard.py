@@ -62,13 +62,15 @@ class TestDashboardViews(BaseTestCase):
 
     def test_edit_project_view(self):
         """Test the edit project view."""
-        response = self.client.get(reverse("edit_project", kwargs={"slug": "test-project"}))
+        response = self.client.get(
+            reverse("edit_project", kwargs={"slug": self.data_generator.project.slug})
+        )
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "dashboard/edit_project.html")
 
         # Test POST with valid data
         response = self.client.post(
-            reverse("edit_project", kwargs={"slug": "test-project"}),
+            reverse("edit_project", kwargs={"slug": self.data_generator.project.slug}),
             {"name": "Updated Project", "description": "Updated description", "insert_date": timezone.now()},
         )
         self.assertRedirects(response, reverse("list_projects"))

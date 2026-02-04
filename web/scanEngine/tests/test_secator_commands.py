@@ -107,6 +107,7 @@ tasks:
         mock_workflow.alias = "subdomain_recon"
         mock_workflow.description = "Subdomain reconnaissance workflow"
         mock_workflow._path = "/path/to/workflow.yaml"
+        mock_workflow.long_description = None
 
         mock_get_configs.return_value = [mock_workflow]
 
@@ -122,19 +123,10 @@ tasks:
         self.assertEqual(workflow.get_display_name(), "Subdomain Recon")
 
     @patch("scanEngine.management.commands.load_scans.get_configs_by_type")
-    @patch("builtins.open", new_callable=mock_open)
-    def test_load_scans_command(self, mock_file, mock_get_configs):
-        """Test the load_scans management command."""
-        # Mock TemplateLoader object for scan
-        mock_scan = MagicMock()
-        mock_scan.name = "domain"
-        mock_scan.description = "Domain reconnaissance scan"
-        mock_scan._path = "/path/to/scan.yaml"
-
-        mock_get_configs.return_value = [mock_scan]
-
-        # Mock the YAML file content
-        yaml_content = """
+    @patch(
+        "builtins.open",
+        new_callable=mock_open,
+        read_data="""
 type: scan
 name: domain
 description: Domain reconnaissance scan
@@ -143,8 +135,18 @@ workflows:
     description: Find subdomains
 input_types:
   - domain
-"""
-        mock_file.return_value.read.return_value = yaml_content
+""",
+    )
+    def test_load_scans_command(self, mock_file, mock_get_configs):
+        """Test the load_scans management command."""
+        # Mock TemplateLoader object for scan
+        mock_scan = MagicMock()
+        mock_scan.name = "domain"
+        mock_scan.description = "Domain reconnaissance scan"
+        mock_scan._path = "/path/to/scan.yaml"
+        mock_scan.long_description = None
+
+        mock_get_configs.return_value = [mock_scan]
 
         # Run the command
         out = StringIO()
@@ -287,12 +289,13 @@ tasks:
         out = StringIO()
         call_command("load_workflows", "--builtin-only", stdout=out)
 
-        # Verify workflow was created (using name as key, not alias)
-        workflow = SecatorWorkflow.objects.get(name="Subdomain Recon")
+        # Verify workflow was created (using loader name as key)
+        workflow = SecatorWorkflow.objects.get(name="subdomain_recon")
         self.assertEqual(workflow.description, "Subdomain discovery")
         self.assertEqual(workflow.workflow_type, "builtin")
         self.assertEqual(workflow.scan_type, "internet")
         self.assertIn("subfinder", workflow.yaml_configuration)
+        self.assertEqual(workflow.get_display_name(), "Subdomain Recon")
 
     @patch("scanEngine.management.commands.load_workflows.get_configs_by_type")
     def test_load_builtin_workflows_secator_failure(self, mock_get_configs):
@@ -390,6 +393,7 @@ tasks:
         mock_workflow.alias = "subdomain_recon"
         mock_workflow.description = "Subdomain discovery"
         mock_workflow._path = "/path/to/workflow.yaml"
+        mock_workflow.long_description = None
 
         mock_get_configs.return_value = [mock_workflow]
 
@@ -400,7 +404,6 @@ tasks:
         # Verify workflow was updated
         existing_workflow.refresh_from_db()
         self.assertEqual(existing_workflow.name, "subdomain_recon")
-        self.assertEqual(existing_workflow.display_name, "Subdomain Recon")
         self.assertEqual(existing_workflow.get_display_name(), "Subdomain Recon")
         self.assertEqual(existing_workflow.description, "Subdomain discovery")
         self.assertEqual(existing_workflow.scan_type, "internet")
@@ -671,6 +674,7 @@ input_types:
         mock_scan.name = "domain"
         mock_scan.description = "Domain reconnaissance scan"
         mock_scan._path = "/path/to/scan.yaml"
+        mock_scan.long_description = None
 
         mock_get_configs.return_value = [mock_scan]
 
@@ -783,6 +787,7 @@ input_types:
         mock_scan.name = "domain"
         mock_scan.description = "Domain reconnaissance scan"
         mock_scan._path = "/path/to/scan.yaml"
+        mock_scan.long_description = None
 
         mock_get_configs.return_value = [mock_scan]
 
@@ -959,3 +964,64 @@ opts:
 
         # Verify no profiles were created
         self.assertEqual(SecatorProfile.objects.filter(profile_type="builtin").count(), 0)
+
+    @patch("scanEngine.management.commands.check_secator_prefix.get_secator_prefix_diagnostic")
+    def test_check_secator_prefix_ok_exits_zero(self, mock_diagnostic):
+        """check_secator_prefix exits 0 when diagnostic reports ok."""
+        mock_diagnostic.return_value = {
+            "prefix_configured": "/home/secator/.secator/reports",
+            "rengine_results": "/tmp/results",
+            "rengine_results_exists": True,
+            "rengine_results_readable": True,
+            "paths_still_with_prefix": [],
+            "count_paths_still_with_prefix": 0,
+            "count_total_with_path": 0,
+            "ok": True,
+        }
+        out = StringIO()
+        err = StringIO()
+        with self.assertRaises(SystemExit) as cm:
+            call_command("check_secator_prefix", stdout=out, stderr=err)
+        self.assertEqual(cm.exception.code, 0)
+        self.assertIn("OK", out.getvalue())
+
+    @patch("scanEngine.management.commands.check_secator_prefix.get_secator_prefix_diagnostic")
+    def test_check_secator_prefix_failure_exits_one(self, mock_diagnostic):
+        """check_secator_prefix exits 1 when diagnostic reports issues."""
+        mock_diagnostic.return_value = {
+            "prefix_configured": "/home/secator/.secator/reports",
+            "rengine_results": "/nonexistent",
+            "rengine_results_exists": False,
+            "rengine_results_readable": False,
+            "paths_still_with_prefix": ["/home/secator/.secator/reports/legacy.png"],
+            "count_paths_still_with_prefix": 1,
+            "count_total_with_path": 1,
+            "ok": False,
+        }
+        out = StringIO()
+        err = StringIO()
+        with self.assertRaises(SystemExit) as cm:
+            call_command("check_secator_prefix", stdout=out, stderr=err)
+        self.assertEqual(cm.exception.code, 1)
+        self.assertIn("issues detected", err.getvalue())
+
+    @patch("scanEngine.management.commands.check_secator_prefix.get_secator_prefix_diagnostic")
+    def test_check_secator_prefix_quiet(self, mock_diagnostic):
+        """check_secator_prefix --quiet only writes to stderr on failure."""
+        mock_diagnostic.return_value = {
+            "ok": False,
+            "prefix_configured": "/x",
+            "rengine_results": "/y",
+            "rengine_results_exists": False,
+            "rengine_results_readable": False,
+            "paths_still_with_prefix": [],
+            "count_paths_still_with_prefix": 0,
+            "count_total_with_path": 0,
+        }
+        out = StringIO()
+        err = StringIO()
+        with self.assertRaises(SystemExit) as cm:
+            call_command("check_secator_prefix", "--quiet", stdout=out, stderr=err)
+        self.assertEqual(cm.exception.code, 1)
+        self.assertEqual(out.getvalue(), "")
+        self.assertIn("check_secator_prefix", err.getvalue())

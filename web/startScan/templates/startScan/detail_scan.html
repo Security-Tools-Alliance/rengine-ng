@@ -58,7 +58,7 @@ Scan Findings
 				<li class="nav-item recon-changes-tab-show" style="display: none">
 					<a class="nav-link" data-bs-toggle="tab" aria-expanded="false" class="nav-link" href="#recon-changes-tab">Recon Data Changes</a>
 				</li>
-				{% if 'screenshot' in history.tasks %}
+				{% if has_screenshots %}
 				<li class="nav-item">
 					<a class="nav-link" id="pills-screenshot-tab" data-bs-toggle="tab" aria-expanded="false" class="nav-link" href="#screenshot-tab">Screenshots</a>
 				</li>
@@ -1051,7 +1051,7 @@ Scan Findings
 			</div>
 		</div>
 	</div>
-	{% if 'screenshot' in history.tasks %}
+	{% if has_screenshots %}
 	<div class="tab-pane" id="screenshot-tab">
 		<div class="col-lg-8 col-md-8 col-sm-9 filtered-list-search mx-auto">
 			<input type="text" class="form-control form-control-lg br-30 mb-3" id="screenshot-search" placeholder="">
@@ -2198,7 +2198,7 @@ $(document).ready(function() {
 		});
 	{% endif %}
 
-	{% if 'screenshot' in history.tasks %}
+	{% if has_screenshots %}
 		$("#pills-screenshot-tab").click(function() {
 			if($('#screenshots-table').children().length > 0) {
 				return false;
@@ -2741,7 +2741,7 @@ $(document).ready(function() {
 
 			// if screenshot is not taken remove screenshot row
 			var column = subdomain_datatables.column('9');
-			{% if 'screenshot' in history.tasks %}
+			{% if has_screenshots %}
 			column.visible(true);
 			{% else %}
 			column.visible(false);

@@ -101,6 +101,7 @@ class SecatorAPIBase(APIView, ABC):
             "domain_id": context.get("domain_id"),
             "subscan_id": context.get("subscan_id"),
             "celery_id": context.get("celery_id"),
+            "workspace_name": context.get("workspace_name"),
             "status": runner_data.get("status"),
             "progress": runner_data.get("progress"),
             "done": runner_data.get("done"),

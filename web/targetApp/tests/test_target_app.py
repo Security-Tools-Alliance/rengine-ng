@@ -30,6 +30,7 @@ import os
 
 from django.contrib.messages import get_messages
 from django.urls import reverse
+from django.utils import timezone
 
 from startScan.models import Subdomain
 from targetApp.models import Domain, Organization
@@ -239,6 +240,9 @@ class TestTargetAppViews(BaseTestCase):
         """
         Test updating an organization with invalid data to ensure validation works.
         """
+        original_name = self.data_generator.organization.name
+        original_description = self.data_generator.organization.description or ""
+
         # Prepare invalid data (e.g., empty name)
         invalid_data = {
             "name": "",  # Invalid: name cannot be empty
@@ -261,8 +265,10 @@ class TestTargetAppViews(BaseTestCase):
 
         # Verify that the organization data has not changed
         self.data_generator.organization.refresh_from_db()
-        self.assertEqual(self.data_generator.organization.name, "Test Organization")
-        self.assertEqual(self.data_generator.organization.description, "Test Description")
+        self.assertEqual(self.data_generator.organization.name, original_name)
+        self.assertEqual(
+            self.data_generator.organization.description or "", original_description
+        )
 
     def test_delete_non_existent_target(self):
         """
@@ -346,6 +352,9 @@ class TestTargetAppViews(BaseTestCase):
         """
         Test updating an organization with invalid data to ensure validation works.
         """
+        original_name = self.data_generator.organization.name
+        original_description = self.data_generator.organization.description or ""
+
         response = self.client.post(
             reverse(
                 "update_organization",
@@ -366,19 +375,28 @@ class TestTargetAppViews(BaseTestCase):
 
         # Verify that the organization data has not changed
         self.data_generator.organization.refresh_from_db()
-        self.assertEqual(self.data_generator.organization.name, "Test Organization")
-        self.assertEqual(self.data_generator.organization.description, "Test Description")
+        self.assertEqual(self.data_generator.organization.name, original_name)
+        self.assertEqual(
+            self.data_generator.organization.description or "", original_description
+        )
 
     def test_add_organization_with_duplicate_name(self):
         """
         Test adding an organization with a name that already exists.
         """
+        existing_name = self.data_generator.organization.name
+        # Create a domain not in any organization (form queryset requires domains__isnull=True)
+        extra_domain = Domain.objects.create(
+            name=f"extra-domain-{self.data_generator.project.slug}.test",
+            project=self.data_generator.project,
+            insert_date=timezone.now(),
+        )
         response = self.client.post(
             reverse("add_organization", kwargs={"slug": self.data_generator.project.slug}),
             {
-                "name": "Test Organization",  # Duplicate name
+                "name": existing_name,
                 "description": "New Org Description",
-                "domains": [],
+                "domains": [extra_domain.id],
             },
         )
 

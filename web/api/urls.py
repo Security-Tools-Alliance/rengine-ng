@@ -1,6 +1,7 @@
 from django.urls import include, path
 from rest_framework import routers
 
+from .scan_file import ServeScanFile
 from .views import (
     AddReconNote,
     AddTarget,
@@ -138,6 +139,7 @@ urlpatterns = [
     path("queryDorkTypes/", ListDorkTypes.as_view(), name="queryDorkTypes"),
     path("queryAllScanResultVisualise/", VisualiseData.as_view(), name="queryAllScanResultVisualise"),
     path("fetchScreenshots/", FetchScreenshots.as_view(), name="fetchScreenshots"),
+    path("scan-files/<path:relative_path>", ServeScanFile.as_view(), name="serve_scan_file"),
     path(
         "queryTargetsWithoutOrganization/",
         ListTargetsWithoutOrganization.as_view(),

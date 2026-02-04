@@ -4,6 +4,8 @@ test_secator_models.py
 This file contains unit tests for the Secator models (SecatorScan, SecatorWorkflow, SecatorTask).
 """
 
+from django.core.exceptions import PermissionDenied
+
 from scanEngine.models import SecatorScan, SecatorTask, SecatorWorkflow
 from utils.test_base import BaseTestCase
 
@@ -252,14 +254,14 @@ tasks:
 
         # Try to modify
         workflow.name = "Modified Name"
-        with self.assertRaises(PermissionError):
+        with self.assertRaises(PermissionDenied):
             workflow.save()
 
     def test_builtin_workflow_deletion_blocked(self):
         """Test that built-in workflows cannot be deleted."""
         workflow = SecatorWorkflow.objects.create(workflow_type="builtin", **self.workflow_data)
 
-        with self.assertRaises(PermissionError):
+        with self.assertRaises(PermissionDenied):
             workflow.delete()
 
     def test_builtin_workflow_bypass_constraints(self):
@@ -314,14 +316,14 @@ class TestSecatorTask(BaseTestCase):
 
         # Try to modify
         task.name = "Modified Name"
-        with self.assertRaises(PermissionError):
+        with self.assertRaises(PermissionDenied):
             task.save()
 
     def test_builtin_task_deletion_blocked(self):
         """Test that built-in tasks cannot be deleted."""
         task = SecatorTask.objects.create(**self.task_data)
 
-        with self.assertRaises(PermissionError):
+        with self.assertRaises(PermissionDenied):
             task.delete()
 
     def test_builtin_task_bypass_constraints(self):
@@ -418,14 +420,14 @@ input_types:
 
         # Try to modify
         scan.name = "Modified Name"
-        with self.assertRaises(PermissionError):
+        with self.assertRaises(PermissionDenied):
             scan.save()
 
     def test_builtin_scan_deletion_blocked(self):
         """Test that built-in scans cannot be deleted."""
         scan = SecatorScan.objects.create(**self.scan_data)
 
-        with self.assertRaises(PermissionError):
+        with self.assertRaises(PermissionDenied):
             scan.delete()
 
     def test_builtin_scan_bypass_constraints(self):

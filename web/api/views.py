@@ -2,6 +2,7 @@ from collections import defaultdict
 from datetime import datetime
 import json
 import logging
+import mimetypes
 import os.path
 from pathlib import Path
 import re
@@ -12,6 +13,7 @@ from channels.layers import get_channel_layer
 from django.core.cache import cache
 from django.db.models import Case, CharField, Count, F, IntegerField, Prefetch, Q, Value, When
 from django.db.models.functions import Coalesce
+from django.http import FileResponse
 from django.shortcuts import get_object_or_404
 from django.template.defaultfilters import slugify
 from django.urls import reverse
@@ -29,8 +31,10 @@ from rest_framework.views import APIView
 import validators
 
 from api.permissions import HasAPIKeyOrIsAuthenticated
+from api.scan_file import get_scan_file_urls
 from api.secator_api_base import SecatorAPIBase
 from dashboard.models import OllamaSettings, OpenAiAPIKey, Project, SearchHistory
+from dashboard.utils import get_user_projects
 from recon_note.models import TodoNote
 
 # NOTE: Legacy tasks removed (query_ip_history, query_reverse_whois, query_whois,
@@ -53,7 +57,7 @@ from reNgine.llm.utils import convert_markdown_to_html, get_default_llm_model, i
 from reNgine.secator.selected_targets import resolve_selected_targets
 from reNgine.secator.service import run_per_task_secator_scans, start_secator_scan
 from reNgine.services.repositories.scan_repository import ScanRepository
-from reNgine.settings import RENGINE_CURRENT_VERSION
+from reNgine.settings import RENGINE_CURRENT_VERSION, RENGINE_RESULTS
 from reNgine.tasks import (
     llm_vulnerability_report,
     send_hackerone_report,
@@ -3360,6 +3364,7 @@ class EndPointViewSet(AdvancedSearchMixin, viewsets.ModelViewSet):
 
     def list(self, request, *args, **kwargs):
         queryset = self.filter_queryset(self.get_queryset())
+        context = {"request": request}
 
         # Support manual pagination with start/length (DataTables) or page/page_size (REST)
         pagination = parse_pagination_params(
@@ -3372,16 +3377,16 @@ class EndPointViewSet(AdvancedSearchMixin, viewsets.ModelViewSet):
         if pagination:
             total_count = queryset.count()
             paginated_queryset = queryset[pagination["start"] : pagination["start"] + pagination["length"]]
-            serializer = self.get_serializer(paginated_queryset, many=True)
+            serializer = self.get_serializer(paginated_queryset, many=True, context=context)
             return Response({"count": total_count, "results": serializer.data})
 
         # Fallback to normal pagination
         page = self.paginate_queryset(queryset)
         if page is not None:
-            serializer = self.get_serializer(page, many=True)
+            serializer = self.get_serializer(page, many=True, context=context)
             return self.get_paginated_response(serializer.data)
 
-        serializer = self.get_serializer(queryset, many=True)
+        serializer = self.get_serializer(queryset, many=True, context=context)
         return Response(serializer.data)
 
 
@@ -3806,6 +3811,8 @@ class FetchScreenshots(APIView):
                 return 80
             return None
 
+        from reNgine.definitions import UNCOMMON_WEB_PORTS
+
         # Get endpoints with screenshots
         endpoints_with_screenshots = (
             EndPoint.objects.filter(screenshot_path__isnull=False)
@@ -3846,15 +3853,29 @@ class FetchScreenshots(APIView):
             subdomain_key = f"{subdomain.name}_{endpoint.id}"
             endpoint_port = extract_port_from_url(endpoint.http_url)
 
+            # URLs served with project-scoped access via api.scan_file.ServeScanFile
+            screenshot_urls = get_scan_file_urls(endpoint.screenshot_path, req)
+            stored_response_urls = get_scan_file_urls(endpoint.stored_response_path, req)
+            screenshot_url = screenshot_urls.absolute
+            stored_response_url = stored_response_urls.absolute
+            port_is_uncommon = (
+                endpoint_port is not None and endpoint_port in UNCOMMON_WEB_PORTS
+            )
+            # Frontend uses screenshot_url (and stored_response_url) for display; screenshot_path
+            # is included for API consumers that need the stored path (e.g. export/debug).
             screenshots_data[subdomain_key] = {
                 "name": subdomain.name,
                 "http_url": endpoint.http_url,
                 "page_title": endpoint.page_title or subdomain.page_title,
                 "http_status": endpoint.http_status or subdomain.http_status,
                 "screenshot_path": endpoint.screenshot_path,
+                "screenshot_url": screenshot_url,
+                "stored_response_path": endpoint.stored_response_path,
+                "stored_response_url": stored_response_url,
                 "is_interesting": subdomain.is_important,
                 "endpoint_id": endpoint.id,
-                "port": endpoint_port,  # Add port information
+                "port": endpoint_port,
+                "port_is_uncommon": port_is_uncommon,
                 "ip_addresses": [{"address": ip.address, "is_cdn": ip.is_cdn} for ip in subdomain.ip_addresses.all()],
                 "technologies": [{"name": tech.name} for tech in subdomain.technologies.all()],
             }
@@ -4361,6 +4382,7 @@ class SecatorRunnerCreate(SecatorAPIBase):
             secator_runner = SecatorRunner(
                 runner_type=runner_type,
                 runner_name=runner_name,
+                workspace_name=context.get("workspace_name"),
                 runner_data=runner_data,
             )
 

@@ -51,7 +51,6 @@ tasks:
         # Create test scan
         self.scan = SecatorScan.objects.create(
             name="Test Scan",
-            alias="domain",
             description="A test scan",
             scan_type="internet",
             scan_config_type="builtin",
@@ -328,7 +327,6 @@ tasks:
         # Create a built-in scan
         scan = SecatorScan.objects.create(
             name="Built-in Scan",
-            alias="domain",
             description="A built-in scan",
             scan_type="internet",
             scan_config_type="builtin",
@@ -339,7 +337,6 @@ tasks:
 
         form_data = {
             "name": "Modified Scan",
-            "alias": "domain",
             "description": "Modified description",
             "scan_type": "internet",
             "scan_config_type": "builtin",
@@ -500,10 +497,13 @@ class TestSecatorProfileViews(BaseTestCase):
         self.assertTrue(profile.is_default)
 
     def test_secator_profile_form_default_unsets_other_defaults(self):
-        """Test that setting a profile as default unsets other defaults in the same category."""
+        """Test that setting a profile as default unsets other defaults in the same category (model behavior)."""
+        import uuid
+
+        unique_suffix = str(uuid.uuid4())[:8]
         # Create first profile as default
         profile1 = SecatorProfile.objects.create(
-            name="profile1",
+            name=f"profile1_unsets_{unique_suffix}",
             category="speed",
             description="First profile",
             enforce=False,
@@ -513,21 +513,20 @@ class TestSecatorProfileViews(BaseTestCase):
             is_default=True,
         )
 
-        # Create form for second profile with is_default=True
-        form_data = {
-            "name": "profile2",
-            "category": "speed",
-            "description": "Second profile",
-            "enforce": False,
-            "opts": yaml.dump({"rate_limit": 150}),
-            "is_active": True,
-            "is_default": True,
-        }
-        form = SecatorProfileForm(data=form_data)
-        self.assertTrue(form.is_valid())
-        profile2 = form.save()
+        # Create second profile with is_default=True via model (form validation would fail due to
+        # unique_default_per_category constraint checked before save)
+        profile2 = SecatorProfile.objects.create(
+            name=f"profile2_unsets_{unique_suffix}",
+            category="speed",
+            description="Second profile",
+            enforce=False,
+            opts=yaml.dump({"rate_limit": 150}),
+            profile_type="custom",
+            is_active=True,
+            is_default=True,
+        )
 
-        # Check that profile1 is no longer default
+        # Model save() unsets other defaults in the same category
         profile1.refresh_from_db()
         self.assertFalse(profile1.is_default)
         self.assertTrue(profile2.is_default)

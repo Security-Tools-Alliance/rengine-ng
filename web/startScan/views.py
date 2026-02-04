@@ -477,6 +477,13 @@ def detail_scan(request, id, slug):
     secator_runners = SecatorRunner.objects.filter(scan_history=scan).order_by("-created_at")
     is_secator_scan = secator_runners.exists()
 
+    # Show Screenshots tab when scan had screenshot task (legacy) or has endpoints with screenshots (e.g. Secator)
+    tasks = scan.tasks or []
+    has_screenshots = (
+        "screenshot" in tasks
+        or endpoints.filter(screenshot_path__isnull=False).exclude(screenshot_path="").exists()
+    )
+
     # Build render context
     ctx = {
         "scan_history_id": id,
@@ -511,6 +518,7 @@ def detail_scan(request, id, slug):
         "most_common_tags": common_tags,
         "most_common_vulnerability": common_vulns,
         "asset_countries": asset_countries,
+        "has_screenshots": has_screenshots,
     }
 
     # Find number of matched GF patterns

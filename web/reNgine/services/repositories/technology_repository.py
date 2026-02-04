@@ -11,6 +11,7 @@ from django.core.exceptions import MultipleObjectsReturned, ObjectDoesNotExist
 from django.db import DatabaseError, IntegrityError
 
 from reNgine.core.validators import is_valid_domain, is_valid_url
+from reNgine.secator.path_utils import strip_secator_reports_prefix
 from startScan.models import EndPoint, Subdomain, Technology
 
 
@@ -66,13 +67,21 @@ class TechnologyRepository:
             logger.warning(f"Technology item missing match field. Available fields: {list(item.keys())}")
             return None
 
-        # Get or create technology
+        # Normalize path for storage (prefix strip); file access and project check
+        # are in api.scan_file (ServeScanFile, get_project_for_scan_file_path).
+        raw_stored_path = item.get("stored_response_path") or ""
+        path_max_length = Technology._meta.get_field("stored_response_path").max_length
+        stored_response_path = (
+            strip_secator_reports_prefix(raw_stored_path, max_length=path_max_length)
+            if raw_stored_path
+            else ""
+        )
         tech_obj, created = Technology.objects.get_or_create(
             name=tech_name,
             defaults={
                 "value": item.get("value", ""),
                 "category": item.get("category", ""),
-                "stored_response_path": item.get("stored_response_path", ""),
+                "stored_response_path": stored_response_path,
             },
         )
 

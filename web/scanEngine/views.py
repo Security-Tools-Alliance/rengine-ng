@@ -873,7 +873,6 @@ def update_scan(request, scan_id):
     form = SecatorScanForm(
         initial={
             "name": scan.name,
-            "alias": scan.alias,
             "description": scan.description,
             "scan_type": scan.scan_type,
             "scan_config_type": scan.scan_config_type,

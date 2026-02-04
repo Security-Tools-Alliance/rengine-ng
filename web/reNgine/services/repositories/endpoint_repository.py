@@ -17,6 +17,7 @@ from django.utils import timezone
 import validators
 
 from reNgine.core.validators import is_valid_domain, is_valid_url
+from reNgine.secator.path_utils import strip_secator_reports_prefix
 from reNgine.utilities.distributed_lock import DistributedLock
 from startScan.models import DirectoryFile, EndPoint, ScanHistory, Subdomain, Technology
 from targetApp.models import Domain
@@ -112,6 +113,18 @@ class EndpointRepository:
         return endpoint
 
     @staticmethod
+    def _extract_secator_source(item: Dict[str, Any], max_length: int = 200) -> Optional[str]:
+        """Extract source from Secator finding (_source or _context.node_id). Returns truncated string or None."""
+        source = item.get("_source")
+        if not source and "_context" in item:
+            ctx = item["_context"]
+            if isinstance(ctx, dict):
+                source = ctx.get("node_id")
+        if not source or not isinstance(source, str):
+            return None
+        return source[:max_length] if len(source) > max_length else source
+
+    @staticmethod
     def _parse_response_time(item: Dict[str, Any]) -> Optional[float]:
         """Parse response time from item (ms string or seconds number). Returns seconds or None."""
         raw = item.get("time")
@@ -126,8 +139,10 @@ class EndpointRepository:
 
     def _build_secator_endpoint_defaults(self, item: Dict[str, Any], domain) -> Dict[str, Any]:
         """Build defaults dict for EndPoint from Secator item."""
+        source = self._extract_secator_source(item)
         defaults = {
             "target_domain": domain,
+            "source": source,
             "http_status": item.get("status_code") or item.get("status") or 0,
             "content_length": item.get("content_length", 0),
             "page_title": item.get("title", ""),
@@ -149,9 +164,22 @@ class EndpointRepository:
         if headers_dict:
             defaults["headers"] = headers_dict
 
-        for key in ("screenshot_path", "stored_response_path", "is_directory"):
-            if key in item:
-                defaults[key] = item[key]
+        # Normalize paths for storage (prefix strip); file access and project check
+        # are in api.scan_file (ServeScanFile, get_project_for_scan_file_path).
+        if "screenshot_path" in item:
+            val = item["screenshot_path"]
+            max_len = EndPoint._meta.get_field("screenshot_path").max_length
+            defaults["screenshot_path"] = strip_secator_reports_prefix(
+                val if isinstance(val, str) else str(val), max_length=max_len
+            )
+        if "stored_response_path" in item:
+            val = item["stored_response_path"]
+            max_len = EndPoint._meta.get_field("stored_response_path").max_length
+            defaults["stored_response_path"] = strip_secator_reports_prefix(
+                val if isinstance(val, str) else str(val), max_length=max_len
+            )
+        if "is_directory" in item:
+            defaults["is_directory"] = item["is_directory"]
 
         if "confidence" in item:
             from reNgine.core.validators import validate_confidence

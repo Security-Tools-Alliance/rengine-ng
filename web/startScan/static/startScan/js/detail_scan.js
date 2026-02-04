@@ -68,6 +68,13 @@ function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, s
 		lookup_url += `&target_id=${domain_id}`;
 	}
 
+	// Store context for screenshot modal when thumbnails lack data-scan-id / data-domain-id
+	const $endpointTable = $('#endpoint_results');
+	if ($endpointTable.length) {
+		$endpointTable.data('context-scan-id', scan_history_id || null);
+		$endpointTable.data('context-domain-id', domain_id || null);
+	}
+
 	if (gf_tags){
 		lookup_url += `&gf_tag=${gf_tags}`
 	}
@@ -117,159 +124,29 @@ function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, s
         { 'data': 'techs', 'title': 'Technology', 'defaultContent': '', 'visible': false, 'className': 'dt-col-hidden' },
         { 'data': 'webserver', 'title': 'Webserver', 'defaultContent': '', 'visible': false, 'className': 'dt-col-hidden', 'render': function ( data ) { return data ? parse_comma_values_into_span(data, "info") : ""; } },
         { 'data': 'response_time', 'title': 'Response time', 'searchable': false, 'defaultContent': '', 'render': function ( data ) { return data ? get_response_time_text(data) : ""; } },
-        { 
-            'data': 'screenshot_path', 'title': 'Screenshot', 
+        {
+            'data': 'screenshot_url',
+            'title': 'Screenshot',
             'searchable': false,
             'defaultContent': '',
-            'render': function(data, type, row) {
-					try {
-						const url = new URL(row['http_url']);
-						const port = url.port || (url.protocol === 'https:' ? 443 : 80);
-					const subdomain_id = row['subdomain_id'] || null;
-					const scan_id = row['scan_history_id'] || null;
-					const domain_id = row['target_domain_id'] || null;
-					const subdomain_name = row['subdomain_name'] || url.hostname;
-						
-						if (subdomain_id) {
-							const cellId = `screenshot-cell-${row['id']}`;
-							setTimeout(async () => {
-								try {
-									const screenshotHtml = await getScreenshotThumbnail(
-										subdomain_id, 
-										subdomain_name, 
-										port, 
-										scan_id, 
-										domain_id
-									);
-									const cell = document.getElementById(cellId);
-									if (cell) {
-										cell.innerHTML = screenshotHtml;
-									}
-								} catch (error) {
-									console.error('Error loading screenshot:', error);
-									const cell = document.getElementById(cellId);
-									if (cell) {
-										cell.innerHTML = '-';
-									}
-								}
-							}, 0);
-							
-							return `<div id="${cellId}">Loading...</div>`;
-						}
-						
-						if (data && data.length > 0) {
-                        // Generate unique identifier for this image element
-                        const imageId = `screenshot-${Math.random().toString(36).substr(2, 9)}`;
-                        
-                        // Create secure image element with data attributes instead of inline handlers
-                        const imgHtml = `<img id="${imageId}" 
-                                     src="/media/${escapeHtml(data)}" 
-                                     class="screenshot-thumbnail" 
-                                     style="width: 100px; height: 75px; object-fit: cover; cursor: pointer; border: 1px solid #ddd; border-radius: 3px;" 
-                                     data-screenshot-path="${escapeHtml(data)}"
-                                     data-http-url="${escapeHtml(row['http_url'] || '')}"
-                                     data-subdomain-id="${escapeHtml(subdomain_id || '')}"
-                                     data-subdomain-name="${escapeHtml(subdomain_name || '')}"
-                                     data-port="${escapeHtml(port || '')}"
-                                     data-scan-id="${escapeHtml(scan_id || '')}"
-                                     data-domain-id="${escapeHtml(domain_id || '')}"
-                                     title="Click to view full screenshot"
-                                     onerror="this.style.display='none'">`;
-                        
-                        // Add secure event listeners after DOM insertion
-                        setTimeout(() => {
-                            const imgElement = document.getElementById(imageId);
-                            if (imgElement) {
-                                // Add hover events
-                                imgElement.addEventListener('mouseover', function() {
-                                    showScreenshotPreview(this, this.dataset.screenshotPath, this.dataset.httpUrl);
-                                });
-                                imgElement.addEventListener('mouseout', hideScreenshotPreview);
-                                
-                                // Add click event
-                                imgElement.addEventListener('click', function() {
-                                    const {subdomainId} = this.dataset;
-                                    if (subdomainId) {
-                                        show_port_screenshots(
-                                            parseInt(subdomainId) || null,
-                                            this.dataset.subdomainName,
-                                            parseInt(this.dataset.port) || null,
-                                            parseInt(this.dataset.scanId) || null,
-                                            parseInt(this.dataset.domainId) || null
-                                        );
-                                    } else {
-                                        showScreenshotImageModal(this.dataset.screenshotPath, this.dataset.httpUrl);
-                                    }
-                                });
-                            }
-                        }, 0);
-                        
-                        return imgHtml;
-						}
-						return '-';
-					} catch (error) {
-						console.error('Error processing screenshot:', error);
-						if (data && data.length > 0) {
-                        // Generate unique identifier for this fallback image element
-                        const fallbackImageId = `screenshot-fallback-${Math.random().toString(36).substr(2, 9)}`;
-                        
-                        // Extract port safely
-                        let extractedPort;
-                        try {
-                            const url = new URL(row['http_url'] || 'http://x');
-                            extractedPort = url.port || (url.protocol === 'https:' ? 443 : 80);
-                        } catch (urlError) {
-                            extractedPort = 80; // Default fallback
-                        }
-                        
-                        // Create secure fallback image element with data attributes
-                        const fallbackImgHtml = `<img id="${fallbackImageId}" 
-                                     src="/media/${escapeHtml(data)}" 
-                                     class="screenshot-thumbnail" 
-                                     style="width: 100px; height: 75px; object-fit: cover; cursor: pointer; border: 1px solid #ddd; border-radius: 3px;" 
-                                     data-screenshot-path="${escapeHtml(data)}"
-                                     data-http-url="${escapeHtml(row['http_url'] || '')}"
-                                     data-subdomain-id="${escapeHtml((row && row['subdomain_id']) || '')}"
-                                     data-subdomain-name="${escapeHtml((row && row['subdomain_name']) || '')}"
-                                     data-port="${escapeHtml(extractedPort || '')}"
-                                     data-scan-id="${escapeHtml((row && row['scan_history_id']) || '')}"
-                                     data-domain-id="${escapeHtml((row && row['target_domain_id']) || '')}"
-                                     title="Click to view full screenshot"
-                                     onerror="this.style.display='none'">`;
-                        
-                        // Add secure event listeners after DOM insertion for fallback image
-                        setTimeout(() => {
-                            const fallbackImgElement = document.getElementById(fallbackImageId);
-                            if (fallbackImgElement) {
-                                // Add hover events
-                                fallbackImgElement.addEventListener('mouseover', function() {
-                                    showScreenshotPreview(this, this.dataset.screenshotPath, this.dataset.httpUrl);
-                                });
-                                fallbackImgElement.addEventListener('mouseout', hideScreenshotPreview);
-                                
-                                // Add click event
-                                fallbackImgElement.addEventListener('click', function() {
-                                    const {subdomainId} = this.dataset;
-                                    if (subdomainId) {
-                                        show_port_screenshots(
-                                            parseInt(subdomainId) || null,
-                                            this.dataset.subdomainName,
-                                            parseInt(this.dataset.port) || null,
-                                            parseInt(this.dataset.scanId) || null,
-                                            parseInt(this.dataset.domainId) || null
-                                        );
-                                    } else {
-                                        showScreenshotImageModal(this.dataset.screenshotPath, this.dataset.httpUrl);
-                                    }
-                                });
-                            }
-                        }, 0);
-                        
-                        return fallbackImgHtml;
-						}
-						return '-';
-					}
-				}
+            'render': function (data, type, row) {
+                const screenshotUrl = row['screenshot_url'] || '';
+                if (!screenshotUrl) return '-';
+                let port = 80;
+                try {
+                    const url = new URL(row['http_url'] || 'http://x');
+                    port = url.port || (url.protocol === 'https:' ? 443 : 80);
+                } catch (_) {}
+                return window.ScreenshotDisplay.buildThumbnailHtml({
+                    screenshotUrl,
+                    httpUrl: row['http_url'] || '',
+                    subdomainId: row['subdomain_id'] || '',
+                    subdomainName: row['subdomain_name'] || '',
+                    port,
+                    scanId: row['scan_history_id'] || '',
+                    domainId: row['target_domain_id'] || '',
+                }) || '-';
+            },
         },
         { 'data': 'method', 'title': 'Method', 'defaultContent': '', 'visible': false, 'className': 'dt-col-hidden' },
         { 'data': 'words', 'title': 'Words', 'searchable': false, 'defaultContent': '', 'visible': false, 'className': 'dt-col-hidden' },
@@ -371,6 +248,7 @@ function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, s
 		"initComplete": function(settings, json) {
 			endpoint_datatable_col_visibility(endpoint_table, endpoint_datatable_columns);
 			$(".dtrg-group th:contains('No group')").remove();
+			window.ScreenshotDisplay.attachDelegation('#endpoint_results');
 		},
 		"drawCallback": function () {
 			$("body").tooltip({ selector: '[data-toggle=tooltip]' });
@@ -416,7 +294,7 @@ function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, s
         { checkbox: 'end_content_type_filter_checkbox', column: 'content_type' },
         { checkbox: 'end_content_length_filter_checkbox', column: 'content_length' },
         { checkbox: 'end_response_time_filter_checkbox', column: 'response_time' },
-        { checkbox: 'end_screenshot_filter_checkbox', column: 'screenshot_path' },
+        { checkbox: 'end_screenshot_filter_checkbox', column: 'screenshot_url' },
     ];
     filterBindings.forEach(binding => {
         const selector = `input[name=${binding.checkbox}]`;
@@ -681,7 +559,8 @@ function get_screenshot(endpoint, scan_id){
 			}
 			search_field = `${data[subdomain]['page_title']} ${data[subdomain]['name']} ${data[subdomain]['http_status']} ${ip_search_values} ${interesting_field}`;
 			link.setAttribute('data-lightbox', 'screenshot-gallery')
-			link.setAttribute('href', '/media/' + data[subdomain]['screenshot_path'])
+			const screenshotUrl = data[subdomain]['screenshot_url'] || '';
+			link.setAttribute('href', screenshotUrl);
 			link.setAttribute('data-title', `<a target='_blank' href='`+data[subdomain]['http_url']+`'><h3 style="color:white">`+data[subdomain]['name']+`</h3></a>`);
 			link.classList.add('img-fluid');
 			link.classList.add('rounded');
@@ -690,7 +569,7 @@ function get_screenshot(endpoint, scan_id){
 			link.classList.add('mt-4');
 			link.setAttribute('data-gridzySearchText', search_field);
 			const newImage = document.createElement('img');
-			newImage.setAttribute('data-gridzylazysrc', '/media/' + data[subdomain]['screenshot_path']);
+			newImage.setAttribute('data-gridzylazysrc', screenshotUrl);
 			// newImage.setAttribute('data-gridzylazysrc', 'https://placeimg.com/1440/900/any?' + subdomain);
 			newImage.setAttribute('height', 500);
 			newImage.setAttribute('width', 500);
@@ -705,9 +584,18 @@ function get_screenshot(endpoint, scan_id){
 				http_status_badge = 'warning';
 			}
 			page_title = data[subdomain]['page_title'] ? data[subdomain]['page_title'] + '</br>': '' ;
-			subdomain_link = data[subdomain]['http_url'] ? `<a href="${data[subdomain]['http_url']}" target="_blank">${data[subdomain]['name']}</a>` : `<a href="https://${data[subdomain]['name']}" target="_blank">${data[subdomain]['name']}</a>`
+			const portNum = data[subdomain]['port'];
+			const showPortInLabel = portNum != null && portNum !== 80 && portNum !== 443;
+			const linkLabel = showPortInLabel ? `${data[subdomain]['name']}:${portNum}` : data[subdomain]['name'];
+			const linkHref = data[subdomain]['http_url'] || `https://${data[subdomain]['name']}${showPortInLabel ? ':' + portNum : ''}`;
+			subdomain_link = `<a href="${linkHref}" target="_blank">${linkLabel}</a>`;
+			const portBadge = (portNum != null && showPortInLabel)
+				? `<span class="m-1 float-end badge badge-soft-${data[subdomain]['port_is_uncommon'] === true ? 'danger' : 'primary'}">${portNum}</span>`
+				: '';
 			http_status = data[subdomain]['http_status'] ? `<span class="m-1 float-end badge  badge-soft-${http_status_badge}">${data[subdomain]['http_status']}</span>` : '';
-			figcaption.innerHTML = data[subdomain]['is_interesting'] ? page_title + subdomain_link + interesting_badge + http_status : page_title + subdomain_link + http_status;
+			figcaption.innerHTML = data[subdomain]['is_interesting']
+				? page_title + subdomain_link + interesting_badge + http_status + portBadge
+				: page_title + subdomain_link + http_status + portBadge;
 			figure.appendChild(figcaption);
 			link.appendChild(newImage);
 			link.appendChild(figure);
@@ -726,8 +614,7 @@ function get_screenshot(endpoint, scan_id){
 				http_status_select.appendChild(option);
 			}
 
-			// ip, port and services filtering
-			ips = data[subdomain]['ip_addresses']
+			// ip, port and services filtering (ips already set at start of loop)
 			for(let ip in ips){
 				ip_address = ips[ip]['address'];
 				filter_values += 'ip_' + ip_address.replace(/\./g,"_") + ' ';
@@ -818,8 +705,8 @@ function get_screenshot(endpoint, scan_id){
 			tags: true
 		});
 		// search functionality
-		const gridzyElements = document.querySelectorAll('.gridzySkinBlank[data-gridzySearchField]'),
-		pos = gridzyElements.length;
+		const gridzyElements = document.querySelectorAll('.gridzySkinBlank[data-gridzySearchField]');
+		let pos = gridzyElements.length;
 
 		while (pos--) {
 			(function(gridzyElement) {
@@ -2108,12 +1995,28 @@ $(document).on('click', '.detect_subdomain_cms_link', function(){
 	}
 });
 
-function show_port_screenshots(subdomain_id, subdomain_name, port, scan_id, domain_id = null) {
+function show_port_screenshots(subdomain_id, subdomain_name, port, scan_id, domain_id = null, clicked_screenshot_url = '', clicked_http_url = '') {
+	// When user clicked a specific thumbnail, show only that screenshot (no API call).
+	if (clicked_screenshot_url) {
+		window.ScreenshotDisplay.showModal(clicked_screenshot_url, clicked_http_url || '');
+		return;
+	}
+
+	let effectiveScanId = scan_id;
+	let effectiveDomainId = domain_id;
+	if ((effectiveScanId == null || effectiveScanId === 'null') && !effectiveDomainId) {
+		const $tbl = $('#endpoint_results');
+		if ($tbl.length) {
+			effectiveScanId = $tbl.data('context-scan-id');
+			effectiveDomainId = $tbl.data('context-domain-id');
+		}
+	}
+
 	let apiUrl = `/api/fetchScreenshots/?subdomain_id=${subdomain_id}&port=${port}`;
-	if (scan_id && scan_id !== 'null') {
-		apiUrl += `&scan_id=${scan_id}`;
-	} else if (domain_id) {
-		apiUrl += `&target_id=${domain_id}`;
+	if (effectiveScanId && effectiveScanId !== 'null') {
+		apiUrl += `&scan_id=${effectiveScanId}`;
+	} else if (effectiveDomainId) {
+		apiUrl += `&target_id=${effectiveDomainId}`;
 	} else {
 		if (window.ModalManager) {
 			ModalManager.showXl({ title: 'Error', bodyHtml: '<p class="text-danger">No scan or target information available</p>', footerHtml: '' });
@@ -2146,17 +2049,18 @@ function show_port_screenshots(subdomain_id, subdomain_name, port, scan_id, doma
 			let modalContent = '';
 			let screenshotCount = 0;
 			if (data && Object.keys(data).length > 0) {
-				for (let key in data) {
+				for (const key in data) {
 					const endpoint = data[key];
-					if (endpoint.screenshot_path && endpoint.port == port) {
+					const screenshotUrl = endpoint.screenshot_url || '';
+					if (screenshotUrl && endpoint.port == port) {
 						screenshotCount++;
 						modalContent += `
 						<div class="mb-4 text-center">
 							<h6><a href="${endpoint.http_url}" target="_blank" class="text-primary">${endpoint.http_url}</a></h6>
 							<div class="d-flex justify-content-center">
-								<img src="/media/${endpoint.screenshot_path}" class="img-fluid rounded screenshot-popup"
+								<img src="${screenshotUrl}" class="img-fluid rounded screenshot-popup"
 									 style="max-width: 90%; max-height: 80vh; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.15);"
-									 onclick="window.open('/media/${endpoint.screenshot_path}', '_blank')">
+									 onclick="window.open('${screenshotUrl.replace(/'/g, "\\'")}', '_blank')">
 							</div>
 						</div>
 					`;
@@ -2195,6 +2099,8 @@ function show_port_screenshots(subdomain_id, subdomain_name, port, scan_id, doma
 		});
 }
 
+window.ScreenshotDisplay.thumbnailClickDelegate = show_port_screenshots;
+
 function show_subdomain_screenshots(subdomain_id, subdomain_name, scan_id) {
 	const loadingTitle = `Loading screenshots for ${subdomain_name}...`;
 	const loadingBody = '<p class="text-muted">Loading...</p>';
@@ -2221,7 +2127,8 @@ function show_subdomain_screenshots(subdomain_id, subdomain_name, scan_id) {
 			if (data && Object.keys(data).length > 0) {
 				for (let key in data) {
 					const endpoint = data[key];
-					if (endpoint.screenshot_path) {
+					const subdomainScreenshotUrl = endpoint.screenshot_url || '';
+					if (subdomainScreenshotUrl) {
 						screenshotCount++;
 						modalContent += `
 						<div class="mb-4 text-center">
@@ -2230,9 +2137,9 @@ function show_subdomain_screenshots(subdomain_id, subdomain_name, scan_id) {
 								<span class="badge badge-soft-info ms-2">Port ${endpoint.port}</span>
 							</h6>
 							<div class="d-flex justify-content-center">
-								<img src="/media/${endpoint.screenshot_path}" class="img-fluid rounded screenshot-popup"
+								<img src="${subdomainScreenshotUrl}" class="img-fluid rounded screenshot-popup"
 									 style="max-width: 90%; max-height: 80vh; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.15);"
-									 onclick="window.open('/media/${endpoint.screenshot_path}', '_blank')">
+									 onclick="window.open('${subdomainScreenshotUrl.replace(/'/g, "\\'")}', '_blank')">
 							</div>
 						</div>
 					`;

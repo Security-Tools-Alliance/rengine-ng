@@ -157,7 +157,7 @@ class TestSecatorRunnerConfig(unittest.TestCase):
         self.assertEqual(result["proxy"], "http://proxy:8080")
 
     def test_prepare_secator_config_profiles_non_string_items(self):
-        """Test that profiles with non-string items skip None and keep non-strings as-is."""
+        """Test that profiles with non-string items skip None and convert non-strings to string."""
         config = {"proxy": None, "delay": 0}
         profiles = ["polite", 123, None, "full", True]
 
@@ -167,8 +167,8 @@ class TestSecatorRunnerConfig(unittest.TestCase):
         self.assertIsInstance(result["profiles"], list)
         self.assertIn("polite", result["profiles"])
         self.assertIn("full", result["profiles"])
-        self.assertIn(123, result["profiles"])
-        self.assertIn(True, result["profiles"])
+        self.assertIn("123", result["profiles"])
+        self.assertIn("True", result["profiles"])
         self.assertNotIn(None, result["profiles"])
 
 

@@ -486,7 +486,7 @@ mark{
   object-fit: contain;
 }
 
-/* Screenshot thumbnail styles */
+/* Screenshot thumbnail: used by screenshot-display.js buildThumbnailHtml(); change here for theming. */
 .screenshot-thumbnail {
   width: 100px;
   height: 75px;

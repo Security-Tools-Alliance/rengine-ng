@@ -6,6 +6,8 @@ This file contains unit tests for the SecatorProfile model.
 
 import yaml
 
+from django.core.exceptions import PermissionDenied
+
 from scanEngine.models import SecatorProfile
 from utils.test_base import BaseTestCase
 
@@ -70,13 +72,13 @@ class TestSecatorProfile(BaseTestCase):
         """Test that built-in profiles cannot be modified."""
         profile = SecatorProfile.objects.create(profile_type="builtin", **self.profile_data)
         profile.description = "Modified description"
-        with self.assertRaises(PermissionError):
+        with self.assertRaises(PermissionDenied):
             profile.save()
 
     def test_cannot_delete_builtin_profile(self):
         """Test that built-in profiles cannot be deleted."""
         profile = SecatorProfile.objects.create(profile_type="builtin", **self.profile_data)
-        with self.assertRaises(PermissionError):
+        with self.assertRaises(PermissionDenied):
             profile.delete()
 
     def test_can_modify_custom_profile(self):

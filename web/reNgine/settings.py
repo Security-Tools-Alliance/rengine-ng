@@ -23,6 +23,15 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RENGINE_HOME = env("RENGINE_HOME", default=str(Path.home() / "rengine"))
 RENGINE_RESULTS = env("RENGINE_RESULTS", default=str(Path.home() / "scan_results"))
 SECATOR_RESULTS = env("SECATOR_RESULTS", default=str(Path.home() / ".secator" / "reports"))
+# Prefix to strip from Secator report paths when storing (path_utils.strip_secator_reports_prefix).
+# Must match the path prefix used by Secator workers when they emit screenshot_path / stored_response_path.
+# Default aligned with SECATOR_RESULTS so unconfigured setups behave consistently. In Docker/worker setups
+# where workers use a different report root (e.g. /home/secator/.secator/reports), set SECATOR_REPORTS_PREFIX
+# to that value so stored paths stay relative and ServeScanFile can resolve them under RENGINE_RESULTS.
+SECATOR_REPORTS_PREFIX = env(
+    "SECATOR_REPORTS_PREFIX",
+    default=str(Path.home() / ".secator" / "reports"),
+)
 RENGINE_CUSTOM_ENGINES = env("RENGINE_CUSTOM_ENGINES", default=str(Path.home() / "custom_engines"))
 RENGINE_WORDLISTS = env("RENGINE_WORDLISTS", default=str(Path.home() / "wordlists"))
 RENGINE_TOOL_PATH = env("RENGINE_TOOL_PATH", default=str(Path.home() / "tools"))

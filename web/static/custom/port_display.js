@@ -217,27 +217,7 @@ function createDataTable(containerId, columns, data, rowRenderer) {
         "lengthMenu": [10, 25, 50, 100],
         "order": [[0, "asc"]],
         "drawCallback": function() {
-            // Add event delegation for screenshot thumbnails after each draw
-            $(`#${containerId}`).off('click.screenshot').on('click.screenshot', '.screenshot-thumbnail', function() {
-                const $this = $(this);
-                const subdomainId = parseInt($this.data('subdomain-id')) || null;
-                const subdomainName = $this.data('subdomain-name');
-                const port = parseInt($this.data('port')) || null;
-                const scanId = parseInt($this.data('scan-id')) || null;
-                const domainId = parseInt($this.data('domain-id')) || null;
-                
-                show_port_screenshots(subdomainId, subdomainName, port, scanId, domainId);
-            });
-            
-            // Use event delegation for hover events on screenshot thumbnails (if not disabled)
-            $(`#${containerId}`).off('mouseenter.screenshot').on('mouseenter.screenshot', '.screenshot-thumbnail:not([data-disable-hover="true"])', function() {
-                const $this = $(this);
-                showScreenshotPreview(this, $this.data('screenshot-path'), $this.data('http-url'));
-            });
-            
-            $(`#${containerId}`).off('mouseleave.screenshot').on('mouseleave.screenshot', '.screenshot-thumbnail:not([data-disable-hover="true"])', function() {
-                hideScreenshotPreview();
-            });
+            window.ScreenshotDisplay.attachDelegation(`#${containerId}`);
         }
     };
     
@@ -287,29 +267,7 @@ function createDataTableWithLazyScreenshots(containerId, columns, data, port, sc
         "lengthMenu": [10, 25, 50, 100],
         "order": [[0, "asc"]],
         "initComplete": function() {
-            // Add event delegation for screenshot thumbnails after initial load
-            $(`#${containerId}`).off('click.screenshot').on('click.screenshot', '.screenshot-thumbnail', function() {
-                const $this = $(this);
-                const subdomainId = parseInt($this.data('subdomain-id')) || null;
-                const subdomainName = $this.data('subdomain-name');
-                const port = parseInt($this.data('port')) || null;
-                const scanId = parseInt($this.data('scan-id')) || null;
-                const domainId = parseInt($this.data('domain-id')) || null;
-                
-                show_port_screenshots(subdomainId, subdomainName, port, scanId, domainId);
-            });
-            
-            // Use event delegation for hover events on screenshot thumbnails (if not disabled)
-            $(`#${containerId}`).off('mouseenter.screenshot').on('mouseenter.screenshot', '.screenshot-thumbnail:not([data-disable-hover="true"])', function() {
-                const $this = $(this);
-                showScreenshotPreview(this, $this.data('screenshot-path'), $this.data('http-url'));
-            });
-            
-            $(`#${containerId}`).off('mouseleave.screenshot').on('mouseleave.screenshot', '.screenshot-thumbnail:not([data-disable-hover="true"])', function() {
-                hideScreenshotPreview();
-            });
-            
-
+            window.ScreenshotDisplay.attachDelegation(`#${containerId}`);
         },
         "drawCallback": function() {
             // Load screenshots only for visible rows on page change/search/sort
@@ -403,29 +361,22 @@ async function processScreenshotData(data, port, subdomain_id, subdomain_name, s
     for (let key in data) {
         const endpoint = data[key];
         
-        if (endpoint.screenshot_path && endpoint.port == port) {
+        const screenshotUrl = endpoint.screenshot_url || '';
+        if (screenshotUrl && endpoint.port == port) {
             count++;
-            if (count <= 2) { // Show max 2 thumbnails
-                // Generate unique identifier using timestamp and random
-                const timestamp = Date.now();
-                const randomId = Math.random().toString(36).substr(2, 9);
-                const screenshotImageId = `port-screenshot-${subdomain_id}-${port}-${timestamp}-${randomId}`;
-                
-                screenshotHtml += `
-                    <img id="${screenshotImageId}"
-                         src="/media/${escapeHtml(endpoint.screenshot_path)}" 
-                         class="screenshot-thumbnail me-1" 
-                         data-subdomain-id="${escapeHtml(subdomain_id || '')}"
-                         data-subdomain-name="${escapeHtml(subdomain_name || '')}"
-                         data-port="${escapeHtml(port || '')}"
-                         data-scan-id="${escapeHtml(scan_id || '')}"
-                         data-domain-id="${escapeHtml(domain_id || '')}"
-                         data-screenshot-path="${escapeHtml(endpoint.screenshot_path)}"
-                         data-http-url="${escapeHtml(endpoint.http_url || '')}"
-                         data-disable-hover="${disableHoverPreview}"
-                         title="Click to view full screenshot"
-                         onerror="this.style.display='none'">
-                `;
+            if (count <= 2) {
+                const thumb = window.ScreenshotDisplay.buildThumbnailHtml({
+                    screenshotUrl,
+                    httpUrl: endpoint.http_url || '',
+                    subdomainId: subdomain_id,
+                    subdomainName: subdomain_name || '',
+                    port,
+                    scanId: scan_id || '',
+                    domainId: domain_id || '',
+                    disableHover: disableHoverPreview,
+                    className: 'screenshot-thumbnail me-1',
+                });
+                if (thumb) screenshotHtml += thumb;
             }
         }
     }
@@ -437,21 +388,21 @@ async function processScreenshotData(data, port, subdomain_id, subdomain_name, s
     return screenshotHtml || '-';
 }
 
-// Helper function to create screenshot preview element
-function createScreenshotPreviewElement(screenshotPath, httpUrl) {
+// Helper function to create screenshot preview element (screenshotUrl is the secure display URL from the API)
+function createScreenshotPreviewElement(screenshotUrl, httpUrl) {
     const preview = $('<div id="screenshot-preview" class="screenshot-preview"></div>');
-    
+    const src = screenshotUrl || '';
+
     const $urlDiv = $('<div class="screenshot-preview-url"></div>').text(httpUrl);
-    const $img = $('<img class="screenshot-preview-img">').attr('src', '/media/' + screenshotPath)
-        .on('error', function() {
-            $(this).parent().hide();
-        });
-    
+    const $img = $('<img class="screenshot-preview-img">').attr('src', src).on('error', function () {
+        $(this).parent().hide();
+    });
+
     return preview.append($urlDiv).append($img);
 }
 
-// Function to show screenshot preview on hover
-function showScreenshotPreview(element, screenshotPath, httpUrl) {
+// Function to show screenshot preview on hover (screenshotUrl is the secure display URL from the API)
+function showScreenshotPreview(element, screenshotUrl, httpUrl) {
     // Remove any existing preview
     hideScreenshotPreview();
     
@@ -481,7 +432,7 @@ function showScreenshotPreview(element, screenshotPath, httpUrl) {
             modalContent.css('position', 'relative');
         }
         
-        preview = createScreenshotPreviewElement(screenshotPath, httpUrl).css('position', 'absolute');
+        preview = createScreenshotPreviewElement(screenshotUrl, httpUrl).css('position', 'absolute');
         
         modalContent.append(preview);
         
@@ -524,7 +475,7 @@ function showScreenshotPreview(element, screenshotPath, httpUrl) {
         // For non-modal contexts (endpoints table or other)
         parentContainer = $('body');
         
-        preview = createScreenshotPreviewElement(screenshotPath, httpUrl).css('position', 'fixed');
+        preview = createScreenshotPreviewElement(screenshotUrl, httpUrl).css('position', 'fixed');
         
         parentContainer.append(preview);
         
@@ -582,14 +533,14 @@ function hideScreenshotPreview() {
     $('.screenshot-thumbnail').off('mousemove.screenshot-preview');
 }
 
-// Simple modal to display a single screenshot image when no subdomain/scan context is available
-function showScreenshotImageModal(screenshotPath, httpUrl = '') {
+// Simple modal to display a single screenshot (screenshotUrl is the secure display URL from the API)
+function showScreenshotImageModal(screenshotUrl, httpUrl = '') {
+    const src = screenshotUrl || '';
     try {
         $('#xl-modal-title').empty();
         $('#xl-modal-content').empty();
         $('#xl-modal-footer').empty();
 
-        // Create modal content using DOM manipulation to avoid XSS
         const $content = $('<div class="mb-4 text-center"></div>');
         if (httpUrl) {
             const $linkBlock = $('<div class="mb-2 screenshot-modal-link"></div>');
@@ -605,9 +556,9 @@ function showScreenshotImageModal(screenshotPath, httpUrl = '') {
         const $imgContainer = $('<div class="d-flex justify-content-center"></div>');
         const $img = $('<img>')
             .addClass('img-fluid rounded screenshot-popup screenshot-modal-img')
-            .attr('src', '/media/' + screenshotPath)
-            .on('click', function() {
-                window.open('/media/' + screenshotPath, '_blank');
+            .attr('src', src)
+            .on('click', function () {
+                window.open(src, '_blank');
             });
         $imgContainer.append($img);
         $content.append($imgContainer);
@@ -617,7 +568,7 @@ function showScreenshotImageModal(screenshotPath, httpUrl = '') {
         if (window.ModalManager) ModalManager.showXlOnly();
     } catch (e) {
         console.error('Error showing screenshot modal:', e);
-        window.open('/media/' + screenshotPath, '_blank');
+        if (src) window.open(src, '_blank');
     }
 }
 
@@ -869,29 +820,7 @@ function createDataTableWithLazyScreenshotsForIP(containerId, columns, data, sca
         "lengthMenu": [10, 25, 50, 100],
         "order": [[0, "asc"]],
         "initComplete": function() {
-            // Add event delegation for screenshot thumbnails after initial load
-            $(`#${containerId}`).off('click.screenshot').on('click.screenshot', '.screenshot-thumbnail', function() {
-                const $this = $(this);
-                const subdomainId = parseInt($this.data('subdomain-id')) || null;
-                const subdomainName = $this.data('subdomain-name');
-                const port = parseInt($this.data('port')) || null;
-                const scanId = parseInt($this.data('scan-id')) || null;
-                const domainId = parseInt($this.data('domain-id')) || null;
-                
-                show_port_screenshots(subdomainId, subdomainName, port, scanId, domainId);
-            });
-            
-            // Use event delegation for hover events on screenshot thumbnails (if not disabled)
-            $(`#${containerId}`).off('mouseenter.screenshot').on('mouseenter.screenshot', '.screenshot-thumbnail:not([data-disable-hover="true"])', function() {
-                const $this = $(this);
-                showScreenshotPreview(this, $this.data('screenshot-path'), $this.data('http-url'));
-            });
-            
-            $(`#${containerId}`).off('mouseleave.screenshot').on('mouseleave.screenshot', '.screenshot-thumbnail:not([data-disable-hover="true"])', function() {
-                hideScreenshotPreview();
-            });
-            
-
+            window.ScreenshotDisplay.attachDelegation(`#${containerId}`);
         },
         "drawCallback": function() {
             // Load screenshots for common web ports (80, 443) only for visible rows on page change/search/sort

@@ -4,6 +4,10 @@ import logging
 from django.contrib.humanize.templatetags.humanize import naturalday, naturaltime
 from django.db.models import F, JSONField, Value
 from rest_framework import serializers
+
+# Scan file URLs: build_scan_file_url (api.scan_file) yields paths served by ServeScanFile
+# with project-scoped access; do not build scan file URLs outside this helper.
+from api.scan_file import build_scan_file_url
 import yaml
 
 from dashboard.models import (
@@ -836,14 +840,14 @@ class VisualiseSubdomainSerializer(serializers.ModelSerializer):
             scan_history=scan_history, subdomain__name=subdomain_name.name, screenshot_path__isnull=False
         )
         if endpoints_with_screenshots.exists():
-            screenshot_data = []
-            screenshot_data.extend(
+            screenshot_data = [
                 {
                     "description": endpoint.http_url,
                     "screenshot_path": endpoint.screenshot_path,
+                    "screenshot_url": build_scan_file_url(endpoint.screenshot_path),
                 }
                 for endpoint in endpoints_with_screenshots
-            )
+            ]
             return_data.append({"description": "Screenshots", "children": screenshot_data})
 
         return return_data
@@ -1091,6 +1095,8 @@ class SubdomainChangesSerializer(serializers.ModelSerializer):
 
 class EndPointChangesSerializer(serializers.ModelSerializer):
     change = serializers.SerializerMethodField("get_change")
+    screenshot_url = serializers.SerializerMethodField()
+    stored_response_url = serializers.SerializerMethodField()
 
     class Meta:
         model = EndPoint
@@ -1108,12 +1114,23 @@ class EndPointChangesSerializer(serializers.ModelSerializer):
             "content_length",
             "techs",
             "screenshot_path",
+            "screenshot_url",
+            "stored_response_path",
+            "stored_response_url",
             "matched_gf_patterns",
             "change",
         ]
 
     def get_change(self, EndPoint):
         return EndPoint.change
+
+    def get_screenshot_url(self, obj):
+        # Served with project-scoped access via api.scan_file.ServeScanFile
+        return build_scan_file_url(obj.screenshot_path)
+
+    def get_stored_response_url(self, obj):
+        # Served with project-scoped access via api.scan_file.ServeScanFile
+        return build_scan_file_url(obj.stored_response_path)
 
 
 class InterestingSubdomainSerializer(serializers.ModelSerializer):
@@ -1185,9 +1202,15 @@ class DorkCountSerializer(serializers.Serializer):
 
 
 class TechnologySerializer(serializers.ModelSerializer):
+    stored_response_url = serializers.SerializerMethodField()
+
     class Meta:
         model = Technology
-        fields = ["id", "name", "value", "category", "stored_response_path"]
+        fields = ["id", "name", "value", "category", "stored_response_path", "stored_response_url"]
+
+    def get_stored_response_url(self, obj):
+        # Served with project-scoped access via api.scan_file.ServeScanFile
+        return build_scan_file_url(obj.stored_response_path)
 
 
 class PortSerializer(serializers.ModelSerializer):
@@ -1427,11 +1450,15 @@ class SubdomainSerializer(serializers.ModelSerializer):
 
 
 class EndpointSerializer(serializers.ModelSerializer):
+    """Frontend uses screenshot_url (and stored_response_url) for display; screenshot_path is the stored path for backend/non-HTTP use."""
+
     techs = TechnologySerializer(many=True)
     subdomain_id = serializers.SerializerMethodField()
     scan_history_id = serializers.SerializerMethodField()
     target_domain_id = serializers.SerializerMethodField()
     subdomain_name = serializers.SerializerMethodField()
+    screenshot_url = serializers.SerializerMethodField()
+    stored_response_url = serializers.SerializerMethodField()
 
     class Meta:
         model = EndPoint
@@ -1452,6 +1479,9 @@ class EndpointSerializer(serializers.ModelSerializer):
             "is_default",
             "matched_gf_patterns",
             "screenshot_path",
+            "screenshot_url",
+            "stored_response_path",
+            "stored_response_url",
             "techs",
             "endpoint_subscan_ids",
             "method",
@@ -1475,6 +1505,14 @@ class EndpointSerializer(serializers.ModelSerializer):
 
     def get_subdomain_name(self, obj):
         return obj.subdomain.name if obj.subdomain else None
+
+    def get_screenshot_url(self, obj):
+        # Served with project-scoped access via api.scan_file.ServeScanFile
+        return build_scan_file_url(obj.screenshot_path)
+
+    def get_stored_response_url(self, obj):
+        # Served with project-scoped access via api.scan_file.ServeScanFile
+        return build_scan_file_url(obj.stored_response_path)
 
 
 class EndpointOnlyURLsSerializer(serializers.ModelSerializer):

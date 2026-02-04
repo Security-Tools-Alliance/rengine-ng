@@ -1117,11 +1117,14 @@ function delete_scan(url) {
 
 function stop_scan(url, scan_id=null, subscan_id=null, reload_scan_bar=true, reload_location=false) {
 
+	let data;
 	if (scan_id) {
-		const data = {'scan_id': scan_id}
-	}
-	else if (subscan_id) {
-		const data = {'subscan_id': subscan_id}
+		data = {'scan_id': scan_id};
+	} else if (subscan_id) {
+		data = {'subscan_id': subscan_id};
+	} else {
+		console.error('stop_scan: either scan_id or subscan_id is required');
+		return;
 	}
 	swal.queue([{
 		title: 'Are you sure you want to stop this scan?',
@@ -3577,7 +3580,7 @@ function endpoint_datatable_col_visibility(endpoint_table, columns){
         endpoint_table.column(getIndex('response_time')).visible(false);
     }
     if(!$('#end_screenshot_filter_checkbox').is(":checked")){
-        endpoint_table.column(getIndex('screenshot_path')).visible(false);
+        endpoint_table.column(getIndex('screenshot_url')).visible(false);
     }
 }
 

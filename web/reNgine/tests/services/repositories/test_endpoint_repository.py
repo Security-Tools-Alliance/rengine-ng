@@ -3,6 +3,7 @@ Unit tests for EndpointRepository.
 Tests the is_default logic for endpoints.
 """
 
+from django.test import override_settings
 from django.utils import timezone
 
 from reNgine.services.repositories.endpoint_repository import EndpointRepository
@@ -370,6 +371,116 @@ class EndpointRepositoryIsDefaultTestCase(BaseTestCase):
         self.assertEqual(result.is_directory, True)
         self.assertEqual(result.stored_response_path, "/path/to/response.json")
         self.assertEqual(result.confidence, "high")
+
+    def test_save_from_secator_persists_screenshot_stored_response_and_headers(self):
+        """Secator Url screenshot_path, stored_response_path, response_headers and request_headers are persisted."""
+        item = {
+            "url": "https://test.example.com/",
+            "status_code": 200,
+            "title": "Home",
+            "screenshot_path": "/reports/example/screenshot.png",
+            "stored_response_path": "/reports/example/response.html",
+            "response_headers": {"Content-Type": "text/html", "X-Frame-Options": "DENY"},
+            "request_headers": {"User-Agent": "Secator/1.0", "Accept": "text/html"},
+        }
+
+        result = self.repository.save_from_secator(
+            item, self.scan_history.id, self.data_generator.domain.id
+        )
+
+        self.assertIsNotNone(result)
+        result.refresh_from_db()
+        self.assertEqual(result.screenshot_path, "/reports/example/screenshot.png")
+        self.assertEqual(result.stored_response_path, "/reports/example/response.html")
+        self.assertIsNotNone(result.headers)
+        self.assertEqual(result.headers.get("response"), item["response_headers"])
+        self.assertEqual(result.headers.get("request"), item["request_headers"])
+
+    @override_settings(SECATOR_REPORTS_PREFIX="/home/secator/.secator/reports")
+    def test_save_from_secator_strips_secator_reports_prefix(self):
+        """screenshot_path and stored_response_path are stored without /home/secator/.secator/reports prefix."""
+        full_screenshot = "/home/secator/.secator/reports/2sec/2sec.fr/tasks/200/.outputs/screenshot/foo.png"
+        full_response = "/home/secator/.secator/reports/2sec/2sec.fr/tasks/200/.outputs/response.html"
+        item = {
+            "url": "https://test.example.com/",
+            "status_code": 200,
+            "screenshot_path": full_screenshot,
+            "stored_response_path": full_response,
+        }
+        result = self.repository.save_from_secator(
+            item, self.scan_history.id, self.data_generator.domain.id
+        )
+        self.assertIsNotNone(result)
+        result.refresh_from_db()
+        self.assertEqual(
+            result.screenshot_path, "2sec/2sec.fr/tasks/200/.outputs/screenshot/foo.png"
+        )
+        self.assertEqual(
+            result.stored_response_path, "2sec/2sec.fr/tasks/200/.outputs/response.html"
+        )
+
+    def test_build_secator_endpoint_defaults_truncates_long_paths(self):
+        """Long screenshot_path and stored_response_path are truncated to 1000 chars."""
+        long_path = "a" * 1500
+        item = {
+            "url": "https://test.example.com/",
+            "status_code": 200,
+            "screenshot_path": long_path,
+            "stored_response_path": long_path,
+        }
+        domain = self.data_generator.domain
+        defaults = self.repository._build_secator_endpoint_defaults(item, domain)
+
+        self.assertEqual(len(defaults["screenshot_path"]), 1000)
+        self.assertEqual(defaults["screenshot_path"], long_path[:1000])
+        self.assertEqual(len(defaults["stored_response_path"]), 1000)
+        self.assertEqual(defaults["stored_response_path"], long_path[:1000])
+
+    def test_process_secator_endpoint_item_sets_source_from_finding(self):
+        """Test _process_secator_endpoint_item sets source from _source (Secator task)."""
+        item = {
+            "url": "https://test.example.com/",
+            "status_code": 301,
+            "title": "301 Moved Permanently",
+            "_source": "httpx_tls",
+            "_context": {
+                "node_id": "subdomain_recon.httpx/tls",
+                "task_id": "2042",
+            },
+        }
+
+        result = self.repository._process_secator_endpoint_item(
+            item, self.scan_history.id, self.data_generator.domain.id
+        )
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result.source, "httpx_tls")
+
+    def test_process_secator_endpoint_item_source_fallback_to_node_id(self):
+        """Test _process_secator_endpoint_item uses _context.node_id when _source is missing."""
+        item = {
+            "url": "https://test.example.com/api",
+            "status_code": 200,
+            "_context": {"node_id": "subdomain_recon.httpx/tls"},
+        }
+
+        result = self.repository._process_secator_endpoint_item(
+            item, self.scan_history.id, self.data_generator.domain.id
+        )
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result.source, "subdomain_recon.httpx/tls")
+
+    def test_process_secator_endpoint_item_source_none_when_absent(self):
+        """Test _process_secator_endpoint_item leaves source None when no _source or _context.node_id."""
+        item = {"url": "https://test.example.com/", "status_code": 200}
+
+        result = self.repository._process_secator_endpoint_item(
+            item, self.scan_history.id, self.data_generator.domain.id
+        )
+
+        self.assertIsNotNone(result)
+        self.assertIsNone(result.source)
 
     def test_subdomain_created_and_associated_when_missing(self):
         """Test that a missing subdomain is created and linked to the endpoint."""
