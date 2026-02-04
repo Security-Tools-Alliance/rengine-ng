@@ -35,7 +35,7 @@ jobs:
     runs-on: ubuntu-22.04
     strategy:
       matrix:
-        image: [celery, web, postgres, redis, ollama, certs, proxy]
+        image: [web, postgres, redis, ollama, certs, proxy]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -102,7 +102,7 @@ jobs:
             "https://api.github.com/repos/${{ github.repository }}/releases/latest" | \
             jq -r .id)
           
-          images="celery web postgres redis ollama certs proxy"
+          images="web postgres redis ollama certs proxy"
           image_list=""
           for image in $images; do
             image_list="${image_list}- ghcr.io/${{ env.OWNER }}/${{ env.PROJECT }}:rengine-${image}-${{ github.ref_name }}\n"
