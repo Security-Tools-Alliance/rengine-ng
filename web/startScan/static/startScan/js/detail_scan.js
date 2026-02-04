@@ -2093,7 +2093,7 @@ function show_port_screenshots(subdomain_id, subdomain_name, port, scan_id, doma
 						screenshotCount++;
 						modalContent += `
 						<div class="mb-4 text-center">
-							<h6><a href="${endpoint.http_url}" target="_blank" class="text-primary">${endpoint.http_url}</a></h6>
+							<h6><a href="${typeof htmlEncode === 'function' ? htmlEncode(endpoint.http_url) : endpoint.http_url}" target="_blank" class="text-primary">${typeof htmlEncode === 'function' ? htmlEncode(endpoint.http_url) : endpoint.http_url}</a></h6>
 							<div class="d-flex justify-content-center">
 								<img src="${screenshotUrl}" class="img-fluid rounded screenshot-popup"
 									 style="max-width: 90%; max-height: 80vh; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.15);"
@@ -2104,12 +2104,13 @@ function show_port_screenshots(subdomain_id, subdomain_name, port, scan_id, doma
 					}
 				}
 			}
+			const safeSubdomain = typeof htmlEncode === 'function' ? htmlEncode(subdomain_name) : subdomain_name;
 			const title = screenshotCount > 0
-				? `Screenshots for ${subdomain_name}:${port} (${screenshotCount})`
+				? `Screenshots for ${safeSubdomain}:${port} (${screenshotCount})`
 				: 'No screenshots';
 			const bodyHtml = screenshotCount > 0
 				? modalContent
-				: `<p class="text-muted">No screenshots found for ${subdomain_name}:${port}</p>`;
+				: `<p class="text-muted">No screenshots found for ${safeSubdomain}:${port}</p>`;
 			if (window.ModalManager) {
 				ModalManager.setXlContent({ title, bodyHtml, footerHtml: '' });
 			} else {
@@ -2170,8 +2171,8 @@ function show_subdomain_screenshots(subdomain_id, subdomain_name, scan_id) {
 						modalContent += `
 						<div class="mb-4 text-center">
 							<h6>
-								<a href="${endpoint.http_url}" target="_blank" class="text-primary">${endpoint.http_url}</a>
-								<span class="badge badge-soft-info ms-2">Port ${endpoint.port}</span>
+								<a href="${typeof htmlEncode === 'function' ? htmlEncode(endpoint.http_url) : endpoint.http_url}" target="_blank" class="text-primary">${typeof htmlEncode === 'function' ? htmlEncode(endpoint.http_url) : endpoint.http_url}</a>
+								<span class="badge badge-soft-info ms-2">Port ${typeof htmlEncode === 'function' ? htmlEncode(String(endpoint.port)) : endpoint.port}</span>
 							</h6>
 							<div class="d-flex justify-content-center">
 								<img src="${subdomainScreenshotUrl}" class="img-fluid rounded screenshot-popup"

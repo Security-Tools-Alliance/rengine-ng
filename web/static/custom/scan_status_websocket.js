@@ -25,13 +25,62 @@
             window.RENGINE_SCAN_STATUS = {};
         }
     }
-    const scanStatusWebSockets = {};
-    const scanStatusReconnectAttempts = {};
-    const scanStatusReconnectTimeouts = {};
-    const scanStatusOptions = {}; // Store options for each connection to share handlers
-    const scanStatusConnecting = {}; // Track connections being established to prevent duplicates
+    const scanStatusWebSocketsMap = new Map();
+    const scanStatusReconnectAttemptsMap = new Map();
+    const scanStatusReconnectTimeoutsMap = new Map();
+    const scanStatusOptionsMap = new Map(); // Store options for each connection to share handlers
+    const scanStatusConnectingMap = new Map(); // Track connections being established to prevent duplicates
     const MAX_RECONNECT_ATTEMPTS = 10;
     const INITIAL_RECONNECT_DELAY = 1000; // 1 second
+
+    /**
+     * Merge options into an existing scan-status options entry (OPEN, CONNECTING, or race-condition branch).
+     * Ensures the entry exists, merges handler and URL options, and updates window.scanStatusApiUrls when URLs are provided.
+     */
+    const mergeScanStatusOptions = function(optionsMap, key, options) {
+        if (!options) {
+            return;
+        }
+        if (!optionsMap.get(key)) {
+            optionsMap.set(key, {});
+        }
+        const entry = optionsMap.get(key);
+        if (options.updateTable && !entry.updateTable) {
+            entry.updateTable = options.updateTable;
+        }
+        if (options.updateDetail && !entry.updateDetail) {
+            entry.updateDetail = options.updateDetail;
+        }
+        if (options.updateSidebar && !entry.updateSidebar) {
+            entry.updateSidebar = options.updateSidebar;
+        }
+        if (options.updateSubscanTable && !entry.updateSubscanTable) {
+            entry.updateSubscanTable = options.updateSubscanTable;
+        }
+        if (options.subscanTable && !entry.subscanTable) {
+            entry.subscanTable = options.subscanTable;
+        }
+        const hasUrls = options.scanStatusUrl || options.stopScanUrl || options.stopActivityUrl || options.fetchSubscanUrl;
+        if (hasUrls && !window.scanStatusApiUrls) {
+            window.scanStatusApiUrls = {};
+        }
+        if (options.scanStatusUrl) {
+            entry.scanStatusUrl = options.scanStatusUrl;
+            window.scanStatusApiUrls.scanStatusUrl = options.scanStatusUrl;
+        }
+        if (options.stopScanUrl) {
+            entry.stopScanUrl = options.stopScanUrl;
+            window.scanStatusApiUrls.stopScanUrl = options.stopScanUrl;
+        }
+        if (options.stopActivityUrl) {
+            entry.stopActivityUrl = options.stopActivityUrl;
+            window.scanStatusApiUrls.stopActivityUrl = options.stopActivityUrl;
+        }
+        if (options.fetchSubscanUrl) {
+            entry.fetchSubscanUrl = options.fetchSubscanUrl;
+            window.scanStatusApiUrls.fetchSubscanUrl = options.fetchSubscanUrl;
+        }
+    };
 
 /**
  * Connect to scan status WebSocket
@@ -63,167 +112,39 @@ const connectScanStatusWebSocket = function(scanId, projectSlug, options) {
     }
     
     // Check if connection already exists and is open or connecting
-    const existingSocket = scanStatusWebSockets[key];
+    const existingSocket = scanStatusWebSocketsMap.get(key);
     if (existingSocket) {
         const { readyState } = existingSocket;
         // WebSocket.CONNECTING = 0, WebSocket.OPEN = 1, WebSocket.CLOSING = 2, WebSocket.CLOSED = 3
         if (readyState === WebSocket.OPEN) {
-            // Merge options with existing connection
-            if (options) {
-                if (!scanStatusOptions[key]) {
-                    scanStatusOptions[key] = {};
-                }
-                // Merge update handlers
-                if (options.updateTable && !scanStatusOptions[key].updateTable) {
-                    scanStatusOptions[key].updateTable = options.updateTable;
-                }
-                if (options.updateDetail && !scanStatusOptions[key].updateDetail) {
-                    scanStatusOptions[key].updateDetail = options.updateDetail;
-                }
-                if (options.updateSidebar && !scanStatusOptions[key].updateSidebar) {
-                    scanStatusOptions[key].updateSidebar = options.updateSidebar;
-                }
-                if (options.updateSubscanTable && !scanStatusOptions[key].updateSubscanTable) {
-                    scanStatusOptions[key].updateSubscanTable = options.updateSubscanTable;
-                }
-                if (options.subscanTable && !scanStatusOptions[key].subscanTable) {
-                    scanStatusOptions[key].subscanTable = options.subscanTable;
-                }
-                // Store API URLs if provided
-                if (options.scanStatusUrl) {
-                    scanStatusOptions[key].scanStatusUrl = options.scanStatusUrl;
-                    if (!window.scanStatusApiUrls) {
-                        window.scanStatusApiUrls = {};
-                    }
-                    window.scanStatusApiUrls.scanStatusUrl = options.scanStatusUrl;
-                }
-                if (options.stopScanUrl) {
-                    scanStatusOptions[key].stopScanUrl = options.stopScanUrl;
-                    if (!window.scanStatusApiUrls) {
-                        window.scanStatusApiUrls = {};
-                    }
-                    window.scanStatusApiUrls.stopScanUrl = options.stopScanUrl;
-                }
-                if (options.stopActivityUrl) {
-                    scanStatusOptions[key].stopActivityUrl = options.stopActivityUrl;
-                    if (!window.scanStatusApiUrls) {
-                        window.scanStatusApiUrls = {};
-                    }
-                    window.scanStatusApiUrls.stopActivityUrl = options.stopActivityUrl;
-                }
-                if (options.fetchSubscanUrl) {
-                    scanStatusOptions[key].fetchSubscanUrl = options.fetchSubscanUrl;
-                    if (!window.scanStatusApiUrls) {
-                        window.scanStatusApiUrls = {};
-                    }
-                    window.scanStatusApiUrls.fetchSubscanUrl = options.fetchSubscanUrl;
-                }
-            }
+            mergeScanStatusOptions(scanStatusOptionsMap, key, options);
             return;
         } else if (readyState === WebSocket.CONNECTING) {
-            // Connection is being established, merge options and wait for it to open
-            if (options) {
-                if (!scanStatusOptions[key]) {
-                    scanStatusOptions[key] = {};
-                }
-                // Merge update handlers
-                if (options.updateTable && !scanStatusOptions[key].updateTable) {
-                    scanStatusOptions[key].updateTable = options.updateTable;
-                }
-                if (options.updateDetail && !scanStatusOptions[key].updateDetail) {
-                    scanStatusOptions[key].updateDetail = options.updateDetail;
-                }
-                if (options.updateSidebar && !scanStatusOptions[key].updateSidebar) {
-                    scanStatusOptions[key].updateSidebar = options.updateSidebar;
-                }
-                if (options.updateSubscanTable && !scanStatusOptions[key].updateSubscanTable) {
-                    scanStatusOptions[key].updateSubscanTable = options.updateSubscanTable;
-                }
-                if (options.subscanTable && !scanStatusOptions[key].subscanTable) {
-                    scanStatusOptions[key].subscanTable = options.subscanTable;
-                }
-                // Store API URLs if provided
-                if (options.scanStatusUrl) {
-                    scanStatusOptions[key].scanStatusUrl = options.scanStatusUrl;
-                    if (!window.scanStatusApiUrls) {
-                        window.scanStatusApiUrls = {};
-                    }
-                    window.scanStatusApiUrls.scanStatusUrl = options.scanStatusUrl;
-                }
-                if (options.stopScanUrl) {
-                    scanStatusOptions[key].stopScanUrl = options.stopScanUrl;
-                    if (!window.scanStatusApiUrls) {
-                        window.scanStatusApiUrls = {};
-                    }
-                    window.scanStatusApiUrls.stopScanUrl = options.stopScanUrl;
-                }
-                if (options.stopActivityUrl) {
-                    scanStatusOptions[key].stopActivityUrl = options.stopActivityUrl;
-                    if (!window.scanStatusApiUrls) {
-                        window.scanStatusApiUrls = {};
-                    }
-                    window.scanStatusApiUrls.stopActivityUrl = options.stopActivityUrl;
-                }
-                if (options.fetchSubscanUrl) {
-                    scanStatusOptions[key].fetchSubscanUrl = options.fetchSubscanUrl;
-                    if (!window.scanStatusApiUrls) {
-                        window.scanStatusApiUrls = {};
-                    }
-                    window.scanStatusApiUrls.fetchSubscanUrl = options.fetchSubscanUrl;
-                }
-            }
+            mergeScanStatusOptions(scanStatusOptionsMap, key, options);
             return;
         } else {
-            // Connection is CLOSING or CLOSED, close it properly
+            // Connection is CLOSING or CLOSED, close it properly and clear any pending reconnect
+            const timeoutId = scanStatusReconnectTimeoutsMap.get(key);
+            if (timeoutId) {
+                clearTimeout(timeoutId);
+                scanStatusReconnectTimeoutsMap.delete(key);
+            }
             existingSocket.close();
-            scanStatusWebSockets[key] = null;
+            scanStatusWebSocketsMap.delete(key);
         }
     }
     
     // Check if a connection is being established (race condition protection)
-    if (scanStatusConnecting[key]) {
-        // Merge options and return
-        if (options) {
-            if (!scanStatusOptions[key]) {
-                scanStatusOptions[key] = {};
-            }
-            if (options.updateTable && !scanStatusOptions[key].updateTable) {
-                scanStatusOptions[key].updateTable = options.updateTable;
-            }
-            if (options.updateDetail && !scanStatusOptions[key].updateDetail) {
-                scanStatusOptions[key].updateDetail = options.updateDetail;
-            }
-            if (options.updateSidebar && !scanStatusOptions[key].updateSidebar) {
-                scanStatusOptions[key].updateSidebar = options.updateSidebar;
-            }
-            if (options.updateSubscanTable && !scanStatusOptions[key].updateSubscanTable) {
-                scanStatusOptions[key].updateSubscanTable = options.updateSubscanTable;
-            }
-            if (options.subscanTable && !scanStatusOptions[key].subscanTable) {
-                scanStatusOptions[key].subscanTable = options.subscanTable;
-            }
-            // Store API URLs if provided
-            if (options.scanStatusUrl) {
-                scanStatusOptions[key].scanStatusUrl = options.scanStatusUrl;
-            }
-            if (options.stopScanUrl) {
-                scanStatusOptions[key].stopScanUrl = options.stopScanUrl;
-            }
-            if (options.stopActivityUrl) {
-                scanStatusOptions[key].stopActivityUrl = options.stopActivityUrl;
-            }
-            if (options.fetchSubscanUrl) {
-                scanStatusOptions[key].fetchSubscanUrl = options.fetchSubscanUrl;
-            }
-        }
+    if (scanStatusConnectingMap.get(key)) {
+        mergeScanStatusOptions(scanStatusOptionsMap, key, options);
         return;
     }
     
     // Mark that we're connecting
-    scanStatusConnecting[key] = true;
+    scanStatusConnectingMap.set(key, true);
     
     // Store options for this connection
-    scanStatusOptions[key] = options || {};
+    scanStatusOptionsMap.set(key, options || {});
     
     // Store API URLs in global object for use by updateRightSidebar
     if (options && (options.scanStatusUrl || options.stopScanUrl || options.stopActivityUrl || options.fetchSubscanUrl)) {
@@ -246,54 +167,60 @@ const connectScanStatusWebSocket = function(scanId, projectSlug, options) {
     
     try {
         const socket = new WebSocket(wsUrl);
-        scanStatusWebSockets[key] = socket;
-        scanStatusReconnectAttempts[key] = 0;
+        scanStatusWebSocketsMap.set(key, socket);
+        scanStatusReconnectAttemptsMap.set(key, 0);
         
         socket.onopen = function(event) {
-            scanStatusReconnectAttempts[key] = 0;
+            scanStatusReconnectAttemptsMap.set(key, 0);
             // Clear connecting flag
-            scanStatusConnecting[key] = false;
+            scanStatusConnectingMap.set(key, false);
         };
         
         socket.onmessage = function(event) {
             try {
                 const data = JSON.parse(event.data);
                 // Use stored options for this connection
-                handleScanStatusUpdate(data, scanStatusOptions[key]);
+                handleScanStatusUpdate(data, scanStatusOptionsMap.get(key));
             } catch (e) {
                 console.error('Error parsing WebSocket message:', e);
             }
         };
         
         socket.onclose = function(event) {
-            scanStatusWebSockets[key] = null;
+            scanStatusWebSocketsMap.delete(key);
             // Clear connecting flag
-            scanStatusConnecting[key] = false;
+            scanStatusConnectingMap.set(key, false);
             
             // Attempt to reconnect if not a normal closure
-            if (event.code !== 1000 && scanStatusReconnectAttempts[key] < MAX_RECONNECT_ATTEMPTS) {
-                const delay = INITIAL_RECONNECT_DELAY * Math.pow(2, scanStatusReconnectAttempts[key]);
-                scanStatusReconnectAttempts[key]++;
+            if (event.code !== 1000 && (scanStatusReconnectAttemptsMap.get(key) || 0) < MAX_RECONNECT_ATTEMPTS) {
+                const attempts = (scanStatusReconnectAttemptsMap.get(key) || 0) + 1;
+                const delay = INITIAL_RECONNECT_DELAY * Math.pow(2, attempts - 1);
+                scanStatusReconnectAttemptsMap.set(key, attempts);
                 
-                scanStatusReconnectTimeouts[key] = setTimeout(function() {
-                    connectScanStatusWebSocket(scanId, projectSlug, scanStatusOptions[key]);
-                }, delay);
+                scanStatusReconnectTimeoutsMap.set(key, setTimeout(function() {
+                    connectScanStatusWebSocket(scanId, projectSlug, scanStatusOptionsMap.get(key));
+                }, delay));
             } else {
-                // Clean up options if connection is permanently closed
-                delete scanStatusOptions[key];
-                delete scanStatusConnecting[key];
+                // Clean up options and any pending reconnect timeout if connection is permanently closed
+                const timeoutId = scanStatusReconnectTimeoutsMap.get(key);
+                if (timeoutId) {
+                    clearTimeout(timeoutId);
+                    scanStatusReconnectTimeoutsMap.delete(key);
+                }
+                scanStatusOptionsMap.delete(key);
+                scanStatusConnectingMap.delete(key);
             }
         };
         
         socket.onerror = function(error) {
             console.error('Scan status WebSocket error for', key + ':', error);
             // Clear connecting flag on error
-            scanStatusConnecting[key] = false;
+            scanStatusConnectingMap.set(key, false);
         };
     } catch (e) {
         console.error('Error creating scan status WebSocket for', key + ':', e);
         // Clear connecting flag on exception
-        scanStatusConnecting[key] = false;
+        scanStatusConnectingMap.set(key, false);
     }
 };
 
@@ -693,30 +620,30 @@ const updateScanRowInTable = function(table, data) {
                 // Use DataTables ajax.reload() method - simple and efficient
                 // Use a debounce mechanism to avoid multiple reloads
                 if (!window._scanTableReloadTimeout) {
-                    window._scanTableReloadTimeout = {};
+                    window._scanTableReloadTimeout = new Map();
                 }
                 const timeoutKey = 'table_reload';
-                if (window._scanTableReloadTimeout[timeoutKey]) {
-                    clearTimeout(window._scanTableReloadTimeout[timeoutKey]);
+                if (window._scanTableReloadTimeout.get(timeoutKey)) {
+                    clearTimeout(window._scanTableReloadTimeout.get(timeoutKey));
                 }
-                window._scanTableReloadTimeout[timeoutKey] = setTimeout(function() {
+                window._scanTableReloadTimeout.set(timeoutKey, setTimeout(function() {
                     table.ajax.reload(null, false); // false = don't reset paging
-                    delete window._scanTableReloadTimeout[timeoutKey];
-                }, 500); // Short delay to ensure scan is in DB
+                    window._scanTableReloadTimeout.delete(timeoutKey);
+                }, 500)); // Short delay to ensure scan is in DB
             } else {
                 // For non-AJAX tables, reload the page after a short delay to show new scans
                 // Use a debounce mechanism to avoid multiple reloads
                 if (!window._scanTablePageReloadTimeout) {
-                    window._scanTablePageReloadTimeout = {};
+                    window._scanTablePageReloadTimeout = new Map();
                 }
                 const timeoutKey = 'page_reload';
-                if (window._scanTablePageReloadTimeout[timeoutKey]) {
-                    clearTimeout(window._scanTablePageReloadTimeout[timeoutKey]);
+                if (window._scanTablePageReloadTimeout.get(timeoutKey)) {
+                    clearTimeout(window._scanTablePageReloadTimeout.get(timeoutKey));
                 }
-                window._scanTablePageReloadTimeout[timeoutKey] = setTimeout(function() {
+                window._scanTablePageReloadTimeout.set(timeoutKey, setTimeout(function() {
                     window.location.reload();
-                    delete window._scanTablePageReloadTimeout[timeoutKey];
-                }, 500); // Short delay to ensure scan is in DB
+                    window._scanTablePageReloadTimeout.delete(timeoutKey);
+                }, 500)); // Short delay to ensure scan is in DB
             }
             return;
         }
@@ -1059,13 +986,13 @@ const updateScanTimeline = function(data) {
         }
         
         // Update existing timeline items instead of removing them
-        // This preserves Logs links and Stop buttons
-        const existingItemsMap = {};
+        // This preserves Logs links and Stop buttons. Use Map to avoid prototype pollution from item.id/runnerId.
+        const existingItemsMap = new Map();
         const existingItems = timelineList.querySelectorAll('[data-runner-id]');
         existingItems.forEach(function(item) {
             const runnerId = item.getAttribute('data-runner-id');
             if (runnerId) {
-                existingItemsMap[runnerId] = item;
+                existingItemsMap.set(runnerId, item);
             }
         });
         
@@ -1121,7 +1048,7 @@ const updateScanTimeline = function(data) {
             const urlMatch = window.location.pathname.match(/\/scan\/([^\/]+)\//);
             return urlMatch ? urlMatch[1] : null;
         })();
-        const stopActivityUrl = (scanStatusOptions['scan-' + data.scan_id] && scanStatusOptions['scan-' + data.scan_id].stopActivityUrl) || 
+        const stopActivityUrl = (scanStatusOptionsMap.get('scan-' + data.scan_id) && scanStatusOptionsMap.get('scan-' + data.scan_id).stopActivityUrl) || 
                                 window.scanStatusApiUrls?.stopActivityUrl || 
                                 '/api/stop-activity/';
         const dateTimeFormatOpts = {
@@ -1136,7 +1063,7 @@ const updateScanTimeline = function(data) {
         
         // Update or add timeline items; new items are stored in map so we can reorder DOM after
         itemsToRender.forEach(function(item) {
-            let listItem = existingItemsMap[item.id];
+            let listItem = existingItemsMap.get(item.id);
             const isNew = !listItem;
             
             if (isNew) {
@@ -1145,7 +1072,7 @@ const updateScanTimeline = function(data) {
                 if (item.activity_id) {
                     listItem.setAttribute('data-activity-id', item.activity_id);
                 }
-                existingItemsMap[item.id] = listItem;
+                existingItemsMap.set(item.id, listItem);
             } else if (item.activity_id) {
                 listItem.setAttribute('data-activity-id', item.activity_id);
             }
@@ -1257,7 +1184,7 @@ const updateScanTimeline = function(data) {
 
         // Reorder DOM to match sorted order (running first, then by time) so "In progress" moves to top on WebSocket update
         itemsToRender.forEach(function(item) {
-            const listItem = existingItemsMap[item.id];
+            const listItem = existingItemsMap.get(item.id);
             if (listItem) {
                 timelineList.appendChild(listItem);
             }
@@ -1682,26 +1609,28 @@ const escapeHtml = function(text) {
  * Disconnect all scan status WebSockets
  */
 const disconnectAllScanStatusWebSockets = function() {
-    for (const key in scanStatusWebSockets) {
-        if (scanStatusWebSockets[key]) {
-            scanStatusWebSockets[key].close();
-            scanStatusWebSockets[key] = null;
+    for (const key of scanStatusWebSocketsMap.keys()) {
+        const socket = scanStatusWebSocketsMap.get(key);
+        if (socket) {
+            socket.close();
+            scanStatusWebSocketsMap.delete(key);
         }
     }
     
-    for (const key in scanStatusReconnectTimeouts) {
-        if (scanStatusReconnectTimeouts[key]) {
-            clearTimeout(scanStatusReconnectTimeouts[key]);
-            scanStatusReconnectTimeouts[key] = null;
+    for (const key of scanStatusReconnectTimeoutsMap.keys()) {
+        const timeoutId = scanStatusReconnectTimeoutsMap.get(key);
+        if (timeoutId) {
+            clearTimeout(timeoutId);
+            scanStatusReconnectTimeoutsMap.delete(key);
         }
     }
     
     // Clear options and connecting flags
-    for (const key in scanStatusOptions) {
-        delete scanStatusOptions[key];
+    for (const key of scanStatusOptionsMap.keys()) {
+        scanStatusOptionsMap.delete(key);
     }
-    for (const key in scanStatusConnecting) {
-        delete scanStatusConnecting[key];
+    for (const key of scanStatusConnectingMap.keys()) {
+        scanStatusConnectingMap.delete(key);
     }
 };
 

@@ -104,9 +104,9 @@ function getScanStatusSidebar(endpoint_url, endpoint_stop_scan_url, endpoint_sto
           <div class="card border-primary border mini-card" id="scan-card-${scan_object.id}">
           <a href="/scan/${finalProject}/${scan_object.id}" class="text-reset item-hovered">
           <div class="card-header bg-soft-primary text-primary mini-card-header">
-          ${htmlEncode(scan_name)} on ${scan_object.domain.name}
+          ${htmlEncode(scan_name)} on ${typeof htmlEncode === 'function' ? htmlEncode(scan_object.domain.name) : scan_object.domain.name}
           <span class="badge badge-soft-primary float-end">
-          ${scan_object.current_progress}%
+          ${typeof htmlEncode === 'function' ? htmlEncode(String(scan_object.current_progress)) : scan_object.current_progress}%
           </span>
           ${currentTaskDisplay}
           </div>
@@ -116,7 +116,7 @@ function getScanStatusSidebar(endpoint_url, endpoint_stop_scan_url, endpoint_sto
           Scanning
           </span>
           <span class="">
-          Started ${scan_object.elapsed_time} ago.
+          Started ${typeof htmlEncode === 'function' ? htmlEncode(scan_object.elapsed_time) : scan_object.elapsed_time} ago.
           </span>
           </p>
           <div>
@@ -125,7 +125,7 @@ function getScanStatusSidebar(endpoint_url, endpoint_stop_scan_url, endpoint_sto
           <span class="badge-vuln-count badge badge-pills bg-danger mt-1" data-toggle="tooltip" data-placement="top" title="Vulnerabilities">&nbsp;&nbsp;${scan_object.vulnerability_count}&nbsp;&nbsp;</span>
           </div>
           <div class="progress mt-2 progress-4px">
-          <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary scan-progress-bar" role="progressbar" aria-valuenow="${scan_object.current_progress}" aria-valuemin="0" aria-valuemax="100" style="width: ${scan_object.current_progress}%"></div>
+          <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary scan-progress-bar" role="progressbar" aria-valuenow="${typeof htmlEncode === 'function' ? htmlEncode(String(scan_object.current_progress)) : scan_object.current_progress}" aria-valuemin="0" aria-valuemax="100" style="width: ${typeof htmlEncode === 'function' ? htmlEncode(String(scan_object.current_progress)) : scan_object.current_progress}%"></div>
           </div>
           <a href="#" onclick="stop_scan('${finalStopScanUrl}', scan_id=${scan_object.id}, subscan_id=null, reload_scan_bar=true, reload_location=false)" class="btn btn-xs btn-soft-danger waves-effect waves-light mt-1 float-end"><i class="fe-alert-triangle"></i> Stop</a>
           </div>
@@ -178,7 +178,7 @@ function getScanStatusSidebar(endpoint_url, endpoint_stop_scan_url, endpoint_sto
             <p class="card-text">
             ${status_badge}
             <span class="">
-            Scan Completed ${scan_object.completed_ago} ago
+            Scan Completed ${typeof htmlEncode === 'function' ? htmlEncode(scan_object.completed_ago) : scan_object.completed_ago} ago
             </span>
             <div>
             <span class="badge-subdomain-count badge badge-pills bg-info mt-1" data-toggle="tooltip" data-placement="top" title="Subdomains">&nbsp;&nbsp;${scan_object.subdomain_count}&nbsp;&nbsp;</span>
@@ -219,7 +219,7 @@ function getScanStatusSidebar(endpoint_url, endpoint_stop_scan_url, endpoint_sto
             In Progress
             </span>
             <span class="">
-            Running Since ${task_object.elapsed_time} ago.
+            Running Since ${typeof htmlEncode === 'function' ? htmlEncode(task_object.elapsed_time) : task_object.elapsed_time} ago.
             </span>
             </p>
             <div>
@@ -268,14 +268,14 @@ function getScanStatusSidebar(endpoint_url, endpoint_stop_scan_url, endpoint_sto
             <div class="card border-${color} border mini-card">
             <a href="/scan/${finalProject}/${task_object.scan_id}" class="text-reset item-hovered">
             <div class="card-header ${bg_color} text-${color} mini-card-header">
-            ${task_name} on <b>${domain_name}</b>
+            ${typeof htmlEncode === 'function' ? htmlEncode(task_name) : task_name} on <b>${typeof htmlEncode === 'function' ? htmlEncode(domain_name) : domain_name}</b>
             </div>
             <div class="card-body mini-card-body">
             <p class="card-text">
             ${status_badge}
             ${error_message}
             <span class="">
-            Completed ${task_object.elapsed_time} ago
+            Completed ${typeof htmlEncode === 'function' ? htmlEncode(task_object.elapsed_time) : task_object.elapsed_time} ago
             </span>
             </p>
             </div>

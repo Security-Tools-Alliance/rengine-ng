@@ -548,7 +548,7 @@ class TestFileOperations(unittest.TestCase):
         with open(file2, "w") as f:
             f.write("content2")
 
-        os.chmod(file1, 0o444)
+        os.chmod(file1, 0o400)
 
         try:
             remove_file_or_pattern(self.test_subdir, "*.txt")
@@ -559,7 +559,7 @@ class TestFileOperations(unittest.TestCase):
         finally:
             try:
                 if os.path.exists(file1):
-                    os.chmod(file1, 0o644)
+                    os.chmod(file1, 0o600)
                     os.remove(file1)
             except OSError:
                 pass

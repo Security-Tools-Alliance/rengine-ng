@@ -32,6 +32,7 @@ from reNgine.settings import (
     RENGINE_NUCLEI_TEMPLATES_DIR,
     RENGINE_WORDLISTS,
 )
+from reNgine.utilities.error import get_safe_user_message
 from reNgine.utilities.notification import (
     send_discord_message,
     send_lark_message,
@@ -479,7 +480,7 @@ def test_hackerone(request):
         return http.JsonResponse(
             {
                 "error": "Timeout while connecting to HackerOne API",
-                "detail": str(exc),
+                "detail": get_safe_user_message(exc, logger),
             },
             status=504,
         )
@@ -487,7 +488,7 @@ def test_hackerone(request):
         return http.JsonResponse(
             {
                 "error": "Failed to reach HackerOne API",
-                "detail": str(exc),
+                "detail": get_safe_user_message(exc, logger),
             },
             status=502,
         )
@@ -596,7 +597,7 @@ def llm_toolkit_section(request):
         context = {"installed_models": data["models"], "openai_key_error": data["openai_key_error"]}
         return render(request, "scanEngine/settings/llm_toolkit.html", context)
     except Exception as e:
-        messages.error(request, f"Error fetching LLM models: {str(e)}")
+        messages.error(request, get_safe_user_message(e, logger))
         return render(request, "scanEngine/settings/llm_toolkit.html", {"installed_models": []})
 
 
@@ -876,7 +877,7 @@ def update_workflow(request, workflow_id):
                 messages.add_message(request, messages.INFO, "Workflow updated successfully")
                 return http.HttpResponseRedirect(reverse("workflows"))
             except PermissionError as e:
-                messages.add_message(request, messages.ERROR, str(e))
+                messages.add_message(request, messages.ERROR, get_safe_user_message(e, logger))
                 return http.HttpResponseRedirect(reverse("workflows"))
 
     context = {"scan_engine_nav_active": "active", "form": form, "workflow": workflow}
@@ -900,7 +901,7 @@ def delete_workflow(request, workflow_id):
             response_data = {"status": True}
             messages.add_message(request, messages.INFO, f"Workflow '{workflow_name}' successfully deleted!")
         except PermissionError as e:
-            response_data = {"status": False, "message": str(e)}
+            response_data = {"status": False, "message": get_safe_user_message(e, logger)}
         except Exception:
             response_data = {"status": False, "message": "Oops! Workflow could not be deleted!"}
             messages.add_message(request, messages.ERROR, "Oops! Workflow could not be deleted!")
@@ -962,7 +963,7 @@ def update_scan(request, scan_id):
                 messages.add_message(request, messages.INFO, "Scan configuration updated successfully")
                 return http.HttpResponseRedirect(reverse("scans"))
             except PermissionError as e:
-                messages.add_message(request, messages.ERROR, str(e))
+                messages.add_message(request, messages.ERROR, get_safe_user_message(e, logger))
                 return http.HttpResponseRedirect(reverse("scans"))
 
     context = {"scan_engine_nav_active": "active", "form": form, "scan": scan}
@@ -1070,8 +1071,8 @@ def add_profile(request):
                 messages.add_message(request, messages.INFO, "Profile added successfully")
                 return http.HttpResponseRedirect(reverse("profiles"))
             except Exception as e:
-                logger.error(f"Error saving profile: {e}", exc_info=True)
-                messages.add_message(request, messages.ERROR, f"Failed to save profile: {str(e)}")
+                logger.error("Error saving profile: %s", e, exc_info=True)
+                messages.add_message(request, messages.ERROR, get_safe_user_message(e, logger))
                 context = {"scan_engine_nav_active": "active", "form": form}
                 return render(request, "scanEngine/add_profile.html", context)
 
@@ -1111,11 +1112,11 @@ def update_profile(request, profile_id):
                 messages.add_message(request, messages.INFO, "Profile updated successfully")
                 return http.HttpResponseRedirect(reverse("profiles"))
             except PermissionError as e:
-                messages.add_message(request, messages.ERROR, str(e))
+                messages.add_message(request, messages.ERROR, get_safe_user_message(e, logger))
                 return http.HttpResponseRedirect(reverse("profiles"))
             except Exception as e:
-                logger.error(f"Error updating profile: {e}", exc_info=True)
-                messages.add_message(request, messages.ERROR, f"Failed to update profile: {str(e)}")
+                logger.error("Error updating profile: %s", e, exc_info=True)
+                messages.add_message(request, messages.ERROR, get_safe_user_message(e, logger))
                 context = {"scan_engine_nav_active": "active", "form": form, "profile": profile}
                 return render(request, "scanEngine/update_profile.html", context)
 
@@ -1150,7 +1151,7 @@ def set_default_profile(request, profile_id):
             }
             messages.add_message(request, messages.INFO, response_data["message"])
         except Exception as e:
-            response_data = {"status": False, "message": f"Failed to set default profile: {str(e)}"}
+            response_data = {"status": False, "message": get_safe_user_message(e, logger)}
             messages.add_message(request, messages.ERROR, response_data["message"])
     else:
         response_data = {"status": False, "message": "Invalid request method"}
@@ -1174,7 +1175,7 @@ def delete_profile(request, profile_id):
             response_data = {"status": True}
             messages.add_message(request, messages.INFO, f"Profile '{profile_name}' successfully deleted!")
         except PermissionError as e:
-            response_data = {"status": False, "message": str(e)}
+            response_data = {"status": False, "message": get_safe_user_message(e, logger)}
         except Exception:
             response_data = {"status": False, "message": "Oops! Profile could not be deleted!"}
             messages.add_message(request, messages.ERROR, "Oops! Profile could not be deleted!")

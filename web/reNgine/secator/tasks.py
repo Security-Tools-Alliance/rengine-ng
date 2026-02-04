@@ -1,5 +1,6 @@
 from django.core.exceptions import ObjectDoesNotExist
 
+from reNgine.core.validators import sanitize_path_component
 from reNgine.utilities.logger import get_module_logger
 from reNgine.utilities.url import get_subdomain_from_url
 from startScan.models import ScanHistory
@@ -129,9 +130,10 @@ def initiate_secator_scan(
             )
         targets = validated_targets
 
-        domain_results_dir = os.path.join(SECATOR_RESULTS, domain.name)
+        domain_name_sanitized = sanitize_path_component(domain.name)
+        domain_results_dir = os.path.join(SECATOR_RESULTS, domain_name_sanitized)
         os.makedirs(domain_results_dir, exist_ok=True)
-        logger.info(f"Built targets list: {len(targets)} targets (input_types={input_types})")
+        logger.info("Built targets list: %s targets (input_types=%s)", len(targets), input_types)
 
         config = {}
         if secator_config:
@@ -145,7 +147,7 @@ def initiate_secator_scan(
             profile_list = secator_config.get("profiles", [])
             if isinstance(profile_list, list):
                 profiles = [str(p) for p in profile_list if p is not None]
-                logger.info(f"Using {len(profiles)} profile(s): {', '.join(profiles) if profiles else 'none'}")
+                logger.info("Using %s profile(s): %s", len(profiles), ", ".join(profiles) if profiles else "none")
 
         if execution_mode == "workflow":
             from scanEngine.models import SecatorWorkflow
@@ -235,7 +237,7 @@ def build_enriched_targets(
         original_count = len(targets)
         targets = [t for t in targets if get_subdomain_from_url(t).lower() not in out_of_scope_clean]
         if original_count > len(targets):
-            logger.info(f"Removed {original_count - len(targets)} out-of-scope targets")
+            logger.info("Removed %s out-of-scope targets", original_count - len(targets))
 
     if url_filter and url_filter.strip() and "url" in input_types:
         url_filter_clean = url_filter.strip()
@@ -246,5 +248,5 @@ def build_enriched_targets(
     elif url_filter and url_filter.strip():
         logger.debug("URL filter not applied: path appending only applies when input_types include 'url'")
 
-    logger.info(f"Final targets list: {len(targets)} targets (input_types={input_types})")
+    logger.info("Final targets list: %s targets (input_types=%s)", len(targets), input_types)
     return targets

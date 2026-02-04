@@ -374,9 +374,11 @@ def send_scan_status_update(scan_history_id: int, scan_status=None, progress=Non
             message["current_task"] = current_task
 
         logger.debug(
-            f"Sending WebSocket update for scan {scan_history_id} - "
-            f"status: {message.get('status')}, progress: {message.get('progress')}, "
-            f"current_task: {message.get('current_task')}"
+            "Sending WebSocket update for scan %s - status: %s, progress: %s, current_task: %s",
+            scan_history_id,
+            message.get("status"),
+            message.get("progress"),
+            message.get("current_task"),
         )
 
         # Send to scan-specific group
@@ -385,7 +387,7 @@ def send_scan_status_update(scan_history_id: int, scan_status=None, progress=Non
             scan_group,
             {"type": "scan_status_update", "message": message},
         )
-        logger.debug(f"Sent WebSocket update to scan-specific group: {scan_group}")
+        logger.debug("Sent WebSocket update to scan-specific group: %s", scan_group)
 
         # Send to project-level group (slug cleaned to match consumer)
         if scan.domain and scan.domain.project:

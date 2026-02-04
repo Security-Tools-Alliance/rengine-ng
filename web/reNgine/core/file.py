@@ -8,6 +8,7 @@ from pathlib import Path
 import shutil
 from typing import Optional, Union
 
+from reNgine.core.path import is_safe_path as path_is_safe_path
 from reNgine.utilities.logger import get_module_logger
 
 
@@ -17,27 +18,12 @@ logger = get_module_logger(__name__)
 def _is_safe_path(base_path: Union[str, Path], target_path: Union[str, Path]) -> bool:
     """
     Check if target_path is safe to access relative to base_path.
-    Uses pathlib for robust path resolution and security checks.
-
-    Args:
-        base_path: Base directory path
-        target_path: Target path to check
-
-    Returns:
-        bool: True if path is safe, False otherwise
+    Delegates to reNgine.core.path.is_safe_path for a single implementation.
     """
     try:
-        base = Path(base_path).resolve()
-        target = Path(target_path).resolve()
-
-        # Check if target is within base directory using pathlib
-        try:
-            target.relative_to(base)
-            return True
-        except ValueError:
-            # target is not relative to base
-            return False
-
+        base_abs = str(Path(base_path).resolve())
+        target_abs = str(Path(target_path).resolve())
+        return path_is_safe_path(base_abs, target_abs)
     except (OSError, ValueError, RuntimeError):
         return False
 

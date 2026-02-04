@@ -23,6 +23,9 @@ MAX_ASSET_PREVIEW_BYTES = 256 * 1024  # 256 KiB
 # Default timeout in seconds for outbound HTTP requests (e.g. notifications).
 REQUEST_TIMEOUT_SECONDS = 10
 
+# Generic user-facing error message when exception details must not be exposed (security).
+GENERIC_USER_ERROR_MESSAGE = "An error occurred. Please try again."
+
 ###############################################################################
 # YAML CONFIG DEFINITIONS
 ###############################################################################

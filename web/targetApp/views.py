@@ -411,16 +411,16 @@ def add_target(request, slug):
                     is_valid, error_msg, cleaned_dns = validate_dns_servers(used_dns_servers)
                     if not is_valid:
                         messages.add_message(request, messages.ERROR, f"Invalid DNS servers configuration: {error_msg}")
-                        logger.warning(f"Invalid DNS servers submitted: {used_dns_servers} - {error_msg}")
+                        logger.warning("Invalid DNS servers submitted: %s - %s", used_dns_servers, error_msg)
                         context = {"current_project": project}
                         return render(request, "target/add.html", context)
                     used_dns_servers = cleaned_dns
 
-                logger.info(f"Processing IP scan results for {original_ip_range}")
-                logger.info(f"Target name: {target_name}")
-                logger.info(f"Selected domains: {discovered_domains}")
-                logger.info(f"Selected hosts count: {len(resolved_hosts_data)}")
-                logger.info(f"DNS servers used: {used_dns_servers}")
+                logger.info("Processing IP scan results for %s", original_ip_range)
+                logger.info("Target name: %s", target_name)
+                logger.info("Selected domains: %s", discovered_domains)
+                logger.info("Selected hosts count: %s", len(resolved_hosts_data))
+                logger.info("DNS servers used: %s", used_dns_servers)
 
                 # Parse selected hosts to categorize them and deduplicate
                 selected_domains = set()
@@ -434,7 +434,7 @@ def add_target(request, slug):
 
                 # If target name is provided, create a single target and group everything under it
                 if target_name:
-                    logger.info(f"Creating single target '{target_name}' to group all selected items")
+                    logger.info("Creating single target '%s' to group all selected items", target_name)
 
                     # Create the main target with the provided name
                     main_target, created = Domain.objects.get_or_create(
@@ -457,7 +457,7 @@ def add_target(request, slug):
                             main_target_locked = type(main_target).objects.select_for_update().get(pk=main_target.pk)
                             main_target_locked.custom_dns_servers = used_dns_servers
                             main_target_locked.save()
-                        logger.info(f"Updated DNS servers for existing target {main_target.name}")
+                        logger.info("Updated DNS servers for existing target %s", main_target.name)
 
                     stats.domain(created)
                     if created:
@@ -468,16 +468,18 @@ def add_target(request, slug):
                         logger.info("Using existing target %s", main_target.name)
 
                     # Process all selected items as subdomains of the main target
-                    logger.info(f"Processing {len(resolved_hosts_data)} selected hosts for target {main_target.name}")
+                    logger.info(
+                        "Processing %s selected hosts for target %s", len(resolved_hosts_data), main_target.name
+                    )
                     for i, host_data_json in enumerate(resolved_hosts_data):
                         try:
-                            logger.debug(f"Processing host {i + 1}/{len(resolved_hosts_data)}: {host_data_json}")
+                            logger.debug("Processing host %s/%s: %s", i + 1, len(resolved_hosts_data), host_data_json)
                             host_info = json.loads(host_data_json.replace("&quot;", '"'))
                             ip = host_info.get("ip")
                             hostname = host_info.get("domain")
                             is_alive = host_info.get("is_alive", False)
 
-                            logger.debug(f"Parsed host info - IP: {ip}, Hostname: {hostname}, Alive: {is_alive}")
+                            logger.debug("Parsed host info - IP: %s, Hostname: %s, Alive: %s", ip, hostname, is_alive)
 
                             # Deduplication: Skip if we've already processed this hostname
                             if hostname in seen_hostnames:
@@ -524,7 +526,7 @@ def add_target(request, slug):
                             subdomain.save()
 
                         except (json.JSONDecodeError, KeyError) as e:
-                            logger.warning(f"Error processing host data '{host_data_json}': {e}")
+                            logger.warning("Error processing host data '%s': %s", host_data_json, e)
                             continue
 
                     # Also add discovered domains as subdomains
@@ -553,7 +555,7 @@ def add_target(request, slug):
 
                     # Update total_processed_count
                     total_processed_count = stats.get_total_processed()
-                    logger.info(f"Grouped target processing complete: {stats.as_dict()}")
+                    logger.info("Grouped target processing complete: %s", stats.as_dict())
 
                 else:
                     # Original logic for individual targets (when no target name is provided)
@@ -611,7 +613,7 @@ def add_target(request, slug):
                             if not created and used_dns_servers:
                                 domain.custom_dns_servers = used_dns_servers
                                 domain.save()
-                                logger.info(f"Updated DNS servers for existing domain target {domain.name}")
+                                logger.info("Updated DNS servers for existing domain target %s", domain.name)
 
                             stats.domain(created)
                             if created:
@@ -696,7 +698,7 @@ def add_target(request, slug):
                             if not created and used_dns_servers:
                                 ip_range_domain.custom_dns_servers = used_dns_servers
                                 ip_range_domain.save()
-                                logger.info(f"Updated DNS servers for existing IP range target {ip_range_domain.name}")
+                                logger.info("Updated DNS servers for existing IP range target %s", ip_range_domain.name)
 
                             stats.domain(created)
                             if created:
@@ -753,12 +755,12 @@ def add_target(request, slug):
                                 subdomain.save()
 
                         except (AddressValueError, ValueError) as e:
-                            logger.warning(f"Error creating IP range target: {e}")
+                            logger.warning("Error creating IP range target: %s", e)
 
                     # Update total_processed_count to include both created and existing items
                     total_processed_count = stats.get_total_processed()
 
-                    logger.info(f"Processing complete: {stats.as_dict()}")
+                    logger.info("Processing complete: %s", stats.as_dict())
 
         except (Http404, ValueError) as e:
             logger.exception(e)
@@ -775,7 +777,7 @@ def add_target(request, slug):
                     "Oops! Could not import any targets, either targets already exists or is not a valid target."
                 )
 
-            logger.warning(f"No targets processed (total_processed_count=0) for request: {dict(request.POST)}")
+            logger.warning("No targets processed (total_processed_count=0) for request: %s", dict(request.POST))
             messages.add_message(request, messages.ERROR, error_msg)
 
             # Handle AJAX requests with JSON error response
@@ -865,11 +867,11 @@ def delete_target(request, slug, id):
                     result = safe_rmtree(settings.RENGINE_RESULTS, dir_path)
                     if result != "removed":
                         logger.warning("Results dir cleanup returned %s for path %s", result, dir_path)
-                direct = base / target.name
-                if direct.exists() and direct.is_dir():
-                    result = safe_rmtree(settings.RENGINE_RESULTS, direct)
+                resolved_direct = resolve_results_dir_under_base(settings.RENGINE_RESULTS, target.name)
+                if resolved_direct is not None and resolved_direct.is_dir():
+                    result = safe_rmtree(settings.RENGINE_RESULTS, resolved_direct)
                     if result != "removed":
-                        logger.warning("Results dir cleanup returned %s for path %s", result, direct)
+                        logger.warning("Results dir cleanup returned %s for path %s", result, resolved_direct)
                 prefix = f"{target.name}__"
                 for entry in base.iterdir():
                     if entry.is_dir() and entry.name.startswith(prefix):

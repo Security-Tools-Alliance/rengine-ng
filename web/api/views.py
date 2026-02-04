@@ -63,6 +63,7 @@ from reNgine.tasks import (
     send_hackerone_report,
 )
 from reNgine.utilities.endpoint import get_interesting_endpoints
+from reNgine.utilities.error import get_safe_user_message
 from reNgine.utilities.external import get_open_ai_key
 from reNgine.utilities.lookup import get_lookup_keywords
 from reNgine.utilities.subdomain import get_interesting_subdomains
@@ -372,7 +373,7 @@ class OllamaManager(APIView):
                         if line:
                             try:
                                 data = json.loads(line.decode("utf-8"))
-                                logger.debug(f"Ollama response: {data}")
+                                logger.debug("Ollama response: %s", data)
 
                                 if "error" in data:
                                     async_to_sync(channel_layer.group_send)(
@@ -406,7 +407,7 @@ class OllamaManager(APIView):
                                     break
 
                             except json.JSONDecodeError as e:
-                                logger.error(f"JSON decode error: {e}")
+                                logger.error("JSON decode error: %s", e)
                                 async_to_sync(channel_layer.group_send)(
                                     channel_name,
                                     {
@@ -417,13 +418,13 @@ class OllamaManager(APIView):
                                 break
 
                 except Exception as e:
-                    logger.error(f"Download error: {e}")
+                    logger.error("Download error: %s", e)
                     try:
                         async_to_sync(channel_layer.group_send)(
-                            channel_name, {"type": "download_progress", "message": {"status": "error", "error": str(e)}}
+                            channel_name, {"type": "download_progress", "message": {"status": "error", "error": get_safe_user_message(e, None)}}
                         )
                     except Exception as e2:
-                        logger.error(f"Error sending error message: {e2}")
+                        logger.error("Error sending error message: %s", e2)
                 finally:
                     if response:
                         response.close()
@@ -437,8 +438,8 @@ class OllamaManager(APIView):
             return Response({"status": True, "channel": channel_name, "message": "Download started"})
 
         except Exception as e:
-            logger.error(f"Error in OllamaManager: {e}")
-            return Response({"status": False, "error": str(e)}, status=500)
+            logger.error("Error in OllamaManager: %s", e)
+            return Response({"status": False, "error": get_safe_user_message(e, None)}, status=500)
 
 
 class OllamaDetailManager(APIView):
@@ -464,7 +465,7 @@ class OllamaDetailManager(APIView):
             return Response({"status": False, "message": error_message}, status=response.status_code)
 
         except Exception as e:
-            logger.error(f"Error in OllamaDetailManager DELETE: {str(e)}")
+            logger.error("Error in OllamaDetailManager DELETE: %s", e)
             return Response({"status": False, "message": "An error occurred while deleting the model."}, status=500)
 
     def put(self, request, model_name):
@@ -479,7 +480,7 @@ class OllamaDetailManager(APIView):
             )
             return Response({"status": True, "message": "Model selected successfully"})
         except Exception as e:
-            logger.error(f"Error in OllamaDetailManager PUT: {str(e)}")
+            logger.error("Error in OllamaDetailManager PUT: %s", e)
             return Response(
                 {"status": False, "message": "An error occurred while updating the model selection."}, status=500
             )
@@ -513,12 +514,12 @@ class AvailableOllamaModels(APIView):
                         if base_name in MODEL_REQUIREMENTS:
                             model["capabilities"] = MODEL_REQUIREMENTS[base_name]
                 else:
-                    logger.warning(f"Ollama API returned status {response.status_code}")
+                    logger.warning("Ollama API returned status %s", response.status_code)
                     for model in recommended_models:
                         model["installed"] = False
                         model["installed_versions"] = []
             except requests.exceptions.RequestException as e:
-                logger.error(f"Error connecting to Ollama API: {str(e)}")
+                logger.error("Error connecting to Ollama API: %s", e)
                 for model in recommended_models:
                     model["installed"] = False
                     model["installed_versions"] = []
@@ -529,8 +530,8 @@ class AvailableOllamaModels(APIView):
             return Response(response_data)
 
         except Exception as e:
-            logger.error(f"Error in AvailableOllamaModels: {str(e)}")
-            return Response({"status": False, "error": str(e)}, status=500)
+            logger.error("Error in AvailableOllamaModels: %s", e)
+            return Response({"status": False, "error": get_safe_user_message(e, None)}, status=500)
 
 
 class LLMAttackSuggestion(APIView):
@@ -607,7 +608,7 @@ class LLMAttackSuggestion(APIView):
         except Subdomain.DoesNotExist:
             return Response({"status": False, "error": f"Subdomain not found with id {subdomain_id}"}, status=404)
         except Exception as e:
-            logger.error(f"Error deleting attack surface analysis: {str(e)}")
+            logger.error("Error deleting attack surface analysis: %s", e)
             return Response({"status": False, "error": "An error occurred while deleting the analysis"}, status=500)
 
 
@@ -623,7 +624,7 @@ class LLMVulnerabilityReportGenerator(APIView):
             selected_model = get_default_llm_model()
         except Exception as e:
             # If fetching the default model fails, log and proceed to task but keep robustness
-            logger.error(f"Error fetching default LLM model: {e}")
+            logger.error("Error fetching default LLM model: %s", e)
             selected_model = None
 
         try:
@@ -632,7 +633,7 @@ class LLMVulnerabilityReportGenerator(APIView):
                 gpt_model_names = [model["name"] for model in DEFAULT_GPT_MODELS]
                 is_gpt = selected_model in gpt_model_names
         except (KeyError, AttributeError) as e:
-            logger.error(f"Error determining if selected model is GPT: {e}")
+            logger.error("Error determining if selected model is GPT: %s", e)
             is_gpt = False
 
         openai_key_missing = is_gpt and not OpenAiAPIKey.objects.exists()
@@ -707,7 +708,7 @@ class LLMVulnerabilityReportGenerator(APIView):
                 {"status": False, "error": f"Vulnerability not found with id {vulnerability_id}"}, status=404
             )
         except Exception as e:
-            logger.error(f"Error deleting LLM vulnerability report: {str(e)}")
+            logger.error("Error deleting LLM vulnerability report: %s", e)
             return Response({"status": False, "error": "An error occurred while deleting the analysis"}, status=500)
 
 
@@ -721,7 +722,7 @@ class CreateProjectApi(APIView):
             Project.objects.create(name=project_name, slug=slug, insert_date=insert_date)
             return Response({"status": True, "project_name": project_name})
         except Exception as e:
-            logger.error(f"Error in CreateProjectApi: {str(e)}")
+            logger.error("Error in CreateProjectApi: %s", e)
             return Response({"status": False, "message": "Failed to create project."}, status=HTTP_400_BAD_REQUEST)
 
 
@@ -793,11 +794,11 @@ class WafDetector(APIView):
             return Response(response)
 
         try:
-            logger.debug(f"WAF detection for URL: {url} - Legacy function disabled, use Secator instead")
+            logger.debug("WAF detection for URL: %s - Legacy function disabled, use Secator instead", url)
             response["message"] = "WAF detection is now handled by Secator. Please use the Secator scan interface."
-            logger.debug(f"WAF detection result: {response}")
+            logger.debug("WAF detection result: %s", response)
         except Exception as e:
-            logger.error(f"Error during WAF detection: {str(e)}")
+            logger.error("Error during WAF detection: %s", e)
             response["message"] = "An unexpected error occurred. Please try again later."
 
         return Response(response)
@@ -905,7 +906,7 @@ class FetchMostCommonVulnerability(APIView):
                 response["result"] = most_common_vulnerabilities
 
         except Exception as e:
-            logger.error(f"Error in FetchMostCommonVulnerability: {str(e)}")
+            logger.error("Error in FetchMostCommonVulnerability: %s", e)
             response["message"] = "An error occurred while fetching vulnerabilities."
 
         return Response(response)
@@ -1295,7 +1296,7 @@ class StopScan(APIView):
                     response = {"status": False, "message": "Failed to stop subscan"}
             except Exception as e:
                 logger.error(e)
-                response = {"status": False, "message": str(e)}
+                response = {"status": False, "message": get_safe_user_message(e, None)}
         elif scan_id:
             try:
                 scan = get_object_or_404(ScanHistory, id=scan_id)
@@ -1318,7 +1319,7 @@ class StopScan(APIView):
                     response = {"status": False, "message": "Failed to stop scan"}
             except Exception as e:
                 logger.error(e)
-                response = {"status": False, "message": str(e)}
+                response = {"status": False, "message": get_safe_user_message(e, None)}
 
         # Abort running scan activities
         if scan:
@@ -1369,7 +1370,7 @@ class StopActivity(APIView):
                 return Response({"status": False, "message": "Failed to stop activity"})
         except Exception as e:
             logger.error(e)
-            return Response({"status": False, "message": str(e)}, status=HTTP_400_BAD_REQUEST)
+            return Response({"status": False, "message": get_safe_user_message(e, None)}, status=HTTP_400_BAD_REQUEST)
 
 
 class StartScan(APIView):
@@ -1458,7 +1459,7 @@ class StartScan(APIView):
                 execution_mode,
             )
         except ValueError as exc:
-            return Response({"error": str(exc)}, status=HTTP_400_BAD_REQUEST)
+            return Response({"error": get_safe_user_message(exc, logger)}, status=HTTP_400_BAD_REQUEST)
 
         if resolved["use_per_task"]:
             selected_targets_per_task = resolved["selected_targets_per_task"]
@@ -1673,7 +1674,7 @@ class InitiateSubTask(APIView):
             domain_id = domains[0]
 
         except Exception as e:
-            return Response({"status": False, "error": f"Error retrieving subdomains: {str(e)}"}, status=400)
+            return Response({"status": False, "error": get_safe_user_message(e, logger)}, status=400)
 
         # selected_targets_per_task only (no selected_targets here). Use resolve_selected_targets for consistent parsing.
         try:
@@ -1683,7 +1684,7 @@ class InitiateSubTask(APIView):
                 "tasks",
             )
         except ValueError as exc:
-            return Response({"error": str(exc)}, status=HTTP_400_BAD_REQUEST)
+            return Response({"error": get_safe_user_message(exc, logger)}, status=HTTP_400_BAD_REQUEST)
 
         selected_targets_per_task = resolved["selected_targets_per_task"]
         scan_results = []
@@ -1804,7 +1805,7 @@ class InitiateSubTask(APIView):
                             "status": "success",
                         }
                     )
-                    logger.info(f"Secator subscan initiated for subdomain {subdomain.name} (ID: {subdomain.id})")
+                    logger.info("Secator subscan initiated for subdomain %s (ID: %s)", subdomain.name, subdomain.id)
                 else:
                     scan_results.append(
                         {
@@ -1819,9 +1820,9 @@ class InitiateSubTask(APIView):
                     )
 
             except Exception as e:
-                logger.error(f"Error initiating subscan for subdomain {subdomain.name}: {e}")
+                logger.error("Error initiating subscan for subdomain %s: %s", subdomain.name, e)
                 scan_results.append(
-                    {"subdomain_id": subdomain.id, "subdomain_name": subdomain.name, "status": "error", "error": str(e)}
+                    {"subdomain_id": subdomain.id, "subdomain_name": subdomain.name, "status": "error", "error": get_safe_user_message(e, None)}
                 )
 
         return Response(
@@ -2138,7 +2139,7 @@ class CMSDetector(APIView):
             # NOTE: CMS detection functionality moved to Secator
             return Response({"status": False, "message": "CMS detection functionality moved to Secator"})
         except Exception as e:
-            logger.error(f"Error in CMSDetector: {str(e)}")
+            logger.error("Error in CMSDetector: %s", e)
             return Response({"status": False, "message": "An unexpected error occurred."}, status=500)
 
 
@@ -2261,7 +2262,7 @@ class GfList(APIView):
             # NOTE: GF patterns functionality moved to Secator
             return Response({"status": False, "message": "GF patterns functionality moved to Secator"})
         except Exception as e:
-            logger.error(f"Error in GfList: {str(e)}")  # Log the exception for internal tracking
+            logger.error("Error in GfList: %s", e)
             return Response({"error": "An unexpected error occurred. Please try again later."}, status=500)
 
 
@@ -3480,7 +3481,7 @@ class VulnerabilityViewSet(AdvancedSearchMixin, viewsets.ModelViewSet):
             elif operator == "!":
                 return queryset.exclude(cvss_score__exact=float_value)
         except (ValueError, TypeError):
-            logger.warning(f"Invalid numeric value for cvss_score: {value}")
+            logger.warning("Invalid numeric value for cvss_score: %s", value)
         return queryset
 
     @property
@@ -3742,7 +3743,7 @@ class LLMModelsManager(APIView):
                         ]
                     )
             except Exception as e:
-                logger.error(f"Error fetching Ollama models: {str(e)}")
+                logger.error("Error fetching Ollama models: %s", e)
 
             # Get currently selected model
             selected_model = OllamaSettings.objects.first()
@@ -3770,8 +3771,8 @@ class LLMModelsManager(APIView):
             )
 
         except Exception as e:
-            logger.error(f"Error in LLMModelsManager GET: {str(e)}")
-            return Response({"status": False, "error": "Failed to fetch LLM models", "message": str(e)}, status=500)
+            logger.error("Error in LLMModelsManager GET: %s", e)
+            return Response({"status": False, "error": "Failed to fetch LLM models", "message": get_safe_user_message(e, None)}, status=500)
 
 
 @api_view(["GET"])
@@ -3791,7 +3792,7 @@ def websocket_status(request):
             }
         )
     except Exception as e:
-        return Response({"status": False, "error": str(e)}, status=500)
+        return Response({"status": False, "error": get_safe_user_message(e, logger)}, status=500)
 
 
 class FetchScreenshots(APIView):
@@ -3937,7 +3938,7 @@ class CreateSecatorWorkflow(APIView):
             )
 
         except Exception as e:
-            return Response({"status": "error", "message": str(e)}, status=400)
+            return Response({"status": "error", "message": get_safe_user_message(e, logger)}, status=400)
 
 
 class CreateSecatorTask(APIView):
@@ -3960,7 +3961,7 @@ class CreateSecatorTask(APIView):
             return Response({"status": "success", "task_id": task.id, "message": "Task created successfully"})
 
         except Exception as e:
-            return Response({"status": "error", "message": str(e)}, status=400)
+            return Response({"status": "error", "message": get_safe_user_message(e, logger)}, status=400)
 
 
 class CreateSecatorScan(APIView):
@@ -3991,7 +3992,7 @@ class CreateSecatorScan(APIView):
             )
 
         except Exception as e:
-            return Response({"status": "error", "message": str(e)}, status=400)
+            return Response({"status": "error", "message": get_safe_user_message(e, logger)}, status=400)
 
 
 class LoadBuiltinWorkflows(APIView):
@@ -4013,7 +4014,7 @@ class LoadBuiltinWorkflows(APIView):
                 {"status": "success", "message": "Built-in workflows loaded successfully", "output": out.getvalue()}
             )
         except Exception as e:
-            return Response({"status": "error", "message": str(e)}, status=400)
+            return Response({"status": "error", "message": get_safe_user_message(e, logger)}, status=400)
 
 
 class LoadBuiltinTasks(APIView):
@@ -4034,7 +4035,7 @@ class LoadBuiltinTasks(APIView):
                 {"status": "success", "message": "Built-in tasks loaded successfully", "output": out.getvalue()}
             )
         except Exception as e:
-            return Response({"status": "error", "message": str(e)}, status=400)
+            return Response({"status": "error", "message": get_safe_user_message(e, logger)}, status=400)
 
 
 class LoadBuiltinProfiles(APIView):
@@ -4056,7 +4057,7 @@ class LoadBuiltinProfiles(APIView):
                 {"status": "success", "message": "Built-in profiles loaded successfully", "output": out.getvalue()}
             )
         except Exception as e:
-            return Response({"status": "error", "message": str(e)}, status=400)
+            return Response({"status": "error", "message": get_safe_user_message(e, logger)}, status=400)
 
 
 class GetDefaultProfileOpts(APIView):
@@ -4073,7 +4074,7 @@ class GetDefaultProfileOpts(APIView):
 
             return Response({"status": "success", "opts": opts_yaml})
         except Exception as e:
-            return Response({"status": "error", "message": str(e)}, status=400)
+            return Response({"status": "error", "message": get_safe_user_message(e, logger)}, status=400)
 
 
 class LoadBuiltinScans(APIView):
@@ -4095,7 +4096,7 @@ class LoadBuiltinScans(APIView):
                 {"status": "success", "message": "Built-in scans loaded successfully", "output": out.getvalue()}
             )
         except Exception as e:
-            return Response({"status": "error", "message": str(e)}, status=400)
+            return Response({"status": "error", "message": get_safe_user_message(e, logger)}, status=400)
 
 
 class GetWorkflowTasks(APIView):
@@ -4111,7 +4112,7 @@ class GetWorkflowTasks(APIView):
             return Response({"status": "success", "tasks": tasks})
 
         except Exception as e:
-            return Response({"status": "error", "message": str(e)}, status=400)
+            return Response({"status": "error", "message": get_safe_user_message(e, logger)}, status=400)
 
 
 class GetAvailableTasks(APIView):
@@ -4126,7 +4127,7 @@ class GetAvailableTasks(APIView):
             return Response({"status": "success", "tasks": list(tasks)})
 
         except Exception as e:
-            return Response({"status": "error", "message": str(e)}, status=400)
+            return Response({"status": "error", "message": get_safe_user_message(e, logger)}, status=400)
 
 
 class GetAvailableWorkflows(APIView):
@@ -4143,7 +4144,7 @@ class GetAvailableWorkflows(APIView):
             return Response({"status": "success", "workflows": list(workflows)})
 
         except Exception as e:
-            return Response({"status": "error", "message": str(e)}, status=400)
+            return Response({"status": "error", "message": get_safe_user_message(e, logger)}, status=400)
 
 
 class GetWorkflowDetail(APIView):
@@ -4170,7 +4171,7 @@ class GetWorkflowDetail(APIView):
         except SecatorWorkflow.DoesNotExist:
             return Response({"status": "error", "message": "Workflow not found"}, status=404)
         except Exception as e:
-            return Response({"status": "error", "message": str(e)}, status=400)
+            return Response({"status": "error", "message": get_safe_user_message(e, logger)}, status=400)
 
 
 class UpdateSecatorWorkflow(APIView):
@@ -4195,7 +4196,7 @@ class UpdateSecatorWorkflow(APIView):
         except SecatorWorkflow.DoesNotExist:
             return Response({"status": "error", "message": "Workflow not found"}, status=404)
         except Exception as e:
-            return Response({"status": "error", "message": str(e)}, status=400)
+            return Response({"status": "error", "message": get_safe_user_message(e, logger)}, status=400)
 
 
 class DeleteSecatorWorkflow(APIView):
@@ -4212,7 +4213,7 @@ class DeleteSecatorWorkflow(APIView):
         except SecatorWorkflow.DoesNotExist:
             return Response({"status": "error", "message": "Workflow not found"}, status=404)
         except Exception as e:
-            return Response({"status": "error", "message": str(e)}, status=400)
+            return Response({"status": "error", "message": get_safe_user_message(e, logger)}, status=400)
 
 
 class GetTaskDetail(APIView):
@@ -4238,7 +4239,7 @@ class GetTaskDetail(APIView):
         except SecatorTask.DoesNotExist:
             return Response({"status": "error", "message": "Task not found"}, status=404)
         except Exception as e:
-            return Response({"status": "error", "message": str(e)}, status=400)
+            return Response({"status": "error", "message": get_safe_user_message(e, logger)}, status=400)
 
 
 class UpdateSecatorTask(APIView):
@@ -4261,7 +4262,7 @@ class UpdateSecatorTask(APIView):
         except SecatorTask.DoesNotExist:
             return Response({"status": "error", "message": "Task not found"}, status=404)
         except Exception as e:
-            return Response({"status": "error", "message": str(e)}, status=400)
+            return Response({"status": "error", "message": get_safe_user_message(e, logger)}, status=400)
 
 
 class DeleteSecatorTask(APIView):
@@ -4278,7 +4279,7 @@ class DeleteSecatorTask(APIView):
         except SecatorTask.DoesNotExist:
             return Response({"status": "error", "message": "Task not found"}, status=404)
         except Exception as e:
-            return Response({"status": "error", "message": str(e)}, status=400)
+            return Response({"status": "error", "message": get_safe_user_message(e, logger)}, status=400)
 
 
 class GetScanDetail(APIView):
@@ -4309,7 +4310,7 @@ class GetScanDetail(APIView):
         except SecatorScan.DoesNotExist:
             return Response({"status": "error", "message": "Scan configuration not found"}, status=404)
         except Exception as e:
-            return Response({"status": "error", "message": str(e)}, status=400)
+            return Response({"status": "error", "message": get_safe_user_message(e, logger)}, status=400)
 
 
 class UpdateSecatorScan(APIView):
@@ -4335,7 +4336,7 @@ class UpdateSecatorScan(APIView):
         except SecatorScan.DoesNotExist:
             return Response({"status": "error", "message": "Scan configuration not found"}, status=404)
         except Exception as e:
-            return Response({"status": "error", "message": str(e)}, status=400)
+            return Response({"status": "error", "message": get_safe_user_message(e, logger)}, status=400)
 
 
 class DeleteSecatorScan(APIView):
@@ -4352,7 +4353,7 @@ class DeleteSecatorScan(APIView):
         except SecatorScan.DoesNotExist:
             return Response({"status": "error", "message": "Scan configuration not found"}, status=404)
         except Exception as e:
-            return Response({"status": "error", "message": str(e)}, status=400)
+            return Response({"status": "error", "message": get_safe_user_message(e, logger)}, status=400)
 
 
 class SecatorRunnerCreate(SecatorAPIBase):
@@ -4451,10 +4452,10 @@ class SecatorRunnerCreate(SecatorAPIBase):
         except Exception as e:
             self.logger.log_error(
                 e,
-                {"prefix": self.logger.PREFIX_SYNC, "action": "CREATE", "error": str(e)},
+                {"prefix": self.logger.PREFIX_SYNC, "action": "CREATE", "error": get_safe_user_message(e, logger)},
                 exc_info=True,
             )
-            return Response({"status": False, "error": str(e)}, status=500)
+            return Response({"status": False, "error": get_safe_user_message(e, logger)}, status=500)
 
 
 class SecatorRunnerUpdate(SecatorAPIBase):
@@ -4547,8 +4548,8 @@ class SecatorRunnerUpdate(SecatorAPIBase):
             # Check if it's a validation error that should return 400
             error_str = str(e).lower()
             if "validation" in error_str or "invalid" in error_str or "required" in error_str:
-                return Response({"status": False, "error": str(e)}, status=400)
-            return Response({"status": False, "error": str(e)}, status=500)
+                return Response({"status": False, "error": get_safe_user_message(e, logger)}, status=400)
+            return Response({"status": False, "error": get_safe_user_message(e, logger)}, status=500)
 
     def _is_all_runners_completed(self, scan_history_id: int) -> bool:
         """
@@ -5004,10 +5005,10 @@ class SecatorFindingCreate(SecatorAPIBase):
         except Exception as e:
             self.logger.log_error(
                 e,
-                {"prefix": self.logger.PREFIX_FINDING, "action": "CREATE", "error": str(e)},
+                {"prefix": self.logger.PREFIX_FINDING, "action": "CREATE", "error": get_safe_user_message(e, logger)},
                 exc_info=True,
             )
-            return Response({"status": False, "error": str(e)}, status=500)
+            return Response({"status": False, "error": get_safe_user_message(e, logger)}, status=500)
 
 
 class SecatorFindingUpdate(SecatorAPIBase):
@@ -5179,5 +5180,5 @@ class SecatorFindingUpdate(SecatorAPIBase):
             # Check if it's a validation error that should return 400
             error_str = str(e).lower()
             if "validation" in error_str or "invalid" in error_str or "required" in error_str:
-                return Response({"status": False, "error": str(e)}, status=400)
-            return Response({"status": False, "error": str(e)}, status=500)
+                return Response({"status": False, "error": get_safe_user_message(e, logger)}, status=400)
+            return Response({"status": False, "error": get_safe_user_message(e, logger)}, status=500)

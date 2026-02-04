@@ -51,18 +51,75 @@ def safe_unlink(base_dir: Union[str, Path], path: Union[str, Path]) -> UnlinkRes
         return "failed"
 
 
+def _safe_path_components(
+    path_str: str,
+    *,
+    separator: str = "/",
+    reject_absolute: bool = False,
+) -> Optional[List[str]]:
+    """Return sanitized path components or None if invalid.
+
+    Shared rules: reject empty input, null byte, empty segments, and any
+    segment exactly equal to '..'. If reject_absolute is True, reject paths
+    that start with /. Used by normalize_relative_path and
+    _normalize_results_dir_components to avoid drift.
+    """
+    if not path_str or not path_str.strip() or "\x00" in path_str:
+        return None
+    raw = path_str.strip()
+    if reject_absolute and raw.startswith("/"):
+        return None
+    raw = raw.replace("\\", "/")
+    parts = [p for p in raw.split(separator) if p]
+    if ".." in parts:
+        return None
+    if not parts:
+        return None
+    return [SafePath.sanitize_component(p) for p in parts]
+
+
+def _normalize_results_dir_components(results_dir: str) -> Optional[List[str]]:
+    """Normalize a results_dir string into safe path components.
+
+    Splits on path separators, rejects empty segments and any path containing
+    '..' (parent traversal). Sanitizes each segment. Returns None if invalid.
+    """
+    if not results_dir or not results_dir.strip() or "\x00" in results_dir:
+        return None
+    raw = results_dir.strip().replace("/", os.sep)
+    return _safe_path_components(raw, separator=os.sep, reject_absolute=False)
+
+
 def resolve_results_dir_under_base(base_dir: Union[str, Path], results_dir: str) -> Optional[Path]:
     """Resolve and validate a results_dir string against a base directory (e.g. RENGINE_RESULTS).
 
+    For absolute results_dir: resolve and ensure it is a directory under base_dir.
+    For relative results_dir: normalize into safe components, join under base, then validate.
     Returns the resolved Path if it exists, is a directory, and is under base_dir;
     otherwise None. Callers can pass the result to safe_rmtree(base_dir, path).
     """
-    if not results_dir or not str(results_dir).strip():
+    if not results_dir or not results_dir.strip():
         return None
     base = Path(base_dir).resolve()
-    path = Path(results_dir)
+    raw = results_dir.strip()
+    path = Path(raw)
+    if path.is_absolute():
+        try:
+            path = path.resolve()
+        except (OSError, TypeError):
+            return None
+        if not path.is_dir():
+            return None
+        base_abs = str(base)
+        path_abs = str(path)
+        if not is_safe_path(base_abs, path_abs):
+            return None
+        return path
+    components = _normalize_results_dir_components(results_dir)
+    if not components:
+        return None
     try:
-        path = path.resolve() if path.is_absolute() else (base / path).resolve()
+        path = base.joinpath(*components).resolve()
     except (OSError, TypeError):
         return None
     if not path.is_dir():
@@ -105,6 +162,20 @@ def safe_rmtree(base_dir: Union[str, Path], path: Union[str, Path]) -> RmtreeRes
     except OSError as e:
         logger.warning("Failed to remove directory %s: %s", resolved_abs, e)
         return "failed"
+
+
+def normalize_relative_path(relative_path: str) -> Optional[str]:
+    """Normalize a relative path for safe resolution under a base directory.
+
+    Rejects absolute paths, null bytes, empty segments, and any '..' segment.
+    Splits into segments, sanitizes each, and rejoins. Returns None if invalid.
+    Filenames containing '..' as part of the name (e.g. 'file..name') remain valid.
+    """
+    components = _safe_path_components(relative_path, separator="/", reject_absolute=True)
+    if not components:
+        return None
+    normalized = "/".join(components)
+    return normalized or None
 
 
 def is_safe_path(basedir, path, follow_symlinks=True):
@@ -197,7 +268,7 @@ class SafePath:
             return str(abs_path)
 
         except Exception as e:
-            logger.error(f"Error creating safe path: {str(e)}")
+            logger.error("Error creating safe path: %s", e)
             raise
 
     @classmethod

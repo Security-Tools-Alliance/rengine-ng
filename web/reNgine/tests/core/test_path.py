@@ -9,6 +9,7 @@ import tempfile
 import unittest
 
 from reNgine.core.path import (
+    normalize_relative_path,
     resolve_results_dir_under_base,
     safe_rmtree,
     safe_unlink,
@@ -166,3 +167,40 @@ class TestResolveResultsDirUnderBase(unittest.TestCase):
         os.symlink(real_dir, link_under_base)
         resolved = resolve_results_dir_under_base(self.base, "link_dir")
         self.assertIsNone(resolved)
+
+    def test_returns_none_for_relative_path_containing_dotdot(self):
+        """Paths with '..' are rejected by _normalize_results_dir_components (no rewriting)."""
+        self.assertIsNone(resolve_results_dir_under_base(self.base, "scan_1/../results"))
+        self.assertIsNone(resolve_results_dir_under_base(self.base, "foo/../bar"))
+
+
+class TestNormalizeRelativePath(unittest.TestCase):
+    """Tests for normalize_relative_path: any path containing '..' segment is rejected; substring '..' in names is allowed."""
+
+    def test_rejects_absolute_path(self):
+        self.assertIsNone(normalize_relative_path("/foo/bar"))
+        self.assertIsNone(normalize_relative_path("/"))
+
+    def test_rejects_null_byte(self):
+        self.assertIsNone(normalize_relative_path("foo\x00bar"))
+
+    def test_rejects_empty_or_whitespace(self):
+        self.assertIsNone(normalize_relative_path(""))
+        self.assertIsNone(normalize_relative_path("   "))
+
+    def test_rejects_single_dotdot_segment(self):
+        self.assertIsNone(normalize_relative_path(".."))
+
+    def test_rejects_any_path_containing_dotdot_segment(self):
+        """Any path that contains a '..' segment is invalid and returns None (no rewriting)."""
+        self.assertIsNone(normalize_relative_path("../foo"))
+        self.assertIsNone(normalize_relative_path("foo/.."))
+        self.assertIsNone(normalize_relative_path("a/../b"))
+        self.assertIsNone(normalize_relative_path("reports/../public"))
+
+    def test_allows_filename_containing_dotdot_substring(self):
+        """Segment '..' is rejected; filename like 'file..name' is allowed (no segment equals '..')."""
+        result = normalize_relative_path("file..name")
+        self.assertIsNotNone(result)
+        self.assertIn("file", result)
+        self.assertIn("name", result)

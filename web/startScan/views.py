@@ -1,6 +1,5 @@
 from datetime import datetime
 import json
-from pathlib import Path
 
 from django.contrib import messages
 from django.core.serializers.json import DjangoJSONEncoder
@@ -1082,16 +1081,15 @@ def delete_all_screenshots(request, slug):
         domains = Domain.objects.filter(project__slug=slug)
         cleanup_issues = False
         for domain in domains:
-            path = Path(RENGINE_RESULTS) / domain.name
-            # safe_rmtree no-ops when path is missing or invalid; we skip when not a dir.
-            if path.exists() and path.is_dir():
-                result = safe_rmtree(RENGINE_RESULTS, path)
+            resolved = resolve_results_dir_under_base(RENGINE_RESULTS, domain.name)
+            if resolved is not None and resolved.is_dir():
+                result = safe_rmtree(RENGINE_RESULTS, resolved)
                 if result == "refused":
                     logger.warning(
                         "Bulk results dir cleanup refused for domain %s at path %s; "
                         "likely configuration or permission issue. project_slug=%s",
                         domain.name,
-                        path,
+                        resolved,
                         slug,
                     )
                     cleanup_issues = True
@@ -1100,7 +1098,7 @@ def delete_all_screenshots(request, slug):
                         "Bulk results dir cleanup failed for domain %s at path %s; "
                         "transient or unexpected error. project_slug=%s",
                         domain.name,
-                        path,
+                        resolved,
                         slug,
                     )
                     cleanup_issues = True
@@ -1109,7 +1107,7 @@ def delete_all_screenshots(request, slug):
                         "Bulk results dir cleanup returned %s for domain %s at path %s. project_slug=%s",
                         result,
                         domain.name,
-                        path,
+                        resolved,
                         slug,
                     )
                     cleanup_issues = True

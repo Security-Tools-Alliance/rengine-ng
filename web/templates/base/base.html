@@ -19,10 +19,10 @@
     <link href="{% static 'plugins/switches/switches.min.css' %}" rel="stylesheet" type="text/css" />
     <link href="{% static 'custom/custom.css' %}" rel="stylesheet" type="text/css" />
     <link href="{% static 'custom/badges.css' %}" rel="stylesheet" type="text/css" />
-    <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
+    <link rel="stylesheet" type="text/css" href="{% static 'plugins/datatable/dataTables.bootstrap5.min.css' %}">
     <link rel="stylesheet" type="text/css" href="{% static 'plugins/datatable/global.css' %}">
     <!-- <link rel="stylesheet" type="text/css" href="{% static 'plugins/datatable/custom.css' %}"> -->
-    <link href="https://cdn.datatables.net/rowgroup/1.4.0/css/rowGroup.dataTables.min.css" rel="stylesheet" type="text/css" />
+    <link href="{% static 'plugins/datatable/rowGroup.dataTables.min.css' %}" rel="stylesheet" type="text/css" />
     <style media="screen">
       @font-face {
         font-family: "Cerebri Sans,sans-serif";
@@ -100,9 +100,9 @@
       (function(){ try { window.sessionStorage.setItem('_UBOLD_VISITED_', '1'); } catch (e) {} })();
     </script>
     <script src="{% static 'assets/js/vendor.min.js' %}"></script>
-    <script src="https://unpkg.com/@popperjs/core@2"></script>
-    <script src="https://unpkg.com/tippy.js@6"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/2.3.8/purify.min.js"></script>
+    <script src="{% static 'plugins/popperjs/popper.min.js' %}"></script>
+    <script src="{% static 'plugins/tippyjs/tippy.min.js' %}"></script>
+    <script src="{% static 'plugins/dompurify/purify.min.js' %}"></script>
     <script src="{% static 'assets/js/app.min.js' %}"></script>
     <script src="{% static 'custom/modal_manager.js' %}"></script>
     <script src="{% static 'custom/custom.js' %}"></script>
@@ -115,9 +115,9 @@
     <script src="{% static 'custom/port_display.js' %}"></script>
     <script src="{% static 'plugins/snackbar/snackbar.min.js' %}"></script>
     <script src="{% static 'plugins/sweetalert2/sweetalert2.all.min.js' %}"></script>
-    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
-    <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
-    <script src="https://cdn.datatables.net/rowgroup/1.4.0/js/dataTables.rowGroup.min.js"></script>
+    <script src="{% static 'plugins/datatable/jquery.dataTables.min.js' %}"></script>
+    <script src="{% static 'plugins/datatable/dataTables.bootstrap5.min.js' %}"></script>
+    <script src="{% static 'plugins/datatable/dataTables.rowGroup.min.js' %}"></script>
     <script type="text/javascript">
       $(document).ready(function(){
         // for tabs with urls, we need to append the hash in the url

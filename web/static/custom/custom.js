@@ -1796,7 +1796,9 @@ function get_and_render_subscan_history(endpoint, subdomain_id, subdomain_name) 
 				statusLine = '—';
 			}
 			const safeEngine = typeof htmlEncode === 'function' ? htmlEncode(engine_label) : engine_label;
-			cardsHtml += `<div class="card border-${color} border mini-card"><a href="#" class="text-reset item-hovered" onclick="show_subscan_results('${(endpoint || '').replace(/'/g, "\\'")}', ${result_obj.id})"><div class="card-header ${bg_color} text-${color} mini-card-header">${task_name} on <b>${subdomain_label}</b> using engine <b>${safeEngine}</b></div><div class="card-body mini-card-body"><p class="card-text">${status_badge}<span class="">${statusLine}</span>${errMsg}</p></div></a></div>`;
+			const safeTaskName = typeof htmlEncode === 'function' ? htmlEncode(task_name) : task_name;
+			const safeSubdomain = typeof htmlEncode === 'function' ? htmlEncode(subdomain_label) : subdomain_label;
+			cardsHtml += `<div class="card border-${color} border mini-card"><a href="#" class="text-reset item-hovered" onclick="show_subscan_results('${(endpoint || '').replace(/'/g, "\\'")}', ${result_obj.id})"><div class="card-header ${bg_color} text-${color} mini-card-header">${safeTaskName} on <b>${safeSubdomain}</b> using engine <b>${safeEngine}</b></div><div class="card-body mini-card-body"><p class="card-text">${status_badge}<span class="">${statusLine}</span>${errMsg}</p></div></a></div>`;
 		}
 		const bodyHtml = `<div id="subscan_history_table">${cardsHtml}</div>`;
 		if (window.ModalManager) ModalManager.showDialog({ title, bodyHtml, footerHtml: '' });

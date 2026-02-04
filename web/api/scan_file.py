@@ -49,7 +49,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from dashboard.utils import get_user_projects
-from reNgine.core.path import is_safe_path
+from reNgine.core.path import is_safe_path, normalize_relative_path
 from reNgine.settings import RENGINE_RESULTS, SECATOR_REPORTS_PREFIX
 from startScan.models import EndPoint, Subdomain, Technology
 
@@ -170,9 +170,8 @@ class ServeScanFile(APIView):
 
     def get(self, request, relative_path: str):
         global _secator_prefix_warning_count
-        if not relative_path or ".." in relative_path:
-            return Response(SCAN_FILE_ERROR_INVALID_PATH, status=400)
-        if relative_path.startswith("/"):
+        normalized_path = normalize_relative_path(relative_path)
+        if normalized_path is None:
             return Response(SCAN_FILE_ERROR_INVALID_PATH, status=400)
         path_has_prefix = SECATOR_REPORTS_PREFIX and (
             relative_path.startswith(SECATOR_REPORTS_PREFIX)
@@ -195,7 +194,7 @@ class ServeScanFile(APIView):
                     _SECATOR_PREFIX_WARNING_LIMIT,
                 )
         base = Path(RENGINE_RESULTS).resolve()
-        full_path = (base / relative_path).resolve()
+        full_path = (base / normalized_path).resolve()
         if not full_path.is_file():
             return Response(SCAN_FILE_ERROR_NOT_FOUND, status=404)
         if not is_safe_path(str(base), str(full_path)):

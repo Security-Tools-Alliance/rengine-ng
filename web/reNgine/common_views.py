@@ -48,9 +48,9 @@ def permission_denied(request, exception=None):
 
 def page_not_found(request, exception=None):
     if exception is not None:
-        logger.warning(f"Page not found: {request.path} - {exception}")
+        logger.warning("Page not found: %s - %s", request.path, exception)
     else:
-        logger.warning(f"Page not found: {request.path}")
+        logger.warning("Page not found: %s", request.path)
 
     context = RequestContext(request)
 

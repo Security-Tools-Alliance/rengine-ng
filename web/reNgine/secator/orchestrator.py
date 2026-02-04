@@ -59,7 +59,7 @@ class ScanOrchestrator:
 
         except ValueError as e:
             # Configuration or validation errors - these are expected and should be handled gracefully
-            logger.error(f"Configuration error in scan execution: {e}")
+            logger.error("Configuration error in scan execution: %s", e)
             self.scan_repo.mark_scan_failed(scan_history_id, str(e))
             raise
         except Exception as e:

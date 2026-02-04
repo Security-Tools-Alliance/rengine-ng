@@ -8,6 +8,7 @@ from pathlib import Path
 from django.core.management.base import BaseCommand
 import yaml
 
+from reNgine.core.validators import sanitize_path_component
 from scanEngine.models import SecatorWorkflow
 
 
@@ -47,8 +48,9 @@ class Command(BaseCommand):
                     )
                     continue
 
-                # Create filename
-                filename = f"{workflow.name}.yaml"
+                # Create filename from sanitized workflow name to prevent path traversal
+                sanitized_name = sanitize_path_component(workflow.name)
+                filename = f"{sanitized_name}.yaml"
 
                 # Write to Secator configs directory
                 configs_file = secator_configs_dir / filename

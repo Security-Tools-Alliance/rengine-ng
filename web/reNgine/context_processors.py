@@ -1,7 +1,9 @@
+import json
 import logging
 import re
 import threading
 import time
+from urllib.parse import urlparse
 
 from django.core.cache import cache
 from django.core.cache.backends.dummy import DummyCache
@@ -55,7 +57,7 @@ def _get_external_ip_with_fallback():
 
     for service_url in ip_services:
         try:
-            logger.debug(f"Attempting to retrieve IP from: {service_url}")
+            logger.debug("Attempting to retrieve IP from: %s", service_url)
             response = requests.get(service_url, timeout=settings.IP_SERVICE_TIMEOUT)
             response.raise_for_status()
 
@@ -63,24 +65,22 @@ def _get_external_ip_with_fallback():
             ip_text = response.text.strip()
 
             # For httpbin.org, the response is JSON
-            if "httpbin.org" in service_url:
-                import json
-
+            if urlparse(service_url).netloc == "httpbin.org":
                 data = json.loads(ip_text)
                 ip_text = data.get("origin", "").split(",")[0].strip()
 
             # Validate that we got a valid IP address
             if re.match(r"^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$", ip_text):
-                logger.info(f"Successfully retrieved external IP: {ip_text} from {service_url}")
+                logger.info("Successfully retrieved external IP: %s from %s", ip_text, service_url)
                 return ip_text
             else:
                 logger.warning(f"Invalid IP format received from {service_url}: {ip_text}")
 
         except requests.RequestException as e:
-            logger.warning(f"Failed to retrieve IP from {service_url}: {e}")
+            logger.warning("Failed to retrieve IP from %s: %s", service_url, e)
             continue
         except Exception as e:
-            logger.warning(f"Unexpected error retrieving IP from {service_url}: {e}")
+            logger.warning("Unexpected error retrieving IP from %s: %s", service_url, e)
             continue
 
     logger.error("All IP services failed to retrieve external IP")

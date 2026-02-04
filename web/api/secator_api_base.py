@@ -22,9 +22,16 @@ from reNgine.services.repositories.port_repository import PortRepository
 from reNgine.services.repositories.subdomain_repository import SubdomainRepository
 from reNgine.services.repositories.technology_repository import TechnologyRepository
 from reNgine.services.repositories.vulnerability_repository import VulnerabilityRepository
+from reNgine.utilities.error import get_safe_user_message
 from reNgine.utilities.logger import get_secator_api_logger
 from startScan.models import ScanHistory
 from targetApp.models import Domain
+
+
+def _is_validation_like_error(error: Exception) -> bool:
+    """Return True if the error message suggests a validation/client error (400)."""
+    error_str = str(error).lower()
+    return "validation" in error_str or "invalid" in error_str or "required" in error_str
 
 
 class SecatorAPIBase(APIView, ABC):
@@ -292,15 +299,16 @@ class SecatorAPIBase(APIView, ABC):
         if finding_id:
             context["id"] = finding_id
 
+        # Logging is done via self.logger.log_error in each branch; logger=None avoids double logging in get_safe_user_message.
         if isinstance(error, ObjectDoesNotExist):
             self.logger.log_error(error, context, exc_info=True)
-            return Response({"status": False, "error": f"Required object not found: {str(error)}"}, status=404)
+            return Response({"status": False, "error": get_safe_user_message(error, None)}, status=404)
         elif isinstance(error, IntegrityError):
             self.logger.log_error(error, context, exc_info=True)
-            return Response({"status": False, "error": f"Database integrity error: {str(error)}"}, status=409)
+            return Response({"status": False, "error": get_safe_user_message(error, None)}, status=409)
         else:
             self.logger.log_error(error, context, exc_info=True)
-            error_str = str(error).lower()
-            if "validation" in error_str or "invalid" in error_str or "required" in error_str:
-                return Response({"status": False, "error": str(error)}, status=400)
-            return Response({"status": False, "error": f"Error saving finding: {str(error)}"}, status=500)
+            return Response(
+                {"status": False, "error": get_safe_user_message(error, None)},
+                status=400 if _is_validation_like_error(error) else 500,
+            )
