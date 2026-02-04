@@ -11,6 +11,14 @@ on:
     paths-ignore:
       - '**/*.md'
       - '**/*.txt'
+  workflow_dispatch:
+    inputs:
+      language:
+        description: 'Language to analyze'
+        required: true
+        default: 'javascript'
+        type: choice
+        options: [javascript, python]
 
 jobs:
   analyze:
