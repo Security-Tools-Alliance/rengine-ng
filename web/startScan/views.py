@@ -18,6 +18,7 @@ from weasyprint import CSS, HTML
 
 from api.serializers import IpSerializer
 from reNgine.core.data import safe_int_cast
+from reNgine.core.path import resolve_results_dir_under_base, safe_rmtree
 from reNgine.definitions import (
     ABORTED_TASK,
     FAILED_TASK,
@@ -34,7 +35,6 @@ from reNgine.definitions import (
 from reNgine.secator.service import run_per_task_secator_scans, start_secator_scan
 from reNgine.services.repositories import EndpointRepository
 from reNgine.settings import RENGINE_RESULTS
-from reNgine.utilities.command import run_command
 from reNgine.utilities.logger import get_module_logger
 from reNgine.utilities.subdomain import get_interesting_subdomains
 from reNgine.utilities.time import local_to_utc_aware
@@ -878,10 +878,57 @@ def delete_scan(request, slug, id):
     obj = get_object_or_404(ScanHistory, id=id)
     if request.method == "POST":
         delete_dir = obj.results_dir
-        run_command("rm -rf " + delete_dir)
+        # resolve_results_dir_under_base returns None when results_dir is missing/invalid;
+        # we intentionally no-op in that case (no filesystem delete) for safety.
+        resolved = resolve_results_dir_under_base(RENGINE_RESULTS, delete_dir or "")
+        cleanup_status = None
+        if resolved is not None:
+            result = safe_rmtree(RENGINE_RESULTS, resolved)
+            cleanup_status = result
+            if result == "refused":
+                logger.warning(
+                    "Results dir cleanup refused for path %s; likely configuration or permission issue. "
+                    "scan_history_id=%s base_dir=%r",
+                    resolved,
+                    getattr(obj, "id", None),
+                    RENGINE_RESULTS,
+                )
+            elif result == "failed":
+                logger.warning(
+                    "Results dir cleanup failed for path %s; transient or unexpected error. "
+                    "scan_history_id=%s base_dir=%r",
+                    resolved,
+                    getattr(obj, "id", None),
+                    RENGINE_RESULTS,
+                )
+            elif result != "removed":
+                logger.warning(
+                    "Results dir cleanup returned %s for path %s. scan_history_id=%s base_dir=%r",
+                    result,
+                    resolved,
+                    getattr(obj, "id", None),
+                    RENGINE_RESULTS,
+                )
+        elif delete_dir:
+            cleanup_status = "resolution_failed"
+            logger.warning(
+                "results_dir resolution failed; not deleting directory. "
+                "scan_history_id=%s results_dir=%r base_dir=%r",
+                getattr(obj, "id", None),
+                delete_dir,
+                RENGINE_RESULTS,
+            )
         obj.delete()
         message_data = {"status": "true"}
-        messages.add_message(request, messages.INFO, "Scan history successfully deleted!")
+        if cleanup_status and cleanup_status != "removed":
+            messages.add_message(
+                request,
+                messages.WARNING,
+                "Scan history deleted, but result files could not be fully cleaned up. "
+                "This may indicate a configuration or permission issue; please contact an administrator.",
+            )
+        else:
+            messages.add_message(request, messages.INFO, "Scan history successfully deleted!")
     else:
         message_data = {"status": "false"}
         messages.add_message(request, messages.INFO, "Oops! something went wrong!")
@@ -1034,10 +1081,49 @@ def delete_all_scan_results(request, slug):
 def delete_all_screenshots(request, slug):
     if request.method == "POST":
         domains = Domain.objects.filter(project__slug=slug)
+        cleanup_issues = False
         for domain in domains:
-            run_command(f"rm -rf {str(Path(RENGINE_RESULTS) / domain.name)}")
+            path = Path(RENGINE_RESULTS) / domain.name
+            # safe_rmtree no-ops when path is missing or invalid; we skip when not a dir.
+            if path.exists() and path.is_dir():
+                result = safe_rmtree(RENGINE_RESULTS, path)
+                if result == "refused":
+                    logger.warning(
+                        "Bulk results dir cleanup refused for domain %s at path %s; "
+                        "likely configuration or permission issue. project_slug=%s",
+                        domain.name,
+                        path,
+                        slug,
+                    )
+                    cleanup_issues = True
+                elif result == "failed":
+                    logger.warning(
+                        "Bulk results dir cleanup failed for domain %s at path %s; "
+                        "transient or unexpected error. project_slug=%s",
+                        domain.name,
+                        path,
+                        slug,
+                    )
+                    cleanup_issues = True
+                elif result != "removed":
+                    logger.warning(
+                        "Bulk results dir cleanup returned %s for domain %s at path %s. project_slug=%s",
+                        result,
+                        domain.name,
+                        path,
+                        slug,
+                    )
+                    cleanup_issues = True
         message_data = {"status": "true"}
-        messages.add_message(request, messages.INFO, "Screenshots successfully deleted!")
+        if cleanup_issues:
+            messages.add_message(
+                request,
+                messages.WARNING,
+                "Screenshots deletion completed, but some result directories could not be fully cleaned up. "
+                "This may indicate a configuration or permission issue; please contact an administrator.",
+            )
+        else:
+            messages.add_message(request, messages.INFO, "Screenshots successfully deleted!")
     return JsonResponse(message_data)
 
 
@@ -1183,14 +1269,63 @@ def schedule_organization_scan(request, slug, id):
 @has_permission_decorator(PERM_MODIFY_SCAN_RESULTS, redirect_url=FOUR_OH_FOUR_URL)
 def delete_scans(request, slug):
     if request.method == "POST":
+        cleanup_issues = False
         for key, value in request.POST.items():
             if key == "scan_history_table_length" or key == "csrfmiddlewaretoken":
                 continue
             scan = get_object_or_404(ScanHistory, id=value)
             delete_dir = scan.results_dir
-            run_command("rm -rf " + delete_dir)
+            # resolve_results_dir_under_base returns None when results_dir is missing/invalid;
+            # we intentionally no-op in that case (no filesystem delete) for safety.
+            resolved = resolve_results_dir_under_base(RENGINE_RESULTS, delete_dir or "")
+            if resolved is not None:
+                result = safe_rmtree(RENGINE_RESULTS, resolved)
+                if result == "refused":
+                    logger.warning(
+                        "Results dir cleanup refused for path %s; likely configuration or permission issue. "
+                        "scan_history_id=%s base_dir=%r",
+                        resolved,
+                        getattr(scan, "id", None),
+                        RENGINE_RESULTS,
+                    )
+                    cleanup_issues = True
+                elif result == "failed":
+                    logger.warning(
+                        "Results dir cleanup failed for path %s; transient or unexpected error. "
+                        "scan_history_id=%s base_dir=%r",
+                        resolved,
+                        getattr(scan, "id", None),
+                        RENGINE_RESULTS,
+                    )
+                    cleanup_issues = True
+                elif result != "removed":
+                    logger.warning(
+                        "Results dir cleanup returned %s for path %s. scan_history_id=%s base_dir=%r",
+                        result,
+                        resolved,
+                        getattr(scan, "id", None),
+                        RENGINE_RESULTS,
+                    )
+                    cleanup_issues = True
+            elif delete_dir:
+                logger.warning(
+                    "results_dir resolution failed; not deleting directory. "
+                    "scan_history_id=%s results_dir=%r base_dir=%r",
+                    getattr(scan, "id", None),
+                    delete_dir,
+                    RENGINE_RESULTS,
+                )
+                cleanup_issues = True
             scan.delete()
-        messages.add_message(request, messages.INFO, "All Scans deleted!")
+        if cleanup_issues:
+            messages.add_message(
+                request,
+                messages.WARNING,
+                "All scans deleted, but some result directories could not be fully cleaned up. "
+                "This may indicate a configuration or permission issue; please contact an administrator.",
+            )
+        else:
+            messages.add_message(request, messages.INFO, "All Scans deleted!")
     return HttpResponseRedirect(reverse("scan_history", kwargs={"slug": slug}))
 
 

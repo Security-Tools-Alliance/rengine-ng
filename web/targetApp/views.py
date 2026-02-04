@@ -4,6 +4,7 @@ import io
 import ipaddress
 import json
 import logging
+from pathlib import Path
 from urllib.parse import urlparse
 
 from django import http
@@ -21,6 +22,7 @@ import validators
 
 from api.serializers import IpSerializer
 from reNgine.core.data import get_ip_info, get_ips_from_cidr_range
+from reNgine.core.path import resolve_results_dir_under_base, safe_rmtree
 from reNgine.core.validators import is_valid_cidr
 from reNgine.definitions import (
     ABORTED_TASK,
@@ -32,7 +34,6 @@ from reNgine.definitions import (
     SUCCESS_TASK,
 )
 from reNgine.services.repositories import EndpointRepository
-from reNgine.utilities.command import run_command
 from reNgine.utilities.dns import get_reverse_dns
 from reNgine.utilities.url import sanitize_url
 from scanEngine.models import EngineType
@@ -850,8 +851,31 @@ def delete_target(request, slug, id):
     if request.method == "POST":
         try:
             target = get_object_or_404(Domain, id=id)
-            run_command(f"rm -rf {settings.RENGINE_RESULTS}/{target.name}")
-            run_command(f"rm -rf {settings.RENGINE_RESULTS}/{target.name}*")  # for backward compatibility
+            base = Path(settings.RENGINE_RESULTS)
+            if base.exists():
+                result_dirs = set()
+                for scan in ScanHistory.objects.filter(domain=target):
+                    results_dir = getattr(scan, "results_dir", None) or ""
+                    # resolve_results_dir_under_base returns None when results_dir is missing/invalid;
+                    # we intentionally no-op in that case (no filesystem delete) for safety.
+                    resolved = resolve_results_dir_under_base(settings.RENGINE_RESULTS, results_dir)
+                    if resolved is not None:
+                        result_dirs.add(resolved)
+                for dir_path in result_dirs:
+                    result = safe_rmtree(settings.RENGINE_RESULTS, dir_path)
+                    if result != "removed":
+                        logger.warning("Results dir cleanup returned %s for path %s", result, dir_path)
+                direct = base / target.name
+                if direct.exists() and direct.is_dir():
+                    result = safe_rmtree(settings.RENGINE_RESULTS, direct)
+                    if result != "removed":
+                        logger.warning("Results dir cleanup returned %s for path %s", result, direct)
+                prefix = f"{target.name}__"
+                for entry in base.iterdir():
+                    if entry.is_dir() and entry.name.startswith(prefix):
+                        result = safe_rmtree(settings.RENGINE_RESULTS, entry)
+                        if result != "removed":
+                            logger.warning("Results dir cleanup returned %s for path %s", result, entry)
             target.delete()
             response_data = {"status": "true"}
             messages.add_message(request, messages.INFO, "Domain successfully deleted!")

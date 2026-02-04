@@ -89,19 +89,32 @@ class TestRengineUpdateCheck(BaseTestCase):
 
 
 class TestGetFileContents(BaseTestCase):
-    """Test case for retrieving file contents."""
+    """Test case for preview of custom scan assets (GF patterns, Nuclei templates)."""
 
-    @patch("api.views.os.path.exists")
-    @patch("api.views.run_command")
-    def test_get_file_contents(self, mock_run_command, mock_exists):
-        """Test retrieving contents of a file."""
-        mock_exists.return_value = True
-        mock_run_command.return_value = (0, "test content")
+    @patch("api.views._read_asset_preview")
+    def test_get_file_contents_nuclei_template(self, mock_read):
+        """Test retrieving contents of a Nuclei template for preview."""
+        mock_read.return_value = (True, "test template content", None)
         url = reverse("api:getFileContents")
-        response = self.client.get(url, {"nuclei_config": True})
+        response = self.client.get(url, {"nuclei_template": True, "name": "my-template"})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data["status"])
-        self.assertGreaterEqual(len(response.data["content"]), 1)
+        self.assertEqual(response.data["content"], "test template content")
+        mock_read.assert_called_once()
+
+    @patch("api.views._read_asset_preview")
+    def test_get_file_contents_invalid_params(self, mock_read):
+        """Test that requests without supported params return 410 Gone."""
+        mock_read.side_effect = AssertionError("should not be called")
+        url = reverse("api:getFileContents")
+        response = self.client.get(url, {})
+        self.assertEqual(response.status_code, status.HTTP_410_GONE)
+        self.assertFalse(response.data["status"])
+        self.assertIn("message", response.data)
+        self.assertIn("gf_pattern", response.data["message"])
+        self.assertIn("nuclei_template", response.data["message"])
+        self.assertIn("migration_note", response.data)
+        mock_read.assert_not_called()
 
 
 class TestDeleteMultipleRows(BaseTestCase):

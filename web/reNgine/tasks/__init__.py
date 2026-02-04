@@ -1,21 +1,9 @@
 """
-Celery tasks for reNgine.
+reNgine tasks (helpers and notifications).
 
-⚠️ LEGACY TASKS REMOVED ⚠️
-The following legacy tasks have been removed as Secator now handles all scanning:
-- command tasks (run_command)
-- subdomain tasks (subdomain_discovery)
-- dns tasks (ip_range_discovery, ping_hosts_task, etc.)
-- port scan tasks (nmap, port_scan, etc.)
-- url tasks (fetch_url, remove_duplicate_endpoints, etc.)
-- vulnerability tasks (nuclei_scan, dalfox_xss_scan, etc.)
-- fuzzing tasks (dir_file_fuzz)
-- screenshot tasks (screenshot)
-- http tasks (http_crawl, etc.)
-- detect tasks (run_cmseek, waf_detection, etc.)
-- osint tasks (dorking, h8mail, etc.)
-
-For all scanning needs, use Secator tasks via initiate_secator_scan.
+Legacy Celery scan tasks have been removed; Secator handles scanning via
+initiate_secator_scan. Scan completion and status are updated by the Secator
+flow (progress, service), not by a report task.
 """
 
 from reNgine.secator import initiate_secator_scan

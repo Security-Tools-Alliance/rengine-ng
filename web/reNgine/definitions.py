@@ -18,6 +18,11 @@ logger = logging.getLogger("django")
 
 EMAIL_REGEX = re.compile(r"[a-z0-9\.\-+_]+@[a-z0-9\.\-+_]+\.[a-z]+")
 
+# Max bytes to read for asset preview (e.g. GF patterns, Nuclei templates) in API.
+MAX_ASSET_PREVIEW_BYTES = 256 * 1024  # 256 KiB
+# Default timeout in seconds for outbound HTTP requests (e.g. notifications).
+REQUEST_TIMEOUT_SECONDS = 10
+
 ###############################################################################
 # YAML CONFIG DEFINITIONS
 ###############################################################################

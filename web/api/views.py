@@ -2,7 +2,6 @@ from collections import defaultdict
 from datetime import datetime
 import json
 import logging
-import os.path
 from pathlib import Path
 import re
 import threading
@@ -24,7 +23,7 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.parsers import JSONParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from rest_framework.status import HTTP_200_OK, HTTP_400_BAD_REQUEST
+from rest_framework.status import HTTP_200_OK, HTTP_400_BAD_REQUEST, HTTP_410_GONE
 from rest_framework.views import APIView
 import validators
 
@@ -37,11 +36,11 @@ from recon_note.models import TodoNote
 # NOTE: Legacy tasks removed (query_ip_history, query_reverse_whois, query_whois,
 # run_cmseek, run_command, run_gf_list, run_wafw00f) - functionality now in Secator
 from reNgine.core.data import get_data_from_post_request, safe_int_cast
-from reNgine.core.path import is_safe_path
 from reNgine.definitions import (
     ABORTED_TASK,
     FAILED_TASK,
     INITIATED_TASK,
+    MAX_ASSET_PREVIEW_BYTES,
     NUCLEI_SEVERITY_MAP,
     RUNNING_TASK,
     SUCCESS_TASK,
@@ -54,12 +53,15 @@ from reNgine.llm.utils import convert_markdown_to_html, get_default_llm_model, i
 from reNgine.secator.selected_targets import resolve_selected_targets
 from reNgine.secator.service import run_per_task_secator_scans, start_secator_scan
 from reNgine.services.repositories.scan_repository import ScanRepository
-from reNgine.settings import RENGINE_CURRENT_VERSION
+from reNgine.settings import (
+    RENGINE_CURRENT_VERSION,
+    RENGINE_GF_PATTERNS_DIR,
+    RENGINE_NUCLEI_TEMPLATES_DIR,
+)
 from reNgine.tasks import (
     llm_vulnerability_report,
     send_hackerone_report,
 )
-from reNgine.utilities.command import run_command
 from reNgine.utilities.endpoint import get_interesting_endpoints
 from reNgine.utilities.external import get_open_ai_key
 from reNgine.utilities.lookup import get_lookup_keywords
@@ -2147,101 +2149,110 @@ class VulnerabilityReport(APIView):
         return Response({"status": send_hackerone_report(vulnerability_id)})
 
 
+def _read_asset_preview(base_dir: str, name: str, extension: str) -> tuple[bool, str, str]:
+    """Read asset file for preview with size limit and UTF-8 validation.
+
+    Reads up to MAX_ASSET_PREVIEW_BYTES + 1; large files get a truncated preview
+    instead of a hard failure. Returns (success, content, message): content is ""
+    on failure; message is set on failure or when preview was truncated.
+    Rejects absolute paths and ".." to enforce sandboxing.
+    """
+    if not name:
+        return False, "", "Invalid path!"
+
+    try:
+        name_path = Path(name)
+    except TypeError:
+        return False, "", "Invalid path!"
+    if name_path.is_absolute():
+        return False, "", "Invalid path!"
+    if any(part == ".." for part in name_path.parts):
+        return False, "", "Invalid path!"
+
+    try:
+        base_path = Path(base_dir).resolve()
+        target_path = base_path / name_path
+        if not name_path.suffix:
+            ext = extension.lstrip(".")
+            target_path = target_path.with_suffix(f".{ext}")
+        target_path = target_path.resolve()
+        target_path.relative_to(base_path)
+    except (OSError, ValueError):
+        return False, "", "Refusing to read asset outside of base directory."
+
+    if not target_path.exists():
+        return False, "", "Asset not found."
+    if not target_path.is_file():
+        return False, "", "Asset path is not a file."
+
+    try:
+        with target_path.open("rb") as f:
+            data = f.read(MAX_ASSET_PREVIEW_BYTES + 1)
+    except OSError as exc:
+        logger.warning(
+            "Failed to read asset preview from path %s: %s",
+            target_path,
+            exc,
+            exc_info=True,
+        )
+        return False, "", f"Error reading asset: {exc}"
+
+    truncated = len(data) > MAX_ASSET_PREVIEW_BYTES
+    if truncated:
+        data = data[: MAX_ASSET_PREVIEW_BYTES]
+
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        return False, "", "Asset is not UTF-8 text and cannot be previewed as text."
+
+    message = "Preview truncated due to size limit." if truncated else ""
+    return True, text, message
+
+
 class GetFileContents(APIView):
+    """Preview custom scan assets (GF patterns, Nuclei templates) only.
+
+    Supported query params: gf_pattern, nuclei_template (with name=).
+    Other config types (e.g. tool config files) are no longer supported and
+    return 410 Gone with a migration_note so clients can detect the behavior change.
+    """
+
+    ASSET_PARAMS = {
+        "gf_pattern": (RENGINE_GF_PATTERNS_DIR, "json"),
+        "nuclei_template": (RENGINE_NUCLEI_TEMPLATES_DIR, "yaml"),
+    }
+
     def get(self, request, format=None):
         req = self.request
-        name = req.query_params.get("name")
-
+        name = req.query_params.get("name", "")
         response = {"status": False}
 
-        if "nuclei_config" in req.query_params:
-            path = str(Path.home() / ".config" / "nuclei" / "config.yaml")
-            if not os.path.exists(path):
-                run_command(f"touch {path}")
-                response["message"] = "File Created!"
-            with open(path, "r") as f:
-                response["status"] = True
-                response["content"] = f.read()
-            return Response(response)
+        for param, (base_dir, extension) in self.ASSET_PARAMS.items():
+            if param in req.query_params:
+                success, content, message = _read_asset_preview(base_dir, name, extension)
+                if success:
+                    response["status"] = True
+                    response["content"] = content
+                    if message:
+                        response["message"] = message
+                else:
+                    response["message"] = message or "Invalid path!"
+                return Response(response)
 
-        if "subfinder_config" in req.query_params:
-            path = str(Path.home() / ".config" / "subfinder" / "config.yaml")
-            if not os.path.exists(path):
-                run_command(f"touch {path}")
-                response["message"] = "File Created!"
-            with open(path, "r") as f:
-                response["status"] = True
-                response["content"] = f.read()
-            return Response(response)
-
-        if "naabu_config" in req.query_params:
-            path = str(Path.home() / ".config" / "naabu" / "config.yaml")
-            if not os.path.exists(path):
-                run_command(f"touch {path}")
-                response["message"] = "File Created!"
-            with open(path, "r") as f:
-                response["status"] = True
-                response["content"] = f.read()
-            return Response(response)
-
-        if "theharvester_config" in req.query_params:
-            path = str(Path.home() / ".config" / "theHarvester" / "api-keys.yaml")
-            if not os.path.exists(path):
-                run_command(f"touch {path}")
-                response["message"] = "File Created!"
-            with open(path, "r") as f:
-                response["status"] = True
-                response["content"] = f.read()
-            return Response(response)
-
-        if "amass_config" in req.query_params:
-            path = str(Path.home() / ".config" / "amass" / "config.ini")
-            if not os.path.exists(path):
-                run_command(f"touch {path}")
-                response["message"] = "File Created!"
-            with open(path, "r") as f:
-                response["status"] = True
-                response["content"] = f.read()
-            return Response(response)
-
-        if "gf_pattern" in req.query_params:
-            basedir = str(Path.home() / ".gf")
-            path = str(Path.home() / ".gf" / f"{name}.json")
-            if is_safe_path(basedir, path) and os.path.exists(path):
-                with open(path, "r") as f:
-                    content = f.read()
-                response["status"] = True
-                response["content"] = content
-            else:
-                response["message"] = "Invalid path!"
-                response["status"] = False
-            return Response(response)
-
-        if "nuclei_template" in req.query_params:
-            safe_dir = str(Path.home() / "nuclei-templates")
-            path = str(Path.home() / "nuclei-templates" / f"{name}")
-            if is_safe_path(safe_dir, path) and os.path.exists(path):
-                with open(path.format(name), "r") as f:
-                    content = f.read()
-                response["status"] = True
-                response["content"] = content
-            else:
-                response["message"] = "Invalid Path!"
-                response["status"] = False
-            return Response(response)
-
-        if "gau_config" in req.query_params:
-            path = str(Path.home() / ".config" / "gau" / "config.toml")
-            if not os.path.exists(path):
-                run_command(f"touch {path}")
-                response["message"] = "File Created!"
-            with open(path, "r") as f:
-                response["status"] = True
-                response["content"] = f.read()
-            return Response(response)
-
-        response["message"] = "Invalid Query Params"
-        return Response(response)
+        response["message"] = (
+            "This API only supports gf_pattern and nuclei_template. Other config types are no longer supported."
+        )
+        response["migration_note"] = (
+            "Previously this endpoint could serve other tool config files; "
+            "it now only serves custom GF patterns and Nuclei templates. "
+            "Use only query params gf_pattern or nuclei_template with name=."
+        )
+        logger.warning(
+            "GetFileContents returned 410 Gone (unsupported params); query_params=%s",
+            dict(req.query_params),
+        )
+        return Response(response, status=HTTP_410_GONE)
 
 
 class GfList(APIView):

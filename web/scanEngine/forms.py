@@ -100,7 +100,7 @@ class UpdateEngineForm(forms.ModelForm):
 
 class AddWordlistForm(forms.Form):
     name = forms.CharField(
-        required=True,
+        required=False,
         widget=forms.TextInput(
             attrs={
                 "class": "form-control form-control-lg",
@@ -110,7 +110,7 @@ class AddWordlistForm(forms.Form):
         ),
     )
     short_name = forms.CharField(
-        required=True,
+        required=False,
         validators=[validate_short_name],
         widget=forms.TextInput(
             attrs={

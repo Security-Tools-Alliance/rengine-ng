@@ -23,8 +23,6 @@ from startScan.models import ScanActivity, ScanHistory, SubScan, Vulnerability
 logger = get_module_logger(__name__)
 
 
-# TODO Use secator to launch this task
-# @app.task(name="send_notif", bind=False, queue="io")
 def send_notif(message, scan_history_id=None, subscan_id=None, **options):
     if "title" not in options:
         message = enrich_notification(message, scan_history_id, subscan_id)
@@ -34,8 +32,6 @@ def send_notif(message, scan_history_id=None, subscan_id=None, **options):
     send_telegram_message(message)
 
 
-# TODO Use secator to launch this task
-# @app.task(name="send_scan_notif", bind=False, queue="io")
 def send_scan_notif(scan_history_id, subscan_id=None, engine_id=None, status="RUNNING"):
     """Send scan status notification. Works for scan or a subscan if subscan_id
     is passed.
@@ -71,8 +67,6 @@ def send_scan_notif(scan_history_id, subscan_id=None, engine_id=None, status="RU
     send_notif(msg, scan_history_id, subscan_id, **opts)
 
 
-# TODO Use secator to launch this task
-# @app.task(name="send_task_notif", bind=False, queue="io")
 def send_task_notif(
     task_name,
     status=None,

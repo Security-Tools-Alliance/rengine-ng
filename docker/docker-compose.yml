@@ -44,6 +44,9 @@ services:
       - ../.env
     volumes:
       - scan_results:/home/secator/.secator/reports
+      - nuclei_templates:/home/secator/nuclei-templates
+      - wordlist:/home/secator/.secator/wordlists
+      - gf_patterns:/home/secator/.gf
       - ./worker/entrypoint.sh:/entrypoint.sh:ro
     depends_on:
       - redis
@@ -80,6 +83,7 @@ services:
       - ./web/entrypoint.sh:/entrypoint.sh:ro
       - nuclei_templates:/home/rengine/nuclei-templates
       - wordlist:/home/rengine/wordlists
+      - gf_patterns:/home/rengine/.gf
       - scan_results:/home/rengine/scan_results
     healthcheck:
       test: ["CMD", "curl", "-f", "-k", "http://localhost:8000"]
@@ -144,6 +148,8 @@ networks:
 volumes:
   postgres_data:
     name: rengine_postgres_data
+  gf_patterns:
+    name: rengine_gf_patterns
   nuclei_templates:
     name: rengine_nuclei_templates
   wordlist:

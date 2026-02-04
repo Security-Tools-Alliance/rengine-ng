@@ -6,12 +6,105 @@ Safe path handling with no Django dependencies.
 import os
 from pathlib import Path
 import re
-from typing import List, Union
+import shutil
+from typing import List, Literal, Optional, Union
 
 from reNgine.utilities.logger import get_module_logger
 
 
 logger = get_module_logger(__name__)
+
+RmtreeResult = Literal["removed", "refused", "not_found", "failed"]
+
+UnlinkResult = Literal["removed", "refused", "not_found", "failed"]
+
+
+def safe_unlink(base_dir: Union[str, Path], path: Union[str, Path]) -> UnlinkResult:
+    """Remove a single file only if path (after resolving symlinks) is under base_dir.
+
+    Returns:
+        "removed": File was removed.
+        "refused": Path is outside base_dir (not removed).
+        "not_found": Path does not exist or is not a file (nothing to remove).
+        "failed": Path was valid but removal raised OSError.
+    """
+    base_dir_abs = os.path.abspath(str(base_dir))
+    try:
+        resolved_path = Path(path).resolve()
+    except OSError as e:
+        logger.warning("Failed to resolve path %s: %s", path, e)
+        return "failed"
+    resolved_abs = os.path.abspath(str(resolved_path))
+    if not is_safe_path(base_dir_abs, resolved_abs):
+        logger.warning("Refused to remove path outside base: %s -> %s", path, resolved_abs)
+        return "refused"
+    if not resolved_path.exists():
+        return "not_found"
+    if not resolved_path.is_file():
+        return "not_found"
+    try:
+        resolved_path.unlink()
+        logger.info("Removed file %s", resolved_abs)
+        return "removed"
+    except OSError as e:
+        logger.warning("Failed to remove file %s: %s", resolved_abs, e)
+        return "failed"
+
+
+def resolve_results_dir_under_base(base_dir: Union[str, Path], results_dir: str) -> Optional[Path]:
+    """Resolve and validate a results_dir string against a base directory (e.g. RENGINE_RESULTS).
+
+    Returns the resolved Path if it exists, is a directory, and is under base_dir;
+    otherwise None. Callers can pass the result to safe_rmtree(base_dir, path).
+    """
+    if not results_dir or not str(results_dir).strip():
+        return None
+    base = Path(base_dir).resolve()
+    path = Path(results_dir)
+    try:
+        path = path.resolve() if path.is_absolute() else (base / path).resolve()
+    except (OSError, TypeError):
+        return None
+    if not path.is_dir():
+        return None
+    base_abs = str(base)
+    path_abs = str(path)
+    if not is_safe_path(base_abs, path_abs):
+        return None
+    return path
+
+
+def safe_rmtree(base_dir: Union[str, Path], path: Union[str, Path]) -> RmtreeResult:
+    """Remove directory tree only if path (after resolving symlinks) is under base_dir.
+
+    Resolves the real target first so a symlink under base_dir that points
+    outside the intended tree is refused.
+
+    Returns:
+        "removed": Directory was removed.
+        "refused": Path is outside base_dir (not removed).
+        "not_found": Path does not exist or is not a directory (nothing to remove).
+        "failed": Path was valid but removal raised OSError.
+    """
+    base_dir_abs = os.path.abspath(str(base_dir))
+    try:
+        resolved_path = Path(path).resolve()
+    except OSError as e:
+        logger.warning("Failed to resolve path %s: %s", path, e)
+        return "failed"
+    resolved_abs = os.path.abspath(str(resolved_path))
+    if not is_safe_path(base_dir_abs, resolved_abs):
+        logger.warning("Refused to remove path outside base: %s -> %s", path, resolved_abs)
+        return "refused"
+    if not os.path.isdir(resolved_abs):
+        return "not_found"
+    try:
+        shutil.rmtree(resolved_abs)
+        logger.info("Removed directory %s", resolved_abs)
+        return "removed"
+    except OSError as e:
+        logger.warning("Failed to remove directory %s: %s", resolved_abs, e)
+        return "failed"
 
 
 def is_safe_path(basedir, path, follow_symlinks=True):

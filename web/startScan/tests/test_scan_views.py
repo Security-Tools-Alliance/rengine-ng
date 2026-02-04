@@ -265,10 +265,9 @@ class TestDeleteAllScanResults(BaseTestCase):
         """Set up test environment."""
         super().setUp()
 
-    @patch("startScan.views.run_command")
-    def test_delete_all_scan_results_view(self, mock_run_command):
+    @patch("startScan.views.safe_rmtree")
+    def test_delete_all_scan_results_view(self, mock_safe_rmtree):
         """Test the delete all scan results view."""
-        mock_run_command.return_value = True
         response = self.client.post(
             reverse(
                 "delete_all_scan_results",
@@ -287,10 +286,9 @@ class TestDeleteAllScreenshots(BaseTestCase):
         """Set up test environment."""
         super().setUp()
 
-    @patch("startScan.views.run_command")
-    def test_delete_all_screenshots_view(self, mock_run_command):
+    @patch("startScan.views.safe_rmtree")
+    def test_delete_all_screenshots_view(self, mock_safe_rmtree):
         """Test the delete all screenshots view."""
-        mock_run_command.return_value = True
         response = self.client.post(
             reverse(
                 "delete_all_screenshots",
@@ -309,10 +307,9 @@ class TestDeleteScans(BaseTestCase):
         """Set up test environment."""
         super().setUp()
 
-    @patch("startScan.views.run_command")
-    def test_delete_scans_view(self, mock_run_command):
+    @patch("startScan.views.safe_rmtree")
+    def test_delete_scans_view(self, mock_safe_rmtree):
         """Test the delete scans view."""
-        mock_run_command.return_value = True
         # The view expects scan IDs as POST keys (not in a list)
         data = {str(self.data_generator.scan_history.id): self.data_generator.scan_history.id}
         response = self.client.post(

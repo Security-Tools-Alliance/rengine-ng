@@ -8,8 +8,6 @@ from startScan.models import CountryISO, IpAddress
 logger = get_module_logger(__name__)
 
 
-# TODO Use secator to launch this task
-# @app.task(name="geo_localize", bind=False, queue="io")
 def geo_localize(host, ip_id=None):
     """Uses geoiplookup to find location associated with host.
 
@@ -42,8 +40,6 @@ def geo_localize(host, ip_id=None):
     return None
 
 
-# TODO Use secator to launch this task
-# @app.task(name="geo_localize_batch", bind=False, queue="io")
 def geo_localize_batch(ip_addresses):
     """Batch geolocalization for multiple IP addresses.
 

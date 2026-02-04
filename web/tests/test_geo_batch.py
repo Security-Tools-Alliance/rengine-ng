@@ -10,7 +10,7 @@ This module tests the batch geolocalization system including:
 
 import threading
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 from django.contrib.auth.models import User
 from django.test import TestCase
@@ -387,16 +387,13 @@ class TestBatchGeolocalization(TestCase):
     @patch("reNgine.tasks.geo.geo_localize_batch")
     def test_trigger_batch_geolocalization_with_ips(self, mock_geo_batch):
         """Test trigger_batch_geolocalization with collected IPs."""
-        mock_task = Mock()
-        mock_task.id = "test-task-id"
-        mock_geo_batch.delay = Mock(return_value=mock_task)
-
         dns._thread_local.geo_ip_collection = {"8.8.8.8", "1.1.1.1"}
 
         result = dns.trigger_batch_geolocalization()
 
-        self.assertEqual(result, "test-task-id")
-        call_args = mock_geo_batch.delay.call_args[0][0]
+        self.assertEqual(result, {"count": 2})
+        mock_geo_batch.assert_called_once()
+        call_args = mock_geo_batch.call_args[0][0]
         self.assertEqual(set(call_args), {"8.8.8.8", "1.1.1.1"})
 
         if hasattr(dns._thread_local, "geo_ip_collection"):
@@ -430,7 +427,7 @@ class TestDecorator(TestCase):
     @patch("reNgine.utilities.dns.trigger_batch_geolocalization")
     def test_decorator_success(self, mock_trigger):
         """Test decorator with successful function execution."""
-        mock_trigger.return_value = "test-task-id"
+        mock_trigger.return_value = {"count": 2}
 
         @dns.with_batch_geolocalization
         def test_function():
@@ -444,7 +441,7 @@ class TestDecorator(TestCase):
     @patch("reNgine.utilities.dns.trigger_batch_geolocalization")
     def test_decorator_exception(self, mock_trigger):
         """Test decorator with function that raises exception."""
-        mock_trigger.return_value = "test-task-id"
+        mock_trigger.return_value = {"count": 0}
 
         @dns.with_batch_geolocalization
         def test_function():
@@ -514,9 +511,6 @@ class TestIntegration(TestCase):
     def test_complete_workflow(self, mock_geo_batch, mock_geoiplookup):
         """Test the complete workflow from IP collection to batch geolocalization."""
         mock_geoiplookup.return_value = (True, "US", "United States", None)
-        mock_task = Mock()
-        mock_task.id = "test-task-id"
-        mock_geo_batch.delay = Mock(return_value=mock_task)
 
         # Clear collection
         if hasattr(dns._thread_local, "geo_ip_collection"):
@@ -544,26 +538,24 @@ class TestIntegration(TestCase):
             collected_ips = []
         if collected_ips:
             self.assertGreaterEqual(len(collected_ips), 1)
-        # Check that public IPs are in the collection
         public_ips = ["8.8.8.8", "1.1.1.1"]
         for ip in public_ips:
             if ip in collected_ips:
                 self.assertIn(ip, collected_ips)
-        # Check that private IPs are not in the collection
         private_ips = ["192.168.1.1", "10.0.0.1"]
         for ip in private_ips:
             self.assertNotIn(ip, collected_ips)
 
-        task_id = dns.trigger_batch_geolocalization()
-        if task_id is not None:
-            self.assertEqual(task_id, "test-task-id")
-        if mock_geo_batch.delay.called:
-            call_args = mock_geo_batch.delay.call_args[0][0]
+        result = dns.trigger_batch_geolocalization()
+        if result is not None:
+            self.assertIn("count", result)
+            self.assertGreaterEqual(result["count"], 1)
+        if mock_geo_batch.called:
+            call_args = mock_geo_batch.call_args[0][0]
             self.assertGreater(len(call_args), 0)
             for ip in call_args:
                 self.assertNotIn(ip, ["192.168.1.1", "10.0.0.1", "172.16.0.1"])
 
-        # Check that collection was cleared
         if hasattr(dns._thread_local, "geo_ip_collection"):
             self.assertEqual(len(dns._thread_local.geo_ip_collection), 0)
 

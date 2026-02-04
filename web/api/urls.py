@@ -152,6 +152,7 @@ urlpatterns = [
     path("listScanHistory/", ListScanHistory.as_view(), name="listScanHistory"),
     path("listTodoNotes/", ListTodoNotes.as_view(), name="listTodoNotes"),
     path("listInterestingKeywords/", ListInterestingKeywords.as_view(), name="listInterestingKeywords"),
+    # Preview for custom scan assets only (gf_pattern, nuclei_template). Unsupported params return 410 Gone + migration_note.
     path("getFileContents/", GetFileContents.as_view(), name="getFileContents"),
     path("vulnerability/report/", VulnerabilityReport.as_view(), name="vulnerability_report"),
     path("tools/csrf_token/", GetCSRFToken.as_view(), name="csrf_token"),

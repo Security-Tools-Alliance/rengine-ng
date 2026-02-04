@@ -86,11 +86,10 @@ def trigger_batch_geolocalization():
     to process them in a single batch operation.
 
     Returns:
-        str: Task ID of the batch geolocalization task, or None if no IPs collected
+        dict | None: Result with key "count" (number of IPs processed), or None if no IPs collected.
     """
     from reNgine.tasks.geo import geo_localize_batch
 
-    # Get collected IPs from thread-local storage
     if not hasattr(_thread_local, "geo_ip_collection"):
         logger.debug("No IPs collected for geolocalization")
         return None
@@ -101,14 +100,13 @@ def trigger_batch_geolocalization():
         logger.debug("No IPs collected for geolocalization")
         return None
 
-    # Clear the collection
     _thread_local.geo_ip_collection.clear()
 
-    # Trigger batch geolocalization
     logger.info(f"Triggering batch geolocalization for {len(collected_ips)} IP addresses")
-    task = geo_localize_batch.delay(collected_ips)
+    # Runs synchronously (Celery removed); callers must tolerate blocking.
+    geo_localize_batch(collected_ips)
 
-    return task.id
+    return {"count": len(collected_ips)}
 
 
 def with_batch_geolocalization(func):

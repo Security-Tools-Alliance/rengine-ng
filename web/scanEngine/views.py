@@ -1,7 +1,5 @@
-import glob
 import json
 import logging
-import os
 from pathlib import Path
 import re
 import shutil
@@ -9,6 +7,7 @@ import shutil
 from django import http
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.db.models import CharField, F, Func, Q, Value
 from django.db.models.functions import Coalesce, Lower
@@ -27,13 +26,20 @@ from reNgine.definitions import (
     PERM_MODIFY_SYSTEM_CONFIGURATIONS,
     PERM_MODIFY_WORDLISTS,
 )
-from reNgine.settings import RENGINE_HOME, RENGINE_WORDLISTS
+from reNgine.core.path import safe_unlink
+from reNgine.settings import (
+    RENGINE_GF_PATTERNS_DIR,
+    RENGINE_HOME,
+    RENGINE_NUCLEI_TEMPLATES_DIR,
+    RENGINE_WORDLISTS,
+)
 from reNgine.utilities.notification import (
     send_discord_message,
     send_lark_message,
     send_slack_message,
     send_telegram_message,
 )
+from reNgine.validators import validate_short_name as validate_wordlist_short_name
 from scanEngine.forms import (
     AddEngineForm,
     AddWordlistForm,
@@ -60,6 +66,8 @@ from scanEngine.models import (
     VulnerabilityReportSetting,
     Wordlist,
 )
+from scanEngine.tool_assets import list_asset_files, save_uploaded_assets
+from scanEngine.wordlists import is_txt_filename as _wordlist_is_txt_filename, save_one as _wordlist_save_one, short_name_from_stem as _wordlist_short_name_from_stem
 from startScan.models import ScanHistory
 
 
@@ -168,6 +176,11 @@ def update_engine(request, id):
     return render(request, "scanEngine/update_engine.html", context)
 
 
+def _wordlist_add_page_context(form) -> dict:
+    """Build context dict for the add wordlist template (reduces duplication on validation errors)."""
+    return {"scan_engine_nav_active": "active", "wordlist_li": "active", "form": form}
+
+
 @has_permission_decorator(PERM_MODIFY_WORDLISTS, redirect_url=FOUR_OH_FOUR_URL)
 def wordlist_list(request):
     wordlists = Wordlist.objects.all().order_by("id")
@@ -178,39 +191,118 @@ def wordlist_list(request):
 @has_permission_decorator(PERM_MODIFY_WORDLISTS, redirect_url=FOUR_OH_FOUR_URL)
 def add_wordlist(request):
     form = AddWordlistForm(request.POST or None, request.FILES or None)
-    if request.method == "POST" and form.is_valid() and "upload_file" in request.FILES:
-        txt_file = request.FILES["upload_file"]
-        if txt_file.content_type == "text/plain":
-            wordlist_content = txt_file.read().decode("UTF-8", "ignore")
-            wordlist_file = open(
-                Path(RENGINE_WORDLISTS) / f"{form.cleaned_data['short_name']}.txt",
-                "w",
-                encoding="utf-8",
-            )
-            wordlist_file.write(wordlist_content)
-            Wordlist.objects.create(
-                name=form.cleaned_data["name"],
-                short_name=form.cleaned_data["short_name"],
-                count=wordlist_content.count("\n"),
-            )
-            messages.add_message(
-                request, messages.INFO, "Wordlist " + form.cleaned_data["name"] + " added successfully"
-            )
-            return http.HttpResponseRedirect(reverse("wordlist_list"))
-    context = {"scan_engine_nav_active": "active", "wordlist_li": "active", "form": form}
-    return render(request, "scanEngine/wordlist/add.html", context)
+    if request.method != "POST":
+        return render(request, "scanEngine/wordlist/add.html", _wordlist_add_page_context(form))
+
+    files = request.FILES.getlist("upload_file") if request.FILES else []
+    if not form.is_valid():
+        if not files:
+            form.add_error("upload_file", "Please select at least one .txt file.")
+        return render(request, "scanEngine/wordlist/add.html", _wordlist_add_page_context(form))
+
+    if not files:
+        form.add_error("upload_file", "Please select at least one .txt file.")
+        return render(request, "scanEngine/wordlist/add.html", _wordlist_add_page_context(form))
+
+    if len(files) == 1:
+        if not _wordlist_is_txt_filename(files[0].name):
+            form.add_error("upload_file", "Only .txt files are allowed.")
+            return render(request, "scanEngine/wordlist/add.html", _wordlist_add_page_context(form))
+        stem = Path(files[0].name).stem
+        name = (form.cleaned_data.get("name") or stem).strip()
+        short_name_raw = form.cleaned_data.get("short_name") or _wordlist_short_name_from_stem(stem)
+        if not name or not short_name_raw:
+            if not name:
+                form.add_error("name", "Name is required for single-file upload.")
+            if not short_name_raw:
+                form.add_error("short_name", "Short name is required for single-file upload.")
+            return render(request, "scanEngine/wordlist/add.html", _wordlist_add_page_context(form))
+        try:
+            validate_wordlist_short_name(short_name_raw)
+        except ValidationError:
+            form.add_error("short_name", "Invalid short name.")
+            return render(request, "scanEngine/wordlist/add.html", _wordlist_add_page_context(form))
+        short_name, err = _wordlist_save_one(name, short_name_raw, uploaded_file=files[0])
+        if err:
+            if err == "empty":
+                form.add_error("upload_file", "Uploaded wordlist is empty.")
+            elif err == "max_retries":
+                form.add_error("short_name", "Could not find a unique short name after many attempts.")
+            elif err == "encoding":
+                form.add_error("upload_file", "Uploaded wordlist must be UTF-8 encoded.")
+            else:
+                form.add_error("upload_file", "Failed to save wordlist file.")
+            return render(request, "scanEngine/wordlist/add.html", _wordlist_add_page_context(form))
+        messages.info(
+            request,
+            f"Wordlist '{name}' added successfully (short_name: {short_name}).",
+        )
+        return http.HttpResponseRedirect(reverse("wordlist_list"))
+
+    empty_filenames = []
+    saved_count = 0
+    for uploaded_file in files:
+        if not _wordlist_is_txt_filename(uploaded_file.name):
+            messages.error(request, f"Skipped {uploaded_file.name}: only .txt files are allowed.")
+            continue
+        stem = Path(uploaded_file.name).stem
+        base_short = _wordlist_short_name_from_stem(stem)
+        try:
+            validate_wordlist_short_name(base_short)
+        except ValidationError:
+            messages.error(request, f"Skipped {uploaded_file.name}: invalid short name derived from filename.")
+            continue
+        name = stem
+        short_name, err = _wordlist_save_one(name, base_short, uploaded_file=uploaded_file)
+        if err == "empty":
+            empty_filenames.append(getattr(uploaded_file, "name", "uploaded file"))
+            continue
+        if err:
+            if err == "max_retries":
+                msg = "could not find a unique short name after many attempts."
+            elif err == "encoding":
+                msg = "file must be UTF-8 encoded."
+            else:
+                msg = "failed to read or save file."
+            messages.error(request, f"Skipped {uploaded_file.name}: {msg}")
+            continue
+        saved_count += 1
+        messages.info(
+            request,
+            f"Wordlist '{name}' added successfully (short_name: {short_name}).",
+        )
+    if len(empty_filenames) == len(files):
+        messages.error(
+            request,
+            "All selected files are empty. Please upload at least one non-empty .txt file.",
+        )
+        return render(request, "scanEngine/wordlist/add.html", _wordlist_add_page_context(form))
+    if saved_count == 0:
+        form.add_error(
+            "upload_file",
+            "No wordlist was created. Fix the errors above and try again.",
+        )
+        return render(request, "scanEngine/wordlist/add.html", _wordlist_add_page_context(form))
+    if empty_filenames:
+        messages.warning(
+            request,
+            "The following files were skipped because they are empty: " + ", ".join(empty_filenames),
+        )
+    return http.HttpResponseRedirect(reverse("wordlist_list"))
 
 
 @has_permission_decorator(PERM_MODIFY_WORDLISTS, redirect_url=FOUR_OH_FOUR_URL)
 def delete_wordlist(request, id):
     obj = get_object_or_404(Wordlist, id=id)
     if request.method == "POST":
+        short_name = obj.short_name
         obj.delete()
-        try:
-            os.remove(Path(RENGINE_WORDLISTS) / f"{obj.short_name}.txt")
-            response_data = {"status": True}
-        except Exception:
-            response_data = {"status": False}
+        file_path = Path(RENGINE_WORDLISTS) / f"{short_name}.txt"
+        # safe_unlink no-ops when path is missing or invalid (returns "not_found"); safe for cleanup.
+        result = safe_unlink(RENGINE_WORDLISTS, file_path)
+        if result not in ("removed", "not_found"):
+            logger.warning("Wordlist file cleanup returned %s for %s", result, file_path)
+        response_data = {"status": result in ("removed", "not_found")}
         messages.add_message(request, messages.INFO, "Wordlist successfully deleted!")
     else:
         response_data = {"status": False}
@@ -244,78 +336,49 @@ def interesting_lookup(request):
     return render(request, "scanEngine/lookup.html", context)
 
 
-@has_permission_decorator(PERM_MODIFY_SCAN_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
-def tool_specific_settings(request):
-    context = {}
-    # check for incoming form requests
-    if request.method == "POST":
-        handle_post_request(request)
-        return http.HttpResponseRedirect(reverse("tool_settings"))
+def _tool_settings_context(request):
+    from django.urls import reverse as django_reverse
 
-    context = {
+    return {
         "settings_nav_active": "active",
         "tool_settings_li": "active",
         "settings_ul_show": "show",
-        "gf_patterns": get_gf_patterns(request),
-        "nuclei_templates": list(glob.glob(str(Path.home() / "nuclei-templates" / "*.yaml"))),
+        "gf_patterns": list_asset_files(RENGINE_GF_PATTERNS_DIR, "json"),
+        "nuclei_templates": list_asset_files(RENGINE_NUCLEI_TEMPLATES_DIR, "yaml"),
+        "get_file_contents_url": django_reverse("api:getFileContents"),
     }
-    return render(request, "scanEngine/settings/tool.html", context)
 
 
-def handle_post_request(request):
-    handlers = {
-        "gfFileUpload": handle_gf_upload,
-        "nucleiFileUpload": handle_nuclei_upload,
-        "nuclei_config_text_area": lambda r: update_config(r, "nuclei", "Nuclei"),
-        "subfinder_config_text_area": lambda r: update_config(r, "subfinder", "Subfinder"),
-        "naabu_config_text_area": lambda r: update_config(r, "naabu", "Naabu"),
-        "amass_config_text_area": lambda r: update_config(r, "amass", "Amass", "config", ".ini"),
-        "theHarvester_config_text_area": lambda r: update_config(
-            r, "theHarvester", "theHarvester", "api-keys", ".yaml"
-        ),
-        "gau_config_text_area": lambda r: update_config(r, "gau", "GAU", "config", ".toml"),
-    }
-    for key, handler in handlers.items():
-        if key in request.FILES or key in request.POST:
-            handler(request)
-            break
+@has_permission_decorator(PERM_MODIFY_SCAN_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
+def tool_specific_settings(request):
+    if request.method == "POST":
+        if "gfFileUpload" in request.FILES:
+            result = save_uploaded_assets(
+                request,
+                "gfFileUpload",
+                RENGINE_GF_PATTERNS_DIR,
+                "json",
+                "GF Pattern",
+            )
+        elif "nucleiFileUpload" in request.FILES:
+            result = save_uploaded_assets(
+                request,
+                "nucleiFileUpload",
+                RENGINE_NUCLEI_TEMPLATES_DIR,
+                "yaml",
+                "Nuclei template",
+            )
+        else:
+            result = {"saved": 0, "errors": 0}
+        if result.get("saved", 0) == 0 and result.get("errors", 0) > 0:
+            messages.error(
+                request,
+                "No files were uploaded. Fix the errors above and try again.",
+            )
+            return render(request, "scanEngine/settings/tool.html", _tool_settings_context(request))
+        return http.HttpResponseRedirect(reverse("tool_settings"))
 
-
-def handle_gf_upload(request):
-    handle_file_upload(request, "gfFileUpload", ".gf", "json", "GF Pattern")
-
-
-def handle_nuclei_upload(request):
-    handle_file_upload(request, "nucleiFileUpload", "nuclei-templates", "yaml", "Nuclei Pattern")
-
-
-def handle_file_upload(request, file_key, directory, expected_extension, pattern_name):
-    uploaded_file = request.FILES[file_key]
-    file_extension = uploaded_file.name.split(".")[-1]
-    if file_extension != expected_extension:
-        messages.error(request, f"Invalid {pattern_name}, upload only *.{expected_extension} extension")
-    else:
-        filename = re.sub(r'[\\/*?:"<>|]', "", uploaded_file.name)
-        file_path = Path.home() / directory / filename
-        with open(file_path, "w", encoding="utf-8") as file:
-            file.write(uploaded_file.read().decode("utf-8"))
-        messages.info(request, f"{pattern_name} {filename} successfully uploaded")
-
-
-def update_config(request, tool_name, display_name, file_name="config", file_extension=".yaml"):
-    config_path = Path.home() / ".config" / tool_name / f"{file_name}{file_extension}"
-    with open(config_path, "w", encoding="utf-8") as fhandle:
-        fhandle.write(request.POST.get(f"{tool_name}_config_text_area"))
-    messages.info(request, f"{display_name} config updated!")
-
-
-def get_gf_patterns(request):
-    try:
-        # NOTE: GF patterns functionality moved to Secator
-        return []
-    except Exception as e:
-        messages.error(request, f"Error fetching GF patterns: {str(e)}")
-    return []
+    return render(request, "scanEngine/settings/tool.html", _tool_settings_context(request))
 
 
 @has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)
@@ -1112,3 +1175,5 @@ def delete_profile(request, profile_id):
         response_data = {"status": False, "message": "Invalid request method"}
         messages.add_message(request, messages.ERROR, "Oops! Profile could not be deleted!")
     return http.JsonResponse(response_data)
+
+

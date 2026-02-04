@@ -7,7 +7,7 @@ This module tests the performance improvements of the batch geolocalization syst
 import threading
 import time
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 from django.test import TestCase
 
@@ -110,10 +110,6 @@ class TestGeolocalizationPerformance(TestCase):
     @patch("reNgine.tasks.geo.geo_localize_batch")
     def test_decorator_performance(self, mock_geo_batch):
         """Test that decorator doesn't add significant overhead."""
-        mock_task = Mock()
-        mock_task.id = "test-task-id"
-        mock_geo_batch.delay = Mock(return_value=mock_task)
-
         if hasattr(dns._thread_local, "geo_ip_collection"):
             delattr(dns._thread_local, "geo_ip_collection")
 

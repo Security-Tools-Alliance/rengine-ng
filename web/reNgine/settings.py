@@ -33,6 +33,8 @@ SECATOR_REPORTS_PREFIX = env(
 )
 RENGINE_CUSTOM_ENGINES = env("RENGINE_CUSTOM_ENGINES", default=str(Path.home() / "custom_engines"))
 RENGINE_WORDLISTS = env("RENGINE_WORDLISTS", default=str(Path.home() / "wordlists"))
+RENGINE_GF_PATTERNS_DIR = env("RENGINE_GF_PATTERNS_DIR", default=str(Path.home() / ".gf"))
+RENGINE_NUCLEI_TEMPLATES_DIR = env("RENGINE_NUCLEI_TEMPLATES_DIR", default=str(Path.home() / "nuclei-templates"))
 RENGINE_TOOL_PATH = env("RENGINE_TOOL_PATH", default=str(Path.home() / "tools"))
 RENGINE_TOOL_GITHUB_PATH = env("RENGINE_TOOL_GITHUB_PATH", default=str(Path(RENGINE_TOOL_PATH) / ".github"))
 
