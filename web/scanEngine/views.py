@@ -1,7 +1,6 @@
 import json
 import logging
 from pathlib import Path
-import re
 import shutil
 
 from django import http
@@ -18,6 +17,7 @@ from rolepermissions.decorators import has_permission_decorator
 
 from api.views import LLMModelsManager
 from dashboard.models import NetlasAPIKey, OpenAiAPIKey
+from reNgine.core.path import safe_unlink
 from reNgine.definitions import (
     FOUR_OH_FOUR_URL,
     PERM_MODIFY_INTERESTING_LOOKUP,
@@ -26,7 +26,6 @@ from reNgine.definitions import (
     PERM_MODIFY_SYSTEM_CONFIGURATIONS,
     PERM_MODIFY_WORDLISTS,
 )
-from reNgine.core.path import safe_unlink
 from reNgine.settings import (
     RENGINE_GF_PATTERNS_DIR,
     RENGINE_HOME,
@@ -67,7 +66,15 @@ from scanEngine.models import (
     Wordlist,
 )
 from scanEngine.tool_assets import list_asset_files, save_uploaded_assets
-from scanEngine.wordlists import is_txt_filename as _wordlist_is_txt_filename, save_one as _wordlist_save_one, short_name_from_stem as _wordlist_short_name_from_stem
+from scanEngine.wordlists import (
+    is_txt_filename as _wordlist_is_txt_filename,
+)
+from scanEngine.wordlists import (
+    save_one as _wordlist_save_one,
+)
+from scanEngine.wordlists import (
+    short_name_from_stem as _wordlist_short_name_from_stem,
+)
 from startScan.models import ScanHistory
 
 
@@ -1175,5 +1182,3 @@ def delete_profile(request, profile_id):
         response_data = {"status": False, "message": "Invalid request method"}
         messages.add_message(request, messages.ERROR, "Oops! Profile could not be deleted!")
     return http.JsonResponse(response_data)
-
-

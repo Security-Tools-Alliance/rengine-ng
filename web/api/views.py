@@ -2199,7 +2199,7 @@ def _read_asset_preview(base_dir: str, name: str, extension: str) -> tuple[bool,
 
     truncated = len(data) > MAX_ASSET_PREVIEW_BYTES
     if truncated:
-        data = data[: MAX_ASSET_PREVIEW_BYTES]
+        data = data[:MAX_ASSET_PREVIEW_BYTES]
 
     try:
         text = data.decode("utf-8")

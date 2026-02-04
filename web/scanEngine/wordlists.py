@@ -7,9 +7,9 @@ unit testing of wordlist logic in isolation.
 
 import codecs
 import os
+from pathlib import Path
 import re
 import tempfile
-from pathlib import Path
 
 from django.db import IntegrityError
 
@@ -51,9 +51,7 @@ def _is_short_name_unique_violation(exc: IntegrityError) -> bool:
     return "short_name" in msg or ("wordlist" in msg and "unique" in msg)
 
 
-def _truncate_base_short(
-    base_short: str, max_len: int = 45, suffix: int | None = None
-) -> str:
+def _truncate_base_short(base_short: str, max_len: int = 45, suffix: int | None = None) -> str:
     """Truncate base_short so that base_short[_N] fits in Wordlist.short_name max length.
 
     If suffix is provided, base_short is truncated so that the final string
@@ -77,9 +75,7 @@ def _truncate_base_short(
     return f"{base_short}{suffix_str}"
 
 
-def _candidate_short_name(
-    base_short: str, suffix: int, max_total: int = _WORDLIST_SHORT_NAME_MAX_LENGTH
-) -> str:
+def _candidate_short_name(base_short: str, suffix: int, max_total: int = _WORDLIST_SHORT_NAME_MAX_LENGTH) -> str:
     """Build candidate short_name for the given suffix, preserving the full suffix.
 
     Ensures base_short is truncated (if needed) so that the final short_name,
@@ -152,18 +148,14 @@ def save_one(
     for suffix in range(_MAX_WORDLIST_SHORT_NAME_RETRIES):
         candidate = _candidate_short_name(base_short, suffix)
         target = wordlists_dir / f"{candidate}.txt"
-        fd, temp_path = tempfile.mkstemp(
-            suffix=".txt", dir=wordlists_dir, prefix=".tmp_wordlist_"
-        )
+        fd, temp_path = tempfile.mkstemp(suffix=".txt", dir=wordlists_dir, prefix=".tmp_wordlist_")
         os.close(fd)
         temp_target = Path(temp_path)
         try:
             if content is not None:
                 line_count = _write_content_to_file(temp_target, content)
             elif uploaded_file is not None:
-                line_count, has_non_empty = _stream_upload_to_file(
-                    temp_target, uploaded_file
-                )
+                line_count, has_non_empty = _stream_upload_to_file(temp_target, uploaded_file)
                 if not has_non_empty:
                     temp_target.unlink(missing_ok=True)
                     return (None, "empty")

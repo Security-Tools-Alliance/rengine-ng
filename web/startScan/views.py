@@ -912,8 +912,7 @@ def delete_scan(request, slug, id):
         elif delete_dir:
             cleanup_status = "resolution_failed"
             logger.warning(
-                "results_dir resolution failed; not deleting directory. "
-                "scan_history_id=%s results_dir=%r base_dir=%r",
+                "results_dir resolution failed; not deleting directory. scan_history_id=%s results_dir=%r base_dir=%r",
                 getattr(obj, "id", None),
                 delete_dir,
                 RENGINE_RESULTS,

@@ -88,5 +88,3 @@ class TestCandidateShortName(BaseTestCase):
         base = "z" * 48
         candidates = [_candidate_short_name(base, i, max_total=50) for i in (1, 2, 10, 99)]
         self.assertEqual(len(candidates), len(set(candidates)))
-
-
