@@ -1,8 +1,8 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 from pathlib import Path
 
-from celery.utils.log import get_task_logger
+from reNgine.utilities.logger import get_module_logger
 from django.contrib import messages
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db.models import Case, Count, F, IntegerField, Q, Value, When
@@ -13,7 +13,6 @@ from django.template.loader import get_template
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import mark_safe
-from django_celery_beat.models import ClockedSchedule, IntervalSchedule, PeriodicTask
 import markdown
 from rolepermissions.decorators import has_permission_decorator
 from weasyprint import CSS, HTML
@@ -56,6 +55,7 @@ from startScan.models import (
     IpAddress,
     ScanActivity,
     ScanHistory,
+    ScanSchedule,
     SecatorRunner,
     Subdomain,
     SubScan,
@@ -68,7 +68,7 @@ from startScan.secator_profiles import build_secator_profiles_context
 from targetApp.models import Domain, Organization
 
 
-logger = get_task_logger(__name__)
+logger = get_module_logger(__name__)
 
 
 def _parse_domain_id_list(raw_domain_ids: str) -> tuple[list[int], list[str]]:
@@ -146,6 +146,128 @@ def _start_secator_scans_for_domain_ids(request, domain_ids: list[int], secator_
         scan_count += sc
         failed_count += fc
     return scan_count, failed_count
+
+
+def _schedule_scan_ui_context(domain: Domain) -> dict:
+    """Build context for schedule_scan_ui.html (single domain)."""
+    context = {
+        "scan_history_active": "active",
+        "domain": domain,
+    }
+    context |= build_secator_profiles_context()
+    return context
+
+
+def _schedule_organization_scan_ui_context(organization: Organization) -> dict:
+    """Build context for organization/schedule_scan_ui.html."""
+    engine = EngineType.objects.annotate(lower_name=Lower("engine_name")).order_by("lower_name")
+    custom_engine_count = EngineType.objects.filter(default_engine=False).count()
+    return {
+        "scan_history_active": "active",
+        "organization": organization,
+        "domain_list": organization.get_domains(),
+        "engines": engine,
+        "custom_engine_count": custom_engine_count,
+    }
+
+
+_VALID_FREQUENCY_TYPES = {choice[0] for choice in ScanSchedule.FREQUENCY_TYPE_CHOICES}
+
+# Centralized message when scheduled_mode is missing or invalid (no default injected)
+SCHEDULE_MODE_REQUIRED_MSG = "Scheduled mode is required."
+
+
+def _normalize_periodic_frequency_from_post(post_data) -> tuple[int, str]:
+    """
+    Parse and validate periodic frequency from POST data.
+
+    Single source of truth for frequency value and type used by both form validation
+    and schedule creation. Returns (frequency_value, frequency_type).
+
+    Raises:
+        ValueError: With a user-facing message if value is missing, not positive, or type invalid.
+    """
+    raw_freq = post_data.get("frequency")
+    if raw_freq is None or (isinstance(raw_freq, str) and not raw_freq.strip()):
+        raise ValueError("Please set the run interval for periodic scans.")
+    val = safe_int_cast(raw_freq)
+    if val is None or val < 1:
+        raise ValueError("Frequency must be a positive number.")
+    freq_type = (post_data.get("frequency_type") or "").strip().lower()
+    if freq_type not in _VALID_FREQUENCY_TYPES:
+        raise ValueError("Invalid frequency unit.")
+    return (val, freq_type)
+
+
+def _validate_schedule_form_post(post_data) -> tuple[str | None, str | None]:
+    """
+    Validate schedule form: scheduled_mode must be present and periodic or clocked;
+    periodic requires frequency and frequency_type; clocked requires scheduled_time.
+
+    Returns:
+        (error_message, normalized_mode): if valid (None, mode); if invalid (message, None).
+        Callers can rely on the returned mode when error_message is None.
+    """
+    raw_mode = (post_data.get("scheduled_mode") or "").strip().lower()
+    if not raw_mode:
+        return (SCHEDULE_MODE_REQUIRED_MSG, None)
+    if raw_mode not in (ScanSchedule.SCHEDULE_MODE_PERIODIC, ScanSchedule.SCHEDULE_MODE_CLOCKED):
+        return (SCHEDULE_MODE_REQUIRED_MSG, None)
+    if raw_mode == ScanSchedule.SCHEDULE_MODE_PERIODIC:
+        try:
+            _normalize_periodic_frequency_from_post(post_data)
+        except ValueError as e:
+            return (str(e), None)
+        return (None, raw_mode)
+    scheduled_time = (post_data.get("scheduled_time") or "").strip()
+    if not scheduled_time:
+        return ("Please select a date and time for the one-time scan.", None)
+    try:
+        datetime.strptime(scheduled_time, "%Y-%m-%d %H:%M")
+    except ValueError:
+        return ("Invalid date and time format for one-time scan.", None)
+    return (None, raw_mode)
+
+
+def _parse_scheduled_time_utc(schedule_time_str: str, timezone_offset: int) -> datetime | None:
+    """
+    Parse 'YYYY-MM-DD HH:MM' to timezone-aware UTC datetime.
+    Returns None on parse or conversion error (avoids 500s on malformed input).
+    """
+    try:
+        raw = (schedule_time_str or "").strip()
+        if not raw:
+            return None
+        local_time = datetime.strptime(raw, "%Y-%m-%d %H:%M")
+        return local_to_utc_aware(local_time, timezone_offset)
+    except (ValueError, TypeError):
+        return None
+
+
+def _build_scan_schedule_common(
+    name: str,
+    domain: Domain,
+    initiated_by,
+    imported_subdomains: list,
+    out_of_scope_subdomains: list,
+    *,
+    scan_type=None,
+    secator_kwargs: dict | None = None,
+) -> dict:
+    """
+    Build common kwargs for ScanSchedule.objects.create.
+    Used by both schedule_scan (secator_kwargs) and schedule_organization_scan (scan_type).
+    """
+    return {
+        "name": name,
+        "domain": domain,
+        "scan_type": scan_type,
+        "secator_kwargs": secator_kwargs,
+        "initiated_by": initiated_by,
+        "imported_subdomains": imported_subdomains,
+        "out_of_scope_subdomains": out_of_scope_subdomains,
+        "enabled": True,
+    }
 
 
 def _build_multiple_scan_selection_from_post(request) -> tuple[list[str], str]:
@@ -798,86 +920,70 @@ def stop_scan(request, slug, id):
 
 @has_permission_decorator(PERM_INITATE_SCANS_SUBSCANS, redirect_url=FOUR_OH_FOUR_URL)
 def schedule_scan(request, host_id, slug):
-    domain = Domain.objects.get(id=host_id)
+    domain = get_object_or_404(Domain, id=host_id)
     if request.method == "POST":
-        scheduled_mode = request.POST["scheduled_mode"]
-        engine_type = int(request.POST["scan_mode"])
+        try:
+            secator_kwargs = build_start_secator_scan_kwargs(request.POST)
+        except ValueError as exc:
+            messages.error(request, str(exc))
+            return render(request, "startScan/schedule_scan_ui.html", _schedule_scan_ui_context(domain))
 
-        # Get imported and out-of-scope subdomains
-        subdomains_in = request.POST["importSubdomainTextArea"].split()
-        subdomains_in = [s.rstrip() for s in subdomains_in if s]
-        subdomains_out = request.POST["outOfScopeSubdomainTextarea"].split()
-        subdomains_out = [s.rstrip() for s in subdomains_out if s]
+        schedule_error, scheduled_mode = _validate_schedule_form_post(request.POST)
+        if schedule_error:
+            messages.error(request, schedule_error)
+            return render(request, "startScan/schedule_scan_ui.html", _schedule_scan_ui_context(domain))
 
-        # Get engine type
-        engine = get_object_or_404(EngineType, id=engine_type)
-        timestr = str(datetime.strftime(timezone.now(), "%Y_%m_%d_%H_%M_%S"))
-        task_name = f"{engine.engine_name} for {domain.name}: {timestr}"
-        if scheduled_mode == "periodic":
-            frequency_value = int(request.POST["frequency"])
-            frequency_type = request.POST["frequency_type"]
-            if frequency_type == "minutes":
-                period = IntervalSchedule.MINUTES
-            elif frequency_type == "hours":
-                period = IntervalSchedule.HOURS
-            elif frequency_type == "days":
-                period = IntervalSchedule.DAYS
-            elif frequency_type == "weeks":
-                period = IntervalSchedule.DAYS
-                frequency_value *= 7
-            elif frequency_type == "months":
-                period = IntervalSchedule.DAYS
-                frequency_value *= 30
-            schedule, _ = IntervalSchedule.objects.get_or_create(every=frequency_value, period=period)
-            kwargs = {
-                "domain_id": host_id,
-                "engine_id": engine.id,
-                "scan_history_id": 1,
-                "scan_type": SCHEDULED_SCAN,
-                "imported_subdomains": subdomains_in,
-                "out_of_scope_subdomains": subdomains_out,
-                "initiated_by_id": request.user.id,
-            }
-            PeriodicTask.objects.create(
-                interval=schedule, name=task_name, task="initiate_secator_scan", kwargs=json.dumps(kwargs)
+        subdomains_in = [s.rstrip() for s in request.POST.get("importSubdomainTextArea", "").split() if s]
+        subdomains_out = [s.rstrip() for s in request.POST.get("outOfScopeSubdomainTextarea", "").split() if s]
+        paths = request.POST.get("filterPath", "").split()
+        url_filter = paths[0].rstrip() if paths else ""
+
+        kwargs_stored = {k: v for k, v in secator_kwargs.items() if k != "scan_history_id"}
+        if url_filter:
+            kwargs_stored["url_filter"] = url_filter
+        timestr = datetime.strftime(timezone.now(), "%Y_%m_%d_%H_%M_%S")
+        mode_label = secator_kwargs.get("execution_mode", "secator")
+        task_name = f"Secator {mode_label} for {domain.name}: {timestr}"
+        common = _build_scan_schedule_common(
+            task_name, domain, request.user, subdomains_in, subdomains_out,
+            secator_kwargs=kwargs_stored,
+        )
+
+        if scheduled_mode == ScanSchedule.SCHEDULE_MODE_PERIODIC:
+            frequency_value, frequency_type = _normalize_periodic_frequency_from_post(request.POST)
+            next_run = ScanSchedule.compute_next_run_from_frequency(
+                timezone.now(), frequency_value, frequency_type
             )
-        elif scheduled_mode == "clocked":
-            schedule_time = request.POST["scheduled_time"]
+            ScanSchedule.objects.create(
+                **common,
+                schedule_mode=ScanSchedule.SCHEDULE_MODE_PERIODIC,
+                frequency_value=frequency_value,
+                frequency_type=frequency_type,
+                next_run=next_run,
+                one_off=False,
+            )
+        else:
+            schedule_time = request.POST.get("scheduled_time", "").strip()
             timezone_offset = max(-1440, min(1440, safe_int_cast(request.POST.get("timezone_offset", 0), 0)))
-            # Convert received hour in UTC
-            local_time = datetime.strptime(schedule_time, "%Y-%m-%d %H:%M")
-            # Convert local time to UTC-aware datetime
-            utc_time = local_to_utc_aware(local_time, timezone_offset)
-            clock, _ = ClockedSchedule.objects.get_or_create(clocked_time=utc_time)
-            kwargs = {
-                "scan_history_id": 0,
-                "domain_id": host_id,
-                "engine_id": engine.id,
-                "scan_type": SCHEDULED_SCAN,
-                "imported_subdomains": subdomains_in,
-                "out_of_scope_subdomains": subdomains_out,
-                "initiated_by_id": request.user.id,
-            }
-            PeriodicTask.objects.create(
-                clocked=clock, one_off=True, name=task_name, task="initiate_secator_scan", kwargs=json.dumps(kwargs)
+            utc_time = _parse_scheduled_time_utc(schedule_time, timezone_offset)
+            if utc_time is None:
+                messages.error(request, "Invalid date and time for the one-time scan.")
+                return render(request, "startScan/schedule_scan_ui.html", _schedule_scan_ui_context(domain))
+            ScanSchedule.objects.create(
+                **common,
+                schedule_mode=ScanSchedule.SCHEDULE_MODE_CLOCKED,
+                scheduled_time=utc_time,
+                next_run=utc_time,
+                one_off=True,
             )
-        messages.add_message(request, messages.INFO, f"Scan Scheduled for {domain.name}")
+        messages.add_message(request, messages.INFO, f"Scan scheduled for {domain.name}")
         return HttpResponseRedirect(reverse("scheduled_scan_view", kwargs={"slug": slug}))
 
-    # GET request
-    engines = EngineType.objects
-    custom_engine_count = engines.filter(default_engine=False).count()
-    context = {
-        "scan_history_active": "active",
-        "domain": domain,
-        "engines": engines,
-        "custom_engine_count": custom_engine_count,
-    }
-    return render(request, "startScan/schedule_scan_ui.html", context)
+    return render(request, "startScan/schedule_scan_ui.html", _schedule_scan_ui_context(domain))
 
 
 def scheduled_scan_view(request, slug):
-    scheduled_tasks = PeriodicTask.objects.all().exclude(name="celery.backend_cleanup")
+    scheduled_tasks = ScanSchedule.objects.all()
     context = {
         "scheduled_scan_active": "active",
         "scheduled_tasks": scheduled_tasks,
@@ -887,7 +993,7 @@ def scheduled_scan_view(request, slug):
 
 @has_permission_decorator(PERM_MODIFY_SCAN_RESULTS, redirect_url=FOUR_OH_FOUR_URL)
 def delete_scheduled_task(request, slug, id):
-    task_object = get_object_or_404(PeriodicTask, id=id)
+    task_object = get_object_or_404(ScanSchedule, id=id)
     if request.method == "POST":
         task_object.delete()
         message_data = {"status": "true"}
@@ -901,7 +1007,7 @@ def delete_scheduled_task(request, slug, id):
 @has_permission_decorator(PERM_MODIFY_SCAN_RESULTS, redirect_url=FOUR_OH_FOUR_URL)
 def change_scheduled_task_status(request, slug, id):
     if request.method == "POST":
-        task = PeriodicTask.objects.get(id=id)
+        task = ScanSchedule.objects.get(id=id)
         task.enabled = not task.enabled
         task.save()
     return HttpResponse("")
@@ -1004,63 +1110,61 @@ def start_organization_scan(request, id, slug):
 def schedule_organization_scan(request, slug, id):
     organization = Organization.objects.get(id=id)
     if request.method == "POST":
+        schedule_error, scheduled_mode = _validate_schedule_form_post(request.POST)
+        if schedule_error:
+            messages.error(request, schedule_error)
+            return render(
+                request,
+                "organization/schedule_scan_ui.html",
+                _schedule_organization_scan_ui_context(organization),
+            )
+
         engine_type = int(request.POST["scan_mode"])
         engine = get_object_or_404(EngineType, id=engine_type)
-        scheduled_mode = request.POST["scheduled_mode"]
         for domain in organization.get_domains():
             timestr = str(datetime.strftime(timezone.now(), "%Y_%m_%d_%H_%M_%S"))
             task_name = f"{engine.engine_name} for {domain.name}: {timestr}"
+            common = _build_scan_schedule_common(
+                task_name, domain, request.user, [], [], scan_type=engine,
+            )
 
-            # Period task
-            if scheduled_mode == "periodic":
-                frequency_value = int(request.POST["frequency"])
-                frequency_type = request.POST["frequency_type"]
-                if frequency_type == "minutes":
-                    period = IntervalSchedule.MINUTES
-                elif frequency_type == "hours":
-                    period = IntervalSchedule.HOURS
-                elif frequency_type == "days":
-                    period = IntervalSchedule.DAYS
-                elif frequency_type == "weeks":
-                    period = IntervalSchedule.DAYS
-                    frequency_value *= 7
-                elif frequency_type == "months":
-                    period = IntervalSchedule.DAYS
-                    frequency_value *= 30
-
-                schedule, _ = IntervalSchedule.objects.get_or_create(every=frequency_value, period=period)
-                _kwargs = json.dumps(
-                    {
-                        "domain_id": domain.id,
-                        "engine_id": engine.id,
-                        "scan_history_id": 0,
-                        "scan_type": SCHEDULED_SCAN,
-                        "imported_subdomains": None,
-                        "initiated_by_id": request.user.id,
-                    }
+            if scheduled_mode == ScanSchedule.SCHEDULE_MODE_PERIODIC:
+                frequency_value, frequency_type = _normalize_periodic_frequency_from_post(
+                    request.POST
                 )
-                PeriodicTask.objects.create(
-                    interval=schedule, name=task_name, task="initiate_secator_scan", kwargs=_kwargs
+                next_run = ScanSchedule.compute_next_run_from_frequency(
+                    timezone.now(), frequency_value, frequency_type
                 )
-
-            # Clocked task
-            elif scheduled_mode == "clocked":
-                schedule_time = request.POST["scheduled_time"]
-                clock, _ = ClockedSchedule.objects.get_or_create(clocked_time=schedule_time)
-                _kwargs = json.dumps(
-                    {
-                        "domain_id": domain.id,
-                        "engine_id": engine.id,
-                        "scan_history_id": 0,
-                        "imported_subdomains": None,
-                        "initiated_by_id": request.user.id,
-                    }
+                ScanSchedule.objects.create(
+                    **common,
+                    schedule_mode=ScanSchedule.SCHEDULE_MODE_PERIODIC,
+                    frequency_value=frequency_value,
+                    frequency_type=frequency_type,
+                    next_run=next_run,
+                    one_off=False,
                 )
-                PeriodicTask.objects.create(
-                    clocked=clock, one_off=True, name=task_name, task="initiate_secator_scan", kwargs=_kwargs
+            else:
+                schedule_time_str = request.POST.get("scheduled_time", "").strip()
+                timezone_offset = max(-1440, min(1440, safe_int_cast(request.POST.get("timezone_offset", 0), 0)))
+                schedule_time = _parse_scheduled_time_utc(schedule_time_str, timezone_offset)
+                if schedule_time is None:
+                    messages.error(
+                        request,
+                        "Invalid date and time for the one-time scan. Please enter a valid date and time.",
+                    )
+                    return render(
+                        request,
+                        "organization/schedule_scan_ui.html",
+                        _schedule_organization_scan_ui_context(organization),
+                    )
+                ScanSchedule.objects.create(
+                    **common,
+                    schedule_mode=ScanSchedule.SCHEDULE_MODE_CLOCKED,
+                    scheduled_time=schedule_time,
+                    next_run=schedule_time,
+                    one_off=True,
                 )
 
-        # Send start notif
         ndomains = len(organization.get_domains())
         messages.add_message(
             request, messages.INFO, f"Scan started for {ndomains} domains in organization {organization.name}"
@@ -1068,16 +1172,11 @@ def schedule_organization_scan(request, slug, id):
         return HttpResponseRedirect(reverse("scheduled_scan_view", kwargs={"slug": slug}))
 
     # GET request
-    engine = EngineType.objects.annotate(lower_name=Lower("engine_name")).order_by("lower_name")
-    custom_engine_count = EngineType.objects.filter(default_engine=False).count()
-    context = {
-        "scan_history_active": "active",
-        "organization": organization,
-        "domain_list": organization.get_domains(),
-        "engines": engine,
-        "custom_engine_count": custom_engine_count,
-    }
-    return render(request, "organization/schedule_scan_ui.html", context)
+    return render(
+        request,
+        "organization/schedule_scan_ui.html",
+        _schedule_organization_scan_ui_context(organization),
+    )
 
 
 @has_permission_decorator(PERM_MODIFY_SCAN_RESULTS, redirect_url=FOUR_OH_FOUR_URL)

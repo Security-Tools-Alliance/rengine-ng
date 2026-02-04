@@ -1,11 +1,11 @@
-from celery.utils.log import get_task_logger
+from reNgine.utilities.logger import get_module_logger
 import validators
 
 from reNgine.core.data import geoiplookup
 from startScan.models import CountryISO, IpAddress
 
 
-logger = get_task_logger(__name__)
+logger = get_module_logger(__name__)
 
 
 # TODO Use secator to launch this task

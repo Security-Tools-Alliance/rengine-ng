@@ -9,7 +9,7 @@ import hashlib
 from typing import Any, Dict, List, Optional, Tuple, Union
 from urllib.parse import urlparse
 
-from celery.utils.log import get_task_logger
+from reNgine.utilities.logger import get_module_logger
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError, transaction
 from django.db.models import Count
@@ -23,7 +23,7 @@ from startScan.models import DirectoryFile, EndPoint, ScanHistory, Subdomain, Te
 from targetApp.models import Domain
 
 
-logger = get_task_logger(__name__)
+logger = get_module_logger(__name__)
 
 
 class EndpointRepository:

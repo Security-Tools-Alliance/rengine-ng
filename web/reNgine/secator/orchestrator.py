@@ -5,13 +5,13 @@ Coordinates scan execution using Secator.
 
 from typing import Any, Dict, List
 
-from celery.utils.log import get_task_logger
+from reNgine.utilities.logger import get_module_logger
 
 from reNgine.secator.runner import SecatorRunner
 from reNgine.services.repositories.scan_repository import ScanRepository
 
 
-logger = get_task_logger(__name__)
+logger = get_module_logger(__name__)
 
 
 class ScanOrchestrator:

@@ -1,10 +1,11 @@
 import logging
 
 from django.db import transaction
-from django.db.models.signals import m2m_changed, pre_delete
+from django.db.models.signals import m2m_changed, post_save, pre_delete
 from django.dispatch import receiver
 
-from .models import IpAddress, Subdomain
+from .cron_utils import ensure_run_scheduled_scans_cron
+from .models import IpAddress, ScanSchedule, Subdomain
 
 
 logger = logging.getLogger(__name__)
@@ -61,3 +62,10 @@ def handle_subdomain_ip_changes(sender, instance, action, pk_set, **kwargs):
                         ip.delete()
         except Exception as e:
             logger.error(f"Error during M2M IP cleanup: {str(e)}")
+
+
+@receiver(post_save, sender=ScanSchedule)
+def ensure_cron_on_schedule_created(sender, instance, created, **kwargs):
+    """When a scheduled scan is created and enabled, ensure the cron job is present (see startScan.cron_utils)."""
+    if created and instance.enabled:
+        transaction.on_commit(lambda: ensure_run_scheduled_scans_cron())

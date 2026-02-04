@@ -39,26 +39,18 @@
     },
 
     ensureButtonOutsideAdvancedConfig: function() {
-      const $buttonContainer = $('.start-scan-button-container');
-      const $advancedConfigSection = $('.advanced-config-section');
-      const $form = $('#start-scan-form');
+      $('.start-scan-button-container').each(function() {
+        const $container = $(this);
+        const $form = $container.closest('form');
+        if (!$form.length) return;
 
-      if (!$buttonContainer.length || !$advancedConfigSection.length || !$form.length) return;
-
-      if ($advancedConfigSection.find($buttonContainer).length > 0) {
-        $buttonContainer.detach();
-        $advancedConfigSection.after($buttonContainer);
-      }
-
-      const $selectEngine = $('#select_engine');
-      if ($selectEngine.length && $selectEngine.find($buttonContainer).length > 0) {
-        $buttonContainer.detach();
-        $selectEngine.after($buttonContainer);
-      }
-
-      if ($buttonContainer.closest('form').length === 0) {
-        $form.append($buttonContainer);
-      }
+        let $section = $container.closest('.advanced-config-section');
+        if (!$section.length) $section = $container.closest('#select_engine');
+        if ($section.length && $section.closest('form')[0] === $form[0]) {
+          $container.detach();
+          $section.after($container);
+        }
+      });
     }
   });
 })(jQuery);

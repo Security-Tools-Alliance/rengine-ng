@@ -2,14 +2,14 @@ import json
 import re
 import xml.etree.ElementTree as ET
 
-from celery.utils.log import get_task_logger
+from reNgine.utilities.logger import get_module_logger
 import xmltodict
 
 from reNgine.definitions import NMAP, NUCLEI_SEVERITY_MAP
 from reNgine.utilities.url import sanitize_url
 
 
-logger = get_task_logger(__name__)
+logger = get_module_logger(__name__)
 
 
 # -----------------#

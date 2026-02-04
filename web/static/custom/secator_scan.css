@@ -69,6 +69,63 @@
   color: #007bff;
 }
 
+/* Schedule type cards (Periodic / One-time) - same look as execution-mode-card, separate class to avoid Secator JS conflict */
+.schedule-mode-card {
+  border: 3px solid #e9ecef;
+  border-radius: 12px;
+  padding: 25px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  background: #fff;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+  min-height: 200px;
+}
+.schedule-mode-card:hover {
+  border-color: #007bff;
+  box-shadow: 0 8px 25px rgba(0, 123, 255, 0.15);
+  transform: translateY(-2px);
+}
+.schedule-mode-card.selected {
+  border-color: #007bff;
+  background: linear-gradient(135deg, rgba(0, 123, 255, 0.05) 0%, rgba(0, 123, 255, 0.1) 100%);
+  box-shadow: 0 8px 25px rgba(0, 123, 255, 0.2);
+}
+.schedule-mode-card.selected::before {
+  content: "✓";
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  background: #007bff;
+  color: white;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 16px;
+}
+.schedule-mode-card i {
+  font-size: 3.5rem;
+  margin-bottom: 20px;
+  color: #6c757d;
+  transition: all 0.3s ease;
+}
+.schedule-mode-card:hover i,
+.schedule-mode-card.selected i {
+  color: #007bff;
+}
+.schedule-mode-card:hover i {
+  transform: scale(1.1);
+}
+
 /* Individual Tasks specific colors */
 .execution-mode-card[data-mode="tasks"]:hover {
   border-color: #28a745;
@@ -618,7 +675,8 @@ body.execution-mode-scan .scan-type-tile.selected .tile-icon i {
   margin-top: 2rem;
 }
 
-#start-scan-btn {
+#start-scan-btn,
+#schedule-scan-btn {
   background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
   border: none;
   border-radius: 8px;
@@ -630,18 +688,21 @@ body.execution-mode-scan .scan-type-tile.selected .tile-icon i {
   width: 100%;
 }
 
-#start-scan-btn:hover {
+#start-scan-btn:hover,
+#schedule-scan-btn:hover {
   background: linear-gradient(135deg, #0056b3 0%, #004085 100%);
   transform: translateY(-2px);
   box-shadow: 0 6px 20px rgba(0, 123, 255, 0.4);
 }
 
-#start-scan-btn:active {
+#start-scan-btn:active,
+#schedule-scan-btn:active {
   transform: translateY(0);
   box-shadow: 0 2px 10px rgba(0, 123, 255, 0.3);
 }
 
-#start-scan-btn:disabled {
+#start-scan-btn:disabled,
+#schedule-scan-btn:disabled {
   background: #6c757d;
   cursor: not-allowed;
   transform: none;
@@ -675,7 +736,8 @@ body.execution-mode-scan .scan-type-tile.selected .tile-icon i {
     margin-bottom: -1rem;
   }
   
-  #start-scan-btn {
+  #start-scan-btn,
+  #schedule-scan-btn {
     font-size: 0.9rem;
     padding: 0.75rem 1.5rem;
   }

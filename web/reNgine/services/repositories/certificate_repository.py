@@ -8,7 +8,7 @@ from datetime import datetime
 from datetime import timezone as dt_timezone
 from typing import Any, Dict, Optional
 
-from celery.utils.log import get_task_logger
+from reNgine.utilities.logger import get_module_logger
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError
 
@@ -17,7 +17,7 @@ from startScan.models import Certificate, IpAddress, ScanHistory, Subdomain
 from targetApp.models import Domain
 
 
-logger = get_task_logger(__name__)
+logger = get_module_logger(__name__)
 
 
 class CertificateRepository:

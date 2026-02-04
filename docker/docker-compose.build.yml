@@ -5,13 +5,6 @@ services:
   redis:
     build: ./redis
 
-  # celery:
-  #   build:
-  #     context: ./celery
-  #     args:
-  #       HOST_UID: ${HOST_UID}
-  #       HOST_GID: ${HOST_GID}
-
   web:
     build:
       context: ./web

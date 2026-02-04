@@ -1,8 +1,10 @@
 import contextlib
+from datetime import timedelta
 from urllib.parse import urlparse
 
 from django.apps import apps
 from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
 from django.contrib.postgres.fields import ArrayField
 from django.db import models
 from django.db.models import Count, Q
@@ -11,7 +13,7 @@ from django.utils import timezone
 
 from reNgine.core.time import get_time_taken
 from reNgine.definitions import (
-    CELERY_TASK_STATUSES,
+    SCAN_STATUSES,
     CONFIDENCE_CHOICES,
     ENGINE_DISPLAY_NAMES,
     IP_PROTOCOL_CHOICES,
@@ -43,7 +45,7 @@ class HybridProperty:
 class ScanHistory(models.Model):
     id = models.AutoField(primary_key=True)
     start_scan_date = models.DateTimeField()
-    scan_status = models.IntegerField(choices=CELERY_TASK_STATUSES, default=-1)
+    scan_status = models.IntegerField(choices=SCAN_STATUSES, default=-1)
     results_dir = models.CharField(max_length=255, blank=True)
     domain = models.ForeignKey(Domain, on_delete=models.CASCADE)
     scan_type = models.ForeignKey(EngineType, on_delete=models.CASCADE, null=True, blank=True)
@@ -204,10 +206,10 @@ class ScanHistory(models.Model):
 
     def get_status_display(self):
         """Get human-readable status display."""
-        from reNgine.definitions import CELERY_TASK_STATUS_MAP
+        from reNgine.definitions import SCAN_STATUS_MAP
 
         status_code = self.status_code
-        return CELERY_TASK_STATUS_MAP.get(status_code, "UNKNOWN")
+        return SCAN_STATUS_MAP.get(status_code, "UNKNOWN")
 
     def get_current_task(self):
         """Get the current running task name, formatted for display."""
@@ -916,10 +918,10 @@ class SubScan(models.Model):
 
     def get_status_display(self):
         """Get human-readable status display."""
-        from reNgine.definitions import CELERY_TASK_STATUS_MAP
+        from reNgine.definitions import SCAN_STATUS_MAP
 
         status_code = self.status_code
-        return CELERY_TASK_STATUS_MAP.get(status_code, "UNKNOWN")
+        return SCAN_STATUS_MAP.get(status_code, "UNKNOWN")
 
     @classmethod
     def get_all_counts(cls, queryset):
@@ -1366,10 +1368,10 @@ class ScanActivity(models.Model):
 
     def get_status_display(self):
         """Get human-readable status display."""
-        from reNgine.definitions import CELERY_TASK_STATUS_MAP
+        from reNgine.definitions import SCAN_STATUS_MAP
 
         status_code = self.status_code
-        return CELERY_TASK_STATUS_MAP.get(status_code, "UNKNOWN")
+        return SCAN_STATUS_MAP.get(status_code, "UNKNOWN")
 
     def __str__(self):
         return str(self.title)
@@ -1823,3 +1825,175 @@ class Certificate(models.Model):
 
             return self.not_after < timezone.now() + timedelta(days=months * 30)
         return False
+
+
+class ScanSchedule(models.Model):
+    """
+    Stores scheduled scan configuration for CRON-driven execution.
+
+    Replaces django_celery_beat PeriodicTask for scan scheduling.
+    Run the management command run_scheduled_scans (e.g. via CRON every minute).
+
+    Note on validation:
+    -------------------
+    save() supports a ``validate`` kwarg (default: True) which controls whether
+    full_clean() is called before persisting. Hot paths (e.g. the scheduler
+    updating next_run/last_run_at) can pass validate=False to avoid validation
+    overhead; creation and admin/form flows keep validation enabled by default.
+    """
+
+    SCHEDULE_MODE_PERIODIC = "periodic"
+    SCHEDULE_MODE_CLOCKED = "clocked"
+    SCHEDULE_MODE_CHOICES = [
+        (SCHEDULE_MODE_PERIODIC, "Periodic"),
+        (SCHEDULE_MODE_CLOCKED, "One-off (clocked)"),
+    ]
+
+    FREQUENCY_MINUTES = "minutes"
+    FREQUENCY_HOURS = "hours"
+    FREQUENCY_DAYS = "days"
+    FREQUENCY_WEEKS = "weeks"
+    FREQUENCY_MONTHS = "months"
+    FREQUENCY_TYPE_CHOICES = [
+        (FREQUENCY_MINUTES, "Minutes"),
+        (FREQUENCY_HOURS, "Hours"),
+        (FREQUENCY_DAYS, "Days"),
+        (FREQUENCY_WEEKS, "Weeks"),
+        (FREQUENCY_MONTHS, "Months"),
+    ]
+
+    name = models.CharField(max_length=255)
+    domain = models.ForeignKey(Domain, on_delete=models.CASCADE)
+    scan_type = models.ForeignKey(
+        EngineType, on_delete=models.CASCADE, null=True, blank=True
+    )
+    secator_kwargs = models.JSONField(null=True, blank=True)
+    initiated_by = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="scheduled_scans"
+    )
+    imported_subdomains = ArrayField(
+        models.CharField(max_length=255), blank=True, default=list
+    )
+    out_of_scope_subdomains = ArrayField(
+        models.CharField(max_length=255), blank=True, default=list
+    )
+
+    schedule_mode = models.CharField(
+        max_length=20, choices=SCHEDULE_MODE_CHOICES, default=SCHEDULE_MODE_PERIODIC
+    )
+    frequency_value = models.PositiveIntegerField(null=True, blank=True)
+    frequency_type = models.CharField(
+        max_length=20, choices=FREQUENCY_TYPE_CHOICES, null=True, blank=True
+    )
+    scheduled_time = models.DateTimeField(null=True, blank=True)
+
+    next_run = models.DateTimeField(db_index=True)
+    last_run_at = models.DateTimeField(null=True, blank=True)
+    total_run_count = models.PositiveIntegerField(default=0)
+    one_off = models.BooleanField(default=False)
+    enabled = models.BooleanField(default=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "scan_schedule"
+        ordering = ["next_run"]
+
+    def clean(self):
+        """Enforce required fields per schedule_mode and initiated_by for audit trail."""
+        super().clean()
+        if self.initiated_by_id is None:
+            raise ValidationError(
+                {"initiated_by": "Scheduled scans require an initiated_by user for audit trail."}
+            )
+        if self.schedule_mode == self.SCHEDULE_MODE_PERIODIC:
+            if self.frequency_value is None or self.frequency_value < 1:
+                raise ValidationError(
+                    {"frequency_value": "Periodic schedules require a positive frequency value."}
+                )
+            if not self.frequency_type or self.frequency_type not in {
+                c[0] for c in self.FREQUENCY_TYPE_CHOICES
+            }:
+                raise ValidationError(
+                    {"frequency_type": "Periodic schedules require a valid frequency type."}
+                )
+        elif self.schedule_mode == self.SCHEDULE_MODE_CLOCKED:
+            if self.scheduled_time is None:
+                raise ValidationError(
+                    {"scheduled_time": "One-time (clocked) schedules require a scheduled time."}
+                )
+
+    def save(self, *args, **kwargs):
+        """
+        Persist the schedule.
+
+        By default runs full_clean() before saving. Callers on hot paths (e.g.
+        the scheduler loop) can pass validate=False to skip validation:
+
+            schedule.save(validate=False)
+        """
+        validate = kwargs.pop("validate", True)
+        if validate:
+            self.full_clean()
+        super().save(*args, **kwargs)
+
+    def get_frequency_type_display_for_value(self) -> str:
+        """Return frequency type label with correct singular/plural for current frequency_value."""
+        display = self.get_frequency_type_display() or ""
+        if self.frequency_value == 1 and display.endswith("s"):
+            return display[:-1]
+        return display
+
+    @staticmethod
+    def compute_next_run_from_frequency(from_time, value: int, frequency_type):
+        """
+        Compute next run datetime from a base time and frequency (value + type).
+        Single place for frequency→next_run logic; used when creating schedules and when
+        rescheduling after a periodic run.
+
+        Note on FREQUENCY_MONTHS: months are implemented as fixed 30-day blocks
+        (value * 30 days), not calendar months. This avoids a dependency on
+        dateutil.relativedelta and keeps behavior simple; long-running schedules
+        may drift relative to calendar month boundaries. For calendar-aligned
+        monthly runs, use a one-off (clocked) schedule or external cron.
+        """
+        if frequency_type == ScanSchedule.FREQUENCY_MINUTES:
+            return from_time + timedelta(minutes=value)
+        if frequency_type == ScanSchedule.FREQUENCY_HOURS:
+            return from_time + timedelta(hours=value)
+        if frequency_type == ScanSchedule.FREQUENCY_DAYS:
+            return from_time + timedelta(days=value)
+        if frequency_type == ScanSchedule.FREQUENCY_WEEKS:
+            return from_time + timedelta(weeks=value)
+        if frequency_type == ScanSchedule.FREQUENCY_MONTHS:
+            # Fixed 30-day blocks; see docstring for calendar-month caveat.
+            return from_time + timedelta(days=value * 30)
+        return from_time + timedelta(days=1)
+
+    @staticmethod
+    def compute_initial_next_run(
+        schedule_mode: str,
+        from_time=None,
+        *,
+        frequency_value: int | None = None,
+        frequency_type: str | None = None,
+        scheduled_time=None,
+    ):
+        """
+        Return the initial next_run for a new schedule. Use when creating schedules
+        outside the UI (e.g. shell, fixtures) to avoid missing or inconsistent next_run.
+
+        For periodic mode, pass frequency_value and frequency_type; for clocked mode,
+        pass scheduled_time. from_time defaults to timezone.now().
+        """
+        now = from_time if from_time is not None else timezone.now()
+        if schedule_mode == ScanSchedule.SCHEDULE_MODE_PERIODIC and frequency_value and frequency_type:
+            return ScanSchedule.compute_next_run_from_frequency(
+                now, frequency_value, frequency_type
+            )
+        if schedule_mode == ScanSchedule.SCHEDULE_MODE_CLOCKED and scheduled_time is not None:
+            return scheduled_time
+        return now + timedelta(days=1)
+
+    def __str__(self):
+        return self.name

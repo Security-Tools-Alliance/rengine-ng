@@ -45,14 +45,12 @@ class TestMakefile(unittest.TestCase):
     expected_services = [
         "rengine-web-1",
         "rengine-db-1",
-        "rengine-celery-1",
-        "rengine-celery-beat-1",
+        "secator-worker",
         "rengine-redis-1",
         "rengine-proxy-1",
         "rengine-ollama-1",
     ]
     expected_images = [
-        f"ghcr.io/security-tools-alliance/rengine-ng:rengine-celery-v{RENGINE_VERSION}",
         f"ghcr.io/security-tools-alliance/rengine-ng:rengine-web-v{RENGINE_VERSION}",
         f"ghcr.io/security-tools-alliance/rengine-ng:rengine-postgres-v{RENGINE_VERSION}",
         f"ghcr.io/security-tools-alliance/rengine-ng:rengine-redis-v{RENGINE_VERSION}",
@@ -280,8 +278,6 @@ class TestMakefile(unittest.TestCase):
             "redis-1",
             "db-1",
             "web-1",
-            "celery-1",
-            "celery-beat-1",
             "ollama-1",
             "proxy-1",
         ]

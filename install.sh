@@ -168,8 +168,6 @@ remove_old_images() {
   fi
   
   declare -a old_images=(
-    "rengine-celery"
-    "rengine-celery-beat"
     "docker.pkg.github.com/yogeshojha/rengine/rengine"
     "rengine-certs",
     "nginx",
@@ -609,36 +607,9 @@ main() {
     make pull && log "Docker images have been pulled" $COLOR_GREEN || { log "Docker images pull failed!" $COLOR_RED; exit 1; }
   fi
 
-  log "Docker containers starting, please wait as starting the Celery container could take a while..." $COLOR_CYAN
+  log "Docker containers starting..." $COLOR_CYAN
   sleep 5
   make up && log "reNgine-ng is started!" $COLOR_GREEN || { log "reNgine-ng start failed!" $COLOR_RED; exit 1; }
-
-  # Add configuration files management
-  log "Setting up tool configurations..." $COLOR_CYAN
-  
-  config_files=(
-    "theHarvester/api-keys.yaml|docker/celery/config/the-harvester-api-keys.yaml"
-    "amass/config.ini|docker/celery/config/amass.ini"
-    "gau/config.toml|docker/celery/config/gau.toml"
-  )
-
-  for entry in "${config_files[@]}"; do
-    target="${entry%%|*}"
-    source_path="${entry#*|}"
-    target_path="/home/rengine/.config/$target"
-    
-    if [ ! -f "$target_path" ]; then
-      log "Copying $target configuration..." $COLOR_CYAN
-      docker exec -u rengine rengine-celery-1 mkdir -p "$(dirname "$target_path")"
-      docker cp "$(pwd)/$source_path" "rengine-celery-1:$target_path"
-      docker exec -u rengine rengine-celery-1 chmod 644 "$target_path"
-    else
-      log "Configuration file $target already exists, skipping..." $COLOR_YELLOW
-    fi
-  done
-
-  # Create symbolic link for theHarvester if it doesn't exist
-  docker exec -u rengine rengine-celery-1 bash -c '[ ! -L "/home/rengine/.theHarvester" ] && ln -s /home/rengine/.config/theHarvester /home/rengine/.theHarvester || true'
 
   log "Creating an account..." $COLOR_CYAN
   make superuser_create isNonInteractive=$isNonInteractive

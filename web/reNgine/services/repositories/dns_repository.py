@@ -5,14 +5,14 @@ Handles DNSRecord database operations from Secator Record type.
 
 from typing import Any, Dict, List, Optional, Tuple
 
-from celery.utils.log import get_task_logger
+from reNgine.utilities.logger import get_module_logger
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError, transaction
 
 from targetApp.models import DNSRecord, Domain, DomainInfo
 
 
-logger = get_task_logger(__name__)
+logger = get_module_logger(__name__)
 
 
 class DnsRepository:

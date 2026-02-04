@@ -7,13 +7,12 @@ source "$(pwd)/common_functions.sh"
 sync_volumes() {
   log "Starting volume synchronization..." $COLOR_CYAN
   
-  # Define volume mappings: volume_name:container_path:image_name:production_container
+  # Volume mappings aligned with docker-compose.yml (web mounts nuclei_templates, wordlist, scan_results)
+  # volume_name:container_path:image_suffix:production_container
   local volumes=(
-    "rengine_tool_config:/home/rengine/.config:rengine-celery:rengine-celery-1"
-    "rengine_nuclei_templates:/home/rengine/nuclei-templates:rengine-celery:rengine-celery-1"
-    "rengine_gf_patterns:/home/rengine/.gf:rengine-celery:rengine-celery-1"
-    "rengine_wordlist:/home/rengine/wordlists:rengine-celery:rengine-celery-1"
-    "rengine_github_repos:/home/rengine/github_repos:rengine-celery:rengine-celery-1"
+    "rengine_nuclei_templates:/home/rengine/nuclei-templates:rengine-web:rengine-web-1"
+    "rengine_wordlist:/home/rengine/wordlists:rengine-web:rengine-web-1"
+    "rengine_scan_results:/home/rengine/scan_results:rengine-web:rengine-web-1"
     "rengine_ollama_data:/home/rengine/.ollama:rengine-ollama:rengine-ollama-1"
   )
   

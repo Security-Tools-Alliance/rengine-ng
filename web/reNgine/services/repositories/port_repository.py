@@ -5,7 +5,7 @@ Handles Port database operations with IP dependency from Secator.
 
 from typing import Any, Dict, List, Optional, Tuple
 
-from celery.utils.log import get_task_logger
+from reNgine.utilities.logger import get_module_logger
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import DatabaseError, IntegrityError
 
@@ -15,7 +15,7 @@ from startScan.models import IpAddress, Port, ScanHistory
 from targetApp.models import Domain
 
 
-logger = get_task_logger(__name__)
+logger = get_module_logger(__name__)
 
 
 class PortRepository:

@@ -2,7 +2,7 @@ import json
 import pickle
 from time import sleep
 
-from celery.utils.log import get_task_logger
+from reNgine.utilities.logger import get_module_logger
 from discord_webhook import DiscordEmbed, DiscordWebhook
 from django.utils import timezone
 import humanize
@@ -14,7 +14,7 @@ from reNgine.settings import DOMAIN_NAME, SECATOR_CELERY_BROKER_URL
 from scanEngine.models import Notification
 
 
-logger = get_task_logger(__name__)
+logger = get_module_logger(__name__)
 DISCORD_WEBHOOKS_CACHE = redis.Redis.from_url(SECATOR_CELERY_BROKER_URL)
 
 

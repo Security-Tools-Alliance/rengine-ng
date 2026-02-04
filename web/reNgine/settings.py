@@ -4,7 +4,6 @@ from pathlib import Path
 
 import environ
 
-from reNgine.core.logging import RengineTaskFormatter
 from reNgine.init import first_run
 
 
@@ -50,9 +49,6 @@ UI_ERROR_LOGGING = bool(int(os.environ.get("UI_ERROR_LOGGING", "0")))
 UI_REMOTE_DEBUG = bool(int(os.environ.get("UI_REMOTE_DEBUG", "0")))
 UI_REMOTE_DEBUG_PORT = int(os.environ.get("UI_REMOTE_DEBUG_PORT", 5678))
 SECATOR_API_DEBUG = bool(int(os.environ.get("SECATOR_API_DEBUG", "0")))
-CELERY_DEBUG = bool(int(os.environ.get("CELERY_DEBUG", "0")))
-CELERY_REMOTE_DEBUG = bool(int(os.environ.get("CELERY_REMOTE_DEBUG", "0")))
-CELERY_REMOTE_DEBUG_PORT = int(os.environ.get("CELERY_REMOTE_DEBUG_PORT", 5679))
 
 # Common env vars
 DEBUG = env.bool("UI_DEBUG", default=False)
@@ -130,7 +126,6 @@ INSTALLED_APPS = [
     "recon_note.apps.ReconNoteConfig",
     "commonFilters.apps.CommonfiltersConfig",
     "django_ace",
-    "django_celery_beat",
     "django_extensions",
     "mathfilters",
     "drf_yasg",
@@ -325,26 +320,12 @@ LOGGING = {
         },
         "brief": {"class": "logging.StreamHandler", "formatter": "brief"},
         "console": {"class": "logging.StreamHandler", "formatter": "brief"},
-        "task": {"class": "logging.StreamHandler", "formatter": "task"},
         "db": {
             "class": "logging.handlers.RotatingFileHandler",
             "formatter": "brief",
             "filename": str(Path.home() / "db.log"),
             "maxBytes": 1024,
             "backupCount": 3,
-        },
-        "celery": {
-            "class": "logging.handlers.RotatingFileHandler",
-            "formatter": "simple",
-            "filename": "celery.log",
-            "maxBytes": 1024 * 1024 * 100,  # 100 mb
-        },
-        "celery_beat": {
-            "class": "logging.handlers.RotatingFileHandler",
-            "formatter": "simple",
-            "filename": "celery_beat.log",
-            "maxBytes": 1024 * 1024 * 100,  # 100 mb
-            "backupCount": 5,
         },
         "error_console": {
             "class": "logging.StreamHandler",
@@ -355,7 +336,6 @@ LOGGING = {
     "formatters": {
         "default": {"format": "%(message)s"},
         "brief": {"format": "%(name)-10s | %(message)s"},
-        "task": {"()": lambda: RengineTaskFormatter("%(task_name)-34s | %(levelname)s | %(message)s")},
         "simple": {
             "format": "%(levelname)s %(message)s",
             "datefmt": "%y %b %d, %H:%M:%S",
@@ -366,54 +346,24 @@ LOGGING = {
         "django": {
             "handlers": ["file", "error_console"] if UI_ERROR_LOGGING else ["file"],
             "level": "ERROR" if (UI_DEBUG or UI_ERROR_LOGGING) else "CRITICAL",
-            "propagate": True,
-        },
-        "celery.app.trace": {
-            "handlers": ["null"],
-            "propagate": False,
-        },
-        "celery.task": {"handlers": ["task"], "propagate": False},
-        "celery.worker": {
-            "handlers": ["null"],
             "propagate": False,
         },
         "django.server": {"handlers": ["console"], "propagate": False},
         "django.db.backends": {"handlers": ["db"], "level": "INFO", "propagate": False},
         "reNgine": {
-            "handlers": ["task"],
-            "level": "DEBUG" if CELERY_DEBUG else "INFO",
-            "propagate": True,  # Allow log messages to propagate to root logger
+            "handlers": ["console"],
+            "level": "DEBUG" if UI_DEBUG else "INFO",
+            "propagate": False,
         },
         "api": {
             "handlers": ["console"],
             "level": "DEBUG" if (UI_DEBUG or SECATOR_API_DEBUG) else "INFO",
-            "propagate": True,  # Allow log messages to propagate to root logger
+            "propagate": False,
         },
         "websocket": {
             "handlers": ["console"],
             "level": "DEBUG" if (UI_DEBUG) else "INFO",
-            "propagate": True,  # Allow log messages to propagate to root logger
-        },
-        "kombu.pidbox": {
-            "handlers": ["null"],
             "propagate": False,
-        },
-        "celery.pool": {
-            "handlers": ["null"],
-            "propagate": False,
-        },
-        "celery.bootsteps": {
-            "handlers": ["null"],
-            "propagate": False,
-        },
-        "celery.utils.functional": {
-            "handlers": ["null"],
-            "propagate": False,
-        },
-        "django_celery_beat": {
-            "handlers": ["celery_beat", "console"],
-            "level": "DEBUG",
-            "propagate": True,
         },
         "migrations": {
             "handlers": ["console", "file"],
@@ -434,7 +384,7 @@ LOGGING = {
     },
     "root": {
         "handlers": ["console"],
-        "level": "DEBUG" if (UI_DEBUG or CELERY_DEBUG) else "INFO",
+        "level": "DEBUG" if UI_DEBUG else "INFO",
     },
 }
 

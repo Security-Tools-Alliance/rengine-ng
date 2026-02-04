@@ -3,7 +3,7 @@ Scan Repository - Data access for scan-related operations.
 Handles ScanHistory, ScanActivity and SubScan database operations.
 """
 
-from celery.utils.log import get_task_logger
+from reNgine.utilities.logger import get_module_logger
 from django.core.exceptions import ObjectDoesNotExist
 from django.utils import timezone
 
@@ -12,7 +12,7 @@ from reNgine.definitions import INITIATED_TASK
 from startScan.models import Domain, ScanActivity, ScanHistory, SubScan
 
 
-logger = get_task_logger(__name__)
+logger = get_module_logger(__name__)
 
 
 class ScanRepository:

@@ -8,10 +8,10 @@ from pathlib import Path
 import re
 from typing import List, Union
 
-from celery.utils.log import get_task_logger
+from reNgine.utilities.logger import get_module_logger
 
 
-logger = get_task_logger(__name__)
+logger = get_module_logger(__name__)
 
 
 def is_safe_path(basedir, path, follow_symlinks=True):

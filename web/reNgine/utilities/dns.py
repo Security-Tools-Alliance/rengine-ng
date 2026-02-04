@@ -4,7 +4,7 @@ import socket
 import subprocess
 import threading
 
-from celery.utils.log import get_task_logger
+from reNgine.utilities.logger import get_module_logger
 import validators
 
 from reNgine.settings import DEFAULT_THREADS
@@ -22,7 +22,7 @@ try:
 except ImportError:
     DNS_AVAILABLE = False
 
-logger = get_task_logger(__name__)
+logger = get_module_logger(__name__)
 
 
 def resolve_subdomain_ips(subdomain_name):

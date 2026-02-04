@@ -4,6 +4,7 @@ This file contains the test cases
 
 import json
 import logging
+from datetime import timedelta
 
 from django.template import Template
 from django.template.loader import get_template
@@ -34,6 +35,7 @@ from startScan.models import (
     Port,
     ScanActivity,
     ScanHistory,
+    ScanSchedule,
     Subdomain,
     SubScan,
     Technology,
@@ -628,21 +630,11 @@ http_crawl: {}
 
     def create_minimal_celery_setup(self):
         """
-        Create minimal Celery Beat setup instead of django_celery_beat.json fixture.
+        No-op: scan scheduling uses ScanSchedule and run_scheduled_scans (CRON).
+        Kept for test compatibility; tests that need a schedule can create ScanSchedule explicitly.
         """
-        try:
-            from django_celery_beat.models import IntervalSchedule
-
-            # Create minimal interval schedule
-            if not IntervalSchedule.objects.filter(every=1, period="minutes").exists():
-                self.test_interval = IntervalSchedule.objects.create(every=1, period="minutes")
-            else:
-                self.test_interval = IntervalSchedule.objects.filter(every=1, period="minutes").first()
-
-            return self.test_interval
-        except ImportError:
-            # Django celery beat not installed, skip
-            return None
+        self.test_interval = None
+        return None
 
     def link_ip_to_subscans(self):
         """Link IP addresses to subscans for proper API filtering."""
@@ -705,6 +697,69 @@ http_crawl: {}
             },
         )
         return self.secator_scan
+
+    def build_scan_schedule(
+        self,
+        domain,
+        initiated_by,
+        *,
+        schedule_mode=ScanSchedule.SCHEDULE_MODE_PERIODIC,
+        next_run=None,
+        one_off=False,
+        **overrides,
+    ):
+        """
+        Build a valid ScanSchedule instance (unsaved) for tests.
+
+        Centralizes required fields so tests do not break when model constraints
+        change. Caller can mutate the instance then save() to test validation.
+        """
+        if next_run is None:
+            next_run = timezone.now() + timedelta(days=1)
+        kwargs = {
+            "name": "Test schedule",
+            "domain": domain,
+            "initiated_by": initiated_by,
+            "schedule_mode": schedule_mode,
+            "next_run": next_run,
+            "one_off": one_off,
+            "enabled": True,
+        }
+        if schedule_mode == ScanSchedule.SCHEDULE_MODE_PERIODIC:
+            kwargs["frequency_value"] = 30
+            kwargs["frequency_type"] = ScanSchedule.FREQUENCY_MINUTES
+        else:
+            kwargs["scheduled_time"] = next_run
+        kwargs.update(overrides)
+        return ScanSchedule(**kwargs)
+
+    def create_scan_schedule(
+        self,
+        domain,
+        initiated_by,
+        *,
+        schedule_mode=ScanSchedule.SCHEDULE_MODE_PERIODIC,
+        next_run=None,
+        one_off=False,
+        **overrides,
+    ):
+        """
+        Create and save a valid ScanSchedule for tests.
+
+        Centralizes required fields so tests do not break when model constraints
+        or migrations change. For unsaved instances (e.g. to test validation),
+        use build_scan_schedule() instead.
+        """
+        schedule = self.build_scan_schedule(
+            domain,
+            initiated_by,
+            schedule_mode=schedule_mode,
+            next_run=next_run,
+            one_off=one_off,
+            **overrides,
+        )
+        schedule.save()
+        return schedule
 
 
 class TestValidation:

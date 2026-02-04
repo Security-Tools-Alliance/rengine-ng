@@ -5,7 +5,7 @@ Handles Command database operations from Secator runner data.
 
 from typing import Any, Dict, Optional
 
-from celery.utils.log import get_task_logger
+from reNgine.utilities.logger import get_module_logger
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError
 from django.utils import timezone
@@ -14,7 +14,7 @@ from reNgine.utilities.time import parse_datetime_iso
 from startScan.models import Command, ScanActivity, ScanHistory
 
 
-logger = get_task_logger(__name__)
+logger = get_module_logger(__name__)
 
 
 class CommandRepository:

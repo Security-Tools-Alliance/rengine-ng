@@ -12,13 +12,11 @@ class StartscanConfig(AppConfig):
         """
         Any Scans that were incomplete in the last scan, we will mark them failed after
         server restarted
-        This does not include pending_scans, pending_scans are taken care by celery
+        This does not include pending_scans, pending_scans are taken care by run_scheduled_scans
         """
-        # Import signals when Django is ready.
+        import startScan.signals  # noqa: F401
 
-        # Additional initialization can be added here
         logger.info("StartScan app initialized - Signals registered")
-        pass
         # logger.info('Cancelling all the ongoing scans')
         # ScanHistory = self.get_model('ScanHistory')
         # ScanHistory.objects.filter(scan_status=1).update(scan_status=0)

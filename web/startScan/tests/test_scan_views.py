@@ -10,8 +10,19 @@ from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
 
+from django.http import QueryDict
+
 from scanEngine.models import SecatorProfile
-from startScan.models import Command, Subdomain
+from startScan.models import Command, ScanSchedule, Subdomain
+from django.core.exceptions import ValidationError
+from django.utils import timezone
+
+from startScan.models import ScanSchedule
+from startScan.views import (
+    SCHEDULE_MODE_REQUIRED_MSG,
+    _parse_scheduled_time_utc,
+    _validate_schedule_form_post,
+)
 from utils.test_base import BaseTestCase
 
 
@@ -455,3 +466,222 @@ class TestBuildCommandHierarchy(BaseTestCase):
         self.assertEqual(hierarchy[0]["command"], workflow_command)
         self.assertEqual(len(hierarchy[0]["tasks"]), 1)
         self.assertEqual(hierarchy[0]["tasks"][0], task_command)
+
+
+class TestScheduleFormValidation(BaseTestCase):
+    """Unit tests for schedule form validation (_validate_schedule_form_post)."""
+
+    def test_invalid_schedule_mode(self):
+        """Unknown scheduled_mode should return an error."""
+        post = QueryDict("", mutable=True)
+        post["scheduled_mode"] = "invalid"
+        err, _ = _validate_schedule_form_post(post)
+        self.assertIsNotNone(err)
+        self.assertEqual(err, SCHEDULE_MODE_REQUIRED_MSG)
+
+    def test_periodic_missing_frequency(self):
+        """Periodic mode with missing frequency should return an error."""
+        post = QueryDict("", mutable=True)
+        post["scheduled_mode"] = ScanSchedule.SCHEDULE_MODE_PERIODIC
+        post["frequency_type"] = ScanSchedule.FREQUENCY_MINUTES
+        err, _ = _validate_schedule_form_post(post)
+        self.assertIsNotNone(err)
+        self.assertIn("interval", err.lower())
+
+    def test_periodic_empty_frequency(self):
+        """Periodic mode with empty frequency string should return an error."""
+        post = QueryDict("", mutable=True)
+        post["scheduled_mode"] = ScanSchedule.SCHEDULE_MODE_PERIODIC
+        post["frequency"] = "   "
+        post["frequency_type"] = ScanSchedule.FREQUENCY_MINUTES
+        err, _ = _validate_schedule_form_post(post)
+        self.assertIsNotNone(err)
+
+    def test_periodic_invalid_frequency_not_number(self):
+        """Periodic mode with non-numeric frequency should return an error."""
+        post = QueryDict("", mutable=True)
+        post["scheduled_mode"] = ScanSchedule.SCHEDULE_MODE_PERIODIC
+        post["frequency"] = "abc"
+        post["frequency_type"] = ScanSchedule.FREQUENCY_MINUTES
+        err, _ = _validate_schedule_form_post(post)
+        self.assertIsNotNone(err)
+        self.assertIn("positive", err.lower())
+
+    def test_periodic_invalid_frequency_zero(self):
+        """Periodic mode with frequency 0 should return an error."""
+        post = QueryDict("", mutable=True)
+        post["scheduled_mode"] = ScanSchedule.SCHEDULE_MODE_PERIODIC
+        post["frequency"] = "0"
+        post["frequency_type"] = ScanSchedule.FREQUENCY_MINUTES
+        err, _ = _validate_schedule_form_post(post)
+        self.assertIsNotNone(err)
+
+    def test_periodic_invalid_frequency_type(self):
+        """Periodic mode with unknown frequency_type should return an error."""
+        post = QueryDict("", mutable=True)
+        post["scheduled_mode"] = ScanSchedule.SCHEDULE_MODE_PERIODIC
+        post["frequency"] = "30"
+        post["frequency_type"] = "invalid_unit"
+        err, _ = _validate_schedule_form_post(post)
+        self.assertIsNotNone(err)
+        self.assertIn("frequency", err.lower())
+
+    def test_periodic_valid(self):
+        """Valid periodic form should return (None, normalized_mode)."""
+        post = QueryDict("", mutable=True)
+        post["scheduled_mode"] = ScanSchedule.SCHEDULE_MODE_PERIODIC
+        post["frequency"] = "30"
+        post["frequency_type"] = ScanSchedule.FREQUENCY_HOURS
+        err, mode = _validate_schedule_form_post(post)
+        self.assertIsNone(err)
+        self.assertEqual(mode, ScanSchedule.SCHEDULE_MODE_PERIODIC)
+
+    def test_clocked_missing_scheduled_time(self):
+        """Clocked mode with missing scheduled_time should return an error."""
+        post = QueryDict("", mutable=True)
+        post["scheduled_mode"] = ScanSchedule.SCHEDULE_MODE_CLOCKED
+        err, _ = _validate_schedule_form_post(post)
+        self.assertIsNotNone(err)
+        self.assertIn("date and time", err.lower())
+
+    def test_clocked_empty_scheduled_time(self):
+        """Clocked mode with empty scheduled_time should return an error."""
+        post = QueryDict("", mutable=True)
+        post["scheduled_mode"] = ScanSchedule.SCHEDULE_MODE_CLOCKED
+        post["scheduled_time"] = "   "
+        err, _ = _validate_schedule_form_post(post)
+        self.assertIsNotNone(err)
+
+    def test_clocked_invalid_datetime_format(self):
+        """Clocked mode with invalid datetime format should return an error."""
+        post = QueryDict("", mutable=True)
+        post["scheduled_mode"] = ScanSchedule.SCHEDULE_MODE_CLOCKED
+        post["scheduled_time"] = "not-a-date"
+        err, _ = _validate_schedule_form_post(post)
+        self.assertIsNotNone(err)
+        self.assertIn("format", err.lower())
+
+    def test_clocked_valid(self):
+        """Valid clocked form should return (None, normalized_mode)."""
+        post = QueryDict("", mutable=True)
+        post["scheduled_mode"] = ScanSchedule.SCHEDULE_MODE_CLOCKED
+        post["scheduled_time"] = "2030-01-15 14:30"
+        err, mode = _validate_schedule_form_post(post)
+        self.assertIsNone(err)
+        self.assertEqual(mode, ScanSchedule.SCHEDULE_MODE_CLOCKED)
+
+
+class TestScheduleScanView(BaseTestCase):
+    """Integration tests for schedule_scan view (schedule form validation)."""
+
+    def setUp(self):
+        """Ensure workflow exists so secator kwargs build succeeds."""
+        super().setUp()
+        self.data_generator.create_secator_workflow()
+
+    def test_schedule_scan_post_clocked_without_time_returns_error(self):
+        """POST with clocked mode but no scheduled_time should re-render form with error."""
+        url = reverse(
+            "schedule_scan",
+            kwargs={
+                "slug": self.data_generator.project.slug,
+                "host_id": self.data_generator.domain.id,
+            },
+        )
+        post_data = {
+            "execution_mode": "workflow",
+            "workflow_id": str(self.data_generator.secator_workflow.id),
+            "scheduled_mode": ScanSchedule.SCHEDULE_MODE_CLOCKED,
+        }
+        response = self.client.post(url, post_data)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "date and time", status_code=200)
+
+
+class TestParseScheduledTimeUtc(BaseTestCase):
+    """Unit tests for _parse_scheduled_time_utc helper."""
+
+    def test_valid_returns_aware_datetime(self):
+        """Valid 'YYYY-MM-DD HH:MM' string should return timezone-aware UTC datetime."""
+        result = _parse_scheduled_time_utc("2030-06-15 10:30", 0)
+        self.assertIsNotNone(result)
+        self.assertTrue(timezone.is_aware(result))
+
+    def test_invalid_format_returns_none(self):
+        """Malformed scheduled_time should return None (no 500)."""
+        self.assertIsNone(_parse_scheduled_time_utc("not-a-date", 0))
+        self.assertIsNone(_parse_scheduled_time_utc("2030/06/15 10:30", 0))
+
+    def test_empty_returns_none(self):
+        """Empty or whitespace string should return None."""
+        self.assertIsNone(_parse_scheduled_time_utc("", 0))
+        self.assertIsNone(_parse_scheduled_time_utc("   ", 0))
+
+
+class TestScanScheduleModelValidation(BaseTestCase):
+    """Unit tests for ScanSchedule.clean() and get_frequency_type_display_for_value."""
+
+    def test_periodic_without_frequency_value_raises(self):
+        """Periodic schedule with null frequency_value should raise ValidationError on save."""
+        schedule = self.data_generator.build_scan_schedule(
+            self.data_generator.domain,
+            self.user,
+            schedule_mode=ScanSchedule.SCHEDULE_MODE_PERIODIC,
+        )
+        schedule.frequency_value = None
+        with self.assertRaises(ValidationError) as ctx:
+            schedule.save()
+        self.assertIn("frequency_value", ctx.exception.message_dict)
+
+    def test_clocked_without_scheduled_time_raises(self):
+        """Clocked schedule with null scheduled_time should raise ValidationError on save."""
+        next_run = timezone.now() + timezone.timedelta(days=1)
+        schedule = self.data_generator.build_scan_schedule(
+            self.data_generator.domain,
+            self.user,
+            schedule_mode=ScanSchedule.SCHEDULE_MODE_CLOCKED,
+            next_run=next_run,
+        )
+        schedule.scheduled_time = None
+        with self.assertRaises(ValidationError) as ctx:
+            schedule.save()
+        self.assertIn("scheduled_time", ctx.exception.message_dict)
+
+    def test_periodic_valid_saves(self):
+        """Periodic schedule with frequency_value and frequency_type should save."""
+        schedule = self.data_generator.create_scan_schedule(
+            self.data_generator.domain,
+            self.user,
+            schedule_mode=ScanSchedule.SCHEDULE_MODE_PERIODIC,
+        )
+        self.assertIsNotNone(schedule.id)
+
+    def test_get_frequency_type_display_for_value_singular_when_one(self):
+        """Display should be singular (e.g. Minute) when frequency_value is 1."""
+        schedule = self.data_generator.build_scan_schedule(
+            self.data_generator.domain,
+            self.user,
+            frequency_value=1,
+        )
+        self.assertEqual(schedule.get_frequency_type_display_for_value(), "Minute")
+
+    def test_get_frequency_type_display_for_value_plural_when_not_one(self):
+        """Display should be plural (e.g. Minutes) when frequency_value is not 1."""
+        schedule = self.data_generator.build_scan_schedule(
+            self.data_generator.domain,
+            self.user,
+            frequency_value=2,
+        )
+        self.assertEqual(schedule.get_frequency_type_display_for_value(), "Minutes")
+
+    def test_initiated_by_required_raises(self):
+        """Schedule with null initiated_by should raise ValidationError on save."""
+        schedule = self.data_generator.build_scan_schedule(
+            self.data_generator.domain,
+            self.user,
+            schedule_mode=ScanSchedule.SCHEDULE_MODE_PERIODIC,
+        )
+        schedule.initiated_by_id = None
+        with self.assertRaises(ValidationError) as ctx:
+            schedule.save()
+        self.assertIn("initiated_by", ctx.exception.message_dict)

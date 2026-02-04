@@ -4,8 +4,10 @@ This guide explains how to deploy Secator workers on remote machines (VPS, inter
 
 ## Overview
 
+Task execution and scheduling are handled by **Secator** (workers and beat run in the Secator worker container). reNgine-ng no longer runs Celery; it uses Secator's Celery-compatible broker for the worker.
+
 Secator workers can be deployed anywhere with network access to:
-- **Redis broker** (Celery task queue)
+- **Redis broker** (used by Secator as Celery broker; set `SECATOR_CELERY_BROKER_URL` and `SECATOR_CELERY_RESULT_BACKEND`)
 - **reNgine-ng API** (for downloading hooks and reporting results)
 
 This enables use cases like:

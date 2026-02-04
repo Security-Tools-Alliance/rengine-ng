@@ -1,4 +1,4 @@
-from celery.utils.log import get_task_logger
+from reNgine.utilities.logger import get_module_logger
 from django.utils import timezone
 
 from reNgine.definitions import (
@@ -8,7 +8,7 @@ from reNgine.definitions import (
 from startScan.models import ScanActivity, ScanHistory, SubScan
 
 
-logger = get_task_logger(__name__)
+logger = get_module_logger(__name__)
 
 
 # TODO Use secator to launch this task

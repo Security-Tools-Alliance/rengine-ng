@@ -42,10 +42,10 @@ Scheduled Scans
             <td>{{ task_name.0 }}</td>
             {% endwith %}
             <td>
-              {% if task.interval %}
-              Will run  {{ task.interval }}
-              {% elif task.clocked %}
-              Will run exactly at {{ task.clocked.clocked_time}} UTC
+              {% if task.schedule_mode == 'periodic' %}
+              Every {{ task.frequency_value }} {{ task.get_frequency_type_display_for_value }}
+              {% else %}
+              {% if task.scheduled_time %}At {{ task.scheduled_time|date:"Y-m-d H:i" }} UTC{% else %}—{% endif %}
               {% endif %}
             </td>
             <td>{{ task.last_run_at|none_or_never }} UTC</td>
@@ -59,7 +59,7 @@ Scheduled Scans
             </td>
             <td class="text-center">
               <label class="switch s-icons s-outline s-outline-info">
-                <input type="hidden" name="task_id" value="task.id" />
+                <input type="hidden" name="task_id" value="{{ task.id }}" />
                 <input type="checkbox" name="task_enabled" {% if task.enabled %}checked{% endif %} onchange="change_scheduled_task_status('{% url 'change_scheduled_task_status' current_project.slug task.id %}', this)" data-plugin="switchery">
                 <span class="slider round"></span>
               </label>

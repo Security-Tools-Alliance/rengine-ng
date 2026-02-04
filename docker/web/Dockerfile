@@ -15,6 +15,7 @@ ARG HOST_GID
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     bash \
+    cron \
     curl \
     fontconfig \
     fonts-freefont-ttf \

@@ -1,6 +1,6 @@
 import os
 
-from celery.utils.log import get_task_logger
+from reNgine.utilities.logger import get_module_logger
 from discord_webhook import DiscordWebhook
 import requests
 
@@ -20,7 +20,7 @@ from scanEngine.models import EngineType, Hackerone, Notification
 from startScan.models import ScanActivity, ScanHistory, SubScan, Vulnerability
 
 
-logger = get_task_logger(__name__)
+logger = get_module_logger(__name__)
 
 
 # TODO Use secator to launch this task

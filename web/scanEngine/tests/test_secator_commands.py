@@ -249,7 +249,7 @@ class TestLoadWorkflowsCommand(BaseTestCase):
 
     @patch("scanEngine.management.commands.load_workflows.get_configs_by_type")
     @patch(
-        "builtins.open",
+        "scanEngine.management.commands.load_workflows.open",
         new_callable=mock_open,
         read_data="""
 type: workflow
@@ -273,12 +273,13 @@ tasks:
         """
         Test successful loading of built-in workflows from Secator.
         """
-        # Mock TemplateLoader object for workflow
+        # Mock TemplateLoader object for workflow (set long_description to None to avoid MagicMock in DB)
         mock_workflow = MagicMock()
         mock_workflow.name = "subdomain_recon"
         mock_workflow.alias = "subdomain_recon"
         mock_workflow.description = "Subdomain discovery"
         mock_workflow._path = "/path/to/workflow.yaml"
+        mock_workflow.long_description = None
 
         mock_get_configs.return_value = [mock_workflow]
 
@@ -324,6 +325,7 @@ tasks:
         mock_workflow.alias = "subdomain_recon"
         mock_workflow.description = "Subdomain discovery"
         mock_workflow._path = "/path/to/workflow.yaml"
+        mock_workflow.long_description = None
 
         mock_get_configs.return_value = [mock_workflow]
 
@@ -349,6 +351,7 @@ tasks:
         mock_workflow.alias = "subdomain_recon"
         mock_workflow.description = "Subdomain discovery"
         mock_workflow._path = "/path/to/workflow.yaml"
+        mock_workflow.long_description = None
 
         mock_get_configs.return_value = [mock_workflow]
 

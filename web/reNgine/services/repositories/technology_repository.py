@@ -6,7 +6,7 @@ Handles Technology database operations with ManyToMany associations from Secator
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
-from celery.utils.log import get_task_logger
+from reNgine.utilities.logger import get_module_logger
 from django.core.exceptions import MultipleObjectsReturned, ObjectDoesNotExist
 from django.db import DatabaseError, IntegrityError
 
@@ -15,7 +15,7 @@ from reNgine.secator.path_utils import strip_secator_reports_prefix
 from startScan.models import EndPoint, Subdomain, Technology
 
 
-logger = get_task_logger(__name__)
+logger = get_module_logger(__name__)
 
 
 class TechnologyRepository:

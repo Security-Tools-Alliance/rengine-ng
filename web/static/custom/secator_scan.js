@@ -122,7 +122,7 @@
         return false;
       }
 
-      const $submitBtn = $form.find('#start-scan-btn');
+      const $submitBtn = $form.find('button[type="submit"]');
       $submitBtn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin me-2"></i>Starting Scan...');
       const formData = this.collectFormData($form);
       this.submitStartScan(formData, {
@@ -1010,7 +1010,7 @@
         return;
       }
 
-      const $submitBtn = $form.find('#start-scan-btn');
+      const $submitBtn = $form.find('button[type="submit"]');
       if (!$submitBtn.length) {
         return;
       }
@@ -1048,31 +1048,18 @@
     },
 
     ensureButtonOutsideAdvancedConfig: function() {
-      // Ensure the start scan button is outside advanced-config-section
-      const $buttonContainer = $('.start-scan-button-container');
-      const $advancedConfigSection = $('.advanced-config-section');
-      const $form = $('#start-scan-form');
-      
-      if ($buttonContainer.length && $advancedConfigSection.length && $form.length) {
-        // Check if button is inside advanced-config-section
-        if ($advancedConfigSection.find($buttonContainer).length > 0) {
-          // Move button outside advanced-config-section
-          $buttonContainer.detach();
-          $advancedConfigSection.after($buttonContainer);
+      $('.start-scan-button-container').each(function() {
+        const $container = $(this);
+        const $form = $container.closest('form');
+        if (!$form.length) return;
+
+        let $section = $container.closest('.advanced-config-section');
+        if (!$section.length) $section = $container.closest('#select_engine');
+        if ($section.length && $section.closest('form')[0] === $form[0]) {
+          $container.detach();
+          $section.after($container);
         }
-        
-        // Also ensure it's outside select_engine
-        const $selectEngine = $('#select_engine');
-        if ($selectEngine.length && $selectEngine.find($buttonContainer).length > 0) {
-          $buttonContainer.detach();
-          $selectEngine.after($buttonContainer);
-        }
-        
-        // Ensure it's inside the form
-        if ($buttonContainer.closest('form').length === 0) {
-          $form.append($buttonContainer);
-        }
-      }
+      });
     }
   });
 

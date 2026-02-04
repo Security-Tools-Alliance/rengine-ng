@@ -8,13 +8,13 @@ import unittest
 os.environ["RENGINE_SECRET_KEY"] = "secret"
 os.environ["CELERY_ALWAYS_EAGER"] = "True"
 
-from celery.utils.log import get_task_logger
+from reNgine.utilities.logger import get_module_logger
 
 from reNgine.settings import CELERY_DEBUG
 from reNgine.utilities.parser import parse_nmap_results
 
 
-logger = get_task_logger(__name__)
+logger = get_module_logger(__name__)
 DOMAIN_NAME = os.environ["DOMAIN_NAME"]
 FIXTURES_DIR = pathlib.Path().absolute() / "fixtures" / "nmap_xml"
 

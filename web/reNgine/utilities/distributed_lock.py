@@ -29,11 +29,11 @@ import hashlib
 import time
 from typing import Any, Callable, Optional
 
-from celery.utils.log import get_task_logger
+from reNgine.utilities.logger import get_module_logger
 from django.conf import settings
 
 
-logger = get_task_logger(__name__)
+logger = get_module_logger(__name__)
 
 # Global Redis connection pool for efficient connection reuse
 _redis_pool = None

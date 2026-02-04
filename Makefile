@@ -123,7 +123,6 @@ build-service:		## Build a specific Docker service without removing images. Usag
 		# Map service names to image names \
 		case "$(SERVICE)" in \
 			"db") IMAGE_NAME="postgres" ;; \
-			"celery-beat") IMAGE_NAME="celery" ;; \
 			*) IMAGE_NAME="$(SERVICE)" ;; \
 		esac; \
 		image_id=$$(docker images --filter=reference="ghcr.io/security-tools-alliance/rengine-ng:rengine-$$IMAGE_NAME-v$(RENGINE_VERSION)" --format "{{.ID}}" | head -1); \
@@ -319,7 +318,7 @@ help:			## Show this help.
 	@echo "  make build GPU=1                       				Build all images with GPU support"
 	@echo "  make build_up GPU=1                    				Build and start all services with GPU support"
 	@echo "  make build-service SERVICE=web         				Build only the web service without removing images"
-	@echo "  make build-service SERVICE=celery GPU=1				Build only the celery service with GPU support"
+	@echo "  make build-service SERVICE=web GPU=1   				Build only the web service with GPU support"
 	@echo "  make build-service SERVICE=web REBUILD=1				Build web service after removing its image"
 	@echo "  make build-service SERVICE=redis REBUILD=1 GPU=1		Build redis service after removing image with GPU support"
 	@echo "  make test-app APPS=api,scanEngine      				Run tests for api and scanEngine apps"

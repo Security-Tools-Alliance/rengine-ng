@@ -6,7 +6,7 @@ Handles Employee database operations from Secator UserAccount type.
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
-from celery.utils.log import get_task_logger
+from reNgine.utilities.logger import get_module_logger
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError
 from django.utils import timezone
@@ -16,7 +16,7 @@ from startScan.models import Email, Employee, EndPoint, ScanHistory, Subdomain
 from targetApp.models import Domain
 
 
-logger = get_task_logger(__name__)
+logger = get_module_logger(__name__)
 
 
 class EmployeeRepository:

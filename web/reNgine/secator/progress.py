@@ -5,7 +5,7 @@ Handles synchronization between Secator runner data and ScanHistory.
 
 from typing import Optional
 
-from celery.utils.log import get_task_logger
+from reNgine.utilities.logger import get_module_logger
 from django.utils import timezone
 
 from reNgine.definitions import (
@@ -20,7 +20,7 @@ from reNgine.services.repositories.scan_repository import ScanRepository
 from startScan.models import ScanActivity, ScanHistory, SecatorRunner
 
 
-logger = get_task_logger(__name__)
+logger = get_module_logger(__name__)
 
 TERMINAL_RUNNER_STATUSES = frozenset({"SUCCESS", "FAILURE", "FAILED", "REVOKED"})
 
