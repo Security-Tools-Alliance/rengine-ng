@@ -421,7 +421,11 @@ class OllamaManager(APIView):
                     logger.error("Download error: %s", e)
                     try:
                         async_to_sync(channel_layer.group_send)(
-                            channel_name, {"type": "download_progress", "message": {"status": "error", "error": get_safe_user_message(e, None)}}
+                            channel_name,
+                            {
+                                "type": "download_progress",
+                                "message": {"status": "error", "error": get_safe_user_message(e, None)},
+                            },
                         )
                     except Exception as e2:
                         logger.error("Error sending error message: %s", e2)
@@ -1822,7 +1826,12 @@ class InitiateSubTask(APIView):
             except Exception as e:
                 logger.error("Error initiating subscan for subdomain %s: %s", subdomain.name, e)
                 scan_results.append(
-                    {"subdomain_id": subdomain.id, "subdomain_name": subdomain.name, "status": "error", "error": get_safe_user_message(e, None)}
+                    {
+                        "subdomain_id": subdomain.id,
+                        "subdomain_name": subdomain.name,
+                        "status": "error",
+                        "error": get_safe_user_message(e, None),
+                    }
                 )
 
         return Response(
@@ -3772,7 +3781,10 @@ class LLMModelsManager(APIView):
 
         except Exception as e:
             logger.error("Error in LLMModelsManager GET: %s", e)
-            return Response({"status": False, "error": "Failed to fetch LLM models", "message": get_safe_user_message(e, None)}, status=500)
+            return Response(
+                {"status": False, "error": "Failed to fetch LLM models", "message": get_safe_user_message(e, None)},
+                status=500,
+            )
 
 
 @api_view(["GET"])

@@ -8,6 +8,7 @@ from django.db import IntegrityError
 
 from reNgine.definitions import GENERIC_USER_ERROR_MESSAGE
 
+
 # Max length and chars that suggest path/multi-line leakage; beyond this we return generic only.
 _SAFE_USER_MESSAGE_MAX_LEN = 256
 _UNSAFE_MESSAGE_CHARS = ("/", "\\", "\n", "\r")
@@ -53,11 +54,7 @@ def get_safe_user_message(exc: BaseException, logger=None, context=None):
         msg = str(exc)
         return msg if _looks_safe_for_user(msg) else GENERIC_USER_ERROR_MESSAGE
     error_str = str(exc).lower()
-    if (
-        "validation" in error_str
-        or "invalid" in error_str
-        or "required" in error_str
-    ):
+    if "validation" in error_str or "invalid" in error_str or "required" in error_str:
         msg = str(exc)
         return msg if _looks_safe_for_user(msg) else GENERIC_USER_ERROR_MESSAGE
     return GENERIC_USER_ERROR_MESSAGE
