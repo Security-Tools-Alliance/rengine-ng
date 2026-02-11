@@ -101,11 +101,7 @@ class AccountAdapter(DefaultAccountAdapter):
             # If they have project access, go to their project dashboard.
             # Order explicitly so the selected project is deterministic
             # (most recently created project).
-            if user_project := (
-                Project.objects.filter(users=user)
-                .order_by("-insert_date")
-                .first()
-            ):
+            if user_project := (Project.objects.filter(users=user).order_by("-insert_date").first()):
                 return reverse("dashboardIndex", kwargs={"slug": user_project.slug})
 
             # First-ever login: show welcome page once
@@ -114,7 +110,7 @@ class AccountAdapter(DefaultAccountAdapter):
             # worst case is the welcome page shows one extra time or skips once (non-critical).
             if user.last_login is None:
                 return reverse("oauth_welcome")
-            
+
             return reverse("list_projects")
 
         if project := get_user_projects(user).first():

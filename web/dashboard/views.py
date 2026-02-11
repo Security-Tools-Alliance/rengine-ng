@@ -208,7 +208,7 @@ def get_user_from_request(request):
 def handle_get_request(request, mode, user):
     if mode != "change_status":
         return HttpResponseBadRequest(reverse("admin_interface"), status=400)
-    
+
     if user is None:
         messages.add_message(request, messages.ERROR, "User not found.")
         return HttpResponseRedirect(reverse("admin_interface"))
@@ -260,9 +260,7 @@ def handle_update_user(request, user):
             valid_projects = Project.objects.filter(id__in=projects)
             # Verify all requested project IDs exist
             if valid_projects.count() != len(projects):
-                return JsonResponse(
-                    {"status": False, "error": "One or more project IDs are invalid"}
-                )
+                return JsonResponse({"status": False, "error": "One or more project IDs are invalid"})
             user.projects.set(valid_projects)
 
         user.save()
@@ -304,9 +302,7 @@ def on_user_logged_out(sender, request, **kwargs):
 @receiver(user_logged_in)
 def on_user_logged_in(sender, request, **kwargs):
     user = kwargs.get("user")
-    messages.add_message(
-        request, messages.INFO, f"Hi @{user.username} welcome back!"
-    )
+    messages.add_message(request, messages.INFO, f"Hi @{user.username} welcome back!")
 
 
 def search(request):

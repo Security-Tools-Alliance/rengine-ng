@@ -18,7 +18,7 @@ class Command(BaseCommand):
             action="store_true",
             default=False,
             help="Remove OAuth providers whose env credentials are empty. "
-                 "Without this flag, providers configured via admin UI are preserved.",
+            "Without this flag, providers configured via admin UI are preserved.",
         )
         parser.add_argument(
             "--site-id",
@@ -41,13 +41,10 @@ class Command(BaseCommand):
         else:
             site_count = Site.objects.count()
             if site_count == 0:
-                raise CommandError(
-                    "No Site instances are configured. Please create a Site first."
-                )
+                raise CommandError("No Site instances are configured. Please create a Site first.")
             if site_count > 1:
                 raise CommandError(
-                    "Multiple Site instances are configured. "
-                    "Please specify which one to configure using --site-id."
+                    "Multiple Site instances are configured. Please specify which one to configure using --site-id."
                 )
             site = Site.objects.get_current()
 

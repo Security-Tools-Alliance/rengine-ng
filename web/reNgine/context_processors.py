@@ -4,7 +4,9 @@ from django.core.cache import cache
 import requests
 
 from dashboard.utils import is_oauth_user
+
 from . import settings
+
 
 try:
     from allauth.socialaccount.models import SocialApp
