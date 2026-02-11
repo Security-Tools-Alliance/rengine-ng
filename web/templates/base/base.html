@@ -84,6 +84,21 @@
             </div>
             {% block main_content %}
             {% endblock main_content %}
+
+            {# Persistent OAuth info banner for OAuth users without project access #}
+            {% if is_oauth_user %}
+              {% if not current_project|default:"" %}
+              <div class="alert alert-info alert-dismissible fade show mt-3" role="alert">
+                <i class="mdi mdi-shield-account me-2"></i>
+                <strong>OAuth Account</strong> &mdash;
+                Your account is managed via OAuth. An administrator needs to assign you to a project before you can access scan features.
+                <a href="https://github.com/Security-Tools-Alliance/rengine-ng/wiki/usage-oauth" target="_blank" class="alert-link">
+                  <i class="mdi mdi-open-in-new"></i> Learn more on the Wiki
+                </a>
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+              </div>
+              {% endif %}
+            {% endif %}
           </div>
           <div id="additional-content"></div>
         </div>
@@ -271,10 +286,11 @@
             {% if message.tags == 'error'%}
               actionTextColor: '#fff',
               backgroundColor: '#e7515a',
+              duration: 8000,
             {% else %}
             actionTextColor: '#42A5F5',
+            duration: 5000,
             {% endif %}
-            duration: 2500
           });
         </script>
       {% endfor %}

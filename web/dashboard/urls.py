@@ -8,6 +8,7 @@ from . import views
 urlpatterns = [
     path("", views.onboarding, name="onboarding"),
     path("dashboard/<slug:slug>", views.index, name="dashboardIndex"),
+    path("welcome/oauth/", views.oauth_welcome, name="oauth_welcome"),
     path("profile/", views.profile, name="profile"),
     path("admin_interface/", views.admin_interface, name="admin_interface"),
     path("admin_interface/update", views.admin_interface_update, name="admin_interface_update"),
