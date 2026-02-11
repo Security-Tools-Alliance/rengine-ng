@@ -159,6 +159,7 @@ TEMPLATES = [
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
                 "reNgine.context_processors.version",
+                "reNgine.context_processors.oauth_providers",
                 "reNgine.context_processors.misc",
                 "dashboard.context_processors.project_context",
             ],
@@ -240,7 +241,13 @@ LOGIN_REQUIRED_IGNORE_VIEW_NAMES = [
 ]
 
 LOGIN_REQUIRED_IGNORE_PATHS = [
-    r"/accounts/",
+    # Only exempt the specific allauth routes needed for OAuth login/callback flow.
+    # Do NOT use a broad r"/accounts/" pattern — that would expose account-management
+    # views (email, password, etc.) to anonymous users.
+    r"/accounts/\w+/login/$",
+    r"/accounts/\w+/login/callback/$",
+    r"/accounts/signup/$",
+    r"/accounts/social/signup/$",
 ]
 
 LOGIN_URL = "login"
@@ -266,18 +273,22 @@ ACCOUNT_DEFAULT_HTTP_PROTOCOL = "https"
 SOCIALACCOUNT_AUTO_SIGNUP = True
 SOCIALACCOUNT_EMAIL_VERIFICATION = "optional"
 SOCIALACCOUNT_STORE_TOKENS = False  # Don't store OAuth tokens (security)
-# Skip intermediate confirmation page and redirect directly to OAuth provider.
-# Set SOCIALACCOUNT_LOGIN_ON_GET=0 in .env for stricter deployments (CSRF protection).
+# Whether to skip the intermediate confirmation page and redirect directly to the OAuth provider.
+# Set SOCIALACCOUNT_LOGIN_ON_GET=0 in .env to restore the confirmation page.
 SOCIALACCOUNT_LOGIN_ON_GET = env.bool("SOCIALACCOUNT_LOGIN_ON_GET", default=True)
 
 # Custom adapter for OAuth user creation with minimal permissions
 SOCIALACCOUNT_ADAPTER = "dashboard.adapters.OAuthAccountAdapter"
 ACCOUNT_ADAPTER = "dashboard.adapters.AccountAdapter"
 
-# Trust proxy headers for HTTPS detection
-SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-USE_X_FORWARDED_HOST = True
-USE_X_FORWARDED_PORT = True
+# Trust proxy headers for HTTPS detection.
+# Only enable when running behind a trusted reverse proxy (e.g. nginx, traefik)
+# that correctly sets X-Forwarded-Proto/Host/Port headers.
+# Set TRUST_PROXY_HEADERS=True in .env to enable.
+if env.bool("TRUST_PROXY_HEADERS", default=False):
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    USE_X_FORWARDED_HOST = True
+    USE_X_FORWARDED_PORT = True
 
 # OAuth Provider Settings
 # Note: OpenID Connect providers are configured via Django admin

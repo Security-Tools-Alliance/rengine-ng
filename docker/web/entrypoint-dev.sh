@@ -18,6 +18,9 @@ poetry run -C $RENGINE_FOLDER python3 manage.py makemigrations
 print_msg "Migrate database"
 poetry run -C $RENGINE_FOLDER python3 manage.py migrate
 
+print_msg "Setup OAuth providers from environment"
+poetry run -C $RENGINE_FOLDER python3 manage.py setup_oauth
+
 print_msg "Collect static files"
 poetry run -C $RENGINE_FOLDER python3 manage.py collectstatic --noinput
 
