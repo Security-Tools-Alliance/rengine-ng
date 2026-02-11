@@ -3,6 +3,8 @@ Custom OAuth adapter for reNgine-ng
 Handles user creation with minimal permissions and proper redirects
 """
 
+import logging
+
 from allauth.account.adapter import DefaultAccountAdapter
 from allauth.socialaccount.adapter import DefaultSocialAccountAdapter
 from django.contrib import messages
@@ -11,6 +13,10 @@ from rolepermissions.checkers import has_role
 from rolepermissions.roles import assign_role
 
 from dashboard.models import Project
+from dashboard.utils import get_user_projects, is_oauth_user
+
+
+logger = logging.getLogger(__name__)
 
 
 class OAuthAccountAdapter(DefaultSocialAccountAdapter):
@@ -36,14 +42,26 @@ class OAuthAccountAdapter(DefaultSocialAccountAdapter):
 
     def _get_oauth_error_message(self, error=None, default_message="OAuth authentication failed."):
         """
-        Generate an OAuth error message.
+        Generate an OAuth error message suitable for user display.
+
+        The raw error from the provider is intentionally not exposed to the user
+        to avoid leaking implementation details or sensitive information.
         """
-        return f"OAuth authentication failed: {error}" if error else default_message
+        return default_message
 
     def on_authentication_error(self, request, provider_id, error=None, exception=None, extra_context=None):
         """
         Handle OAuth authentication errors by redirecting to login page with an error message.
         """
+        # Log the raw error/exception details for internal diagnostics only.
+        logger.warning(
+            "OAuth authentication error for provider '%s': error=%r, exception=%r, extra_context=%r",
+            provider_id,
+            error,
+            exception,
+            extra_context,
+        )
+
         error_message = self._get_oauth_error_message(error)
         messages.error(request, error_message)
         # Return None to let allauth handle the redirect, which will go to login
@@ -75,21 +93,34 @@ class AccountAdapter(DefaultAccountAdapter):
         """
         user = request.user
 
-        if (social_accounts := getattr(user, "socialaccount_set", None)) and social_accounts.exists():
+        if is_oauth_user(user):
             # Ensure OAuth users keep the minimum Auditor role
             if not has_role(user, "auditor"):
                 assign_role(user, "auditor")
 
-            # OAuth users should not be sent to onboarding; show assigned project if any
-            user_project = Project.objects.filter(users=user).first()
-            if user_project:
+            # If they have project access, go to their project dashboard.
+            # Order explicitly so the selected project is deterministic
+            # (most recently created project).
+            if user_project := (
+                Project.objects.filter(users=user)
+                .order_by("-insert_date")
+                .first()
+            ):
                 return reverse("dashboardIndex", kwargs={"slug": user_project.slug})
+
+            # First-ever login: show welcome page once
+            # Note: last_login is updated during login, so it's None only on the very first login.
+            # While this may have edge cases in read-replica setups, it's acceptable for this feature -
+            # worst case is the welcome page shows one extra time or skips once (non-critical).
+            if user.last_login is None:
+                return reverse("oauth_welcome")
+            
             return reverse("list_projects")
 
-        if project := Project.objects.first():
+        if project := get_user_projects(user).first():
             return reverse("dashboardIndex", kwargs={"slug": project.slug})
 
-        # No project exists
+        # No accessible project exists
         if user.is_superuser or has_role(user, "sys_admin"):
             # Admins can create projects via onboarding
             return reverse("onboarding")
