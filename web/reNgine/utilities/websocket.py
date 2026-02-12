@@ -21,6 +21,7 @@ from reNgine.definitions import (
     SKIPPED_TASK,
     SUCCESS_TASK,
 )
+from reNgine.utilities.worker_ws_groups import worker_deploy_group, worker_refresh_group
 from startScan.models import (
     Command,
     EndPoint,
@@ -131,9 +132,7 @@ def _timeline_status_order(status) -> int:
         return 2
     if status == ABORTED_TASK:
         return 3
-    if status == SKIPPED_TASK:
-        return 4
-    return 5  # INITIATED_TASK, other
+    return 4 if status == SKIPPED_TASK else 5
 
 
 def _parse_timeline_time(value) -> float:
@@ -157,9 +156,7 @@ def _timeline_hierarchy_order(runner_type: str | None) -> int:
         return 0
     if t == "workflow":
         return 1
-    if t == "task":
-        return 2
-    return 3
+    return 2 if t == "task" else 3
 
 
 def _sort_timeline_by_priority(timeline: list) -> None:
@@ -406,3 +403,112 @@ def send_scan_status_update(scan_history_id: int, scan_status=None, progress=Non
     except Exception as e:
         logger.error(f"Error sending WebSocket update for scan {scan_history_id}: {e}", exc_info=True)
         raise
+
+
+WORKER_STATUS_GROUP = "worker-status"
+
+
+def send_worker_status_update(worker_id: int) -> None:
+    """
+    Notify WebSocket clients subscribed to worker status that a worker was updated.
+    Payload includes worker_id so the client can refetch or update local state.
+    """
+    channel_layer = get_channel_layer()
+    if not channel_layer:
+        logger.debug("No channel layer available, skipping worker status update for worker_id=%s", worker_id)
+        return
+    try:
+        async_to_sync(channel_layer.group_send)(
+            WORKER_STATUS_GROUP,
+            {"type": "worker_status_update", "payload": {"worker_id": worker_id}},
+        )
+    except Exception:
+        logger.exception(
+            "Error sending worker status update for worker_id=%s",
+            worker_id,
+        )
+
+
+def send_worker_deploy_log(
+    worker_id: int,
+    step: Optional[str],
+    message: Optional[str],
+    *,
+    done: bool = False,
+    error: Optional[str] = None,
+) -> None:
+    """
+    Send a deploy log line to WebSocket clients subscribed to this worker's deploy stream.
+    Used for real-time deploy progress in the UI modal.
+    """
+    channel_layer = get_channel_layer()
+    if not channel_layer:
+        logger.debug(
+            "No channel layer available, skipping worker deploy log for worker_id=%s",
+            worker_id,
+        )
+        return
+    payload = {
+        "worker_id": worker_id,
+        "step": step,
+        "message": message,
+        "done": done,
+        "error": error,
+    }
+    try:
+        async_to_sync(channel_layer.group_send)(
+            worker_deploy_group(worker_id),
+            {"type": "worker_deploy_log", "payload": payload},
+        )
+    except Exception:
+        logger.exception(
+            "Error sending worker deploy log for worker_id=%s",
+            worker_id,
+        )
+
+
+def send_worker_refresh_log(
+    worker_id: int,
+    step: Optional[str],
+    message: Optional[str],
+    *,
+    done: bool = False,
+    error: Optional[str] = None,
+    ssh_ok: Optional[bool] = None,
+    container_running: Optional[bool] = None,
+    api_reachable: Optional[bool] = None,
+) -> None:
+    """
+    Send a refresh log line to WebSocket clients subscribed to this worker's refresh stream.
+    When done=True, pass ssh_ok, container_running, api_reachable so the UI can update badges.
+    """
+    channel_layer = get_channel_layer()
+    if not channel_layer:
+        logger.debug(
+            "No channel layer available, skipping worker refresh log for worker_id=%s",
+            worker_id,
+        )
+        return
+    payload = {
+        "worker_id": worker_id,
+        "step": step,
+        "message": message,
+        "done": done,
+        "error": error,
+    }
+    if done and ssh_ok is not None:
+        payload["ssh_ok"] = ssh_ok
+    if done and container_running is not None:
+        payload["container_running"] = container_running
+    if done and api_reachable is not None:
+        payload["api_reachable"] = api_reachable
+    try:
+        async_to_sync(channel_layer.group_send)(
+            worker_refresh_group(worker_id),
+            {"type": "worker_refresh_log", "payload": payload},
+        )
+    except Exception:
+        logger.exception(
+            "Error sending worker refresh log for worker_id=%s",
+            worker_id,
+        )

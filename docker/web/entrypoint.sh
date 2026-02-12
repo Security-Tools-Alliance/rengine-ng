@@ -10,6 +10,20 @@ print_msg() {
 USER_HOME="${HOME:-/home/rengine}"
 RENGINE_FOLDER="${USER_HOME}/rengine"
 
+# Ensure SSH key exists for worker SSH auth (persisted in rengine_ssh_keys volume)
+SSH_DIR="${USER_HOME}/.ssh"
+SSH_KEY="${SSH_DIR}/id_ed25519"
+if [ ! -f "$SSH_KEY" ] && command -v ssh-keygen >/dev/null 2>&1; then
+  mkdir -p "$SSH_DIR"
+  chmod 700 "$SSH_DIR" 2>/dev/null || true
+  ssh-keygen -t ed25519 -f "$SSH_KEY" -N "" -q
+  chmod 600 "$SSH_KEY" "${SSH_KEY}.pub" 2>/dev/null || true
+fi
+# Always enforce strict permissions so mounted or existing keys are accepted by SSH
+[ -d "$SSH_DIR" ] && chmod 700 "$SSH_DIR" 2>/dev/null || true
+[ -f "$SSH_KEY" ] && chmod 600 "$SSH_KEY" 2>/dev/null || true
+[ -f "${SSH_KEY}.pub" ] && chmod 600 "${SSH_KEY}.pub" 2>/dev/null || true
+
 # Create wrapper script for run_scheduled_scans (used by cron)
 RUN_SCHEDULED_SCRIPT="${USER_HOME}/run_scheduled_scans.sh"
 if [ ! -x "$RUN_SCHEDULED_SCRIPT" ]; then

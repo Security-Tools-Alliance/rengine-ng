@@ -37,6 +37,11 @@ RENGINE_GF_PATTERNS_DIR = env("RENGINE_GF_PATTERNS_DIR", default=str(Path.home()
 RENGINE_NUCLEI_TEMPLATES_DIR = env("RENGINE_NUCLEI_TEMPLATES_DIR", default=str(Path.home() / "nuclei-templates"))
 RENGINE_TOOL_PATH = env("RENGINE_TOOL_PATH", default=str(Path.home() / "tools"))
 RENGINE_TOOL_GITHUB_PATH = env("RENGINE_TOOL_GITHUB_PATH", default=str(Path(RENGINE_TOOL_PATH) / ".github"))
+# Default SSH key path for worker connections (generated at container startup in ~/.ssh/id_ed25519)
+RENGINE_SSH_DEFAULT_KEY_PATH = env(
+    "RENGINE_SSH_DEFAULT_KEY_PATH",
+    default=str(Path.home() / ".ssh" / "id_ed25519"),
+)
 
 RENGINE_CACHE_ENABLED = env.bool("RENGINE_CACHE_ENABLED", default=False)
 RENGINE_RECORD_ENABLED = env.bool("RENGINE_RECORD_ENABLED", default=True)
@@ -249,16 +254,36 @@ IP_SERVICE_TIMEOUT = env.int("IP_SERVICE_TIMEOUT", default=5)
 DELETE_DUPLICATES_THRESHOLD = 10
 
 """
-CELERY settings
+SECATOR settings
 """
 SECATOR_CELERY_BROKER_URL = env("SECATOR_CELERY_BROKER_URL", default="redis://redis:6379/0")
 SECATOR_CELERY_RESULT_BACKEND = env("SECATOR_CELERY_RESULT_BACKEND", default="redis://redis:6379/0")
-CELERY_ENABLE_UTC = False
-CELERY_TIMEZONE = "UTC"
-CELERY_IGNORE_RESULTS = False
-CELERY_EAGER_PROPAGATES_EXCEPTIONS = True
-CELERY_TRACK_STARTED = True
-CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+# Used when deploying remote workers (worker .env generation)
+SECATOR_ADDONS_API_URL = env(
+    "SECATOR_ADDONS_API_URL",
+    default=f"https://{DOMAIN_NAME}/api/secator",
+)
+SECATOR_ADDONS_API_HEADER_NAME = env("SECATOR_ADDONS_API_HEADER_NAME", default="Api-Key")
+SECATOR_ADDONS_API_WORKSPACE_GET_ENDPOINT = env("SECATOR_ADDONS_API_WORKSPACE_GET_ENDPOINT", default="")
+SECATOR_ADDONS_API_KEY = env("SECATOR_ADDONS_API_KEY", default="")
+SECATOR_ADDONS_API_FORCE_SSL = env.bool("SECATOR_ADDONS_API_FORCE_SSL", default=False)
+# Python executable used inside the remote worker container to run the Secator job script.
+# Set this when Secator is installed via pipx in the container (e.g. /root/.local/share/pipx/venvs/secator/bin/python).
+SECATOR_WORKER_CONTAINER_PYTHON = env(
+    "SECATOR_WORKER_CONTAINER_PYTHON", default="/home/secator/.local/share/pipx/venvs/secator/bin/python"
+)
+# Base path for scripts inside the worker container (where run_secator_job.py is run).
+# Set this when the container sees a different path than deploy_path (e.g. container user is secator:
+# deploy_path may be /home/rengine/secator-worker on the host, container has /home/secator/secator-worker).
+# If unset, deploy_path is used for both SFTP upload and the container command.
+SECATOR_WORKER_CONTAINER_SCRIPT_BASE = env("SECATOR_WORKER_CONTAINER_SCRIPT_BASE", default="/home/secator")
+# SSH reverse tunnel (worker api_access_type=tunnel): bind and target for ssh -R on the worker host.
+# Bind: where the worker host listens; default Docker bridge gateway so only the Secator container
+# can reach it via host.docker.internal. Use 127.0.0.1 for localhost-only, 0.0.0.0 for all interfaces.
+RENGINE_TUNNEL_BIND_ADDRESS = env("RENGINE_TUNNEL_BIND_ADDRESS", default="172.17.0.1")
+# Target: host/port the tunnel forwards to (where nginx/API listens). In Docker use "proxy", bare metal "localhost".
+RENGINE_TUNNEL_TARGET_HOST = env("RENGINE_TUNNEL_TARGET_HOST", default="proxy")
+RENGINE_TUNNEL_TARGET_PORT = env.int("RENGINE_TUNNEL_TARGET_PORT", default=443)
 
 """
 Redis settings for distributed locking

@@ -1781,7 +1781,15 @@ function initiate_subscan(subdomain_ids){
 	if ($scanHistoryIdEl.length && $scanHistoryIdEl.val()) {
 		data['scan_history_id'] = parseInt($scanHistoryIdEl.val(), 10);
 	}
-	
+
+	const workerIdEl = document.querySelector('#subscan-modal select[name="worker_id"]');
+	if (workerIdEl && workerIdEl.value && String(workerIdEl.value).trim() !== '') {
+		const parsed = parseInt(workerIdEl.value, 10);
+		if (!Number.isNaN(parsed) && parsed > 0) {
+			data.worker_id = parsed;
+		}
+	}
+
 	Swal.fire({
 		title: 'Initiating subscan...',
 		text: 'Using Secator ' + executionMode,

@@ -1,6 +1,7 @@
 from django.core.exceptions import ObjectDoesNotExist
 
 from reNgine.core.validators import sanitize_path_component
+from reNgine.utilities.error import get_safe_user_message
 from reNgine.utilities.logger import get_module_logger
 from reNgine.utilities.url import get_subdomain_from_url
 from startScan.models import ScanHistory
@@ -8,6 +9,25 @@ from targetApp.models import Domain
 
 
 logger = get_module_logger(__name__)
+
+
+def _workspace_for_domain(domain) -> str:
+    """
+    Return workspace string for domain.
+    When a project is associated (project_id set), always include project slug or id
+    to avoid workspace collision for identical domain names across projects.
+    Use domain.name alone only when there is no associated project.
+    """
+    if domain.project_id is not None:
+        try:
+            project = domain.project
+            slug = getattr(project, "slug", None) if project else None
+            if slug:
+                return f"{sanitize_path_component(slug)}/{sanitize_path_component(domain.name)}"
+            return f"{domain.project_id}/{sanitize_path_component(domain.name)}"
+        except Exception:
+            return f"{domain.project_id}/{sanitize_path_component(domain.name)}"
+    return sanitize_path_component(domain.name)
 
 
 def initiate_secator_scan(
@@ -25,6 +45,7 @@ def initiate_secator_scan(
     secator_config=None,
     targets_override=None,
     subscan_id=None,
+    worker_id=None,
 ):
     """Initiate a new Secator scan.
 
@@ -171,6 +192,47 @@ def initiate_secator_scan(
 
         if subscan_id is not None:
             config["subscan_id"] = subscan_id
+
+        if worker_id:
+            from reNgine.secator.remote_runner import run_scan_on_worker
+            from reNgine.secator.service import handle_scan_error
+            from scanEngine.models import SecatorWorker
+
+            worker = SecatorWorker.objects.get(id=worker_id)
+            if not worker.is_active:
+                raise ValueError("Worker is not active")
+            workspace = _workspace_for_domain(domain)
+            remote_config = {"proxy": config.get("proxy"), "delay": config.get("delay"), "profiles": profiles}
+            try:
+                run_scan_on_worker(
+                    worker,
+                    scan_history_id=scan_history_id,
+                    domain_id=domain_id,
+                    workspace_name=workspace,
+                    execution_mode=execution_mode,
+                    targets=targets,
+                    workflow_name=config.get("workflow_name"),
+                    scan_type=config.get("scan_type"),
+                    task_names=config.get("tasks"),
+                    secator_config=remote_config,
+                    subscan_id=subscan_id,
+                )
+            except Exception as e:
+                handle_scan_error(scan_history, e)
+                return {
+                    "status": "error",
+                    "error": get_safe_user_message(e, logger),
+                    "scan_type": "secator",
+                    "result": {"worker_id": worker.id, "mode": "remote"},
+                }
+            result = {
+                "scan_history_id": scan_history_id,
+                "worker_id": worker.id,
+                "mode": "remote",
+            }
+            if subscan_id is not None:
+                result["subscan_id"] = subscan_id
+            return {"status": "success", "result": result, "scan_type": "secator"}
 
         orchestrator = ScanOrchestrator()
         result = orchestrator.execute_scan(

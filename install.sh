@@ -624,8 +624,10 @@ main() {
     # Remove existing Secator API configuration from .env
     sed -i '/^SECATOR_ADDONS_API_ENABLED=/d' .env
     sed -i '/^SECATOR_ADDONS_API_KEY=/d' .env
+    sed -i '/^SECATOR_ADDONS_API_HEADER_NAME=/d' .env
     sed -i '/^SECATOR_ADDONS_API_URL=/d' .env
     sed -i '/^SECATOR_ADDONS_API_FORCE_SSL=/d' .env
+    sed -i '/^SECATOR_ADDONS_API_WORKSPACE_GET_ENDPOINT=/d' .env
     # Also remove legacy variable names if present
     sed -i '/^RENGINE_API_KEY=/d' .env
     sed -i '/^RENGINE_API_URL=/d' .env
@@ -636,7 +638,9 @@ main() {
       echo "# Secator Worker API Configuration (auto-generated)"
       echo "SECATOR_ADDONS_API_ENABLED=true"
       echo "SECATOR_ADDONS_API_KEY=$SECATOR_API_KEY"
-      echo "SECATOR_ADDONS_API_URL=http://web:8000/api/secator"
+      echo "SECATOR_ADDONS_API_HEADER_NAME=Api-Key"
+      echo "SECATOR_ADDONS_API_WORKSPACE_GET_ENDPOINT="
+      echo "SECATOR_ADDONS_API_URL=https://proxy/api/secator"
       echo "SECATOR_ADDONS_API_FORCE_SSL=false"
     } >> .env
     

@@ -45,8 +45,8 @@ options:
 
   fuzzers:
     type: list
-    default: [ffuf, dirsearch, feroxbuster]
-    help: Fuzzers to use (ffuf, dirsearch, feroxbuster)
+    default: [ffuf, feroxbuster]
+    help: Fuzzers to use (ffuf, feroxbuster)
     internal: True
 
 tasks:
@@ -182,13 +182,13 @@ tasks:
           condition: item.status_code != 0
       if: "'ffuf' in opts.fuzzers"
 
-    dirsearch:
-      description: Advanced web path brute-forcer
-      targets_:
-        - type: url
-          field: url
-          condition: item.status_code != 0
-      if: "'dirsearch' in opts.fuzzers"
+#    dirsearch:
+#      description: Advanced web path brute-forcer
+#      targets_:
+#        - type: url
+#          field: url
+#          condition: item.status_code != 0
+#      if: "'dirsearch' in opts.fuzzers"
 
     feroxbuster:
       description: Fast recursive content discovery
@@ -207,13 +207,13 @@ tasks:
           field: value
           condition: item.name == 'url_base'
 
-    x8:
-      description: Bruteforce URL params
-      wordlist: http_params
-      targets_:
-        - type: tag
-          field: '{value}/'
-          condition: item.name == 'url_base'
+#    x8:
+#      description: Bruteforce URL params
+#      wordlist: http_params
+#      targets_:
+#        - type: tag
+#          field: '{value}/'
+#          condition: item.name == 'url_base'
 
   _group/pattern:
     gf/xss:

@@ -8,6 +8,17 @@ print_msg() {
 }
 
 RENGINE_FOLDER="/home/$USERNAME/rengine"
+USER_HOME="${HOME:-/home/$USERNAME}"
+
+# Ensure SSH key exists for worker SSH auth (persisted in rengine_ssh_keys volume when used)
+SSH_DIR="${USER_HOME}/.ssh"
+SSH_KEY="${SSH_DIR}/id_ed25519"
+if [ ! -f "$SSH_KEY" ] && command -v ssh-keygen >/dev/null 2>&1; then
+  mkdir -p "$SSH_DIR"
+  chmod 700 "$SSH_DIR" 2>/dev/null || true
+  ssh-keygen -t ed25519 -f "$SSH_KEY" -N "" -q
+  chmod 600 "$SSH_KEY" "${SSH_KEY}.pub" 2>/dev/null || true
+fi
 
 print_msg "Installing dev dependencies"
 poetry install --only dev --no-root

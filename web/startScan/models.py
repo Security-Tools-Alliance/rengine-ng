@@ -276,20 +276,26 @@ class ScanHistory(models.Model):
         Get the main SecatorRunner for this scan (workflow or scan type).
         Returns None for legacy scans or if no runner is found.
         Caches the result to avoid multiple queries.
+        Uses prefetched secatorrunner_set when available to avoid N+1.
         """
         if self.is_legacy_scan:
             return None
 
         if not hasattr(self, "_cached_main_runner"):
-            # Import here to avoid circular import
-            from startScan.models import SecatorRunner
+            prefetched = getattr(self, "_prefetched_objects_cache", None)
+            if prefetched and "secatorrunner_set" in prefetched:
+                runners = [r for r in self.secatorrunner_set.all() if r.runner_type in ("workflow", "scan")]
+                self._cached_main_runner = min(runners, key=lambda r: r.id) if runners else None
+            else:
+                from startScan.models import SecatorRunner
 
-            main_runner = (
-                SecatorRunner.objects.filter(scan_history=self, runner_type__in=["workflow", "scan"])
-                .order_by("id")
-                .first()
-            )
-            self._cached_main_runner = main_runner
+                main_runner = (
+                    SecatorRunner.objects.filter(scan_history=self, runner_type__in=["workflow", "scan"])
+                    .select_related("worker")
+                    .order_by("id")
+                    .first()
+                )
+                self._cached_main_runner = main_runner
 
         return self._cached_main_runner
 
@@ -406,6 +412,19 @@ class ScanHistory(models.Model):
             return self._format_display_label(main_runner.runner_type)
 
         return "Task" if self._get_task_runner_display_names() else ""
+
+    @property
+    def secator_worker_name(self) -> str:
+        """
+        Human-friendly worker name for UI (where the scan runs).
+        Returns the main runner's worker name, or 'Local' if no remote worker.
+        """
+        if self.is_legacy_scan:
+            return "Local"
+        main_runner = self._get_main_runner()
+        if main_runner and main_runner.worker_id and getattr(main_runner, "worker", None):
+            return main_runner.worker.name or "Local"
+        return "Local"
 
     def get_time_ago(self, time):
         duration = timezone.now() - time
@@ -845,6 +864,23 @@ class SubScan(models.Model):
         if runner_type and scan_name:
             return f"{runner_type}: {scan_name}"
         return scan_name or runner_type or "—"
+
+    @property
+    def secator_worker_name(self) -> str:
+        """
+        Human-friendly worker name for UI (where the subscan runs).
+        Uses secator_runner.worker if set, else the parent scan's main runner worker.
+        Uses scan_history._get_main_runner() so prefetch_related on scan_history is used.
+        """
+        runner = getattr(self, "secator_runner", None)
+        if runner and runner.worker_id and getattr(runner, "worker", None):
+            return runner.worker.name or "Local"
+        if not self.scan_history:
+            return "Local"
+        main_runner = self.scan_history._get_main_runner()
+        if main_runner and main_runner.worker_id and getattr(main_runner, "worker", None):
+            return main_runner.worker.name or "Local"
+        return "Local"
 
     def _get_status_field_value(self):
         """Get the raw status field value to avoid recursion."""
@@ -1754,6 +1790,13 @@ class SecatorRunner(models.Model):
     )
     scan_history = models.ForeignKey(ScanHistory, on_delete=models.CASCADE, null=True, blank=True)
     domain = models.ForeignKey(Domain, on_delete=models.CASCADE, null=True, blank=True)
+    worker = models.ForeignKey(
+        "scanEngine.SecatorWorker",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="secatorrunner_set",
+    )
     runner_data = models.JSONField(default=dict, help_text="Full runner data from Secator")
     celery_id = models.CharField(max_length=100, blank=True, null=True, help_text="Celery task ID for this runner")
     status = models.CharField(
@@ -1910,8 +1953,7 @@ class ScanSchedule(models.Model):
 
             schedule.save(validate=False)
         """
-        validate = kwargs.pop("validate", True)
-        if validate:
+        if kwargs.pop("validate", True):
             self.full_clean()
         super().save(*args, **kwargs)
 

@@ -79,6 +79,7 @@ def start_secator_scan(
     targets_override: list = None,
     scan_history_id: int = None,
     subscan_id: int = None,
+    worker_id: int = None,
 ) -> dict:
     """
     Start a Secator scan with the given parameters.
@@ -105,6 +106,7 @@ def start_secator_scan(
         targets_override: Optional list of target strings; when set, used instead of DB-built targets
         scan_history_id: Optional existing ScanHistory id; when set with execution_mode, reuse it instead of creating
         subscan_id: Optional SubScan id; when set, passed to runner context for findings linking
+        worker_id: Optional SecatorWorker id; when set, run the scan on that remote worker via SSH
 
     Returns:
         dict: Result with 'status' (bool), 'scan_id' (int), 'error' (str), 'http_status' (int), etc.
@@ -139,6 +141,12 @@ def start_secator_scan(
         domain = Domain.objects.get(id=domain_id)
     except Domain.DoesNotExist:
         return {"status": False, "error": f"Domain with ID {domain_id} not found", "http_status": 404}
+
+    if worker_id is not None:
+        from scanEngine.models import SecatorWorker
+
+        if not SecatorWorker.objects.filter(id=worker_id, is_active=True).exists():
+            return {"status": False, "error": "Worker not found or not active", "http_status": 400}
 
     # Ensure lists are properly formatted
     if isinstance(imported_subdomains, str):
@@ -187,6 +195,7 @@ def start_secator_scan(
                         subdomain_ids=subdomain_ids or [],
                         secator_config=secator_config,
                         initiated_by_id=initiated_by_id,
+                        worker_id=worker_id,
                     )
                     # Do not save scan here - status is managed by Secator hooks via SecatorRunnerUpdate API
                     # Saving would overwrite the status updated by the hooks
@@ -243,6 +252,7 @@ def start_secator_scan(
                         initiated_by_id=initiated_by_id,
                         targets_override=targets_override or None,
                         subscan_id=subscan_id,
+                        worker_id=worker_id,
                     )
                 except Exception as e:
                     handle_scan_error(scan, e)
@@ -290,6 +300,7 @@ def start_secator_scan(
                         secator_config=secator_config,
                         initiated_by_id=initiated_by_id,
                         targets_override=targets_override or None,
+                        worker_id=worker_id,
                     )
                     # Do not save scan here - status is managed by Secator hooks via SecatorRunnerUpdate API
                     # Saving would overwrite the status updated by the hooks
@@ -335,6 +346,8 @@ def _run_one_per_task_entry(
     out_of_scope_subdomains: list,
     url_filter: str,
     secator_config: dict,
+    *,
+    worker_id: int | None = None,
 ) -> tuple[dict, bool]:
     """Run one per-task (task_type, targets) and return (result_dict, success)."""
     subscan = None
@@ -361,6 +374,7 @@ def _run_one_per_task_entry(
             secator_config=secator_config,
             scan_history_id=shared_scan_id,
             subscan_id=subscan.id if subscan else None,
+            worker_id=worker_id,
         )
         if result.get("status"):
             return ({"task_type": task_type, "status": "success", "scan_id": shared_scan_id}, True)
@@ -406,6 +420,7 @@ def run_per_task_secator_scans(
     secator_config: dict | None = None,
     subdomain_ids: list[int] | None = None,
     scan_history_id: int | None = None,
+    worker_id: int | None = None,
 ) -> PerTaskRunResult:
     """
     Validate per-task targets and run one scan per (task_type, targets) under a single ScanHistory.
@@ -487,6 +502,7 @@ def run_per_task_secator_scans(
             out_of_scope_subdomains,
             url_filter,
             secator_config,
+            worker_id=worker_id,
         )
         results.append(result_dict)
         if success:

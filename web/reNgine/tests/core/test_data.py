@@ -7,6 +7,7 @@ from django.test import TestCase
 from reNgine.core.data import (
     get_ip_info,
     get_ips_from_cidr_range,
+    get_request_worker_id,
     is_iterable,
     replace_nulls,
     return_iterable,
@@ -248,6 +249,52 @@ class TestDataUtils(TestCase):
         """Test safe_int_cast with list."""
         result = safe_int_cast(["1", "2", "3"])
         self.assertEqual(result, [1, 2, 3])
+
+    def test_get_request_worker_id_from_data(self):
+        """Test get_request_worker_id from request.data."""
+        request = type("R", (), {"data": {"worker_id": 42}, "query_params": {}, "headers": {}})()
+        self.assertEqual(get_request_worker_id(request), 42)
+
+    def test_get_request_worker_id_from_query_params(self):
+        """Test get_request_worker_id from request.query_params when data has none."""
+        request = type(
+            "R",
+            (),
+            {"data": {}, "query_params": {"worker_id": "7"}, "headers": {}},
+        )()
+        self.assertEqual(get_request_worker_id(request), 7)
+
+    def test_get_request_worker_id_from_header(self):
+        """Test get_request_worker_id from X-Secator-Worker-Id header."""
+        request = type(
+            "R",
+            (),
+            {"data": {}, "query_params": {}, "headers": {"X-Secator-Worker-Id": "3"}},
+        )()
+        self.assertEqual(get_request_worker_id(request), 3)
+
+    def test_get_request_worker_id_from_context(self):
+        """Test get_request_worker_id from context when request has none."""
+        request = type("R", (), {"data": {}, "query_params": {}, "headers": {}})()
+        self.assertEqual(get_request_worker_id(request, context={"worker_id": 99}), 99)
+
+    def test_get_request_worker_id_positive_only(self):
+        """Test get_request_worker_id returns None for zero or negative."""
+        request = type("R", (), {"data": {"worker_id": 0}, "query_params": {}, "headers": {}})()
+        self.assertIsNone(get_request_worker_id(request))
+        request.data["worker_id"] = -1
+        self.assertIsNone(get_request_worker_id(request))
+
+    def test_get_request_worker_id_invalid_returns_none(self):
+        """Test get_request_worker_id returns None for invalid values."""
+        request = type("R", (), {"data": {"worker_id": "x"}, "query_params": {}, "headers": {}})()
+        self.assertIsNone(get_request_worker_id(request))
+
+    def test_get_request_worker_id_no_source_returns_none(self):
+        """Test get_request_worker_id returns None when no source provides a value."""
+        request = type("R", (), {"data": {}, "query_params": {}, "headers": {}})()
+        self.assertIsNone(get_request_worker_id(request))
+        self.assertIsNone(get_request_worker_id(request, context={}))
 
     def test_safe_bool_cast_true_strings(self):
         """Test safe_bool_cast with true string values."""

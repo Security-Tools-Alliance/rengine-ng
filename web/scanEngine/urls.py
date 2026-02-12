@@ -45,4 +45,8 @@ urlpatterns = [
     path("scans/<int:scan_id>/", views.secator_scan_detail, name="scan_detail"),
     path("scans/<int:scan_id>/update/", views.update_scan, name="update_scan"),
     path("scans/<int:scan_id>/delete/", views.delete_scan, name="delete_scan"),
+    # Secator workers (remote deployment)
+    path("workers/", views.worker_list, name="worker_list"),
+    path("workers/add/", views.worker_add, name="worker_add"),
+    path("workers/<int:worker_id>/update/", views.worker_update, name="worker_update"),
 ]

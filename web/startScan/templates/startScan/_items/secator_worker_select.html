@@ -1,0 +1,14 @@
+{# Optional worker selection: run scan on remote worker #}
+{# Params: id_prefix (string, optional), secator_workers (list of SecatorWorker, optional) #}
+{% if secator_workers %}
+<div class="worker-select mt-3">
+  <label for="{{ id_prefix|default:'' }}worker_id">Run on worker</label>
+  <select class="form-control" name="worker_id" id="{{ id_prefix|default:'' }}worker_id">
+    <option value="">Local (this server)</option>
+    {% for w in secator_workers %}
+    <option value="{{ w.id }}">{{ w.name|escape }}</option>
+    {% endfor %}
+  </select>
+  <small class="text-muted">Leave as &quot;Local&quot; to run on this server; choose a worker to run on a remote Secator host.</small>
+</div>
+{% endif %}

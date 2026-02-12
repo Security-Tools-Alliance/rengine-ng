@@ -93,6 +93,12 @@
         formData.secator_scan_type = $form.find('input[name="secator_scan_type"]:checked').val();
       }
 
+      const workerIdVal = $form.find('select[name="worker_id"]').val();
+      if (workerIdVal && String(workerIdVal).trim() !== '') {
+        const parsed = parseInt(workerIdVal, 10);
+        if (!Number.isNaN(parsed)) formData.worker_id = parsed;
+      }
+
       const prefix = this.getSecatorIdPrefix($form);
       if (prefix) {
         const $targetsPreview = $form.find(`#${prefix}-targets-preview`);

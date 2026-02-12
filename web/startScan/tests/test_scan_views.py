@@ -147,7 +147,7 @@ class TestStartMultipleScan(BaseTestCase):
             self.assertIn(category, response.context["custom_profiles_by_category"])
 
     @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
-    @patch("reNgine.secator.service.start_secator_scan")
+    @patch("startScan.views.start_secator_scan")
     def test_start_multiple_scan_view_post(self, mock_start_scan):
         """Test the start multiple scan view POST request."""
         mock_start_scan.return_value = {"status": True, "scan_id": self.data_generator.scan_history.id}

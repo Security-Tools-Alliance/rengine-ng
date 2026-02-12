@@ -18,12 +18,12 @@ from django.utils import timezone
 from packaging import version
 import requests
 from rest_framework import viewsets
-from rest_framework.decorators import api_view
+from rest_framework.decorators import action, api_view
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.parsers import JSONParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from rest_framework.status import HTTP_200_OK, HTTP_400_BAD_REQUEST, HTTP_410_GONE
+from rest_framework.status import HTTP_200_OK, HTTP_202_ACCEPTED, HTTP_400_BAD_REQUEST, HTTP_410_GONE
 from rest_framework.views import APIView
 import validators
 
@@ -35,7 +35,7 @@ from recon_note.models import TodoNote
 
 # NOTE: Legacy tasks removed (query_ip_history, query_reverse_whois, query_whois,
 # run_cmseek, run_command, run_gf_list, run_wafw00f) - functionality now in Secator
-from reNgine.core.data import get_data_from_post_request, safe_int_cast
+from reNgine.core.data import get_data_from_post_request, get_request_worker_id, safe_int_cast
 from reNgine.definitions import (
     ABORTED_TASK,
     FAILED_TASK,
@@ -67,7 +67,21 @@ from reNgine.utilities.error import get_safe_user_message
 from reNgine.utilities.external import get_open_ai_key
 from reNgine.utilities.lookup import get_lookup_keywords
 from reNgine.utilities.subdomain import get_interesting_subdomains
-from scanEngine.models import EngineType, SecatorScan, SecatorTask, SecatorWorkflow
+from scanEngine.models import EngineType, SecatorScan, SecatorTask, SecatorWorker, SecatorWorkflow
+from scanEngine.services.worker_config_sync import sync_all_custom_configs_to_worker
+from scanEngine.services.worker_deploy import (
+    deploy_worker,
+    refresh_worker_status,
+    restart_worker_container,
+    teardown_worker_remote,
+)
+from scanEngine.services.worker_ssh import (
+    get_public_key_content,
+    get_ssh_client,
+    install_public_key_on_host,
+    run_remote_command,
+    validate_deploy_path,
+)
 from startScan.models import (
     Command,
     DirectoryFile,
@@ -116,6 +130,9 @@ from .serializers import (
     ScanActivitySerializer,
     ScanHistorySerializer,
     SearchHistorySerializer,
+    SecatorWorkerCreateUpdateSerializer,
+    SecatorWorkerDetailSerializer,
+    SecatorWorkerListSerializer,
     SubdomainChangesSerializer,
     SubdomainSerializer,
     SubScanResultSerializer,
@@ -1456,6 +1473,8 @@ class StartScan(APIView):
             raw_selected_targets_per_task = {}
             scan_history_id = None
 
+        worker_id = get_request_worker_id(request)
+
         try:
             resolved = resolve_selected_targets(
                 raw_selected_targets,
@@ -1477,6 +1496,7 @@ class StartScan(APIView):
                 url_filter=url_filter,
                 secator_config=secator_config,
                 scan_history_id=scan_history_id,
+                worker_id=worker_id,
             )
             per_task_results = [
                 {
@@ -1555,6 +1575,7 @@ class StartScan(APIView):
             secator_config=secator_config,
             targets_override=targets_override,
             scan_history_id=scan_history_id,
+            worker_id=worker_id,
         )
 
         # Convert result to Response
@@ -1784,6 +1805,7 @@ class InitiateSubTask(APIView):
                     )
                     subscan_id_arg = subscan.id
 
+                worker_id = get_request_worker_id(request)
                 result = start_secator_scan(
                     domain_id=domain_id,
                     user_id=request.user.id,
@@ -1798,6 +1820,7 @@ class InitiateSubTask(APIView):
                     secator_config=secator_config,
                     scan_history_id=scan_history_id if scan else None,
                     subscan_id=subscan_id_arg,
+                    worker_id=worker_id,
                 )
 
                 if result.get("status"):
@@ -4427,6 +4450,26 @@ class SecatorRunnerCreate(SecatorAPIBase):
                         {"prefix": self.logger.PREFIX_SYNC, "action": "CREATE", "domain_id": domain_id},
                     )
 
+            worker_id = get_request_worker_id(request, context=context)
+            if worker_id is not None:
+                try:
+                    secator_runner.worker_id = worker_id
+                except (ValueError, TypeError):
+                    self.logger.log_warning(
+                        f"Invalid worker_id '{worker_id}' provided; ignoring assignment",
+                        {
+                            "prefix": self.logger.PREFIX_SYNC,
+                            "action": "CREATE",
+                            "worker_id": worker_id,
+                        },
+                    )
+                except Exception as e:
+                    self.logger.log_error(
+                        e,
+                        {"prefix": self.logger.PREFIX_SYNC, "action": "CREATE", "worker_id": worker_id},
+                        exc_info=True,
+                    )
+
             # Save runner and get its ID
             secator_runner.save()
             runner_id = str(secator_runner.id)
@@ -4434,8 +4477,7 @@ class SecatorRunnerCreate(SecatorAPIBase):
             # Link SubScan to this runner when subscan_id is in context (per-task subscans)
             subscan_id = safe_int_cast(context.get("subscan_id"))
             if subscan_id is not None:
-                updated = SubScan.objects.filter(id=subscan_id).update(secator_runner_id=secator_runner.id)
-                if updated:
+                if SubScan.objects.filter(id=subscan_id).update(secator_runner_id=secator_runner.id):
                     self.logger.log_runner_sync(
                         "CREATE",
                         runner_name or "unknown",
@@ -4525,6 +4567,32 @@ class SecatorRunnerUpdate(SecatorAPIBase):
                 if runner_status:
                     secator_runner.status = runner_status.upper()
                     self.logger.log_runner_field_extraction("status", runner_status, runner_id)
+
+                worker_id = get_request_worker_id(request, context=context)
+                if worker_id is not None:
+                    try:
+                        secator_runner.worker_id = worker_id
+                    except (ValueError, TypeError):
+                        self.logger.log_warning(
+                            "Invalid worker_id '%s' provided; ignoring assignment" % (worker_id,),
+                            {
+                                "prefix": self.logger.PREFIX_SYNC,
+                                "action": "UPDATE",
+                                "id": runner_id,
+                                "worker_id": worker_id,
+                            },
+                        )
+                    except Exception as e:
+                        self.logger.log_error(
+                            e,
+                            {
+                                "prefix": self.logger.PREFIX_SYNC,
+                                "action": "UPDATE",
+                                "id": runner_id,
+                                "worker_id": worker_id,
+                            },
+                            exc_info=True,
+                        )
 
                 secator_runner.save()
 
@@ -5194,3 +5262,357 @@ class SecatorFindingUpdate(SecatorAPIBase):
             if "validation" in error_str or "invalid" in error_str or "required" in error_str:
                 return Response({"status": False, "error": get_safe_user_message(e, logger)}, status=400)
             return Response({"status": False, "error": get_safe_user_message(e, logger)}, status=500)
+
+
+class SecatorHealth(APIView):
+    """GET /health/ - Health check for Secator API (auth: API key or session)."""
+
+    permission_classes = [HasAPIKeyOrIsAuthenticated]
+
+    def get(self, request):
+        return Response({"status": "ok"})
+
+
+class SecatorWorkerCheckIn(APIView):
+    """
+    POST /worker/<worker_id>/check - Worker check-in to report status.
+    Body: api_reachable (bool), last_error (str or null).
+    Auth: Secator API key or session.
+    """
+
+    permission_classes = [HasAPIKeyOrIsAuthenticated]
+
+    def post(self, request, worker_id):
+        worker = get_object_or_404(SecatorWorker, pk=worker_id)
+        try:
+            data = request.data or {}
+            if "api_reachable" in data:
+                worker.api_reachable = bool(data["api_reachable"])
+            if "last_error" in data:
+                worker.last_error = data["last_error"] or None
+            worker.last_status_at = timezone.now()
+            worker.save(update_fields=["api_reachable", "last_error", "last_status_at"])
+            from reNgine.utilities.websocket import send_worker_status_update
+
+            send_worker_status_update(worker.id)
+            return Response({"status": "ok"})
+        except Exception as e:
+            logger.exception("Worker check-in failed for worker_id=%s", worker_id)
+            return Response(
+                {"status": "error", "message": get_safe_user_message(e, logger)},
+                status=400,
+            )
+
+
+class SecatorWorkerViewSet(viewsets.ModelViewSet):
+    """
+    CRUD + deploy/refresh/disable/delete for Secator workers.
+    Requires IsAuthenticated (session or user API key).
+    """
+
+    permission_classes = [IsAuthenticated]
+    queryset = SecatorWorker.objects.all().order_by("name")
+
+    def get_serializer_class(self):
+        if self.action == "list":
+            return SecatorWorkerListSerializer
+        if self.action in (
+            "retrieve",
+            "deploy",
+            "refresh",
+            "restart",
+            "disable",
+            "enable",
+            "delete_worker",
+            "sync_configs",
+            "check_connection",
+            "install_public_key",
+        ):
+            return SecatorWorkerDetailSerializer
+        return SecatorWorkerCreateUpdateSerializer
+
+    def get_queryset(self):
+        return SecatorWorker.objects.all().order_by("name").prefetch_related("secatorrunner_set")
+
+    @action(detail=True, methods=["post"], url_path="check-connection")
+    def check_connection(self, request, pk=None):
+        """Test SSH connection (password or key). Returns {ok: true/false, error?: string}."""
+        worker = self.get_object()
+        client = None
+        try:
+            client = get_ssh_client(worker)
+            exit_code, _, _ = run_remote_command(client, "echo ok", timeout=10)
+            if exit_code != 0:
+                return Response(
+                    {"ok": False, "error": "Connection failed."},
+                    status=HTTP_400_BAD_REQUEST,
+                )
+            return Response({"ok": True})
+        except Exception as e:
+            logger.warning("Check connection failed for worker %s: %s", worker.name, e)
+            return Response(
+                {"ok": False, "error": "Connection failed."},
+                status=HTTP_400_BAD_REQUEST,
+            )
+        finally:
+            if client:
+                try:
+                    client.close()
+                except Exception:
+                    pass
+
+    @action(detail=True, methods=["post"])
+    def deploy(self, request, pk=None):
+        """Start worker deploy in background; progress is streamed via WebSocket (worker-deploy-{id})."""
+        worker = self.get_object()
+        try:
+            validate_deploy_path(worker.deploy_path)
+        except ValueError as e:
+            return Response(
+                {"status": "error", "message": get_safe_user_message(e, logger)},
+                status=HTTP_400_BAD_REQUEST,
+            )
+
+        from reNgine.utilities.websocket import send_worker_deploy_log, send_worker_status_update
+
+        def progress_callback(step: str, message: str) -> None:
+            send_worker_deploy_log(worker.id, step, message, done=False)
+
+        def run_deploy() -> None:
+            try:
+                deploy_worker(worker, progress_callback=progress_callback)
+                send_worker_deploy_log(worker.id, None, None, done=True)
+                send_worker_status_update(worker.id)
+            except Exception as e:
+                logger.exception("Deploy failed for worker %s", worker.name)
+                safe_msg = get_safe_user_message(e, logger)
+                send_worker_deploy_log(worker.id, "error", None, done=True, error=safe_msg)
+
+        thread = threading.Thread(target=run_deploy, daemon=True)
+        thread.start()
+        return Response(
+            {"status": "accepted", "worker_id": worker.id},
+            status=HTTP_202_ACCEPTED,
+        )
+
+    @action(detail=True, methods=["post"])
+    def refresh(self, request, pk=None):
+        """Start worker status refresh in background; progress is streamed via WebSocket (worker-refresh-{id})."""
+        worker = self.get_object()
+        from reNgine.utilities.websocket import send_worker_refresh_log, send_worker_status_update
+
+        def progress_callback(step: str, message: str) -> None:
+            send_worker_refresh_log(worker.id, step, message, done=False)
+
+        def run_refresh() -> None:
+            tunnel_handle = None
+            try:
+                if worker.api_access_type == SecatorWorker.API_ACCESS_TUNNEL:
+                    from scanEngine.services.worker_tunnel import start_worker_tunnel, stop_worker_tunnel
+
+                    try:
+                        tunnel_handle = start_worker_tunnel(worker)
+                        if tunnel_handle:
+                            progress_callback("tunnel", "SSH tunnel started.")
+                    except ValueError as e:
+                        send_worker_refresh_log(
+                            worker.id, "error", None, done=True, error=get_safe_user_message(e, logger)
+                        )
+                        return
+                status = refresh_worker_status(worker, progress_callback=progress_callback)
+                worker.last_status_at = timezone.now()
+                worker.last_error = status.get("last_error") or worker.last_error
+                worker.ssh_ok = status.get("ssh_ok", False)
+                worker.container_running = status.get("container_running", False)
+                worker.api_reachable = status.get("api_reachable", False)
+                worker.save(
+                    update_fields=[
+                        "last_status_at",
+                        "last_error",
+                        "ssh_ok",
+                        "container_running",
+                        "api_reachable",
+                    ]
+                )
+                summary = (
+                    f"SSH: ok, Container: {'running' if status.get('container_running') else 'not running'}, "
+                    f"API: {'reachable' if status.get('api_reachable') else 'not reachable'}."
+                )
+                send_worker_refresh_log(
+                    worker.id,
+                    "done",
+                    summary,
+                    done=True,
+                    ssh_ok=status.get("ssh_ok"),
+                    container_running=status.get("container_running"),
+                    api_reachable=status.get("api_reachable"),
+                )
+                send_worker_status_update(worker.id)
+            except Exception as e:
+                logger.exception("Refresh failed for worker %s", worker.name)
+                send_worker_refresh_log(worker.id, "error", None, done=True, error=get_safe_user_message(e, logger))
+            finally:
+                if tunnel_handle is not None:
+                    from scanEngine.services.worker_tunnel import stop_worker_tunnel
+
+                    stop_worker_tunnel(tunnel_handle)
+
+        thread = threading.Thread(target=run_refresh, daemon=True)
+        thread.start()
+        return Response(
+            {"status": "accepted", "worker_id": worker.id},
+            status=HTTP_202_ACCEPTED,
+        )
+
+    @action(detail=True, methods=["post"])
+    def restart(self, request, pk=None):
+        """Restart the worker container on the remote host. Returns {ok, log} for display in a modal."""
+        worker = self.get_object()
+        try:
+            success, log = restart_worker_container(worker)
+            if success:
+                return Response({"ok": True, "log": log})
+            return Response(
+                {"ok": False, "log": log, "error": "Restart failed."},
+                status=HTTP_400_BAD_REQUEST,
+            )
+        except ValueError as e:
+            return Response(
+                {"ok": False, "log": "", "error": str(e)},
+                status=HTTP_400_BAD_REQUEST,
+            )
+
+    @action(detail=True, methods=["post"], url_path="install-public-key")
+    def install_public_key(self, request, pk=None):
+        """Connect with password, install default public key on host, verify key auth, then switch worker to key auth."""
+        worker = self.get_object()
+        if worker.ssh_auth_type != SecatorWorker.AUTH_PASSWORD:
+            return Response(
+                {"ok": False, "error": "Worker is not using password authentication."},
+                status=HTTP_400_BAD_REQUEST,
+            )
+        if not (worker.ssh_password_encrypted or "").strip():
+            return Response(
+                {"ok": False, "error": "No password set for this worker."},
+                status=HTTP_400_BAD_REQUEST,
+            )
+        pubkey_content = get_public_key_content()
+        if not pubkey_content:
+            return Response(
+                {"ok": False, "error": "Public key not available."},
+                status=HTTP_400_BAD_REQUEST,
+            )
+        client = None
+        try:
+            client = get_ssh_client(worker)
+            install_public_key_on_host(client, pubkey_content)
+            client.close()
+            client = None
+        except Exception as e:
+            logger.warning("Install public key failed for worker %s: %s", worker.name, e)
+            return Response(
+                {"ok": False, "error": "Connection or install failed."},
+                status=HTTP_400_BAD_REQUEST,
+            )
+        finally:
+            if client:
+                try:
+                    client.close()
+                except Exception:
+                    pass
+
+        key_test_client = None
+        try:
+            key_test_worker = type(
+                "_KeyTest",
+                (),
+                {
+                    "ssh_host": worker.ssh_host,
+                    "ssh_port": worker.ssh_port,
+                    "ssh_user": worker.ssh_user,
+                    "ssh_auth_type": SecatorWorker.AUTH_KEY,
+                    "ssh_key_path": "",
+                    "ssh_password_encrypted": "",
+                    "AUTH_KEY": SecatorWorker.AUTH_KEY,
+                    "AUTH_PASSWORD": SecatorWorker.AUTH_PASSWORD,
+                },
+            )()
+            key_test_client = get_ssh_client(key_test_worker)
+            exit_code, _, _ = run_remote_command(key_test_client, "echo ok", timeout=10)
+            key_test_client.close()
+            key_test_client = None
+            if exit_code != 0:
+                return Response(
+                    {"ok": False, "error": "Key installed but connection test failed."},
+                    status=HTTP_400_BAD_REQUEST,
+                )
+        except Exception as e:
+            logger.warning("Key auth test failed for worker %s: %s", worker.name, e)
+            return Response(
+                {"ok": False, "error": "Key installed but connection test failed."},
+                status=HTTP_400_BAD_REQUEST,
+            )
+        finally:
+            if key_test_client:
+                try:
+                    key_test_client.close()
+                except Exception:
+                    pass
+
+        worker.ssh_auth_type = SecatorWorker.AUTH_KEY
+        worker.ssh_key_path = ""
+        worker.ssh_password_encrypted = ""
+        worker.save(update_fields=["ssh_auth_type", "ssh_key_path", "ssh_password_encrypted"])
+        return Response({"ok": True})
+
+    @action(detail=True, methods=["post"], url_path="sync-configs")
+    def sync_configs(self, request, pk=None):
+        """Sync all custom workflows, scans, tasks, and profiles to the worker."""
+        worker = self.get_object()
+        try:
+            sync_all_custom_configs_to_worker(worker)
+            return Response({"status": "ok", "message": "Configs synced successfully."})
+        except (ValueError, RuntimeError) as e:
+            return Response(
+                {"status": "error", "message": get_safe_user_message(e, logger)},
+                status=HTTP_400_BAD_REQUEST,
+            )
+
+    @action(detail=True, methods=["post"])
+    def disable(self, request, pk=None):
+        """Set worker is_active=False."""
+        worker = self.get_object()
+        worker.is_active = False
+        worker.save(update_fields=["is_active"])
+        from reNgine.utilities.websocket import send_worker_status_update
+
+        send_worker_status_update(worker.id)
+        return Response({"status": "ok", "message": "Worker disabled."})
+
+    @action(detail=True, methods=["post"])
+    def enable(self, request, pk=None):
+        """Set worker is_active=True."""
+        worker = self.get_object()
+        worker.is_active = True
+        worker.save(update_fields=["is_active"])
+        from reNgine.utilities.websocket import send_worker_status_update
+
+        send_worker_status_update(worker.id)
+        return Response({"status": "ok", "message": "Worker enabled."})
+
+    @action(detail=True, methods=["post"], url_path="delete")
+    def delete_worker(self, request, pk=None):
+        """Teardown on remote host (stop container, remove files) then delete worker from DB."""
+        worker = self.get_object()
+        worker_id = worker.id
+        ok, err = teardown_worker_remote(worker)
+        if not ok:
+            return Response(
+                {"status": "error", "message": err or "Teardown failed."},
+                status=HTTP_400_BAD_REQUEST,
+            )
+        worker.delete()
+        from reNgine.utilities.websocket import send_worker_status_update
+
+        send_worker_status_update(worker_id)
+        return Response({"status": "ok", "message": "Worker removed."})

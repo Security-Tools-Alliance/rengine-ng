@@ -287,25 +287,23 @@ name: domain
         """Test SecatorWorkflowForm with valid data."""
         form_data = {
             "name": "Test Workflow",
-            "alias": "subdomain_recon",  # Use a valid choice
+            "alias": "subdomain_recon",
             "description": "A test workflow",
             "scan_type": "internet",
             "yaml_configuration": """
 type: workflow
 name: test_workflow
 description: A test workflow
-scan_type: internet
-workflow_type: custom
+tags: []
 tasks:
-  - name: subfinder
-    type: subfinder
+  subfinder:
     description: Find subdomains
 """,
             "is_active": True,
         }
 
         form = SecatorWorkflowForm(data=form_data)
-        self.assertTrue(form.is_valid())
+        self.assertTrue(form.is_valid(), msg=form.errors)
 
     def test_secator_workflow_form_invalid_yaml(self):
         """Test SecatorWorkflowForm with invalid YAML."""

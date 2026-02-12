@@ -95,6 +95,7 @@
                                         <tr>
                                             <th>Scan</th>
                                             <th>Started</th>
+                                            <th>Worker</th>
                                             <th>Status</th>
                                         </tr>
                                     </thead>
@@ -105,6 +106,7 @@
                                                 <a href="{% url 'detail_scan' history.domain.slug history.id %}">{{ history.domain.name }} #{{ history.id }}</a>
                                             </td>
                                             <td>{{ history.start_scan_date|date:"M d, Y H:i" }}</td>
+                                            <td><span class="badge badge-soft-secondary">{{ history.secator_worker_name|default:"Local" }}</span></td>
                                             <td><span class="badge badge-soft-secondary">{{ history.get_status_display }}</span></td>
                                         </tr>
                                         {% endfor %}

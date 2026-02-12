@@ -78,6 +78,7 @@ SubScan History
             <th class="text-center">Serial Number</th>
             <th>Scanned Subdomain</th>
             <th class="text-center">Scan engine used</th>
+            <th class="text-center d-none d-md-table-cell">Worker</th>
             <th>Scan Started</th>
             <th class="text-center">Status</th>
             <th class="text-center">Progress</th>
@@ -105,6 +106,9 @@ SubScan History
           </td>
           <td class="text-center scan-engine-cell">
             <span class="badge badge-soft-primary">{{ subscan.display_runner_type }}: {{ subscan.display_scan_name }}</span>
+          </td>
+          <td class="text-center d-none d-md-table-cell">
+            <span class="badge badge-soft-secondary">{{ subscan.secator_worker_name|default:"Local" }}</span>
           </td>
           <td class="">
             <span data-toggle="tooltip" data-placement="top" title="{{subscan.start_scan_date}}">{{subscan.start_scan_date|naturaltime}}</br><small>({{subscan.start_scan_date}})</small></span>

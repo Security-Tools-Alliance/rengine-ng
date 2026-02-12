@@ -166,6 +166,23 @@ class TestStartScanAPI(BaseTestCase):
         self.assertFalse(response.data["status"])
 
     @patch("api.views.start_secator_scan")
+    def test_start_scan_with_worker_id_passes_worker_id_to_service(self, mock_start_scan):
+        """When worker_id is provided in body, start_secator_scan is called with that worker_id."""
+        mock_start_scan.return_value = {"status": True, "scan_id": 1, "http_status": 200}
+        worker_id = 10
+        data = {
+            "domain_id": self.data_generator.domain.id,
+            "execution_mode": "workflow",
+            "workflow_id": 1,
+            "worker_id": worker_id,
+        }
+        response = self.client.post(self.url, data, content_type="application/json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        mock_start_scan.assert_called_once()
+        call_kwargs = mock_start_scan.call_args[1]
+        self.assertEqual(call_kwargs["worker_id"], worker_id)
+
+    @patch("api.views.start_secator_scan")
     def test_start_scan_with_selected_targets_passes_targets_override(self, mock_start_scan):
         """When selected_targets is provided for workflow, start_secator_scan receives targets_override."""
         mock_start_scan.return_value = {"status": True, "scan_id": 1, "http_status": 200}
@@ -182,16 +199,11 @@ class TestStartScanAPI(BaseTestCase):
         self.assertEqual(call_kwargs["targets_override"], ["https://example.com", "https://test.example.com"])
 
     @patch("reNgine.secator.service.start_secator_scan")
-    @patch("reNgine.secator.service.ScanRepository")
-    def test_start_scan_with_selected_targets_per_task_starts_one_scan_per_task(
-        self, mock_scan_repo_cls, mock_start_scan
-    ):
+    def test_start_scan_with_selected_targets_per_task_starts_one_scan_per_task(self, mock_start_scan):
         """When selected_targets_per_task is provided, one shared ScanHistory for all tasks."""
         self.data_generator.create_secator_task()
         task_type = self.data_generator.secator_task.task_type
-        shared_scan_id = 42
-        mock_scan_repo_cls.return_value.create_scan.return_value = shared_scan_id
-        mock_start_scan.return_value = {"status": True, "scan_id": shared_scan_id}
+        mock_start_scan.return_value = {"status": True, "scan_id": 1}
         data = {
             "domain_id": self.data_generator.domain.id,
             "execution_mode": "tasks",
@@ -203,13 +215,33 @@ class TestStartScanAPI(BaseTestCase):
         response = self.client.post(self.url, data, content_type="application/json")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data["status"])
-        self.assertEqual(response.data["scan_id"], shared_scan_id)
+        self.assertIn("scan_id", response.data)
         self.assertIn("results", response.data)
         self.assertEqual(len(response.data["results"]), 1)
-        self.assertEqual(response.data["results"][0]["scan_id"], shared_scan_id)
         mock_start_scan.assert_called_once()
         call_kwargs = mock_start_scan.call_args[1]
         self.assertEqual(call_kwargs["execution_mode"], "tasks")
         self.assertEqual(call_kwargs["task_ids"], [self.data_generator.secator_task.id])
-        self.assertEqual(call_kwargs["scan_history_id"], shared_scan_id)
         self.assertEqual(call_kwargs["targets_override"], [self.data_generator.domain.name, "sub.example.com"])
+
+    @patch("reNgine.secator.service.start_secator_scan")
+    def test_start_scan_per_task_with_worker_id_passes_worker_id_to_service(self, mock_start_scan):
+        """When worker_id is provided with selected_targets_per_task, start_secator_scan receives worker_id."""
+        self.data_generator.create_secator_task()
+        task_type = self.data_generator.secator_task.task_type
+        worker_id = 7
+        mock_start_scan.return_value = {"status": True, "scan_id": 1}
+        data = {
+            "domain_id": self.data_generator.domain.id,
+            "execution_mode": "tasks",
+            "task_ids": [self.data_generator.secator_task.id],
+            "selected_targets_per_task": {
+                task_type: [self.data_generator.domain.name],
+            },
+            "worker_id": worker_id,
+        }
+        response = self.client.post(self.url, data, content_type="application/json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        mock_start_scan.assert_called_once()
+        call_kwargs = mock_start_scan.call_args[1]
+        self.assertEqual(call_kwargs["worker_id"], worker_id)

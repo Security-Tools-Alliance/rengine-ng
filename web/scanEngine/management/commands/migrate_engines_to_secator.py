@@ -79,7 +79,7 @@ class Command(BaseCommand):
             {
                 "name": "Internal Network Scan",
                 "description": "Internal network reconnaissance",
-                "scan_type": "internal",
+                "scan_type": "internal_network",
                 "execution_mode": "workflow",
                 "scan_config_type": "builtin",
                 "workflow_name": "Host Recon",

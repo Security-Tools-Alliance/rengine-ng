@@ -1,362 +1,176 @@
-# Secator Worker Remote Deployment Guide
+# Secator Worker Remote Deployment Guide (SSH mode)
 
-This guide explains how to deploy Secator workers on remote machines (VPS, internal networks, etc.) to perform distributed scanning.
+This guide explains how to deploy Secator workers on remote machines (VPS, internal networks, etc.) to perform distributed scanning. Workers run in **SSH mode**: no Redis or Celery on the remote host. reNgine-ng launches each scan via SSH by running a Python script inside the worker container.
 
 ## Overview
 
-Task execution and scheduling are handled by **Secator** (workers and beat run in the Secator worker container). reNgine-ng no longer runs Celery; it uses Secator's Celery-compatible broker for the worker.
+- **reNgine-ng** runs the web UI, API, and database. It does **not** use Redis for worker task distribution.
+- **Secator workers** run in Docker on remote hosts. The container runs in **CLI-only** mode (e.g. `sleep infinity`). reNgine-ng connects via **SSH**, syncs custom configs to `~/.secator/templates/` (or the deploy path equivalent), pushes a job file and a runner script, then runs the scan with `docker exec <container> python /path/to/run_secator_job.py /path/to/job.json`. Results are reported to reNgine-ng via the API (Secator hooks).
 
-Secator workers can be deployed anywhere with network access to:
-- **Redis broker** (used by Secator as Celery broker; set `SECATOR_CELERY_BROKER_URL` and `SECATOR_CELERY_RESULT_BACKEND`)
-- **reNgine-ng API** (for downloading hooks and reporting results)
+Workers need:
 
-This enables use cases like:
-- 🌍 **Distributed web scanning** from multiple geographic locations (VPS)
-- 🔒 **Internal network scanning** via agents deployed on internal infrastructure
-- ⚡ **Scalable architecture** with multiple workers processing scans in parallel
+- **SSH access** from reNgine-ng to the remote host (so reNgine-ng can deploy, sync configs, and run scans).
+- **Outbound access** from the worker container to the reNgine-ng API (for hooks and health check).
+
+No Redis or inbound ports are required on the worker.
 
 ## Architecture
 
 ```
 ┌─────────────────┐
-│  reNgine-ng     │◄───── HTTP/HTTPS ─────┐
-│  (Main Server)  │                        │
-│  - Web UI       │                        │
-│  - API          │                        │
-│  - Redis        │◄──── Redis ───┐       │
-│  - Database     │                │       │
-└─────────────────┘                │       │
-                                   │       │
-                            ┌──────┴───────┴──────┐
-                            │  Secator Worker     │
-                            │  (Remote Machine)   │
-                            │  - Executes scans   │
-                            │  - Reports results  │
-                            └─────────────────────┘
+│  reNgine-ng     │
+│  (Main Server)  │
+│  - Web UI       │
+│  - API          │
+│  - Database     │
+└────────┬────────┘
+         │ SSH (deploy, sync configs, docker exec)
+         ▼
+┌────────────────────────────────────────┐
+│  Remote host                           │
+│  ┌──────────────────────────────────┐ │
+│  │  Secator container (CLI only)     │ │
+│  │  - sleep infinity                 │ │
+│  │  - ~/.secator/templates/ (mount)  │ │
+│  │  - run_secator_job.py + job.json  │ │
+│  │  - Outbound → reNgine-ng API      │ │
+│  └──────────────────────────────────┘ │
+└────────────────────────────────────────┘
 ```
 
 ## Quick Start
 
 ### Prerequisites
 
-- Docker installed on the remote machine
-- Network access to reNgine-ng's Redis (port 6379)
-- Network access to reNgine-ng's API (port 8000 or 443)
+- Docker (and Docker Compose v2 or docker-compose) on the remote machine.
+- SSH access from the reNgine-ng server to the remote machine (key or password).
+- Network access from the worker container to reNgine-ng's API (HTTPS/HTTP).
 
-### Step 1: Copy Files to Remote Machine
+### Step 1: Copy files to the remote machine
 
-Copy these files to your remote machine:
 ```bash
 scp docker-compose.worker.yml user@remote-machine:~/
 scp .env-dist.worker user@remote-machine:~/.env
 ```
 
-### Step 2: Configure Environment Variables
+### Step 2: Configure environment variables
 
-On the remote machine, edit the `.env` file:
-
-```bash
-nano ~/.env
-```
-
-Update the following variables:
+On the remote machine, edit the `.env` file. **Redis is not used**; only API-related variables are needed:
 
 ```bash
-# Point to your reNgine-ng instance Redis
-SECATOR_CELERY_BROKER_URL=redis://your-rengine-server.com:6379/0
-SECATOR_CELERY_RESULT_BACKEND=redis://your-rengine-server.com:6379/0
-
-# API configuration (Secator API addon)
+# API configuration (Secator API addon – required for hooks)
 SECATOR_ADDONS_API_ENABLED=true
 SECATOR_ADDONS_API_URL=https://your-rengine-server.com/api/secator
 SECATOR_ADDONS_API_KEY=your-generated-api-key-from-rengine
 SECATOR_ADDONS_API_FORCE_SSL=false
 ```
 
-**Important:** 
-- Replace `your-rengine-server.com` with your actual reNgine-ng server address
-- Get the API key from your main reNgine-ng instance's `.env` file (variable `SECATOR_ADDONS_API_KEY`)
+Leave `SECATOR_CELERY_BROKER_URL` and `SECATOR_CELERY_RESULT_BACKEND` empty or commented out.
 
-### Step 3: Start the Worker
+### Step 3: Start the worker container
+
+The compose file runs the container with `command: ["sleep", "infinity"]` so it stays up; reNgine-ng will run scans via `docker exec`:
 
 ```bash
 docker-compose -f docker-compose.worker.yml up -d
 ```
 
-### Step 4: Verify
+### Step 4: Register and deploy from reNgine-ng (recommended)
 
-Check that the worker is running:
-```bash
-docker-compose -f docker-compose.worker.yml logs -f
-```
+In reNgine-ng, go to **Scan Engine** → **Workers** → **Add Worker**. Enter SSH host, user, key or password, and deploy path. Then click **Deploy** so reNgine-ng copies the compose file and `.env` (with broker/backend empty) and starts the container. reNgine-ng will use this SSH connection to sync custom configs and run scans.
 
-You should see:
-- ✅ Hooks downloaded successfully
-- ✅ Secator worker starting
-- ✅ Worker connected to Celery
+### Step 5: Verify API reachability
 
-## Configuration Details
+In the Workers list, use **Refresh**. reNgine-ng runs **inside the container**: `wget --no-check-certificate -q -O - <health_url>`. If reNgine-ng uses a self-signed certificate, this avoids strict certificate verification. The **API** column and **Last check** are updated accordingly.
 
-### Environment Variables
+## Custom configs (templates)
+
+Custom workflows, scans, tasks, and profiles must be present on the worker in `~/.secator/templates/` (with subdirs `workflows/`, `scans/`, `tasks/`, `profiles/`). Secator loads them via `CONFIG.dirs.templates`.
+
+- **From reNgine-ng**: Before each remote scan, reNgine-ng syncs the required custom configs via SFTP to the deploy path (e.g. `deploy_path/templates/`), which is mounted in the container as `~/.secator/templates/`. You can also use **Sync configs** in the worker UI to push all custom configs at once.
+
+## Configuration details
+
+### Environment variables (worker `.env`)
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `SECATOR_CELERY_BROKER_URL` | Redis broker URL for Celery | `redis://host:6379/0` |
-| `SECATOR_CELERY_RESULT_BACKEND` | Redis backend URL for results | `redis://host:6379/0` |
+| `SECATOR_CELERY_BROKER_URL` | Not used (SSH mode). Leave empty. | — |
+| `SECATOR_CELERY_RESULT_BACKEND` | Not used (SSH mode). Leave empty. | — |
 | `SECATOR_ADDONS_API_ENABLED` | Enable API addon | `true` |
 | `SECATOR_ADDONS_API_URL` | reNgine-ng API endpoint | `https://rengine.example.com/api/secator` |
-| `SECATOR_ADDONS_API_KEY` | System API key (from main instance) | `StkhUn8u.eabOM...` |
+| `SECATOR_ADDONS_API_KEY` | System API key (from main instance) | From main `.env` |
 | `SECATOR_ADDONS_API_FORCE_SSL` | Force SSL verification | `false` |
 
-### Redis Connection
+### Secator installed with pipx
 
-The Redis connection format is:
-```
-redis://[username:password@]host:port/db_number
-```
+If Secator is installed via **pipx** inside the worker container, the system `python` does not see the `secator` module. Configure reNgine-ng (e.g. in its `.env`) so the runner uses the pipx venv Python:
 
-Examples:
-- Local network: `redis://192.168.1.100:6379/0`
-- With auth: `redis://user:password@host:6379/0`
-- SSL/TLS: `rediss://host:6380/0`
-
-## Security Considerations
-
-### Network Security
-
-1. **Redis Authentication**: Use Redis authentication when possible
-   ```bash
-   SECATOR_CELERY_BROKER_URL=redis://username:password@host:6379/0
-   ```
-
-2. **Firewall Rules**: 
-   - Allow outbound to reNgine-ng Redis (6379)
-   - Allow outbound to reNgine-ng API (443/8000)
-   - No inbound connections required
-
-3. **HTTPS**: Use HTTPS for API communication
-   ```bash
-   RENGINE_API_URL=https://your-rengine-server.com
-   ```
-
-### API Key Security
-
-- Store API key securely (never commit to git)
-- Rotate API key periodically
-- Use separate API keys for different worker pools if needed
-- Monitor API key usage in reNgine-ng
-
-### Data Security
-
-- Scan results are transmitted to reNgine-ng via API
-- Local scan results are stored in Docker volume (optional)
-- Use encrypted connections (Redis SSL, HTTPS API)
-
-## Use Cases
-
-### 1. Multi-Location Web Scanning
-
-Deploy workers on VPS in different countries:
-
-```
-┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-│  Worker US  │    │  Worker EU  │    │  Worker AS  │
-│  (VPS)      │    │  (VPS)      │    │  (VPS)      │
-└──────┬──────┘    └──────┬──────┘    └──────┬──────┘
-       │                  │                  │
-       └──────────────────┴──────────────────┘
-                          │
-                  ┌───────▼────────┐
-                  │  reNgine-ng    │
-                  │  (Main Server) │
-                  └────────────────┘
+```bash
+SECATOR_WORKER_CONTAINER_PYTHON=/root/.local/share/pipx/venvs/secator/bin/python
 ```
 
-**Benefits:**
-- Geographic distribution for better scan coverage
-- Bypass geo-blocking
-- Reduce latency to targets
-- Load distribution
+Adjust the path if the container user is not root (e.g. `~/.local/share/pipx/venvs/secator/bin/python` for a non-root user).
 
-### 2. Internal Network Scanning
+### Container path differs from host (e.g. container user is secator)
 
-Deploy worker on internal network via agent:
+If the path where scripts are visible **inside the container** is different from `deploy_path` (e.g. on the host you use `/home/rengine/secator-worker` but inside the container the same directory is `/home/secator/secator-worker` because the container user is `secator`), set in reNgine-ng's environment:
 
-```
-┌─────────────────────────────────┐
-│  Internal Network               │
-│  ┌────────────┐  ┌────────────┐ │
-│  │ Target A   │  │ Target B   │ │
-│  └──────▲─────┘  └──────▲─────┘ │
-│         │                │       │
-│  ┌──────┴────────────────┴─────┐ │
-│  │  Secator Worker (Agent)    │ │
-│  └──────────────┬──────────────┘ │
-└─────────────────│────────────────┘
-                  │ (Outbound only)
-          ┌───────▼────────┐
-          │  reNgine-ng    │
-          │  (Internet)    │
-          └────────────────┘
+```bash
+SECATOR_WORKER_CONTAINER_SCRIPT_BASE=/home/secator/secator-worker
 ```
 
-**Benefits:**
-- Scan internal infrastructure without VPN
-- No inbound connections required
-- Secure communication via API
-- Centralized management
+Scripts are still uploaded to `deploy_path/scripts/` on the host; the command run via `docker exec` will use `SECATOR_WORKER_CONTAINER_SCRIPT_BASE/scripts/` so the container finds the files.
 
-### 3. Scalable Architecture
+### SSH tunnel (API access type: tunnel)
 
-Multiple workers for high-volume scanning:
+When the worker uses **SSH tunnel** to reach the API, reNgine-ng starts a reverse tunnel (`ssh -R 0.0.0.0:port:target_host:443`). The tunnel process runs **inside the reNgine-ng web container**. The tunnel client must connect to the host where nginx listens on 443:
 
-```
-┌──────────┐  ┌──────────┐  ┌──────────┐
-│ Worker 1 │  │ Worker 2 │  │ Worker N │
-└─────┬────┘  └─────┬────┘  └─────┬────┘
-      │             │             │
-      └─────────────┴─────────────┘
-                    │
-            ┌───────▼────────┐
-            │  reNgine-ng    │
-            │  - Task Queue  │
-            │  - Results DB  │
-            └────────────────┘
+- **Docker deployment**: nginx runs in the `proxy` container. Set `RENGINE_TUNNEL_TARGET_HOST=proxy` (default) so the tunnel forwards to the proxy service. No change needed if you use the default.
+- **Bare metal** (single host): nginx listens on localhost. Set `RENGINE_TUNNEL_TARGET_HOST=localhost` in reNgine-ng's environment.
+
+On the worker host, `sshd_config` must have `GatewayPorts yes` so the tunnel can bind to `0.0.0.0`.
+
+### API health check from the worker
+
+When you click **Refresh** in the Workers UI, reNgine-ng executes **inside the container**:
+
+```bash
+wget --no-check-certificate -q -O - <rengine_health_url>
 ```
 
-**Benefits:**
-- Horizontal scaling
-- Parallel scan execution
-- Load balancing
-- High availability
+So the worker does not need `curl`; `wget` is used, and self-signed certificates are accepted.
+
+## Security considerations
+
+- **SSH**: Use key-based auth when possible; restrict SSH access to the reNgine-ng server IP if feasible.
+- **Firewall**: Allow outbound from the worker to reNgine-ng API (HTTPS/HTTP). No inbound ports required on the worker.
+- **API key**: Store securely; rotate periodically. Use the same key as in the main reNgine-ng `.env` for the Secator addon.
 
 ## Troubleshooting
 
-### Worker Cannot Connect to Redis
+### Worker API unreachable after Refresh
 
-**Symptoms:** Worker logs show Redis connection errors
+- Ensure the container can reach reNgine-ng (HTTPS/HTTP). From the **host**: `docker exec <container_name> wget --no-check-certificate -q -O - https://your-rengine/api/secator/health/` (or the URL reNgine-ng uses).
+- Check `SECATOR_ADDONS_API_URL` and `SECATOR_ADDONS_API_KEY` in the deployed `.env`.
 
-**Solutions:**
-1. Check network connectivity:
-   ```bash
-   telnet your-rengine-server.com 6379
-   ```
-2. Verify Redis is accessible (firewall rules)
-3. Check Redis authentication if enabled
-4. Verify `SECATOR_CELERY_BROKER_URL` in `.env`
+### Scan not starting on worker
 
-### Worker Cannot Connect to API
+- Check reNgine-ng logs for SSH or `docker exec` errors.
+- Ensure deploy path and container name match what reNgine-ng has for that worker.
+- Use **Sync configs** so the worker has the required custom templates in `~/.secator/templates/`.
 
-**Symptoms:** "Failed to connect to API" or "401 Unauthorized" errors
+### Container exits or not running
 
-**Solutions:**
-1. Check API URL is correct (must include `/api/secator` path)
-2. Verify API key is valid
-3. Test API connectivity:
-   ```bash
-   curl -H "Authorization: Api-Key $SECATOR_ADDONS_API_KEY" \
-     $SECATOR_ADDONS_API_URL/runners
-   ```
-4. Check firewall allows HTTPS/HTTP to reNgine-ng
-
-### Worker Not Processing Tasks
-
-**Symptoms:** Worker idle, tasks queued in reNgine-ng
-
-**Solutions:**
-1. Check worker logs: `docker-compose -f docker-compose.worker.yml logs`
-2. Verify worker is registered with Celery
-3. Check Redis connection
-4. Ensure worker is using correct Redis URL
-
-### API Authentication Failures
-
-**Symptoms:** 401/403 errors in logs
-
-**Solutions:**
-1. Verify API key is correct (check main `.env`)
-2. Regenerate API key if needed:
-   ```bash
-   docker exec rengine-web-1 poetry run python3 manage.py \
-     generate_secator_api_key --recreate --show-key
-   ```
-3. Update worker `.env` with new key
+- The default command is `sleep infinity`. Check `docker-compose -f docker-compose.worker.yml logs`. If the image was previously used with Celery, ensure you use the updated compose file (no Celery worker command).
 
 ## Maintenance
 
-### Updating Workers
-
-```bash
-# Pull latest image
-docker-compose -f docker-compose.worker.yml pull
-
-# Restart worker
-docker-compose -f docker-compose.worker.yml up -d
-```
-
-### Monitoring
-
-View real-time logs:
-```bash
-docker-compose -f docker-compose.worker.yml logs -f
-```
-
-Check worker health:
-```bash
-docker-compose -f docker-compose.worker.yml ps
-```
-
-### Stopping Workers
-
-```bash
-# Graceful shutdown
-docker-compose -f docker-compose.worker.yml down
-
-# Force stop
-docker-compose -f docker-compose.worker.yml down -v
-```
-
-## Advanced Configuration
-
-### Multiple Workers on Same Machine
-
-Create separate directories for each worker:
-
-```bash
-mkdir -p ~/secator-worker-1 ~/secator-worker-2
-cp docker-compose.worker.yml .env ~/secator-worker-1/
-cp docker-compose.worker.yml .env ~/secator-worker-2/
-
-# Start workers
-cd ~/secator-worker-1 && docker-compose -f docker-compose.worker.yml up -d
-cd ~/secator-worker-2 && docker-compose -f docker-compose.worker.yml up -d
-```
-
-### Custom Worker Names
-
-Edit `docker-compose.worker.yml` and change:
-```yaml
-container_name: secator-worker-custom-name
-```
-
-### Resource Limits
-
-Add resource limits in `docker-compose.worker.yml`:
-```yaml
-deploy:
-  resources:
-    limits:
-      cpus: '2.0'
-      memory: 4G
-    reservations:
-      cpus: '1.0'
-      memory: 2G
-```
+- **Update image**: `docker-compose -f docker-compose.worker.yml pull && docker-compose -f docker-compose.worker.yml up -d`
+- **Logs**: `docker-compose -f docker-compose.worker.yml logs -f`
+- **Stop**: `docker-compose -f docker-compose.worker.yml down`
 
 ## Support
 
-For issues or questions:
 - GitHub Issues: https://github.com/Security-Tools-Alliance/rengine-ng/issues
 - Documentation: https://github.com/Security-Tools-Alliance/rengine-ng/wiki
-- Discord: Check project README for invite link
-

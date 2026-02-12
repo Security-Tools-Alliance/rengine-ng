@@ -51,6 +51,43 @@ class SecatorAPILogger(BaseLogger):
             return self.PREFIX_SYNC_COLOR
         return self.COLOR_RESET
 
+    def log_request_body_size(self, method: str, path: str, content_length: Optional[str]) -> None:
+        """
+        Log request body size from Content-Length header.
+
+        Helps diagnose nginx buffering when body exceeds client_body_buffer_size.
+
+        Args:
+            method: HTTP method (GET, POST, PUT, etc.)
+            path: Request path
+            content_length: Value of Content-Length header (bytes as string, or None if absent/chunked)
+        """
+        if content_length is None or content_length == "":
+            self._logger.info(
+                "%s %s %s | request body: unknown (Content-Length absent or chunked)",
+                self.PREFIX_RUNNER,
+                method,
+                path,
+            )
+        else:
+            try:
+                size_bytes = int(content_length)
+                size_human = (
+                    f"{size_bytes / (1024 * 1024):.2f} MB"
+                    if size_bytes >= 1024 * 1024
+                    else (f"{size_bytes / 1024:.2f} KB" if size_bytes >= 1024 else f"{size_bytes} bytes")
+                )
+            except (ValueError, TypeError):
+                size_human = str(content_length)
+            self._logger.info(
+                "%s %s %s | request body: %s bytes (%s)",
+                self.PREFIX_RUNNER,
+                method,
+                path,
+                content_length,
+                size_human,
+            )
+
     def log_runner_api_call(self, action: str, runner_data: Dict[str, Any], runner_id: Optional[str] = None) -> None:
         """
         Log runner API call with full details.

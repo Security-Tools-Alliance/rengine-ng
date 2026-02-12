@@ -158,6 +158,39 @@ def safe_int_cast(value, default=None):
         return default
 
 
+def get_request_worker_id(request, context=None):
+    """
+    Derive a valid Secator worker ID from request data, query params, headers, or context.
+
+    Checks (in order): request.data.worker_id, request.query_params.worker_id,
+    request.headers['X-Secator-Worker-Id'] (or request.META['HTTP_X_SECATOR_WORKER_ID'] for
+    plain Django requests), and context['worker_id'] if context is provided.
+    Only positive integer IDs are returned; invalid or missing values return None.
+
+    Args:
+        request: DRF or Django request (must have .data, .query_params, .headers or .META).
+        context: Optional dict with optional 'worker_id' key (e.g. from sync/runner context).
+
+    Returns:
+        Positive int worker_id, or None if not present or invalid.
+    """
+    raw = None
+    if hasattr(request, "data") and hasattr(request.data, "get"):
+        raw = request.data.get("worker_id")
+    if raw is None and getattr(request, "query_params", None):
+        raw = request.query_params.get("worker_id")
+    if raw is None and hasattr(request, "headers"):
+        raw = request.headers.get("X-Secator-Worker-Id")
+    if raw is None and getattr(request, "META", None):
+        raw = request.META.get("HTTP_X_SECATOR_WORKER_ID")
+    if raw is None and context and isinstance(context, dict):
+        raw = context.get("worker_id")
+    if raw is None:
+        return None
+    worker_id = safe_int_cast(raw)
+    return worker_id if worker_id is not None and worker_id > 0 else None
+
+
 def safe_bool_cast(value, default=False):
     """
     Convert a value to a boolean if possible, otherwise return a default value.
@@ -189,17 +222,11 @@ def safe_bool_cast(value, default=False):
         value_lower = value.lower().strip()
         if value_lower in ("true", "on", "1", "yes"):
             return True
-        if value_lower in ("false", "off", "0", "no", ""):
-            return False
-        return default
-
+        return False if value_lower in ("false", "off", "0", "no", "") else default
     if isinstance(value, int):
         return bool(value)
 
-    if isinstance(value, float):
-        return bool(value)
-
-    return default
+    return bool(value) if isinstance(value, float) else default
 
 
 def get_ip_info(ip_address):
@@ -300,12 +327,9 @@ def geoiplookup(ip_address):
             logger.debug(f"IP address not found in geoiplookup database: {ip_address}")
             return False, None, None, "IP address not found"
 
-        geo_pattern = r"GeoIP\s+Country\s+Edition:\s*([A-Z]{2}),\s*(.+)"
-        match = re.search(geo_pattern, output)
-
-        if match:
-            country_iso = match.group(1).strip()
-            country_name = match.group(2).strip()
+        if match := re.search(r"GeoIP\s+Country\s+Edition:\s*([A-Z]{2}),\s*(.+)", output):
+            country_iso = match[1].strip()
+            country_name = match[2].strip()
             logger.debug(f"Successfully parsed geolocalization for {ip_address}: {country_iso}, {country_name}")
             return True, country_iso, country_name, None
         else:

@@ -154,13 +154,13 @@ tasks:
           field: value
           condition: item.name == 'url_base'
 
-    x8:
-      description: Bruteforce URL params
-      wordlist: http_params
-      targets_:
-        - type: tag
-          field: '{value}/'
-          condition: item.name == 'url_base'
+    # x8:
+    #   description: Bruteforce URL params
+    #   wordlist: http_params
+    #   targets_:
+    #     - type: tag
+    #       field: '{value}/'
+    #       condition: item.name == 'url_base'
 
   _group/pattern:
     gf/xss:

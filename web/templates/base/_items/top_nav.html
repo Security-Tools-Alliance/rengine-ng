@@ -62,6 +62,7 @@
               <a href="{% url 'workflows' %}" class="dropdown-item">Workflows</a>
               <a href="{% url 'tasks' %}" class="dropdown-item">Tasks</a>
               <a href="{% url 'profiles' %}" class="dropdown-item">Profiles</a>
+              <a href="{% url 'worker_list' %}" class="dropdown-item">Workers</a>
               <div class="dropdown-divider"></div>
               {% endif %}
               {% if user|can:'modify_wordlists' %}

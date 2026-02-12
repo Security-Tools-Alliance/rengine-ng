@@ -76,8 +76,8 @@ class SecatorScanController:
                 logger.error("Scan %s not found", self.scan_history_id)
                 return False
 
-            # Get all SecatorRunner instances associated with this scan
-            runners = list(SecatorRunner.objects.filter(scan_history_id=self.scan_history_id))
+            # Get all SecatorRunner instances associated with this scan (include worker for remote revoke)
+            runners = list(SecatorRunner.objects.filter(scan_history_id=self.scan_history_id).select_related("worker"))
 
             if not runners:
                 logger.warning("No SecatorRunner found for scan %s", self.scan_history_id)
@@ -98,14 +98,33 @@ class SecatorScanController:
                     celery_id = context.get("celery_id")
 
                 if celery_id:
+                    task_name = f"scan_{self.scan_history_id}"
                     try:
-                        revoke_task(celery_id, task_name=f"scan_{self.scan_history_id}")
-                        revoked_count += 1
-                        logger.debug("Successfully revoked Celery task %s for scan %s", celery_id, self.scan_history_id)
+                        if runner.worker_id:
+                            from reNgine.secator.remote_runner import revoke_task_on_remote_worker
+
+                            if revoke_task_on_remote_worker(runner.worker, celery_id, task_name=task_name):
+                                revoked_count += 1
+                                logger.debug(
+                                    "Successfully revoked Celery task %s for scan %s (remote)",
+                                    celery_id,
+                                    self.scan_history_id,
+                                )
+                            else:
+                                failed_count += 1
+                        else:
+                            revoke_task(celery_id, task_name=task_name)
+                            revoked_count += 1
+                            logger.debug(
+                                "Successfully revoked Celery task %s for scan %s", celery_id, self.scan_history_id
+                            )
                     except Exception as e:
                         failed_count += 1
                         logger.error(
-                            "Failed to revoke Celery task %s for scan %s: %s", celery_id, self.scan_history_id, e
+                            "Failed to revoke Celery task %s for scan %s: %s",
+                            celery_id,
+                            self.scan_history_id,
+                            e,
                         )
                 else:
                     logger.warning(
@@ -162,7 +181,7 @@ class SecatorScanController:
         try:
             subscan = SubScan.objects.filter(id=subscan_id).first()
             if not subscan:
-                logger.error(f"Subscan {subscan_id} not found")
+                logger.error("Subscan %s not found", subscan_id)
                 return False
 
             scan = subscan.scan_history
@@ -177,13 +196,15 @@ class SecatorScanController:
 
             if other_running_subscans > 0:
                 logger.warning(
-                    f"Stopping subscan {subscan_id} will also affect {other_running_subscans} "
-                    f"other running subscan(s) for scan {scan.id} as they share the same runners"
+                    "Stopping subscan %s will also affect %s other running subscan(s) for scan %s as they share the same runners",
+                    subscan_id,
+                    other_running_subscans,
+                    scan.id,
                 )
 
             runners = self._get_runners_to_revoke_for_subscan(subscan, scan)
             if not runners:
-                logger.warning(f"No SecatorRunner found for subscan {subscan_id}")
+                logger.warning("No SecatorRunner found for subscan %s", subscan_id)
                 self._abort_subscan(subscan)
                 return True
 
@@ -196,7 +217,7 @@ class SecatorScanController:
             return True
 
         except Exception as e:
-            logger.error(f"Error stopping subscan {subscan_id}: {e}")
+            logger.error("Error stopping subscan %s: %s", subscan_id, e)
             return False
 
     def _get_runners_to_revoke_for_subscan(self, subscan: SubScan, scan) -> list:
@@ -220,13 +241,19 @@ class SecatorScanController:
                 activity_runner_ids.add(runner.id)
 
         if activity_runner_ids:
-            runners = list(SecatorRunner.objects.filter(id__in=activity_runner_ids, scan_history_id=scan.id))
+            runners = list(
+                SecatorRunner.objects.filter(id__in=activity_runner_ids, scan_history_id=scan.id).select_related(
+                    "worker"
+                )
+            )
             logger.debug("Scoping subscan %s stop to %s activity-specific runner(s)", subscan.id, len(runners))
         else:
-            runners = list(SecatorRunner.objects.filter(scan_history_id=scan.id))
+            runners = list(SecatorRunner.objects.filter(scan_history_id=scan.id).select_related("worker"))
             logger.debug(
-                f"No activity-specific runners found for subscan {subscan.id}, "
-                f"using all {len(runners)} runner(s) from parent scan {scan.id}"
+                "No activity-specific runners found for subscan %s, using all %s runner(s) from parent scan %s",
+                subscan.id,
+                len(runners),
+                scan.id,
             )
         return runners
 
@@ -235,17 +262,38 @@ class SecatorScanController:
         from secator.celery import revoke_task
 
         revoked_count = 0
+        task_name = f"subscan_{subscan_id}"
         for runner in runners:
             if celery_id := runner.celery_id or (runner.runner_data or {}).get("context", {}).get("celery_id"):
                 try:
-                    revoke_task(celery_id, task_name=f"subscan_{subscan_id}")
-                    revoked_count += 1
-                    logger.debug("Successfully revoked Celery task %s for subscan %s", celery_id, subscan_id)
+                    if runner.worker_id:
+                        from reNgine.secator.remote_runner import revoke_task_on_remote_worker
+
+                        if revoke_task_on_remote_worker(runner.worker, celery_id, task_name=task_name):
+                            revoked_count += 1
+                            logger.debug(
+                                "Successfully revoked Celery task %s for subscan %s (remote)",
+                                celery_id,
+                                subscan_id,
+                            )
+                        else:
+                            logger.error(
+                                "Failed to revoke Celery task %s for subscan %s on remote worker",
+                                celery_id,
+                                subscan_id,
+                            )
+                    else:
+                        revoke_task(celery_id, task_name=task_name)
+                        revoked_count += 1
+                        logger.debug("Successfully revoked Celery task %s for subscan %s", celery_id, subscan_id)
                 except Exception as e:
                     logger.error("Failed to revoke Celery task %s for subscan %s: %s", celery_id, subscan_id, e)
             else:
                 logger.warning(
-                    f"Runner {runner.id} ({runner.runner_type}: {runner.runner_name}) has no celery_id to revoke"
+                    "Runner %s (%s: %s) has no celery_id to revoke",
+                    runner.id,
+                    runner.runner_type,
+                    runner.runner_name,
                 )
 
             runner.status = "REVOKED"
@@ -307,9 +355,9 @@ class SecatorScanController:
         try:
             from secator.celery import revoke_task
 
-            activity = ScanActivity.objects.filter(id=activity_id).select_related("runner_id").first()
+            activity = ScanActivity.objects.filter(id=activity_id).select_related("runner_id__worker").first()
             if not activity:
-                logger.error(f"ScanActivity {activity_id} not found")
+                logger.error("ScanActivity %s not found", activity_id)
                 return False
 
             # Check if activity has a runner_id and celery_id
@@ -347,16 +395,35 @@ class SecatorScanController:
                 and activity.scan_of.id != activity.runner_id.scan_history.id
             ):
                 logger.error(
-                    f"Activity {activity_id} (scan {activity.scan_of.id}) has runner "
-                    f"{activity.runner_id.id} associated with different scan "
-                    f"{activity.runner_id.scan_history.id}. This may indicate data inconsistency."
+                    "Activity %s (scan %s) has runner %s associated with different scan %s. "
+                    "This may indicate data inconsistency.",
+                    activity_id,
+                    activity.scan_of.id,
+                    activity.runner_id.id,
+                    activity.runner_id.scan_history.id,
                 )
                 # Detected data inconsistency: avoid revoking a task that may belong to a different scan
                 return False
 
-            # Revoke the Celery task
+            # Revoke the Celery task (remote or local)
+            task_name = f"activity_{activity_id}"
             try:
-                revoke_task(activity.runner_id.celery_id, task_name=f"activity_{activity_id}")
+                if activity.runner_id.worker_id:
+                    from reNgine.secator.remote_runner import revoke_task_on_remote_worker
+
+                    if not revoke_task_on_remote_worker(
+                        activity.runner_id.worker,
+                        activity.runner_id.celery_id,
+                        task_name=task_name,
+                    ):
+                        logger.error(
+                            "Failed to revoke Celery task %s for activity %s on remote worker",
+                            activity.runner_id.celery_id,
+                            activity_id,
+                        )
+                        return False
+                else:
+                    revoke_task(activity.runner_id.celery_id, task_name=task_name)
                 logger.debug(
                     "Successfully revoked Celery task %s for activity %s",
                     activity.runner_id.celery_id,
@@ -364,7 +431,10 @@ class SecatorScanController:
                 )
             except Exception as e:
                 logger.error(
-                    f"Failed to revoke Celery task {activity.runner_id.celery_id} for activity {activity_id}: {e}"
+                    "Failed to revoke Celery task %s for activity %s: %s",
+                    activity.runner_id.celery_id,
+                    activity_id,
+                    e,
                 )
                 return False
 

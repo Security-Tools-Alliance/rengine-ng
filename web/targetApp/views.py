@@ -36,7 +36,7 @@ from reNgine.definitions import (
 from reNgine.services.repositories import EndpointRepository
 from reNgine.utilities.dns import get_reverse_dns
 from reNgine.utilities.url import sanitize_url
-from scanEngine.models import EngineType
+from scanEngine.models import EngineType, SecatorWorker
 from startScan.models import (
     CountryISO,
     CveId,
@@ -1043,6 +1043,7 @@ def target_summary(request, slug, id):
     )
 
     context.update(build_secator_profiles_context())
+    context["secator_workers"] = SecatorWorker.objects.filter(is_active=True).order_by("name")
     return render(request, "target/summary.html", context)
 
 

@@ -34,6 +34,38 @@ class TestSecatorAPILogger(BaseTestCase):
         logger2 = get_secator_api_logger()
         self.assertIs(logger1, logger2)
 
+    def test_log_request_body_size_with_content_length(self):
+        """Test logging request body size when Content-Length is present."""
+        self.logger.log_request_body_size("PUT", "/api/secator/runner/123", "1048576")
+        self.assertEqual(len(self.log_capture), 1)
+        all_msgs = str(self.log_capture[0][0])
+        self.assertIn("1048576", all_msgs)
+        self.assertIn("1.00 MB", all_msgs)
+        self.assertIn("PUT", all_msgs)
+
+    def test_log_request_body_size_without_content_length(self):
+        """Test logging request body size when Content-Length is absent."""
+        self.logger.log_request_body_size("POST", "/api/secator/runners", None)
+        self.assertEqual(len(self.log_capture), 1)
+        all_msgs = str(self.log_capture[0][0])
+        self.assertIn("unknown", all_msgs)
+        self.assertIn("chunked", all_msgs)
+
+    def test_log_request_body_size_small_body(self):
+        """Test logging request body size for small payload (bytes)."""
+        self.logger.log_request_body_size("PUT", "/api/secator/runner/1", "512")
+        self.assertEqual(len(self.log_capture), 1)
+        all_msgs = str(self.log_capture[0][0])
+        self.assertIn("512", all_msgs)
+        self.assertIn("bytes", all_msgs)
+
+    def test_log_request_body_size_invalid_content_length(self):
+        """Test logging when Content-Length is present but non-numeric."""
+        self.logger.log_request_body_size("PATCH", "/api/secator/runner/1", "invalid")
+        self.assertEqual(len(self.log_capture), 1)
+        all_msgs = str(self.log_capture[0][0])
+        self.assertIn("invalid", all_msgs)
+
     def test_log_runner_api_call(self):
         """Test logging runner API call."""
         runner_data = {

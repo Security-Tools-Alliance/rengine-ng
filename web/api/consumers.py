@@ -5,6 +5,8 @@ import re
 from asgiref.sync import async_to_sync
 from channels.generic.websocket import WebsocketConsumer
 
+from reNgine.utilities.worker_ws_groups import worker_deploy_group, worker_refresh_group
+
 
 logger = logging.getLogger(__name__)
 
@@ -178,3 +180,101 @@ class ScanStatusConsumer(WebsocketConsumer):
             self.send(text_data=json.dumps(message))
         except Exception as e:
             logger.error(f"Error in scan_status_update: {e}")
+
+
+WORKER_STATUS_GROUP = "worker-status"
+
+
+class WorkerStatusConsumer(WebsocketConsumer):
+    """WebSocket consumer for Secator worker status updates (list/detail UI)."""
+
+    def connect(self):
+        try:
+            async_to_sync(self.channel_layer.group_add)(WORKER_STATUS_GROUP, self.channel_name)
+            self.accept()
+        except Exception as e:
+            logger.error("Worker status WebSocket connect failed: %s", e)
+            raise
+
+    def disconnect(self, close_code):
+        try:
+            async_to_sync(self.channel_layer.group_discard)(WORKER_STATUS_GROUP, self.channel_name)
+        except Exception as e:
+            logger.error("Worker status WebSocket disconnect failed: %s", e)
+
+    def worker_status_update(self, event):
+        """Send worker status update to WebSocket client."""
+        try:
+            self.send(text_data=json.dumps(event.get("payload", {})))
+        except Exception as e:
+            logger.error("Error in worker_status_update: %s", e)
+
+
+class WorkerDeployConsumer(WebsocketConsumer):
+    """WebSocket consumer for worker deploy log stream (modal progress)."""
+
+    def connect(self):
+        try:
+            worker_id = self.scope["url_route"]["kwargs"].get("worker_id")
+            if worker_id is None or (isinstance(worker_id, str) and not worker_id.isdigit()):
+                self.close(code=4000)
+                return
+            self.worker_id = int(worker_id)
+            if self.worker_id <= 0:
+                self.close(code=4000)
+                return
+            self.room_group_name = worker_deploy_group(self.worker_id)
+            async_to_sync(self.channel_layer.group_add)(self.room_group_name, self.channel_name)
+            self.accept()
+        except Exception as e:
+            logger.error("Worker deploy WebSocket connect failed: %s", e)
+            raise
+
+    def disconnect(self, close_code):
+        try:
+            if hasattr(self, "room_group_name"):
+                async_to_sync(self.channel_layer.group_discard)(self.room_group_name, self.channel_name)
+        except Exception as e:
+            logger.error("Worker deploy WebSocket disconnect failed: %s", e)
+
+    def worker_deploy_log(self, event):
+        """Forward deploy log payload to WebSocket client."""
+        try:
+            self.send(text_data=json.dumps(event.get("payload", {})))
+        except Exception as e:
+            logger.error("Error in worker_deploy_log: %s", e)
+
+
+class WorkerRefreshConsumer(WebsocketConsumer):
+    """WebSocket consumer for worker refresh log stream (modal progress)."""
+
+    def connect(self):
+        try:
+            worker_id = self.scope["url_route"]["kwargs"].get("worker_id")
+            if worker_id is None or (isinstance(worker_id, str) and not worker_id.isdigit()):
+                self.close(code=4000)
+                return
+            self.worker_id = int(worker_id)
+            if self.worker_id <= 0:
+                self.close(code=4000)
+                return
+            self.room_group_name = worker_refresh_group(self.worker_id)
+            async_to_sync(self.channel_layer.group_add)(self.room_group_name, self.channel_name)
+            self.accept()
+        except Exception as e:
+            logger.error("Worker refresh WebSocket connect failed: %s", e)
+            raise
+
+    def disconnect(self, close_code):
+        try:
+            if hasattr(self, "room_group_name"):
+                async_to_sync(self.channel_layer.group_discard)(self.room_group_name, self.channel_name)
+        except Exception as e:
+            logger.error("Worker refresh WebSocket disconnect failed: %s", e)
+
+    def worker_refresh_log(self, event):
+        """Forward refresh log payload to WebSocket client."""
+        try:
+            self.send(text_data=json.dumps(event.get("payload", {})))
+        except Exception as e:
+            logger.error("Error in worker_refresh_log: %s", e)

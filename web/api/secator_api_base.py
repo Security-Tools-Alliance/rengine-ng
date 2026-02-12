@@ -8,6 +8,7 @@ from typing import Any, Dict, Optional, Tuple, Type
 
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError
+from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -62,6 +63,12 @@ class SecatorAPIBase(APIView, ABC):
         """Initialize the base class."""
         super().__init__(**kwargs)
         self.logger = get_secator_api_logger()
+
+    def initial(self, request: Request, *args: Any, **kwargs: Any) -> None:
+        """Log request body size for diagnosing nginx buffering, then run default initial."""
+        content_length = request.META.get("CONTENT_LENGTH")
+        self.logger.log_request_body_size(request.method, request.path, content_length)
+        super().initial(request, *args, **kwargs)
 
     def validate_request_data(
         self, data: Any, entity_id: Optional[str] = None, prefix: Optional[str] = None

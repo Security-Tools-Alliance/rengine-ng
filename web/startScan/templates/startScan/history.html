@@ -80,6 +80,7 @@ Quick Scan History
               <th class="">Domain Name</th>
               <th>Summary</th>
               <th class="">Scan Engine Used</th>
+              <th class="d-none d-md-table-cell">Worker</th>
               <th>Last Scan</th>
               <th>Initiated By</th>
               <th class="text-center">Status</th>
@@ -106,6 +107,9 @@ Quick Scan History
               </td>
               <td class="scan-engine-cell">
                 <span class="badge badge-soft-primary">{{ scan_history.display_runner_type }}: {{ scan_history.display_scan_name }}</span>
+              </td>
+              <td class="d-none d-md-table-cell">
+                <span class="badge badge-soft-secondary">{{ scan_history.secator_worker_name|default:"Local" }}</span>
               </td>
               <td>
                 <span data-toggle="tooltip" data-placement="top" title="{{scan_history.start_scan_date}}">{{scan_history.start_scan_date|naturaltime}}</span>

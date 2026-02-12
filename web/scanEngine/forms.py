@@ -15,6 +15,7 @@ from scanEngine.models import (
     SecatorProfile,
     SecatorScan,
     SecatorTask,
+    SecatorWorker,
     SecatorWorkflow,
     VulnerabilityReportSetting,
 )
@@ -796,16 +797,15 @@ class SecatorWorkflowForm(forms.ModelForm):
             try:
                 parsed_yaml = yaml.safe_load(yaml_config)
             except yaml.YAMLError as e:
-                raise ValidationError(f"Invalid YAML configuration: {e}")
+                raise ValidationError(f"Invalid YAML configuration: {e}") from e
 
             # Schema validation: check for required fields
             if not isinstance(parsed_yaml, dict):
                 raise ValidationError("YAML configuration must be a mapping (dictionary) at the top level.")
 
             # Required top-level fields
-            required_fields = ["name", "description", "scan_type", "workflow_type"]
-            missing_fields = [field for field in required_fields if field not in parsed_yaml]
-            if missing_fields:
+            required_fields = ["name", "description", "type", "tags"]
+            if missing_fields := [field for field in required_fields if field not in parsed_yaml]:
                 raise ValidationError(f"Missing required field(s) in YAML configuration: {', '.join(missing_fields)}")
 
             # Validate field types and values
@@ -827,46 +827,41 @@ class SecatorWorkflowForm(forms.ModelForm):
         if not isinstance(parsed_yaml.get("description"), str) or not parsed_yaml.get("description").strip():
             raise ValidationError("Field 'description' must be a non-empty string.")
 
-        # Validate scan_type field
-        valid_scan_types = ["internet", "internal"]
-        scan_type = parsed_yaml.get("scan_type")
-        if not isinstance(scan_type, str) or scan_type not in valid_scan_types:
-            raise ValidationError(f"Field 'scan_type' must be one of: {', '.join(valid_scan_types)}")
+        # Validate type field
+        valid_types = ["workflow"]
+        config_type = parsed_yaml.get("type")
+        if not isinstance(config_type, str) or config_type not in valid_types:
+            raise ValidationError(f"Field 'type' must be one of: {', '.join(valid_types)}")
 
-        # Validate workflow_type field
-        valid_workflow_types = ["builtin", "custom"]
-        workflow_type = parsed_yaml.get("workflow_type")
-        if not isinstance(workflow_type, str) or workflow_type not in valid_workflow_types:
-            raise ValidationError(f"Field 'workflow_type' must be one of: {', '.join(valid_workflow_types)}")
+        # # Validate workflow_type field
+        # valid_workflow_types = ["builtin", "custom"]
+        # workflow_type = parsed_yaml.get("workflow_type")
+        # if not isinstance(workflow_type, str) or workflow_type not in valid_workflow_types:
+        #     raise ValidationError(f"Field 'workflow_type' must be one of: {', '.join(valid_workflow_types)}")
 
     def _validate_tasks_section(self, tasks):
         """Validate the tasks section of the YAML configuration."""
-        if not isinstance(tasks, list):
-            raise ValidationError("Field 'tasks' must be a list.")
+        if not isinstance(tasks, dict):
+            raise ValidationError("Field 'tasks' must be a dictionary.")
 
         if not tasks:
             raise ValidationError("Field 'tasks' cannot be empty.")
 
-        for i, task in enumerate(tasks):
-            if not isinstance(task, dict):
-                raise ValidationError(f"Task at index {i} must be a dictionary.")
-
+        for task_name, task in tasks.items():
+            if not isinstance(task, (dict, str)):
+                raise ValidationError(f"Task '{task_name}' must be a dictionary or string.")
+            if isinstance(task, str):
+                continue
+            if task_name.startswith("_"):
+                continue
             # Required task fields
-            required_task_fields = ["name", "type"]
-            missing_task_fields = [field for field in required_task_fields if field not in task]
-            if missing_task_fields:
-                raise ValidationError(f"Task at index {i} missing required field(s): {', '.join(missing_task_fields)}")
+            required_task_fields = ["description"]
+            if missing_task_fields := [field for field in required_task_fields if field not in task]:
+                raise ValidationError(f"Task '{task_name}' missing required field(s): {', '.join(missing_task_fields)}")
 
             # Validate task field types
-            if not isinstance(task.get("name"), str) or not task.get("name").strip():
-                raise ValidationError(f"Task at index {i}: field 'name' must be a non-empty string.")
-
-            if not isinstance(task.get("type"), str) or not task.get("type").strip():
-                raise ValidationError(f"Task at index {i}: field 'type' must be a non-empty string.")
-
-            # Validate config field if present
-            if "config" in task and not isinstance(task["config"], dict):
-                raise ValidationError(f"Task at index {i}: field 'config' must be a dictionary.")
+            if not isinstance(task.get("description"), str) or not task.get("description").strip():
+                raise ValidationError(f"Task '{task_name}': field 'description' must be a non-empty string.")
 
     def clean_name(self):
         """Validate workflow name uniqueness."""
@@ -942,7 +937,7 @@ class SecatorTaskForm(forms.ModelForm):
             try:
                 yaml.safe_load(yaml_config)
             except yaml.YAMLError as e:
-                raise ValidationError(f"Invalid YAML configuration: {e}")
+                raise ValidationError(f"Invalid YAML configuration: {e}") from e
 
         return yaml_config
 
@@ -1013,29 +1008,31 @@ class SecatorScanForm(forms.ModelForm):
             return yaml_config
 
         try:
-            import yaml
-
-            parsed_yaml = yaml.safe_load(yaml_config)
-
-            if not isinstance(parsed_yaml, dict):
-                raise ValidationError("YAML configuration must be a dictionary.")
-
-            # Required top-level fields
-            required_fields = ["name", "description", "type"]
-            missing_fields = [field for field in required_fields if field not in parsed_yaml]
-            if missing_fields:
-                raise ValidationError(f"Missing required fields in YAML: {', '.join(missing_fields)}")
-
-            # Validate type field
-            valid_types = ["scan"]
-            scan_type = parsed_yaml.get("type")
-            if not isinstance(scan_type, str) or scan_type not in valid_types:
-                raise ValidationError(f"Field 'type' must be one of: {', '.join(valid_types)}")
-
+            self._validate_scan_yaml_structure(yaml_config)
         except yaml.YAMLError as e:
-            raise ValidationError(f"Invalid YAML syntax: {e}")
+            raise ValidationError(f"Invalid YAML syntax: {e}") from e
 
         return yaml_config
+
+    def _validate_scan_yaml_structure(self, yaml_config):
+        """Validate required top-level fields and type of a Secator scan YAML config."""
+        import yaml
+
+        parsed_yaml = yaml.safe_load(yaml_config)
+
+        if not isinstance(parsed_yaml, dict):
+            raise ValidationError("YAML configuration must be a dictionary.")
+
+        # Required top-level fields
+        required_fields = ["name", "description", "type"]
+        if missing_fields := [field for field in required_fields if field not in parsed_yaml]:
+            raise ValidationError(f"Missing required fields in YAML: {', '.join(missing_fields)}")
+
+        # Validate type field
+        valid_types = ["scan"]
+        scan_type = parsed_yaml.get("type")
+        if not isinstance(scan_type, str) or scan_type not in valid_types:
+            raise ValidationError(f"Field 'type' must be one of: {', '.join(valid_types)}")
 
     def clean(self):
         """Validate scan configuration."""
@@ -1117,7 +1114,7 @@ class SecatorProfileForm(forms.ModelForm):
         try:
             yaml.safe_load(opts)
         except yaml.YAMLError as e:
-            raise ValidationError(f"Invalid YAML syntax: {e}")
+            raise ValidationError(f"Invalid YAML syntax: {e}") from e
 
         return opts
 
@@ -1130,3 +1127,129 @@ class SecatorProfileForm(forms.ModelForm):
             raise ValidationError("Built-in profiles cannot be modified.")
 
         return cleaned_data
+
+
+class SecatorWorkerForm(forms.ModelForm):
+    """Form for creating/editing Secator workers (SSH deployment)."""
+
+    class Meta:
+        model = SecatorWorker
+        fields = [
+            "name",
+            "ssh_host",
+            "ssh_port",
+            "ssh_user",
+            "ssh_auth_type",
+            "ssh_password_encrypted",
+            "deploy_path",
+            "container_name",
+            "api_access_type",
+            "api_tunnel_port",
+            "api_url",
+            "is_active",
+        ]
+
+    name = forms.CharField(
+        required=True,
+        max_length=255,
+        widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "Worker name (e.g. worker-1)"}),
+    )
+    ssh_host = forms.CharField(
+        required=True,
+        max_length=255,
+        widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "Hostname or IP"}),
+    )
+    ssh_port = forms.IntegerField(
+        required=True,
+        min_value=1,
+        max_value=65535,
+        initial=22,
+        widget=forms.NumberInput(attrs={"class": "form-control"}),
+    )
+    ssh_user = forms.CharField(
+        required=True,
+        max_length=255,
+        widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "SSH user"}),
+    )
+    ssh_auth_type = forms.ChoiceField(
+        choices=SecatorWorker.SSH_AUTH_CHOICES,
+        required=True,
+        widget=forms.Select(attrs={"class": "form-control"}),
+    )
+    ssh_password_encrypted = forms.CharField(
+        required=False,
+        widget=forms.PasswordInput(
+            attrs={"class": "form-control", "placeholder": "Password", "autocomplete": "new-password"}
+        ),
+    )
+    deploy_path = forms.CharField(
+        required=True,
+        max_length=1024,
+        widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "/opt/secator-worker"}),
+    )
+    container_name = forms.CharField(
+        required=False,
+        max_length=255,
+        widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "secator-worker (optional)"}),
+    )
+    api_access_type = forms.ChoiceField(
+        choices=SecatorWorker.API_ACCESS_CHOICES,
+        required=True,
+        widget=forms.Select(attrs={"class": "form-control"}),
+    )
+    api_tunnel_port = forms.IntegerField(
+        required=False,
+        min_value=1,
+        max_value=65535,
+        initial=8443,
+        widget=forms.NumberInput(attrs={"class": "form-control", "placeholder": "8443"}),
+    )
+    api_url = forms.CharField(
+        required=False,
+        max_length=512,
+        widget=forms.URLInput(
+            attrs={
+                "class": "form-control",
+                "placeholder": "https://rengine.example.com",
+            }
+        ),
+    )
+    is_active = forms.BooleanField(
+        required=False,
+        initial=True,
+        widget=forms.CheckboxInput(attrs={"class": "form-check-input"}),
+    )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        auth_type = cleaned_data.get("ssh_auth_type")
+        if (
+            auth_type == SecatorWorker.AUTH_PASSWORD
+            and not cleaned_data.get("ssh_password_encrypted")
+            and (not self.instance or not self.instance.ssh_password_encrypted)
+        ):
+            raise ValidationError("Password is required when using password authentication.")
+        api_access = cleaned_data.get("api_access_type")
+        if api_access == SecatorWorker.API_ACCESS_CLASSIC:
+            api_url = (cleaned_data.get("api_url") or "").strip()
+            if not api_url:
+                raise ValidationError({"api_url": "API URL is required when using classic (HTTPS) access."})
+        if api_access == SecatorWorker.API_ACCESS_TUNNEL:
+            port = cleaned_data.get("api_tunnel_port")
+            if port is None:
+                raise ValidationError({"api_tunnel_port": "API tunnel port is required when using tunnel access."})
+            if port < 1 or port > 65535:
+                raise ValidationError({"api_tunnel_port": "Port must be between 1 and 65535."})
+            if auth_type == SecatorWorker.AUTH_PASSWORD:
+                raise ValidationError(
+                    {"ssh_auth_type": "Password authentication is not supported when using API tunnel access."}
+                )
+        return cleaned_data
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        if self.cleaned_data.get("ssh_auth_type") == SecatorWorker.AUTH_KEY:
+            instance.ssh_key_path = ""
+        if commit:
+            instance.save()
+        return instance

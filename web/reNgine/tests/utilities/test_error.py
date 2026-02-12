@@ -9,7 +9,7 @@ from django.db import IntegrityError
 from django.test import TestCase
 
 from reNgine.definitions import GENERIC_USER_ERROR_MESSAGE
-from reNgine.utilities.error import get_safe_user_message
+from reNgine.utilities.error import UserSafeError, get_safe_user_message
 
 
 class TestGetSafeUserMessage(TestCase):
@@ -63,16 +63,46 @@ class TestGetSafeUserMessage(TestCase):
         self.assertEqual(msg, "activity_id is required")
         logger.exception.assert_called_once()
 
-    def test_generic_exception_returns_generic_message(self):
-        """Unknown exception returns GENERIC_USER_ERROR_MESSAGE."""
+    def test_runtime_error_always_returns_generic(self):
+        """RuntimeError is not passed through; returns GENERIC to avoid leaking internal messages."""
+        logger = MagicMock()
+        exc = RuntimeError("Worker compose file not found. Check server configuration.")
+        msg = get_safe_user_message(exc, logger)
+        self.assertEqual(msg, GENERIC_USER_ERROR_MESSAGE)
+        logger.exception.assert_called_once()
+
+    def test_runtime_error_unsafe_message_returns_generic(self):
+        """RuntimeError with path/newline returns GENERIC_USER_ERROR_MESSAGE."""
         logger = MagicMock()
         exc = RuntimeError("Internal path /etc/secret leaked")
         msg = get_safe_user_message(exc, logger)
         self.assertEqual(msg, GENERIC_USER_ERROR_MESSAGE)
         logger.exception.assert_called_once()
 
-    def test_logger_none_does_not_log(self):
-        """When logger is None, no logging call and still returns safe message."""
+    def test_user_safe_error_safe_message_returns_message(self):
+        """UserSafeError with safe message (e.g. deploy config) is returned to user."""
+        logger = MagicMock()
+        exc = UserSafeError("Worker compose file not found. Check server configuration.")
+        msg = get_safe_user_message(exc, logger)
+        self.assertEqual(msg, "Worker compose file not found. Check server configuration.")
+        logger.exception.assert_called_once()
+
+    def test_user_safe_error_unsafe_message_returns_generic(self):
+        """UserSafeError with path/newline returns GENERIC_USER_ERROR_MESSAGE."""
+        logger = MagicMock()
+        exc = UserSafeError("Error in /etc/secret")
+        msg = get_safe_user_message(exc, logger)
+        self.assertEqual(msg, GENERIC_USER_ERROR_MESSAGE)
+        logger.exception.assert_called_once()
+
+    def test_logger_none_user_safe_error_returns_message(self):
+        """When logger is None, UserSafeError message is still returned if safe."""
+        exc = UserSafeError("SSH error during deployment.")
+        msg = get_safe_user_message(exc, None)
+        self.assertEqual(msg, "SSH error during deployment.")
+
+    def test_logger_none_runtime_error_returns_generic(self):
+        """When logger is None, RuntimeError returns generic (not passed through)."""
         exc = RuntimeError("Some internal error")
         msg = get_safe_user_message(exc, None)
         self.assertEqual(msg, GENERIC_USER_ERROR_MESSAGE)
@@ -83,12 +113,19 @@ class TestGetSafeUserMessage(TestCase):
         msg = get_safe_user_message(exc, None)
         self.assertEqual(msg, "Invalid value")
 
-    def test_validation_like_message_with_path_returns_generic(self):
-        """Validation-like exception message containing path separator returns generic."""
+    def test_validation_like_message_with_system_path_returns_generic(self):
+        """Validation-like message containing absolute system path (e.g. /etc/secret) returns generic."""
         logger = MagicMock()
         exc = ValueError("Invalid path: /etc/secret")
         msg = get_safe_user_message(exc, logger)
         self.assertEqual(msg, GENERIC_USER_ERROR_MESSAGE)
+
+    def test_validation_like_message_with_url_path_returns_message(self):
+        """Validation-like message mentioning a URL path (e.g. invalid URL /foo) is allowed."""
+        logger = MagicMock()
+        exc = ValueError("invalid URL /foo")
+        msg = get_safe_user_message(exc, logger)
+        self.assertEqual(msg, "invalid URL /foo")
 
     def test_validation_like_message_with_newline_returns_generic(self):
         """Validation-like exception message containing newline returns generic."""

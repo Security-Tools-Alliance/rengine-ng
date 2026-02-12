@@ -40,6 +40,7 @@ from reNgine.utilities.time import local_to_utc_aware
 from scanEngine.models import (
     EngineType,
     SecatorScan,
+    SecatorWorker,
     VulnerabilityReportSetting,
 )
 from startScan.models import (
@@ -115,6 +116,7 @@ def _run_secator_scan_or_per_task(
             url_filter=url_filter,
             secator_config=kwargs_copy.get("secator_config") or {},
             scan_history_id=scan_history_id,
+            worker_id=kwargs_copy.get("worker_id"),
         )
         if result["validation_errors"]:
             logger.warning(
@@ -406,8 +408,8 @@ def build_command_hierarchy(commands):
 def scan_history(request, slug):
     host = ScanHistory.objects.filter(domain__project__slug=slug).order_by("-start_scan_date")
 
-    # Preload scan_type and SecatorRunner to avoid N+1 queries when accessing scan_name
-    host = host.select_related("scan_type").prefetch_related("secatorrunner_set")
+    # Preload scan_type and SecatorRunner (with worker) to avoid N+1 when accessing scan_name / secator_worker_name
+    host = host.select_related("scan_type").prefetch_related("secatorrunner_set__worker")
 
     context = {
         "scan_history_active": "active",
@@ -419,7 +421,8 @@ def scan_history(request, slug):
 def subscan_history(request, slug):
     subscans = (
         SubScan.objects.filter(scan_history__domain__project__slug=slug)
-        .select_related("secator_runner")
+        .select_related("secator_runner__worker", "scan_history")
+        .prefetch_related("scan_history__secatorrunner_set__worker")
         .order_by("-start_scan_date")
     )
     context = {"scan_history_active": "active", "subscans": subscans}
@@ -500,8 +503,8 @@ def scan_logs_view(request, slug):
 def detail_scan(request, id, slug):
     ctx = {}
 
-    # Get scan objects
-    scan = get_object_or_404(ScanHistory, id=id)
+    # Get scan objects (prefetch runners+worker for secator_worker_name)
+    scan = get_object_or_404(ScanHistory.objects.prefetch_related("secatorrunner_set__worker"), id=id)
     domain_id = safe_int_cast(scan.domain.id)
     scan_engines = EngineType.objects.annotate(lower_name=Lower("engine_name")).order_by("lower_name")
     recent_scans = ScanHistory.objects.filter(domain__id=domain_id)
@@ -654,6 +657,7 @@ def detail_scan(request, id, slug):
 
     # Secator profiles context for subscan modal (Advanced config > profiles)
     ctx.update(build_secator_profiles_context())
+    ctx["secator_workers"] = SecatorWorker.objects.filter(is_active=True).order_by("name")
 
     return render(request, "startScan/detail_scan.html", ctx)
 
@@ -672,6 +676,7 @@ def all_subdomains(request, slug):
         "important_count": important_subdomains,
     }
     context.update(build_secator_profiles_context())
+    context["secator_workers"] = SecatorWorker.objects.filter(is_active=True).order_by("name")
     return render(request, "startScan/subdomains.html", context)
 
 
@@ -772,6 +777,7 @@ def start_scan_ui(request, slug, domain_id):
         "has_ip_content": has_ip_content,
     }
     context.update(build_secator_profiles_context())
+    context["secator_workers"] = SecatorWorker.objects.filter(is_active=True).order_by("name")
     return render(request, "startScan/start_scan_ui.html", context)
 
 
@@ -829,6 +835,7 @@ def start_multiple_scan(request, slug):
         "scan_type": scan_type,
     }
     context.update(build_secator_profiles_context())
+    context["secator_workers"] = SecatorWorker.objects.filter(is_active=True).order_by("name")
     return render(request, "startScan/start_multiple_scan_ui.html", context)
 
 
@@ -1186,6 +1193,7 @@ def start_organization_scan(request, id, slug):
         "secator_scans": secator_scans,
     }
     context.update(build_secator_profiles_context())
+    context["secator_workers"] = SecatorWorker.objects.filter(is_active=True).order_by("name")
     return render(request, "organization/start_scan.html", context)
 
 

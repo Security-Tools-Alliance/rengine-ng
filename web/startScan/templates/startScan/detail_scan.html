@@ -166,7 +166,10 @@ Scan Findings
 						
 						<h6 class="font-13 text-muted text-uppercase mt-3">Scan Name</h6>
 						<span class="badge badge-soft-primary" id="scan-name-display">{{ history.display_runner_type }}: {{ history.display_scan_name }}</span>
-						
+
+						<h6 class="font-13 text-muted text-uppercase mt-3">Worker</h6>
+						<span class="badge badge-soft-secondary">{{ history.secator_worker_name|default:"Local" }}</span>
+
 						<h6 class="font-13 text-muted text-uppercase mt-3">Scan Duration</h6>
 						{% if history.scan_status == -1 %}
 						<p class="mt-1 mb-0 text-warning font-14"><small class="text-center text-muted">Scan not yet started.</small></p>

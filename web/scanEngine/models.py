@@ -1,5 +1,7 @@
 import logging
+from urllib.parse import urlparse, urlunparse
 
+from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import IntegrityError, models, transaction
@@ -528,10 +530,10 @@ class SecatorScanQuerySet(models.QuerySet):
 
     def filter_by_workflow(self, workflow):
         """Return scans whose YAML configuration references the given workflow (by alias or name)."""
-        identifiers = [x for x in [workflow.alias, workflow.name] if x]
-        if not identifiers:
+        if identifiers := [x for x in [workflow.alias, workflow.name] if x]:
+            return self.filter(workflow_identifiers__overlap=identifiers)
+        else:
             return self.none()
-        return self.filter(workflow_identifiers__overlap=identifiers)
 
 
 class SecatorScanManager(models.Manager.from_queryset(SecatorScanQuerySet)):
@@ -827,3 +829,75 @@ class SecatorProfile(models.Model):
                 name="unique_default_per_category",
             )
         ]
+
+
+class SecatorWorker(models.Model):
+    """
+    Remote Secator worker host. Used for deployment via SSH and to associate
+    runners (scan executions) with the worker that executed them.
+    """
+
+    AUTH_KEY = "key"
+    AUTH_PASSWORD = "password"
+    SSH_AUTH_CHOICES = [(AUTH_KEY, "SSH key"), (AUTH_PASSWORD, "Password")]
+
+    API_ACCESS_TUNNEL = "tunnel"
+    API_ACCESS_CLASSIC = "classic"
+    API_ACCESS_CHOICES = [
+        (API_ACCESS_TUNNEL, "SSH tunnel"),
+        (API_ACCESS_CLASSIC, "HTTPS (external URL)"),
+    ]
+
+    name = models.CharField(max_length=255, unique=True)
+    ssh_host = models.CharField(max_length=255)
+    ssh_port = models.PositiveIntegerField(default=22)
+    ssh_user = models.CharField(max_length=255)
+    ssh_auth_type = models.CharField(max_length=20, choices=SSH_AUTH_CHOICES, default=AUTH_KEY)
+    ssh_key_path = models.CharField(max_length=1024, null=True, blank=True)
+    ssh_password_encrypted = models.TextField(null=True, blank=True)
+    deploy_path = models.CharField(max_length=1024)
+    container_name = models.CharField(max_length=255, null=True, blank=True)
+
+    ssh_ok = models.BooleanField(default=False)
+    container_running = models.BooleanField(default=False)
+    api_reachable = models.BooleanField(default=False)
+    last_status_at = models.DateTimeField(null=True, blank=True)
+    last_error = models.TextField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+
+    api_access_type = models.CharField(
+        max_length=20,
+        choices=API_ACCESS_CHOICES,
+        default=API_ACCESS_CLASSIC,
+    )
+    api_tunnel_port = models.PositiveIntegerField(
+        default=8443,
+        help_text="Port on worker side (127.0.0.1:port) when using SSH tunnel.",
+    )
+    api_url = models.CharField(
+        max_length=512,
+        blank=True,
+        help_text="Base URL of reNgine API (e.g. https://rengine.example.com) for classic access.",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+    def get_api_base_url(self) -> str:
+        """Return the API base URL this worker uses (for .env and health check)."""
+        if self.api_access_type == self.API_ACCESS_TUNNEL:
+            base_url = getattr(settings, "SECATOR_ADDONS_API_URL", "") or ""
+            if not base_url:
+                return f"https://host.docker.internal:{self.api_tunnel_port}"
+            parsed = urlparse(base_url.strip().rstrip("/"))
+            new_netloc = f"host.docker.internal:{self.api_tunnel_port}"
+            return urlunparse(
+                (parsed.scheme or "https", new_netloc, parsed.path or "/", parsed.params, parsed.query, parsed.fragment)
+            ).rstrip("/")
+        return (self.api_url or "").strip().rstrip("/")

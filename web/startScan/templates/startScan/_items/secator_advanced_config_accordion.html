@@ -12,7 +12,10 @@
         <div class="accordion-body">
           <!-- Secator Profiles -->
           {% include 'startScan/_items/secator_profiles.html' with id_prefix=id_prefix|default:'' %}
-          
+
+          <!-- Optional worker (run on remote Secator host) -->
+          {% include 'startScan/_items/secator_worker_select.html' with id_prefix=id_prefix|default:'' secator_workers=secator_workers|default:None %}
+
           <!-- Simple Options -->
           {% include 'startScan/_items/secator_simple_options.html' with show_random_proxy=show_random_proxy|default:False id_prefix=id_prefix|default:'' %}
           

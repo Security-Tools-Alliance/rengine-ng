@@ -32,6 +32,8 @@ class StartSecatorScanKwargs(ExecutionModeParams, total=False):
     secator_config: SecatorConfig
     targets_override: list[str]
     selected_targets_per_task: dict[str, list[str]]
+    scan_history_id: int
+    worker_id: int
 
 
 def parse_secator_config(post: QueryDict) -> SecatorConfig:
@@ -195,4 +197,7 @@ def build_start_secator_scan_kwargs(post: QueryDict) -> StartSecatorScanKwargs:
     optional_scan_history_id = safe_int_cast(post.get("scan_history_id"))
     if optional_scan_history_id is not None:
         kwargs["scan_history_id"] = optional_scan_history_id
+    optional_worker_id = safe_int_cast(post.get("worker_id"))
+    if optional_worker_id is not None:
+        kwargs["worker_id"] = optional_worker_id
     return kwargs

@@ -6,6 +6,7 @@ Tests the new status_string and status_code properties that read from SecatorRun
 from django.utils import timezone
 
 from reNgine.definitions import ABORTED_TASK, INITIATED_TASK, SUCCESS_TASK
+from scanEngine.models import SecatorWorker
 from startScan.models import ScanActivity, SecatorRunner, SubScan
 from utils.test_base import BaseTestCase
 
@@ -481,3 +482,146 @@ class TestCommandStatusProperties(BaseTestCase):
         # We can test that status_string returns REVOKED
         status_str = self.command.status_string
         self.assertEqual(status_str, "REVOKED")
+
+
+class TestScanHistorySecatorWorkerName(BaseTestCase):
+    """Test secator_worker_name property for ScanHistory."""
+
+    def setUp(self):
+        super().setUp()
+        self.scan_history = self.data_generator.scan_history
+
+    def test_secator_worker_name_legacy_returns_local(self):
+        """Legacy scan returns Local."""
+        self.scan_history.is_legacy_scan = True
+        self.scan_history.save()
+        self.assertEqual(self.scan_history.secator_worker_name, "Local")
+
+    def test_secator_worker_name_no_runner_returns_local(self):
+        """Secator scan with no runner returns Local."""
+        self.scan_history.is_legacy_scan = False
+        self.scan_history.save()
+        SecatorRunner.objects.filter(scan_history=self.scan_history).delete()
+        self.assertEqual(self.scan_history.secator_worker_name, "Local")
+
+    def test_secator_worker_name_runner_without_worker_returns_local(self):
+        """Secator scan with runner but no worker returns Local."""
+        self.scan_history.is_legacy_scan = False
+        self.scan_history.save()
+        SecatorRunner.objects.filter(scan_history=self.scan_history).delete()
+        SecatorRunner.objects.create(
+            scan_history=self.scan_history,
+            runner_type="workflow",
+            runner_name="test_workflow",
+            celery_id="celery-1",
+        )
+        self.assertEqual(self.scan_history.secator_worker_name, "Local")
+
+    def test_secator_worker_name_runner_with_worker_returns_worker_name(self):
+        """Secator scan with runner linked to worker returns worker name."""
+        self.scan_history.is_legacy_scan = False
+        self.scan_history.save()
+        SecatorRunner.objects.filter(scan_history=self.scan_history).delete()
+        worker = SecatorWorker.objects.create(
+            name="Worker-Test",
+            ssh_host="192.0.2.1",
+            ssh_port=22,
+            ssh_user="u",
+            ssh_auth_type=SecatorWorker.AUTH_KEY,
+            deploy_path="/tmp/worker",
+            api_access_type=SecatorWorker.API_ACCESS_CLASSIC,
+            api_url="https://rengine.example.com",
+        )
+        SecatorRunner.objects.create(
+            scan_history=self.scan_history,
+            runner_type="workflow",
+            runner_name="test_workflow",
+            celery_id="celery-1",
+            worker=worker,
+        )
+        self.assertEqual(self.scan_history.secator_worker_name, "Worker-Test")
+
+
+class TestSubScanSecatorWorkerName(BaseTestCase):
+    """Test secator_worker_name property for SubScan."""
+
+    def setUp(self):
+        super().setUp()
+        if self.data_generator.subscans and len(self.data_generator.subscans) > 0:
+            self.subscan = self.data_generator.subscans[0]
+        else:
+            subscans = self.data_generator.create_subscan()
+            self.subscan = subscans[-1] if subscans else None
+        if not self.subscan:
+            self.subscan = SubScan.objects.create(
+                scan_history=self.data_generator.scan_history,
+                subdomain=self.data_generator.subdomain,
+                type="subfinder",
+                status=1,
+            )
+
+    def test_secator_worker_name_legacy_scan_history_returns_local(self):
+        """SubScan with legacy scan_history (no Secator runners) returns Local."""
+        scan_history = self.data_generator.scan_history
+        scan_history.is_legacy_scan = True
+        scan_history.save()
+        SecatorRunner.objects.filter(scan_history=scan_history).delete()
+        self.subscan.scan_history = scan_history
+        self.subscan.secator_runner = None
+        self.subscan.save()
+        self.assertEqual(self.subscan.secator_worker_name, "Local")
+
+    def test_secator_worker_name_from_scan_history_main_runner_worker(self):
+        """SubScan uses parent scan's main runner worker when no secator_runner."""
+        scan_history = self.data_generator.scan_history
+        scan_history.is_legacy_scan = False
+        scan_history.save()
+        SecatorRunner.objects.filter(scan_history=scan_history).delete()
+        worker = SecatorWorker.objects.create(
+            name="Remote-Worker",
+            ssh_host="192.0.2.2",
+            ssh_port=22,
+            ssh_user="u",
+            ssh_auth_type=SecatorWorker.AUTH_KEY,
+            deploy_path="/tmp/w",
+            api_access_type=SecatorWorker.API_ACCESS_CLASSIC,
+            api_url="https://rengine.example.com",
+        )
+        SecatorRunner.objects.create(
+            scan_history=scan_history,
+            runner_type="workflow",
+            runner_name="wf",
+            celery_id="c1",
+            worker=worker,
+        )
+        self.subscan.scan_history = scan_history
+        self.subscan.secator_runner = None
+        self.subscan.save()
+        self.assertEqual(self.subscan.secator_worker_name, "Remote-Worker")
+
+    def test_secator_worker_name_from_secator_runner_worker(self):
+        """SubScan with secator_runner linked to worker returns worker name."""
+        scan_history = self.data_generator.scan_history
+        scan_history.is_legacy_scan = False
+        scan_history.save()
+        worker = SecatorWorker.objects.create(
+            name="Task-Worker",
+            ssh_host="192.0.2.3",
+            ssh_port=22,
+            ssh_user="u",
+            ssh_auth_type=SecatorWorker.AUTH_KEY,
+            deploy_path="/tmp/tw",
+            api_access_type=SecatorWorker.API_ACCESS_CLASSIC,
+            api_url="https://rengine.example.com",
+        )
+        runner = SecatorRunner.objects.create(
+            scan_history=scan_history,
+            runner_type="task",
+            runner_name="nuclei",
+            celery_id="c2",
+            worker=worker,
+        )
+        self.subscan.scan_history = scan_history
+        self.subscan.secator_runner = runner
+        self.subscan.save()
+        self.assertEqual(self.subscan.secator_worker_name, "Task-Worker")

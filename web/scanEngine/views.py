@@ -50,6 +50,7 @@ from scanEngine.forms import (
     ReportForm,
     SecatorProfileForm,
     SecatorScanForm,
+    SecatorWorkerForm,
     SecatorWorkflowForm,
     UpdateEngineForm,
 )
@@ -62,10 +63,12 @@ from scanEngine.models import (
     SecatorProfile,
     SecatorScan,
     SecatorTask,
+    SecatorWorker,
     SecatorWorkflow,
     VulnerabilityReportSetting,
     Wordlist,
 )
+from scanEngine.services.worker_ssh import get_public_key_content
 from scanEngine.tool_assets import list_asset_files, save_uploaded_assets
 from scanEngine.wordlists import (
     is_txt_filename as _wordlist_is_txt_filename,
@@ -811,10 +814,14 @@ def secator_scan_detail(request, scan_id):
 
     # TODO: Filter by this SecatorScan when ScanHistory is linked to SecatorScan.
     # Until then, recent_scans is unfiltered (last 10 non-legacy scans globally).
-    recent_scans = ScanHistory.objects.filter(
-        scan_type__isnull=False,
-        is_legacy_scan=False,
-    ).order_by("-start_scan_date")[:10]
+    recent_scans = (
+        ScanHistory.objects.filter(
+            scan_type__isnull=False,
+            is_legacy_scan=False,
+        )
+        .prefetch_related("secatorrunner_set__worker")
+        .order_by("-start_scan_date")[:10]
+    )
 
     context = {
         "scan": scan,
@@ -1183,3 +1190,93 @@ def delete_profile(request, profile_id):
         response_data = {"status": False, "message": "Invalid request method"}
         messages.add_message(request, messages.ERROR, "Oops! Profile could not be deleted!")
     return http.JsonResponse(response_data)
+
+
+@login_required
+def worker_list(request):
+    """List Secator workers; actions (deploy, refresh, disable, delete) are performed via API from JS."""
+    workers = SecatorWorker.objects.all().order_by("name").prefetch_related("secatorrunner_set")
+    context = {
+        "scan_engine_nav_active": "active",
+        "workers": workers,
+    }
+    return render(request, "scanEngine/workers.html", context)
+
+
+@login_required
+def worker_add(request):
+    """Add a new Secator worker (form); optional deploy after create."""
+    form = SecatorWorkerForm()
+    if request.method == "POST":
+        form = SecatorWorkerForm(request.POST)
+        if form.is_valid():
+            worker = form.save()
+            messages.add_message(request, messages.SUCCESS, f"Worker '{worker.name}' created.")
+            return http.HttpResponseRedirect(reverse("worker_list"))
+    context = {
+        "scan_engine_nav_active": "active",
+        "form": form,
+        "ssh_public_key_content": get_public_key_content() or "",
+    }
+    return render(request, "scanEngine/worker_form.html", context)
+
+
+@login_required
+def worker_update(request, worker_id):
+    """Update a Secator worker; password left unchanged if empty."""
+    worker = get_object_or_404(SecatorWorker, id=worker_id)
+    form = SecatorWorkerForm(instance=worker)
+    if request.method == "POST":
+        worker.refresh_from_db()
+        old_api = (
+            worker.api_access_type,
+            worker.api_tunnel_port,
+            (worker.api_url or "").strip(),
+        )
+        form = SecatorWorkerForm(request.POST, instance=worker)
+        if form.is_valid():
+            if not form.cleaned_data.get("ssh_password_encrypted") and getattr(worker, "ssh_password_encrypted", None):
+                form.cleaned_data["ssh_password_encrypted"] = worker.ssh_password_encrypted
+            form.save()
+            worker.refresh_from_db()
+            new_api = (
+                worker.api_access_type,
+                worker.api_tunnel_port,
+                (worker.api_url or "").strip(),
+            )
+            if old_api != new_api:
+                from scanEngine.services.worker_deploy import push_env_and_restart_worker
+
+                ok, err = push_env_and_restart_worker(worker)
+                if ok:
+                    messages.add_message(
+                        request,
+                        messages.SUCCESS,
+                        f"Worker '{worker.name}' updated; .env pushed and container restarted.",
+                    )
+                else:
+                    messages.add_message(
+                        request,
+                        messages.WARNING,
+                        f"Worker '{worker.name}' updated but remote update failed: {err}",
+                    )
+            else:
+                messages.add_message(request, messages.SUCCESS, f"Worker '{worker.name}' updated.")
+            return http.HttpResponseRedirect(reverse("worker_list"))
+    worker_check_connection_url = reverse(
+        "api:secator-workers-check-connection",
+        kwargs={"pk": worker.id},
+    )
+    worker_install_public_key_url = reverse(
+        "api:secator-workers-install-public-key",
+        kwargs={"pk": worker.id},
+    )
+    context = {
+        "scan_engine_nav_active": "active",
+        "form": form,
+        "worker": worker,
+        "ssh_public_key_content": get_public_key_content() or "",
+        "worker_check_connection_url": worker_check_connection_url,
+        "worker_install_public_key_url": worker_install_public_key_url,
+    }
+    return render(request, "scanEngine/worker_form.html", context)

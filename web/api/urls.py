@@ -82,8 +82,11 @@ from .views import (
     SearchHistoryView,
     SecatorFindingCreate,
     SecatorFindingUpdate,
+    SecatorHealth,
     SecatorRunnerCreate,
     SecatorRunnerUpdate,
+    SecatorWorkerCheckIn,
+    SecatorWorkerViewSet,
     StartScan,
     StopActivity,
     StopScan,
@@ -119,6 +122,7 @@ router.register(r"listEndPointChanges", EndPointChangesViewSet, basename="endpoi
 router.register(r"listIps", IpAddressViewSet, basename="ip-addresses")
 router.register(r"listActivityLogs", ListActivityLogsViewSet, basename="activity-logs")
 router.register(r"listScanLogs", ListScanLogsViewSet, basename="scan-logs")
+router.register(r"secator/workers", SecatorWorkerViewSet, basename="secator-workers")
 
 urlpatterns = [
     path("", include(router.urls)),
@@ -229,6 +233,8 @@ urlpatterns = [
     path("secator/runner/<str:runner_id>", SecatorRunnerUpdate.as_view(), name="secator_runner_update"),
     path("secator/findings", SecatorFindingCreate.as_view(), name="secator_finding_create"),
     path("secator/finding/<str:finding_id>", SecatorFindingUpdate.as_view(), name="secator_finding_update"),
+    path("secator/health/", SecatorHealth.as_view(), name="secator_health"),
+    path("secator/worker/<int:worker_id>/check/", SecatorWorkerCheckIn.as_view(), name="secator_worker_check"),
 ]
 
 urlpatterns += router.urls

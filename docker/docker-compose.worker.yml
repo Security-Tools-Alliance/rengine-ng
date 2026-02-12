@@ -1,46 +1,45 @@
 version: '3.8'
 
-# Docker Compose for deploying remote Secator workers
-# This file is designed to be used on remote machines (VPS, internal networks, etc.)
-# to deploy Secator workers that connect to a central reNgine-ng instance.
+# Docker Compose for deploying remote Secator Celery workers.
+# Used on remote hosts; the container runs the same entrypoint as docker/worker/entrypoint.sh (secator worker).
 #
 # Prerequisites:
-# 1. Copy this file and the .env-dist.worker to your remote machine
-# 2. Rename .env-dist.worker to .env and configure the variables
-# 3. Run: docker-compose -f docker-compose.worker.yml up -d
+# 1. Copy this file and .env to the remote machine (deploy_path).
+# 2. Run: docker compose -f docker-compose.worker.yml up -d
 #
-# The worker will:
-# - Connect to the Redis broker (reNgine-ng instance)
-# - Execute scan tasks
-# - Report results back to reNgine-ng via API
+# reNgine-ng runs each scan via SSH (docker exec ...) or via the worker API.
+# Results are reported back to reNgine-ng via API (SECATOR_ADDONS_* in .env).
+#
+# extra_hosts allows the container to reach the host (SSH tunnel when using tunnel API access).
+# For tunnel mode, on the reNgine server set RENGINE_TUNNEL_BIND_ADDRESS to the Docker bridge
+# gateway so only this container can reach the tunnel (e.g. 172.17.0.1 on Linux default bridge).
+# Then the container uses host.docker.internal:api_tunnel_port. Worker host sshd needs GatewayPorts yes.
 
+# Optional: set SECATOR_WORKER_CONTAINER_NAME in .env to distinguish workers on the same host
 services:
   secator-worker:
     image: freelabz/secator:latest
-    container_name: secator-worker
+    container_name: ${SECATOR_WORKER_CONTAINER_NAME:-secator-worker}
     restart: unless-stopped
+    entrypoint: /entrypoint.sh
+    command: ['worker']
     env_file:
       - .env
-#    volumes:
-      # Volume for scan results (optional, for local storage)
-#      - secator_reports:/home/secator/.secator/reports
-    
+    environment:
+      # Suppress InsecureRequestWarning when reNgine uses self-signed cert (SECATOR_ADDONS_API_FORCE_SSL=false)
+      - PYTHONWARNINGS=ignore::urllib3.exceptions.InsecureRequestWarning
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./entrypoint.sh:/entrypoint.sh:ro
+      # Custom templates (workflows, scans, tasks, profiles) synced from reNgine-ng
+      - ./templates:/home/secator/.secator/templates
+      # Script and job file for Python-bridge execution
+      - ./scripts:/home/secator/scripts
     networks:
       - secator_network
-    
-    # Health check
-    healthcheck:
-      test: ["CMD", "celery", "-A", "secator", "inspect", "ping"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
 
 networks:
   secator_network:
     driver: bridge
-
-volumes:
-  secator_reports:
-    driver: local
 

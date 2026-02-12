@@ -17,6 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     bash \
     cron \
     curl \
+    openssh-client \
     fontconfig \
     fonts-freefont-ttf \
     fonts-noto \
@@ -53,7 +54,9 @@ ENV PIPX_BIN_DIR="${TOOLPATH}/pipx"
 ENV PATH="${PATH}:${BINPATH}:${PIPX_BIN_DIR}"
 
 RUN mkdir -p $TOOLPATH && \
-    mkdir -p $BINPATH
+    mkdir -p $BINPATH && \
+    mkdir -p /home/$USERNAME/.ssh && \
+    mkdir -p /home/$USERNAME/docker
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1

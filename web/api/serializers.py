@@ -20,6 +20,7 @@ from reNgine.definitions import ENGINE_NAMES
 from reNgine.utilities.subdomain import get_interesting_subdomains
 from scanEngine.models import (
     EngineType,
+    SecatorWorker,
 )
 from startScan.models import (
     Command,
@@ -683,6 +684,87 @@ class SecatorRunnerSerializer(serializers.ModelSerializer):
             return delta.total_seconds()
 
         return 0.0
+
+
+class SecatorWorkerListSerializer(serializers.ModelSerializer):
+    """Serializer for SecatorWorker list; excludes credentials."""
+
+    class Meta:
+        model = SecatorWorker
+        fields = [
+            "id",
+            "name",
+            "ssh_host",
+            "ssh_port",
+            "ssh_ok",
+            "container_running",
+            "api_reachable",
+            "last_status_at",
+            "last_error",
+            "is_active",
+            "api_access_type",
+            "api_tunnel_port",
+            "api_url",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields
+
+
+class SecatorWorkerDetailSerializer(serializers.ModelSerializer):
+    """Serializer for SecatorWorker detail with runners; excludes secret fields."""
+
+    runners = SecatorRunnerSerializer(source="secatorrunner_set", many=True, read_only=True)
+
+    class Meta:
+        model = SecatorWorker
+        fields = [
+            "id",
+            "name",
+            "ssh_host",
+            "ssh_port",
+            "ssh_user",
+            "ssh_auth_type",
+            "deploy_path",
+            "container_name",
+            "ssh_ok",
+            "container_running",
+            "api_reachable",
+            "last_status_at",
+            "last_error",
+            "is_active",
+            "api_access_type",
+            "api_tunnel_port",
+            "api_url",
+            "created_at",
+            "updated_at",
+            "runners",
+        ]
+        read_only_fields = fields
+
+
+class SecatorWorkerCreateUpdateSerializer(serializers.ModelSerializer):
+    """Serializer for creating/updating SecatorWorker (used by UI form)."""
+
+    class Meta:
+        model = SecatorWorker
+        fields = [
+            "id",
+            "name",
+            "ssh_host",
+            "ssh_port",
+            "ssh_user",
+            "ssh_auth_type",
+            "ssh_key_path",
+            "ssh_password_encrypted",
+            "deploy_path",
+            "container_name",
+            "is_active",
+            "api_access_type",
+            "api_tunnel_port",
+            "api_url",
+        ]
+        read_only_fields = ["id"]
 
 
 class OrganizationSerializer(serializers.ModelSerializer):

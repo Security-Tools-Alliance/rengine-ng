@@ -52,20 +52,6 @@ services:
       - redis
     networks:
       - rengine_network
-    # =========================================================================
-    # Remote Worker Deployment
-    # =========================================================================
-    # For deploying workers on remote machines (VPS, internal networks, etc.),
-    # use docker-compose.worker.yml with a configured .env file.
-    #
-    # Quick setup on remote machine:
-    #   1. Copy docker-compose.worker.yml and .env-dist.worker
-    #   2. Rename .env-dist.worker to .env
-    #   3. Configure Redis and API URLs in .env
-    #   4. Run: docker-compose -f docker-compose.worker.yml up -d
-    #
-    # See docker-compose.worker.yml and .env-dist.worker for full documentation.
-    # =========================================================================
 
   web:
     image: ghcr.io/security-tools-alliance/rengine-ng:rengine-web-v${RENGINE_VERSION}
@@ -81,6 +67,9 @@ services:
     volumes:
       - ../web:/home/rengine/rengine:rw,z
       - ./web/entrypoint.sh:/entrypoint.sh:ro
+      - ./docker-compose.worker.yml:/home/rengine/docker/docker-compose.worker.yml:ro
+      - ./worker/entrypoint.sh:/home/rengine/docker/entrypoint.sh:ro
+      - rengine_ssh_keys:/home/rengine/.ssh
       - nuclei_templates:/home/rengine/nuclei-templates
       - wordlist:/home/rengine/wordlists
       - gf_patterns:/home/rengine/.gf
@@ -158,6 +147,8 @@ volumes:
     name: rengine_scan_results
   ollama_data:
     name: rengine_ollama_data
+  rengine_ssh_keys:
+    name: rengine_ssh_keys
 
 
 secrets:
