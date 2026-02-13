@@ -32,16 +32,14 @@ _SAFE_USER_MESSAGE_MAX_LEN = 256
 _TRACEBACK_MARKERS = (
     "Traceback (most recent",
     "Traceback ",
-    "  File \"",
-    "\", line ",
+    '  File "',
+    '", line ',
     " in <",
 )
 
 # Regex: absolute system path (e.g. /etc/secret, /home/deploy/app). Used to reject
 # internal path leakage while allowing "invalid URL /foo" or "path must be under /opt".
-_RE_ABSOLUTE_SYSTEM_PATH = re.compile(
-    r"(^|\s)/(etc|home|root|usr|var|opt|tmp)/\S+"
-)
+_RE_ABSOLUTE_SYSTEM_PATH = re.compile(r"(^|\s)/(etc|home|root|usr|var|opt|tmp)/\S+")
 
 
 def _looks_safe_for_user(msg: str) -> bool:

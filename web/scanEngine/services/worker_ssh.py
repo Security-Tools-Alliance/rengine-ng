@@ -232,7 +232,11 @@ def install_public_key_on_host(client: Any, public_key_content: str) -> None:
 
     cmd = (
         "mkdir -p ~/.ssh && "
-        "(grep -qFf " + tmp_path + " ~/.ssh/authorized_keys 2>/dev/null || cat " + tmp_path + " >> ~/.ssh/authorized_keys) && "
+        "(grep -qFf "
+        + tmp_path
+        + " ~/.ssh/authorized_keys 2>/dev/null || cat "
+        + tmp_path
+        + " >> ~/.ssh/authorized_keys) && "
         "chmod 600 ~/.ssh/authorized_keys && "
         "chmod 700 ~/.ssh 2>/dev/null; "
         "rm -f " + tmp_path
