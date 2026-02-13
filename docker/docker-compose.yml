@@ -19,6 +19,33 @@ services:
     networks:
       - rengine_network
 
+  pgbouncer:
+    build: ./pgbouncer
+    image: edoburu/pgbouncer:latest
+    container_name: rengine-pgbouncer-1
+    env_file:
+      - ../.env
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USER=${POSTGRES_USER}
+      - DB_PASSWORD=${POSTGRES_PASSWORD}
+      - DB_NAME=${POSTGRES_DB}
+      - PGUSER=${POSTGRES_USER}
+      - LISTEN_ADDR=0.0.0.0
+      - LISTEN_PORT=${PGBOUNCER_LISTEN_PORT:-6432}
+      - POOL_MODE=${PGBOUNCER_POOL_MODE:-transaction}
+      - MAX_CLIENT_CONN=${PGBOUNCER_MAX_CLIENT_CONN:-200}
+      - DEFAULT_POOL_SIZE=${PGBOUNCER_DEFAULT_POOL_SIZE:-30}
+      - SERVER_RESET_QUERY=${PGBOUNCER_SERVER_RESET_QUERY:-DISCARD ALL}
+    command: ["/bin/sh", "-c", "sed -i \"s/^user = postgres/user = $$POSTGRES_USER/\" /etc/pgbouncer/pgbouncer.ini; exec pgbouncer /etc/pgbouncer/pgbouncer.ini"]
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - rengine_network
+
   redis:
     image: ghcr.io/security-tools-alliance/rengine-ng:rengine-redis-v${RENGINE_VERSION}
     env_file:
@@ -82,6 +109,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      pgbouncer:
+        condition: service_started
       worker:
         condition: service_started
     networks:

@@ -27,6 +27,11 @@ RENGINE_HOME_FOLDER := /home/rengine
 RENGINE_FOLDER := ${RENGINE_HOME_FOLDER}/rengine
 export RENGINE_FOLDER
 
+# Export Postgres vars from .env for docker compose substitution (e.g. pgbouncer service)
+export POSTGRES_USER
+export POSTGRES_PASSWORD
+export POSTGRES_DB
+
 # Credits: https://github.com/sherifabdlnaby/elastdocker/
 
 # This for future release of Compose that will use Docker Buildkit, which is much efficient.
@@ -37,7 +42,7 @@ COMPOSE_FILE_BUILD	  := docker/docker-compose.build.yml
 COMPOSE_FILE_DEV      := docker/docker-compose.dev.yml
 COMPOSE_FILE_SETUP    := docker/docker-compose.setup.yml
 COMPOSE_FILE_GPU      := docker/docker-compose.gpu.yml
-SERVICES              := db web proxy redis worker ollama
+SERVICES              := db pgbouncer web proxy redis worker ollama
 
 # Check if 'docker compose' command is available, otherwise check for 'docker-compose'
 DOCKER_COMPOSE := $(shell if command -v docker > /dev/null && docker compose version > /dev/null 2>&1; then echo "docker compose"; elif command -v docker-compose > /dev/null; then echo "docker-compose"; else echo ""; fi)

@@ -8,7 +8,7 @@ from unittest.mock import patch
 from django.conf import settings
 from django.http import QueryDict
 
-from startScan.secator_form import (
+from startScan.secator.form import (
     build_start_secator_scan_kwargs,
     parse_execution_mode_params,
     parse_secator_config,
@@ -157,7 +157,7 @@ class TestSecatorFormHelpers(BaseTestCase):
     def test_parse_secator_config_malformed_json_warning(self):
         """Malformed JSON in secator_config should log a warning."""
         post = self._make_post("{invalid json}", "secator_config", "5", "delay")
-        with patch("startScan.secator_form.logger") as mock_logger:
+        with patch("startScan.secator.form.logger") as mock_logger:
             cfg = parse_secator_config(post)
             mock_logger.warning.assert_called_once()
             self.assertIn("Failed to decode", str(mock_logger.warning.call_args))

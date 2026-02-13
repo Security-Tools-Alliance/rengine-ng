@@ -8,6 +8,7 @@ import threading
 
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
+from django.conf import settings as django_settings
 from django.core.cache import cache
 from django.db.models import Case, CharField, Count, F, IntegerField, Prefetch, Q, Value, When
 from django.db.models.functions import Coalesce
@@ -28,6 +29,7 @@ from rest_framework.views import APIView
 import validators
 
 from api.permissions import HasAPIKeyOrIsAuthenticated
+from api.query_helpers import build_subdomain_datatable_queryset, get_scan_status_querysets
 from api.scan_file import get_scan_file_urls
 from api.secator_api_base import SecatorAPIBase
 from dashboard.models import OllamaSettings, OpenAiAPIKey, Project, SearchHistory
@@ -38,12 +40,9 @@ from recon_note.models import TodoNote
 from reNgine.core.data import get_data_from_post_request, get_request_worker_id, safe_int_cast
 from reNgine.definitions import (
     ABORTED_TASK,
-    FAILED_TASK,
-    INITIATED_TASK,
     MAX_ASSET_PREVIEW_BYTES,
     NUCLEI_SEVERITY_MAP,
     RUNNING_TASK,
-    SUCCESS_TASK,
 )
 from reNgine.llm.config import DEFAULT_GPT_MODELS, MODEL_REQUIREMENTS, OLLAMA_INSTANCE, RECOMMENDED_MODELS
 from reNgine.llm.llm import LLMAttackSuggestionGenerator
@@ -52,7 +51,6 @@ from reNgine.llm.utils import convert_markdown_to_html, get_default_llm_model, i
 # NOTE: Legacy task functions removed - functionality now in Secator
 from reNgine.secator.selected_targets import resolve_selected_targets
 from reNgine.secator.service import run_per_task_secator_scans, start_secator_scan
-from reNgine.services.repositories.scan_repository import ScanRepository
 from reNgine.settings import (
     RENGINE_CURRENT_VERSION,
     RENGINE_GF_PATTERNS_DIR,
@@ -101,6 +99,8 @@ from startScan.models import (
     Technology,
     Vulnerability,
 )
+from startScan.secator.runner_sync import is_all_runners_completed, sync_runner_with_scan_history
+from startScan.secator.sync_service import submit_sync as secator_submit_sync
 from targetApp.models import Domain, Organization
 
 from .serializers import (
@@ -895,23 +895,17 @@ class FetchMostCommonVulnerability(APIView):
             target_id = safe_int_cast(data.get("target_id"))
             is_ignore_info = data.get("ignore_info", False)
 
-            vulnerabilities = (
+            base_filter = (
                 Vulnerability.objects.filter(target_domain__project__slug=project_slug)
                 if project_slug
                 else Vulnerability.objects.all()
             )
-
-            # Optimize queries with prefetch_related to avoid N+1 queries
-            vulnerabilities = vulnerabilities.prefetch_related(
-                "cve_ids", "cwe_ids", "tags", "subdomain", "endpoint", "target_domain", "scan_history"
-            )
-
             if scan_history_id:
-                vuln_query = vulnerabilities.filter(scan_history__id=scan_history_id).values("name", "severity")
+                vuln_query = base_filter.filter(scan_history__id=scan_history_id).values("name", "severity")
             elif target_id:
-                vuln_query = vulnerabilities.filter(target_domain__id=target_id).values("name", "severity")
+                vuln_query = base_filter.filter(target_domain__id=target_id).values("name", "severity")
             else:
-                vuln_query = vulnerabilities.values("name", "severity")
+                vuln_query = base_filter.values("name", "severity")
 
             if is_ignore_info:
                 most_common_vulnerabilities = (
@@ -977,12 +971,30 @@ class FetchMostVulnerable(APIView):
                 most_vulnerable_subdomains = (
                     subdomain_query.annotate(vuln_count=Count("vulnerability__name"))
                     .order_by("-vuln_count")
-                    .exclude(vuln_count=0)[:limit]
+                    .exclude(vuln_count=0)
+                    .prefetch_related(
+                        "ip_addresses",
+                        "ip_addresses__ports",
+                        "technologies",
+                        "waf",
+                        "directories",
+                        "scan_history",
+                        "target_domain",
+                        Prefetch(
+                            "endpoint_set",
+                            queryset=EndPoint.objects.filter(is_default=True),
+                            to_attr="default_endpoint_list",
+                        ),
+                    )[:limit]
                 )
 
             if most_vulnerable_subdomains:
                 response["status"] = True
-                response["result"] = SubdomainSerializer(most_vulnerable_subdomains, many=True).data
+                ctx = {}
+                if scan_history_id:
+                    interesting = get_interesting_subdomains(scan_history=scan_history_id)
+                    ctx["datatable_interesting_names"] = set(interesting.values_list("name", flat=True))
+                response["result"] = SubdomainSerializer(most_vulnerable_subdomains, many=True, context=ctx).data
 
         elif target_id:
             subdomain_query = subdomains.filter(target_domain__id=target_id)
@@ -1021,7 +1033,11 @@ class FetchMostVulnerable(APIView):
 
             if most_vulnerable_subdomains:
                 response["status"] = True
-                response["result"] = SubdomainSerializer(most_vulnerable_subdomains, many=True).data
+                ctx = {}
+                if target_id:
+                    interesting = get_interesting_subdomains(domain_id=target_id)
+                    ctx["datatable_interesting_names"] = set(interesting.values_list("name", flat=True))
+                response["result"] = SubdomainSerializer(most_vulnerable_subdomains, many=True, context=ctx).data
         else:
             if is_ignore_info:
                 most_vulnerable_targets = (
@@ -1246,23 +1262,26 @@ class ListSubScans(APIView):
         domain_id = safe_int_cast(data.get("domain_id", None))
         response = {"status": False}
 
+        subscan_base = SubScan.objects.select_related(
+            "scan_history", "scan_history__domain", "subdomain", "engine", "secator_runner"
+        )
         if subdomain_id:
-            subscans = SubScan.objects.filter(subdomain__id=subdomain_id).order_by("-stop_scan_date")
+            subscans = subscan_base.filter(subdomain__id=subdomain_id).order_by("-stop_scan_date")
             results = SubScanSerializer(subscans, many=True).data
             if subscans:
                 response["status"] = True
                 response["results"] = results
 
         elif scan_history:
-            subscans = SubScan.objects.filter(scan_history__id=scan_history).order_by("-stop_scan_date")
+            subscans = subscan_base.filter(scan_history__id=scan_history).order_by("-stop_scan_date")
             results = SubScanSerializer(subscans, many=True).data
             if subscans:
                 response["status"] = True
                 response["results"] = results
 
         elif domain_id:
-            scan_history = ScanHistory.objects.filter(domain__id=domain_id)
-            subscans = SubScan.objects.filter(scan_history__in=scan_history).order_by("-stop_scan_date")
+            scan_history_qs = ScanHistory.objects.filter(domain__id=domain_id)
+            subscans = subscan_base.filter(scan_history__in=scan_history_qs).order_by("-stop_scan_date")
             results = SubScanSerializer(subscans, many=True).data
             if subscans:
                 response["status"] = True
@@ -1996,7 +2015,7 @@ class GetSecatorSelection(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        from startScan.secator_ajax import render_secator_selection_json
+        from startScan.secator.ajax import render_secator_selection_json
 
         # Prefer AJAX requests to avoid exposing template HTML broadly
         # Note: This check is advisory - if other clients need access in future,
@@ -2093,44 +2112,23 @@ class RengineUpdateCheck(APIView):
 
 
 class ScanStatus(APIView):
+    """Return pending/running/completed scans and tasks for the project dashboard."""
+
+    MAX_RUNNING_TASKS = 30
+
     def get(self, request):
         slug = self.request.GET.get("project", None)
-        # main tasks
-        recently_completed_scans = (
-            ScanHistory.objects.filter(domain__project__slug=slug)
-            .order_by("-start_scan_date")
-            .filter(Q(scan_status=0) | Q(scan_status=2) | Q(scan_status=3))[:10]
-        )
-        current_scans = (
-            ScanHistory.objects.filter(domain__project__slug=slug)
-            .order_by("-start_scan_date")
-            .filter(Q(scan_status=1) | Q(scan_status=4))
-        )
-        pending_scans = ScanHistory.objects.filter(domain__project__slug=slug).filter(scan_status=-1)
-
-        # subtasks - use ScanActivity instead of SubScan for better visibility
-        recently_completed_tasks = (
-            ScanActivity.objects.filter(scan_of__domain__project__slug=slug)
-            .order_by("-time")
-            .filter(Q(status=FAILED_TASK) | Q(status=SUCCESS_TASK))[:15]
-        )
-        current_tasks = (
-            ScanActivity.objects.filter(scan_of__domain__project__slug=slug)
-            .order_by("-time")
-            .filter(status=RUNNING_TASK)
-        )
-        # For pending tasks, we keep SubScan since ScanActivity don't have pending status
-        pending_tasks = SubScan.objects.filter(scan_history__domain__project__slug=slug).filter(status=-1)
+        qs = get_scan_status_querysets(slug, max_running_tasks=self.MAX_RUNNING_TASKS)
         response = {
             "scans": {
-                "pending": ScanHistorySerializer(pending_scans, many=True).data,
-                "scanning": ScanHistorySerializer(current_scans, many=True).data,
-                "completed": ScanHistorySerializer(recently_completed_scans, many=True).data,
+                "pending": ScanHistorySerializer(qs["pending_scans"], many=True).data,
+                "scanning": ScanHistorySerializer(qs["current_scans"], many=True).data,
+                "completed": ScanHistorySerializer(qs["recently_completed_scans"], many=True).data,
             },
             "tasks": {
-                "pending": SubScanSerializer(pending_tasks, many=True).data,
-                "running": ScanActivitySerializer(current_tasks, many=True).data,
-                "completed": ScanActivitySerializer(recently_completed_tasks, many=True).data,
+                "pending": SubScanSerializer(qs["pending_tasks"], many=True).data,
+                "running": ScanActivitySerializer(qs["current_tasks"], many=True).data,
+                "completed": ScanActivitySerializer(qs["recently_completed_tasks"], many=True).data,
             },
         }
         return Response(response)
@@ -2446,15 +2444,12 @@ class ListTechnology(APIView):
         else:
             subdomain_filter = Subdomain.objects.all()
 
-        # Fetch technologies and serialize the results with optimization
+        # Use subquery so the IN clause is a single SQL subquery, not a large IN list
+        subdomain_ids = subdomain_filter.values_list("id", flat=True)
         tech = (
-            Technology.objects.filter(technologies__in=subdomain_filter)
-            .annotate(count=Count("name"))
-            .order_by("-count")
+            Technology.objects.filter(technologies__in=subdomain_ids).annotate(count=Count("name")).order_by("-count")
         )
-
-        # Optimize queries with select_related and prefetch_related to avoid N+1 queries
-        tech = tech.select_related().prefetch_related("technologies", "techs")
+        tech = tech.prefetch_related("technologies", "techs")
 
         serializer = TechnologyCountSerializer(tech, many=True)
 
@@ -2644,6 +2639,11 @@ class ListSubdomains(AdvancedSearchMixin, APIView):
             page_size=req.query_params.get("page_size"),
         )
 
+        serializer_context = {}
+        if scan_id and "no_lookup_interesting" not in req.query_params:
+            interesting = get_interesting_subdomains(scan_history=scan_id)
+            serializer_context["datatable_interesting_names"] = set(interesting.values_list("name", flat=True))
+
         if pagination:
             total_count = subdomain_query.count()
             paginated_queryset = subdomain_query[pagination["start"] : pagination["start"] + pagination["length"]]
@@ -2651,7 +2651,7 @@ class ListSubdomains(AdvancedSearchMixin, APIView):
             if "no_lookup_interesting" in req.query_params:
                 serializer = OnlySubdomainNameSerializer(paginated_queryset, many=True)
             else:
-                serializer = SubdomainSerializer(paginated_queryset, many=True)
+                serializer = SubdomainSerializer(paginated_queryset, many=True, context=serializer_context)
 
             return Response({"count": total_count, "results": serializer.data})
 
@@ -2659,7 +2659,7 @@ class ListSubdomains(AdvancedSearchMixin, APIView):
         if "no_lookup_interesting" in req.query_params:
             serializer = OnlySubdomainNameSerializer(subdomain_query, many=True)
         else:
-            serializer = SubdomainSerializer(subdomain_query, many=True)
+            serializer = SubdomainSerializer(subdomain_query, many=True, context=serializer_context)
         return Response({"subdomains": serializer.data})
 
     def post(self, req):
@@ -2817,21 +2817,20 @@ class SubdomainChangesViewSet(viewsets.ModelViewSet):
         project = req.query_params.get("project")
 
         if scan_id:
-            # Get the current scan
-            current_scan = ScanHistory.objects.get(id=scan_id)
+            current_scan = ScanHistory.objects.filter(id=scan_id).select_related("domain").first()
+            if not current_scan or not current_scan.domain_id:
+                return Subdomain.objects.none()
             domain = current_scan.domain
 
-            # Get all scans for this domain that have subdomain_discovery task
             scans_with_subdomain_discovery = (
                 ScanHistory.objects.filter(domain=domain)
                 .filter(tasks__overlap=["subdomain_discovery"])
                 .filter(scan_status=2)  # SUCCESS
-                .order_by("-start_scan_date")
+                .order_by("-start_scan_date")[:2]
             )
-
-            if scans_with_subdomain_discovery.count() > 1:
-                # Get the previous scan
-                previous_scan = scans_with_subdomain_discovery[1]
+            scans_list = list(scans_with_subdomain_discovery)
+            if len(scans_list) >= 2:
+                previous_scan = scans_list[1]
 
                 # Get subdomains from current scan
                 current_subdomains = (
@@ -2851,9 +2850,9 @@ class SubdomainChangesViewSet(viewsets.ModelViewSet):
                     Subdomain.objects.filter(scan_history=current_scan)
                     .filter(name__in=new_subdomains)
                     .annotate(change=Value("added", output_field=CharField()))
+                    .select_related("scan_history", "target_domain")
                 )
             else:
-                # If this is the first scan, return empty queryset as changes are only meaningful from 2nd scan
                 queryset = Subdomain.objects.none()
         elif target_id:
             queryset = Subdomain.objects.filter(target_domain__id=target_id).annotate(
@@ -2891,53 +2890,55 @@ class EndPointChangesViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         req = self.request
         scan_id = safe_int_cast(req.query_params.get("scan_id"))
+        if not scan_id:
+            return EndPoint.objects.none()
         changes = req.query_params.get("changes")
-        domain_id = safe_int_cast(ScanHistory.objects.filter(id=safe_int_cast(scan_id)).first().domain.id)
+        scan = ScanHistory.objects.filter(id=scan_id).select_related("domain").first()
+        if not scan or not scan.domain_id:
+            return EndPoint.objects.none()
+        domain_id = scan.domain_id
         scan_history = (
             ScanHistory.objects.filter(domain=domain_id)
             .filter(tasks__overlap=["subdomain_discovery"])
             .filter(id__lte=scan_id)
             .exclude(Q(scan_status=-1) | Q(scan_status=1))
+            .order_by("-start_scan_date")
         )
-        if scan_history.count() > 1:
-            last_scan = scan_history.order_by("-start_scan_date")[1]
-            scanned_host_q1 = EndPoint.objects.filter(scan_history__id=scan_id).values("http_url")
-            scanned_host_q2 = EndPoint.objects.filter(scan_history__id=last_scan.id).values("http_url")
-            added_endpoint = scanned_host_q1.difference(scanned_host_q2)
-            removed_endpoints = scanned_host_q2.difference(scanned_host_q1)
-            if changes == "added":
-                queryset = (
-                    EndPoint.objects.filter(scan_history__id=scan_id)
-                    .filter(http_url__in=added_endpoint)
-                    .annotate(change=Value("added", output_field=CharField()))
-                    .prefetch_related("subdomain", "target_domain", "scan_history", "techs")
-                )
-            elif changes == "removed":
-                queryset = (
-                    EndPoint.objects.filter(scan_history__id=last_scan.id)
-                    .filter(http_url__in=removed_endpoints)
-                    .annotate(change=Value("removed", output_field=CharField()))
-                    .prefetch_related("subdomain", "target_domain", "scan_history", "techs")
-                )
-            else:
-                added_endpoint = (
-                    EndPoint.objects.filter(scan_history__id=scan_id)
-                    .filter(http_url__in=added_endpoint)
-                    .annotate(change=Value("added", output_field=CharField()))
-                    .prefetch_related("subdomain", "target_domain", "scan_history", "techs")
-                )
-                removed_endpoints = (
-                    EndPoint.objects.filter(scan_history__id=last_scan.id)
-                    .filter(http_url__in=removed_endpoints)
-                    .annotate(change=Value("removed", output_field=CharField()))
-                    .prefetch_related("subdomain", "target_domain", "scan_history", "techs")
-                )
-                queryset = added_endpoint.union(removed_endpoints)
+        scans_list = list(scan_history[:2])
+        if len(scans_list) < 2:
+            return EndPoint.objects.none()
+        last_scan = scans_list[1]
+        scanned_host_q1 = EndPoint.objects.filter(scan_history__id=scan_id).values("http_url")
+        scanned_host_q2 = EndPoint.objects.filter(scan_history__id=last_scan.id).values("http_url")
+        added_endpoint = scanned_host_q1.difference(scanned_host_q2)
+        removed_endpoints = scanned_host_q2.difference(scanned_host_q1)
+        endpoint_base = EndPoint.objects.select_related("subdomain", "target_domain", "scan_history").prefetch_related(
+            "techs"
+        )
+        if changes == "added":
+            return (
+                endpoint_base.filter(scan_history__id=scan_id)
+                .filter(http_url__in=added_endpoint)
+                .annotate(change=Value("added", output_field=CharField()))
+            )
+        elif changes == "removed":
+            return (
+                endpoint_base.filter(scan_history__id=last_scan.id)
+                .filter(http_url__in=removed_endpoints)
+                .annotate(change=Value("removed", output_field=CharField()))
+            )
         else:
-            # If this is the first scan, return empty queryset as changes are only meaningful from 2nd scan
-            queryset = EndPoint.objects.none()
-
-        return queryset
+            added_qs = (
+                endpoint_base.filter(scan_history__id=scan_id)
+                .filter(http_url__in=added_endpoint)
+                .annotate(change=Value("added", output_field=CharField()))
+            )
+            removed_qs = (
+                endpoint_base.filter(scan_history__id=last_scan.id)
+                .filter(http_url__in=removed_endpoints)
+                .annotate(change=Value("removed", output_field=CharField()))
+            )
+            return added_qs.union(removed_qs)
 
     def paginate_queryset(self, queryset, view=None):
         if "no_page" in self.request.query_params:
@@ -2965,6 +2966,12 @@ class InterestingSubdomainViewSet(viewsets.ModelViewSet):
         else:
             queryset = get_interesting_subdomains()
 
+        # Cache interesting names for serializer context to avoid running get_interesting_subdomains twice
+        if scan_id or target_id:
+            self._datatable_interesting_names = set(queryset.values_list("name", flat=True))
+        else:
+            self._datatable_interesting_names = None
+
         # Optimize queries with prefetch_related to avoid N+1 queries
         if hasattr(queryset, "prefetch_related"):
             queryset = queryset.prefetch_related(
@@ -2980,6 +2987,12 @@ class InterestingSubdomainViewSet(viewsets.ModelViewSet):
         self.queryset = queryset
 
         return self.queryset
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        if getattr(self, "_datatable_interesting_names", None) is not None:
+            context["datatable_interesting_names"] = self._datatable_interesting_names
+        return context
 
     def filter_queryset(self, qs):
         qs = self.queryset.filter()
@@ -3108,46 +3121,18 @@ class SubdomainDatatableViewSet(AdvancedSearchMixin, viewsets.ModelViewSet):
         req = self.request
         scan_id = safe_int_cast(req.query_params.get("scan_id"))
         target_id = safe_int_cast(req.query_params.get("target_id"))
-        url_query = req.query_params.get("query_param")
-        ip_address = req.query_params.get("ip_address")
-        name = req.query_params.get("name")
-        project = req.query_params.get("project")
-
-        # Start with base query without ordering
-        subdomains = Subdomain.objects.filter(target_domain__project__slug=project)
-
-        if "is_important" in req.query_params:
-            subdomains = subdomains.filter(is_important=True)
-
-        if target_id:
-            subdomains = subdomains.filter(target_domain__id=target_id)
-        elif url_query:
-            subdomains = subdomains.filter(Q(target_domain__name=url_query))
-        elif scan_id:
-            subdomains = subdomains.filter(scan_history__id=scan_id)
-
-        if "only_directory" in req.query_params:
-            subdomains = subdomains.exclude(directories__isnull=True)
-
-        if ip_address:
-            subdomains = subdomains.filter(ip_addresses__address__icontains=ip_address)
-
-        if name:
-            subdomains = subdomains.filter(name=name)
-
-        # Get unique subdomains by name, keeping the latest (highest ID) for each name
-        # Use a subquery to get the latest ID for each unique subdomain name
-        from django.db.models import Max
-
-        latest_subdomain_ids = subdomains.values("name").annotate(max_id=Max("id")).values_list("max_id", flat=True)
-        self.queryset = Subdomain.objects.filter(id__in=latest_subdomain_ids)
-
-        # Prefetching necessary relations for get_ports_by_ip
-        self.queryset = self.queryset.prefetch_related(
-            "ip_addresses",
-            "ip_addresses__ports",
+        self._datatable_scan_id = scan_id
+        queryset, self._datatable_interesting_names = build_subdomain_datatable_queryset(
+            project_slug=req.query_params.get("project", ""),
+            scan_id=scan_id,
+            target_id=target_id,
+            url_query=req.query_params.get("query_param"),
+            ip_address=req.query_params.get("ip_address"),
+            name=req.query_params.get("name"),
+            is_important="is_important" in req.query_params,
+            only_directory="only_directory" in req.query_params,
         )
-
+        self.queryset = queryset
         return self.queryset
 
     def general_lookup(self, queryset, search_value):
@@ -3182,6 +3167,12 @@ class SubdomainDatatableViewSet(AdvancedSearchMixin, viewsets.ModelViewSet):
             qs = self.apply_advanced_search(qs, search_value)
 
         return qs.order_by(order_col)
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        if getattr(self, "_datatable_interesting_names", None) is not None:
+            context["datatable_interesting_names"] = self._datatable_interesting_names
+        return context
 
 
 class ListActivityLogsViewSet(viewsets.ModelViewSet):
@@ -4401,9 +4392,22 @@ class SecatorRunnerCreate(SecatorAPIBase):
 
     def post(self, request):
         try:
+            from rest_framework.exceptions import ParseError
+
             from startScan.models import Domain, ScanHistory, SecatorRunner, SubScan
 
-            runner_data = request.data
+            try:
+                runner_data = request.data
+            except ParseError:
+                return Response(
+                    {"status": False, "error": "Invalid request data format"},
+                    status=HTTP_400_BAD_REQUEST,
+                )
+            if not isinstance(runner_data, dict):
+                return Response(
+                    {"status": False, "error": "Invalid request data format"},
+                    status=HTTP_400_BAD_REQUEST,
+                )
 
             # Validate request data
             is_valid, error_response = self.validate_request_data(runner_data)
@@ -4607,9 +4611,17 @@ class SecatorRunnerUpdate(SecatorAPIBase):
                     {"id": runner_id},
                 )
 
-                # Sync with ScanHistory if scan_history is linked
-                if secator_runner.scan_history:
-                    self._sync_runner_with_scan_history(secator_runner, runner_data)
+                # Sync with ScanHistory: inline when SECATOR_RUNNER_UPDATE_SYNC_INLINE (e.g. tests) or when
+                # SECATOR_RUNNER_UPDATE_SYNC_BACKGROUND is False (production guard); otherwise run in bounded pool.
+                # Pool limits concurrent syncs (SECATOR_RUNNER_UPDATE_SYNC_MAX_WORKERS) to avoid unbounded threads.
+                if secator_runner.scan_history_id:
+                    if (
+                        django_settings.SECATOR_RUNNER_UPDATE_SYNC_INLINE
+                        or not django_settings.SECATOR_RUNNER_UPDATE_SYNC_BACKGROUND
+                    ):
+                        self._sync_runner_with_scan_history(secator_runner, runner_data)
+                    else:
+                        secator_submit_sync(secator_runner.id)
 
             except SecatorRunner.DoesNotExist:
                 self.logger.log_warning(
@@ -4632,327 +4644,12 @@ class SecatorRunnerUpdate(SecatorAPIBase):
             return Response({"status": False, "error": get_safe_user_message(e, logger)}, status=500)
 
     def _is_all_runners_completed(self, scan_history_id: int) -> bool:
-        """
-        Check if all runners for this scan are completed.
-        Works for both workflow scans (checks all runners) and task-only scans.
-
-        Args:
-            scan_history_id: ID of the scan history
-
-        Returns:
-            bool: True if all runners are done, False otherwise
-        """
-        from startScan.models import SecatorRunner
-
-        # Get all runners for this scan
-        runners = SecatorRunner.objects.filter(scan_history_id=scan_history_id)
-
-        if not runners.exists():
-            self.logger.log_debug(
-                self.logger.PREFIX_SYNC,
-                "CHECK",
-                f"_is_all_runners_completed: No runners found for scan {scan_history_id}",
-            )
-            return False
-
-        # Check if all runners are done
-        incomplete_runners = []
-        for runner in runners:
-            if runner.runner_data:
-                done = runner.runner_data.get("done", False)
-                status = runner.runner_data.get("status", "").upper()
-                runner_name = runner.runner_name or runner.runner_data.get("name", "Unknown")
-                runner_type = runner.runner_type or runner.runner_data.get("config", {}).get("type", "unknown")
-                # If any runner is not done or still running, scan is not completed
-                if not done or status == "RUNNING":
-                    incomplete_runners.append(f"{runner_name} (type={runner_type}, status={status}, done={done})")
-
-        if incomplete_runners:
-            self.logger.log_debug(
-                self.logger.PREFIX_SYNC,
-                "CHECK",
-                f"_is_all_runners_completed: Scan {scan_history_id} NOT completed. "
-                f"Incomplete runners: {', '.join(incomplete_runners)}",
-            )
-            return False
-
-        self.logger.log_debug(
-            self.logger.PREFIX_SYNC,
-            "CHECK",
-            f"_is_all_runners_completed: Scan {scan_history_id} is fully completed. "
-            f"Total runners checked: {runners.count()}",
-        )
-        return True
+        """Delegate to standalone helper (view passes self.logger)."""
+        return is_all_runners_completed(scan_history_id, self.logger)
 
     def _sync_runner_with_scan_history(self, secator_runner, runner_data):
-        """
-        Synchronize runner data with ScanHistory and create/update ScanActivity.
-
-        Args:
-            secator_runner: SecatorRunner instance
-            runner_data: Runner data from Secator
-        """
-        from django.utils import timezone
-
-        from reNgine.utilities.websocket import send_scan_status_update
-        from startScan.models import ScanActivity, SecatorRunner
-
-        scan_history = secator_runner.scan_history
-        scan_repo = ScanRepository()
-
-        # Extract runner status and progress
-        runner_status = runner_data.get("status", "").upper()
-        runner_done = runner_data.get("done", False)
-        runner_name = runner_data.get("name") or secator_runner.runner_name or "Unknown"
-        runner_type = runner_data.get("config", {}).get("type", "") or secator_runner.runner_type
-
-        # Map Secator status to reNgine status
-        status_map = {
-            "RUNNING": RUNNING_TASK,
-            "SUCCESS": SUCCESS_TASK,
-            "FAILURE": FAILED_TASK,
-            "FAILED": FAILED_TASK,
-            "PENDING": INITIATED_TASK,
-            "REVOKED": ABORTED_TASK,
-        }
-        rengine_status = status_map.get(runner_status, INITIATED_TASK)
-
-        # Debug: Log current state
-        self.logger.log_debug(
-            self.logger.PREFIX_SYNC,
-            "SYNC",
-            f"Runner update request - "
-            f"Runner: {runner_name} (type={runner_type}, id={secator_runner.id}), "
-            f"Secator status: {runner_status}, done: {runner_done}, "
-            f"ScanHistory current status: {scan_history.scan_status}, "
-            f"Proposed reNgine status: {rengine_status}",
-        )
-
-        # Determine if this runner can update the global status
-        # Case 1: Runner workflow/scan -> always allowed
-        # Case 2: Runner task -> allowed only if scan has no workflow/scan runner
-        has_workflow_or_scan_runner = SecatorRunner.objects.filter(
-            scan_history_id=scan_history.id, runner_type__in=["workflow", "scan"]
-        ).exists()
-
-        can_update_status = runner_type in ["workflow", "scan"] or (
-            runner_type == "task" and not has_workflow_or_scan_runner
-        )
-
-        self.logger.log_debug(
-            self.logger.PREFIX_SYNC,
-            "SYNC",
-            f"Permission check - "
-            f"has_workflow_or_scan_runner: {has_workflow_or_scan_runner}, "
-            f"can_update_status: {can_update_status}",
-        )
-
-        if can_update_status:
-            # Do not downgrade status if scan is already in progress
-            if runner_status == "PENDING" and scan_history.scan_status in [RUNNING_TASK, SUCCESS_TASK]:
-                self.logger.log_debug(
-                    self.logger.PREFIX_SYNC,
-                    "BLOCKED",
-                    f"Ignoring PENDING status for runner {runner_name} "
-                    f"(type={runner_type}) - scan already in progress. "
-                    f"Current ScanHistory status: {scan_history.scan_status}, "
-                    f"Would set to: {rengine_status}",
-                )
-            # For SUCCESS, verify that all runners are really completed
-            elif runner_status == "SUCCESS":
-                self.logger.log_debug(
-                    self.logger.PREFIX_SYNC,
-                    "SUCCESS",
-                    f"Processing SUCCESS status - "
-                    f"Runner: {runner_name} (type={runner_type}), done: {runner_done}, "
-                    f"Current ScanHistory status: {scan_history.scan_status}",
-                )
-                if runner_done:
-                    # Verify that all runners are completed
-                    all_completed = self._is_all_runners_completed(scan_history.id)
-                    self.logger.log_debug(
-                        self.logger.PREFIX_SYNC,
-                        "CHECK",
-                        f"All runners completed check: {all_completed} for scan {scan_history.id}",
-                    )
-                    if all_completed:
-                        old_status = scan_history.scan_status
-                        scan_history.scan_status = rengine_status
-                        if not scan_history.stop_scan_date:
-                            scan_history.stop_scan_date = timezone.now()
-                        scan_history.save(update_fields=["scan_status", "stop_scan_date"])
-                        self.logger.log_runner_sync(
-                            "SUCCESS",
-                            runner_name,
-                            runner_type,
-                            runner_status,
-                            scan_history.id,
-                            {
-                                "old_status": old_status,
-                                "new_status": rengine_status,
-                                "stop_scan_date": scan_history.stop_scan_date,
-                            },
-                        )
-                        # Send WebSocket update
-                        send_scan_status_update(scan_history.id)
-                    else:
-                        # Not all runners are completed yet, keep RUNNING
-                        old_status = scan_history.scan_status
-                        scan_history.scan_status = RUNNING_TASK
-                        scan_history.save(update_fields=["scan_status"])
-                        self.logger.log_debug(
-                            self.logger.PREFIX_SYNC,
-                            "KEEP_RUNNING",
-                            f"Scan {scan_history.id} not fully completed yet. "
-                            f"Status changed from {old_status} to {RUNNING_TASK} by runner {runner_name} "
-                            f"(type={runner_type})",
-                        )
-                        # Send WebSocket update
-                        send_scan_status_update(scan_history.id)
-                else:
-                    # Runner in SUCCESS but not yet done, keep RUNNING
-                    old_status = scan_history.scan_status
-                    scan_history.scan_status = RUNNING_TASK
-                    scan_history.save(update_fields=["scan_status"])
-                    self.logger.log_debug(
-                        self.logger.PREFIX_SYNC,
-                        "KEEP_RUNNING",
-                        f"Runner {runner_name} (type={runner_type}) "
-                        f"in SUCCESS but not done. Status changed from {old_status} to {RUNNING_TASK}",
-                    )
-                    # Send WebSocket update
-                    send_scan_status_update(scan_history.id)
-            # For RUNNING, FAILURE, FAILED
-            elif runner_status in ["RUNNING", "FAILURE", "FAILED"]:
-                old_status = scan_history.scan_status
-                scan_history.scan_status = rengine_status
-                if runner_done and runner_status in ["FAILURE", "FAILED"] and not scan_history.stop_scan_date:
-                    scan_history.stop_scan_date = timezone.now()
-                scan_history.save(update_fields=["scan_status", "stop_scan_date"])
-                self.logger.log_runner_sync(
-                    "UPDATED",
-                    runner_name,
-                    runner_type,
-                    runner_status,
-                    scan_history.id,
-                    {
-                        "old_status": old_status,
-                        "new_status": rengine_status,
-                        "done": runner_done,
-                        "stop_scan_date": scan_history.stop_scan_date,
-                    },
-                )
-                # Send WebSocket update
-                send_scan_status_update(scan_history.id)
-        else:
-            self.logger.log_debug(
-                self.logger.PREFIX_SYNC,
-                "SKIPPED",
-                f"Runner {runner_name} (type={runner_type}) "
-                f"cannot update global status. Current ScanHistory status: {scan_history.scan_status}",
-            )
-
-        # Extract reports_folder from run_opts for results_dir
-        run_opts = runner_data.get("run_opts", {})
-        reports_folder = run_opts.get("reports_folder")
-
-        # Create or update ScanActivity
-        activity_title = f"{runner_type.title()}: {runner_name}"
-
-        # Check if activity already exists for this runner
-        existing_activity = (
-            ScanActivity.objects.filter(scan_of=scan_history, name=runner_name, runner_id=secator_runner)
-            .order_by("-time")
-            .first()
-        )
-
-        if existing_activity:
-            # Update existing activity
-            existing_activity.status = rengine_status
-            existing_activity.time = timezone.now()
-            if runner_done and runner_status in ["SUCCESS", "FAILURE", "FAILED"]:
-                existing_activity.title = f"{activity_title} - Completed"
-            if reports_folder:
-                existing_activity.results_dir = reports_folder
-            update_fields = ["status", "time", "title"]
-            if reports_folder:
-                update_fields.append("results_dir")
-            existing_activity.save(update_fields=update_fields)
-            self.logger.log_debug(
-                self.logger.PREFIX_SYNC,
-                "ACTIVITY",
-                f"Updated ScanActivity {existing_activity.id} for runner {runner_name}",
-            )
-        else:
-            # Create new activity
-            activity_id = scan_repo.create_activity(scan_history.id, activity_title, rengine_status)
-            # Update the newly created activity with runner_id, name, and results_dir
-            try:
-                new_activity = ScanActivity.objects.get(id=activity_id)
-                new_activity.runner_id = secator_runner
-                new_activity.name = runner_name
-                if reports_folder:
-                    new_activity.results_dir = reports_folder
-                update_fields = ["runner_id", "name"]
-                if reports_folder:
-                    update_fields.append("results_dir")
-                new_activity.save(update_fields=update_fields)
-                self.logger.log_debug(
-                    self.logger.PREFIX_SYNC,
-                    "ACTIVITY",
-                    f"Created ScanActivity {activity_id} for runner {runner_name}",
-                )
-            except ScanActivity.DoesNotExist:
-                self.logger.log_warning(
-                    f"Could not find newly created ScanActivity {activity_id}",
-                    {"prefix": self.logger.PREFIX_SYNC, "action": "SYNC", "runner": runner_name},
-                )
-
-        # Mark subscans linked to this runner as finished (stop_scan_date, status) when runner is terminal
-        from reNgine.secator import SecatorProgressSync
-
-        SecatorProgressSync._sync_subscans_if_terminal(secator_runner.id, runner_status, rengine_status)
-
-        self.logger.log_runner_sync(
-            "SYNC",
-            runner_name,
-            runner_type,
-            runner_status,
-            scan_history.id,
-            {},
-        )
-
-        # Save command log from runner data
-        try:
-            from reNgine.services.repositories.command_repository import CommandRepository
-
-            command_repo = CommandRepository()
-            activity_id_for_command = existing_activity.id if existing_activity else activity_id
-            command_repo.save_from_secator(runner_data, scan_history.id, activity_id_for_command)
-        except Exception as e:
-            self.logger.log_warning(
-                f"Error saving command log for runner {runner_name}: {e}",
-                {"prefix": self.logger.PREFIX_SYNC, "action": "SYNC", "runner": runner_name},
-            )
-
-        # Send WebSocket update for runner status/progress changes
-        # This ensures real-time updates even when status doesn't change
-        runner_progress = runner_data.get("progress")
-        if isinstance(runner_progress, (int, float)) and runner_progress >= 0:
-            self.logger.log_debug(
-                self.logger.PREFIX_SYNC,
-                "WEBSOCKET",
-                f"Sending progress update for scan {scan_history.id} - "
-                f"Runner: {runner_name}, Progress: {runner_progress}%, Status: {runner_status}",
-            )
-        else:
-            self.logger.log_debug(
-                self.logger.PREFIX_SYNC,
-                "WEBSOCKET",
-                f"Sending runner update for scan {scan_history.id} - "
-                f"Runner: {runner_name}, Status: {runner_status} (no progress data)",
-            )
-        send_scan_status_update(scan_history.id)
+        """Delegate to standalone helper (view passes self.logger)."""
+        sync_runner_with_scan_history(secator_runner, runner_data, self.logger)
 
 
 class SecatorFindingCreate(SecatorAPIBase):

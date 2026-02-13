@@ -5,6 +5,7 @@ Tests for SecatorRunnerCreate, SecatorRunnerUpdate, SecatorFindingCreate, Secato
 
 from unittest.mock import MagicMock, patch
 
+from django.test import override_settings
 from django.urls import reverse
 from rest_framework import status
 
@@ -91,8 +92,14 @@ class TestSecatorRunnerUpdate(BaseTestCase):
 
     def test_update_runner_success(self):
         """Test successful runner update."""
-        runner_id = "test-runner-123"
-        url = reverse("api:secator_runner_update", kwargs={"runner_id": runner_id})
+        runner = SecatorRunner.objects.create(
+            runner_type="task",
+            runner_name="test_task",
+            scan_history=self.data_generator.scan_history,
+            domain=self.data_generator.domain,
+            runner_data={"status": "RUNNING"},
+        )
+        url = reverse("api:secator_runner_update", kwargs={"runner_id": runner.id})
         update_data = {
             "status": "COMPLETED",
             "progress": 100,
@@ -100,12 +107,18 @@ class TestSecatorRunnerUpdate(BaseTestCase):
         response = self.client.put(url, update_data, content_type="application/json")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data["status"])
-        self.assertEqual(response.data["id"], runner_id)
+        self.assertEqual(response.data["id"], str(runner.id))
 
     def test_update_runner_with_error(self):
         """Test runner update with error status."""
-        runner_id = "test-runner-456"
-        url = reverse("api:secator_runner_update", kwargs={"runner_id": runner_id})
+        runner = SecatorRunner.objects.create(
+            runner_type="task",
+            runner_name="test_task",
+            scan_history=self.data_generator.scan_history,
+            domain=self.data_generator.domain,
+            runner_data={"status": "RUNNING"},
+        )
+        url = reverse("api:secator_runner_update", kwargs={"runner_id": runner.id})
         update_data = {
             "status": "FAILED",
             "error": "Connection timeout",
@@ -114,6 +127,7 @@ class TestSecatorRunnerUpdate(BaseTestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data["status"])
 
+    @override_settings(SECATOR_RUNNER_UPDATE_SYNC_INLINE=True)
     def test_update_runner_terminal_status_sets_subscan_stop_scan_date(self):
         """When runner update has terminal status (SUCCESS), linked subscan gets stop_scan_date and status."""
         scan_history = self.data_generator.scan_history
@@ -179,15 +193,12 @@ class TestSecatorFindingCreate(BaseTestCase):
         self.assertTrue(response.data["status"])
         self.assertIn("unknown_type_", response.data["id"])
 
-    @patch("api.secator_api_base.SubdomainRepository")
-    def test_create_subdomain_finding(self, mock_repo_class):
+    @patch(
+        "reNgine.services.repositories.subdomain_repository.SubdomainRepository.save_from_secator",
+        return_value=MagicMock(id=123),
+    )
+    def test_create_subdomain_finding(self, mock_save_from_secator):
         """Test creating a subdomain finding."""
-        mock_repo = MagicMock()
-        mock_saved = MagicMock()
-        mock_saved.id = 123
-        mock_repo.save_from_secator.return_value = mock_saved
-        mock_repo_class.return_value = mock_repo
-
         finding_data = {
             "_type": "subdomain",
             "name": "test.example.com",
@@ -200,17 +211,14 @@ class TestSecatorFindingCreate(BaseTestCase):
         response = self.client.post(self.url, finding_data, content_type="application/json")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data["status"])
-        mock_repo.save_from_secator.assert_called_once()
+        mock_save_from_secator.assert_called_once()
 
-    @patch("api.secator_api_base.VulnerabilityRepository")
-    def test_create_vulnerability_finding(self, mock_repo_class):
+    @patch(
+        "reNgine.services.repositories.vulnerability_repository.VulnerabilityRepository.save_from_secator",
+        return_value=MagicMock(id=456),
+    )
+    def test_create_vulnerability_finding(self, mock_save_from_secator):
         """Test creating a vulnerability finding."""
-        mock_repo = MagicMock()
-        mock_saved = MagicMock()
-        mock_saved.id = 456
-        mock_repo.save_from_secator.return_value = mock_saved
-        mock_repo_class.return_value = mock_repo
-
         finding_data = {
             "_type": "vulnerability",
             "name": "SQL Injection",
@@ -224,17 +232,14 @@ class TestSecatorFindingCreate(BaseTestCase):
         response = self.client.post(self.url, finding_data, content_type="application/json")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data["status"])
-        mock_repo.save_from_secator.assert_called_once()
+        mock_save_from_secator.assert_called_once()
 
-    @patch("api.secator_api_base.IpRepository")
-    def test_create_ip_finding(self, mock_repo_class):
+    @patch(
+        "reNgine.services.repositories.ip_repository.IpRepository.save_from_secator",
+        return_value=MagicMock(id=789),
+    )
+    def test_create_ip_finding(self, mock_save_from_secator):
         """Test creating an IP finding."""
-        mock_repo = MagicMock()
-        mock_saved = MagicMock()
-        mock_saved.id = 789
-        mock_repo.save_from_secator.return_value = mock_saved
-        mock_repo_class.return_value = mock_repo
-
         finding_data = {
             "_type": "ip",
             "ip": "192.168.1.1",
@@ -246,26 +251,25 @@ class TestSecatorFindingCreate(BaseTestCase):
         response = self.client.post(self.url, finding_data, content_type="application/json")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data["status"])
-        mock_repo.save_from_secator.assert_called_once()
+        mock_save_from_secator.assert_called_once()
 
     def test_create_finding_without_context(self):
-        """Test finding creation without scan context returns success but doesn't save."""
+        """Test finding creation without scan context returns 400."""
         finding_data = {
             "_type": "subdomain",
             "name": "test.example.com",
         }
         response = self.client.post(self.url, finding_data, content_type="application/json")
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertTrue(response.data["status"])
-        self.assertIn("subdomain_", response.data["id"])
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(response.data["status"])
+        self.assertIn("error", response.data)
 
-    @patch("api.secator_api_base.SubdomainRepository")
-    def test_create_finding_repository_returns_none(self, mock_repo_class):
+    @patch(
+        "reNgine.services.repositories.subdomain_repository.SubdomainRepository.save_from_secator",
+        return_value=None,
+    )
+    def test_create_finding_repository_returns_none(self, mock_save_from_secator):
         """Test finding creation when repository returns None (validation error)."""
-        mock_repo = MagicMock()
-        mock_repo.save_from_secator.return_value = None
-        mock_repo_class.return_value = mock_repo
-
         finding_data = {
             "_type": "subdomain",
             "name": "invalid_subdomain",
@@ -278,7 +282,7 @@ class TestSecatorFindingCreate(BaseTestCase):
         self.assertEqual(response.status_code, status.HTTP_422_UNPROCESSABLE_ENTITY)
         self.assertFalse(response.data["status"])
         self.assertIn("error", response.data)
-        mock_repo.save_from_secator.assert_called_once()
+        mock_save_from_secator.assert_called_once()
 
 
 class TestSecatorFindingUpdate(BaseTestCase):
@@ -319,7 +323,8 @@ class TestSecatorAPIAuthentication(BaseTestCase):
     def setUp(self):
         """Set up test environment."""
         super().setUp()
-        self.client.logout()
+        with patch("dashboard.views.messages.add_message", lambda *args, **kwargs: None):
+            self.client.logout()
 
     def test_runner_create_unauthenticated(self):
         """Test runner creation without authentication."""

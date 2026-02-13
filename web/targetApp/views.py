@@ -51,7 +51,7 @@ from startScan.models import (
     Vulnerability,
     VulnerabilityTags,
 )
-from startScan.secator_profiles import build_secator_profiles_context
+from startScan.secator.profiles import build_secator_profiles_context
 from targetApp.forms import (
     AddOrganizationForm,
     AddTargetForm,

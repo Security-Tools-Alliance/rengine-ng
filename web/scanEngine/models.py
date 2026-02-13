@@ -48,6 +48,9 @@ class EngineType(models.Model):
         default=True, help_text="Whether this is a legacy scan engine (deprecated in favor of Secator)"
     )
 
+    class Meta:
+        indexes = [models.Index(fields=["default_engine"], name="se_enginetype_default_idx")]
+
     def __str__(self):
         return self.engine_name
 
@@ -445,6 +448,7 @@ class SecatorWorkflow(models.Model):
 
     class Meta:
         ordering = ["workflow_type", "name"]
+        indexes = [models.Index(fields=["is_active"], name="se_secatorworkflow_active_idx")]
 
 
 class SecatorTask(models.Model):
@@ -822,6 +826,7 @@ class SecatorProfile(models.Model):
 
     class Meta:
         ordering = ["profile_type", "category", "name"]
+        indexes = [models.Index(fields=["name", "profile_type"], name="se_secatorprofile_nametype_idx")]
         constraints = [
             models.UniqueConstraint(
                 fields=["category"],

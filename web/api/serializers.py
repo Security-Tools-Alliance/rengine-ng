@@ -48,6 +48,9 @@ from targetApp.models import (
 )
 
 
+# Sentinel to distinguish "annotated count missing" from "count present but None" in get_*_count.
+_CACHE_MISSING = object()
+
 logger = logging.getLogger(__name__)
 
 
@@ -447,14 +450,23 @@ class ScanHistorySerializer(serializers.ModelSerializer):
         depth = 1
 
     def get_subdomain_count(self, scan_history):
+        val = getattr(scan_history, "subdomain_count", _CACHE_MISSING)
+        if val is not _CACHE_MISSING:
+            return val
         if scan_history.get_subdomain_count:
             return scan_history.get_subdomain_count()
 
     def get_endpoint_count(self, scan_history):
+        val = getattr(scan_history, "endpoint_count", _CACHE_MISSING)
+        if val is not _CACHE_MISSING:
+            return val
         if scan_history.get_endpoint_count:
             return scan_history.get_endpoint_count()
 
     def get_vulnerability_count(self, scan_history):
+        val = getattr(scan_history, "vulnerability_count", _CACHE_MISSING)
+        if val is not _CACHE_MISSING:
+            return val
         if scan_history.get_vulnerability_count:
             return scan_history.get_vulnerability_count()
 
@@ -1454,37 +1466,51 @@ class SubdomainSerializer(serializers.ModelSerializer):
         ]
 
     def get_is_interesting(self, subdomain):
+        interesting_names = self.context.get("datatable_interesting_names")
+        if interesting_names is not None:
+            return subdomain.name in interesting_names
         scan_id = subdomain.scan_history.id if subdomain.scan_history else None
         return get_interesting_subdomains(scan_id).filter(name=subdomain.name).exists()
 
     def get_endpoint_count(self, subdomain):
-        return subdomain.get_endpoint_count
+        val = getattr(subdomain, "endpoint_count", None)
+        return val if val is not None else subdomain.get_endpoint_count
 
     def get_info_count(self, subdomain):
-        return subdomain.get_info_count
+        val = getattr(subdomain, "info_count", None)
+        return val if val is not None else subdomain.get_info_count
 
     def get_low_count(self, subdomain):
-        return subdomain.get_low_count
+        val = getattr(subdomain, "low_count", None)
+        return val if val is not None else subdomain.get_low_count
 
     def get_medium_count(self, subdomain):
-        return subdomain.get_medium_count
+        val = getattr(subdomain, "medium_count", None)
+        return val if val is not None else subdomain.get_medium_count
 
     def get_high_count(self, subdomain):
-        return subdomain.get_high_count
+        val = getattr(subdomain, "high_count", None)
+        return val if val is not None else subdomain.get_high_count
 
     def get_critical_count(self, subdomain):
-        return subdomain.get_critical_count
+        val = getattr(subdomain, "critical_count", None)
+        return val if val is not None else subdomain.get_critical_count
 
     def get_directories_count(self, subdomain):
         return subdomain.get_directories_count
 
     def get_subscan_count(self, subdomain):
-        return subdomain.get_subscan_count
+        val = getattr(subdomain, "subscan_count", None)
+        return val if val is not None else subdomain.get_subscan_count
 
     def get_todos_count(self, subdomain):
-        return len(subdomain.get_todos.filter(is_done=False))
+        val = getattr(subdomain, "todos_count", None)
+        return len(subdomain.get_todos.filter(is_done=False)) if val is None else val
 
     def get_vuln_count(self, obj):
+        val = getattr(obj, "vuln_count", None)
+        if val is not None:
+            return val
         try:
             return obj.vuln_count
         except Exception:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any, TypedDict
 
+from django.core.cache import cache
 from django.http import HttpRequest, JsonResponse
 from django.template.loader import render_to_string
 
@@ -9,6 +10,7 @@ from scanEngine.models import SecatorScan, SecatorTask, SecatorWorkflow
 
 
 _INVALID_EXECUTION_MODE_HTML = '<div class="alert alert-warning">Invalid execution mode</div>'
+_SECATOR_SELECTION_CACHE_TIMEOUT = 300
 
 
 def normalize_secator_id_prefix(raw: str) -> str:
@@ -91,9 +93,12 @@ def get_secator_selection_template_and_context(execution_mode: str) -> tuple[str
             .order_by("name")
         )
         scans_list = list(scans_qs)
+        scan_workflows_cache: list[dict[str, Any]] = []
         workflow_names: set[str] = set()
         for scan in scans_list:
-            workflow_names.update(scan.get_workflows().keys())
+            wfs = scan.get_workflows()
+            scan_workflows_cache.append(wfs)
+            workflow_names.update(wfs.keys())
         workflows_by_name: dict[str, SecatorWorkflow] = {}
         if workflow_names:
             workflows_qs = SecatorWorkflow.objects.filter(name__in=workflow_names).only(
@@ -115,8 +120,8 @@ def get_secator_selection_template_and_context(execution_mode: str) -> tuple[str
         )
         tasks_dict = {task.task_type: task for task in all_tasks}
         scans_context: list[dict[str, Any]] = []
-        for scan in scans_list:
-            ordered_names = list(scan.get_workflows().keys())
+        for scan, wfs in zip(scans_list, scan_workflows_cache):
+            ordered_names = list(wfs.keys())
             workflow_contexts: list[dict[str, Any]] = []
             for wf_name in ordered_names:
                 wf = workflows_by_name.get(wf_name)
@@ -141,12 +146,24 @@ def get_secator_selection_template_and_context(execution_mode: str) -> tuple[str
     raise ValueError(f"Invalid execution_mode: {execution_mode!r}")
 
 
+def _secator_selection_cache_key(execution_mode: str, id_prefix: str) -> str:
+    """Build cache key for Secator selection response (execution_mode + normalized id_prefix)."""
+    mode = (execution_mode or "").strip().lower()
+    prefix = normalize_secator_id_prefix(id_prefix or "")
+    return f"secator_selection:{mode}:{prefix}"
+
+
 def render_secator_selection_json(request: HttpRequest) -> JsonResponse:
     """
     Render and return Secator selection HTML as JSON payload: {"html": "<...>"}.
+    Responses are cached per execution_mode and id_prefix to keep repeat loads fast.
     """
     execution_mode = request.GET.get("execution_mode", "")
     id_prefix = request.GET.get("id_prefix", "")
+
+    cache_key = _secator_selection_cache_key(execution_mode, id_prefix)
+    if cached := cache.get(cache_key):
+        return JsonResponse(cached)
 
     try:
         template, context = get_secator_selection_template_and_context(execution_mode)
@@ -156,4 +173,6 @@ def render_secator_selection_json(request: HttpRequest) -> JsonResponse:
         return JsonResponse({"html": _INVALID_EXECUTION_MODE_HTML})
 
     html = render_to_string(template, context, request=request)
-    return JsonResponse({"html": html})
+    payload = {"html": html}
+    cache.set(cache_key, payload, _SECATOR_SELECTION_CACHE_TIMEOUT)
+    return JsonResponse(payload)

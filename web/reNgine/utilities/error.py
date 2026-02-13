@@ -57,9 +57,7 @@ def _looks_safe_for_user(msg: str) -> bool:
         return False
     if re.search(r'File\s+["\'][^"\']*\.py["\']\s*,\s*line', msg):
         return False
-    if _RE_ABSOLUTE_SYSTEM_PATH.search(msg):
-        return False
-    return True
+    return not _RE_ABSOLUTE_SYSTEM_PATH.search(msg)
 
 
 def get_safe_user_message(exc: BaseException, logger=None, context=None):

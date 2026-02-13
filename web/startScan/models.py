@@ -792,6 +792,11 @@ class Subdomain(models.Model):
 
         return results[::-1]
 
+    class Meta:
+        indexes = [
+            models.Index(fields=["scan_history_id", "content_length"], name="ss_sub_scan_content_len"),
+        ]
+
 
 class SubScan(models.Model):
     id = models.AutoField(primary_key=True)
@@ -812,6 +817,11 @@ class SubScan(models.Model):
         related_name="subscan",
         help_text="Secator runner linked to this subscan (Secator scans only)",
     )
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["scan_history_id", "status"]),
+        ]
 
     def get_completed_ago(self):
         if self.stop_scan_date:
@@ -1101,6 +1111,11 @@ class EndPoint(models.Model):
 
         return results[::-1]
 
+    class Meta:
+        indexes = [
+            models.Index(fields=["scan_history_id", "content_length"], name="ss_ep_scan_content_len"),
+        ]
+
 
 class VulnerabilityTags(models.Model):
     id = models.AutoField(primary_key=True)
@@ -1321,6 +1336,12 @@ class Vulnerability(models.Model):
         """Format references as HTML with proper styling"""
         return convert_markdown_to_html(self.references)
 
+    class Meta:
+        indexes = [
+            models.Index(fields=["scan_history_id", "cvss_score"], name="ss_vuln_scan_cvss_idx"),
+            models.Index(fields=["scan_history_id", "severity"], name="ss_vuln_scan_severity_idx"),
+        ]
+
 
 class ScanActivity(models.Model):
     id = models.AutoField(primary_key=True)
@@ -1343,6 +1364,12 @@ class ScanActivity(models.Model):
         blank=True,
         help_text="Results directory path for this activity (extracted from Secator run_opts.reports_folder)",
     )
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["scan_of_id", "status"]),
+            models.Index(fields=["scan_of_id", "runner_id", "time"]),
+        ]
 
     @property
     def celery_id(self):
@@ -1435,6 +1462,11 @@ class Command(models.Model):
     node_id = models.CharField(max_length=500, blank=True, null=True)
     ancestor_id = models.CharField(max_length=500, blank=True, null=True)
     scan_type = models.CharField(max_length=50, blank=True, null=True, help_text="Scan type from run_opts.scan_type")
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["scan_history_id", "name", "time"]),
+        ]
 
     def _get_status_field_value(self):
         """Get the raw status field value to avoid recursion."""
@@ -1810,6 +1842,17 @@ class SecatorRunner(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["scan_history_id", "runner_type"]),
+            models.Index(
+                fields=["scan_history_id", "runner_type", "-created_at"],
+                name="ss_runner_scan_type_created",
+            ),
+            models.Index(
+                fields=["scan_history_id", "-created_at"],
+                name="ss_runner_scan_created",
+            ),
+        ]
 
 
 class Certificate(models.Model):

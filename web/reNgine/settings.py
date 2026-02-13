@@ -267,6 +267,20 @@ SECATOR_ADDONS_API_HEADER_NAME = env("SECATOR_ADDONS_API_HEADER_NAME", default="
 SECATOR_ADDONS_API_WORKSPACE_GET_ENDPOINT = env("SECATOR_ADDONS_API_WORKSPACE_GET_ENDPOINT", default="")
 SECATOR_ADDONS_API_KEY = env("SECATOR_ADDONS_API_KEY", default="")
 SECATOR_ADDONS_API_FORCE_SSL = env.bool("SECATOR_ADDONS_API_FORCE_SSL", default=False)
+# When True, run runner/ScanHistory sync in the request (for tests). When False, run in a background thread.
+try:
+    SECATOR_RUNNER_UPDATE_SYNC_INLINE = bool(int(os.environ.get("SECATOR_RUNNER_UPDATE_SYNC_INLINE") or "0"))
+except (ValueError, TypeError):
+    SECATOR_RUNNER_UPDATE_SYNC_INLINE = False
+# When False, never use a background thread for runner sync; always run inline (avoids threading/connection
+# handling). Use in production if you observe concurrency issues. Requires sync to complete within hook timeout.
+try:
+    SECATOR_RUNNER_UPDATE_SYNC_BACKGROUND = bool(int(os.environ.get("SECATOR_RUNNER_UPDATE_SYNC_BACKGROUND", "1")))
+except (ValueError, TypeError):
+    SECATOR_RUNNER_UPDATE_SYNC_BACKGROUND = True
+# Max workers for the thread pool used when SECATOR_RUNNER_UPDATE_SYNC_BACKGROUND is True.
+# Limits concurrent sync tasks to avoid unbounded thread growth and DB connection pressure.
+SECATOR_RUNNER_UPDATE_SYNC_MAX_WORKERS = env.int("SECATOR_RUNNER_UPDATE_SYNC_MAX_WORKERS", default=8)
 # Python executable used inside the remote worker container to run the Secator job script.
 # Set this when Secator is installed via pipx in the container (e.g. /root/.local/share/pipx/venvs/secator/bin/python).
 SECATOR_WORKER_CONTAINER_PYTHON = env(

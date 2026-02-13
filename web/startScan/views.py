@@ -61,9 +61,9 @@ from startScan.models import (
     Vulnerability,
     VulnerabilityTags,
 )
-from startScan.secator_ajax import render_secator_selection_json
-from startScan.secator_form import build_start_secator_scan_kwargs
-from startScan.secator_profiles import build_secator_profiles_context
+from startScan.secator.ajax import render_secator_selection_json
+from startScan.secator.form import build_start_secator_scan_kwargs
+from startScan.secator.profiles import build_secator_profiles_context
 from targetApp.models import Domain, Organization
 
 
@@ -503,8 +503,11 @@ def scan_logs_view(request, slug):
 def detail_scan(request, id, slug):
     ctx = {}
 
-    # Get scan objects (prefetch runners+worker for secator_worker_name)
-    scan = get_object_or_404(ScanHistory.objects.prefetch_related("secatorrunner_set__worker"), id=id)
+    # Get scan objects (prefetch runners+worker; select_related domain to avoid N+1 for history.domain)
+    scan = get_object_or_404(
+        ScanHistory.objects.select_related("domain").prefetch_related("secatorrunner_set__worker"),
+        id=id,
+    )
     domain_id = safe_int_cast(scan.domain.id)
     scan_engines = EngineType.objects.annotate(lower_name=Lower("engine_name")).order_by("lower_name")
     recent_scans = ScanHistory.objects.filter(domain__id=domain_id)
@@ -523,16 +526,18 @@ def detail_scan(request, id, slug):
 
     # Optimize vulnerability queries with prefetch_related to avoid N+1 queries
     vulns = Vulnerability.objects.filter(scan_history=scan).prefetch_related(
-        "cve_ids", "cwe_ids", "tags", "subdomain", "endpoint", "target_domain"
+        "cve_ids", "cwe_ids", "tags", "subdomain", "endpoint", "target_domain", "scan_history"
     )
 
     vulns_tags = VulnerabilityTags.objects.filter(vuln_tags__in=vulns)
     ip_addresses = IpAddress.objects.filter(ip_addresses__in=subdomains).distinct("address")
     ip_serializer = IpSerializer(ip_addresses.all(), many=True, context={"scan_id": id, "target_id": domain_id})
     geo_isos = CountryISO.objects.filter(ipaddress__in=ip_addresses)
-    timeline_status_order = Case(
-        When(status=RUNNING_TASK, then=Value(0)),
-        When(status=RUNNING_BACKGROUND, then=Value(0)),
+
+    # Order in DB: status priority (running first, then failed, success, etc.), then runner type
+    # (scan/workflow/task), then -time. Uses indexes and avoids materializing large sets in Python.
+    status_order_case = Case(
+        When(status__in=(RUNNING_TASK, RUNNING_BACKGROUND), then=Value(0)),
         When(status=FAILED_TASK, then=Value(1)),
         When(status=SUCCESS_TASK, then=Value(2)),
         When(status=ABORTED_TASK, then=Value(3)),
@@ -540,7 +545,7 @@ def detail_scan(request, id, slug):
         default=Value(5),
         output_field=IntegerField(),
     )
-    hierarchy_order = Case(
+    type_order_case = Case(
         When(runner_id__runner_type="scan", then=Value(0)),
         When(runner_id__runner_type="workflow", then=Value(1)),
         When(runner_id__runner_type="task", then=Value(2)),
@@ -549,9 +554,12 @@ def detail_scan(request, id, slug):
     )
     scan_activity = (
         ScanActivity.objects.filter(scan_of__id=id)
-        .select_related("runner_id")
-        .annotate(sort_priority=timeline_status_order, hierarchy_order=hierarchy_order)
-        .order_by("sort_priority", "hierarchy_order", "-time")
+        .select_related("scan_of", "runner_id")
+        .annotate(
+            status_order=status_order_case,
+            type_order=type_order_case,
+        )
+        .order_by("status_order", "type_order", "-time")
     )
     cves = CveId.objects.filter(cve_ids__in=vulns)
     cwes = CweId.objects.filter(cwe_ids__in=vulns)

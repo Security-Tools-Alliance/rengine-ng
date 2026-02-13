@@ -231,7 +231,7 @@ class TestSecatorProfilesContext(BaseTestCase):
             is_active=True,
         )
 
-        from startScan.secator_profiles import build_secator_profiles_context
+        from startScan.secator.profiles import build_secator_profiles_context
 
         with self.assertRaises(ValueError):
             build_secator_profiles_context()
