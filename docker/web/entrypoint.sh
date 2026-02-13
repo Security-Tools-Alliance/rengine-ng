@@ -40,7 +40,9 @@ print_msg "Generate Django migrations files"
 poetry run -C $RENGINE_FOLDER python3 manage.py makemigrations
 
 print_msg "Migrate database"
-poetry run -C $RENGINE_FOLDER python3 manage.py migrate
+# Migrations run against PostgreSQL directly (not via PgBouncer) to avoid transaction-pool issues.
+POSTGRES_HOST="${POSTGRES_DIRECT_HOST:-db}" POSTGRES_PORT="${POSTGRES_DIRECT_PORT:-5432}" \
+  poetry run -C $RENGINE_FOLDER python3 manage.py migrate
 
 # Ensure run_scheduled_scans is in crontab if any schedule exists
 print_msg "Ensure scheduled scans cron (if any schedule exists)"

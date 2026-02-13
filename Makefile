@@ -179,8 +179,12 @@ else
 	${DOCKER_COMPOSE_FILE_CMD} exec web poetry -C ${RENGINE_FOLDER} run python3 manage.py changepassword
 endif
 
-migrate:		## Apply Django migrations
-	${DOCKER_COMPOSE_FILE_CMD} exec web poetry -C ${RENGINE_FOLDER} run python3 manage.py migrate
+# Direct DB host/port for migrate (bypass PgBouncer to avoid transaction-pool issues).
+export POSTGRES_DIRECT_HOST ?= db
+export POSTGRES_DIRECT_PORT ?= 5432
+
+migrate:		## Apply Django migrations (connects to PostgreSQL directly, not via PgBouncer).
+	${DOCKER_COMPOSE_FILE_CMD} exec -e POSTGRES_HOST=$(POSTGRES_DIRECT_HOST) -e POSTGRES_PORT=$(POSTGRES_DIRECT_PORT) web poetry -C ${RENGINE_FOLDER} run python3 manage.py migrate
 
 down:			## Down all services and remove containers.
 	${DOCKER_COMPOSE_FILE_CMD} down

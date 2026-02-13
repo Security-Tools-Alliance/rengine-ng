@@ -99,18 +99,37 @@ SESSION_COOKIE_HTTPONLY = True  # Prevent JavaScript access to session cookie
 SESSION_COOKIE_SAMESITE = "Lax"  # Session protection while allowing some cross-site requests
 
 # Databases
+USE_PGBOUNCER = env.bool("USE_PGBOUNCER", default=True)
+
+_db_host = env("POSTGRES_HOST")
+_db_port = str(env("POSTGRES_PORT"))
+if USE_PGBOUNCER:
+    try:
+        import psycopg2  # noqa: PLC0415
+
+        psycopg2.connect(
+            dbname=env("POSTGRES_DB"),
+            user=env("POSTGRES_USER"),
+            password=env("POSTGRES_PASSWORD"),
+            host=_db_host,
+            port=_db_port,
+            connect_timeout=2,
+        ).close()
+    except Exception:
+        _db_host = env("POSTGRES_DIRECT_HOST", default="db")
+        _db_port = str(env("POSTGRES_DIRECT_PORT", default="5432"))
+
+# DISABLE_SERVER_SIDE_CURSORS must be at top level; in OPTIONS it would be passed to psycopg2.connect() and cause an error.
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
         "NAME": env("POSTGRES_DB"),
         "USER": env("POSTGRES_USER"),
         "PASSWORD": env("POSTGRES_PASSWORD"),
-        "HOST": env("POSTGRES_HOST"),
-        "PORT": env("POSTGRES_PORT"),
-        # 'OPTIONS':{
-        #     'sslmode':'verify-full',
-        #     'sslrootcert': os.path.join(BASE_DIR, 'ca-certificate.crt')
-        # }
+        "HOST": _db_host,
+        "PORT": _db_port,
+        "CONN_HEALTH_CHECKS": USE_PGBOUNCER,
+        "DISABLE_SERVER_SIDE_CURSORS": USE_PGBOUNCER,
     }
 }
 
