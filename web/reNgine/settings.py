@@ -1,9 +1,11 @@
 import mimetypes
 import os
 from pathlib import Path
+import sys
 
 import environ
 
+from reNgine.core.db import resolve_db_host_port
 from reNgine.init import first_run
 
 
@@ -100,24 +102,10 @@ SESSION_COOKIE_SAMESITE = "Lax"  # Session protection while allowing some cross-
 
 # Databases
 USE_PGBOUNCER = env.bool("USE_PGBOUNCER", default=True)
+RENGINE_DB_PROBE_AT_STARTUP = env.bool("RENGINE_DB_PROBE_AT_STARTUP", default=False)
 
-_db_host = env("POSTGRES_HOST")
-_db_port = str(env("POSTGRES_PORT"))
-if USE_PGBOUNCER:
-    try:
-        import psycopg2  # noqa: PLC0415
 
-        psycopg2.connect(
-            dbname=env("POSTGRES_DB"),
-            user=env("POSTGRES_USER"),
-            password=env("POSTGRES_PASSWORD"),
-            host=_db_host,
-            port=_db_port,
-            connect_timeout=2,
-        ).close()
-    except Exception:
-        _db_host = env("POSTGRES_DIRECT_HOST", default="db")
-        _db_port = str(env("POSTGRES_DIRECT_PORT", default="5432"))
+_db_host, _db_port = resolve_db_host_port(env, USE_PGBOUNCER, RENGINE_DB_PROBE_AT_STARTUP, sys.argv)
 
 # DISABLE_SERVER_SIDE_CURSORS must be at top level; in OPTIONS it would be passed to psycopg2.connect() and cause an error.
 DATABASES = {

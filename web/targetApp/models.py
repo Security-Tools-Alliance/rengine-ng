@@ -140,6 +140,11 @@ class Organization(models.Model):
 
 
 class Domain(models.Model):
+    # Name of Organization.domains reverse relation; used by get_organization() and
+    # prefetch_related paths (e.g. "domain__domains"). Do not change without updating
+    # Organization.domains and any prefetch that uses this.
+    ORGANIZATIONS_REVERSE_RELATION = "domains"
+
     id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=300, unique=True)
     h1_team_handle = models.CharField(max_length=100, blank=True, null=True)
@@ -154,7 +159,8 @@ class Domain(models.Model):
     custom_dns_servers = models.CharField(max_length=500, blank=True, null=True)
 
     def get_organization(self):
-        return Organization.objects.filter(domains__id=self.id)
+        # Use the reverse M2M manager; Django uses the prefetch cache when present.
+        return getattr(self, self.ORGANIZATIONS_REVERSE_RELATION).all()
 
     def get_recent_scan_id(self):
         scan_history = apps.get_model("startScan.ScanHistory")

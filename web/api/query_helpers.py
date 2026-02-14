@@ -9,16 +9,30 @@ from typing import Optional
 
 from django.db.models import Count, Max, Prefetch, Q
 
-from reNgine.definitions import FAILED_TASK, RUNNING_TASK, SUCCESS_TASK
+from reNgine.definitions import (
+    FAILED_TASK,
+    RUNNING_TASK,
+    SCAN_STATUS_PENDING,
+    SCAN_STATUSES_CURRENT,
+    SCAN_STATUSES_RECENTLY_COMPLETED,
+    SUCCESS_TASK,
+)
 from reNgine.utilities.subdomain import get_interesting_subdomains
 
 
 def get_scan_status_querysets(
     project_slug: str,
     max_running_tasks: int = 30,
+    recently_completed_scans_limit: int = 10,
+    recently_completed_tasks_limit: int = 15,
 ) -> dict:
     """
     Build all querysets needed for the project dashboard scan/task status.
+
+    Recently completed scans = scan_status in SCAN_STATUSES_RECENTLY_COMPLETED (Queued, Completed, Failed).
+    Current scans = scan_status in SCAN_STATUSES_CURRENT (Running, Running Background).
+    Pending scans = scan_status SCAN_STATUS_PENDING. Limits control dashboard list size.
+    Status groupings are defined in reNgine.definitions; use those or is_scan_status_* helpers elsewhere.
 
     Returns a dict with keys: pending_scans, current_scans, recently_completed_scans,
     pending_tasks, current_tasks, recently_completed_tasks (each a queryset or list).
@@ -35,21 +49,21 @@ def get_scan_status_querysets(
         )
     )
     recently_completed_scans = base_scan.order_by("-start_scan_date").filter(
-        Q(scan_status=0) | Q(scan_status=2) | Q(scan_status=3)
-    )[:10]
-    current_scans = base_scan.order_by("-start_scan_date").filter(Q(scan_status=1) | Q(scan_status=4))
-    pending_scans = base_scan.filter(scan_status=-1)
+        scan_status__in=SCAN_STATUSES_RECENTLY_COMPLETED
+    )[:recently_completed_scans_limit]
+    current_scans = base_scan.order_by("-start_scan_date").filter(scan_status__in=SCAN_STATUSES_CURRENT)
+    pending_scans = base_scan.order_by("-start_scan_date").filter(scan_status=SCAN_STATUS_PENDING)
 
     activity_base = ScanActivity.objects.filter(scan_of__domain__project__slug=project_slug).select_related(
         "scan_of", "scan_of__domain"
     )
     recently_completed_tasks = activity_base.order_by("-time", "-pk").filter(
         Q(status=FAILED_TASK) | Q(status=SUCCESS_TASK)
-    )[:15]
+    )[:recently_completed_tasks_limit]
     current_tasks = activity_base.order_by("-time", "-pk").filter(status=RUNNING_TASK)[:max_running_tasks]
     pending_tasks = (
         SubScan.objects.filter(scan_history__domain__project__slug=project_slug)
-        .filter(status=-1)
+        .filter(status=SCAN_STATUS_PENDING)
         .select_related("scan_history", "scan_history__domain", "subdomain", "engine", "secator_runner")
     )
 
@@ -75,6 +89,9 @@ def build_subdomain_datatable_queryset(
 ):
     """
     Build the Subdomain datatable queryset and optional interesting subdomain names.
+
+    Annotates: endpoint_count; info_count, low_count, medium_count, high_count, critical_count
+    (vulnerability counts by severity 0-4); vuln_count, subscan_count, todos_count (undone only).
 
     Returns (queryset, datatable_interesting_names).
     datatable_interesting_names is a set of subdomain names when scan_id is set, else None.

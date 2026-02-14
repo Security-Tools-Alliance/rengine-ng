@@ -25,13 +25,13 @@ from reNgine.core.data import get_ip_info, get_ips_from_cidr_range
 from reNgine.core.path import resolve_results_dir_under_base, safe_rmtree
 from reNgine.core.validators import is_valid_cidr
 from reNgine.definitions import (
-    ABORTED_TASK,
-    FAILED_TASK,
     FOUR_OH_FOUR_URL,
     PERM_MODIFY_TARGETS,
-    RUNNING_BACKGROUND,
-    RUNNING_TASK,
-    SUCCESS_TASK,
+    SCAN_STATUS_COMPLETED,
+    SCAN_STATUS_FAILED,
+    SCAN_STATUS_QUEUED,
+    SCAN_STATUS_RUNNING,
+    SCAN_STATUS_RUNNING_BACKGROUND,
 )
 from reNgine.services.repositories import EndpointRepository
 from reNgine.utilities.dns import get_reverse_dns
@@ -941,14 +941,14 @@ def target_summary(request, slug, id):
     target = get_object_or_404(Domain, id=id)
     context["target"] = target
 
-    # Scan History: running first, then error, success, aborted/skipped; within group by most recent first
+    # Scan History: running first, then queued, completed, failed; within group by most recent first
     scan = ScanHistory.objects.filter(domain__id=id)
     scan_status_order = Case(
-        When(scan_status=RUNNING_TASK, then=Value(0)),
-        When(scan_status=RUNNING_BACKGROUND, then=Value(0)),
-        When(scan_status=FAILED_TASK, then=Value(1)),
-        When(scan_status=SUCCESS_TASK, then=Value(2)),
-        When(scan_status=ABORTED_TASK, then=Value(3)),
+        When(scan_status=SCAN_STATUS_RUNNING, then=Value(0)),
+        When(scan_status=SCAN_STATUS_RUNNING_BACKGROUND, then=Value(0)),
+        When(scan_status=SCAN_STATUS_QUEUED, then=Value(1)),
+        When(scan_status=SCAN_STATUS_COMPLETED, then=Value(2)),
+        When(scan_status=SCAN_STATUS_FAILED, then=Value(3)),
         default=Value(4),
         output_field=IntegerField(),
     )

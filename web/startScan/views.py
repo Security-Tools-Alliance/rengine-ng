@@ -406,10 +406,23 @@ def build_command_hierarchy(commands):
 
 
 def scan_history(request, slug):
-    host = ScanHistory.objects.filter(domain__project__slug=slug).order_by("-start_scan_date")
-
-    # Preload scan_type and SecatorRunner (with worker) to avoid N+1 when accessing scan_name / secator_worker_name
-    host = host.select_related("scan_type").prefetch_related("secatorrunner_set__worker")
+    host = (
+        ScanHistory.objects.filter(domain__project__slug=slug)
+        .order_by("-start_scan_date")
+        .select_related("domain", "initiated_by", "scan_type")
+        .prefetch_related(
+            "secatorrunner_set__worker",
+            "domain__domains",
+        )
+        .annotate(
+            subdomain_count=Count("subdomain", distinct=True),
+            endpoint_count=Count("endpoint", distinct=True),
+            vuln_count=Count("vulnerability", distinct=True),
+            vuln_critical_count=Count("vulnerability", filter=Q(vulnerability__severity=4), distinct=True),
+            vuln_high_count=Count("vulnerability", filter=Q(vulnerability__severity=3), distinct=True),
+            vuln_medium_count=Count("vulnerability", filter=Q(vulnerability__severity=2), distinct=True),
+        )
+    )
 
     context = {
         "scan_history_active": "active",

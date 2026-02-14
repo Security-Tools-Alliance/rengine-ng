@@ -69,6 +69,8 @@ class ScanHistory(models.Model):
         return self.domain.name
 
     def get_subdomain_count(self):
+        if hasattr(self, "subdomain_count"):
+            return self.subdomain_count
         return Subdomain.objects.filter(scan_history__id=self.id).count()
 
     def get_subdomain_change_count(self):
@@ -93,9 +95,13 @@ class ScanHistory(models.Model):
         return [new_subdomains, removed_subdomains]
 
     def get_endpoint_count(self):
+        if hasattr(self, "endpoint_count"):
+            return self.endpoint_count
         return EndPoint.objects.filter(scan_history__id=self.id).count()
 
     def get_vulnerability_count(self):
+        if hasattr(self, "vuln_count"):
+            return self.vuln_count
         return Vulnerability.objects.filter(scan_history__id=self.id).count()
 
     def get_unknown_vulnerability_count(self):
@@ -108,12 +114,18 @@ class ScanHistory(models.Model):
         return Vulnerability.objects.filter(scan_history__id=self.id).filter(severity=1).count()
 
     def get_medium_vulnerability_count(self):
+        if hasattr(self, "vuln_medium_count"):
+            return self.vuln_medium_count
         return Vulnerability.objects.filter(scan_history__id=self.id).filter(severity=2).count()
 
     def get_high_vulnerability_count(self):
+        if hasattr(self, "vuln_high_count"):
+            return self.vuln_high_count
         return Vulnerability.objects.filter(scan_history__id=self.id).filter(severity=3).count()
 
     def get_critical_vulnerability_count(self):
+        if hasattr(self, "vuln_critical_count"):
+            return self.vuln_critical_count
         return Vulnerability.objects.filter(scan_history__id=self.id).filter(severity=4).count()
 
     def get_progress(self):
@@ -206,10 +218,10 @@ class ScanHistory(models.Model):
 
     def get_status_display(self):
         """Get human-readable status display."""
-        from reNgine.definitions import SCAN_STATUS_MAP
+        from reNgine.definitions import SCAN_STATUS_DISPLAY_MAP
 
         status_code = self.status_code
-        return SCAN_STATUS_MAP.get(status_code, "UNKNOWN")
+        return SCAN_STATUS_DISPLAY_MAP.get(status_code, "UNKNOWN")
 
     def get_current_task(self):
         """Get the current running task name, formatted for display."""
@@ -443,13 +455,21 @@ class ScanHistory(models.Model):
     @classmethod
     def get_all_counts(cls, queryset):
         """Aggregate total scans and status distribution"""
+        from reNgine.definitions import (
+            SCAN_STATUS_COMPLETED,
+            SCAN_STATUS_FAILED,
+            SCAN_STATUS_QUEUED,
+            SCAN_STATUS_RUNNING,
+            SCAN_STATUS_RUNNING_BACKGROUND,
+        )
+
         return queryset.aggregate(
             total=Count("id"),
-            pending=Count("id", filter=models.Q(scan_status=0)),
-            running=Count("id", filter=models.Q(scan_status=1)),
-            completed=Count("id", filter=models.Q(scan_status=2)),
-            failed=Count("id", filter=models.Q(scan_status=3)),
-            running_background=Count("id", filter=models.Q(scan_status=4)),
+            pending=Count("id", filter=models.Q(scan_status=SCAN_STATUS_QUEUED)),
+            running=Count("id", filter=models.Q(scan_status=SCAN_STATUS_RUNNING)),
+            completed=Count("id", filter=models.Q(scan_status=SCAN_STATUS_COMPLETED)),
+            failed=Count("id", filter=models.Q(scan_status=SCAN_STATUS_FAILED)),
+            running_background=Count("id", filter=models.Q(scan_status=SCAN_STATUS_RUNNING_BACKGROUND)),
         )
 
     @classmethod
@@ -964,10 +984,10 @@ class SubScan(models.Model):
 
     def get_status_display(self):
         """Get human-readable status display."""
-        from reNgine.definitions import SCAN_STATUS_MAP
+        from reNgine.definitions import TASK_STATUS_MAP
 
         status_code = self.status_code
-        return SCAN_STATUS_MAP.get(status_code, "UNKNOWN")
+        return TASK_STATUS_MAP.get(status_code, "UNKNOWN")
 
     @classmethod
     def get_all_counts(cls, queryset):
@@ -1431,10 +1451,10 @@ class ScanActivity(models.Model):
 
     def get_status_display(self):
         """Get human-readable status display."""
-        from reNgine.definitions import SCAN_STATUS_MAP
+        from reNgine.definitions import TASK_STATUS_MAP
 
         status_code = self.status_code
-        return SCAN_STATUS_MAP.get(status_code, "UNKNOWN")
+        return TASK_STATUS_MAP.get(status_code, "UNKNOWN")
 
     def __str__(self):
         return str(self.title)
