@@ -4611,14 +4611,10 @@ class SecatorRunnerUpdate(SecatorAPIBase):
                     {"id": runner_id},
                 )
 
-                # Sync with ScanHistory: inline when SECATOR_RUNNER_UPDATE_SYNC_INLINE (e.g. tests) or when
-                # SECATOR_RUNNER_UPDATE_SYNC_BACKGROUND is False (production guard); otherwise run in bounded pool.
-                # Pool limits concurrent syncs (SECATOR_RUNNER_UPDATE_SYNC_MAX_WORKERS) to avoid unbounded threads.
+                # Sync with ScanHistory: inline when SECATOR_RUNNER_UPDATE_SYNC_BACKGROUND is False (e.g. tests);
+                # otherwise run in bounded pool. Pool limits concurrent syncs (SECATOR_RUNNER_UPDATE_SYNC_MAX_WORKERS).
                 if secator_runner.scan_history_id:
-                    if (
-                        django_settings.SECATOR_RUNNER_UPDATE_SYNC_INLINE
-                        or not django_settings.SECATOR_RUNNER_UPDATE_SYNC_BACKGROUND
-                    ):
+                    if not django_settings.SECATOR_RUNNER_UPDATE_SYNC_BACKGROUND:
                         self._sync_runner_with_scan_history(secator_runner, runner_data)
                     else:
                         secator_submit_sync(secator_runner.id)

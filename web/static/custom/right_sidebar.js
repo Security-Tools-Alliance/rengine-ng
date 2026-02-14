@@ -28,7 +28,7 @@ function getScanStatusSidebar(endpoint_url, endpoint_stop_scan_url, endpoint_sto
     if (slugFromDom) {
       finalProject = slugFromDom;
     } else {
-      const pathname = window.location.pathname;
+      const {pathname} = window.location;
       const scanMatch = pathname.match(/\/scan\/([^\/]+)(?:\/|$)/);
       const targetMatch = pathname.match(/\/target\/([^\/]+)(?:\/|$)/);
       finalProject = (scanMatch && scanMatch[1]) || (targetMatch && targetMatch[1]) || null;
@@ -57,8 +57,7 @@ function getScanStatusSidebar(endpoint_url, endpoint_stop_scan_url, endpoint_sto
       $bar.find('#currently_scanning').html('<div class="alert alert-warning" role="alert">Unable to load scan status.</div>');
       return;
     }
-    const scans = data.scans;
-    const tasks = data.tasks;
+    const {scans, tasks} = data;
 
     // main scans
     $bar.find('#currently_scanning').empty();
@@ -85,8 +84,17 @@ function getScanStatusSidebar(endpoint_url, endpoint_stop_scan_url, endpoint_sto
       $bar.find('#upcoming_scans').html('<div class="alert alert-info" role="alert">No upcoming Scans.</div>');
     }
 
+    const scanningCount = scans.scanning.length;
+    const $topCounter = $('#current_scan_counter');
+    const $topCountLabel = $('#current_scan_count');
+    if ($topCounter.length) {
+      $topCounter.text(scanningCount);
+    }
+    if ($topCountLabel.length) {
+      $topCountLabel.text(scanningCount > 0 ? scanningCount + ' Scans Currently Running' : '');
+    }
+
     if (scans.scanning.length > 0){
-      $bar.find('#current_scan_counter').html(scans.scanning.length);
       $bar.find('#current_scan_count').html(scans.scanning.length + ' Scans Currently Running');
       for (var scan in scans.scanning) {
         const scan_object = scans.scanning[scan];

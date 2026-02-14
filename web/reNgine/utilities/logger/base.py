@@ -137,9 +137,7 @@ class BaseLogger(ABC):
         Returns:
             str: Formatted message with colors
         """
-        prefix_colored = self._colorize(prefix, self._get_prefix_color(prefix))
-        action_colored = self._colorize(action, self.COLOR_VIOLET)  # DEBUG level color
-        return f"{prefix_colored} {action_colored} | {message}"
+        return self._format_line(prefix, action, message, self.COLOR_VIOLET)
 
     def _format_info_message(self, prefix: str, action: str, message: str) -> str:
         """
@@ -153,9 +151,23 @@ class BaseLogger(ABC):
         Returns:
             str: Formatted message with colors
         """
+        return self._format_line(prefix, action, message, self.COLOR_BRIGHT_BLUE)
+
+    def _format_line(self, prefix: str, action: str, message: str, action_color: str) -> str:
+        """
+        Format a single line with prefix, action and message (for use by ModuleLogger.log_line).
+
+        Args:
+            prefix: Log prefix (e.g. section name)
+            action: Action label
+            message: Message text
+            action_color: ANSI color for the action
+
+        Returns:
+            str: Formatted line with colors
+        """
         prefix_colored = self._colorize(prefix, self._get_prefix_color(prefix))
-        # All INFO level actions (CREATE, UPDATE, etc.) are blue
-        action_colored = self._colorize(action, self.COLOR_BRIGHT_BLUE)
+        action_colored = self._colorize(action, action_color)
         return f"{prefix_colored} {action_colored} | {message}"
 
     def _format_info_line(

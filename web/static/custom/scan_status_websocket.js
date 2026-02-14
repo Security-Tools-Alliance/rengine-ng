@@ -172,8 +172,18 @@ const connectScanStatusWebSocket = function(scanId, projectSlug, options) {
         
         socket.onopen = function(event) {
             scanStatusReconnectAttemptsMap.set(key, 0);
-            // Clear connecting flag
             scanStatusConnectingMap.set(key, false);
+            // Refresh sidebar once so status is current (e.g. if BACKGROUND SYNC completed while page was loading)
+            if (key.startsWith('project-') && typeof getScanStatusSidebar === 'function') {
+                const projectSlug = key.replace(/^project-/, '');
+                const endpointUrl = window.scanStatusApiUrls?.scanStatusUrl;
+                const stopScanUrl = window.scanStatusApiUrls?.stopScanUrl;
+                const stopActivityUrl = window.scanStatusApiUrls?.stopActivityUrl;
+                const fetchSubscanUrl = window.scanStatusApiUrls?.fetchSubscanUrl;
+                if (endpointUrl && stopScanUrl && stopActivityUrl && fetchSubscanUrl) {
+                    getScanStatusSidebar(endpointUrl, stopScanUrl, stopActivityUrl, fetchSubscanUrl, { project: projectSlug, reload: false });
+                }
+            }
         };
         
         socket.onmessage = function(event) {
@@ -754,13 +764,11 @@ const updateSubscanRowInTable = function(table, data) {
             }
         });
 
-        if (hasNewSubscan) {
-            if (!window._subscanTableReloadTimeout) {
-                window._subscanTableReloadTimeout = setTimeout(function() {
-                    window.location.reload();
-                    window._subscanTableReloadTimeout = null;
-                }, 500);
-            }
+        if (hasNewSubscan && !window._subscanTableReloadTimeout) {
+              window._subscanTableReloadTimeout = setTimeout(function() {
+                  window.location.reload();
+                  window._subscanTableReloadTimeout = null;
+              }, 500);
         }
     } catch (e) {
         console.error('Error updating subscan row in table:', e);

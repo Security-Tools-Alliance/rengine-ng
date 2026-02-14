@@ -127,7 +127,7 @@ class TestSecatorRunnerUpdate(BaseTestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data["status"])
 
-    @override_settings(SECATOR_RUNNER_UPDATE_SYNC_INLINE=True)
+    @override_settings(SECATOR_RUNNER_UPDATE_SYNC_BACKGROUND=False)
     def test_update_runner_terminal_status_sets_subscan_stop_scan_date(self):
         """When runner update has terminal status (SUCCESS), linked subscan gets stop_scan_date and status."""
         scan_history = self.data_generator.scan_history

@@ -3,7 +3,6 @@ WebSocket utility functions for sending scan status updates.
 """
 
 from datetime import datetime
-import logging
 import re
 from typing import Optional
 
@@ -21,6 +20,7 @@ from reNgine.definitions import (
     SKIPPED_TASK,
     SUCCESS_TASK,
 )
+from reNgine.utilities.logger import get_module_logger
 from reNgine.utilities.worker_ws_groups import worker_deploy_group, worker_refresh_group
 from startScan.models import (
     Command,
@@ -34,7 +34,7 @@ from startScan.models import (
 )
 
 
-logger = logging.getLogger("websocket")
+logger = get_module_logger(__name__)
 
 # Must match api.consumers.CHANNEL_NAME_PATTERN so group names align
 _CHANNEL_NAME_PATTERN = re.compile(r"[^a-zA-Z0-9\-\.]")
@@ -376,6 +376,10 @@ def send_scan_status_update(scan_history_id: int, scan_status=None, progress=Non
             message.get("status"),
             message.get("progress"),
             message.get("current_task"),
+        )
+        logger.info(
+            "WebSocket group_send for scan %s (scan-status and project group)",
+            scan_history_id,
         )
 
         # Send to scan-specific group

@@ -32,6 +32,10 @@ class ModuleLogger(BaseLogger):
     Uses the underlying logging.Logger so Django LOGGING config (reNgine.settings)
     applies. Pass the module's __name__ as the logger name so the "reNgine" or
     root logger config is used; see module docstring for usage notes.
+
+    Use log_line() for section-style output (prefix + action + message) with colors.
+    When the logger is configured with the "default" formatter (%(message)s), only
+    the formatted line is printed (no module name), so sections stay clearly visible.
     """
 
     def __init__(self, logger_name: str) -> None:
@@ -39,6 +43,44 @@ class ModuleLogger(BaseLogger):
 
     def _get_prefix_color(self, prefix: str) -> str:
         return self.COLOR_BLUE
+
+    def log_line(
+        self,
+        prefix: str,
+        action: str,
+        message: str,
+        level: str = "info",
+        exc_info: bool = False,
+    ) -> None:
+        """
+        Log a section-style line: prefix + action + message with colors.
+
+        Use when the logger handler uses formatter "default" (%(message)s) so
+        only this line is printed and sections are clearly visible in logs.
+
+        Args:
+            prefix: Section prefix (e.g. "[SECATOR BACKGROUND SYNC]")
+            action: Action label (e.g. "BACKGROUND_SYNC", "POOL")
+            message: Message text
+            level: "debug", "info", "warning", or "error"
+            exc_info: If True, append exception traceback (honored for all levels).
+        """
+        action_colors = {
+            "debug": self.COLOR_VIOLET,
+            "info": self.COLOR_BRIGHT_BLUE,
+            "warning": self.COLOR_YELLOW,
+            "error": self.COLOR_RED,
+        }
+        color = action_colors.get(level, self.COLOR_BRIGHT_BLUE)
+        formatted = self._format_line(prefix, action, message, color)
+        if level == "debug":
+            self._logger.debug(formatted, exc_info=exc_info)
+        elif level == "error":
+            self._logger.error(formatted, exc_info=exc_info)
+        elif level == "warning":
+            self._logger.warning(formatted, exc_info=exc_info)
+        else:
+            self._logger.info(formatted, exc_info=exc_info)
 
     def debug(self, msg: str, *args: Any, **kwargs: Any) -> None:
         self._logger.debug(msg, *args, **kwargs)

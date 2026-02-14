@@ -2,7 +2,16 @@
 Unit tests for api.query_helpers (get_scan_status_querysets, build_subdomain_datatable_queryset).
 """
 
+from django.utils import timezone
+
 from api.query_helpers import build_subdomain_datatable_queryset, get_scan_status_querysets
+from reNgine.definitions import (
+    SCAN_STATUS_COMPLETED,
+    SCAN_STATUS_FAILED,
+    SCAN_STATUS_PENDING,
+    SCAN_STATUS_RUNNING,
+)
+from startScan.models import ScanHistory
 from utils.test_base import BaseTestCase
 
 
@@ -35,6 +44,66 @@ class GetScanStatusQuerysetsTestCase(BaseTestCase):
         self.assertLessEqual(len(list(result["recently_completed_scans"])), 3)
         self.assertLessEqual(len(list(result["recently_completed_tasks"])), 7)
         self.assertLessEqual(len(list(result["current_tasks"])), 5)
+
+    def test_pending_scan_in_pending_scans_bucket(self):
+        """Scan with scan_status=SCAN_STATUS_PENDING appears in pending_scans."""
+        slug = self.data_generator.project.slug
+        domain = self.data_generator.domain
+        scan = ScanHistory.objects.create(
+            domain=domain,
+            start_scan_date=timezone.now(),
+            scan_status=SCAN_STATUS_PENDING,
+            is_legacy_scan=False,
+            tasks=[],
+        )
+        result = get_scan_status_querysets(slug)
+        pending_ids = [s.id for s in result["pending_scans"]]
+        self.assertIn(scan.id, pending_ids)
+
+    def test_running_scan_in_current_scans_bucket(self):
+        """Scan with scan_status=SCAN_STATUS_RUNNING appears in current_scans."""
+        slug = self.data_generator.project.slug
+        domain = self.data_generator.domain
+        scan = ScanHistory.objects.create(
+            domain=domain,
+            start_scan_date=timezone.now(),
+            scan_status=SCAN_STATUS_RUNNING,
+            is_legacy_scan=False,
+            tasks=[],
+        )
+        result = get_scan_status_querysets(slug)
+        current_ids = [s.id for s in result["current_scans"]]
+        self.assertIn(scan.id, current_ids)
+
+    def test_completed_scan_in_recently_completed_bucket(self):
+        """Scan with scan_status=SCAN_STATUS_COMPLETED appears in recently_completed_scans."""
+        slug = self.data_generator.project.slug
+        domain = self.data_generator.domain
+        scan = ScanHistory.objects.create(
+            domain=domain,
+            start_scan_date=timezone.now(),
+            scan_status=SCAN_STATUS_COMPLETED,
+            is_legacy_scan=False,
+            tasks=[],
+        )
+        result = get_scan_status_querysets(slug, recently_completed_scans_limit=20)
+        completed_ids = [s.id for s in result["recently_completed_scans"]]
+        self.assertIn(scan.id, completed_ids)
+
+    def test_failed_scan_in_recently_completed_bucket(self):
+        """Scan with scan_status=SCAN_STATUS_FAILED appears in recently_completed_scans."""
+        slug = self.data_generator.project.slug
+        domain = self.data_generator.domain
+        scan = ScanHistory.objects.create(
+            domain=domain,
+            start_scan_date=timezone.now(),
+            scan_status=SCAN_STATUS_FAILED,
+            is_legacy_scan=False,
+            tasks=[],
+        )
+        result = get_scan_status_querysets(slug, recently_completed_scans_limit=20)
+        completed_ids = [s.id for s in result["recently_completed_scans"]]
+        self.assertIn(scan.id, completed_ids)
 
 
 class BuildSubdomainDatatableQuerysetTestCase(BaseTestCase):

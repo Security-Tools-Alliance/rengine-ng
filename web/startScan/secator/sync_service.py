@@ -25,15 +25,35 @@ multi-worker deployments (e.g. uvicorn --workers N).
 
 import atexit
 from concurrent.futures import ThreadPoolExecutor
-import logging
 import threading
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
+
+
+if TYPE_CHECKING:
+    from concurrent.futures import Future
 
 from django.conf import settings
+from django.db import close_old_connections as django_close_old_connections
 from django.db import connection
 
+from reNgine.utilities.logger import get_module_logger
 
-logger = logging.getLogger(__name__)
+
+PREFIX_SYNC = "[SECATOR BACKGROUND SYNC]"
+logger = get_module_logger(__name__)
+
+
+def _log_future_exception(future: "Future[None]", runner_id: int) -> None:
+    """Done callback: log any exception from the sync worker so it appears in make logs."""
+    exc = future.exception()
+    if exc is not None:
+        logger.log_line(
+            PREFIX_SYNC,
+            "BACKGROUND_SYNC",
+            f"worker failed for runner_id={runner_id}: {exc}",
+            level="error",
+            exc_info=True,
+        )
 
 
 def _run_sync_worker(secator_runner_id: int) -> None:
@@ -48,29 +68,61 @@ def _run_sync_worker(secator_runner_id: int) -> None:
     from startScan.models import SecatorRunner
     from startScan.secator.runner_sync import sync_runner_with_scan_history
 
-    connection.close_old_connections()
+    logger.log_line(
+        PREFIX_SYNC,
+        "BACKGROUND_SYNC",
+        f"worker started for runner_id={secator_runner_id}",
+        level="debug",
+    )
     log = get_secator_api_logger()
+    try:
+        django_close_old_connections()
+    except Exception as e:
+        logger.log_line(
+            PREFIX_SYNC,
+            "BACKGROUND_SYNC",
+            f"close_old_connections failed for runner_id={secator_runner_id} (continuing): {e}",
+            level="warning",
+        )
     try:
         secator_runner = SecatorRunner.objects.select_related("scan_history").get(id=secator_runner_id)
     except SecatorRunner.DoesNotExist:
-        log.log_warning(
-            f"Runner {secator_runner_id} not found for background sync",
-            {
-                "prefix": log.PREFIX_SYNC,
-                "action": "BACKGROUND_SYNC",
-                "id": str(secator_runner_id),
-            },
+        logger.log_line(
+            PREFIX_SYNC,
+            "BACKGROUND_SYNC",
+            f"runner {secator_runner_id} not found for background sync",
+            level="warning",
         )
         return
     runner_data = secator_runner.runner_data or {}
     if not secator_runner.scan_history_id:
+        logger.log_line(
+            PREFIX_SYNC,
+            "BACKGROUND_SYNC",
+            f"skipping: scan_history_id is None for runner_id={secator_runner_id}",
+            level="warning",
+        )
         return
+    logger.log_line(
+        PREFIX_SYNC,
+        "BACKGROUND_SYNC",
+        f"starting for runner_id={secator_runner_id} scan_history_id={secator_runner.scan_history_id}",
+        level="debug",
+    )
     try:
         sync_runner_with_scan_history(secator_runner, runner_data, log)
+        logger.log_line(
+            PREFIX_SYNC,
+            "BACKGROUND_SYNC",
+            f"completed for runner_id={secator_runner_id}",
+            level="debug",
+        )
     except Exception as e:
-        log.log_error(
-            e,
-            {"prefix": log.PREFIX_SYNC, "action": "BACKGROUND_SYNC", "id": str(secator_runner_id)},
+        logger.log_line(
+            PREFIX_SYNC,
+            "BACKGROUND_SYNC",
+            f"sync failed for runner_id={secator_runner_id}: {e}",
+            level="error",
             exc_info=True,
         )
     finally:
@@ -100,7 +152,12 @@ class _SecatorSyncPool:
                 max_workers=max_workers,
                 thread_name_prefix="secator_sync",
             )
-            logger.debug("Secator sync executor started with max_workers=%s", max_workers)
+            logger.log_line(
+                PREFIX_SYNC,
+                "POOL",
+                f"executor started with max_workers={max_workers}",
+                level="debug",
+            )
         return self._executor
 
     def get_executor(self) -> ThreadPoolExecutor:
@@ -118,7 +175,10 @@ class _SecatorSyncPool:
         """
         with self._lock:
             executor = self._get_or_create_executor_unlocked()
-        executor.submit(_run_sync_worker, secator_runner_id)
+        future = executor.submit(_run_sync_worker, secator_runner_id)
+        future.add_done_callback(
+            lambda f: _log_future_exception(f, secator_runner_id),
+        )
 
     def shutdown_pool(self, wait: bool = False) -> None:
         """
@@ -136,7 +196,12 @@ class _SecatorSyncPool:
             if self._executor is not None:
                 self._executor.shutdown(wait=wait)
                 self._executor = None
-                logger.debug("Secator sync executor shut down (wait=%s)", wait)
+                logger.log_line(
+                    PREFIX_SYNC,
+                    "POOL",
+                    f"executor shut down (wait={wait})",
+                    level="debug",
+                )
 
 
 # Private: single process-wide pool. Use get_executor/submit_sync/shutdown_pool only.

@@ -3,8 +3,15 @@ Unit tests for startScan.secator.sync_service (pool lifecycle, submit_sync, shut
 """
 
 from concurrent.futures import ThreadPoolExecutor
+import time
+from unittest.mock import patch
 
-from startScan.secator.sync_service import get_executor, shutdown_pool, submit_sync
+from startScan.secator.sync_service import (
+    PREFIX_SYNC,
+    get_executor,
+    shutdown_pool,
+    submit_sync,
+)
 from utils.test_base import BaseTestCase
 
 
@@ -40,3 +47,28 @@ class SecatorSyncServiceTestCase(BaseTestCase):
     def test_submit_sync_does_not_raise(self):
         """submit_sync(id) does not raise (worker may log and return for non-existent runner)."""
         submit_sync(999999)
+
+    def test_submit_sync_exception_in_worker_is_logged_via_callback(self):
+        """When _run_sync_worker raises, the done callback logs via log_line and process does not crash."""
+        runner_id = 12345
+        with (
+            patch(
+                "startScan.secator.sync_service._run_sync_worker",
+                side_effect=ValueError("expected test error"),
+            ),
+            patch("startScan.secator.sync_service.logger") as mock_logger,
+        ):
+            submit_sync(runner_id)
+            time.sleep(1.0)
+            error_calls = [
+                c for c in mock_logger.log_line.call_args_list if len(c[0]) >= 3 and c[1].get("level") == "error"
+            ]
+            self.assertEqual(len(error_calls), 1)
+            call_args = error_calls[0]
+            self.assertEqual(call_args[0][0], PREFIX_SYNC)
+            self.assertEqual(call_args[0][1], "BACKGROUND_SYNC")
+            message = call_args[0][2]
+            self.assertIn("worker failed", message)
+            self.assertIn(str(runner_id), message)
+            self.assertIn("expected test error", message)
+            self.assertTrue(call_args[1]["exc_info"])

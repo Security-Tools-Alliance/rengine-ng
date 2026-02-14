@@ -274,34 +274,32 @@ SECATOR_ADDONS_API_HEADER_NAME = env("SECATOR_ADDONS_API_HEADER_NAME", default="
 SECATOR_ADDONS_API_WORKSPACE_GET_ENDPOINT = env("SECATOR_ADDONS_API_WORKSPACE_GET_ENDPOINT", default="")
 SECATOR_ADDONS_API_KEY = env("SECATOR_ADDONS_API_KEY", default="")
 SECATOR_ADDONS_API_FORCE_SSL = env.bool("SECATOR_ADDONS_API_FORCE_SSL", default=False)
-# When True, run runner/ScanHistory sync in the request (for tests). When False, run in a background thread.
-try:
-    SECATOR_RUNNER_UPDATE_SYNC_INLINE = bool(int(os.environ.get("SECATOR_RUNNER_UPDATE_SYNC_INLINE") or "0"))
-except (ValueError, TypeError):
-    SECATOR_RUNNER_UPDATE_SYNC_INLINE = False
-# When False, never use a background thread for runner sync; always run inline (avoids threading/connection
-# handling). Use in production if you observe concurrency issues. Requires sync to complete within hook timeout.
-try:
-    SECATOR_RUNNER_UPDATE_SYNC_BACKGROUND = bool(int(os.environ.get("SECATOR_RUNNER_UPDATE_SYNC_BACKGROUND", "1")))
-except (ValueError, TypeError):
-    SECATOR_RUNNER_UPDATE_SYNC_BACKGROUND = True
+
+# When False, run runner/ScanHistory sync in the request (inline, e.g. for tests). When True, run in a bounded
+# background thread pool. Set to False in production if you observe concurrency/connection issues.
+SECATOR_RUNNER_UPDATE_SYNC_BACKGROUND = bool(int(os.environ.get("SECATOR_RUNNER_UPDATE_SYNC_BACKGROUND", "1")))
+
 # Max workers for the thread pool used when SECATOR_RUNNER_UPDATE_SYNC_BACKGROUND is True.
 # Limits concurrent sync tasks to avoid unbounded thread growth and DB connection pressure.
 SECATOR_RUNNER_UPDATE_SYNC_MAX_WORKERS = env.int("SECATOR_RUNNER_UPDATE_SYNC_MAX_WORKERS", default=8)
+
 # Python executable used inside the remote worker container to run the Secator job script.
 # Set this when Secator is installed via pipx in the container (e.g. /root/.local/share/pipx/venvs/secator/bin/python).
 SECATOR_WORKER_CONTAINER_PYTHON = env(
     "SECATOR_WORKER_CONTAINER_PYTHON", default="/home/secator/.local/share/pipx/venvs/secator/bin/python"
 )
+
 # Base path for scripts inside the worker container (where run_secator_job.py is run).
 # Set this when the container sees a different path than deploy_path (e.g. container user is secator:
 # deploy_path may be /home/rengine/secator-worker on the host, container has /home/secator/secator-worker).
 # If unset, deploy_path is used for both SFTP upload and the container command.
 SECATOR_WORKER_CONTAINER_SCRIPT_BASE = env("SECATOR_WORKER_CONTAINER_SCRIPT_BASE", default="/home/secator")
+
 # SSH reverse tunnel (worker api_access_type=tunnel): bind and target for ssh -R on the worker host.
 # Bind: where the worker host listens; default Docker bridge gateway so only the Secator container
 # can reach it via host.docker.internal. Use 127.0.0.1 for localhost-only, 0.0.0.0 for all interfaces.
 RENGINE_TUNNEL_BIND_ADDRESS = env("RENGINE_TUNNEL_BIND_ADDRESS", default="172.17.0.1")
+
 # Target: host/port the tunnel forwards to (where nginx/API listens). In Docker use "proxy", bare metal "localhost".
 RENGINE_TUNNEL_TARGET_HOST = env("RENGINE_TUNNEL_TARGET_HOST", default="proxy")
 RENGINE_TUNNEL_TARGET_PORT = env.int("RENGINE_TUNNEL_TARGET_PORT", default=443)
@@ -428,6 +426,11 @@ LOGGING = {
             "handlers": ["default"],
             "level": "DEBUG" if (SECATOR_API_DEBUG) else "INFO",
             "propagate": False,  # Don't propagate to avoid duplicate logs
+        },
+        "startScan.secator": {
+            "handlers": ["default"],
+            "level": "DEBUG",
+            "propagate": False,
         },
     },
     "root": {
