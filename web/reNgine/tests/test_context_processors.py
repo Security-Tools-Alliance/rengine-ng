@@ -128,10 +128,9 @@ class TestContextProcessors(TestCase):
         self.assertEqual(context["external_ip"], "203.0.113.5")
         mock_cache_get.assert_called_once_with(EXTERNAL_IP_CACHE_KEY)
 
-    @patch("reNgine.context_processors._is_dummy_cache", return_value=True)
     @patch("reNgine.context_processors._get_external_ip_with_fallback")
-    def test_get_cached_external_ip_uses_in_process_cache(self, mock_get_ip, _mock_dummy):
-        """Test that in-process cache avoids calling fetch when DummyCache is used."""
+    def test_get_cached_external_ip_uses_in_process_cache(self, mock_get_ip):
+        """Test that in-process cache avoids calling fetch on subsequent requests."""
         mock_get_ip.return_value = "203.0.113.10"
         context_processors_module._cached_external_ip_value = "203.0.113.10"
         context_processors_module._cached_external_ip_expires_at = 1e12
