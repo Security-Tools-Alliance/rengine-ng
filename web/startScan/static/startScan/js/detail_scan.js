@@ -154,7 +154,7 @@ function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, s
         { 'data': 'headers', 'title': 'Headers', 'defaultContent': '', 'visible': false, 'className': 'dt-col-hidden', 'render': function ( data ) { return data ? JSON.stringify(data) : ""; } }
     ];
     // If already initialized, destroy cleanly to avoid index drift
-    if ($.fn.DataTable.isDataTable('#endpoint_results')) {
+    if (DataTable.isDataTable('#endpoint_results')) {
         const existing = $('#endpoint_results').DataTable();
         existing.destroy();
     }
@@ -221,17 +221,10 @@ function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, s
 		"processing": true,
         "autoWidth": false,
         "deferRender": true,
-		"oLanguage": {
-			"oPaginate": { "sPrevious": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-left"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>', "sNext": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-right"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>' },
-			"sInfo": "Showing page _PAGE_ of _PAGES_",
-			"sLengthMenu": "Results :  _MENU_",
-			"sProcessing": "Processing... Please wait..."
-		},
-		"dom": "<'dt--top-section'<'row'<'col-12 mb-3 mb-sm-0 col-sm-4 col-md-3 col-lg-4 d-flex justify-content-sm-start justify-content-center'l><'dt--pages-count col-12 col-sm-6 col-md-4 col-lg-4 d-flex justify-content-sm-middle justify-content-center'i><'dt--pagination col-12 col-sm-2 col-md-5 col-lg-4 d-flex justify-content-sm-end justify-content-center'p>>>" +
-		"<'table-responsive'tr>" +
-		"<'dt--bottom-section'<'row'<'col-12 mb-3 mb-sm-0 col-sm-4 col-md-3 col-lg-4 d-flex justify-content-sm-start justify-content-center'l><'dt--pages-count col-12 col-sm-6 col-md-4 col-lg-4 d-flex justify-content-sm-middle justify-content-center'i><'dt--pagination col-12 col-sm-2 col-md-5 col-lg-4 d-flex justify-content-sm-end justify-content-center'p>>>",
-		"stripeClasses": [],
+		"language": { "processing": "Processing... Please wait..." },
+		"layout": window.RENGINE_DATATABLE_LAYOUT_FULL,
 		"lengthMenu": [100, 200, 300, 500, 1000],
+		"responsive": true,
 		"pageLength": 100,
 		'serverSide': true,
 		"ajax": {
@@ -252,7 +245,7 @@ function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, s
 		},
 		"drawCallback": function () {
 			$("body").tooltip({ selector: '[data-toggle=tooltip]' });
-			// $('.dataTables_wrapper table').removeClass('table-striped');
+			// $('.dt-container table').removeClass('table-striped');
 			$('.badge').tooltip({ template: '<div class="tooltip status" role="tooltip"><div class="arrow"></div><div class="tooltip-inner"></div></div>' })
 			$('.dtrg-group').remove();
 			$('.bs-tooltip').tooltip();
@@ -310,31 +303,24 @@ function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, s
 
 function get_subdomain_changes(endpoint, scan_history_id){
 	$('#table-subdomain-changes').DataTable({
-		"drawCallback": function(settings, start, end, max, total, pre) {
-			if (this.fnSettings().fnRecordsTotal() > 0) {
+		"drawCallback": function() {
+			const pageInfo = this.page && typeof this.page.info === 'function' ? this.page.info() : null;
+			const total = pageInfo ? pageInfo.recordsTotal : 0;
+			if (total > 0) {
 				$('#subdomain_change_count').empty();
-				$("#subdomain_change_count").html(`<span class="badge badge-soft-primary me-1">${this.fnSettings().fnRecordsTotal()}</span>`);
+				$("#subdomain_change_count").html(`<span class="badge badge-soft-primary me-1">${total}</span>`);
 				$('.recon-changes-tab-show').removeAttr('style');
-				$('#subdomain_changes_alert').html(`${this.fnSettings().fnRecordsTotal()} Subdomain changes.`)
+				$('#subdomain_changes_alert').html(`${total} Subdomain changes.`);
 			}
 			else{
 				$('#recon_changes_subdomain_div').remove();
 			}
 			$("#subdomain-changes-loader").remove();
 		},
-		"oLanguage": {
-			"oPaginate": { "sPrevious": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-left"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>', "sNext": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-right"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>' },
-			"sInfo": "Showing page _PAGE_ of _PAGES_",
-			"sSearch": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-search"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>',
-			"sSearchPlaceholder": "Search...",
-			"sLengthMenu": "Results :  _MENU_",
-		},
 		"processing": true,
-		"dom": "<'dt--top-section'<'row'<'col-12 mb-3 mb-sm-0 col-sm-4 col-md-3 col-lg-4 d-flex justify-content-sm-start justify-content-center'l><'dt--pages-count col-12 col-sm-6 col-md-4 col-lg-4 d-flex justify-content-sm-middle justify-content-center'i><'dt--pagination col-12 col-sm-2 col-md-5 col-lg-4 d-flex justify-content-sm-end justify-content-center'p>>>" +
-		"<'table-responsive'tr>" +
-		"<'dt--bottom-section'<'row'<'col-12 mb-3 mb-sm-0 col-sm-4 col-md-3 col-lg-4 d-flex justify-content-sm-start justify-content-center'l><'dt--pages-count col-12 col-sm-6 col-md-4 col-lg-4 d-flex justify-content-sm-middle justify-content-center'i><'dt--pagination col-12 col-sm-2 col-md-5 col-lg-4 d-flex justify-content-sm-end justify-content-center'p>>>",
+		"layout": window.RENGINE_DATATABLE_LAYOUT_FULL,
 		"destroy": true,
-		"stripeClasses": [],
+		"responsive": true,
 		'serverSide': true,
 		"ajax": `${endpoint}?scan_id=${scan_history_id}&format=datatables`,
 		"order": [[ 3, "desc" ]],
@@ -348,7 +334,7 @@ function get_subdomain_changes(endpoint, scan_history_id){
 			{'data': 'is_cdn'},
 			{'data': 'is_interesting'},
 		],
-		"bInfo": false,
+		"info": false,
 		"columnDefs": [
 			{
 				"targets": [ 5, 6, 7 ],
@@ -437,10 +423,12 @@ function get_subdomain_changes(endpoint, scan_history_id){
 
 function get_endpoint_changes(endpoint, scan_history_id){
 	$('#table-endpoint-changes').DataTable({
-		"drawCallback": function(settings, start, end, max, total, pre) {
-			if (this.fnSettings().fnRecordsTotal() > 0) {
+		"drawCallback": function() {
+			const pageInfo = this.page && typeof this.page.info === 'function' ? this.page.info() : null;
+			const total = pageInfo ? pageInfo.recordsTotal : 0;
+			if (total > 0) {
 				$("#endpoint_change_count").empty();
-				$("#endpoint_change_count").html(`${this.fnSettings().fnRecordsTotal()}`);
+				$("#endpoint_change_count").html(`${total}`);
 				$('.recon-changes-tab-show').removeAttr('style');
 			}
 			else{
@@ -448,19 +436,10 @@ function get_endpoint_changes(endpoint, scan_history_id){
 			}
 			$("#endpoint-changes-loader").remove();
 		},
-		"oLanguage": {
-			"oPaginate": { "sPrevious": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-left"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>', "sNext": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-right"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>' },
-			"sInfo": "Showing page _PAGE_ of _PAGES_",
-			"sSearch": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-search"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>',
-			"sSearchPlaceholder": "Search...",
-			"sLengthMenu": "Results :  _MENU_",
-		},
 		"processing": true,
-		"dom": "<'dt--top-section'<'row'<'col-12 mb-3 mb-sm-0 col-sm-4 col-md-3 col-lg-4 d-flex justify-content-sm-start justify-content-center'l><'dt--pages-count col-12 col-sm-6 col-md-4 col-lg-4 d-flex justify-content-sm-middle justify-content-center'i><'dt--pagination col-12 col-sm-2 col-md-5 col-lg-4 d-flex justify-content-sm-end justify-content-center'p>>>" +
-		"<'table-responsive'tr>" +
-		"<'dt--bottom-section'<'row'<'col-12 mb-3 mb-sm-0 col-sm-4 col-md-3 col-lg-4 d-flex justify-content-sm-start justify-content-center'l><'dt--pages-count col-12 col-sm-6 col-md-4 col-lg-4 d-flex justify-content-sm-middle justify-content-center'i><'dt--pagination col-12 col-sm-2 col-md-5 col-lg-4 d-flex justify-content-sm-end justify-content-center'p>>>",
+		"layout": window.RENGINE_DATATABLE_LAYOUT_FULL,
 		"destroy": true,
-		"stripeClasses": [],
+		"responsive": true,
 		'serverSide': true,
 		"ajax": `${endpoint}?scan_id=${scan_history_id}&format=datatables`,
 		"order": [[ 3, "desc" ]],
@@ -471,7 +450,7 @@ function get_endpoint_changes(endpoint, scan_history_id){
 			{'data': 'content_length'},
 			{'data': 'change'},
 		],
-		"bInfo": false,
+		"info": false,
 		"columnDefs": [
 			{"className": "text-center", "targets": [ 2 ]},
 			{

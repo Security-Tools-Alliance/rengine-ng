@@ -4578,7 +4578,7 @@ th.fc-col-header-cell {
     font-weight: 600 !important
 }
 
-.dataTables_wrapper.container-fluid {
+.dt-container.container-fluid {
     padding: 0
 }
 
@@ -4636,7 +4636,7 @@ table.dataTable thead>tr>th.sorting_desc {
     padding-left: .85rem
 }
 
-.dataTables_info {
+.dt-info {
     font-weight: 600
 }
 
@@ -4671,17 +4671,17 @@ div.dt-button-info h2 {
 
 @media (max-width:767.98px) {
 
-    li.paginate_button.next,
-    li.paginate_button.previous {
+    li.dt-paging-button {
+        display: none
+    }
+
+    li.dt-paging-button:has(button[data-dt-idx="previous"]),
+    li.dt-paging-button:has(button[data-dt-idx="next"]) {
         display: inline-block;
         font-size: 1.5rem
     }
 
-    li.paginate_button {
-        display: none
-    }
-
-    .dataTables_paginate ul {
+    .dt-paging ul {
         text-align: center;
         display: block;
         margin: 1.5rem 0 0 !important
@@ -4697,26 +4697,26 @@ div.dt-button-info h2 {
     background-color: #f3f7f9
 }
 
-div.dataTables_wrapper div.dataTables_filter {
+div.dt-container div.dt-search {
     text-align: right
 }
 
 @media (max-width:767px) {
-    div.dataTables_wrapper div.dataTables_filter {
+    div.dt-container div.dt-search {
         text-align: center
     }
 }
 
-div.dataTables_wrapper div.dataTables_filter input {
+div.dt-container div.dt-search input {
     margin-left: .5em;
     margin-right: 0
 }
 
-div.table-responsive>div.dataTables_wrapper>div.row>div[class^=col-]:last-child {
+div.table-responsive>div.dt-container>div.row>div[class^=col-]:last-child {
     padding-right: 0
 }
 
-div.table-responsive>div.dataTables_wrapper>div.row>div[class^=col-]:first-child {
+div.table-responsive>div.dt-container>div.row>div[class^=col-]:first-child {
     padding-left: 0
 }
 

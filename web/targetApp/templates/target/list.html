@@ -59,22 +59,24 @@ Targets
 <div class="row">
 	<div class="col-12">
 		<div class="card">
-			<form method="POST" id="multiple_targets_form" action="{% url 'start_multiple_scan' current_project.slug %}">
-				{% csrf_token %}
-				<table id="list_target_table" class="table dt-responsive w-100">
-					<thead>
-						<tr>
-							<th class="checkbox-column text-center">Serial Number</th>
-							<th>Serial Number</th>
-							<th>Target</th>
-							<th>Description</th>
-							<th class="text-center">Added On</th>
-							<th class="text-center">Last Scanned</th>
-							<th class="text-center">Action</th>
-						</tr>
-					</thead>
-				</table>
-			</form>
+			<div class="card-body">
+				<form method="POST" id="multiple_targets_form" action="{% url 'start_multiple_scan' current_project.slug %}">
+					{% csrf_token %}
+					<table id="list_target_table" class="table dt-responsive w-100">
+						<thead>
+							<tr>
+								<th class="checkbox-column text-center">Serial Number</th>
+								<th>Serial Number</th>
+								<th>Target</th>
+								<th>Description</th>
+								<th class="text-center">Added On</th>
+								<th class="text-center">Last Scanned</th>
+								<th class="text-center">Action</th>
+							</tr>
+						</thead>
+					</table>
+				</form>
+			</div>
 		</div>
 	</div>
 </div>
@@ -91,16 +93,7 @@ $(document).ready(function(){
 		},
 		"destroy": true,
 		"processing": true,
-		"dom": "<'dt--top-section'<'row'<'col-12 col-sm-6 d-flex justify-content-sm-start justify-content-center mt-sm-0 mt-3'f><'col-12 col-sm-6 d-flex justify-content-sm-end justify-content-center'l>>>" +
-		"<'table-responsive'tr>" +
-		"<'dt--bottom-section d-sm-flex justify-content-sm-between text-center'<'dt--pages-count  mb-sm-0 mb-3'i><'dt--pagination'p>>",
-		"oLanguage": {
-			"oPaginate": { "sPrevious": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-left"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>', "sNext": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-right"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>' },
-			"sInfo": "Showing page _PAGE_ of _PAGES_",
-			"sSearch": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-search"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>',
-			"sSearchPlaceholder": "Search...",
-			"sLengthMenu": "Results :  _MENU_",
-		},
+		"layout": window.RENGINE_DATATABLE_LAYOUT_WITH_SEARCH,
 		"fnCreatedRow": function(nRow, aData, iDataIndex) {
 			$(nRow).attr('id', 'target_row_' + aData['id']);
 		},
@@ -220,28 +213,18 @@ $(document).ready(function(){
 
 						{% if user|has_role:'penetration_tester' or user|has_role:'admin'%}
 						content += `
-						<div class="btn-group float-end">
-						<a class="btn btn-soft-primary" href="${targetSummaryUrl}"><i class="fe-info"></i>&nbsp;&nbsp;Target Summary</a>
-						<a href="${startScanUrl}" class="btn btn-soft-primary"><i class="fe-zap"></i>&nbsp;&nbsp;Initiate Scan</a>
-						<div class="btn-group dropstart" role="group">
-						<button type="button" class="btn btn-soft-primary dropdown-toggle dropdown-toggle-split" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-						<i class="mdi mdi-chevron-right"></i>
-						</button>
-						<div class="dropdown-menu" style="">
-						<a class="dropdown-item" href="${scheduleScanUrl}"><i class="fe-clock"></i>&nbsp;&nbsp;Schedule Scan</a>
-						<div class="dropdown-divider"></div>
-						<a class="dropdown-item" href="${updateTargetUrl}"><i class="fe-edit-2"></i>&nbsp;&nbsp;Edit Target</a>
-						<a class="dropdown-item text-danger" href="#" onclick="delete_target('${deleteTargetUrl}', '${row.name}')"><i class="fe-trash-2"></i>&nbsp;&nbsp;Delete target</a>
-						</div>
-						</div>
+						<div class="d-flex flex-wrap gap-1 justify-content-end">
+						<a class="btn btn-sm btn-soft-info" href="${targetSummaryUrl}" data-toggle="tooltip" data-placement="top" title="Target Summary"><i class="fe-info"></i></a>
+						<a href="${startScanUrl}" class="btn btn-sm btn-soft-primary" data-toggle="tooltip" data-placement="top" title="Initiate Scan"><i class="fe-zap"></i></a>
+						<a class="btn btn-sm btn-soft-warning" href="${scheduleScanUrl}" data-toggle="tooltip" data-placement="top" title="Schedule Scan"><i class="fe-clock"></i></a>
+						<a class="btn btn-sm btn-soft-secondary" href="${updateTargetUrl}" data-toggle="tooltip" data-placement="top" title="Edit Target"><i class="fe-edit-2"></i></a>
+						<a class="btn btn-sm btn-soft-danger" href="#" data-toggle="tooltip" data-placement="top" title="Delete target" onclick="delete_target('${deleteTargetUrl}', '${row.name}'); return false;"><i class="fe-trash-2"></i></a>
 						</div>
 						`;
 						{% else %}
 						content += `
-						<div class="btn-group float-end">
-						<a class="btn btn-soft-primary" href="${targetSummaryUrl}"><i class="fe-info"></i>&nbsp;&nbsp;Target Summary</a>
-						</div>
-						</div>
+						<div class="d-flex flex-wrap gap-1 justify-content-end">
+						<a class="btn btn-sm btn-soft-info" href="${targetSummaryUrl}" data-toggle="tooltip" data-placement="top" title="Target Summary"><i class="fe-info"></i></a>
 						</div>
 						`;
 						{% endif %}
@@ -254,8 +237,9 @@ $(document).ready(function(){
 			drawCallback: function() {
 				$('.badge').tooltip({
 					template: '<div class="tooltip status" role="tooltip"><div class="arrow"></div><div class="tooltip-inner"></div></div>'
-				})
+				});
 				$('.bs-tooltip').tooltip();
+				$('#list_target_table').find('[data-toggle="tooltip"]').tooltip();
 			},
 		});
 		multiCheck(table);

@@ -1873,7 +1873,18 @@ class SecatorRunner(models.Model):
             ),
             models.Index(
                 fields=["scan_history_id", "-created_at"],
-                name="ss_runner_scan_created",
+                name="ss_runner_scan_created_cov",
+                include=[
+                    "id",
+                    "runner_type",
+                    "runner_name",
+                    "workspace_name",
+                    "domain_id",
+                    "worker_id",
+                    "celery_id",
+                    "status",
+                    "updated_at",
+                ],
             ),
         ]
 

@@ -610,6 +610,22 @@ const handleScanStatusUpdate = function(data, options) {
 };
 
 /**
+ * Truncate label to maxLength characters, appending "..." when truncated.
+ * Keeps behavior consistent with templates (e.g. truncatechars:30).
+ * @param {string} text - Text to truncate
+ * @param {number} maxLength - Total visible length including ellipsis when applied
+ * @returns {string}
+ */
+const truncateLabel = function(text, maxLength) {
+    const str = String(text);
+    if (str.length <= maxLength) {
+        return str;
+    }
+    const visibleLength = Math.max(0, maxLength - 3);
+    return str.substring(0, visibleLength) + '...';
+};
+
+/**
  * Update a row in DataTable (for history.html)
  * @param {DataTable} table - DataTable instance
  * @param {object} data - Update data
@@ -674,7 +690,9 @@ const updateScanRowInTable = function(table, data) {
         if (data.scan_name) {
             const engineCell = $(rowNode).find('.scan-engine-cell');
             if (engineCell.length) {
-                const engineHtml = '<span class="badge badge-soft-primary">' + escapeHtml(data.scan_name) + '</span>';
+                const fullText = String(data.scan_name);
+                const displayText = truncateLabel(fullText, 30);
+                const engineHtml = '<span class="badge badge-soft-primary" data-toggle="tooltip" data-placement="top" title="' + escapeHtml(fullText) + '">' + escapeHtml(displayText) + '</span>';
                 engineCell.html(engineHtml);
             }
         }
@@ -754,7 +772,9 @@ const updateSubscanRowInTable = function(table, data) {
             if (item.scan_engine_used != null && item.scan_engine_used !== '') {
                 const engineCell = $(rowNode).find('.scan-engine-cell');
                 if (engineCell.length) {
-                    const engineHtml = '<span class="badge badge-soft-primary">' + escapeHtml(String(item.scan_engine_used)) + '</span>';
+                    const fullText = String(item.scan_engine_used);
+                    const displayText = truncateLabel(fullText, 30);
+                    const engineHtml = '<span class="badge badge-soft-primary" data-toggle="tooltip" data-placement="top" title="' + escapeHtml(fullText) + '">' + escapeHtml(displayText) + '</span>';
                     engineCell.html(engineHtml);
                 }
             }

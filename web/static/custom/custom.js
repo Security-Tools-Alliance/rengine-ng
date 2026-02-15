@@ -824,44 +824,22 @@ function get_interesting_subdomains(endpoint_url, project, target_id, scan_histo
 		non_orderable_targets = [];
 	}
 	const interesting_subdomain_table = $('#interesting_subdomains').DataTable({
-		"drawCallback": function(settings, start, end, max, total, pre) {
-			// if no interesting subdomains are found, hide the datatable and show no interesting subdomains found badge
-			if (this.fnSettings().fnRecordsTotal() == 0) {
+		"drawCallback": function() {
+			const total = this.api().page.info().recordsTotal;
+			if (total === 0) {
 				$('#interesting_subdomain_div').empty();
-				// $('#interesting_subdomain_div').append(`<div class="card-header bg-primary py-3 text-white">
-				// <div class="card-widgets">
-				// <a href="#" data-toggle="remove"><i class="mdi mdi-close"></i></a>
-				// </div>
-				// <h5 class="card-title mb-0 text-white"><i class="mdi mdi-fire-alert me-2"></i>Interesting subdomains could not be identified</h5>
-				// </div>
-				// <div id="cardCollpase4" class="collapse show">
-				// <div class="card-body">
-				// reNgine could not identify any interesting subdomains. You can customize interesting subdomain keywords <a href="/scanEngine/interesting/lookup/">from here</a> and this section would be automatically updated.
-				// </div>
-				// </div>`);
 			} else {
-				// show nav bar
 				$('.interesting-tab-show').removeAttr('style');
-				$('#interesting_subdomain_alert_count').html(`${this.fnSettings().fnRecordsTotal()} Interesting Subdomains`)
+				$('#interesting_subdomain_alert_count').html(`${total} Interesting Subdomains`);
 				$('#interesting_subdomain_count_badge').empty();
-				$('#interesting_subdomain_count_badge').html(`<span class="badge badge-soft-primary me-1">${this.fnSettings().fnRecordsTotal()}</span>`);
+				$('#interesting_subdomain_count_badge').html(`<span class="badge badge-soft-primary me-1">${total}</span>`);
 			}
 		},
-		"oLanguage": {
-			"oPaginate": {
-				"sPrevious": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-left"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>',
-				"sNext": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-right"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>'
-			},
-			"sInfo": "Showing page _PAGE_ of _PAGES_",
-			"sSearch": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-search"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>',
-			"sSearchPlaceholder": "Search...",
-			"sLengthMenu": "Results :  _MENU_",
-		},
 		"processing": true,
-		"dom": "<'dt--top-section'<'row'<'col-12 col-sm-6 d-flex justify-content-sm-start justify-content-center'f><'col-12 col-sm-6 d-flex justify-content-sm-end justify-content-center'l>>>" + "<'table-responsive'tr>" + "<'dt--bottom-section d-sm-flex justify-content-sm-between text-center'<'dt--pages-count  mb-sm-0 mb-3'i><'dt--pagination'p>>",
+		"layout": window.RENGINE_DATATABLE_LAYOUT_WITH_SEARCH,
 		"destroy": true,
-		"bInfo": false,
-		"stripeClasses": [],
+		"info": false,
+		"responsive": true,
 		'serverSide': true,
 		"ajax": url,
 		"order": [
@@ -938,31 +916,23 @@ function get_interesting_endpoints(endpoint_url, project, target_id, scan_histor
 		// non_orderable_targets = [0, 1, 2, 3];
 	}
 	$('#interesting_endpoints').DataTable({
-		"drawCallback": function(settings, start, end, max, total, pre) {
-			if (this.fnSettings().fnRecordsTotal() == 0) {
+		"drawCallback": function() {
+			const total = this.api().page.info().recordsTotal;
+			if (total === 0) {
 				$('#interesting_endpoint_div').remove();
 			} else {
 				$('.interesting-tab-show').removeAttr('style');
-				$('#interesting_endpoint_alert_count').html(`, ${this.fnSettings().fnRecordsTotal()} Interesting Endpoints`)
+				$('#interesting_endpoint_alert_count').html(`, ${total} Interesting Endpoints`);
 				$('#interesting_endpoint_count_badge').empty();
-				$('#interesting_endpoint_count_badge').html(`<span class="badge badge-soft-primary me-1">${this.fnSettings().fnRecordsTotal()}</span>`);
+				$('#interesting_endpoint_count_badge').html(`<span class="badge badge-soft-primary me-1">${total}</span>`);
 			}
 		},
-		"oLanguage": {
-			"oPaginate": {
-				"sPrevious": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-left"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>',
-				"sNext": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-right"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>'
-			},
-			"sInfo": "Showing page _PAGE_ of _PAGES_",
-			"sSearch": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-search"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>',
-			"sSearchPlaceholder": "Search...",
-			"sLengthMenu": "Results :  _MENU_",
-		},
 		"processing": true,
-		"dom": "<'dt--top-section'<'row'<'col-12 col-sm-6 d-flex justify-content-sm-start justify-content-center'f><'col-12 col-sm-6 d-flex justify-content-sm-end justify-content-center'l>>>" + "<'table-responsive'tr>" + "<'dt--bottom-section d-sm-flex justify-content-sm-between text-center'<'dt--pages-count  mb-sm-0 mb-3'i><'dt--pagination'p>>",
+		"layout": window.RENGINE_DATATABLE_LAYOUT_WITH_SEARCH,
 		'serverSide': true,
 		"destroy": true,
-		"bInfo": false,
+		"info": false,
+		"responsive": true,
 		"ajax": url,
 		"order": [
 			[3, "desc"]
@@ -1503,22 +1473,13 @@ function render_endpoint_in_xl_modal(endpoint_count, subdomain_name, result) {
 		`);
 	}
 	$("#endpoint-modal-datatable").DataTable({
-		"oLanguage": {
-			"oPaginate": {
-				"sPrevious": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-left"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>',
-				"sNext": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-right"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>'
-			},
-			"sInfo": "Showing page _PAGE_ of _PAGES_",
-			"sSearch": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-search"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>',
-			"sSearchPlaceholder": "Search...",
-			"sLengthMenu": "Results :  _MENU_",
-		},
-		"dom": "<'dt--top-section'<'row'<'col-12 col-sm-6 d-flex justify-content-sm-start justify-content-center'f><'col-12 col-sm-6 d-flex justify-content-sm-end justify-content-center'l>>>" + "<'table-responsive'tr>" + "<'dt--bottom-section d-sm-flex justify-content-sm-between text-center'<'dt--pages-count  mb-sm-0 mb-3'i><'dt--pagination'p>>",
+		"layout": window.RENGINE_DATATABLE_LAYOUT_WITH_SEARCH,
 		"order": [
 			[5, "desc"]
 		],
+		"responsive": true,
 		drawCallback: function() {
-			$(".dataTables_paginate > .pagination").addClass("pagination-rounded")
+			$(".dt-paging > .pagination").addClass("pagination-rounded")
 		}
 	});
 }
@@ -1636,22 +1597,13 @@ function render_vulnerability_in_xl_modal(endpoint_url, vuln_count, subdomain_na
 		`);
 	}
 	$("#vulnerability-modal-datatable").DataTable({
-		"oLanguage": {
-			"oPaginate": {
-				"sPrevious": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-left"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>',
-				"sNext": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-right"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>'
-			},
-			"sInfo": "Showing page _PAGE_ of _PAGES_",
-			"sSearch": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-search"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>',
-			"sSearchPlaceholder": "Search...",
-			"sLengthMenu": "Results :  _MENU_",
-		},
-		"dom": "<'dt--top-section'<'row'<'col-12 col-sm-6 d-flex justify-content-sm-start justify-content-center'f><'col-12 col-sm-6 d-flex justify-content-sm-end justify-content-center'l>>>" + "<'table-responsive'tr>" + "<'dt--bottom-section d-sm-flex justify-content-sm-between text-center'<'dt--pages-count  mb-sm-0 mb-3'i><'dt--pagination'p>>",
+		"layout": window.RENGINE_DATATABLE_LAYOUT_WITH_SEARCH,
 		"order": [
 			[5, "desc"]
 		],
+		"responsive": true,
 		drawCallback: function() {
-			$(".dataTables_paginate > .pagination").addClass("pagination-rounded")
+			$(".dt-paging > .pagination").addClass("pagination-rounded")
 		}
 	});
 }
@@ -1694,22 +1646,13 @@ function render_directories_in_xl_modal(directory_count, subdomain_name, result)
 	}
 	const interesting_keywords_array = [];
 	const dir_modal_table = $("#directory-modal-datatable").DataTable({
-		"oLanguage": {
-			"oPaginate": {
-				"sPrevious": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-left"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>',
-				"sNext": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-right"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>'
-			},
-			"sInfo": "Showing page _PAGE_ of _PAGES_",
-			"sSearch": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-search"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>',
-			"sSearchPlaceholder": "Search...",
-			"sLengthMenu": "Results :  _MENU_",
-		},
-		"dom": "<'dt--top-section'<'row'<'col-12 col-sm-6 d-flex justify-content-sm-start justify-content-center'f><'col-12 col-sm-6 d-flex justify-content-sm-end justify-content-center'l>>>" + "<'table-responsive'tr>" + "<'dt--bottom-section d-sm-flex justify-content-sm-between text-center'<'dt--pages-count  mb-sm-0 mb-3'i><'dt--pagination'p>>",
-			"order": [
-		[1, "asc"]
-	],
+		"layout": window.RENGINE_DATATABLE_LAYOUT_WITH_SEARCH,
+		"order": [
+			[1, "asc"]
+		],
+		"responsive": true,
 		drawCallback: function() {
-			$(".dataTables_paginate > .pagination").addClass("pagination-rounded");
+			$(".dt-paging > .pagination").addClass("pagination-rounded");
 		}
 	});
 	// TODO: Find interesting dirs

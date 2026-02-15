@@ -15,7 +15,7 @@ const vuln_datatable_columns = [
 	{'data': 'references'},            // Reference
 	{'data': 'discovered_date'},       // Discovered on
 	{'data': 'open_status'},           // Status
-	{'data': 'action', 'orderable': false, 'searchable': false}, // Action
+	{'data': 'action', 'defaultContent': '', 'orderable': false, 'searchable': false}, // Action (rendered by columnDefs)
 	{'data': 'extracted_results'},     // Extracted Results
 	{'data': 'curl_command'},          // CURL command
 	{'data': 'matcher_name'},          // Matcher Name

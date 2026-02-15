@@ -23,7 +23,8 @@ Scheduled Scans
 <div class="row">
   <div class="col-12">
     <div class="card">
-      <table id="scheduled_scan_table" class="table dt-responsive w-100">
+      <div class="card-body">
+        <table id="scheduled_scan_table" class="table dt-responsive w-100">
         <thead>
           <tr>
             <th>Description</th>
@@ -66,19 +67,16 @@ Scheduled Scans
             </td>
             {% if user|can:'modify_scan_results' %}
             <td class="text-center">
-              <a onclick="deleteScheduledScan('{% url 'delete_scheduled_task' current_project.slug task.id %}')" class="text-danger btnDelTask" href="#" data-toggle="tooltip" data-placement="top" title="" data-original-title="Delete Scheduled Task">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather table-delete feather-x-circle">
-                  <circle cx="12" cy="12" r="10"></circle>
-                  <line x1="15" y1="9" x2="9" y2="15"></line>
-                  <line x1="9" y1="9" x2="15" y2="15"></line>
-                </svg>
-              </a>
+              <div class="d-flex flex-wrap gap-1 justify-content-center mb-2">
+                <a href="#" class="btn btn-sm btn-soft-danger btnDelTask" data-toggle="tooltip" data-placement="top" title="Delete Scheduled Task" onclick="deleteScheduledScan('{% url 'delete_scheduled_task' current_project.slug task.id %}'); return false;"><i class="fe-trash-2"></i></a>
+              </div>
             </td>
             {% endif %}
           </tr>
           {% endfor %}
         </tbody>
       </table>
+      </div>
     </div>
   </div>
 </div>
@@ -88,18 +86,9 @@ Scheduled Scans
 // var e;
 $(document).ready(function() {
   var scheduled_scan_table = $('#scheduled_scan_table').DataTable({
-    "oLanguage": {
-      "oPaginate": { "sPrevious": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-left"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>', "sNext": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-right"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>' },
-      "sInfo": "Showing page _PAGE_ of _PAGES_",
-      "sSearch": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-search"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>',
-      "sSearchPlaceholder": "Search...",
-      "sLengthMenu": "Results :  _MENU_",
-    },
+    "layout": window.RENGINE_DATATABLE_LAYOUT_WITH_SEARCH,
     "lengthMenu": [5, 10, 20, 30, 50, 100],
     "pageLength": 10,
-    "dom": "<'dt--top-section'<'row'<'col-12 col-sm-6 d-flex justify-content-sm-start justify-content-center mt-sm-0 mt-3'f><'col-12 col-sm-6 d-flex justify-content-sm-end justify-content-center'l>>>" +
-    "<'table-responsive'tr>" +
-    "<'dt--bottom-section d-sm-flex justify-content-sm-between text-center'<'dt--pages-count  mb-sm-0 mb-3'i><'dt--pagination'p>>",
   });
   multiCheck(scheduled_scan_table);
 });

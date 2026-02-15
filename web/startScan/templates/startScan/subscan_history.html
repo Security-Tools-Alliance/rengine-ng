@@ -71,7 +71,8 @@ SubScan History
 <div class="row">
   <div class="col-12">
     <div class="card">
-      <table id="subscan_history_table" class="table dt-responsive w-100">
+			<div class="card-body">
+        <table id="subscan_history_table" class="table dt-responsive w-100">
         <thead>
           <tr>
             <th class="checkbox-column text-center">Serial Number</th>
@@ -105,7 +106,9 @@ SubScan History
           <a href="{% url 'detail_scan' current_project.slug subscan.scan_history.id %}" class="text-info">Recent Scan&nbsp;<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-external-link"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg></a>
           </td>
           <td class="text-center scan-engine-cell">
-            <span class="badge badge-soft-primary">{{ subscan.display_runner_type }}: {{ subscan.display_scan_name }}</span>
+            {% with full_text=subscan.display_runner_type|default:""|add:": "|add:subscan.display_scan_name|default:"" %}
+            <span class="badge badge-soft-primary" data-toggle="tooltip" data-placement="top" title="{{ full_text|escape }}">{{ full_text|truncatechars:30 }}</span>
+            {% endwith %}
           </td>
           <td class="text-center d-none d-md-table-cell">
             <span class="badge badge-soft-secondary">{{ subscan.secator_worker_name|default:"Local" }}</span>
@@ -162,31 +165,23 @@ SubScan History
             {% endif %}
           </td>
           <td class="text-center">
-            <div class="btn-group mb-2 dropstart">
-              <div class="btn-group">
-                <a href="#" class="btn btn-soft-primary" onclick="show_subscan_results('{% url 'api:fetch_subscan_results' %}', {{subscan.id}})">View Results</a>
-                <div class="btn-group dropstart" role="group">
-                  <button type="button" class="btn btn-soft-primary dropdown-toggle dropdown-toggle-split" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                    <i class="mdi mdi-chevron-right"></i>
-                  </button>
-                  <div class="dropdown-menu" style="">
-                    {% if user|can:'initiate_scans_subscans' %}
-                      {% if subscan.status_code == 1 %}
-                        <a href="#" class="dropdown-item text-danger" onclick="stop_scan('{% url 'api:stop_scan' %}', scan_id=null, subscan_id={{subscan.id}}, reload_scan_bar=false, reload_location=true)"><i class="fe-alert-triangle"></i>&nbsp;Stop Subscan</a>
-                      {% endif %}
-                    {% endif %}
-                    {% if user|can:'modify_scan_results' %}
-                    <a href="#" class="dropdown-item text-danger" onclick="delete_subscan('{% url 'api:delete_rows' %}', {{ subscan.id }})"><i class="fe-trash-2"></i>&nbsp;Delete Subscan</a>
-                    {% endif %}
-                  </div>
-                </div>
-              </div>
+            <div class="d-flex flex-wrap gap-1 justify-content-center mb-2">
+              <a href="#" class="btn btn-sm btn-soft-primary" data-toggle="tooltip" data-placement="top" title="View Results" onclick="show_subscan_results('{% url 'api:fetch_subscan_results' %}', {{subscan.id}}); return false;"><i class="fe-eye"></i></a>
+              {% if user|can:'initiate_scans_subscans' %}
+                {% if subscan.status_code == 1 %}
+              <a href="#" class="btn btn-sm btn-soft-danger" data-toggle="tooltip" data-placement="top" title="Stop Subscan" onclick="stop_scan('{% url 'api:stop_scan' %}', scan_id=null, subscan_id={{subscan.id}}, reload_scan_bar=false, reload_location=true); return false;"><i class="fe-alert-triangle"></i></a>
+                {% endif %}
+              {% endif %}
+              {% if user|can:'modify_scan_results' %}
+              <a href="#" class="btn btn-sm btn-soft-danger" data-toggle="tooltip" data-placement="top" title="Delete Subscan" onclick="delete_subscan('{% url 'api:delete_rows' %}', {{ subscan.id }}); return false;"><i class="fe-trash-2"></i></a>
+              {% endif %}
             </div>
           </td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
+    </div>
   </div>
 </div>
 </div>
@@ -209,29 +204,18 @@ $(document).ready(function() {
 
       }],
       "order": [[1, 'desc']],
-      "dom": "<'dt--top-section'<'row'<'col-12 col-sm-6 d-flex justify-content-sm-start justify-content-center mt-sm-0 mt-3'f><'col-12 col-sm-6 d-flex justify-content-sm-end justify-content-center'l>>>" +
-      "<'table-responsive'tr>" +
-      "<'dt--bottom-section d-sm-flex justify-content-sm-between text-center'<'dt--pages-count  mb-sm-0 mb-3'i><'dt--pagination'p>>",
-      "oLanguage": {
-        "oPaginate": { "sPrevious": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-left"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>', "sNext": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-right"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>' },
-        "sInfo": "Showing page _PAGE_ of _PAGES_",
-        "sSearch": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-search"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>',
-        "sSearchPlaceholder": "Search...",
-        "sLengthMenu": "Results :  _MENU_",
-      },
-      "stripeClasses": [],
+      "layout": window.RENGINE_DATATABLE_LAYOUT_WITH_SEARCH,
       "lengthMenu": [5, 10, 20, 30, 40, 50],
       "pageLength": 20,
+      "responsive": true,
       "initComplete": function(settings, json) {
         $('[data-toggle="tooltip"]').tooltip();
-        table = settings.oInstance.api();
-        var rows = table.rows({
-          selected: true
-        }).indexes();
+        var api = $(settings.nTable).DataTable();
+        var rows = api.rows().indexes();
 
         // populate filter menu from datatables
         // populate targets
-        var selectedData = table.cells(rows, 2).data();
+        var selectedData = api.cells(rows, 2).data();
         var target_array = [];
         for (var i = 0; i < selectedData.length; i++) {
           col1_data = selectedData[i];
@@ -249,7 +233,7 @@ $(document).ready(function() {
         }
 
         // populate Scan Type
-        var selectedData = table.cells(rows, 3).data();
+        var selectedData = api.cells(rows, 3).data();
         var scan_type_array = [];
         for (var i = 0; i < selectedData.length; i++) {
           col1_data = extractContent(selectedData[i]);

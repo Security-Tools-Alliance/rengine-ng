@@ -70,6 +70,7 @@ Quick Scan History
 <div class="row">
   <div class="col-12">
     <div class="card">
+      <div class="card-body">
       <form method="POST" id="scan_history_form">
         {% csrf_token %}
         <table id="scan_history_table" class="table dt-responsive w-100">
@@ -106,7 +107,9 @@ Quick Scan History
                 <span class="badge badge-pills bg-danger mt-1" data-toggle="tooltip" data-placement="top" title="{{scan_history.get_critical_vulnerability_count}} Critical, {{scan_history.get_high_vulnerability_count}} High, {{scan_history.get_medium_vulnerability_count}} Medium Vulnerabilities">{{scan_history.get_vulnerability_count}}</span>
               </td>
               <td class="scan-engine-cell">
-                <span class="badge badge-soft-primary">{{ scan_history.display_runner_type }}: {{ scan_history.display_scan_name }}</span>
+                {% with full_text=scan_history.display_runner_type|default:""|add:": "|add:scan_history.display_scan_name|default:"" %}
+                <span class="badge badge-soft-primary" data-toggle="tooltip" data-placement="top" title="{{ full_text|escape }}">{{ full_text|truncatechars:30 }}</span>
+                {% endwith %}
               </td>
               <td class="d-none d-md-table-cell">
                 <span class="badge badge-soft-secondary">{{ scan_history.secator_worker_name|default:"Local" }}</span>
@@ -179,52 +182,38 @@ Quick Scan History
                 {% endif %}
               </td>
               <td class="text-center">
-                <div class="btn-group mb-2 dropstart">
-                  <div class="btn-group">
-                    <a href="{% url 'detail_scan' current_project.slug scan_history.id %}" class="btn btn-soft-primary">View Results</a>
-                    <div class="btn-group dropstart" role="group">
-                      <button type="button" class="btn btn-soft-primary dropdown-toggle dropdown-toggle-split" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                        <i class="mdi mdi-chevron-right"></i>
-                      </button>
-                      <div class="dropdown-menu" style="">
-                        {% if user|can:'initiate_scans_subscans' %}
-                          {% if scan_history.scan_status == 0 or scan_history.scan_status == 2 or scan_history.scan_status == 3 %}
-                          <a class="dropdown-item text-primary" href="{% url 'start_scan' current_project.slug scan_history.domain.id %}">
-                          <i class="fe-refresh-ccw"></i>&nbsp;Rescan </a>
-                          {% endif %}
-
-                          {% if scan_history.scan_status == 1 or scan_history.scan_status == 4 or scan_history.scan_status == -1%}
-                          <a href="#" class="dropdown-item text-danger" onclick="stop_scan('{% url 'api:stop_scan' %}', scan_id={{ scan_history.id }}, subscan_id=null, reload_scan_bar=false, reload_location=true)">
-                          <i class="fe-alert-triangle"></i>&nbsp;Stop Scan</a>
-                          {% endif %}
-                        {% endif %}
-                        {% if user|can:'modify_scan_results' %}
-                          {% if scan_history.scan_status == 2 or scan_history.scan_status == 3 or scan_history.scan_status == 0 %}
-                            <a href="#" class="dropdown-item text-danger" onclick="delete_scan('{% url 'delete_scan' current_project.slug scan_history.id %}')">
-                            <i class="fe-trash-2"></i>&nbsp;Delete Scan Results</a>
-                          {% endif %}
-                          <div class="dropdown-divider"></div>
-                        {% endif %}
-                        {% if scan_history.scan_status != -1%}
-                          <a href="#" class="dropdown-item text-dark" onclick="initiate_report(
-                              '{% url "create_report" current_project.slug scan_history.id %}',
-                              {{scan_history.id}},
-                              '{% if scan_history.is_legacy_scan %}{% if 'subdomain_discovery' in scan_history.tasks %}True{% endif %}{% else %}True{% endif %}',
-                              '{% if scan_history.is_legacy_scan %}{% if 'vulnerability_scan' in scan_history.tasks %}True{% endif %}{% else %}True{% endif %}',
-                              '{% if scan_history.is_legacy_scan %}{% if 'port_scan' in scan_history.tasks %}True{% endif %}{% else %}True{% endif %}',
-                              '{{ scan_history.domain.name }}'
-                          )">
-                          <i class="fe-download"></i>&nbsp;Scan Report</a>
-                        {% endif %}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                <div class="d-flex flex-wrap gap-1 justify-content-center mb-2">
+                  <a href="{% url 'detail_scan' current_project.slug scan_history.id %}" class="btn btn-sm btn-soft-primary" data-toggle="tooltip" data-placement="top" title="View Results"><i class="fe-eye"></i></a>
+                  {% if user|can:'initiate_scans_subscans' %}
+                    {% if scan_history.scan_status == 0 or scan_history.scan_status == 2 or scan_history.scan_status == 3 %}
+                  <a href="{% url 'start_scan' current_project.slug scan_history.domain.id %}" class="btn btn-sm btn-soft-success" data-toggle="tooltip" data-placement="top" title="Rescan"><i class="fe-refresh-ccw"></i></a>
+                    {% endif %}
+                    {% if scan_history.scan_status == 1 or scan_history.scan_status == 4 or scan_history.scan_status == -1 %}
+                  <a href="#" class="btn btn-sm btn-soft-danger" data-toggle="tooltip" data-placement="top" title="Stop Scan" onclick="stop_scan('{% url 'api:stop_scan' %}', scan_id={{ scan_history.id }}, subscan_id=null, reload_scan_bar=false, reload_location=true); return false;"><i class="fe-alert-triangle"></i></a>
+                    {% endif %}
+                  {% endif %}
+                  {% if user|can:'modify_scan_results' %}
+                    {% if scan_history.scan_status == 2 or scan_history.scan_status == 3 or scan_history.scan_status == 0 %}
+                  <a href="#" class="btn btn-sm btn-soft-danger" data-toggle="tooltip" data-placement="top" title="Delete Scan Results" onclick="delete_scan('{% url 'delete_scan' current_project.slug scan_history.id %}'); return false;"><i class="fe-trash-2"></i></a>
+                    {% endif %}
+                  {% endif %}
+                  {% if scan_history.scan_status != -1 %}
+                  <a href="#" class="btn btn-sm btn-soft-info" data-toggle="tooltip" data-placement="top" title="Scan Report" onclick="initiate_report(
+                      '{% url "create_report" current_project.slug scan_history.id %}',
+                      {{scan_history.id}},
+                      '{% if scan_history.is_legacy_scan %}{% if 'subdomain_discovery' in scan_history.tasks %}True{% endif %}{% else %}True{% endif %}',
+                      '{% if scan_history.is_legacy_scan %}{% if 'vulnerability_scan' in scan_history.tasks %}True{% endif %}{% else %}True{% endif %}',
+                      '{% if scan_history.is_legacy_scan %}{% if 'port_scan' in scan_history.tasks %}True{% endif %}{% else %}True{% endif %}',
+                      '{{ scan_history.domain.name }}'
+                  ); return false;"><i class="fe-download"></i></a>
+                  {% endif %}
+                </div>
               </td>
             </tr>
           {% endfor %}
           </tbody>
         </table>
+        </div>
       </form>
     </div>
   </div>
@@ -277,29 +266,18 @@ Quick Scan History
         }
       ],
       "order": [[1, 'desc']],
-      "dom": "<'dt--top-section'<'row'<'col-12 col-sm-6 d-flex justify-content-sm-start justify-content-center mt-sm-0 mt-3'f><'col-12 col-sm-6 d-flex justify-content-sm-end justify-content-center'l>>>" +
-      "<'table-responsive'tr>" +
-      "<'dt--bottom-section d-sm-flex justify-content-sm-between text-center'<'dt--pages-count  mb-sm-0 mb-3'i><'dt--pagination'p>>",
-      "oLanguage": {
-        "oPaginate": { "sPrevious": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-left"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>', "sNext": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-right"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>' },
-        "sInfo": "Showing page _PAGE_ of _PAGES_",
-        "sSearch": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-search"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>',
-        "sSearchPlaceholder": "Search...",
-        "sLengthMenu": "Results :  _MENU_",
-      },
-      "stripeClasses": [],
+      "layout": window.RENGINE_DATATABLE_LAYOUT_WITH_SEARCH,
       "lengthMenu": [5, 10, 20, 30, 40, 50],
       "pageLength": 20,
+      "responsive": true,
       "initComplete": function(settings, json) {
         $('[data-toggle="tooltip"]').tooltip();
-        table = settings.oInstance.api();
-        var rows = table.rows({
-          selected: true
-        }).indexes();
+        var api = $(settings.nTable).DataTable();
+        var rows = api.rows().indexes();
 
         // populate filter menu from datatables
         // populate targets
-        var selectedData = table.cells(rows, 2).data();
+        var selectedData = api.cells(rows, 2).data();
         var target_array = [];
         for (var i = 0; i < selectedData.length; i++) {
           col1_data = selectedData[i];
@@ -317,7 +295,7 @@ Quick Scan History
         }
 
         // populate Scan Type
-        var selectedData = table.cells(rows, 4).data();
+        var selectedData = api.cells(rows, 4).data();
         var scan_type_array = [];
         for (var i = 0; i < selectedData.length; i++) {
           col1_data = extractContent(selectedData[i]);

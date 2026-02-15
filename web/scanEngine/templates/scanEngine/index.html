@@ -97,23 +97,24 @@ Scan Engines <small class="text-muted">(Legacy)</small>
     </div>
     
     <div class="card">
-              <!-- Scan Type Filter Buttons -->
-              <div class="card-header">
-                <div class="d-flex justify-content-between align-items-center">
-                  <div class="d-flex gap-2">
-                    <button type="button" class="btn btn-sm btn-secondary scan-type-filter" data-filter="all">
-                      <i class="fas fa-list me-1"></i>All
-                    </button>
-                    <button type="button" class="btn btn-sm btn-info scan-type-filter" data-filter="internet">
-                      <i class="fas fa-globe me-1"></i>Internet
-                    </button>
-                    <button type="button" class="btn btn-sm btn-warning scan-type-filter" data-filter="internal_network">
-                      <i class="fas fa-network-wired me-1"></i>Internal Network
-                    </button>
-                  </div>
-                </div>
-              </div>
-      <table id="scan_engine_table" class="table dt-responsive w-100">
+      <!-- Scan Type Filter Buttons -->
+      <div class="card-header">
+        <div class="d-flex justify-content-between align-items-center">
+          <div class="d-flex gap-2">
+            <button type="button" class="btn btn-sm btn-secondary scan-type-filter" data-filter="all">
+              <i class="fas fa-list me-1"></i>All
+            </button>
+            <button type="button" class="btn btn-sm btn-info scan-type-filter" data-filter="internet">
+              <i class="fas fa-globe me-1"></i>Internet
+            </button>
+            <button type="button" class="btn btn-sm btn-warning scan-type-filter" data-filter="internal_network">
+              <i class="fas fa-network-wired me-1"></i>Internal Network
+            </button>
+          </div>
+        </div>
+      </div>
+     <div class="card-body">
+        <table id="scan_engine_table" class="table dt-responsive w-100">
         <thead>
           <tr>
             <th>ID</th>
@@ -232,6 +233,7 @@ Scan Engines <small class="text-muted">(Legacy)</small>
           {% endfor %}
         </tbody>
       </table>
+      </div>
     </div>
   </div>
 </div>
@@ -257,16 +259,7 @@ Scan Engines <small class="text-muted">(Legacy)</small>
           
           $(document).ready(function() {
     var scan_engine_table = $('#scan_engine_table').DataTable({
-      "dom": "<'dt--top-section'<'row'<'col-12 col-sm-6 d-flex justify-content-sm-start justify-content-center mt-sm-0 mt-3'f><'col-12 col-sm-6 d-flex justify-content-sm-end justify-content-center'l>>>" +
-      "<'table-responsive'tr>" +
-      "<'dt--bottom-section d-sm-flex justify-content-sm-between text-center'<'dt--pages-count  mb-sm-0 mb-3'i><'dt--pagination'p>>",
-      "oLanguage": {
-        "oPaginate": { "sPrevious": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-left"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>', "sNext": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-right"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>' },
-        "sInfo": "Showing page _PAGE_ of _PAGES_",
-        "sSearch": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-search"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>',
-        "sSearchPlaceholder": "Search...",
-        "sLengthMenu": "Results :  _MENU_",
-      },
+      "layout": window.RENGINE_DATATABLE_LAYOUT_WITH_SEARCH,
       "columnDefs":[
       { 'visible': false, 'targets': [0] },
       { 'width': '60px', 'targets': [0] },

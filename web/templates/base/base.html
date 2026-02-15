@@ -19,10 +19,7 @@
     <link href="{% static 'plugins/switches/switches.min.css' %}" rel="stylesheet" type="text/css" />
     <link href="{% static 'custom/custom.css' %}" rel="stylesheet" type="text/css" />
     <link href="{% static 'custom/badges.css' %}" rel="stylesheet" type="text/css" />
-    <link rel="stylesheet" type="text/css" href="{% static 'plugins/datatable/dataTables.bootstrap5.min.css' %}">
-    <link rel="stylesheet" type="text/css" href="{% static 'plugins/datatable/global.css' %}">
-    <!-- <link rel="stylesheet" type="text/css" href="{% static 'plugins/datatable/custom.css' %}"> -->
-    <link href="{% static 'plugins/datatable/rowGroup.dataTables.min.css' %}" rel="stylesheet" type="text/css" />
+    <link rel="stylesheet" type="text/css" href="{% static 'plugins/datatables/datatables.min.css' %}">
     <style media="screen">
       @font-face {
         font-family: "Cerebri Sans,sans-serif";
@@ -115,10 +112,29 @@
     <script src="{% static 'custom/port_display.js' %}"></script>
     <script src="{% static 'plugins/snackbar/snackbar.min.js' %}"></script>
     <script src="{% static 'plugins/sweetalert2/sweetalert2.all.min.js' %}"></script>
-    <script src="{% static 'plugins/datatable/jquery.dataTables.min.js' %}"></script>
-    <script src="{% static 'plugins/datatable/dataTables.bootstrap5.min.js' %}"></script>
-    <script src="{% static 'plugins/datatable/dataTables.rowGroup.min.js' %}"></script>
+    <script src="{% static 'plugins/datatables/datatables.min.js' %}"></script>
     <script type="text/javascript">
+      window.RENGINE_DATATABLE_LAYOUT_FULL = {
+        topStart: 'pageLength',
+        topEnd: ['info', 'paging'],
+        bottomStart: 'pageLength',
+        bottomEnd: ['info', 'paging']
+      };
+      window.RENGINE_DATATABLE_LAYOUT_WITH_SEARCH = {
+        topStart: 'search',
+        topEnd: 'pageLength',
+        bottomStart: 'info',
+        bottomEnd: 'paging'
+      };
+      if (typeof $.fn.DataTable !== "undefined") {
+        $.fn.DataTable.defaults.language = {
+          paginate: { previous: "←", next: "→" },
+          info: "Showing page _PAGE_ of _PAGES_",
+          search: "",
+          searchPlaceholder: "Search...",
+          lengthMenu: "Results :  _MENU_"
+        };
+      }
       $(document).ready(function(){
         // for tabs with urls, we need to append the hash in the url
         $('a[data-bs-toggle="tab"]').on('shown.bs.tab', function (e) {

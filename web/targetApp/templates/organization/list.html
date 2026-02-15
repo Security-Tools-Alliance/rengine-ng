@@ -39,7 +39,8 @@ Organizations
 <div class="row">
   <div class="col-12">
     <div class="card">
-      <table id="list_organization_table" class="table dt-responsive w-100">
+			<div class="card-body">
+        <table id="list_organization_table" class="table dt-responsive w-100">
         <thead>
           <tr>
             <th class="">Organization</th>
@@ -55,41 +56,24 @@ Organizations
             <td class="">{{ organization.name|capfirst }}</td>
             <td class="text-center">{% if organization.description %}{{organization.description}}{% endif %}</td>
             <td class="text-center"><span class="badge bg-primary badge-link" onclick="get_target_modal({{organization.id}})">{{organization.get_domains.count}}</span></td>
-            <td class="text-center"><span data-toggle="tooltip" data-placement="top" title="{{organization.insert_date}}">{{organization.insert_date|naturaltime}}</span></td></td>
+            <td class="text-center"><span data-toggle="tooltip" data-placement="top" title="{{organization.insert_date}}">{{organization.insert_date|naturaltime}}</span></td>
             <td class="text-center">
-              {% if user|can:'initiate_scans_subscans' %}
-              <a href="{% url 'start_organization_scan' current_project.slug organization.id %}" data-toggle="tooltip" data-placement="top" title="Quick Scan Entire Organization">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather table-scan feather-zap" id="myInput" value="helloworld">
-                  <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
-                </svg>
-              </a>
-              {% endif %}
-              {% if user|can:'initiate_scans_subscans' %}
-              <a href="{% url 'schedule_organization_scan' current_project.slug organization.id %}" class="open-domain" data-toggle="tooltip" data-placement="top" title="Schedule Scan">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-watch table-schedule"><circle cx="12" cy="12" r="7"></circle><polyline points="12 9 12 12 13.5 13.5"></polyline><path d="M16.51 17.35l-.35 3.83a2 2 0 0 1-2 1.82H9.83a2 2 0 0 1-2-1.82l-.35-3.83m.01-10.7l.35-3.83A2 2 0 0 1 9.83 1h4.35a2 2 0 0 1 2 1.82l.35 3.83"></path></svg>
-              </a>
-              {% endif %}
-              {% if user|can:'modify_targets' %}
-              <a href="{% url 'update_organization' current_project.slug organization.id %}" class="text-primary open-domain" data-toggle="tooltip" data-placement="top" title="Update Organization">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather table-edit feather-edit-2">
-                  <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
-                </svg>
-              </a>
-              {% endif %}
-              {% if user|can:'modify_targets' %}
-              <a onclick="delete_organization('{% url 'delete_organization' current_project.slug organization.id %}')" class="text-danger" href="#" data-toggle="tooltip" data-placement="top" title="Delete Organization">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather table-delete feather-x-circle">
-                  <circle cx="12" cy="12" r="10"></circle>
-                  <line x1="15" y1="9" x2="9" y2="15"></line>
-                  <line x1="9" y1="9" x2="15" y2="15"></line>
-                </svg>
-              </a>
-              {% endif %}
+              <div class="d-flex flex-wrap gap-1 justify-content-center mb-2">
+                {% if user|can:'initiate_scans_subscans' %}
+                <a href="{% url 'start_organization_scan' current_project.slug organization.id %}" class="btn btn-sm btn-soft-success" data-toggle="tooltip" data-placement="top" title="Quick Scan Entire Organization"><i class="fe-zap"></i></a>
+                <a href="{% url 'schedule_organization_scan' current_project.slug organization.id %}" class="btn btn-sm btn-soft-info open-domain" data-toggle="tooltip" data-placement="top" title="Schedule Scan"><i class="fe-clock"></i></a>
+                {% endif %}
+                {% if user|can:'modify_targets' %}
+                <a href="{% url 'update_organization' current_project.slug organization.id %}" class="btn btn-sm btn-soft-primary open-domain" data-toggle="tooltip" data-placement="top" title="Update Organization"><i class="fe-edit-2"></i></a>
+                <a href="#" class="btn btn-sm btn-soft-danger" data-toggle="tooltip" data-placement="top" title="Delete Organization" onclick="delete_organization('{% url 'delete_organization' current_project.slug organization.id %}'); return false;"><i class="fe-trash-2"></i></a>
+                {% endif %}
+              </div>
             </td>
           </tr>
           {% endfor %}
         </tbody>
-      </table>
+        </table>
+      </div>
     </div>
   </div>
 </div>
@@ -101,16 +85,7 @@ Organizations
 <script>
 $(document).ready(function() {
   list_organization_table = $('#list_organization_table').DataTable({
-    "oLanguage": {
-      "oPaginate": { "sPrevious": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-left"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>', "sNext": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-right"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>' },
-      "sInfo": "Showing page _PAGE_ of _PAGES_",
-      "sSearch": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-search"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>',
-      "sSearchPlaceholder": "Search...",
-      "sLengthMenu": "Results :  _MENU_",
-    },
-    "dom": "<'dt--top-section'<'row'<'col-12 col-sm-6 d-flex justify-content-sm-start justify-content-center mt-sm-0 mt-3'f><'col-12 col-sm-6 d-flex justify-content-sm-end justify-content-center'l>>>" +
-    "<'table-responsive'tr>" +
-    "<'dt--bottom-section d-sm-flex justify-content-sm-between text-center'<'dt--pages-count  mb-sm-0 mb-3'i><'dt--pagination'p>>",
+    "layout": window.RENGINE_DATATABLE_LAYOUT_WITH_SEARCH,
     "lengthMenu": [5, 10, 20, 30, 50, 100, 500, 1000],
     "pageLength": 10,
     "initComplete": function(settings, json) {

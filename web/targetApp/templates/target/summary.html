@@ -936,7 +936,7 @@ $(document).ready(function(){
 			},
 			"destroy": false,
 			"processing": true,
-			"oLanguage": subdomain_oLanguage,
+			"language": $.extend(true, {}, $.fn.DataTable.defaults.language, { "processing": "Fetching Subdomains... Please wait..." }),
 			"fnCreatedRow": function (nRow, aData, iDataIndex) {
 				$(nRow).attr('id', 'subdomain_row_' + aData['id']);
 			},
@@ -1241,9 +1241,7 @@ $(document).ready(function(){
 						"targets": get_datatable_col_index('action', subdomain_datatable_columns),
 					},
 				],
-				"dom": "<'dt--top-section'<'row'<'col-12 mb-3 mb-sm-0 col-sm-4 col-md-3 col-lg-4 d-flex justify-content-sm-start justify-content-center'l><'dt--pages-count col-12 col-sm-6 col-md-4 col-lg-4 d-flex justify-content-sm-middle justify-content-center'i><'dt--pagination col-12 col-sm-2 col-md-5 col-lg-4 d-flex justify-content-sm-end justify-content-center'p>>>" +
-				"<'table-responsive'tr>" +
-				"<'dt--bottom-section'<'row'<'col-12 mb-3 mb-sm-0 col-sm-4 col-md-3 col-lg-4 d-flex justify-content-sm-start justify-content-center'l><'dt--pages-count col-12 col-sm-6 col-md-4 col-lg-4 d-flex justify-content-sm-middle justify-content-center'i><'dt--pagination col-12 col-sm-2 col-md-5 col-lg-4 d-flex justify-content-sm-end justify-content-center'p>>>",
+				"layout": window.RENGINE_DATATABLE_LAYOUT_FULL,
 				"initComplete": function(settings, json) {
 					api = this.api();
 					subdomain_datatable_col_visibility(subdomain_datatables);
@@ -1374,20 +1372,8 @@ $(document).ready(function(){
 		var vuln_ajax_url = '{% url "api:vulnerabilities-list" %}?target_id={{target.id}}&format=datatables';
 		var vulnerability_table = $('#vulnerability_results').DataTable({
 			"destroy": false,
-			"oLanguage": {
-				"oPaginate": {
-					"sPrevious": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-left"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>',
-					"sNext": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-right"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>'
-				},
-				"sInfo": "Showing page _PAGE_ of _PAGES_",
-				"sSearch": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-search"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>',
-				"sSearchPlaceholder": "Search...",
-				"sLengthMenu": "Results :  _MENU_",
-			},
 			"processing": true,
-			"dom": "<'dt--top-section'<'row'<'col-12 mb-3 mb-sm-0 col-sm-4 col-md-3 col-lg-4 d-flex justify-content-sm-start justify-content-center'l><'dt--pages-count col-12 col-sm-6 col-md-4 col-lg-4 d-flex justify-content-sm-middle justify-content-center'i><'dt--pagination col-12 col-sm-2 col-md-5 col-lg-4 d-flex justify-content-sm-end justify-content-center'p>>>" +
-			"<'table-responsive'tr>" +
-			"<'dt--bottom-section'<'row'<'col-12 mb-3 mb-sm-0 col-sm-4 col-md-3 col-lg-4 d-flex justify-content-sm-start justify-content-center'l><'dt--pages-count col-12 col-sm-6 col-md-4 col-lg-4 d-flex justify-content-sm-middle justify-content-center'i><'dt--pagination col-12 col-sm-2 col-md-5 col-lg-4 d-flex justify-content-sm-end justify-content-center'p>>>",
+			"layout": window.RENGINE_DATATABLE_LAYOUT_FULL,
 			"stripeClasses": [],
 			"lengthMenu": vuln_datatable_length_menu,
 			"pageLength": vuln_datatable_page_length,
@@ -1563,16 +1549,10 @@ $(document).ready(function(){
 			{
 				"render": function(data, type, row) {
 					if (!data) {
-						return `
-									<div class="btn-group mb-2 dropstart">
-									<a href="#" class="text-dark dropdown-toggle float-end" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-									<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-more-horizontal"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg>
-									</a>
-									<div class="dropdown-menu" style="">
-									<a class="dropdown-item" href="javascript:fetch_llm_vuln_details('{% url 'api:llm_vulnerability_report_generator' %}', ${row['id']}, '${row['name']}');">Fetch LLM Vulnerability Details</a>
-									<a class="dropdown-item" href="javascript:report_hackerone('{% url 'api:vulnerability_report' %}', ${row['id']}, '${row['severity']}');">Report to Hackerone</a>
-									<a class="text-danger dropdown-item btn-delete-vulnerability" href="#" id="${row['id']}" data-url="{% url 'api:delete_vulnerability' %}">Delete Vulnerability</a>
-									</div>
+						return `<div class="d-flex flex-wrap gap-1 justify-content-center mb-2">
+									<a href="javascript:fetch_llm_vuln_details('{% url 'api:llm_vulnerability_report_generator' %}', ${row['id']}, '${row['name']}');" class="btn btn-sm btn-soft-info" data-toggle="tooltip" data-placement="top" title="Fetch LLM Vulnerability Details"><i class="fe-zap"></i></a>
+									<a href="javascript:report_hackerone('{% url 'api:vulnerability_report' %}', ${row['id']}, '${row['severity']}');" class="btn btn-sm btn-soft-primary" data-toggle="tooltip" data-placement="top" title="Report to Hackerone"><i class="fe-share"></i></a>
+									<a href="#" class="btn btn-sm btn-soft-danger btn-delete-vulnerability" id="${row['id']}" data-url="{% url 'api:delete_vulnerability' %}" data-toggle="tooltip" data-placement="top" title="Delete Vulnerability"><i class="fe-trash-2"></i></a>
 									</div>`;
 					} else {
 						return '';
