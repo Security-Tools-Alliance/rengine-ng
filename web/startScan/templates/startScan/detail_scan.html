@@ -43,25 +43,25 @@ Scan Findings
 		<div class="card">
 			<ul class="nav nav-tabs nav-bordered m-1">
 				<li class="nav-item">
-					<a class="nav-link active" id="pills-summary-tab" data-bs-toggle="tab" aria-expanded="false" class="nav-link" href="#summary-tab">Home</a>
+					<a class="nav-link active" id="pills-summary-tab" data-bs-toggle="tab" aria-expanded="false" href="#summary-tab">Home</a>
 				</li>
 				<li class="nav-item">
-					<a class="nav-link" id="pills-subdomain-tab" data-bs-toggle="tab" aria-expanded="false" class="nav-link" href="#subdomain-tab">Subdomains</a>
+					<a class="nav-link" id="pills-subdomain-tab" data-bs-toggle="tab" aria-expanded="false" href="#subdomain-tab">Subdomains</a>
 				</li>
 				{% if history.buckets.all %}
 				<li class="nav-item">
-					<a class="nav-link" id="pills-buckets-tab" data-bs-toggle="tab" aria-expanded="false" class="nav-link" href="#buckets-tab">S3 Buckets</a>
+					<a class="nav-link" id="pills-buckets-tab" data-bs-toggle="tab" aria-expanded="false" href="#buckets-tab">S3 Buckets</a>
 				</li>
 				{% endif %}
 				<li class="nav-item interesting-tab-show" style="display: none">
-					<a class="nav-link" data-bs-toggle="tab" aria-expanded="false" class="nav-link" href="#interesting-tab">Interesting Recon</a>
+					<a class="nav-link" data-bs-toggle="tab" aria-expanded="false" href="#interesting-tab">Interesting Recon</a>
 				</li>
 				<li class="nav-item recon-changes-tab-show" style="display: none">
-					<a class="nav-link" data-bs-toggle="tab" aria-expanded="false" class="nav-link" href="#recon-changes-tab">Recon Data Changes</a>
+					<a class="nav-link" data-bs-toggle="tab" aria-expanded="false" href="#recon-changes-tab">Recon Data Changes</a>
 				</li>
 				{% if has_screenshots %}
 				<li class="nav-item">
-					<a class="nav-link" id="pills-screenshot-tab" data-bs-toggle="tab" aria-expanded="false" class="nav-link" href="#screenshot-tab">Screenshots</a>
+					<a class="nav-link" id="pills-screenshot-tab" data-bs-toggle="tab" aria-expanded="false" href="#screenshot-tab">Screenshots</a>
 				</li>
 				{% endif %}
 				{% if 'dir_file_fuzz' in history.tasks %}
@@ -84,16 +84,16 @@ Scan Findings
 				</li>
 				{% if total_vulnerability_count > 0 %}
 				<li class="nav-item">
-					<a class="nav-link" id="pills-vulnerabilities-tab" data-bs-toggle="tab" aria-expanded="false" class="nav-link" href="#vulnerabilities-tab">Vulnerabilities</a>
+					<a class="nav-link" id="pills-vulnerabilities-tab" data-bs-toggle="tab" aria-expanded="false" href="#vulnerabilities-tab">Vulnerabilities</a>
 				</li>
 				{% endif %}
 				{% if 'osint' in history.tasks %}
 				<li class="nav-item">
-					<a class="nav-link" id="pills-osint-tab" data-bs-toggle="tab" aria-expanded="false" class="nav-link" href="#osint-tab">OSINT</a>
+					<a class="nav-link" id="pills-osint-tab" data-bs-toggle="tab" aria-expanded="false" href="#osint-tab">OSINT</a>
 				</li>
 				{% endif %}
 				<li class="nav-item">
-					<a class="nav-link" id="pills-visualisation-tab" data-bs-toggle="tab" aria-expanded="false" class="nav-link" href="#visualisation-tab">Visualization</a>
+					<a class="nav-link" id="pills-visualisation-tab" data-bs-toggle="tab" aria-expanded="false" href="#visualisation-tab">Visualization</a>
 				</li>
 			</ul>
 		</div>

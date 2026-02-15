@@ -17,10 +17,10 @@ function get_ports_for_ip(ip, history_id){
 function render_ports(data)
 {
 	let port_badge = ''
-	ip_address_content = document.getElementById("detailScanModalContent");
+	const ip_address_content = document.getElementById("detailScanModalContent");
 	Object.entries(JSON.parse(data)).forEach(([key, value]) => {
-		badge_color = value[3] ? 'danger' : 'info';
-		title = value[3] ? 'Uncommon Port - ' + value[2] : value[2];
+		const badge_color = value[3] ? 'danger' : 'info';
+		let title = value[3] ? 'Uncommon Port - ' + value[2] : value[2];
 		// Add port details if available (state, protocol, host, cpes)
 		if (value[4]) { // state
 			title += `\nState: ${value[4]}`;
@@ -43,10 +43,10 @@ function render_ports(data)
 function render_ips(data)
 {
 	let ip_badge = ''
-	content = document.getElementById("detailScanModalContent");
+	const content = document.getElementById("detailScanModalContent");
 	Object.entries(JSON.parse(data)).forEach(([key, value]) => {
-		badge_color = value[1] ? 'warning' : 'info';
-		title = value[1] ? 'CDN IP Address' : '';
+		const badge_color = value[1] ? 'warning' : 'info';
+		let title = value[1] ? 'CDN IP Address' : '';
 		if (value[2] !== undefined) { // alive field
 			title += value[2] ? '\nAlive: Yes' : '\nAlive: No';
 		}
@@ -344,10 +344,10 @@ function get_subdomain_changes(endpoint, scan_history_id){
 			{"className": "text-center", "targets": [ 2, 4 ]},
 			{
 				"render": function ( data, type, row ) {
-					badges = '';
-					cdn_badge = '';
-					tech_badge = '';
-					interesting_badge = '';
+					let badges = '';
+					let cdn_badge = '';
+					let tech_badge = '';
+					let interesting_badge = '';
 					if (row['is_cdn'])
 					{
 						cdn_badge = "<span class='m-1 badge  badge-soft-warning'>CDN</span>"
@@ -497,7 +497,7 @@ function get_osint_users(scan_id){
 	$.getJSON(`/api/queryOsintUsers/?scan_id=${scan_id}&format=json`, function(data) {
 		$('#osint-users-count').empty();
 		for (let val in data['users']){
-			user = data['users'][val]
+			const user = data['users'][val];
 			$("#osint-users").append(`<span class='badge badge-soft-info  m-1'>${user['author']}</span>`);
 		}
 		$('#osint-users-count').html(`<span class="badge badge-soft-primary">${data['users'].length}</span>`);
@@ -529,14 +529,14 @@ function get_screenshot(endpoint, scan_id){
 			const link = document.createElement('a');
 			// return `<a href="/media/`+data+`" data-lightbox="screenshots" data-title="&lt;a target='_blank' href='`+row['http_url']+`'&gt;&lt;h3 style=&quot;color:white&quot;&gt;`+row['name']+`&lt;/h3&gt;&lt;/a&gt;"><img src="/media/`+data+`" class="img-fluid rounded mb-4 mt-4 screenshot" onerror="removeImageElement(this)"></a>`;
 			// currently lookup is supported only for http_status, page title & subdomain name,
-			interesting_field = data[subdomain]['is_interesting'] ? 'interesting' : '';
+			const interesting_field = data[subdomain]['is_interesting'] ? 'interesting' : '';
 			const ips = data[subdomain]['ip_addresses'];
 			let ip_search_values = '';
 			for(let ip in ips){
 				ip_address = ips[ip]['address'];
 				ip_search_values += ip_address + ' ';
 			}
-			search_field = `${data[subdomain]['page_title']} ${data[subdomain]['name']} ${data[subdomain]['http_status']} ${ip_search_values} ${interesting_field}`;
+			let search_field = `${data[subdomain]['page_title']} ${data[subdomain]['name']} ${data[subdomain]['http_status']} ${ip_search_values} ${interesting_field}`;
 			link.setAttribute('data-lightbox', 'screenshot-gallery')
 			const screenshotUrl = data[subdomain]['screenshot_url'] || '';
 			link.setAttribute('href', screenshotUrl);
@@ -555,23 +555,23 @@ function get_screenshot(endpoint, scan_id){
 			newImage.setAttribute('class', 'gridzyImage');
 			const figcaption = document.createElement('figcaption');
 			figcaption.setAttribute('class', 'gridzyCaption');
-			http_status_badge = 'danger';
+			let http_status_badge = 'danger';
 			if (data[subdomain]['http_status'] >=200 && data[subdomain]['http_status'] < 300){
 				http_status_badge = 'success';
 			}
 			else if (data[subdomain]['http_status'] >=300 && data[subdomain]['http_status'] < 400){
 				http_status_badge = 'warning';
 			}
-			page_title = data[subdomain]['page_title'] ? data[subdomain]['page_title'] + '</br>': '' ;
+			const page_title = data[subdomain]['page_title'] ? data[subdomain]['page_title'] + '</br>': '' ;
 			const portNum = data[subdomain]['port'];
 			const showPortInLabel = portNum != null && portNum !== 80 && portNum !== 443;
 			const linkLabel = showPortInLabel ? `${data[subdomain]['name']}:${portNum}` : data[subdomain]['name'];
 			const linkHref = data[subdomain]['http_url'] || `https://${data[subdomain]['name']}${showPortInLabel ? ':' + portNum : ''}`;
-			subdomain_link = `<a href="${linkHref}" target="_blank">${linkLabel}</a>`;
+			const subdomain_link = `<a href="${linkHref}" target="_blank">${linkLabel}</a>`;
 			const portBadge = (portNum != null && showPortInLabel)
 				? `<span class="m-1 float-end badge badge-soft-${data[subdomain]['port_is_uncommon'] === true ? 'danger' : 'primary'}">${portNum}</span>`
 				: '';
-			http_status = data[subdomain]['http_status'] ? `<span class="m-1 float-end badge  badge-soft-${http_status_badge}">${data[subdomain]['http_status']}</span>` : '';
+			let http_status = data[subdomain]['http_status'] ? `<span class="m-1 float-end badge  badge-soft-${http_status_badge}">${data[subdomain]['http_status']}</span>` : '';
 			figcaption.innerHTML = data[subdomain]['is_interesting']
 				? page_title + subdomain_link + interesting_badge + http_status + portBadge
 				: page_title + subdomain_link + http_status + portBadge;
@@ -581,11 +581,11 @@ function get_screenshot(endpoint, scan_id){
 			gridzyElement.appendChild(link);
 
 			// add http status to filter values
-			filter_values = 'http_' + data[subdomain]['http_status'] + ' ';
+			let filter_values = 'http_' + data[subdomain]['http_status'] + ' ';
 
 			// dynamic filtering menu
 			http_status = data[subdomain]['http_status'];
-			http_status_select = document.getElementById('http_select_filter');
+			const http_status_select = document.getElementById('http_select_filter');
 			if(!$('#http_select_filter').find("option:contains('" + http_status + "')").length){
 				const option = document.createElement('option');
 				option.value = ".http_" + http_status;
@@ -595,16 +595,16 @@ function get_screenshot(endpoint, scan_id){
 
 			// ip, port and services filtering (ips already set at start of loop)
 			for(let ip in ips){
-				ip_address = ips[ip]['address'];
+				const ip_address = ips[ip]['address'];
 				filter_values += 'ip_' + ip_address.replace(/\./g,"_") + ' ';
 				if (ip_array.indexOf(ip_address) === -1){
 					ip_array.push(ip_address);
 				}
 
-				ports = ips[ip]['ports'];
+				const ports = ips[ip]['ports'];
 				for(let port in ports){
-					port_number = ips[ip]['ports'][port]['number'];
-					service_name = ips[ip]['ports'][port]['service_name'];
+					const port_number = ips[ip]['ports'][port]['number'];
+					const service_name = ips[ip]['ports'][port]['service_name'];
 
 					filter_values += 'port_' + port_number + ' ';
 					if (port_array.indexOf(port_number) === -1){
@@ -619,9 +619,9 @@ function get_screenshot(endpoint, scan_id){
 			}
 
 			// technology stack filtering
-			technology = data[subdomain]['technologies'];
+			const technology = data[subdomain]['technologies'];
 			for(let tech in technology){
-				tech_name = technology[tech]['name']
+				const tech_name = technology[tech]['name'];
 				filter_values += 'tech_' + tech_name.replace(/ /g,"_").toLowerCase() + ' ';
 				if (tech_array.indexOf(tech_name) === -1){
 					tech_array.push(tech_name);
@@ -633,7 +633,7 @@ function get_screenshot(endpoint, scan_id){
 		}
 
 		// add port and service and tech to options
-		port_select = document.getElementById('ports_select_filter');
+		const port_select = document.getElementById('ports_select_filter');
 		if (port_select) {
 			port_array.sort((a, b) => a - b);
 			for(let port in port_array){
@@ -647,7 +647,7 @@ function get_screenshot(endpoint, scan_id){
 		}
 
 		// add ip to select
-		ip_select = document.getElementById('ips_select_filter');
+		const ip_select = document.getElementById('ips_select_filter');
 		for(let ip in ip_array){
 			if(!$('#ips_select_filter').find("option:contains('" + ip_array[ip] + "')").length){
 				const option = document.createElement('option');
@@ -658,7 +658,7 @@ function get_screenshot(endpoint, scan_id){
 		}
 
 		service_array.sort();
-		service_select = document.getElementById('services_select_filter');
+		const service_select = document.getElementById('services_select_filter');
 		if (service_select) {
 			for(let service in service_array){
 				if(!$('#services_select_filter').find("option:contains('" + service_array[service] + "')").length){
@@ -670,7 +670,7 @@ function get_screenshot(endpoint, scan_id){
 			}
 		}
 
-		tech_select = document.getElementById('tech_select_filter');
+		const tech_select = document.getElementById('tech_select_filter');
 		for(let tech in tech_array){
 			if(!$('#tech_select_filter').find("option:contains('" + tech_array[tech] + "')").length){
 				const option = document.createElement('option');
@@ -729,7 +729,7 @@ function get_screenshot(endpoint, scan_id){
 		//filter functionality
 		const gridzyInstance = document.querySelector('.gridzySkinBlank').gridzy;
 		$('#http_select_filter, #ips_select_filter, #services_select_filter, #ports_select_filter, #tech_select_filter').on('change', function() {
-			values = $(this).val();
+			const values = $(this).val();
 			if(values.length && this.id == 'ips_select_filter'){
 				const replaces_str = values.map(function(values){return values.replace(/(?<=\..*)\./g, '_');});
 				gridzyInstance.setOptions({
@@ -756,16 +756,17 @@ function get_metadata(scan_id){
 		$('#metadata-count').empty();
 		$('#metadata-table-body').empty();
 		for (let val in data['metadata']){
-			doc = data['metadata'][val];
-			rand_id = get_randid();
+			const doc = data['metadata'][val];
+			const rand_id = get_randid();
 			$('#metadata-table-body').append(`<tr id=${rand_id}></tr>`);
+			let filename;
 			if (doc['doc_name']) {
 				filename = `<a href=${doc['url']} target="_blank" class="text-primary">${truncate(doc['doc_name'], 30)}</a>`;
 			}
 			else{
 				filename = ''
 			}
-			subdomain = `<span class='text-muted bs-tooltip' title='Subdomain'>${doc['subdomain']['name']}</span>`;
+			const subdomain = `<span class='text-muted bs-tooltip' title='Subdomain'>${doc['subdomain']['name']}</span>`;
 			$(`#${rand_id}`).append(`<td class="td-content">${filename}</br>${subdomain}</td>`);
 			if (doc['author']){
 				$(`#${rand_id}`).append(`<td class="td-content text-center">${doc['author']}</td>`);
@@ -774,7 +775,7 @@ function get_metadata(scan_id){
 				$(`#${rand_id}`).append('<td></td>')
 			}
 			if (doc['producer'] || doc['creator'] || doc['os']) {
-				metadata = '';
+				let metadata = '';
 				metadata += doc['producer'] ? 'Software: ' + doc['producer'] : '';
 				metadata += doc['creator'] ? '/' + doc['creator'] : 'dsdd';
 				metadata += doc['os'] ? `<br> <span class='badge badge-soft-danger'> OS: ` + doc['os'] + '</span>': '';
@@ -802,8 +803,8 @@ function get_emails(scan_id){
 		$('#emails-count').empty();
 		$('#email-table-body').empty();
 		for (let val in data['emails']){
-			email = data['emails'][val];
-			rand_id = get_randid();
+			const email = data['emails'][val];
+			const rand_id = get_randid();
 			$('#email-table-body').append(`<tr id=${rand_id}></tr>`);
 			$(`#${rand_id}`).append(`<td class="td-content">${email['address']}</td>`);
 			if (email['password']) {
@@ -824,8 +825,8 @@ function get_employees(scan_id){
 		$('#employees-count').empty();
 		$('#employees-table-body').empty();
 		for (let val in data['employees']){
-			emp = data['employees'][val];
-			rand_id = get_randid();
+			const emp = data['employees'][val];
+			const rand_id = get_randid();
 			$('#employees-table-body').append(`<tr id=${rand_id}></tr>`);
 			$(`#${rand_id}`).append(`<td class="td-content">${emp['name']}</td>`);
 			$(`#${rand_id}`).append(`<td class="td-content">${emp['designation']}</td>`);
@@ -848,6 +849,7 @@ function get_dorks(scan_id){
 		let is_first = true;
 		for (let val in data['dorks']){
 			const dorks = data['dorks'][val];
+			let active;
 			if (is_first) {
 				active = 'active show';
 			}
@@ -1116,7 +1118,7 @@ function getStatusBadge(status) {
 	if (info) {
 		return `<span class="badge ${info.class}">${escapeHtml(info.text)}</span>`;
 	}
-	const s = (status || '').toUpperCase();
+	const s = String(status).toUpperCase();
 	let badgeClass = 'secondary';
 	let label = s;
 	if (s === 'SUCCESS') {
@@ -1252,10 +1254,11 @@ function create_log_element(log) {
 			
 			// Use formatted output if available, otherwise use raw output
 			if (log.formatted_output && log.formatted_output.formatted) {
-				// formatted_output.formatted is HTML generated by our secure formatter
-				// It only contains <span> tags with CSS classes, all user content is escaped
-				// Safe to insert directly since it's generated server-side with proper escaping
-				contentHTML += log.formatted_output.formatted;
+				const rawFormatted = log.formatted_output.formatted;
+				const safeFormatted = (typeof DOMPurify !== 'undefined' && DOMPurify.sanitize)
+					? DOMPurify.sanitize(rawFormatted, { ALLOWED_TAGS: ['span', 'br'], ALLOWED_ATTR: ['class'] })
+					: escapeHtml(rawFormatted);
+				contentHTML += safeFormatted;
 			} else if (log.output) {
 				contentHTML += escapeHtml(log.output);
 			}
@@ -1407,11 +1410,11 @@ function add_todo_for_scanhistory_modal(scan_history_id){
 	subdomain_dropdown = document.getElementById('todoSubdomainDropdown');
 	$.getJSON(`/api/querySubdomains?scan_id=${scan_history_id}&no_lookup_interesting&format=json`, function(data) {
 		document.querySelector("#selectedSubdomainCount").innerHTML = data['subdomains'].length + ' Subdomains';
-		for (let subdomain in data['subdomains']){
-			subdomain_obj = data['subdomains'][subdomain];
+		for (const subdomain in data['subdomains']){
+			const subdomain_obj = data['subdomains'][subdomain];
 			const option = document.createElement('option');
 			option.value = subdomain_obj['id'];
-			option.innerHTML = subdomain_obj['name'];
+			option.textContent = subdomain_obj['name'];
 			subdomain_dropdown.appendChild(option);
 		}
 	});
@@ -1424,13 +1427,13 @@ $(".add-scan-history-todo").click(function(){
 
 	const description = document.getElementById('todoDescription').value;
 
-	data = {
+	const data = {
 		'title': title,
 		'description': description
-	}
+	};
 
 
-	scan_id = parseInt(document.getElementById('summary_identifier_val').value);
+	const scan_id = parseInt(document.getElementById('summary_identifier_val').value);
 	data['scan_history_id'] = scan_id;
 
 	if ($("#todoSubdomainDropdown").val() != 'Choose Subdomain...') {
@@ -1519,7 +1522,7 @@ function add_note_for_subdomain_handler(subdomain_id, current_project){
 	const description = document.getElementById('subdomainTodoDescription').value;
 	const scan_id = parseInt(document.getElementById('summary_identifier_val').value);
 
-	data = {
+	const data = {
 		'title': title,
 		'description': description,
 		'subdomain_id': subdomain_id,
@@ -1868,7 +1871,7 @@ function downloadSelectedSubdomains(domain_name){
 		});
 		Swal.showLoading();
 
-		subdomain_item = document.getElementsByClassName("subdomain_checkbox");
+		const subdomain_item = document.getElementsByClassName("subdomain_checkbox");
 		const subdomain_ids = [];
 		for (let i = 0; i < subdomain_item.length; i++) {
 			if (subdomain_item[i].checked) {
@@ -1892,10 +1895,10 @@ function downloadSelectedSubdomains(domain_name){
 				if (window.ModalManager) ModalManager.showDialog({});
 				$('#modal-dialog-title .modal_count').html(response['results'].length);
 				$('#modal-dialog-body').empty();
-				subdomains = '';
+				let subdomains = '';
 				$('#modal-dialog-body').append(`<textarea class="form-control clipboard copy-txt" id="selected_subdomains_text_area" rows="10" spellcheck="false"></textarea>`);
-				for (subdomain in response['results']){
-					subdomain_obj = response['results'][subdomain];
+				for (const subdomain in response['results']){
+					const subdomain_obj = response['results'][subdomain];
 					subdomains += subdomain_obj + '\n'
 				}
 				$('#selected_subdomains_text_area').append(subdomains);
@@ -1938,7 +1941,7 @@ function deleteMultipleSubdomains(){
 				});
 				Swal.showLoading();
 
-				subdomain_item = document.getElementsByClassName("subdomain_checkbox");
+				const subdomain_item = document.getElementsByClassName("subdomain_checkbox");
 				const subdomain_ids = [];
 				for (let i = 0; i < subdomain_item.length; i++) {
 					if (subdomain_item[i].checked) {
@@ -2084,7 +2087,7 @@ function show_port_screenshots(subdomain_id, subdomain_name, port, scan_id, doma
 							<div class="d-flex justify-content-center">
 								<img src="${screenshotUrl}" class="img-fluid rounded screenshot-popup"
 									 style="max-width: 90%; max-height: 80vh; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.15);"
-									 onclick="window.open('${screenshotUrl.replace(/'/g, "\\'")}', '_blank')">
+									 onclick="window.open('${screenshotUrl.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}', '_blank')">
 							</div>
 						</div>
 					`;
@@ -2164,7 +2167,7 @@ function show_subdomain_screenshots(subdomain_id, subdomain_name, scan_id) {
 							<div class="d-flex justify-content-center">
 								<img src="${subdomainScreenshotUrl}" class="img-fluid rounded screenshot-popup"
 									 style="max-width: 90%; max-height: 80vh; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.15);"
-									 onclick="window.open('${subdomainScreenshotUrl.replace(/'/g, "\\'")}', '_blank')">
+									 onclick="window.open('${subdomainScreenshotUrl.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}', '_blank')">
 							</div>
 						</div>
 					`;

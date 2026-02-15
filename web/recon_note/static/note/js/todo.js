@@ -276,7 +276,7 @@ const checkBtnListener = function() {
 
 const importantBtnListener = function() {
   $('.actions-btn .important-btn').click(async function() {
-    badge_id = this.id.split('_')[1];
+    const badge_id = this.id.split('_')[1];
     if(!$(this).parents('.todo-item').hasClass('todo-task-important')){
       $(this).parents('.todo-item').addClass('todo-task-important');
 
@@ -285,7 +285,7 @@ const importantBtnListener = function() {
       is_important_badge.classList.add("custom-dropdown-icon");
       is_important_badge.id = 'important-badge-' + this.id.split('_')[1];
 
-      badge = `
+      const badge = `
           <div class="dropdown p-dropdown">
             <span class="text-danger bs-tooltip" title="Important to-do">
               <i class="fa fa-exclamation-circle"></i>
@@ -321,7 +321,7 @@ const todoItemListener = function() {
     const $todoDescription = $(this).find('.todo-text').text();
 
     $('.task-heading').text($_taskTitle);
-    $('.task-text').html(`<span class="text-success">${$_taskTarget}</span><br>` + htmlEncode($todoDescription));
+    $('.task-text').html(`<span class="text-success">${htmlEncode($_taskTarget)}</span><br>` + htmlEncode($todoDescription));
 
     if (window.ModalManager) ModalManager.showById(ModalManager.MODAL_IDS.TODO_SHOW_LIST_ITEM);
   });
@@ -331,7 +331,7 @@ const populateScanHistory = function(project) {
   scan_history_select = document.getElementById('scanHistoryIDropdown');
   $.getJSON(`/api/listScanHistory/?format=json&project=${project}`, function(data) {
     for (var history in data){
-      history_object = data[history];
+      const history_object = data[history];
       const option = document.createElement('option');
       option.value = history_object['id'];
       option.innerHTML = history_object['domain']['name'] + ' - Scanned ' + moment.utc(history_object['start_scan_date']).fromNow();
