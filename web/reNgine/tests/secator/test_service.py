@@ -89,15 +89,20 @@ class TestSecatorService(BaseTestCase):
 
     @patch("reNgine.secator.service.logger")
     def test_handle_scan_error_logs_error(self, mock_logger):
-        """Test that handle_scan_error logs the error."""
+        """Test that handle_scan_error logs the error via log_line."""
         self.scan_history.scan_status = RUNNING_TASK
         self.scan_history.save()
 
         error = Exception("Test error message")
         handle_scan_error(self.scan_history, error)
 
-        mock_logger.exception.assert_called_once()
-        self.assertIn("Test error message", str(mock_logger.exception.call_args))
+        mock_logger.log_line.assert_called()
+        error_calls = [
+            c for c in mock_logger.log_line.call_args_list
+            if c[1].get("level") == "error" and c[1].get("exc_info") is True
+        ]
+        self.assertEqual(len(error_calls), 1)
+        self.assertIn("Test error message", str(error_calls[0]))
 
     @patch("reNgine.secator.service.logger")
     def test_handle_scan_error_logs_debug_when_terminal(self, mock_logger):
@@ -108,8 +113,13 @@ class TestSecatorService(BaseTestCase):
         error = Exception("Test error")
         handle_scan_error(self.scan_history, error)
 
-        mock_logger.debug.assert_called_once()
-        self.assertIn("already in terminal state", str(mock_logger.debug.call_args).lower())
+        mock_logger.log_line.assert_called()
+        debug_calls = [
+            c for c in mock_logger.log_line.call_args_list
+            if c[1].get("level") == "debug"
+        ]
+        self.assertEqual(len(debug_calls), 1)
+        self.assertIn("terminal state", str(debug_calls[0]).lower())
 
     def test_handle_scan_error_refreshes_from_db(self):
         """Test that handle_scan_error refreshes scan from database before checking status."""

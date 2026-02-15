@@ -57,7 +57,7 @@ class TestListTargetsDatatableViewSet(BaseTestCase):
     def test_list_targets_with_slug(self):
         """Test listing targets with project slug."""
         api_url = reverse("api:targets-list")
-        response = self.client.get(api_url, {"slug": "test-project"})
+        response = self.client.get(api_url, {"slug": self.data_generator.project.slug})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertGreaterEqual(len(response.data["results"]), 1)
         self.assertEqual(response.data["results"][0]["name"], self.data_generator.domain.name)

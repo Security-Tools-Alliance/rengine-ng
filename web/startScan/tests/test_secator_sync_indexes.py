@@ -13,7 +13,7 @@ from startScan.models import Command, ScanActivity, SecatorRunner, SubScan
 from utils.test_base import BaseTestCase
 
 
-# Index name -> expected db table (from migration 0096_add_secator_sync_indexes)
+# Index name -> expected db table (from migrations 0096 and 0097_secatorrunner_covering_index)
 EXPECTED_INDEX_TO_TABLE = {
     "startScan_c_scan_hi_3a5c4a_idx": Command._meta.db_table,
     "startScan_s_scan_of_3c4d7a_idx": ScanActivity._meta.db_table,
@@ -21,7 +21,7 @@ EXPECTED_INDEX_TO_TABLE = {
     "startScan_s_scan_hi_a578c6_idx": SecatorRunner._meta.db_table,
     "startScan_s_scan_hi_5c36dc_idx": SubScan._meta.db_table,
     "ss_runner_scan_type_created": SecatorRunner._meta.db_table,
-    "ss_runner_scan_created": SecatorRunner._meta.db_table,
+    "ss_runner_scan_created_cov": SecatorRunner._meta.db_table,
 }
 
 

@@ -203,7 +203,8 @@ class TestInitiateSubTask(BaseTestCase):
     @patch("reNgine.secator.service.ScanRepository")
     def test_initiate_subtask_tasks_mode_with_selected_targets_per_task(self, mock_scan_repo_cls, mock_start_scan):
         """When selected_targets_per_task is provided, one shared ScanHistory for all tasks."""
-        shared_scan_id = 42
+        scan_history = self.data_generator.scan_history
+        shared_scan_id = scan_history.id
         mock_scan_repo_cls.return_value.create_scan.return_value = shared_scan_id
         mock_start_scan.return_value = {"status": True, "scan_id": shared_scan_id}
 
@@ -365,11 +366,7 @@ class TestListSubScans(BaseTestCase):
     def setUp(self):
         """Set up test environment."""
         super().setUp()
-
         self.subscans = self.data_generator.create_subscan()
-        # Now self.subscans is a list with the created subscan
-        self.subscans[-1].celery_ids = ["test_celery_id"]
-        self.subscans[-1].save()
 
     def test_list_subscans(self):
         """Test listing all subscans."""
@@ -380,16 +377,11 @@ class TestListSubScans(BaseTestCase):
         self.assertTrue(response.data["status"])
         self.assertGreaterEqual(len(response.data["results"]), 1)
 
-        # Test if the created subscan is in the results
         found_subscan = next(
-            (
-                s
-                for s in response.data["results"]
-                if s["celery_ids"] and len(s["celery_ids"]) > 0 and s["celery_ids"][0] == "test_celery_id"
-            ),
+            (s for s in response.data["results"] if s["id"] == self.subscans[-1].id),
             None,
         )
-        self.assertIsNotNone(found_subscan, "Le subscan créé n'a pas été trouvé dans les résultats")
+        self.assertIsNotNone(found_subscan, "Created subscan not found in results")
         self.assertEqual(found_subscan["id"], self.subscans[-1].id)
 
 

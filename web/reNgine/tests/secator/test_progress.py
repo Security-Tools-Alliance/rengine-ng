@@ -73,9 +73,10 @@ class TestMapSecatorStatusToRengine(unittest.TestCase):
 
     @patch("reNgine.secator.progress.logger")
     def test_unknown_status_logs_warning(self, mock_logger):
-        """Unknown Secator status logs a warning."""
+        """Unknown Secator status logs a warning via log_line."""
         SecatorProgressSync.map_secator_status_to_rengine("UNKNOWN_STATUS")
-        mock_logger.warning.assert_called_once()
-        call_args = mock_logger.warning.call_args
-        self.assertIn("UNKNOWN_STATUS", call_args[0])
-        self.assertEqual(call_args[0][2], UNKNOWN_SECATOR_STATUS_FALLBACK)
+        mock_logger.log_line.assert_called_once()
+        call_args = mock_logger.log_line.call_args
+        self.assertEqual(call_args[1].get("level"), "warning")
+        self.assertIn("UNKNOWN_STATUS", str(call_args[0]))
+        self.assertIn(str(UNKNOWN_SECATOR_STATUS_FALLBACK), str(call_args[0]))
