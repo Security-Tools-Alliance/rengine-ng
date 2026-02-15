@@ -98,7 +98,8 @@ class TestSecatorService(BaseTestCase):
 
         mock_logger.log_line.assert_called()
         error_calls = [
-            c for c in mock_logger.log_line.call_args_list
+            c
+            for c in mock_logger.log_line.call_args_list
             if c[1].get("level") == "error" and c[1].get("exc_info") is True
         ]
         self.assertEqual(len(error_calls), 1)
@@ -114,10 +115,7 @@ class TestSecatorService(BaseTestCase):
         handle_scan_error(self.scan_history, error)
 
         mock_logger.log_line.assert_called()
-        debug_calls = [
-            c for c in mock_logger.log_line.call_args_list
-            if c[1].get("level") == "debug"
-        ]
+        debug_calls = [c for c in mock_logger.log_line.call_args_list if c[1].get("level") == "debug"]
         self.assertEqual(len(debug_calls), 1)
         self.assertIn("terminal state", str(debug_calls[0]).lower())
 
