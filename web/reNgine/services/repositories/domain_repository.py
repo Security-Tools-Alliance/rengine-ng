@@ -22,6 +22,7 @@ from targetApp.models import (
     WhoisStatus,
 )
 
+
 PREFIX_DOMAIN_REPO = "[DOMAIN_REPO]"
 logger = get_module_logger(__name__)
 

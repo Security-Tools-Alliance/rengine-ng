@@ -158,11 +158,7 @@ def _get_cached_external_ip() -> str:
             return external_ip
 
         external_ip = _get_external_ip_with_fallback()
-        ttl = (
-            EXTERNAL_IP_CACHE_TTL_SUCCESS
-            if external_ip != "Unable to retrieve IP"
-            else EXTERNAL_IP_CACHE_TTL_FAILURE
-        )
+        ttl = EXTERNAL_IP_CACHE_TTL_SUCCESS if external_ip != "Unable to retrieve IP" else EXTERNAL_IP_CACHE_TTL_FAILURE
         cache.set(EXTERNAL_IP_CACHE_KEY, external_ip, timeout=ttl)
         _cached_external_ip_value = external_ip
         _cached_external_ip_expires_at = time.monotonic() + ttl

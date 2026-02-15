@@ -12,6 +12,7 @@ from django.conf import settings
 
 from reNgine.utilities.logger import get_module_logger
 
+
 PREFIX_PATH_UTILS = "[SECATOR_PATH_UTILS]"
 logger = get_module_logger(__name__)
 

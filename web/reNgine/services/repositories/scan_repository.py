@@ -11,6 +11,7 @@ from reNgine.definitions import INITIATED_TASK
 from reNgine.utilities.logger import get_module_logger
 from startScan.models import Domain, ScanActivity, ScanHistory, SubScan
 
+
 PREFIX_SCAN_REPO = "[SCAN_REPO]"
 logger = get_module_logger(__name__)
 

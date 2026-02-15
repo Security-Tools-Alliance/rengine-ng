@@ -9,6 +9,7 @@ from typing import Any, Dict
 
 from reNgine.utilities.logger import get_module_logger
 
+
 PREFIX_SECATOR_CONFIG = "[SECATOR_CONFIG]"
 logger = get_module_logger(__name__)
 

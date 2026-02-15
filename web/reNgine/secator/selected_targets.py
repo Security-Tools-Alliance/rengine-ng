@@ -12,6 +12,7 @@ from typing import Any, Literal, TypedDict
 
 from reNgine.utilities.logger import get_module_logger
 
+
 PREFIX_SELECTED_TARGETS = "[SECATOR_SELECTED_TARGETS]"
 logger = get_module_logger(__name__)
 

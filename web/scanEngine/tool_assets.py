@@ -11,6 +11,7 @@ from django.contrib import messages
 
 from reNgine.utilities.logger import get_module_logger
 
+
 PREFIX_TOOL_ASSETS = "[TOOL_ASSETS]"
 logger = get_module_logger(__name__)
 

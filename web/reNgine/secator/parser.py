@@ -11,6 +11,7 @@ from django.db import transaction
 
 from reNgine.utilities.logger import get_module_logger
 
+
 PREFIX_SECATOR_PARSER = "[SECATOR_PARSER]"
 logger = get_module_logger(__name__)
 

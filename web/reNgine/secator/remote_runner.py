@@ -27,6 +27,7 @@ from scanEngine.services.worker_ssh import (
 )
 from scanEngine.services.worker_tunnel import start_worker_tunnel, stop_worker_tunnel
 
+
 PREFIX_REMOTE_RUNNER = "[REMOTE_RUNNER]"
 logger = get_module_logger(__name__)
 

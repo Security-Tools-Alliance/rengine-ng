@@ -17,6 +17,7 @@ from reNgine.settings import RENGINE_WORDLISTS
 from reNgine.utilities.logger import get_module_logger
 from scanEngine.models import Wordlist
 
+
 PREFIX_WORDLISTS = "[WORDLISTS]"
 logger = get_module_logger(__name__)
 

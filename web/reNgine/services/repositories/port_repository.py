@@ -14,6 +14,7 @@ from reNgine.utilities.logger import get_module_logger
 from startScan.models import IpAddress, Port, ScanHistory
 from targetApp.models import Domain
 
+
 PREFIX_PORT_REPO = "[PORT_REPO]"
 logger = get_module_logger(__name__)
 

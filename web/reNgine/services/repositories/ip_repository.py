@@ -13,6 +13,7 @@ from reNgine.utilities.logger import get_module_logger
 from startScan.models import IpAddress, ScanHistory, Subdomain
 from targetApp.models import Domain
 
+
 PREFIX_IP_REPO = "[IP_REPO]"
 logger = get_module_logger(__name__)
 

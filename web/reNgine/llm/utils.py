@@ -7,6 +7,7 @@ from dashboard.models import OllamaSettings
 from reNgine.llm.config import LLM_CONFIG
 from reNgine.utilities.logger import get_module_logger
 
+
 PREFIX_LLM_UTILS = "[LLM_UTILS]"
 logger = get_module_logger(__name__)
 

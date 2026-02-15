@@ -14,6 +14,7 @@ from reNgine.secator.path_utils import strip_secator_reports_prefix
 from reNgine.utilities.logger import get_module_logger
 from startScan.models import EndPoint, Subdomain, Technology
 
+
 PREFIX_TECH_REPO = "[TECH_REPO]"
 logger = get_module_logger(__name__)
 

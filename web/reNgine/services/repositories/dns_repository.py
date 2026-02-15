@@ -11,6 +11,7 @@ from django.db import IntegrityError, transaction
 from reNgine.utilities.logger import get_module_logger
 from targetApp.models import DNSRecord, Domain, DomainInfo
 
+
 PREFIX_DNS_REPO = "[DNS_REPO]"
 logger = get_module_logger(__name__)
 

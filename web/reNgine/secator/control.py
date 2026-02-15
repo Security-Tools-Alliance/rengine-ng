@@ -12,6 +12,7 @@ from reNgine.services.repositories.scan_repository import ScanRepository
 from reNgine.utilities.logger import get_module_logger
 from startScan.models import ScanActivity, SecatorRunner, SubScan
 
+
 PREFIX_SECATOR_CONTROL = "[SECATOR_CONTROL]"
 logger = get_module_logger(__name__)
 

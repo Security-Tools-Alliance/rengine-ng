@@ -18,6 +18,7 @@ from targetApp.models import Domain
 
 from .lookup import get_lookup_keywords
 
+
 PREFIX_ENDPOINT = "[ENDPOINT]"
 logger = get_module_logger(__name__)
 

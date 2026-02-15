@@ -16,6 +16,7 @@ from reNgine.utilities.time import ensure_timezone_aware, parse_datetime_iso
 from startScan.models import Certificate, IpAddress, ScanHistory, Subdomain
 from targetApp.models import Domain
 
+
 PREFIX_CERT_REPO = "[CERT_REPO]"
 logger = get_module_logger(__name__)
 

@@ -7,6 +7,7 @@ import validators
 
 from reNgine.utilities.logger import get_module_logger
 
+
 PREFIX_URL = "[URL]"
 logger = get_module_logger(__name__)
 

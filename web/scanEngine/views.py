@@ -81,6 +81,7 @@ from scanEngine.wordlists import (
 )
 from startScan.models import ScanHistory
 
+
 PREFIX_SCAN_ENGINE_VIEWS = "[SCAN_ENGINE_VIEWS]"
 logger = get_module_logger(__name__)
 

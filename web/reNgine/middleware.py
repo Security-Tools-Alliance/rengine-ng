@@ -6,6 +6,7 @@ from django.template.loader import render_to_string
 from reNgine.settings import DEBUG, UI_ERROR_LOGGING
 from reNgine.utilities.logger import get_module_logger
 
+
 PREFIX_MIDDLEWARE = "[MIDDLEWARE]"
 logger = get_module_logger(__name__)
 

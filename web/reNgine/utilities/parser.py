@@ -8,6 +8,7 @@ from reNgine.definitions import NMAP, NUCLEI_SEVERITY_MAP
 from reNgine.utilities.logger import get_module_logger
 from reNgine.utilities.url import sanitize_url
 
+
 PREFIX_PARSER = "[PARSER]"
 logger = get_module_logger(__name__)
 

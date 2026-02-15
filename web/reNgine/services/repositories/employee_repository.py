@@ -15,6 +15,7 @@ from reNgine.utilities.logger import get_module_logger
 from startScan.models import Email, Employee, EndPoint, ScanHistory, Subdomain
 from targetApp.models import Domain
 
+
 PREFIX_EMPLOYEE_REPO = "[EMPLOYEE_REPO]"
 logger = get_module_logger(__name__)
 

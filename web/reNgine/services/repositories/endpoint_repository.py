@@ -22,6 +22,7 @@ from reNgine.utilities.logger import get_module_logger
 from startScan.models import DirectoryFile, EndPoint, ScanHistory, Subdomain, Technology
 from targetApp.models import Domain
 
+
 PREFIX_ENDPOINT_REPO = "[ENDPOINT_REPO]"
 logger = get_module_logger(__name__)
 

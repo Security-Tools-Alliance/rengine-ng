@@ -11,6 +11,7 @@ from django.db import transaction
 from dashboard.models import UserAPIKey
 from reNgine.utilities.logger import get_module_logger
 
+
 PREFIX_API_KEY = "[API_KEY]"
 logger = get_module_logger(__name__)
 User = get_user_model()

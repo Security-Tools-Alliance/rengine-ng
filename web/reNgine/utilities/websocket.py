@@ -33,6 +33,7 @@ from startScan.models import (
     Vulnerability,
 )
 
+
 PREFIX_WS = "[WS]"
 logger = get_module_logger(__name__)
 

@@ -31,6 +31,7 @@ from typing import Any
 
 from reNgine.utilities.logger.base import BaseLogger
 
+
 ALLOWED_LOG_LEVELS = frozenset({"debug", "info", "warning", "error"})
 
 
@@ -79,10 +80,7 @@ class ModuleLogger(BaseLogger):
             ValueError: If level is not one of the allowed values.
         """
         if level not in ALLOWED_LOG_LEVELS:
-            raise ValueError(
-                "log_line level must be one of %s, got %r"
-                % (sorted(ALLOWED_LOG_LEVELS), level)
-            )
+            raise ValueError("log_line level must be one of %s, got %r" % (sorted(ALLOWED_LOG_LEVELS), level))
         action_colors = {
             "debug": self.COLOR_VIOLET,
             "info": self.COLOR_BRIGHT_BLUE,

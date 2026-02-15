@@ -53,6 +53,7 @@ from reNgine.settings import RENGINE_RESULTS, SECATOR_REPORTS_PREFIX
 from reNgine.utilities.logger import get_module_logger
 from startScan.models import EndPoint, Subdomain, Technology
 
+
 PREFIX_SCAN_FILE = "[SCAN_FILE]"
 logger = get_module_logger(__name__)
 

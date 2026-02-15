@@ -9,6 +9,7 @@ from reNgine.secator.runner import SecatorRunner
 from reNgine.services.repositories.scan_repository import ScanRepository
 from reNgine.utilities.logger import get_module_logger
 
+
 PREFIX_SECATOR_ORCH = "[SECATOR_ORCH]"
 logger = get_module_logger(__name__)
 
