@@ -16,6 +16,7 @@ from reNgine.utilities.logger import get_module_logger
 from startScan.models import ScanSchedule
 
 
+PREFIX_SCHEDULED = "[SCHEDULED_SCANS]"
 logger = get_module_logger(__name__)
 
 
@@ -137,11 +138,12 @@ class Command(BaseCommand):
             except Exception as e:
                 schedule_id = getattr(schedule, "id", "?")
                 schedule_name = getattr(schedule, "name", "unknown")
-                logger.exception(
-                    "run_scheduled_scans failed for schedule id=%s name=%r: %s",
-                    schedule_id,
-                    schedule_name,
-                    e,
+                logger.log_line(
+                    PREFIX_SCHEDULED,
+                    "SCHEDULED_SCANS",
+                    "run_scheduled_scans failed for schedule id=%s name=%r: %s" % (schedule_id, schedule_name, e),
+                    level="error",
+                    exc_info=True,
                 )
                 tb = traceback.format_exc()
                 self.stderr.write(self.style.ERROR(f"Schedule id={schedule_id} name={schedule_name!r}: {e}\n{tb}"))

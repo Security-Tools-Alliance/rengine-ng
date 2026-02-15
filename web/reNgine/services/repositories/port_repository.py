@@ -14,7 +14,7 @@ from reNgine.utilities.logger import get_module_logger
 from startScan.models import IpAddress, Port, ScanHistory
 from targetApp.models import Domain
 
-
+PREFIX_PORT_REPO = "[PORT_REPO]"
 logger = get_module_logger(__name__)
 
 
@@ -43,13 +43,28 @@ class PortRepository:
         try:
             return self._process_secator_port_item(item, scan_history_id, domain_id)
         except ObjectDoesNotExist as e:
-            logger.error(f"Object not found when saving port: {e}")
+            logger.log_line(
+                PREFIX_PORT_REPO,
+                "SAVE",
+                "Object not found when saving port: %s" % (e,),
+                level="error",
+            )
             return None
         except IntegrityError as e:
-            logger.error(f"Integrity error saving port: {e}")
+            logger.log_line(
+                PREFIX_PORT_REPO,
+                "SAVE",
+                "Integrity error saving port: %s" % (e,),
+                level="error",
+            )
             return None
         except DatabaseError as e:
-            logger.error(f"Database error saving port from Secator: {e}")
+            logger.log_line(
+                PREFIX_PORT_REPO,
+                "SAVE",
+                "Database error saving port from Secator: %s" % (e,),
+                level="error",
+            )
             return None
 
     def _process_secator_port_item(self, item: Dict[str, Any], scan_history_id: int, domain_id: int) -> Optional[Port]:
@@ -58,17 +73,32 @@ class PortRepository:
         raw_host = item.get("host")
 
         if raw_port is None:
-            logger.warning("Port item missing port number field")
+            logger.log_line(
+                PREFIX_PORT_REPO,
+                "SAVE",
+                "Port item missing port number field",
+                level="warning",
+            )
             return None
 
         try:
             port_number = int(raw_port)
         except (TypeError, ValueError):
-            logger.warning(f"Invalid port number type/value: {raw_port!r}")
+            logger.log_line(
+                PREFIX_PORT_REPO,
+                "SAVE",
+                "Invalid port number type/value: %s" % (repr(raw_port),),
+                level="warning",
+            )
             return None
 
         if not is_valid_port(port_number):
-            logger.warning(f"Invalid port number: {port_number}")
+            logger.log_line(
+                PREFIX_PORT_REPO,
+                "SAVE",
+                "Invalid port number: %s" % (port_number,),
+                level="warning",
+            )
             return None
 
         ip_address: Optional[str] = None
@@ -76,23 +106,48 @@ class PortRepository:
             if is_valid_ip(raw_ip):
                 ip_address = raw_ip
             else:
-                logger.warning(f"Invalid IP address in 'ip' field for port: {raw_ip}")
+                logger.log_line(
+                    PREFIX_PORT_REPO,
+                    "SAVE",
+                    "Invalid IP address in 'ip' field for port: %s" % (raw_ip,),
+                    level="warning",
+                )
         if ip_address is None and raw_host:
             if is_valid_ip(raw_host):
                 ip_address = raw_host
             else:
-                logger.info("Port item host is not an IP address; treating 'host' as hostname: %s", raw_host)
+                logger.log_line(
+                    PREFIX_PORT_REPO,
+                    "SAVE",
+                    "Port item host is not an IP address; treating 'host' as hostname: %s" % (raw_host,),
+                    level="info",
+                )
         if ip_address is None:
             if raw_ip is None and raw_host is None:
-                logger.warning("Port item missing both 'ip' and 'host' fields")
+                logger.log_line(
+                    PREFIX_PORT_REPO,
+                    "SAVE",
+                    "Port item missing both 'ip' and 'host' fields",
+                    level="warning",
+                )
             else:
-                logger.warning("Port item does not contain a valid IP address in either 'ip' or 'host' fields")
+                logger.log_line(
+                    PREFIX_PORT_REPO,
+                    "SAVE",
+                    "Port item does not contain a valid IP address in either 'ip' or 'host' fields",
+                    level="warning",
+                )
             return None
 
         # Get or create IP address first
         ip_obj = self._get_or_create_ip(ip_address, scan_history_id, domain_id)
         if not ip_obj:
-            logger.error(f"Failed to get or create IP address: {ip_address}")
+            logger.log_line(
+                PREFIX_PORT_REPO,
+                "SAVE",
+                "Failed to get or create IP address: %s" % (ip_address,),
+                level="error",
+            )
             return None
 
         # Get or create port
@@ -112,9 +167,19 @@ class PortRepository:
         )
 
         if created:
-            logger.info(f"Created port: {port_number} on {ip_address}")
+            logger.log_line(
+                PREFIX_PORT_REPO,
+                "SAVE",
+                "Created port: %s on %s" % (port_number, ip_address),
+                level="info",
+            )
         else:
-            logger.debug(f"Port already exists: {port_number} on {ip_address}")
+            logger.log_line(
+                PREFIX_PORT_REPO,
+                "SAVE",
+                "Port already exists: %s on %s" % (port_number, ip_address),
+                level="debug",
+            )
 
         return port_obj
 
@@ -132,11 +197,21 @@ class PortRepository:
         """
         try:
             if not is_valid_port(port_number):
-                logger.warning(f"Invalid port number: {port_number}")
+                logger.log_line(
+                    PREFIX_PORT_REPO,
+                    "GET_OR_CREATE",
+                    "Invalid port number: %s" % (port_number,),
+                    level="warning",
+                )
                 return None, False
 
             if not is_valid_ip(ip_address):
-                logger.warning(f"Invalid IP address: {ip_address}")
+                logger.log_line(
+                    PREFIX_PORT_REPO,
+                    "GET_OR_CREATE",
+                    "Invalid IP address: %s" % (ip_address,),
+                    level="warning",
+                )
                 return None, False
 
             # Get or create IP address
@@ -159,7 +234,12 @@ class PortRepository:
             return port_obj, created
 
         except (IntegrityError, DatabaseError) as e:
-            logger.error(f"Error in get_or_create port: {e}")
+            logger.log_line(
+                PREFIX_PORT_REPO,
+                "GET_OR_CREATE",
+                "Error in get_or_create port: %s" % (e,),
+                level="error",
+            )
             return None, False
 
     def bulk_create(self, ports: list, scan_history_id: int, domain_id: int) -> list:
@@ -177,10 +257,20 @@ class PortRepository:
         try:
             return self._create_ports_in_bulk(scan_history_id, domain_id, ports)
         except ObjectDoesNotExist as e:
-            logger.error(f"Object not found: {e}")
+            logger.log_line(
+                PREFIX_PORT_REPO,
+                "BULK_CREATE",
+                "Object not found: %s" % (e,),
+                level="error",
+            )
             return []
         except DatabaseError as e:
-            logger.error(f"Error in bulk create ports: {e}")
+            logger.log_line(
+                PREFIX_PORT_REPO,
+                "BULK_CREATE",
+                "Error in bulk create ports: %s" % (e,),
+                level="error",
+            )
             return []
 
     def _create_ports_in_bulk(self, scan_history_id: int, domain_id: int, ports: List[Dict[str, Any]]) -> List[Port]:
@@ -220,7 +310,12 @@ class PortRepository:
 
         if port_objects:
             created = Port.objects.bulk_create(port_objects, ignore_conflicts=True)
-            logger.info(f"Bulk created {len(created)} ports")
+            logger.log_line(
+                PREFIX_PORT_REPO,
+                "BULK_CREATE",
+                "Bulk created %s ports" % (len(created),),
+                level="info",
+            )
             return created
 
         return []
@@ -249,10 +344,20 @@ class PortRepository:
             return True
 
         except ObjectDoesNotExist:
-            logger.error(f"Port with ID {port_id} not found")
+            logger.log_line(
+                PREFIX_PORT_REPO,
+                "UPDATE_SERVICE",
+                "Port with ID %s not found" % (port_id,),
+                level="error",
+            )
             return False
         except DatabaseError as e:
-            logger.error(f"Error updating port service info: {e}")
+            logger.log_line(
+                PREFIX_PORT_REPO,
+                "UPDATE_SERVICE",
+                "Error updating port service info: %s" % (e,),
+                level="error",
+            )
             return False
 
     def _get_or_create_ip(self, ip_address: str, scan_history_id: int, domain_id: int) -> Optional[IpAddress]:
@@ -278,12 +383,22 @@ class PortRepository:
             )
 
             if created:
-                logger.info(f"Created IP address for port: {ip_address}")
+                logger.log_line(
+                    PREFIX_PORT_REPO,
+                    "GET_OR_CREATE_IP",
+                    "Created IP address for port: %s" % (ip_address,),
+                    level="info",
+                )
 
             return ip_obj
 
         except (IntegrityError, DatabaseError) as e:
-            logger.error(f"Error getting or creating IP for port: {e}")
+            logger.log_line(
+                PREFIX_PORT_REPO,
+                "GET_OR_CREATE_IP",
+                "Error getting or creating IP for port: %s" % (e,),
+                level="error",
+            )
             return None
 
     def _validate_confidence(self, confidence: str) -> str:

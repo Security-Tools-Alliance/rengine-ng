@@ -7,7 +7,7 @@ import validators
 
 from reNgine.utilities.logger import get_module_logger
 
-
+PREFIX_URL = "[URL]"
 logger = get_module_logger(__name__)
 
 
@@ -43,17 +43,28 @@ def add_port_urls_to_crawl(
     ports_to_test = list(precrawl_ports)  # Start with configured common ports
 
     if precrawl_all_ports:
-        # If all ports requested, combine common and uncommon
         ports_to_test = list(set(COMMON_WEB_PORTS + UNCOMMON_WEB_PORTS))
-        logger.info(f"Found single default endpoint for {entity_type} {name}, testing ALL ports (COMMON + UNCOMMON)")
+        logger.log_line(
+            PREFIX_URL,
+            "ADD_PORT_URLS",
+            "Found single default endpoint for %s %s, testing ALL ports (COMMON + UNCOMMON)" % (entity_type, name),
+            level="info",
+        )
     elif precrawl_uncommon_ports:
-        # If uncommon ports requested, add them to the configured ports
         ports_to_test = list(set(precrawl_ports + UNCOMMON_WEB_PORTS))
-        logger.info(f"Found single default endpoint for {entity_type} {name}, testing COMMON and UNCOMMON ports")
+        logger.log_line(
+            PREFIX_URL,
+            "ADD_PORT_URLS",
+            "Found single default endpoint for %s %s, testing COMMON and UNCOMMON ports" % (entity_type, name),
+            level="info",
+        )
     else:
-        # Only test configured common ports (default behavior)
-        logger.info(
-            f"Found single default endpoint for {entity_type} {name}, testing configured ports: {precrawl_ports}"
+        logger.log_line(
+            PREFIX_URL,
+            "ADD_PORT_URLS",
+            "Found single default endpoint for %s %s, testing configured ports: %s"
+            % (entity_type, name, precrawl_ports),
+            level="info",
         )
 
     # Add port URLs to crawl list (not to database yet)
@@ -61,29 +72,39 @@ def add_port_urls_to_crawl(
     for port in ports_to_test:
         # Special handling for default ports 80 and 443
         if port == 80:
-            # Port 80 is HTTP default, no need to specify port
-            url = f"http://{name}"
+            url = "http://%s" % (name,)
             if url not in urls_to_crawl:
                 urls_to_crawl.append(url)
                 additional_urls_to_test.append(url)
-                logger.debug(f"Added port URL to crawl: {url}")
+                logger.log_line(
+                    PREFIX_URL,
+                    "ADD_PORT_URLS",
+                    "Added port URL to crawl: %s" % (url,),
+                    level="debug",
+                )
         elif port == 443:
-            # Port 443 is HTTPS default, no need to specify port
-            url = f"https://{name}"
+            url = "https://%s" % (name,)
             if url not in urls_to_crawl:
                 urls_to_crawl.append(url)
                 additional_urls_to_test.append(url)
-                logger.debug(f"Added port URL to crawl: {url}")
+                logger.log_line(
+                    PREFIX_URL,
+                    "ADD_PORT_URLS",
+                    "Added port URL to crawl: %s" % (url,),
+                    level="debug",
+                )
         else:
-            # For all other ports, test both schemes
             for scheme in ["http", "https"]:
-                url = f"{scheme}://{name}:{port}"
-
-                # Don't add if it already exists in crawl list
+                url = "%s://%s:%s" % (scheme, name, port)
                 if url not in urls_to_crawl:
                     urls_to_crawl.append(url)
                     additional_urls_to_test.append(url)
-                    logger.debug(f"Added port URL to crawl: {url}")
+                    logger.log_line(
+                        PREFIX_URL,
+                        "ADD_PORT_URLS",
+                        "Added port URL to crawl: %s" % (url,),
+                        level="debug",
+                    )
 
 
 def get_subdomain_from_url(url):
@@ -154,7 +175,12 @@ def get_domain_from_subdomain(subdomain):
                 # Take the last two parts as domain.tld
                 potential_domain = ".".join(parts[-2:])
                 if is_valid_domain_or_subdomain(potential_domain):
-                    logger.debug(f"Extracted private TLD domain: {potential_domain} from {subdomain}")
+                    logger.log_line(
+                        PREFIX_URL,
+                        "GET_DOMAIN",
+                        "Extracted private TLD domain: %s from %s" % (potential_domain, subdomain),
+                        level="debug",
+                    )
                     return potential_domain
 
         # Fallback method for edge cases where tldextract might not recognize the TLD
@@ -169,7 +195,12 @@ def get_domain_from_subdomain(subdomain):
         return None
 
     except Exception as e:
-        logger.warning(f"Error extracting domain from subdomain '{subdomain}': {str(e)}")
+        logger.log_line(
+            PREFIX_URL,
+            "GET_DOMAIN",
+            "Error extracting domain from subdomain '%s': %s" % (subdomain, e),
+            level="warning",
+        )
         return None
 
 
@@ -223,7 +254,12 @@ def is_valid_url(url):
     Returns:
         bool: True if valid URL, False otherwise
     """
-    logger.debug(f"Validating URL: {url}")
+    logger.log_line(
+        PREFIX_URL,
+        "VALIDATE",
+        "Validating URL: %s" % (url,),
+        level="debug",
+    )
 
     # Handle URLs with scheme (http://, https://)
     if url.startswith(("http://", "https://")):
@@ -236,21 +272,40 @@ def is_valid_url(url):
             # Validate port
             port = int(port)
             if not 1 <= port <= 65535:
-                logger.debug(f"Invalid port number: {port}")
+                logger.log_line(
+                    PREFIX_URL,
+                    "VALIDATE",
+                    "Invalid port number: %s" % (port,),
+                    level="debug",
+                )
                 return False
         else:
             domain = url
 
-        # Validate domain
         if validators.domain(domain) or validators.ipv4(domain) or validators.ipv6(domain):
-            logger.debug(f"Valid domain/IP found: {domain}")
+            logger.log_line(
+                PREFIX_URL,
+                "VALIDATE",
+                "Valid domain/IP found: %s" % (domain,),
+                level="debug",
+            )
             return True
 
-        logger.debug(f"Invalid domain/IP: {domain}")
+        logger.log_line(
+            PREFIX_URL,
+            "VALIDATE",
+            "Invalid domain/IP: %s" % (domain,),
+            level="debug",
+        )
         return False
 
     except (ValueError, ValidationError) as e:
-        logger.debug(f"Validation error: {str(e)}")
+        logger.log_line(
+            PREFIX_URL,
+            "VALIDATE",
+            "Validation error: %s" % (e,),
+            level="debug",
+        )
         return False
 
 

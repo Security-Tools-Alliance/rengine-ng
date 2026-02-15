@@ -1,5 +1,4 @@
 import json
-import logging
 from pathlib import Path
 import shutil
 
@@ -33,6 +32,7 @@ from reNgine.settings import (
     RENGINE_WORDLISTS,
 )
 from reNgine.utilities.error import get_safe_user_message
+from reNgine.utilities.logger import get_module_logger
 from reNgine.utilities.notification import (
     send_discord_message,
     send_lark_message,
@@ -81,8 +81,8 @@ from scanEngine.wordlists import (
 )
 from startScan.models import ScanHistory
 
-
-logger = logging.getLogger(__name__)
+PREFIX_SCAN_ENGINE_VIEWS = "[SCAN_ENGINE_VIEWS]"
+logger = get_module_logger(__name__)
 
 
 def index(request):
@@ -312,7 +312,12 @@ def delete_wordlist(request, id):
         # safe_unlink no-ops when path is missing or invalid (returns "not_found"); safe for cleanup.
         result = safe_unlink(RENGINE_WORDLISTS, file_path)
         if result not in ("removed", "not_found"):
-            logger.warning("Wordlist file cleanup returned %s for %s", result, file_path)
+            logger.log_line(
+                PREFIX_SCAN_ENGINE_VIEWS,
+                "WORDLIST_CLEANUP",
+                "Wordlist file cleanup returned %s for %s" % (result, file_path),
+                level="warning",
+            )
         response_data = {"status": result in ("removed", "not_found")}
         messages.add_message(request, messages.INFO, "Wordlist successfully deleted!")
     else:
@@ -1078,7 +1083,13 @@ def add_profile(request):
                 messages.add_message(request, messages.INFO, "Profile added successfully")
                 return http.HttpResponseRedirect(reverse("profiles"))
             except Exception as e:
-                logger.error("Error saving profile: %s", e, exc_info=True)
+                logger.log_line(
+                    PREFIX_SCAN_ENGINE_VIEWS,
+                    "PROFILE",
+                    "Error saving profile: %s" % (e,),
+                    level="error",
+                    exc_info=True,
+                )
                 messages.add_message(request, messages.ERROR, get_safe_user_message(e, logger))
                 context = {"scan_engine_nav_active": "active", "form": form}
                 return render(request, "scanEngine/add_profile.html", context)
@@ -1122,7 +1133,13 @@ def update_profile(request, profile_id):
                 messages.add_message(request, messages.ERROR, get_safe_user_message(e, logger))
                 return http.HttpResponseRedirect(reverse("profiles"))
             except Exception as e:
-                logger.error("Error updating profile: %s", e, exc_info=True)
+                logger.log_line(
+                    PREFIX_SCAN_ENGINE_VIEWS,
+                    "PROFILE",
+                    "Error updating profile: %s" % (e,),
+                    level="error",
+                    exc_info=True,
+                )
                 messages.add_message(request, messages.ERROR, get_safe_user_message(e, logger))
                 context = {"scan_engine_nav_active": "active", "form": form, "profile": profile}
                 return render(request, "scanEngine/update_profile.html", context)

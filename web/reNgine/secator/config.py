@@ -5,11 +5,12 @@ This module handles the conversion of reNgine scan configurations
 to Secator-compatible configuration format.
 """
 
-import logging
 from typing import Any, Dict
 
+from reNgine.utilities.logger import get_module_logger
 
-logger = logging.getLogger(__name__)
+PREFIX_SECATOR_CONFIG = "[SECATOR_CONFIG]"
+logger = get_module_logger(__name__)
 
 
 class SecatorConfigConverter:
@@ -43,7 +44,12 @@ class SecatorConfigConverter:
                 return self._convert_engine_type(scan_config)
 
         except Exception as e:
-            logger.error(f"Error converting scan configuration: {e}")
+            logger.log_line(
+                PREFIX_SECATOR_CONFIG,
+                "CONVERT",
+                "Error converting scan configuration: %s" % (e,),
+                level="error",
+            )
             return self._get_default_config()
 
     def _convert_secator_scan(self, scan_config: Any) -> Dict[str, Any]:
@@ -115,7 +121,12 @@ class SecatorConfigConverter:
                 if yaml_config := yaml.safe_load(engine_type.yaml_configuration):
                     config.update(yaml_config)
             except Exception as e:
-                logger.warning(f"Error parsing YAML configuration: {e}")
+                logger.log_line(
+                    PREFIX_SECATOR_CONFIG,
+                    "CONVERT",
+                    "Error parsing YAML configuration: %s" % (e,),
+                    level="warning",
+                )
 
         return config
 

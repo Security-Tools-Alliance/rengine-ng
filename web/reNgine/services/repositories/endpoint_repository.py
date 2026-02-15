@@ -22,7 +22,7 @@ from reNgine.utilities.logger import get_module_logger
 from startScan.models import DirectoryFile, EndPoint, ScanHistory, Subdomain, Technology
 from targetApp.models import Domain
 
-
+PREFIX_ENDPOINT_REPO = "[ENDPOINT_REPO]"
 logger = get_module_logger(__name__)
 
 
@@ -51,14 +51,37 @@ class EndpointRepository:
         try:
             return self._process_secator_endpoint_item(item, scan_history_id, domain_id, rengine_context or {})
         except ObjectDoesNotExist as e:
-            logger.error(f"Object not found when saving endpoint: {e}", exc_info=True)
+            logger.log_line(
+                PREFIX_ENDPOINT_REPO,
+                "SAVE",
+                "Object not found when saving endpoint: %s" % (e,),
+                level="error",
+                exc_info=True,
+            )
             return None
         except IntegrityError as e:
-            logger.error(f"Integrity error saving endpoint: {e}", exc_info=True)
+            logger.log_line(
+                PREFIX_ENDPOINT_REPO,
+                "SAVE",
+                "Integrity error saving endpoint: %s" % (e,),
+                level="error",
+                exc_info=True,
+            )
             return None
         except Exception as e:
-            logger.error(f"Error saving endpoint from Secator: {e}", exc_info=True)
-            logger.error(f"Endpoint item data: {item}")
+            logger.log_line(
+                PREFIX_ENDPOINT_REPO,
+                "SAVE",
+                "Error saving endpoint from Secator: %s" % (e,),
+                level="error",
+                exc_info=True,
+            )
+            logger.log_line(
+                PREFIX_ENDPOINT_REPO,
+                "SAVE",
+                "Endpoint item data: %s" % (item,),
+                level="error",
+            )
             return None
 
     def _process_secator_endpoint_item(
@@ -72,11 +95,21 @@ class EndpointRepository:
         http_url = item.get("url")
 
         if not http_url:
-            logger.warning(f"Endpoint item missing URL field. Available fields: {list(item.keys())}")
+            logger.log_line(
+                PREFIX_ENDPOINT_REPO,
+                "SAVE",
+                "Endpoint item missing URL field. Available fields: %s" % (list(item.keys()),),
+                level="warning",
+            )
             return None
 
         if not is_valid_url(http_url):
-            logger.warning(f"Invalid URL: {http_url}")
+            logger.log_line(
+                PREFIX_ENDPOINT_REPO,
+                "SAVE",
+                "Invalid URL: %s" % (http_url,),
+                level="warning",
+            )
             return None
 
         scan_history = ScanHistory.objects.get(id=scan_history_id)
@@ -94,9 +127,19 @@ class EndpointRepository:
         self._associate_technologies(endpoint, item)
 
         if created:
-            logger.info(f"Created endpoint: {http_url}")
+            logger.log_line(
+                PREFIX_ENDPOINT_REPO,
+                "SAVE",
+                "Created endpoint: %s" % (http_url,),
+                level="info",
+            )
         else:
-            logger.debug(f"Endpoint already exists: {http_url}")
+            logger.log_line(
+                PREFIX_ENDPOINT_REPO,
+                "SAVE",
+                "Endpoint already exists: %s" % (http_url,),
+                level="debug",
+            )
 
         subscan_id = ctx.get("subscan_id")
         if subscan_id:
@@ -276,10 +319,20 @@ class EndpointRepository:
             return endpoint, created
 
         except ObjectDoesNotExist as e:
-            logger.error(f"Object not found: {e}")
+            logger.log_line(
+                PREFIX_ENDPOINT_REPO,
+                "GET_OR_CREATE",
+                "Object not found: %s" % (e,),
+                level="error",
+            )
             return None, False
         except Exception as e:
-            logger.error(f"Error in get_or_create endpoint: {e}")
+            logger.log_line(
+                PREFIX_ENDPOINT_REPO,
+                "GET_OR_CREATE",
+                "Error in get_or_create endpoint: %s" % (e,),
+                level="error",
+            )
             return None, False
 
     def bulk_create(self, endpoints, scan_history_id, domain_id):
@@ -297,10 +350,20 @@ class EndpointRepository:
         try:
             return self._create_endpoints_in_bulk(scan_history_id, domain_id, endpoints)
         except ObjectDoesNotExist as e:
-            logger.error(f"Object not found: {e}")
+            logger.log_line(
+                PREFIX_ENDPOINT_REPO,
+                "BULK_CREATE",
+                "Object not found: %s" % (e,),
+                level="error",
+            )
             return []
         except Exception as e:
-            logger.error(f"Error in bulk create endpoints: {e}")
+            logger.log_line(
+                PREFIX_ENDPOINT_REPO,
+                "BULK_CREATE",
+                "Error in bulk create endpoints: %s" % (e,),
+                level="error",
+            )
             return []
 
     def _create_endpoints_in_bulk(
@@ -326,7 +389,12 @@ class EndpointRepository:
 
         if endpoint_objects:
             created = EndPoint.objects.bulk_create(endpoint_objects, ignore_conflicts=True)
-            logger.info(f"Bulk created {len(created)} endpoints")
+            logger.log_line(
+                PREFIX_ENDPOINT_REPO,
+                "BULK_CREATE",
+                "Bulk created %s endpoints" % (len(created),),
+                level="info",
+            )
             return created
 
         return []
@@ -348,10 +416,20 @@ class EndpointRepository:
             endpoint.save(update_fields=["http_status"])
             return True
         except ObjectDoesNotExist:
-            logger.error(f"EndPoint with ID {endpoint_id} not found")
+            logger.log_line(
+                PREFIX_ENDPOINT_REPO,
+                "UPDATE",
+                "EndPoint with ID %s not found" % (endpoint_id,),
+                level="error",
+            )
             return False
         except Exception as e:
-            logger.error(f"Error updating endpoint HTTP status: {e}")
+            logger.log_line(
+                PREFIX_ENDPOINT_REPO,
+                "UPDATE",
+                "Error updating endpoint HTTP status: %s" % (e,),
+                level="error",
+            )
             return False
 
     def _associate_with_subdomain(
@@ -382,11 +460,12 @@ class EndpointRepository:
                     subdomain = Subdomain.objects.filter(name=hostname, scan_history_id=scan_history_id).first()
                     if not subdomain:
                         if not auto_create_subdomain:
-                            logger.debug(
+                            logger.log_line(
+                                PREFIX_ENDPOINT_REPO,
+                                "ASSOCIATE",
                                 "Subdomain %s not found in scan %s and auto_create_subdomain=False, "
-                                "skipping association",
-                                hostname,
-                                scan_history_id,
+                                "skipping association" % (hostname, scan_history_id),
+                                level="debug",
                             )
                             return
 
@@ -402,16 +481,31 @@ class EndpointRepository:
                             discovered_date=timezone.now(),
                             http_url=subdomain_http_url,
                         )
-                        logger.info(f"Created subdomain {hostname} for scan {scan_history_id}")
+                        logger.log_line(
+                            PREFIX_ENDPOINT_REPO,
+                            "ASSOCIATE",
+                            "Created subdomain %s for scan %s" % (hostname, scan_history_id),
+                            level="info",
+                        )
             except ObjectDoesNotExist:
                 return
 
             endpoint.subdomain = subdomain
             endpoint.save(update_fields=["subdomain"])
-            logger.debug(f"Associated endpoint {http_url} with subdomain {hostname}")
+            logger.log_line(
+                PREFIX_ENDPOINT_REPO,
+                "ASSOCIATE",
+                "Associated endpoint %s with subdomain %s" % (http_url, hostname),
+                level="debug",
+            )
 
         except Exception as e:
-            logger.error(f"Error associating endpoint with subdomain: {e}")
+            logger.log_line(
+                PREFIX_ENDPOINT_REPO,
+                "ASSOCIATE",
+                "Error associating endpoint with subdomain: %s" % (e,),
+                level="error",
+            )
 
     def _get_port_from_url(self, http_url: str) -> int:
         """Extract port from URL; returns 80 or 443 if scheme has no explicit port."""
@@ -432,7 +526,12 @@ class EndpointRepository:
         """
         try:
             if not endpoint.subdomain:
-                logger.debug(f"Endpoint {endpoint.http_url} has no subdomain, skipping default marking")
+                logger.log_line(
+                    PREFIX_ENDPOINT_REPO,
+                    "DEFAULT",
+                    "Endpoint %s has no subdomain, skipping default marking" % (endpoint.http_url,),
+                    level="debug",
+                )
                 return
 
             port = self._get_port_from_url(endpoint.http_url)
@@ -448,26 +547,43 @@ class EndpointRepository:
 
             with transaction.atomic():
                 if _has_other_default_for_port():
-                    logger.debug(
-                        f"A default endpoint already exists for subdomain {endpoint.subdomain.name} on port {port}, "
-                        f"skipping default for {endpoint.http_url}"
+                    logger.log_line(
+                        PREFIX_ENDPOINT_REPO,
+                        "DEFAULT",
+                        "A default endpoint already exists for subdomain %s on port %s, "
+                        "skipping default for %s" % (endpoint.subdomain.name, port, endpoint.http_url),
+                        level="debug",
                     )
                     return
 
                 endpoint.refresh_from_db()
                 # Re-check immediately before setting to avoid race with concurrent creations
                 if _has_other_default_for_port():
-                    logger.debug(
-                        f"Default already set for (subdomain, port) by concurrent transaction, skipping {endpoint.http_url}"
+                    logger.log_line(
+                        PREFIX_ENDPOINT_REPO,
+                        "DEFAULT",
+                        "Default already set for (subdomain, port) by concurrent transaction, skipping %s"
+                        % (endpoint.http_url,),
+                        level="debug",
                     )
                     return
                 endpoint.is_default = True
                 endpoint.save(update_fields=["is_default"])
-                logger.info(
-                    f"Marked endpoint {endpoint.http_url} as default for subdomain {endpoint.subdomain.name} (port {port})"
+                logger.log_line(
+                    PREFIX_ENDPOINT_REPO,
+                    "DEFAULT",
+                    "Marked endpoint %s as default for subdomain %s (port %s)"
+                    % (endpoint.http_url, endpoint.subdomain.name, port),
+                    level="info",
                 )
         except Exception as e:
-            logger.error(f"Error marking endpoint as default: {e}", exc_info=True)
+            logger.log_line(
+                PREFIX_ENDPOINT_REPO,
+                "DEFAULT",
+                "Error marking endpoint as default: %s" % (e,),
+                level="error",
+                exc_info=True,
+            )
 
     def create_endpoint_for_ip(self, ip_address: str, scan_history_id: int, domain_id: int) -> Optional[EndPoint]:
         """
@@ -486,15 +602,31 @@ class EndpointRepository:
         try:
             return self._get_or_create_endpoint_for_ip(ip_address, scan_history_id, domain_id)
         except (ObjectDoesNotExist, IntegrityError) as e:
-            logger.debug(f"create_endpoint_for_ip: {e}")
+            logger.log_line(
+                PREFIX_ENDPOINT_REPO,
+                "CREATE_IP",
+                "create_endpoint_for_ip: %s" % (e,),
+                level="debug",
+            )
             return None
         except Exception as e:
-            logger.error(f"Error creating endpoint for IP {ip_address}: {e}", exc_info=True)
+            logger.log_line(
+                PREFIX_ENDPOINT_REPO,
+                "CREATE_IP",
+                "Error creating endpoint for IP %s: %s" % (ip_address, e),
+                level="error",
+                exc_info=True,
+            )
             return None
 
     def _get_or_create_endpoint_for_ip(self, ip_address, scan_history_id, domain_id):
         if not validators.ipv4(ip_address) and not validators.ipv6(ip_address):
-            logger.debug(f"create_endpoint_for_ip: invalid IP {ip_address}, skipping")
+            logger.log_line(
+                PREFIX_ENDPOINT_REPO,
+                "CREATE_IP",
+                "create_endpoint_for_ip: invalid IP %s, skipping" % (ip_address,),
+                level="debug",
+            )
             return None
 
         scan_history = ScanHistory.objects.get(id=scan_history_id)
@@ -512,7 +644,12 @@ class EndpointRepository:
             },
         )
         if created:
-            logger.info(f"Created endpoint for IP {ip_address}")
+            logger.log_line(
+                PREFIX_ENDPOINT_REPO,
+                "CREATE_IP",
+                "Created endpoint for IP %s" % (ip_address,),
+                level="info",
+            )
         return endpoint
 
     def _associate_technologies(self, endpoint: EndPoint, item: Dict[str, Any]) -> None:
@@ -534,10 +671,20 @@ class EndpointRepository:
                 if tech_name and isinstance(tech_name, str):
                     tech_obj, _ = Technology.objects.get_or_create(name=tech_name.strip())
                     endpoint.techs.add(tech_obj)
-                    logger.debug(f"Associated technology {tech_name} with endpoint {endpoint.http_url}")
+                    logger.log_line(
+                        PREFIX_ENDPOINT_REPO,
+                        "TECH",
+                        "Associated technology %s with endpoint %s" % (tech_name, endpoint.http_url),
+                        level="debug",
+                    )
 
         except Exception as e:
-            logger.error(f"Error associating technologies with endpoint: {e}")
+            logger.log_line(
+                PREFIX_ENDPOINT_REPO,
+                "TECH",
+                "Error associating technologies with endpoint: %s" % (e,),
+                level="error",
+            )
 
     def extract_technologies_from_list(self, tech_list: List[str]) -> List[Technology]:
         """
@@ -559,7 +706,12 @@ class EndpointRepository:
             return technologies
 
         except Exception as e:
-            logger.error(f"Error extracting technologies from list: {e}")
+            logger.log_line(
+                PREFIX_ENDPOINT_REPO,
+                "TECH",
+                "Error extracting technologies from list: %s" % (e,),
+                level="error",
+            )
             return []
 
     def _save_fuzzing_file(

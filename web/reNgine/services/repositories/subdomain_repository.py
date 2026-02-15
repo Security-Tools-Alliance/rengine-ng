@@ -16,7 +16,7 @@ from reNgine.utilities.logger import get_module_logger
 from startScan.models import IpAddress, ScanHistory, Subdomain, Technology
 from targetApp.models import Domain
 
-
+PREFIX_SUBDOMAIN_REPO = "[SUBDOMAIN_REPO]"
 logger = get_module_logger(__name__)
 
 
@@ -41,13 +41,28 @@ class SubdomainRepository:
         try:
             return self._process_secator_subdomain_item(item, scan_history_id, domain_id, rengine_context)
         except ObjectDoesNotExist as e:
-            logger.error(f"Object not found when saving subdomain: {e}")
+            logger.log_line(
+                PREFIX_SUBDOMAIN_REPO,
+                "SAVE",
+                "Object not found when saving subdomain: %s" % (e,),
+                level="error",
+            )
             return None
         except IntegrityError as e:
-            logger.error(f"Integrity error saving subdomain: {e}")
+            logger.log_line(
+                PREFIX_SUBDOMAIN_REPO,
+                "SAVE",
+                "Integrity error saving subdomain: %s" % (e,),
+                level="error",
+            )
             return None
         except Exception as e:
-            logger.error(f"Error saving subdomain from Secator: {e}")
+            logger.log_line(
+                PREFIX_SUBDOMAIN_REPO,
+                "SAVE",
+                "Error saving subdomain from Secator: %s" % (e,),
+                level="error",
+            )
             return None
 
     def _process_secator_subdomain_item(
@@ -60,11 +75,21 @@ class SubdomainRepository:
         subdomain_name = item.get("host") or item.get("target") or item.get("name")
 
         if not subdomain_name:
-            logger.warning("Subdomain item missing name field")
+            logger.log_line(
+                PREFIX_SUBDOMAIN_REPO,
+                "SAVE",
+                "Subdomain item missing name field",
+                level="warning",
+            )
             return None
 
         if not is_valid_domain(subdomain_name):
-            logger.warning(f"Invalid subdomain: {subdomain_name}")
+            logger.log_line(
+                PREFIX_SUBDOMAIN_REPO,
+                "SAVE",
+                "Invalid subdomain: %s" % (subdomain_name,),
+                level="warning",
+            )
             return None
 
         scan_history = ScanHistory.objects.get(id=scan_history_id)
@@ -94,7 +119,12 @@ class SubdomainRepository:
         if not created and is_imported and not subdomain.is_imported_subdomain:
             subdomain.is_imported_subdomain = True
             subdomain.save(update_fields=["is_imported_subdomain"])
-            logger.info(f"Updated subdomain {subdomain_name} as imported")
+            logger.log_line(
+                PREFIX_SUBDOMAIN_REPO,
+                "SAVE",
+                "Updated subdomain %s as imported" % (subdomain_name,),
+                level="info",
+            )
 
         # Associate with IP addresses if available
         self._associate_ip_addresses(subdomain, item, scan_history_id)
@@ -103,9 +133,19 @@ class SubdomainRepository:
         self._associate_technologies(subdomain, item)
 
         if created:
-            logger.info(f"Created subdomain: {subdomain_name} (imported: {is_imported})")
+            logger.log_line(
+                PREFIX_SUBDOMAIN_REPO,
+                "SAVE",
+                "Created subdomain: %s (imported: %s)" % (subdomain_name, is_imported),
+                level="info",
+            )
         else:
-            logger.debug(f"Subdomain already exists: {subdomain_name}")
+            logger.log_line(
+                PREFIX_SUBDOMAIN_REPO,
+                "SAVE",
+                "Subdomain already exists: %s" % (subdomain_name,),
+                level="debug",
+            )
 
         rengine_context = rengine_context or {}
         if subscan_id := rengine_context.get("subscan_id"):
@@ -169,10 +209,20 @@ class SubdomainRepository:
             return subdomain, created
 
         except ObjectDoesNotExist as e:
-            logger.error(f"Object not found: {e}")
+            logger.log_line(
+                PREFIX_SUBDOMAIN_REPO,
+                "GET_OR_CREATE",
+                "Object not found: %s" % (e,),
+                level="error",
+            )
             return None, False
         except Exception as e:
-            logger.error(f"Error in get_or_create subdomain: {e}")
+            logger.log_line(
+                PREFIX_SUBDOMAIN_REPO,
+                "GET_OR_CREATE",
+                "Error in get_or_create subdomain: %s" % (e,),
+                level="error",
+            )
             return None, False
 
     def bulk_create(self, subdomains, scan_history_id, domain_id):
@@ -202,16 +252,31 @@ class SubdomainRepository:
                 if is_valid_domain(name)
             ]:
                 created = Subdomain.objects.bulk_create(subdomain_objects, ignore_conflicts=True)
-                logger.info(f"Bulk created {len(created)} subdomains")
+                logger.log_line(
+                    PREFIX_SUBDOMAIN_REPO,
+                    "BULK_CREATE",
+                    "Bulk created %s subdomains" % (len(created),),
+                    level="info",
+                )
                 return created
 
             return []
 
         except ObjectDoesNotExist as e:
-            logger.error(f"Object not found: {e}")
+            logger.log_line(
+                PREFIX_SUBDOMAIN_REPO,
+                "BULK_CREATE",
+                "Object not found: %s" % (e,),
+                level="error",
+            )
             return []
         except Exception as e:
-            logger.error(f"Error in bulk create subdomains: {e}")
+            logger.log_line(
+                PREFIX_SUBDOMAIN_REPO,
+                "BULK_CREATE",
+                "Error in bulk create subdomains: %s" % (e,),
+                level="error",
+            )
             return []
 
     def update_http_url(self, subdomain_id, http_url):
@@ -231,10 +296,20 @@ class SubdomainRepository:
             subdomain.save(update_fields=["http_url"])
             return True
         except ObjectDoesNotExist:
-            logger.error(f"Subdomain with ID {subdomain_id} not found")
+            logger.log_line(
+                PREFIX_SUBDOMAIN_REPO,
+                "UPDATE",
+                "Subdomain with ID %s not found" % (subdomain_id,),
+                level="error",
+            )
             return False
         except Exception as e:
-            logger.error(f"Error updating subdomain HTTP URL: {e}")
+            logger.log_line(
+                PREFIX_SUBDOMAIN_REPO,
+                "UPDATE",
+                "Error updating subdomain HTTP URL: %s" % (e,),
+                level="error",
+            )
             return False
 
     def _is_imported_subdomain(self, subdomain_name, rengine_context):
@@ -287,14 +362,24 @@ class SubdomainRepository:
                         },
                     )
                     subdomain.ip_addresses.add(ip_obj)
-                    logger.debug(f"Associated IP {ip_address} with subdomain {subdomain.name}")
+                    logger.log_line(
+                        PREFIX_SUBDOMAIN_REPO,
+                        "ASSOCIATE",
+                        "Associated IP %s with subdomain %s" % (ip_address, subdomain.name),
+                        level="debug",
+                    )
                     cache_key = (ip_address, sid, did)
                     if cache_key not in created_endpoints_cache:
                         endpoint_repo.create_endpoint_for_ip(ip_address, sid, did)
                         created_endpoints_cache.add(cache_key)
 
         except Exception as e:
-            logger.error(f"Error associating IP addresses with subdomain: {e}")
+            logger.log_line(
+                PREFIX_SUBDOMAIN_REPO,
+                "ASSOCIATE",
+                "Error associating IP addresses with subdomain: %s" % (e,),
+                level="error",
+            )
 
     def _associate_technologies(self, subdomain: Subdomain, item: Dict[str, Any]) -> None:
         """
@@ -316,10 +401,20 @@ class SubdomainRepository:
                 if tech_name and isinstance(tech_name, str):
                     tech_obj, _ = Technology.objects.get_or_create(name=tech_name.strip())
                     subdomain.technologies.add(tech_obj)
-                    logger.debug(f"Associated technology {tech_name} with subdomain {subdomain.name}")
+                    logger.log_line(
+                        PREFIX_SUBDOMAIN_REPO,
+                        "ASSOCIATE",
+                        "Associated technology %s with subdomain %s" % (tech_name, subdomain.name),
+                        level="debug",
+                    )
 
         except Exception as e:
-            logger.error(f"Error associating technologies with subdomain: {e}")
+            logger.log_line(
+                PREFIX_SUBDOMAIN_REPO,
+                "ASSOCIATE",
+                "Error associating technologies with subdomain: %s" % (e,),
+                level="error",
+            )
 
     def _is_private_ip(self, ip_address: str) -> bool:
         """

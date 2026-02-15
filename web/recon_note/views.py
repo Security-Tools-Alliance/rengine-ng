@@ -6,15 +6,16 @@ the management of todo notesand related operations.
 """
 
 import json
-import logging
 
 from django.http import JsonResponse
 from django.shortcuts import render
 
 from recon_note.models import TodoNote
+from reNgine.utilities.logger import get_module_logger
 
 
-logger = logging.getLogger(__name__)
+PREFIX_RECON_NOTE = "[RECON_NOTE]"
+logger = get_module_logger(__name__)
 
 
 def list_note(request, slug):
@@ -57,7 +58,12 @@ def flip_todo_status(request):
         body_unicode = request.body.decode("utf-8")
         body = json.loads(body_unicode)
     except json.JSONDecodeError as e:
-        logger.error("JSON decode error: %s", e)
+        logger.log_line(
+            PREFIX_RECON_NOTE,
+            "JSON",
+            "JSON decode error: %s" % (e,),
+            level="error",
+        )
         return JsonResponse({"status": False, "error": "Invalid JSON."}, status=400)
 
     note_id = body.get("id")
@@ -98,7 +104,12 @@ def flip_important_status(request):
         body_unicode = request.body.decode("utf-8")
         body = json.loads(body_unicode)
     except json.JSONDecodeError as e:
-        logger.error("JSON decode error: %s", e)
+        logger.log_line(
+            PREFIX_RECON_NOTE,
+            "JSON",
+            "JSON decode error: %s" % (e,),
+            level="error",
+        )
         return JsonResponse({"status": False, "error": "Invalid JSON."}, status=400)
 
     note_id = body.get("id")
@@ -138,7 +149,12 @@ def delete_note(request):
         body_unicode = request.body.decode("utf-8")
         body = json.loads(body_unicode)
     except json.JSONDecodeError as e:
-        logger.error("JSON decode error: %s", e)
+        logger.log_line(
+            PREFIX_RECON_NOTE,
+            "JSON",
+            "JSON decode error: %s" % (e,),
+            level="error",
+        )
         return JsonResponse({"status": False, "error": "Invalid JSON."}, status=400)
 
     note_id = body.get("id")

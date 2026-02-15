@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-import logging
 from typing import Any, Dict, Optional
 
 from langchain_ollama import OllamaLLM as Ollama
@@ -9,9 +8,10 @@ from reNgine.llm.config import LLM_CONFIG
 from reNgine.llm.utils import get_default_llm_model
 from reNgine.llm.validators import LLMProvider, LLMResponse
 from reNgine.utilities.external import get_open_ai_key
+from reNgine.utilities.logger import get_module_logger
 
-
-logger = logging.getLogger(__name__)
+PREFIX_LLM = "[LLM]"
+logger = get_module_logger(__name__)
 
 
 class BaseLLMGenerator(ABC):
@@ -115,11 +115,22 @@ class LLMVulnerabilityReportGenerator(BaseLLMGenerator):
                 "references": references,
             }
 
-            logger.debug(f"Response: {response}")
+            logger.log_line(
+                PREFIX_LLM,
+                "VULN_REPORT",
+                "Response: %s" % (response,),
+                level="debug",
+            )
             return LLMResponse(status=True, **response).to_dict()
 
         except Exception as e:
-            logger.error(f"Error in get_vulnerability_report: {str(e)}", exc_info=True)
+            logger.log_line(
+                PREFIX_LLM,
+                "VULN_REPORT",
+                "Error in get_vulnerability_report: %s" % (e,),
+                level="error",
+                exc_info=True,
+            )
             return LLMResponse(status=False, error=str(e)).to_dict()
 
     def _get_section_response(self, input_data: str, prompt: str) -> str:
@@ -143,15 +154,20 @@ class LLMVulnerabilityReportGenerator(BaseLLMGenerator):
             return response_content.strip()
 
         except Exception as e:
-            logger.error(f"Error in _get_section_response: {str(e)}")
+            logger.log_line(
+                PREFIX_LLM,
+                "SECTION_RESPONSE",
+                "Error in _get_section_response: %s" % (e,),
+                level="error",
+            )
             return ""
 
     def _get_ollama_response(self, prompt: str, description: str) -> str:
         """Get response from Ollama"""
-        prompt = f"{prompt}\nUser: {description}"
-        logger.debug(f"Ollama Prompt: {prompt}")
+        prompt = "%s\nUser: %s" % (prompt, description)
+        logger.log_line(PREFIX_LLM, "OLLAMA", "Ollama Prompt: %s" % (prompt,), level="debug")
         response = self.ollama(prompt)
-        logger.debug(f"Ollama Response: {response}")
+        logger.log_line(PREFIX_LLM, "OLLAMA", "Ollama Response: %s" % (response,), level="debug")
         return str(response) if response is not None else ""
 
     def _get_openai_response(self, prompt: str, description: str, model_name: str = None) -> str:
@@ -229,7 +245,13 @@ class LLMAttackSuggestionGenerator(BaseLLMGenerator):
             return {"status": True, "description": response_content, "input": input_data, "model_name": model_name}
 
         except Exception as e:
-            logger.error(f"Error in get_attack_suggestion: {str(e)}", exc_info=True)
+            logger.log_line(
+                PREFIX_LLM,
+                "ATTACK_SUGGESTION",
+                "Error in get_attack_suggestion: %s" % (e,),
+                level="error",
+                exc_info=True,
+            )
             return {"status": False, "error": str(e), "input": input_data, "model_name": model_name}
 
     def _get_ollama_response(self, description: str) -> str:

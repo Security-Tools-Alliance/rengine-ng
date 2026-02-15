@@ -1,15 +1,15 @@
 import ast
 import json
-import logging
 import re
 from urllib.parse import urlparse
 
 from django import template
 
 from dashboard.utils import get_user_groups
+from reNgine.utilities.logger import get_module_logger
 
 
-logger = logging.getLogger(__name__)
+logger = get_module_logger(__name__)
 register = template.Library()
 
 

@@ -10,7 +10,7 @@ import yaml
 from reNgine.settings import CELERY_REMOTE_DEBUG, CELERY_REMOTE_DEBUG_PORT
 from reNgine.utilities.logger import get_module_logger
 
-
+PREFIX_MISC = "[MISC]"
 logger = get_module_logger(__name__)
 
 
@@ -23,9 +23,12 @@ def debug():
     try:
         # Activate remote debug for scan worker
         if CELERY_REMOTE_DEBUG:
-            logger.info(
-                f"\n⚡ Debugger started on port {str(CELERY_REMOTE_DEBUG_PORT)}"
-                + ", task is waiting IDE (VSCode ...) to be attached to continue ⚡\n"
+            logger.log_line(
+                PREFIX_MISC,
+                "DEBUG",
+                "\n⚡ Debugger started on port %s, task is waiting IDE (VSCode ...) to be attached to continue ⚡\n"
+                % (CELERY_REMOTE_DEBUG_PORT,),
+                level="info",
             )
             os.environ["GEVENT_SUPPORT"] = "True"
             import debugpy
@@ -33,7 +36,12 @@ def debug():
             debugpy.listen(("0.0.0.0", CELERY_REMOTE_DEBUG_PORT))
             debugpy.wait_for_client()
     except Exception as e:
-        logger.error(e)
+        logger.log_line(
+            PREFIX_MISC,
+            "DEBUG",
+            "Debugger error: %s" % (e,),
+            level="error",
+        )
 
 
 def fmt_traceback(exc):
@@ -139,16 +147,36 @@ def determine_scan_type_from_engine_name(engine_name):
             # Extract scan_type from the configuration
             if isinstance(engine_config, dict) and "scan_type" in engine_config:
                 scan_type = engine_config["scan_type"]
-                logger.debug(f"Found scan_type in engine '{engine_name}': {scan_type}")
+                logger.log_line(
+                    PREFIX_MISC,
+                    "SCAN_TYPE",
+                    "Found scan_type in engine '%s': %s" % (engine_name, scan_type),
+                    level="debug",
+                )
                 return scan_type
             else:
-                logger.warning(f"No scan_type found in engine '{engine_name}', using default")
+                logger.log_line(
+                    PREFIX_MISC,
+                    "SCAN_TYPE",
+                    "No scan_type found in engine '%s', using default" % (engine_name,),
+                    level="warning",
+                )
         else:
-            logger.warning(f"Engine file not found: {yaml_file_path}, using default")
+            logger.log_line(
+                PREFIX_MISC,
+                "SCAN_TYPE",
+                "Engine file not found: %s, using default" % (yaml_file_path,),
+                level="warning",
+            )
 
         # Fallback to default
         return "internet"
 
     except Exception as e:
-        logger.error(f"Error determining scan type for engine '{engine_name}': {e}")
+        logger.log_line(
+            PREFIX_MISC,
+            "SCAN_TYPE",
+            "Error determining scan type for engine '%s': %s" % (engine_name, e),
+            level="error",
+        )
         return "internet"  # Safe fallback

@@ -5,11 +5,12 @@ Resolves PostgreSQL host/port for Django DATABASES config (PgBouncer vs direct).
 No Django dependencies; uses only stdlib and optional psycopg2.
 """
 
-import logging
 from typing import Any, Callable, Sequence
 
+from reNgine.utilities.logger import get_module_logger
 
-logger = logging.getLogger(__name__)
+
+logger = get_module_logger(__name__)
 
 
 def resolve_db_host_port(

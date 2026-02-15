@@ -8,11 +8,12 @@ are consistent.
 from __future__ import annotations
 
 import json
-import logging
 from typing import Any, Literal, TypedDict
 
+from reNgine.utilities.logger import get_module_logger
 
-logger = logging.getLogger(__name__)
+PREFIX_SELECTED_TARGETS = "[SECATOR_SELECTED_TARGETS]"
+logger = get_module_logger(__name__)
 
 
 class ResolvedTargets(TypedDict, total=False):
@@ -63,10 +64,11 @@ def parse_selected_targets(
         try:
             parsed = json.loads(value)
         except (json.JSONDecodeError, TypeError) as exc:
-            logger.warning(
-                "Failed to decode %s JSON: %r",
-                field_name,
-                value,
+            logger.log_line(
+                PREFIX_SELECTED_TARGETS,
+                "PARSE",
+                "Failed to decode %s JSON: %r" % (field_name, value),
+                level="warning",
                 exc_info=True,
             )
             raise ValueError(f"Invalid JSON in {field_name}. Please refresh and try again.") from exc
@@ -95,10 +97,11 @@ def parse_selected_targets_per_task(
         try:
             parsed = json.loads(value)
         except (json.JSONDecodeError, TypeError) as exc:
-            logger.warning(
-                "Failed to decode %s JSON: %r",
-                field_name,
-                value,
+            logger.log_line(
+                PREFIX_SELECTED_TARGETS,
+                "PARSE",
+                "Failed to decode %s JSON: %r" % (field_name, value),
+                level="warning",
                 exc_info=True,
             )
             raise ValueError(f"Invalid JSON in {field_name}. Please refresh and try again.") from exc

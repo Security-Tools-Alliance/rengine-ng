@@ -1,7 +1,6 @@
 from collections import defaultdict
 from datetime import datetime
 import json
-import logging
 from pathlib import Path
 import re
 import threading
@@ -40,6 +39,7 @@ from recon_note.models import TodoNote
 from reNgine.core.data import get_data_from_post_request, get_request_worker_id, safe_int_cast
 from reNgine.definitions import (
     ABORTED_TASK,
+    GENERIC_USER_ERROR_MESSAGE,
     MAX_ASSET_PREVIEW_BYTES,
     NUCLEI_SEVERITY_MAP,
     RUNNING_TASK,
@@ -63,6 +63,7 @@ from reNgine.tasks import (
 from reNgine.utilities.endpoint import get_interesting_endpoints
 from reNgine.utilities.error import get_safe_user_message
 from reNgine.utilities.external import get_open_ai_key
+from reNgine.utilities.logger import get_module_logger
 from reNgine.utilities.lookup import get_lookup_keywords
 from reNgine.utilities.subdomain import get_interesting_subdomains
 from scanEngine.models import EngineType, SecatorScan, SecatorTask, SecatorWorker, SecatorWorkflow
@@ -143,7 +144,8 @@ from .serializers import (
 )
 
 
-logger = logging.getLogger(__name__)
+PREFIX_API = "[API]"
+logger = get_module_logger(__name__)
 
 
 PAGINATION_MAX_LENGTH = 10000
@@ -204,7 +206,12 @@ def parse_pagination_params(start=None, length=None, page=None, page_size=None):
         return None
 
     except ValueError as e:
-        logger.warning("Pagination parameter validation error: %s", str(e))
+        logger.log_line(
+            PREFIX_API,
+            "PAGINATION",
+            "Pagination parameter validation error: %s" % (str(e),),
+            level="warning",
+        )
         raise ValidationError("Invalid pagination parameters.")
 
 
@@ -390,7 +397,12 @@ class OllamaManager(APIView):
                         if line:
                             try:
                                 data = json.loads(line.decode("utf-8"))
-                                logger.debug("Ollama response: %s", data)
+                                logger.log_line(
+                                    PREFIX_API,
+                                    "OLLAMA",
+                                    "Ollama response: %s" % (data,),
+                                    level="debug",
+                                )
 
                                 if "error" in data:
                                     async_to_sync(channel_layer.group_send)(
@@ -424,7 +436,12 @@ class OllamaManager(APIView):
                                     break
 
                             except json.JSONDecodeError as e:
-                                logger.error("JSON decode error: %s", e)
+                                logger.log_line(
+                                    PREFIX_API,
+                                    "OLLAMA",
+                                    "JSON decode error: %s" % (e,),
+                                    level="error",
+                                )
                                 async_to_sync(channel_layer.group_send)(
                                     channel_name,
                                     {
@@ -435,7 +452,12 @@ class OllamaManager(APIView):
                                 break
 
                 except Exception as e:
-                    logger.error("Download error: %s", e)
+                    logger.log_line(
+                        PREFIX_API,
+                        "OLLAMA",
+                        "Download error: %s" % (e,),
+                        level="error",
+                    )
                     try:
                         async_to_sync(channel_layer.group_send)(
                             channel_name,
@@ -445,7 +467,12 @@ class OllamaManager(APIView):
                             },
                         )
                     except Exception as e2:
-                        logger.error("Error sending error message: %s", e2)
+                        logger.log_line(
+                            PREFIX_API,
+                            "OLLAMA",
+                            "Error sending error message: %s" % (e2,),
+                            level="error",
+                        )
                 finally:
                     if response:
                         response.close()
@@ -459,7 +486,12 @@ class OllamaManager(APIView):
             return Response({"status": True, "channel": channel_name, "message": "Download started"})
 
         except Exception as e:
-            logger.error("Error in OllamaManager: %s", e)
+            logger.log_line(
+                PREFIX_API,
+                "OLLAMA",
+                "Error in OllamaManager: %s" % (e,),
+                level="error",
+            )
             return Response({"status": False, "error": get_safe_user_message(e, None)}, status=500)
 
 
@@ -486,7 +518,12 @@ class OllamaDetailManager(APIView):
             return Response({"status": False, "message": error_message}, status=response.status_code)
 
         except Exception as e:
-            logger.error("Error in OllamaDetailManager DELETE: %s", e)
+            logger.log_line(
+                PREFIX_API,
+                "OLLAMA",
+                "Error in OllamaDetailManager DELETE: %s" % (e,),
+                level="error",
+            )
             return Response({"status": False, "message": "An error occurred while deleting the model."}, status=500)
 
     def put(self, request, model_name):
@@ -501,7 +538,12 @@ class OllamaDetailManager(APIView):
             )
             return Response({"status": True, "message": "Model selected successfully"})
         except Exception as e:
-            logger.error("Error in OllamaDetailManager PUT: %s", e)
+            logger.log_line(
+                PREFIX_API,
+                "OLLAMA",
+                "Error in OllamaDetailManager PUT: %s" % (e,),
+                level="error",
+            )
             return Response(
                 {"status": False, "message": "An error occurred while updating the model selection."}, status=500
             )
@@ -535,12 +577,22 @@ class AvailableOllamaModels(APIView):
                         if base_name in MODEL_REQUIREMENTS:
                             model["capabilities"] = MODEL_REQUIREMENTS[base_name]
                 else:
-                    logger.warning("Ollama API returned status %s", response.status_code)
+                    logger.log_line(
+                        PREFIX_API,
+                        "OLLAMA",
+                        "Ollama API returned status %s" % (response.status_code,),
+                        level="warning",
+                    )
                     for model in recommended_models:
                         model["installed"] = False
                         model["installed_versions"] = []
             except requests.exceptions.RequestException as e:
-                logger.error("Error connecting to Ollama API: %s", e)
+                logger.log_line(
+                    PREFIX_API,
+                    "OLLAMA",
+                    "Error connecting to Ollama API: %s" % (e,),
+                    level="error",
+                )
                 for model in recommended_models:
                     model["installed"] = False
                     model["installed_versions"] = []
@@ -551,7 +603,12 @@ class AvailableOllamaModels(APIView):
             return Response(response_data)
 
         except Exception as e:
-            logger.error("Error in AvailableOllamaModels: %s", e)
+            logger.log_line(
+                PREFIX_API,
+                "OLLAMA",
+                "Error in AvailableOllamaModels: %s" % (e,),
+                level="error",
+            )
             return Response({"status": False, "error": get_safe_user_message(e, None)}, status=500)
 
 
@@ -629,7 +686,12 @@ class LLMAttackSuggestion(APIView):
         except Subdomain.DoesNotExist:
             return Response({"status": False, "error": f"Subdomain not found with id {subdomain_id}"}, status=404)
         except Exception as e:
-            logger.error("Error deleting attack surface analysis: %s", e)
+            logger.log_line(
+                PREFIX_API,
+                "LLM",
+                "Error deleting attack surface analysis: %s" % (e,),
+                level="error",
+            )
             return Response({"status": False, "error": "An error occurred while deleting the analysis"}, status=500)
 
 
@@ -645,7 +707,12 @@ class LLMVulnerabilityReportGenerator(APIView):
             selected_model = get_default_llm_model()
         except Exception as e:
             # If fetching the default model fails, log and proceed to task but keep robustness
-            logger.error("Error fetching default LLM model: %s", e)
+            logger.log_line(
+                PREFIX_API,
+                "LLM",
+                "Error fetching default LLM model: %s" % (e,),
+                level="error",
+            )
             selected_model = None
 
         try:
@@ -654,7 +721,12 @@ class LLMVulnerabilityReportGenerator(APIView):
                 gpt_model_names = [model["name"] for model in DEFAULT_GPT_MODELS]
                 is_gpt = selected_model in gpt_model_names
         except (KeyError, AttributeError) as e:
-            logger.error("Error determining if selected model is GPT: %s", e)
+            logger.log_line(
+                PREFIX_API,
+                "LLM",
+                "Error determining if selected model is GPT: %s" % (e,),
+                level="error",
+            )
             is_gpt = False
 
         openai_key_missing = is_gpt and not OpenAiAPIKey.objects.exists()
@@ -729,7 +801,12 @@ class LLMVulnerabilityReportGenerator(APIView):
                 {"status": False, "error": f"Vulnerability not found with id {vulnerability_id}"}, status=404
             )
         except Exception as e:
-            logger.error("Error deleting LLM vulnerability report: %s", e)
+            logger.log_line(
+                PREFIX_API,
+                "LLM",
+                "Error deleting LLM vulnerability report: %s" % (e,),
+                level="error",
+            )
             return Response({"status": False, "error": "An error occurred while deleting the analysis"}, status=500)
 
 
@@ -743,7 +820,12 @@ class CreateProjectApi(APIView):
             Project.objects.create(name=project_name, slug=slug, insert_date=insert_date)
             return Response({"status": True, "project_name": project_name})
         except Exception as e:
-            logger.error("Error in CreateProjectApi: %s", e)
+            logger.log_line(
+                PREFIX_API,
+                "PROJECT",
+                "Error in CreateProjectApi: %s" % (e,),
+                level="error",
+            )
             return Response({"status": False, "message": "Failed to create project."}, status=HTTP_400_BAD_REQUEST)
 
 
@@ -815,11 +897,26 @@ class WafDetector(APIView):
             return Response(response)
 
         try:
-            logger.debug("WAF detection for URL: %s - Legacy function disabled, use Secator instead", url)
+            logger.log_line(
+                PREFIX_API,
+                "WAF",
+                "WAF detection for URL: %s - Legacy function disabled, use Secator instead" % (url,),
+                level="debug",
+            )
             response["message"] = "WAF detection is now handled by Secator. Please use the Secator scan interface."
-            logger.debug("WAF detection result: %s", response)
+            logger.log_line(
+                PREFIX_API,
+                "WAF",
+                "WAF detection result: %s" % (response,),
+                level="debug",
+            )
         except Exception as e:
-            logger.error("Error during WAF detection: %s", e)
+            logger.log_line(
+                PREFIX_API,
+                "WAF",
+                "Error during WAF detection: %s" % (e,),
+                level="error",
+            )
             response["message"] = "An unexpected error occurred. Please try again later."
 
         return Response(response)
@@ -921,7 +1018,12 @@ class FetchMostCommonVulnerability(APIView):
                 response["result"] = most_common_vulnerabilities
 
         except Exception as e:
-            logger.error("Error in FetchMostCommonVulnerability: %s", e)
+            logger.log_line(
+                PREFIX_API,
+                "VULN",
+                "Error in FetchMostCommonVulnerability: %s" % (e,),
+                level="error",
+            )
             response["message"] = "An error occurred while fetching vulnerabilities."
 
         return Response(response)
@@ -1123,7 +1225,12 @@ class AddReconNote(APIView):
             note.save()
             return Response({"status": True, "error": False, "id": note.id}, status=200)
         except Exception as e:
-            logger.error(e)
+            logger.log_line(
+                PREFIX_API,
+                "RECON_NOTE",
+                "AddReconNote error: %s" % (e,),
+                level="error",
+            )
             return Response({"status": False, "error": "An error occurred."}, status=400)
 
 
@@ -1240,8 +1347,18 @@ class FetchSubscanResults(APIView):
             )
             subscan_results = EndpointSerializer(endpoints_in_subscan, many=True).data
 
-        logger.info(subscan_data)
-        logger.info(subscan_results)
+        logger.log_line(
+            PREFIX_API,
+            "SUBSCAN",
+            "FetchSubscanResults: subscan_data received",
+            level="info",
+        )
+        logger.log_line(
+            PREFIX_API,
+            "SUBSCAN",
+            "FetchSubscanResults: subscan_results received",
+            level="info",
+        )
 
         return Response(
             {
@@ -1303,7 +1420,10 @@ class DeleteMultipleRows(APIView):
         except ValueError:
             return Response({"status": False, "message": "Invalid subscan ID provided"}, status=400)
         except Exception as e:
-            return Response({"status": False, "message": logger.debug(e)}, status=500)
+            return Response(
+                {"status": False, "message": get_safe_user_message(e, None) or GENERIC_USER_ERROR_MESSAGE},
+                status=500,
+            )
 
 
 class StopScan(APIView):
@@ -1335,7 +1455,12 @@ class StopScan(APIView):
                 else:
                     response = {"status": False, "message": "Failed to stop subscan"}
             except Exception as e:
-                logger.error(e)
+                logger.log_line(
+                    PREFIX_API,
+                    "STOP_SCAN",
+                    "Stop subscan error: %s" % (e,),
+                    level="error",
+                )
                 response = {"status": False, "message": get_safe_user_message(e, None)}
         elif scan_id:
             try:
@@ -1358,7 +1483,12 @@ class StopScan(APIView):
                 else:
                     response = {"status": False, "message": "Failed to stop scan"}
             except Exception as e:
-                logger.error(e)
+                logger.log_line(
+                    PREFIX_API,
+                    "STOP_SCAN",
+                    "Stop scan error: %s" % (e,),
+                    level="error",
+                )
                 response = {"status": False, "message": get_safe_user_message(e, None)}
 
         # Abort running scan activities
@@ -1409,7 +1539,12 @@ class StopActivity(APIView):
             else:
                 return Response({"status": False, "message": "Failed to stop activity"})
         except Exception as e:
-            logger.error(e)
+            logger.log_line(
+                PREFIX_API,
+                "STOP_ACTIVITY",
+                "Stop activity error: %s" % (e,),
+                level="error",
+            )
             return Response({"status": False, "message": get_safe_user_message(e, None)}, status=HTTP_400_BAD_REQUEST)
 
 
@@ -1851,7 +1986,12 @@ class InitiateSubTask(APIView):
                             "status": "success",
                         }
                     )
-                    logger.info("Secator subscan initiated for subdomain %s (ID: %s)", subdomain.name, subdomain.id)
+                    logger.log_line(
+                        PREFIX_API,
+                        "SECATOR_SUBSCAN",
+                        "Secator subscan initiated for subdomain %s (ID: %s)" % (subdomain.name, subdomain.id),
+                        level="info",
+                    )
                 else:
                     scan_results.append(
                         {
@@ -1861,12 +2001,21 @@ class InitiateSubTask(APIView):
                             "error": result.get("error", "Unknown error"),
                         }
                     )
-                    logger.error(
-                        f"Failed to start subscan for subdomain {subdomain.name}: {result.get('error', 'Unknown error')}"
+                    logger.log_line(
+                        PREFIX_API,
+                        "SECATOR_SUBSCAN",
+                        "Failed to start subscan for subdomain %s: %s"
+                        % (subdomain.name, result.get("error", "Unknown error")),
+                        level="error",
                     )
 
             except Exception as e:
-                logger.error("Error initiating subscan for subdomain %s: %s", subdomain.name, e)
+                logger.log_line(
+                    PREFIX_API,
+                    "SECATOR_SUBSCAN",
+                    "Error initiating subscan for subdomain %s: %s" % (subdomain.name, e),
+                    level="error",
+                )
                 scan_results.append(
                     {
                         "subdomain_id": subdomain.id,
@@ -1999,7 +2148,13 @@ class GetSecatorInputTypesAndTargets(APIView):
         except ValueError:
             return Response({"error": "Invalid request parameters"}, status=HTTP_400_BAD_REQUEST)
         except Exception as e:
-            logger.exception("GetSecatorInputTypesAndTargets error: %s", e)
+            logger.log_line(
+                PREFIX_API,
+                "SECATOR_TARGETS",
+                "GetSecatorInputTypesAndTargets error: %s" % (e,),
+                level="error",
+                exc_info=True,
+            )
             return Response({"error": "Unexpected error building targets"}, status=500)
 
 
@@ -2024,10 +2179,12 @@ class GetSecatorSelection(APIView):
         x_requested_with = request.headers.get("X-Requested-With", "")
         if x_requested_with != "XMLHttpRequest":
             # Log warning but allow request for future client compatibility
-            logger = logging.getLogger(__name__)
-            logger.warning(
-                f"GetSecatorSelection accessed without X-Requested-With header "
-                f"from {request.META.get('REMOTE_ADDR', 'unknown')}"
+            logger.log_line(
+                PREFIX_API,
+                "SECATOR_SELECTION",
+                "GetSecatorSelection accessed without X-Requested-With header from %s"
+                % (request.META.get("REMOTE_ADDR", "unknown"),),
+                level="warning",
             )
 
         return render_secator_selection_json(request)
@@ -2043,7 +2200,10 @@ class DeleteSubdomain(APIView):
         except ValueError:
             return Response({"status": False, "message": "Invalid subdomain ID provided"}, status=400)
         except Exception as e:
-            return Response({"status": False, "message": logger.debug(e)}, status=500)
+            return Response(
+                {"status": False, "message": get_safe_user_message(e, None) or GENERIC_USER_ERROR_MESSAGE},
+                status=500,
+            )
 
 
 class DeleteVulnerability(APIView):
@@ -2169,7 +2329,12 @@ class CMSDetector(APIView):
             # NOTE: CMS detection functionality moved to Secator
             return Response({"status": False, "message": "CMS detection functionality moved to Secator"})
         except Exception as e:
-            logger.error("Error in CMSDetector: %s", e)
+            logger.log_line(
+                PREFIX_API,
+                "CMS_DETECTOR",
+                "Error in CMSDetector: %s" % (e,),
+                level="error",
+            )
             return Response({"status": False, "message": "An unexpected error occurred."}, status=500)
 
 
@@ -2220,13 +2385,14 @@ def _read_asset_preview(base_dir: str, name: str, extension: str) -> tuple[bool,
         with target_path.open("rb") as f:
             data = f.read(MAX_ASSET_PREVIEW_BYTES + 1)
     except OSError as exc:
-        logger.warning(
-            "Failed to read asset preview from path %s: %s",
-            target_path,
-            exc,
+        logger.log_line(
+            PREFIX_API,
+            "ASSET_PREVIEW",
+            "Failed to read asset preview from path %s: %s" % (target_path, exc),
+            level="warning",
             exc_info=True,
         )
-        return False, "", f"Error reading asset: {exc}"
+        return False, "", "Error reading asset: %s" % (exc,)
 
     truncated = len(data) > MAX_ASSET_PREVIEW_BYTES
     if truncated:
@@ -2279,9 +2445,11 @@ class GetFileContents(APIView):
             "it now only serves custom GF patterns and Nuclei templates. "
             "Use only query params gf_pattern or nuclei_template with name=."
         )
-        logger.warning(
-            "GetFileContents returned 410 Gone (unsupported params); query_params=%s",
-            dict(req.query_params),
+        logger.log_line(
+            PREFIX_API,
+            "GET_FILE_CONTENTS",
+            "GetFileContents returned 410 Gone (unsupported params); query_params=%s" % (dict(req.query_params),),
+            level="warning",
         )
         return Response(response, status=HTTP_410_GONE)
 
@@ -2292,7 +2460,12 @@ class GfList(APIView):
             # NOTE: GF patterns functionality moved to Secator
             return Response({"status": False, "message": "GF patterns functionality moved to Secator"})
         except Exception as e:
-            logger.error("Error in GfList: %s", e)
+            logger.log_line(
+                PREFIX_API,
+                "GF_LIST",
+                "Error in GfList: %s" % (e,),
+                level="error",
+            )
             return Response({"error": "An unexpected error occurred. Please try again later."}, status=500)
 
 
@@ -2343,9 +2516,11 @@ class ListEngines(APIView):
             # Validate engine_id is a valid integer
             engine_id_int = safe_int_cast(engine_id)
             if engine_id_int is None:
-                logger.warning(
-                    "Invalid engine_id query parameter received",
-                    extra={"engine_id": engine_id},
+                logger.log_line(
+                    PREFIX_API,
+                    "LIST_ENGINES",
+                    "Invalid engine_id query parameter received: %s" % (engine_id,),
+                    level="warning",
                 )
                 return Response(
                     {"detail": "Invalid engine_id parameter."},
@@ -3504,7 +3679,12 @@ class VulnerabilityViewSet(AdvancedSearchMixin, viewsets.ModelViewSet):
             elif operator == "!":
                 return queryset.exclude(cvss_score__exact=float_value)
         except (ValueError, TypeError):
-            logger.warning("Invalid numeric value for cvss_score: %s", value)
+            logger.log_line(
+                PREFIX_API,
+                "VULNERABILITY_SEARCH",
+                "Invalid numeric value for cvss_score: %s" % (value,),
+                level="warning",
+            )
         return queryset
 
     @property
@@ -3749,9 +3929,11 @@ class LLMModelsManager(APIView):
                                 continue
 
                         # If no format matches, log error and return current time
-                        logger.error(
-                            f"Could not parse timestamp: {date_str}",
-                            extra={"timestamp": date_str, "parsing_formats": formats},
+                        logger.log_line(
+                            PREFIX_API,
+                            "LLM_MODELS",
+                            "Could not parse timestamp: %s" % (date_str,),
+                            level="error",
                         )
                         return timezone.now()
 
@@ -3766,7 +3948,12 @@ class LLMModelsManager(APIView):
                         ]
                     )
             except Exception as e:
-                logger.error("Error fetching Ollama models: %s", e)
+                logger.log_line(
+                    PREFIX_API,
+                    "LLM_MODELS",
+                    "Error fetching Ollama models: %s" % (e,),
+                    level="error",
+                )
 
             # Get currently selected model
             selected_model = OllamaSettings.objects.first()
@@ -3794,7 +3981,12 @@ class LLMModelsManager(APIView):
             )
 
         except Exception as e:
-            logger.error("Error in LLMModelsManager GET: %s", e)
+            logger.log_line(
+                PREFIX_API,
+                "LLM_MODELS",
+                "Error in LLMModelsManager GET: %s" % (e,),
+                level="error",
+            )
             return Response(
                 {"status": False, "error": "Failed to fetch LLM models", "message": get_safe_user_message(e, None)},
                 status=500,
@@ -4876,23 +5068,21 @@ class SecatorFindingUpdate(SecatorAPIBase):
 
             # Instantiate repository and save finding (upsert: create or update)
             repository = repository_class()
-            self.logger._logger.debug(
-                self.logger._format_debug_message(
-                    self.logger.PREFIX_FINDING,
-                    "UPDATE",
-                    f"Using repository: {repository_class.__name__} "
-                    f"for finding type: {finding_type}, finding_id: {finding_id}",
-                )
+            logger.log_line(
+                PREFIX_API,
+                "FINDING_UPDATE",
+                "Using repository: %s for finding type: %s, finding_id: %s"
+                % (repository_class.__name__, finding_type, finding_id),
+                level="debug",
             )
 
             try:
                 if finding_type == "subdomain":
-                    self.logger._logger.debug(
-                        self.logger._format_debug_message(
-                            self.logger.PREFIX_FINDING,
-                            "UPDATE",
-                            f"Saving subdomain with context: {context}, finding_id: {finding_id}",
-                        )
+                    logger.log_line(
+                        PREFIX_API,
+                        "FINDING_UPDATE",
+                        "Saving subdomain with context: %s, finding_id: %s" % (context, finding_id),
+                        level="debug",
                     )
                 saved_object = repository.save_from_secator(
                     finding_data, scan_history_id, domain_id, rengine_context=context
@@ -4990,7 +5180,13 @@ class SecatorWorkerCheckIn(APIView):
             send_worker_status_update(worker.id)
             return Response({"status": "ok"})
         except Exception as e:
-            logger.exception("Worker check-in failed for worker_id=%s", worker_id)
+            logger.log_line(
+                PREFIX_API,
+                "WORKER_CHECKIN",
+                "Worker check-in failed for worker_id=%s: %s" % (worker_id, e),
+                level="error",
+                exc_info=True,
+            )
             return Response(
                 {"status": "error", "message": get_safe_user_message(e, logger)},
                 status=400,
@@ -5042,7 +5238,12 @@ class SecatorWorkerViewSet(viewsets.ModelViewSet):
                 )
             return Response({"ok": True})
         except Exception as e:
-            logger.warning("Check connection failed for worker %s: %s", worker.name, e)
+            logger.log_line(
+                PREFIX_API,
+                "WORKER_CHECK_CONNECTION",
+                "Check connection failed for worker %s: %s" % (worker.name, e),
+                level="warning",
+            )
             return Response(
                 {"ok": False, "error": "Connection failed."},
                 status=HTTP_400_BAD_REQUEST,
@@ -5077,7 +5278,13 @@ class SecatorWorkerViewSet(viewsets.ModelViewSet):
                 send_worker_deploy_log(worker.id, None, None, done=True)
                 send_worker_status_update(worker.id)
             except Exception as e:
-                logger.exception("Deploy failed for worker %s", worker.name)
+                logger.log_line(
+                    PREFIX_API,
+                    "WORKER_DEPLOY",
+                    "Deploy failed for worker %s: %s" % (worker.name, e),
+                    level="error",
+                    exc_info=True,
+                )
                 safe_msg = get_safe_user_message(e, logger)
                 send_worker_deploy_log(worker.id, "error", None, done=True, error=safe_msg)
 
@@ -5142,7 +5349,13 @@ class SecatorWorkerViewSet(viewsets.ModelViewSet):
                 )
                 send_worker_status_update(worker.id)
             except Exception as e:
-                logger.exception("Refresh failed for worker %s", worker.name)
+                logger.log_line(
+                    PREFIX_API,
+                    "WORKER_REFRESH",
+                    "Refresh failed for worker %s: %s" % (worker.name, e),
+                    level="error",
+                    exc_info=True,
+                )
                 send_worker_refresh_log(worker.id, "error", None, done=True, error=get_safe_user_message(e, logger))
             finally:
                 if tunnel_handle is not None:
@@ -5202,7 +5415,12 @@ class SecatorWorkerViewSet(viewsets.ModelViewSet):
             client.close()
             client = None
         except Exception as e:
-            logger.warning("Install public key failed for worker %s: %s", worker.name, e)
+            logger.log_line(
+                PREFIX_API,
+                "WORKER_INSTALL_KEY",
+                "Install public key failed for worker %s: %s" % (worker.name, e),
+                level="warning",
+            )
             return Response(
                 {"ok": False, "error": "Connection or install failed."},
                 status=HTTP_400_BAD_REQUEST,
@@ -5240,7 +5458,12 @@ class SecatorWorkerViewSet(viewsets.ModelViewSet):
                     status=HTTP_400_BAD_REQUEST,
                 )
         except Exception as e:
-            logger.warning("Key auth test failed for worker %s: %s", worker.name, e)
+            logger.log_line(
+                PREFIX_API,
+                "WORKER_KEY_AUTH",
+                "Key auth test failed for worker %s: %s" % (worker.name, e),
+                level="warning",
+            )
             return Response(
                 {"ok": False, "error": "Key installed but connection test failed."},
                 status=HTTP_400_BAD_REQUEST,

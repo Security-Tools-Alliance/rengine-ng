@@ -1,14 +1,15 @@
 from __future__ import annotations
 
-import logging
 from typing import TypedDict
 
 from django.conf import settings
 
+from reNgine.utilities.logger import get_module_logger
 from scanEngine.models import SecatorProfile
 
 
-logger = logging.getLogger(__name__)
+PREFIX_SECATOR_PROFILES = "[SECATOR_PROFILES]"
+logger = get_module_logger(__name__)
 
 
 # Supported Secator profile categories used for grouping in the UI.
@@ -42,10 +43,12 @@ def build_secator_profiles_context() -> SecatorProfilesContext:
             unknown_categories.add(profile.category)
 
     if unknown_categories:
-        logger.warning(
+        logger.log_line(
+            PREFIX_SECATOR_PROFILES,
+            "PROFILES",
             "SecatorProfile(s) with unknown categories encountered; they will not be shown in the UI. "
-            "Unknown categories: %s",
-            ", ".join(sorted(str(c) for c in unknown_categories)),
+            "Unknown categories: %s" % (", ".join(sorted(str(c) for c in unknown_categories)),),
+            level="warning",
         )
         if getattr(settings, "DEBUG", False):
             raise ValueError(

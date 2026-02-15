@@ -1,14 +1,14 @@
 import contextlib
 import json
-import logging
 
 from markdown import markdown
 
 from dashboard.models import OllamaSettings
 from reNgine.llm.config import LLM_CONFIG
+from reNgine.utilities.logger import get_module_logger
 
-
-logger = logging.getLogger(__name__)
+PREFIX_LLM_UTILS = "[LLM_UTILS]"
+logger = get_module_logger(__name__)
 
 
 def get_default_llm_model():
@@ -21,7 +21,12 @@ def get_default_llm_model():
         if ollama_settings and ollama_settings.selected_model:
             return ollama_settings.selected_model
     except Exception as e:
-        logger.error(f"Error while retrieving default LLM model: {e}")
+        logger.log_line(
+            PREFIX_LLM_UTILS,
+            "DEFAULT_MODEL",
+            "Error while retrieving default LLM model: %s" % (e,),
+            level="error",
+        )
 
     # Fallback to default model from config based on provider
     try:
@@ -29,7 +34,12 @@ def get_default_llm_model():
             return LLM_CONFIG["providers"]["ollama"]["default_model"]
         return LLM_CONFIG["providers"]["openai"]["default_model"]
     except Exception as e:
-        logger.error(f"Error while getting default model from config: {e}")
+        logger.log_line(
+            PREFIX_LLM_UTILS,
+            "DEFAULT_MODEL",
+            "Error while getting default model from config: %s" % (e,),
+            level="error",
+        )
         return "gpt-3.5-turbo"  # Ultimate fallback
 
 

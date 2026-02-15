@@ -5,13 +5,14 @@ This module handles the conversion of Secator output to reNgine's Django models,
 ensuring compatibility with the existing database structure.
 """
 
-import logging
 from typing import Any, Dict, List, Optional
 
 from django.db import transaction
 
+from reNgine.utilities.logger import get_module_logger
 
-logger = logging.getLogger(__name__)
+PREFIX_SECATOR_PARSER = "[SECATOR_PARSER]"
+logger = get_module_logger(__name__)
 
 
 class SecatorParser:
@@ -51,11 +52,21 @@ class SecatorParser:
 
             if parser_func := parser_map.get(result_type):
                 return parser_func(result)
-            logger.warning(f"Unknown result type: {result_type}")
+            logger.log_line(
+                PREFIX_SECATOR_PARSER,
+                "PARSE",
+                "Unknown result type: %s" % (result_type,),
+                level="warning",
+            )
             return None
 
         except Exception as e:
-            logger.error(f"Error parsing Secator result: {e}")
+            logger.log_line(
+                PREFIX_SECATOR_PARSER,
+                "PARSE",
+                "Error parsing Secator result: %s" % (e,),
+                level="error",
+            )
             return None
 
     def _parse_subdomain(self, result: Dict[str, Any]) -> Optional[Any]:
@@ -79,7 +90,12 @@ class SecatorParser:
 
             return Subdomain(**subdomain_data)
         except Exception as e:
-            logger.error(f"Error parsing subdomain result: {e}")
+            logger.log_line(
+                PREFIX_SECATOR_PARSER,
+                "PARSE_SUBDOMAIN",
+                "Error parsing subdomain result: %s" % (e,),
+                level="error",
+            )
             return None
 
     def _parse_url(self, result: Dict[str, Any]) -> Optional[Any]:
@@ -103,7 +119,12 @@ class SecatorParser:
 
             return EndPoint(**url_data)
         except Exception as e:
-            logger.error(f"Error parsing URL result: {e}")
+            logger.log_line(
+                PREFIX_SECATOR_PARSER,
+                "PARSE_URL",
+                "Error parsing URL result: %s" % (e,),
+                level="error",
+            )
             return None
 
     def _parse_vulnerability(self, result: Dict[str, Any]) -> Optional[Any]:
@@ -123,8 +144,12 @@ class SecatorParser:
             valid_severities = {"critical", "high", "medium", "low", "info"}
             raw_severity = result.get("severity", "").lower()
             if raw_severity not in valid_severities:
-                logger.warning(
-                    f"Unknown or missing severity '{raw_severity}' in vulnerability result, defaulting to 'medium'"
+                logger.log_line(
+                    PREFIX_SECATOR_PARSER,
+                    "PARSE_VULN",
+                    "Unknown or missing severity '%s' in vulnerability result, defaulting to 'medium'"
+                    % (raw_severity,),
+                    level="warning",
                 )
                 severity = "medium"
             else:
@@ -142,7 +167,12 @@ class SecatorParser:
 
             return Vulnerability(**vuln_data)
         except Exception as e:
-            logger.error(f"Error parsing vulnerability result: {e}")
+            logger.log_line(
+                PREFIX_SECATOR_PARSER,
+                "PARSE_VULN",
+                "Error parsing vulnerability result: %s" % (e,),
+                level="error",
+            )
             return None
 
     def _parse_port(self, result: Dict[str, Any]) -> Optional[Any]:
@@ -161,12 +191,22 @@ class SecatorParser:
             # Validate that port number is present and valid
             port_number = result.get("port")
             if port_number is None:
-                logger.warning(f"Port result missing port number: {result}")
+                logger.log_line(
+                    PREFIX_SECATOR_PARSER,
+                    "PARSE_PORT",
+                    "Port result missing port number: %s" % (result,),
+                    level="warning",
+                )
                 return None
 
             # Check for boolean values (True/False)
             if isinstance(port_number, bool):
-                logger.warning(f"Port number '{port_number}' is a boolean value: {result}")
+                logger.log_line(
+                    PREFIX_SECATOR_PARSER,
+                    "PARSE_PORT",
+                    "Port number '%s' is a boolean value: %s" % (port_number, result),
+                    level="warning",
+                )
                 return None
 
             # Ensure port number is a valid integer
@@ -179,16 +219,31 @@ class SecatorParser:
                     float_port = float(port_number)
                     # Check if it's a whole number
                     if float_port != int(float_port):
-                        logger.warning(f"Port number '{port_number}' is not a whole number: {result}")
+                        logger.log_line(
+                            PREFIX_SECATOR_PARSER,
+                            "PARSE_PORT",
+                            "Port number '%s' is not a whole number: %s" % (port_number, result),
+                            level="warning",
+                        )
                         return None
                     port_number = int(float_port)
             except (ValueError, TypeError):
-                logger.warning(f"Invalid port number '{port_number}' in result: {result}")
+                logger.log_line(
+                    PREFIX_SECATOR_PARSER,
+                    "PARSE_PORT",
+                    "Invalid port number '%s' in result: %s" % (port_number, result),
+                    level="warning",
+                )
                 return None
 
             # Validate port number range (1-65535)
             if not (1 <= port_number <= 65535):
-                logger.warning(f"Port number {port_number} out of valid range (1-65535): {result}")
+                logger.log_line(
+                    PREFIX_SECATOR_PARSER,
+                    "PARSE_PORT",
+                    "Port number %s out of valid range (1-65535): %s" % (port_number, result),
+                    level="warning",
+                )
                 return None
 
             port_data = {
@@ -200,7 +255,12 @@ class SecatorParser:
 
             return Port(**port_data)
         except Exception as e:
-            logger.error(f"Error parsing port result: {e}")
+            logger.log_line(
+                PREFIX_SECATOR_PARSER,
+                "PARSE_PORT",
+                "Error parsing port result: %s" % (e,),
+                level="error",
+            )
             return None
 
     def _parse_technology(self, result: Dict[str, Any]) -> Optional[Any]:
@@ -225,7 +285,12 @@ class SecatorParser:
 
             return Technology(**tech_data)
         except Exception as e:
-            logger.error(f"Error parsing technology result: {e}")
+            logger.log_line(
+                PREFIX_SECATOR_PARSER,
+                "PARSE_TECH",
+                "Error parsing technology result: %s" % (e,),
+                level="error",
+            )
             return None
 
     def _parse_email(self, result: Dict[str, Any]) -> Optional[Any]:
@@ -249,7 +314,12 @@ class SecatorParser:
 
             return Email(**email_data)
         except Exception as e:
-            logger.error(f"Error parsing email result: {e}")
+            logger.log_line(
+                PREFIX_SECATOR_PARSER,
+                "PARSE_EMAIL",
+                "Error parsing email result: %s" % (e,),
+                level="error",
+            )
             return None
 
     def _parse_ip(self, result: Dict[str, Any]) -> Optional[Any]:
@@ -273,7 +343,12 @@ class SecatorParser:
 
             return IPAddress(**ip_data)
         except Exception as e:
-            logger.error(f"Error parsing IP result: {e}")
+            logger.log_line(
+                PREFIX_SECATOR_PARSER,
+                "PARSE_IP",
+                "Error parsing IP result: %s" % (e,),
+                level="error",
+            )
             return None
 
     def parse_batch(self, results: List[Dict[str, Any]]) -> List[Any]:
@@ -318,7 +393,12 @@ class SecatorParser:
                         saved_count += 1
 
         except Exception as e:
-            logger.error(f"Error saving results: {e}")
+            logger.log_line(
+                PREFIX_SECATOR_PARSER,
+                "SAVE",
+                "Error saving results: %s" % (e,),
+                level="error",
+            )
 
         return saved_count
 
@@ -358,28 +438,58 @@ class SecatorParser:
                 # We need to find or create the associated IP address
                 # For now, we'll skip setting association for Port
                 # as it requires more complex logic to determine the IP
-                logger.debug("Port model doesn't have scan_history field, skipping association")
+                logger.log_line(
+                    PREFIX_SECATOR_PARSER,
+                    "ASSOCIATE",
+                    "Port model doesn't have scan_history field, skipping association",
+                    level="debug",
+                )
 
             elif model_class == "Technology":
                 # Technology doesn't have scan_history field
                 # It's associated through subdomain relationships
-                logger.debug("Technology model doesn't have scan_history field, skipping association")
+                logger.log_line(
+                    PREFIX_SECATOR_PARSER,
+                    "ASSOCIATE",
+                    "Technology model doesn't have scan_history field, skipping association",
+                    level="debug",
+                )
 
             elif model_class == "Email":
                 # Email doesn't have scan_history field
-                logger.debug("Email model doesn't have scan_history field, skipping association")
+                logger.log_line(
+                    PREFIX_SECATOR_PARSER,
+                    "ASSOCIATE",
+                    "Email model doesn't have scan_history field, skipping association",
+                    level="debug",
+                )
 
             elif model_class == "IpAddress":
                 # IpAddress doesn't have scan_history field
-                logger.debug("IpAddress model doesn't have scan_history field, skipping association")
+                logger.log_line(
+                    PREFIX_SECATOR_PARSER,
+                    "ASSOCIATE",
+                    "IpAddress model doesn't have scan_history field, skipping association",
+                    level="debug",
+                )
 
             elif hasattr(model_instance, "scan_history"):
                 model_instance.scan_history = scan_history
             elif hasattr(model_instance, "scan_history_id"):
                 model_instance.scan_history_id = scan_history_id
             else:
-                logger.debug(f"Model {model_class} doesn't have scan_history field, skipping association")
+                logger.log_line(
+                    PREFIX_SECATOR_PARSER,
+                    "ASSOCIATE",
+                    "Model %s doesn't have scan_history field, skipping association" % (model_class,),
+                    level="debug",
+                )
 
         except Exception as e:
-            logger.error(f"Error setting model association for {model_instance.__class__.__name__}: {e}")
+            logger.log_line(
+                PREFIX_SECATOR_PARSER,
+                "ASSOCIATE",
+                "Error setting model association for %s: %s" % (model_instance.__class__.__name__, e),
+                level="error",
+            )
             # Don't raise the exception, just log it and continue

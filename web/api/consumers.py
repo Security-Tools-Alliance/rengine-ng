@@ -1,14 +1,14 @@
 import json
-import logging
 import re
 
 from asgiref.sync import async_to_sync
 from channels.generic.websocket import WebsocketConsumer
 
+from reNgine.utilities.logger import get_module_logger
 from reNgine.utilities.worker_ws_groups import worker_deploy_group, worker_refresh_group
 
-
-logger = logging.getLogger(__name__)
+PREFIX_API = "[API]"
+logger = get_module_logger(__name__)
 
 # Constants
 CHANNEL_NAME_PATTERN = r"[^a-zA-Z0-9\-\.]"
@@ -21,38 +21,78 @@ class OllamaDownloadConsumer(WebsocketConsumer):
 
     def connect(self):
         try:
-            logger.info(f"WebSocket connection attempt with scope: {self.scope}")
+            logger.log_line(
+                PREFIX_API,
+                "WS_OLLAMA",
+                "WebSocket connection attempt with scope: %s" % (self.scope,),
+                level="info",
+            )
             self.model_name = self.scope["url_route"]["kwargs"]["model_name"]
             self.room_group_name = f"ollama-download-{self.clean_channel_name(self.model_name)}"
 
-            logger.info(f"Joining group: {self.room_group_name}")
+            logger.log_line(
+                PREFIX_API,
+                "WS_OLLAMA",
+                "Joining group: %s" % (self.room_group_name,),
+                level="info",
+            )
 
             # Join room group
             async_to_sync(self.channel_layer.group_add)(self.room_group_name, self.channel_name)
 
-            logger.info("WebSocket connection accepted")
+            logger.log_line(
+                PREFIX_API,
+                "WS_OLLAMA",
+                "WebSocket connection accepted",
+                level="info",
+            )
             self.accept()
 
         except Exception as e:
-            logger.error(f"Error in WebSocket connect: {e}")
+            logger.log_line(
+                PREFIX_API,
+                "WS_OLLAMA",
+                "Error in WebSocket connect: %s" % (e,),
+                level="error",
+            )
             raise
 
     def disconnect(self, close_code):
         try:
-            logger.info(f"WebSocket disconnecting with code: {close_code}")
+            logger.log_line(
+                PREFIX_API,
+                "WS_OLLAMA",
+                "WebSocket disconnecting with code: %s" % (close_code,),
+                level="info",
+            )
             # Leave room group
             async_to_sync(self.channel_layer.group_discard)(self.room_group_name, self.channel_name)
         except Exception as e:
-            logger.error(f"Error in WebSocket disconnect: {e}")
+            logger.log_line(
+                PREFIX_API,
+                "WS_OLLAMA",
+                "Error in WebSocket disconnect: %s" % (e,),
+                level="error",
+            )
 
     def receive(self, text_data):
         try:
-            logger.info(f"WebSocket received data: {text_data}")
+            logger.log_line(
+                PREFIX_API,
+                "WS_OLLAMA",
+                "WebSocket received data: %s" % (text_data,),
+                level="info",
+            )
             text_data_json = json.loads(text_data)
             message = text_data_json.get("message")
 
             if not message:
-                logger.warning("No 'message' field in received WebSocket data")
+                logger.log_line(
+                    PREFIX_API,
+                    "WS_OLLAMA",
+                    "No 'message' field in received WebSocket data",
+                    level="warning",
+                )
                 return
 
             # Send message to room group
@@ -60,9 +100,19 @@ class OllamaDownloadConsumer(WebsocketConsumer):
                 self.room_group_name, {"type": "download_progress", "message": message}
             )
         except json.JSONDecodeError as e:
-            logger.error(f"Invalid JSON in WebSocket receive: {e}")
+            logger.log_line(
+                PREFIX_API,
+                "WS_OLLAMA",
+                "Invalid JSON in WebSocket receive: %s" % (e,),
+                level="error",
+            )
         except Exception as e:
-            logger.error(f"Error in WebSocket receive: {e}")
+            logger.log_line(
+                PREFIX_API,
+                "WS_OLLAMA",
+                "Error in WebSocket receive: %s" % (e,),
+                level="error",
+            )
 
     def download_progress(self, event):
         try:
@@ -70,7 +120,12 @@ class OllamaDownloadConsumer(WebsocketConsumer):
             # Send message to WebSocket
             self.send(text_data=json.dumps(message))
         except Exception as e:
-            logger.error(f"Error in download_progress: {e}")
+            logger.log_line(
+                PREFIX_API,
+                "WS_OLLAMA",
+                "Error in download_progress: %s" % (e,),
+                level="error",
+            )
 
 
 class IPScanProgressConsumer(WebsocketConsumer):
@@ -80,38 +135,78 @@ class IPScanProgressConsumer(WebsocketConsumer):
 
     def connect(self):
         try:
-            logger.info(f"IP Scan WebSocket connection attempt with scope: {self.scope}")
+            logger.log_line(
+                PREFIX_API,
+                "WS_IP_SCAN",
+                "IP Scan WebSocket connection attempt with scope: %s" % (self.scope,),
+                level="info",
+            )
             self.scan_id = self.scope["url_route"]["kwargs"]["scan_id"]
             self.room_group_name = f"ip-scan-{self.clean_channel_name(self.scan_id)}"
 
-            logger.info(f"Joining IP scan group: {self.room_group_name}")
+            logger.log_line(
+                PREFIX_API,
+                "WS_IP_SCAN",
+                "Joining IP scan group: %s" % (self.room_group_name,),
+                level="info",
+            )
 
             # Join room group
             async_to_sync(self.channel_layer.group_add)(self.room_group_name, self.channel_name)
 
-            logger.info("IP Scan WebSocket connection accepted")
+            logger.log_line(
+                PREFIX_API,
+                "WS_IP_SCAN",
+                "IP Scan WebSocket connection accepted",
+                level="info",
+            )
             self.accept()
 
         except Exception as e:
-            logger.error(f"Error in IP Scan WebSocket connect: {e}")
+            logger.log_line(
+                PREFIX_API,
+                "WS_IP_SCAN",
+                "Error in IP Scan WebSocket connect: %s" % (e,),
+                level="error",
+            )
             raise
 
     def disconnect(self, close_code):
         try:
-            logger.info(f"IP Scan WebSocket disconnecting with code: {close_code}")
+            logger.log_line(
+                PREFIX_API,
+                "WS_IP_SCAN",
+                "IP Scan WebSocket disconnecting with code: %s" % (close_code,),
+                level="info",
+            )
             # Leave room group
             async_to_sync(self.channel_layer.group_discard)(self.room_group_name, self.channel_name)
         except Exception as e:
-            logger.error(f"Error in IP Scan WebSocket disconnect: {e}")
+            logger.log_line(
+                PREFIX_API,
+                "WS_IP_SCAN",
+                "Error in IP Scan WebSocket disconnect: %s" % (e,),
+                level="error",
+            )
 
     def receive(self, text_data):
         try:
-            logger.info(f"IP Scan WebSocket received data: {text_data}")
+            logger.log_line(
+                PREFIX_API,
+                "WS_IP_SCAN",
+                "IP Scan WebSocket received data: %s" % (text_data,),
+                level="info",
+            )
             text_data_json = json.loads(text_data)
             message = text_data_json.get("message")
 
             if not message:
-                logger.warning("No 'message' field in received IP Scan WebSocket data")
+                logger.log_line(
+                    PREFIX_API,
+                    "WS_IP_SCAN",
+                    "No 'message' field in received IP Scan WebSocket data",
+                    level="warning",
+                )
                 return
 
             # Send message to room group
@@ -119,9 +214,19 @@ class IPScanProgressConsumer(WebsocketConsumer):
                 self.room_group_name, {"type": "scan_progress", "message": message}
             )
         except json.JSONDecodeError as e:
-            logger.error(f"Invalid JSON in IP Scan WebSocket receive: {e}")
+            logger.log_line(
+                PREFIX_API,
+                "WS_IP_SCAN",
+                "Invalid JSON in IP Scan WebSocket receive: %s" % (e,),
+                level="error",
+            )
         except Exception as e:
-            logger.error(f"Error in IP Scan WebSocket receive: {e}")
+            logger.log_line(
+                PREFIX_API,
+                "WS_IP_SCAN",
+                "Error in IP Scan WebSocket receive: %s" % (e,),
+                level="error",
+            )
 
     def scan_progress(self, event):
         try:
@@ -129,7 +234,12 @@ class IPScanProgressConsumer(WebsocketConsumer):
             # Send message to WebSocket
             self.send(text_data=json.dumps(message))
         except Exception as e:
-            logger.error(f"Error in IP scan_progress: {e}")
+            logger.log_line(
+                PREFIX_API,
+                "WS_IP_SCAN",
+                "Error in IP scan_progress: %s" % (e,),
+                level="error",
+            )
 
 
 class ScanStatusConsumer(WebsocketConsumer):
@@ -139,7 +249,12 @@ class ScanStatusConsumer(WebsocketConsumer):
 
     def connect(self):
         try:
-            logger.info(f"Scan Status WebSocket connection attempt with scope: {self.scope}")
+            logger.log_line(
+                PREFIX_API,
+                "WS_SCAN_STATUS",
+                "Scan Status WebSocket connection attempt with scope: %s" % (self.scope,),
+                level="info",
+            )
             scan_id = self.scope["url_route"]["kwargs"].get("scan_id")
             project_slug = self.scope["url_route"]["kwargs"].get("project_slug")
 
@@ -148,29 +263,59 @@ class ScanStatusConsumer(WebsocketConsumer):
             elif project_slug:
                 self.room_group_name = f"scan-status-project-{self.clean_channel_name(project_slug)}"
             else:
-                logger.error("No scan_id or project_slug provided in WebSocket connection")
+                logger.log_line(
+                    PREFIX_API,
+                    "WS_SCAN_STATUS",
+                    "No scan_id or project_slug provided in WebSocket connection",
+                    level="error",
+                )
                 self.close()
                 return
 
-            logger.info(f"Joining scan status group: {self.room_group_name}")
+            logger.log_line(
+                PREFIX_API,
+                "WS_SCAN_STATUS",
+                "Joining scan status group: %s" % (self.room_group_name,),
+                level="info",
+            )
 
             # Join room group
             async_to_sync(self.channel_layer.group_add)(self.room_group_name, self.channel_name)
 
-            logger.info("Scan Status WebSocket connection accepted")
+            logger.log_line(
+                PREFIX_API,
+                "WS_SCAN_STATUS",
+                "Scan Status WebSocket connection accepted",
+                level="info",
+            )
             self.accept()
 
         except Exception as e:
-            logger.error(f"Error in Scan Status WebSocket connect: {e}")
+            logger.log_line(
+                PREFIX_API,
+                "WS_SCAN_STATUS",
+                "Error in Scan Status WebSocket connect: %s" % (e,),
+                level="error",
+            )
             raise
 
     def disconnect(self, close_code):
         try:
-            logger.info(f"Scan Status WebSocket disconnecting with code: {close_code}")
+            logger.log_line(
+                PREFIX_API,
+                "WS_SCAN_STATUS",
+                "Scan Status WebSocket disconnecting with code: %s" % (close_code,),
+                level="info",
+            )
             # Leave room group
             async_to_sync(self.channel_layer.group_discard)(self.room_group_name, self.channel_name)
         except Exception as e:
-            logger.error(f"Error in Scan Status WebSocket disconnect: {e}")
+            logger.log_line(
+                PREFIX_API,
+                "WS_SCAN_STATUS",
+                "Error in Scan Status WebSocket disconnect: %s" % (e,),
+                level="error",
+            )
 
     def scan_status_update(self, event):
         """Send scan status update to WebSocket client"""
@@ -179,7 +324,12 @@ class ScanStatusConsumer(WebsocketConsumer):
             # Send message to WebSocket
             self.send(text_data=json.dumps(message))
         except Exception as e:
-            logger.error(f"Error in scan_status_update: {e}")
+            logger.log_line(
+                PREFIX_API,
+                "WS_SCAN_STATUS",
+                "Error in scan_status_update: %s" % (e,),
+                level="error",
+            )
 
 
 WORKER_STATUS_GROUP = "worker-status"
@@ -193,21 +343,36 @@ class WorkerStatusConsumer(WebsocketConsumer):
             async_to_sync(self.channel_layer.group_add)(WORKER_STATUS_GROUP, self.channel_name)
             self.accept()
         except Exception as e:
-            logger.error("Worker status WebSocket connect failed: %s", e)
+            logger.log_line(
+                PREFIX_API,
+                "WS_WORKER_STATUS",
+                "Worker status WebSocket connect failed: %s" % (e,),
+                level="error",
+            )
             raise
 
     def disconnect(self, close_code):
         try:
             async_to_sync(self.channel_layer.group_discard)(WORKER_STATUS_GROUP, self.channel_name)
         except Exception as e:
-            logger.error("Worker status WebSocket disconnect failed: %s", e)
+            logger.log_line(
+                PREFIX_API,
+                "WS_WORKER_STATUS",
+                "Worker status WebSocket disconnect failed: %s" % (e,),
+                level="error",
+            )
 
     def worker_status_update(self, event):
         """Send worker status update to WebSocket client."""
         try:
             self.send(text_data=json.dumps(event.get("payload", {})))
         except Exception as e:
-            logger.error("Error in worker_status_update: %s", e)
+            logger.log_line(
+                PREFIX_API,
+                "WS_WORKER_STATUS",
+                "Error in worker_status_update: %s" % (e,),
+                level="error",
+            )
 
 
 class WorkerDeployConsumer(WebsocketConsumer):
@@ -227,7 +392,12 @@ class WorkerDeployConsumer(WebsocketConsumer):
             async_to_sync(self.channel_layer.group_add)(self.room_group_name, self.channel_name)
             self.accept()
         except Exception as e:
-            logger.error("Worker deploy WebSocket connect failed: %s", e)
+            logger.log_line(
+                PREFIX_API,
+                "WS_WORKER_DEPLOY",
+                "Worker deploy WebSocket connect failed: %s" % (e,),
+                level="error",
+            )
             raise
 
     def disconnect(self, close_code):
@@ -235,14 +405,24 @@ class WorkerDeployConsumer(WebsocketConsumer):
             if hasattr(self, "room_group_name"):
                 async_to_sync(self.channel_layer.group_discard)(self.room_group_name, self.channel_name)
         except Exception as e:
-            logger.error("Worker deploy WebSocket disconnect failed: %s", e)
+            logger.log_line(
+                PREFIX_API,
+                "WS_WORKER_DEPLOY",
+                "Worker deploy WebSocket disconnect failed: %s" % (e,),
+                level="error",
+            )
 
     def worker_deploy_log(self, event):
         """Forward deploy log payload to WebSocket client."""
         try:
             self.send(text_data=json.dumps(event.get("payload", {})))
         except Exception as e:
-            logger.error("Error in worker_deploy_log: %s", e)
+            logger.log_line(
+                PREFIX_API,
+                "WS_WORKER_DEPLOY",
+                "Error in worker_deploy_log: %s" % (e,),
+                level="error",
+            )
 
 
 class WorkerRefreshConsumer(WebsocketConsumer):
@@ -262,7 +442,12 @@ class WorkerRefreshConsumer(WebsocketConsumer):
             async_to_sync(self.channel_layer.group_add)(self.room_group_name, self.channel_name)
             self.accept()
         except Exception as e:
-            logger.error("Worker refresh WebSocket connect failed: %s", e)
+            logger.log_line(
+                PREFIX_API,
+                "WS_WORKER_REFRESH",
+                "Worker refresh WebSocket connect failed: %s" % (e,),
+                level="error",
+            )
             raise
 
     def disconnect(self, close_code):
@@ -270,11 +455,21 @@ class WorkerRefreshConsumer(WebsocketConsumer):
             if hasattr(self, "room_group_name"):
                 async_to_sync(self.channel_layer.group_discard)(self.room_group_name, self.channel_name)
         except Exception as e:
-            logger.error("Worker refresh WebSocket disconnect failed: %s", e)
+            logger.log_line(
+                PREFIX_API,
+                "WS_WORKER_REFRESH",
+                "Worker refresh WebSocket disconnect failed: %s" % (e,),
+                level="error",
+            )
 
     def worker_refresh_log(self, event):
         """Forward refresh log payload to WebSocket client."""
         try:
             self.send(text_data=json.dumps(event.get("payload", {})))
         except Exception as e:
-            logger.error("Error in worker_refresh_log: %s", e)
+            logger.log_line(
+                PREFIX_API,
+                "WS_WORKER_REFRESH",
+                "Error in worker_refresh_log: %s" % (e,),
+                level="error",
+            )

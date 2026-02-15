@@ -1,12 +1,11 @@
-import logging
-
 from django.utils import timezone
 from rest_framework_api_key.models import APIKey
 
 from dashboard.models import UserAPIKey
+from reNgine.utilities.logger import get_module_logger
 
 
-logger = logging.getLogger(__name__)
+logger = get_module_logger(__name__)
 
 
 class APIKeyAuthenticationMiddleware:

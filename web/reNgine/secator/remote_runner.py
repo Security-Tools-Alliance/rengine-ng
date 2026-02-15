@@ -27,7 +27,7 @@ from scanEngine.services.worker_ssh import (
 )
 from scanEngine.services.worker_tunnel import start_worker_tunnel, stop_worker_tunnel
 
-
+PREFIX_REMOTE_RUNNER = "[REMOTE_RUNNER]"
 logger = get_module_logger(__name__)
 
 RUNNER_SCRIPT_NAME = "run_secator_job.py"
@@ -76,7 +76,12 @@ def revoke_task_on_remote_worker(
             tunnel_handle = start_worker_tunnel(worker)
             time.sleep(1.5)
         except ValueError as e:
-            logger.warning("Tunnel not started for worker %s: %s", worker.name, e)
+            logger.log_line(
+                PREFIX_REMOTE_RUNNER,
+                "REVOKE",
+                "Tunnel not started for worker %s: %s" % (worker.name, e),
+                level="warning",
+            )
             return False
     try:
         python_exe, base_cmd = get_container_script_base(worker)
@@ -86,21 +91,31 @@ def revoke_task_on_remote_worker(
         try:
             exit_code, out, err = run_in_container(client, worker, cmd, timeout=REVOKE_TIMEOUT_SECONDS)
             if exit_code != 0:
-                logger.warning(
-                    "Remote revoke failed for worker %s task %s: exit %s, stderr: %s",
-                    worker.name,
-                    celery_id,
-                    exit_code,
-                    err,
+                logger.log_line(
+                    PREFIX_REMOTE_RUNNER,
+                    "REVOKE",
+                    "Remote revoke failed for worker %s task %s: exit %s, stderr: %s"
+                    % (worker.name, celery_id, exit_code, err),
+                    level="warning",
                 )
                 return False
             if task_name:
-                logger.debug("Revoked task %s (%s) on worker %s", celery_id, task_name, worker.name)
+                logger.log_line(
+                    PREFIX_REMOTE_RUNNER,
+                    "REVOKE",
+                    "Revoked task %s (%s) on worker %s" % (celery_id, task_name, worker.name),
+                    level="debug",
+                )
             return True
         finally:
             client.close()
     except Exception as e:
-        logger.warning("revoke_task_on_remote_worker failed for worker %s: %s", worker.name, e)
+        logger.log_line(
+            PREFIX_REMOTE_RUNNER,
+            "REVOKE",
+            "revoke_task_on_remote_worker failed for worker %s: %s" % (worker.name, e),
+            level="warning",
+        )
         return False
     finally:
         if tunnel_handle is not None:
@@ -158,7 +173,12 @@ def run_scan_on_worker(
         except RuntimeError:
             raise
         except Exception as e:
-            logger.warning("run_scan_on_worker failed for worker %s: %s", worker.name, e)
+            logger.log_line(
+                PREFIX_REMOTE_RUNNER,
+                "RUN_SCAN",
+                "run_scan_on_worker failed for worker %s: %s" % (worker.name, e),
+                level="warning",
+            )
             raise RuntimeError("Failed to run scan on worker. Check SSH and container.") from e
         finally:
             client.close()
@@ -176,7 +196,12 @@ def _start_tunnel_if_needed(worker: SecatorWorker):
         time.sleep(1.5)
         return handle
     except ValueError as e:
-        logger.warning("Tunnel not started for worker %s: %s", worker.name, e)
+        logger.log_line(
+            PREFIX_REMOTE_RUNNER,
+            "TUNNEL",
+            "Tunnel not started for worker %s: %s" % (worker.name, e),
+            level="warning",
+        )
         raise RuntimeError("Could not start SSH tunnel for worker. Check tunnel configuration.") from e
 
 
@@ -259,9 +284,10 @@ def _upload_and_execute_on_worker(
     exit_code, out, err = run_in_container(client, worker, cmd, timeout=timeout_seconds)
     if exit_code != 0:
         err_msg = normalize_remote_error(exit_code, out, err, "Remote scan execution failed. Check worker logs.")
-        logger.warning(
-            "Remote worker run failed for scan %s: %s",
-            scan_history_id,
-            err_msg,
+        logger.log_line(
+            PREFIX_REMOTE_RUNNER,
+            "RUN_SCAN",
+            "Remote worker run failed for scan %s: %s" % (scan_history_id, err_msg),
+            level="warning",
         )
         raise RuntimeError(err_msg) from None

@@ -13,7 +13,7 @@ from reNgine.utilities.logger import get_module_logger
 from reNgine.utilities.time import parse_datetime_iso
 from startScan.models import Command, ScanActivity, ScanHistory
 
-
+PREFIX_CMD_REPO = "[CMD_REPO]"
 logger = get_module_logger(__name__)
 
 
@@ -37,13 +37,28 @@ class CommandRepository:
         try:
             return self._process_secator_runner_data(runner_data, scan_history_id, activity_id)
         except ObjectDoesNotExist as e:
-            logger.error(f"Object not found when saving command: {e}")
+            logger.log_line(
+                PREFIX_CMD_REPO,
+                "SAVE",
+                "Object not found when saving command: %s" % (e,),
+                level="error",
+            )
             return None
         except IntegrityError as e:
-            logger.error(f"Integrity error saving command: {e}")
+            logger.log_line(
+                PREFIX_CMD_REPO,
+                "SAVE",
+                "Integrity error saving command: %s" % (e,),
+                level="error",
+            )
             return None
         except Exception as e:
-            logger.error(f"Error saving command from Secator: {e}")
+            logger.log_line(
+                PREFIX_CMD_REPO,
+                "SAVE",
+                "Error saving command from Secator: %s" % (e,),
+                level="error",
+            )
             return None
 
     def _process_secator_runner_data(
@@ -101,18 +116,33 @@ class CommandRepository:
         if runner_type not in ["workflow", "scan"]:
             # For tasks, we require at least cmd or output
             if not cmd and not output:
-                logger.warning(f"Command data missing both cmd and output fields for runner type {runner_type}")
+                logger.log_line(
+                    PREFIX_CMD_REPO,
+                    "SAVE",
+                    "Command data missing both cmd and output fields for runner type %s" % (runner_type,),
+                    level="warning",
+                )
                 return None
         elif not name:
             # For workflows and scans, we still need at least a name to create a meaningful entry
-            logger.warning("Workflow/scan runner missing name field")
+            logger.log_line(
+                PREFIX_CMD_REPO,
+                "SAVE",
+                "Workflow/scan runner missing name field",
+                level="warning",
+            )
             return None
 
         # Get scan history
         try:
             scan_history = ScanHistory.objects.get(id=scan_history_id)
         except ScanHistory.DoesNotExist:
-            logger.error(f"ScanHistory with ID {scan_history_id} not found")
+            logger.log_line(
+                PREFIX_CMD_REPO,
+                "SAVE",
+                "ScanHistory with ID %s not found" % (scan_history_id,),
+                level="error",
+            )
             return None
 
         # Get activity if provided
@@ -121,7 +151,12 @@ class CommandRepository:
             try:
                 activity = ScanActivity.objects.get(id=activity_id)
             except ScanActivity.DoesNotExist:
-                logger.warning(f"ScanActivity with ID {activity_id} not found, continuing without activity link")
+                logger.log_line(
+                    PREFIX_CMD_REPO,
+                    "SAVE",
+                    "ScanActivity with ID %s not found, continuing without activity link" % (activity_id,),
+                    level="warning",
+                )
 
         # Parse start_time
         start_time = parse_datetime_iso(start_time_str) or timezone.now()
@@ -136,7 +171,12 @@ class CommandRepository:
                 if isinstance(elapsed, (int, float)):
                     elapsed_float = float(elapsed)
             except (ValueError, TypeError) as e:
-                logger.warning(f"Error converting elapsed '{elapsed}' to float: {e}")
+                logger.log_line(
+                    PREFIX_CMD_REPO,
+                    "SAVE",
+                    "Error converting elapsed '%s' to float: %s" % (elapsed, e),
+                    level="warning",
+                )
 
         # Ensure errors and warnings are lists
         if not isinstance(errors, list):
@@ -151,7 +191,12 @@ class CommandRepository:
             try:
                 existing_command = Command.objects.filter(scan_history=scan_history, name=name, time=start_time).first()
             except Exception as e:
-                logger.debug(f"Error checking for existing command: {e}")
+                logger.log_line(
+                    PREFIX_CMD_REPO,
+                    "SAVE",
+                    "Error checking for existing command: %s" % (e,),
+                    level="debug",
+                )
 
         if existing_command:
             # Update existing command
@@ -183,7 +228,12 @@ class CommandRepository:
             if activity:
                 existing_command.activity = activity
             existing_command.save()
-            logger.debug(f"Updated Command {existing_command.id} for runner {name}")
+            logger.log_line(
+                PREFIX_CMD_REPO,
+                "SAVE",
+                "Updated Command %s for runner %s" % (existing_command.id, name),
+                level="debug",
+            )
             return existing_command
         else:
             # Create new command
@@ -209,7 +259,12 @@ class CommandRepository:
                 ancestor_id=ancestor_id,
                 scan_type=scan_type,
             )
-            logger.info(f"Created Command {command.id} for runner {name}")
+            logger.log_line(
+                PREFIX_CMD_REPO,
+                "SAVE",
+                "Created Command %s for runner %s" % (command.id, name),
+                level="info",
+            )
             return command
 
     def get_commands_for_scan(self, scan_history_id: int) -> list[Command]:
@@ -225,7 +280,12 @@ class CommandRepository:
         try:
             return list(Command.objects.filter(scan_history_id=scan_history_id).order_by("time"))
         except Exception as e:
-            logger.error(f"Error getting commands for scan {scan_history_id}: {e}")
+            logger.log_line(
+                PREFIX_CMD_REPO,
+                "GET",
+                "Error getting commands for scan %s: %s" % (scan_history_id, e),
+                level="error",
+            )
             return []
 
     def get_commands_for_activity(self, activity_id: int) -> list[Command]:
@@ -241,5 +301,10 @@ class CommandRepository:
         try:
             return list(Command.objects.filter(activity_id=activity_id).order_by("time"))
         except Exception as e:
-            logger.error(f"Error getting commands for activity {activity_id}: {e}")
+            logger.log_line(
+                PREFIX_CMD_REPO,
+                "GET",
+                "Error getting commands for activity %s: %s" % (activity_id, e),
+                level="error",
+            )
             return []

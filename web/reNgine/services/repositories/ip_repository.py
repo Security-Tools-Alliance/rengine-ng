@@ -13,7 +13,7 @@ from reNgine.utilities.logger import get_module_logger
 from startScan.models import IpAddress, ScanHistory, Subdomain
 from targetApp.models import Domain
 
-
+PREFIX_IP_REPO = "[IP_REPO]"
 logger = get_module_logger(__name__)
 
 
@@ -42,13 +42,28 @@ class IpRepository:
         try:
             return self._process_secator_ip_item(item, scan_history_id, domain_id, rengine_context or {})
         except ObjectDoesNotExist as e:
-            logger.error(f"Object not found when saving IP address: {e}")
+            logger.log_line(
+                PREFIX_IP_REPO,
+                "SAVE",
+                "Object not found when saving IP address: %s" % (e,),
+                level="error",
+            )
             return None
         except IntegrityError as e:
-            logger.error(f"Integrity error saving IP address: {e}")
+            logger.log_line(
+                PREFIX_IP_REPO,
+                "SAVE",
+                "Integrity error saving IP address: %s" % (e,),
+                level="error",
+            )
             return None
         except Exception as e:
-            logger.error(f"Error saving IP address from Secator: {e}")
+            logger.log_line(
+                PREFIX_IP_REPO,
+                "SAVE",
+                "Error saving IP address from Secator: %s" % (e,),
+                level="error",
+            )
             return None
 
     def _process_secator_ip_item(
@@ -83,11 +98,21 @@ class IpRepository:
         )
 
         if created:
-            logger.info(f"Created IP address: {ip_address}")
+            logger.log_line(
+                PREFIX_IP_REPO,
+                "SAVE",
+                "Created IP address: %s" % (ip_address,),
+                level="info",
+            )
             # Collect for batch geolocalization
             self._collect_ip_for_geolocalization(ip_address)
         else:
-            logger.debug(f"IP address already exists: {ip_address}")
+            logger.log_line(
+                PREFIX_IP_REPO,
+                "SAVE",
+                "IP address already exists: %s" % (ip_address,),
+                level="debug",
+            )
 
         # Associate with subdomain if hostname provided (use value not used as IP when applicable)
         hostname = self._resolve_hostname_for_association(item, ip_address)
@@ -124,7 +149,12 @@ class IpRepository:
         """
         try:
             if not is_valid_ip(address):
-                logger.warning(f"Invalid IP address: {address}")
+                logger.log_line(
+                    PREFIX_IP_REPO,
+                    "GET_OR_CREATE",
+                    "Invalid IP address: %s" % (address,),
+                    level="warning",
+                )
                 return None, False
 
             version = self._get_ip_version(address)
@@ -139,13 +169,23 @@ class IpRepository:
             ip_obj, created = IpAddress.objects.get_or_create(address=address, defaults=defaults)
 
             if created:
-                logger.info(f"Created new IP address: {address}")
+                logger.log_line(
+                    PREFIX_IP_REPO,
+                    "GET_OR_CREATE",
+                    "Created new IP address: %s" % (address,),
+                    level="info",
+                )
                 self._collect_ip_for_geolocalization(address)
 
             return ip_obj, created
 
         except Exception as e:
-            logger.error(f"Error in get_or_create IP address: {e}")
+            logger.log_line(
+                PREFIX_IP_REPO,
+                "GET_OR_CREATE",
+                "Error in get_or_create IP address: %s" % (e,),
+                level="error",
+            )
             return None, False
 
     def bulk_create(self, ip_addresses: list, scan_history_id: int, domain_id: int) -> list:
@@ -182,7 +222,12 @@ class IpRepository:
 
             if ip_objects:
                 created = IpAddress.objects.bulk_create(ip_objects, ignore_conflicts=True)
-                logger.info(f"Bulk created {len(created)} IP addresses")
+                logger.log_line(
+                    PREFIX_IP_REPO,
+                    "BULK_CREATE",
+                    "Bulk created %s IP addresses" % (len(created),),
+                    level="info",
+                )
 
                 # Collect all for batch geolocalization
                 for ip_obj in created:
@@ -193,10 +238,20 @@ class IpRepository:
             return []
 
         except ObjectDoesNotExist as e:
-            logger.error(f"Object not found: {e}")
+            logger.log_line(
+                PREFIX_IP_REPO,
+                "BULK_CREATE",
+                "Object not found: %s" % (e,),
+                level="error",
+            )
             return []
         except Exception as e:
-            logger.error(f"Error in bulk create IP addresses: {e}")
+            logger.log_line(
+                PREFIX_IP_REPO,
+                "BULK_CREATE",
+                "Error in bulk create IP addresses: %s" % (e,),
+                level="error",
+            )
             return []
 
     def update_geolocation(self, ip_address_id: int, geo_data: Dict[str, Any]) -> bool:
@@ -226,10 +281,20 @@ class IpRepository:
             return True
 
         except ObjectDoesNotExist:
-            logger.error(f"IpAddress with ID {ip_address_id} not found")
+            logger.log_line(
+                PREFIX_IP_REPO,
+                "UPDATE",
+                "IpAddress with ID %s not found" % (ip_address_id,),
+                level="error",
+            )
             return False
         except Exception as e:
-            logger.error(f"Error updating IP geolocation: {e}")
+            logger.log_line(
+                PREFIX_IP_REPO,
+                "UPDATE",
+                "Error updating IP geolocation: %s" % (e,),
+                level="error",
+            )
             return False
 
     def _resolve_valid_ip_from_item(self, item: Dict[str, Any]) -> Optional[str]:
@@ -241,14 +306,20 @@ class IpRepository:
             if candidate and is_valid_ip(candidate):
                 return candidate
         if any(item.get(k) for k in ("ip", "target", "host")):
-            logger.warning(
-                "Invalid IP address: no valid IP in ip/target/host (values: ip=%r, target=%r, host=%r)",
-                item.get("ip"),
-                item.get("target"),
-                item.get("host"),
+            logger.log_line(
+                PREFIX_IP_REPO,
+                "SAVE",
+                "Invalid IP address: no valid IP in ip/target/host (values: ip=%r, target=%r, host=%r)"
+                % (item.get("ip"), item.get("target"), item.get("host")),
+                level="warning",
             )
         else:
-            logger.warning("IP item missing IP address field")
+            logger.log_line(
+                PREFIX_IP_REPO,
+                "SAVE",
+                "IP item missing IP address field",
+                level="warning",
+            )
         return None
 
     def _resolve_hostname_for_association(self, item: Dict[str, Any], ip_address_used: str) -> Optional[str]:
@@ -328,12 +399,27 @@ class IpRepository:
         try:
             if subdomain := Subdomain.objects.filter(name=hostname, scan_history_id=scan_history_id).first():
                 subdomain.ip_addresses.add(ip_obj)
-                logger.debug(f"Associated IP {ip_obj.address} with subdomain {hostname}")
+                logger.log_line(
+                    PREFIX_IP_REPO,
+                    "ASSOCIATE",
+                    "Associated IP %s with subdomain %s" % (ip_obj.address, hostname),
+                    level="debug",
+                )
             else:
-                logger.debug(f"No subdomain found for hostname {hostname} in scan {scan_history_id}")
+                logger.log_line(
+                    PREFIX_IP_REPO,
+                    "ASSOCIATE",
+                    "No subdomain found for hostname %s in scan %s" % (hostname, scan_history_id),
+                    level="debug",
+                )
 
         except Exception as e:
-            logger.error(f"Error associating IP with subdomain: {e}")
+            logger.log_line(
+                PREFIX_IP_REPO,
+                "ASSOCIATE",
+                "Error associating IP with subdomain: %s" % (e,),
+                level="error",
+            )
 
     def _collect_ip_for_geolocalization(self, ip_address: str) -> None:
         """
@@ -348,4 +434,9 @@ class IpRepository:
 
             collect_ip_for_geolocalization(ip_address)
         except Exception as e:
-            logger.error(f"Error collecting IP for geolocalization: {e}")
+            logger.log_line(
+                PREFIX_IP_REPO,
+                "GEO",
+                "Error collecting IP for geolocalization: %s" % (e,),
+                level="error",
+            )

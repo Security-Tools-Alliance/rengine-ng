@@ -8,12 +8,12 @@ in sync with workers (and optionally set SECATOR_REPORTS_PREFIX in env on both w
 workers) so stripping and file serving work correctly.
 """
 
-import logging
-
 from django.conf import settings
 
+from reNgine.utilities.logger import get_module_logger
 
-logger = logging.getLogger(__name__)
+PREFIX_PATH_UTILS = "[SECATOR_PATH_UTILS]"
+logger = get_module_logger(__name__)
 
 # Cap per-process logs for unmatched prefix; only logged when path is under SECATOR_RESULTS.
 _MAX_UNMATCHED_PREFIX_LOGS = 10
@@ -50,24 +50,23 @@ def strip_secator_reports_prefix(path: str, max_length: int = 1000) -> str:
         path_under_results = bool(results_root and (path == results_root or path.startswith(f"{results_root}/")))
         if path_under_results and _unmatched_prefix_log_count < _MAX_UNMATCHED_PREFIX_LOGS:
             _unmatched_prefix_log_count += 1
-            logger.info(
-                "Secator path does not start with SECATOR_REPORTS_PREFIX (%r); worker and web prefix may be out of sync. path=%r (occurrence %d/%d)",
-                prefix,
-                path[:200],
-                _unmatched_prefix_log_count,
-                _MAX_UNMATCHED_PREFIX_LOGS,
+            logger.log_line(
+                PREFIX_PATH_UTILS,
+                "STRIP_PREFIX",
+                "Secator path does not start with SECATOR_REPORTS_PREFIX (%s); worker and web prefix may be out of sync. path=%s (occurrence %s/%s)"
+                % (prefix, path[:200], _unmatched_prefix_log_count, _MAX_UNMATCHED_PREFIX_LOGS),
+                level="info",
             )
     if len(path) > max_length:
         if _truncation_warning_log_count < _MAX_TRUNCATION_WARNING_LOGS:
             _truncation_warning_log_count += 1
             snippet = path[max_length - 80 : max_length + 20] if len(path) > 100 else path
-            logger.warning(
-                "Secator path truncated (len=%d, max_length=%d); stored value may not match a real file. snippet=%r (occurrence %d/%d)",
-                len(path),
-                max_length,
-                snippet,
-                _truncation_warning_log_count,
-                _MAX_TRUNCATION_WARNING_LOGS,
+            logger.log_line(
+                PREFIX_PATH_UTILS,
+                "STRIP_PREFIX",
+                "Secator path truncated (len=%s, max_length=%s); stored value may not match a real file. snippet=%s (occurrence %s/%s)"
+                % (len(path), max_length, snippet, _truncation_warning_log_count, _MAX_TRUNCATION_WARNING_LOGS),
+                level="warning",
             )
         return path[:max_length]
     return path

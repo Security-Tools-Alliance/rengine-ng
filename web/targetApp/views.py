@@ -3,7 +3,6 @@ from datetime import timedelta
 import io
 import ipaddress
 import json
-import logging
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -35,6 +34,7 @@ from reNgine.definitions import (
 )
 from reNgine.services.repositories import EndpointRepository
 from reNgine.utilities.dns import get_reverse_dns
+from reNgine.utilities.logger import get_module_logger
 from reNgine.utilities.url import sanitize_url
 from scanEngine.models import EngineType, SecatorWorker
 from startScan.models import (
@@ -66,7 +66,8 @@ from targetApp.models import (
 from targetApp.utilities import StatsTracker
 
 
-logger = logging.getLogger(__name__)
+PREFIX_TARGET = "[TARGET]"
+logger = get_module_logger(__name__)
 
 
 def validate_dns_servers(dns_servers_string):
@@ -176,7 +177,12 @@ def add_target(request, slug):
     project = Project.objects.get(slug=slug)
     form = AddTargetForm(request.POST or None)
     if request.method == "POST":
-        logger.info("POST data received: %s", dict(request.POST))
+        logger.log_line(
+            PREFIX_TARGET,
+            "ADD_TARGET",
+            "POST data received: %s" % (dict(request.POST),),
+            level="info",
+        )
         total_processed_count = 0
         multiple_targets = request.POST.get("add-multiple-targets")
         ip_target = request.POST.get("add-ip-target")
@@ -188,7 +194,12 @@ def add_target(request, slug):
                     target if isinstance(target, str) and validators.domain(target) else "Invalid target"
                     for target in bulk_targets
                 ]
-                logger.info("Adding multiple targets: %s", sanitized_targets)
+                logger.log_line(
+                    PREFIX_TARGET,
+                    "ADD_TARGET",
+                    "Adding multiple targets: %s" % (sanitized_targets,),
+                    level="info",
+                )
                 description = request.POST.get("targetDescription", "")
                 h1_team_handle = request.POST.get("targetH1TeamHandle")
                 organization_name = request.POST.get("targetOrganization")
@@ -212,13 +223,12 @@ def add_target(request, slug):
                     sanitized_target = (
                         target if isinstance(target, str) and validators.domain(target) else "Invalid target"
                     )
-                    logger.info(
-                        "%s | Domain? %s | IP? %s | CIDR range? %s | URL? %s",
-                        sanitized_target,
-                        is_domain,
-                        is_ip,
-                        is_range,
-                        is_url,
+                    logger.log_line(
+                        PREFIX_TARGET,
+                        "ADD_TARGET",
+                        "%s | Domain? %s | IP? %s | CIDR range? %s | URL? %s"
+                        % (sanitized_target, is_domain, is_ip, is_range, is_url),
+                        level="info",
                     )
 
                     if is_domain:
@@ -248,7 +258,12 @@ def add_target(request, slug):
                             domains.append(ip_address)
                     else:
                         msg = f"{target} is not a valid domain, IP, or URL. Skipped."
-                        logger.warning(msg)
+                        logger.log_line(
+                            PREFIX_TARGET,
+                            "ADD_TARGET",
+                            msg,
+                            level="warning",
+                        )
                         messages.add_message(request, messages.WARNING, msg)
                         continue
 
@@ -260,12 +275,12 @@ def add_target(request, slug):
                     ]
                     sanitized_http_urls = [url if validators.url(url) else "Invalid URL" for url in http_urls]
                     sanitized_ports = [port if isinstance(port, int) else "Invalid Port" for port in ports]
-                    logger.info(
-                        "IPs: %s | Domains: %s | URLs: %s | Ports: %s",
-                        sanitized_ips,
-                        sanitized_domains,
-                        sanitized_http_urls,
-                        sanitized_ports,
+                    logger.log_line(
+                        PREFIX_TARGET,
+                        "ADD_TARGET",
+                        "IPs: %s | Domains: %s | URLs: %s | Ports: %s"
+                        % (sanitized_ips, sanitized_domains, sanitized_http_urls, sanitized_ports),
+                        level="info",
                     )
 
                     for domain_name in domains:
@@ -281,7 +296,12 @@ def add_target(request, slug):
                             domain.save()
                             total_processed_count += 1
                             if created:
-                                logger.info("Added new target %s", domain.name)
+                                logger.log_line(
+                                    PREFIX_TARGET,
+                                    "ADD_TARGET",
+                                    "Added new target %s" % (domain.name,),
+                                    level="info",
+                                )
 
                             if organization_name:
                                 organization = None
@@ -298,7 +318,12 @@ def add_target(request, slug):
                         http_url = sanitize_url(http_url)
                         endpoint, created = EndPoint.objects.get_or_create(target_domain=domain, http_url=http_url)
                         if created:
-                            logger.info("Added new endpoint %s", endpoint.http_url)
+                            logger.log_line(
+                                PREFIX_TARGET,
+                                "ADD_TARGET",
+                                "Added new endpoint %s" % (endpoint.http_url,),
+                                level="info",
+                            )
 
                     for ip_address in ips:
                         ip_data = get_ip_info(ip_address)
@@ -310,14 +335,24 @@ def add_target(request, slug):
                         ip.version = ip_data.version
                         ip.save()
                         if created:
-                            logger.warning("Added new IP %s", ip)
+                            logger.log_line(
+                                PREFIX_TARGET,
+                                "ADD_TARGET",
+                                "Added new IP %s" % (ip,),
+                                level="warning",
+                            )
 
                     for port_number in ports:
                         port, created = Port.objects.get_or_create(
                             number=port_number, defaults={"is_uncommon": port_number not in [80, 443, 8080, 8443]}
                         )
                         if created:
-                            logger.warning("Added new port %s", port.number)
+                            logger.log_line(
+                                PREFIX_TARGET,
+                                "ADD_TARGET",
+                                "Added new port %s" % (port.number,),
+                                level="warning",
+                            )
 
             # Import from txt / csv
             elif "import-txt-target" in request.POST or "import-csv-target" in request.POST:
@@ -411,16 +446,46 @@ def add_target(request, slug):
                     is_valid, error_msg, cleaned_dns = validate_dns_servers(used_dns_servers)
                     if not is_valid:
                         messages.add_message(request, messages.ERROR, f"Invalid DNS servers configuration: {error_msg}")
-                        logger.warning("Invalid DNS servers submitted: %s - %s", used_dns_servers, error_msg)
+                        logger.log_line(
+                            PREFIX_TARGET,
+                            "IP_SCAN",
+                            "Invalid DNS servers submitted: %s - %s" % (used_dns_servers, error_msg),
+                            level="warning",
+                        )
                         context = {"current_project": project}
                         return render(request, "target/add.html", context)
                     used_dns_servers = cleaned_dns
 
-                logger.info("Processing IP scan results for %s", original_ip_range)
-                logger.info("Target name: %s", target_name)
-                logger.info("Selected domains: %s", discovered_domains)
-                logger.info("Selected hosts count: %s", len(resolved_hosts_data))
-                logger.info("DNS servers used: %s", used_dns_servers)
+                logger.log_line(
+                    PREFIX_TARGET,
+                    "IP_SCAN",
+                    "Processing IP scan results for %s" % (original_ip_range,),
+                    level="info",
+                )
+                logger.log_line(
+                    PREFIX_TARGET,
+                    "IP_SCAN",
+                    "Target name: %s" % (target_name,),
+                    level="info",
+                )
+                logger.log_line(
+                    PREFIX_TARGET,
+                    "IP_SCAN",
+                    "Selected domains: %s" % (discovered_domains,),
+                    level="info",
+                )
+                logger.log_line(
+                    PREFIX_TARGET,
+                    "IP_SCAN",
+                    "Selected hosts count: %s" % (len(resolved_hosts_data),),
+                    level="info",
+                )
+                logger.log_line(
+                    PREFIX_TARGET,
+                    "IP_SCAN",
+                    "DNS servers used: %s" % (used_dns_servers,),
+                    level="info",
+                )
 
                 # Parse selected hosts to categorize them and deduplicate
                 selected_domains = set()
@@ -434,7 +499,12 @@ def add_target(request, slug):
 
                 # If target name is provided, create a single target and group everything under it
                 if target_name:
-                    logger.info("Creating single target '%s' to group all selected items", target_name)
+                    logger.log_line(
+                        PREFIX_TARGET,
+                        "IP_SCAN",
+                        "Creating single target '%s' to group all selected items" % (target_name,),
+                        level="info",
+                    )
 
                     # Create the main target with the provided name
                     main_target, created = Domain.objects.get_or_create(
@@ -457,33 +527,64 @@ def add_target(request, slug):
                             main_target_locked = type(main_target).objects.select_for_update().get(pk=main_target.pk)
                             main_target_locked.custom_dns_servers = used_dns_servers
                             main_target_locked.save()
-                        logger.info("Updated DNS servers for existing target %s", main_target.name)
+                        logger.log_line(
+                            PREFIX_TARGET,
+                            "IP_SCAN",
+                            "Updated DNS servers for existing target %s" % (main_target.name,),
+                            level="info",
+                        )
 
                     stats.domain(created)
                     if created:
-                        logger.info(
-                            "Created new grouped target %s with DNS servers: %s", main_target.name, used_dns_servers
+                        logger.log_line(
+                            PREFIX_TARGET,
+                            "IP_SCAN",
+                            "Created new grouped target %s with DNS servers: %s" % (main_target.name, used_dns_servers),
+                            level="info",
                         )
                     else:
-                        logger.info("Using existing target %s", main_target.name)
+                        logger.log_line(
+                            PREFIX_TARGET,
+                            "IP_SCAN",
+                            "Using existing target %s" % (main_target.name,),
+                            level="info",
+                        )
 
                     # Process all selected items as subdomains of the main target
-                    logger.info(
-                        "Processing %s selected hosts for target %s", len(resolved_hosts_data), main_target.name
+                    logger.log_line(
+                        PREFIX_TARGET,
+                        "IP_SCAN",
+                        "Processing %s selected hosts for target %s" % (len(resolved_hosts_data), main_target.name),
+                        level="info",
                     )
                     for i, host_data_json in enumerate(resolved_hosts_data):
                         try:
-                            logger.debug("Processing host %s/%s: %s", i + 1, len(resolved_hosts_data), host_data_json)
+                            logger.log_line(
+                                PREFIX_TARGET,
+                                "IP_SCAN",
+                                "Processing host %s/%s: %s" % (i + 1, len(resolved_hosts_data), host_data_json),
+                                level="debug",
+                            )
                             host_info = json.loads(host_data_json.replace("&quot;", '"'))
                             ip = host_info.get("ip")
                             hostname = host_info.get("domain")
                             is_alive = host_info.get("is_alive", False)
 
-                            logger.debug("Parsed host info - IP: %s, Hostname: %s, Alive: %s", ip, hostname, is_alive)
+                            logger.log_line(
+                                PREFIX_TARGET,
+                                "IP_SCAN",
+                                "Parsed host info - IP: %s, Hostname: %s, Alive: %s" % (ip, hostname, is_alive),
+                                level="debug",
+                            )
 
                             # Deduplication: Skip if we've already processed this hostname
                             if hostname in seen_hostnames:
-                                logger.debug("Skipping duplicate hostname: %s", hostname)
+                                logger.log_line(
+                                    PREFIX_TARGET,
+                                    "IP_SCAN",
+                                    "Skipping duplicate hostname: %s" % (hostname,),
+                                    level="debug",
+                                )
                                 continue
                             seen_hostnames.add(hostname)
 
@@ -498,9 +599,19 @@ def add_target(request, slug):
 
                             stats.subdomain(created)
                             if created:
-                                logger.info("Added subdomain %s to grouped target %s", hostname, main_target.name)
+                                logger.log_line(
+                                    PREFIX_TARGET,
+                                    "IP_SCAN",
+                                    "Added subdomain %s to grouped target %s" % (hostname, main_target.name),
+                                    level="info",
+                                )
                             else:
-                                logger.info("Subdomain %s already exists for target %s", hostname, main_target.name)
+                                logger.log_line(
+                                    PREFIX_TARGET,
+                                    "IP_SCAN",
+                                    "Subdomain %s already exists for target %s" % (hostname, main_target.name),
+                                    level="info",
+                                )
 
                             # Create/update IP address record
                             if validators.ipv4(ip) or validators.ipv6(ip):
@@ -521,12 +632,22 @@ def add_target(request, slug):
 
                                 stats.ip(ip_created)
                                 if ip_created:
-                                    logger.info("Added new IP %s", ip_obj.address)
+                                    logger.log_line(
+                                        PREFIX_TARGET,
+                                        "IP_SCAN",
+                                        "Added new IP %s" % (ip_obj.address,),
+                                        level="info",
+                                    )
 
                             subdomain.save()
 
                         except (json.JSONDecodeError, KeyError) as e:
-                            logger.warning("Error processing host data '%s': %s", host_data_json, e)
+                            logger.log_line(
+                                PREFIX_TARGET,
+                                "IP_SCAN",
+                                "Error processing host data '%s': %s" % (host_data_json, e),
+                                level="warning",
+                            )
                             continue
 
                     # Also add discovered domains as subdomains
@@ -541,21 +662,30 @@ def add_target(request, slug):
                             )
                             stats.subdomain(created)
                             if created:
-                                logger.info(
-                                    "Added discovered domain %s as subdomain to grouped target %s",
-                                    domain,
-                                    main_target.name,
+                                logger.log_line(
+                                    PREFIX_TARGET,
+                                    "IP_SCAN",
+                                    "Added discovered domain %s as subdomain to grouped target %s"
+                                    % (domain, main_target.name),
+                                    level="info",
                                 )
                             else:
-                                logger.info(
-                                    "Discovered domain %s already exists as subdomain for target %s",
-                                    domain,
-                                    main_target.name,
+                                logger.log_line(
+                                    PREFIX_TARGET,
+                                    "IP_SCAN",
+                                    "Discovered domain %s already exists as subdomain for target %s"
+                                    % (domain, main_target.name),
+                                    level="info",
                                 )
 
                     # Update total_processed_count
                     total_processed_count = stats.get_total_processed()
-                    logger.info("Grouped target processing complete: %s", stats.as_dict())
+                    logger.log_line(
+                        PREFIX_TARGET,
+                        "IP_SCAN",
+                        "Grouped target processing complete: %s" % (stats.as_dict(),),
+                        level="info",
+                    )
 
                 else:
                     # Original logic for individual targets (when no target name is provided)
@@ -584,7 +714,12 @@ def add_target(request, slug):
                                     seen_ips.add(ip)
                                     selected_ips.append(host_info)
                         except (json.JSONDecodeError, KeyError) as e:
-                            logger.warning(f"Error processing host data: {e}")
+                            logger.log_line(
+                                PREFIX_TARGET,
+                                "IP_SCAN",
+                                "Error processing host data: %s" % (e,),
+                                level="warning",
+                            )
                             continue
 
                     # Add discovered domains from checkboxes to the set
@@ -613,13 +748,28 @@ def add_target(request, slug):
                             if not created and used_dns_servers:
                                 domain.custom_dns_servers = used_dns_servers
                                 domain.save()
-                                logger.info("Updated DNS servers for existing domain target %s", domain.name)
+                                logger.log_line(
+                                    PREFIX_TARGET,
+                                    "IP_SCAN",
+                                    "Updated DNS servers for existing domain target %s" % (domain.name,),
+                                    level="info",
+                                )
 
                             stats.domain(created)
                             if created:
-                                logger.info("Added new target %s with DNS servers: %s", domain.name, used_dns_servers)
+                                logger.log_line(
+                                    PREFIX_TARGET,
+                                    "IP_SCAN",
+                                    "Added new target %s with DNS servers: %s" % (domain.name, used_dns_servers),
+                                    level="info",
+                                )
                             else:
-                                logger.info("Domain target %s already exists", domain.name)
+                                logger.log_line(
+                                    PREFIX_TARGET,
+                                    "IP_SCAN",
+                                    "Domain target %s already exists" % (domain.name,),
+                                    level="info",
+                                )
                             domain_targets[domain_name] = domain
 
                     # 2. Process selected hostnames - add them as subdomains to their respective domain targets
@@ -645,12 +795,18 @@ def add_target(request, slug):
 
                                 stats.subdomain(created)
                                 if created:
-                                    logger.info(
-                                        "Added hostname subdomain %s for target %s", hostname, target_domain.name
+                                    logger.log_line(
+                                        PREFIX_TARGET,
+                                        "IP_SCAN",
+                                        "Added hostname subdomain %s for target %s" % (hostname, target_domain.name),
+                                        level="info",
                                     )
                                 else:
-                                    logger.info(
-                                        "Subdomain %s already exists for target %s", hostname, target_domain.name
+                                    logger.log_line(
+                                        PREFIX_TARGET,
+                                        "IP_SCAN",
+                                        "Subdomain %s already exists for target %s" % (hostname, target_domain.name),
+                                        level="info",
                                     )
 
                                 # Create/update IP address record
@@ -672,7 +828,12 @@ def add_target(request, slug):
 
                                     stats.ip(ip_created)
                                     if ip_created:
-                                        logger.info("Added new IP %s", ip_obj.address)
+                                        logger.log_line(
+                                            PREFIX_TARGET,
+                                            "IP_SCAN",
+                                            "Added new IP %s" % (ip_obj.address,),
+                                            level="info",
+                                        )
 
                                 subdomain.save()
 
@@ -698,17 +859,29 @@ def add_target(request, slug):
                             if not created and used_dns_servers:
                                 ip_range_domain.custom_dns_servers = used_dns_servers
                                 ip_range_domain.save()
-                                logger.info("Updated DNS servers for existing IP range target %s", ip_range_domain.name)
+                                logger.log_line(
+                                    PREFIX_TARGET,
+                                    "IP_SCAN",
+                                    "Updated DNS servers for existing IP range target %s" % (ip_range_domain.name,),
+                                    level="info",
+                                )
 
                             stats.domain(created)
                             if created:
-                                logger.info(
-                                    "Added new IP range target %s with DNS servers: %s",
-                                    ip_range_domain.name,
-                                    used_dns_servers,
+                                logger.log_line(
+                                    PREFIX_TARGET,
+                                    "IP_SCAN",
+                                    "Added new IP range target %s with DNS servers: %s"
+                                    % (ip_range_domain.name, used_dns_servers),
+                                    level="info",
                                 )
                             else:
-                                logger.info("IP range target %s already exists", ip_range_domain.name)
+                                logger.log_line(
+                                    PREFIX_TARGET,
+                                    "IP_SCAN",
+                                    "IP range target %s already exists" % (ip_range_domain.name,),
+                                    level="info",
+                                )
 
                             # Add selected IPs as subdomains
                             for host_info in selected_ips:
@@ -742,28 +915,57 @@ def add_target(request, slug):
                                     subdomain.ip_addresses.add(ip_obj)
 
                                     if ip_created:
-                                        logger.info("Added new IP %s", ip_obj.address)
+                                        logger.log_line(
+                                            PREFIX_TARGET,
+                                            "IP_SCAN",
+                                            "Added new IP %s" % (ip_obj.address,),
+                                            level="info",
+                                        )
 
                                 stats.subdomain(created)
                                 if created:
-                                    logger.info("Added IP subdomain %s for target %s", ip, ip_range_domain.name)
+                                    logger.log_line(
+                                        PREFIX_TARGET,
+                                        "IP_SCAN",
+                                        "Added IP subdomain %s for target %s" % (ip, ip_range_domain.name),
+                                        level="info",
+                                    )
                                 else:
-                                    logger.info(
-                                        "IP subdomain %s already exists for target %s", ip, ip_range_domain.name
+                                    logger.log_line(
+                                        PREFIX_TARGET,
+                                        "IP_SCAN",
+                                        "IP subdomain %s already exists for target %s" % (ip, ip_range_domain.name),
+                                        level="info",
                                     )
 
                                 subdomain.save()
 
                         except (AddressValueError, ValueError) as e:
-                            logger.warning("Error creating IP range target: %s", e)
+                            logger.log_line(
+                                PREFIX_TARGET,
+                                "IP_SCAN",
+                                "Error creating IP range target: %s" % (e,),
+                                level="warning",
+                            )
 
                     # Update total_processed_count to include both created and existing items
                     total_processed_count = stats.get_total_processed()
 
-                    logger.info("Processing complete: %s", stats.as_dict())
+                    logger.log_line(
+                        PREFIX_TARGET,
+                        "IP_SCAN",
+                        "Processing complete: %s" % (stats.as_dict(),),
+                        level="info",
+                    )
 
         except (Http404, ValueError) as e:
-            logger.exception(e)
+            logger.log_line(
+                PREFIX_TARGET,
+                "ADD_TARGET",
+                "Exception while adding domain: %s" % (e,),
+                level="error",
+                exc_info=True,
+            )
             messages.add_message(request, messages.ERROR, f"Exception while adding domain: {e}")
             return http.HttpResponseRedirect(reverse("add_target", kwargs={"slug": slug}))
 
@@ -777,7 +979,12 @@ def add_target(request, slug):
                     "Oops! Could not import any targets, either targets already exists or is not a valid target."
                 )
 
-            logger.warning("No targets processed (total_processed_count=0) for request: %s", dict(request.POST))
+            logger.log_line(
+                PREFIX_TARGET,
+                "ADD_TARGET",
+                "No targets processed (total_processed_count=0) for request: %s" % (dict(request.POST),),
+                level="warning",
+            )
             messages.add_message(request, messages.ERROR, error_msg)
 
             # Handle AJAX requests with JSON error response
@@ -866,34 +1073,69 @@ def delete_target(request, slug, id):
                 for dir_path in result_dirs:
                     result = safe_rmtree(settings.RENGINE_RESULTS, dir_path)
                     if result != "removed":
-                        logger.warning("Results dir cleanup returned %s for path %s", result, dir_path)
+                        logger.log_line(
+                            PREFIX_TARGET,
+                            "DELETE_TARGET",
+                            "Results dir cleanup returned %s for path %s" % (result, dir_path),
+                            level="warning",
+                        )
                 resolved_direct = resolve_results_dir_under_base(settings.RENGINE_RESULTS, target.name)
                 if resolved_direct is not None and resolved_direct.is_dir():
                     result = safe_rmtree(settings.RENGINE_RESULTS, resolved_direct)
                     if result != "removed":
-                        logger.warning("Results dir cleanup returned %s for path %s", result, resolved_direct)
+                        logger.log_line(
+                            PREFIX_TARGET,
+                            "DELETE_TARGET",
+                            "Results dir cleanup returned %s for path %s" % (result, resolved_direct),
+                            level="warning",
+                        )
                 prefix = f"{target.name}__"
                 for entry in base.iterdir():
                     if entry.is_dir() and entry.name.startswith(prefix):
                         result = safe_rmtree(settings.RENGINE_RESULTS, entry)
                         if result != "removed":
-                            logger.warning("Results dir cleanup returned %s for path %s", result, entry)
+                            logger.log_line(
+                                PREFIX_TARGET,
+                                "DELETE_TARGET",
+                                "Results dir cleanup returned %s for path %s" % (result, entry),
+                                level="warning",
+                            )
             target.delete()
             response_data = {"status": "true"}
             messages.add_message(request, messages.INFO, "Domain successfully deleted!")
         except Http404:
             if isinstance(id, int):  # Ensure id is an integer
-                logger.error("Domain not found: %d", id)
+                logger.log_line(
+                    PREFIX_TARGET,
+                    "DELETE_TARGET",
+                    "Domain not found: %d" % (id,),
+                    level="error",
+                )
             else:
-                logger.error("Domain not found: Invalid ID provided")
+                logger.log_line(
+                    PREFIX_TARGET,
+                    "DELETE_TARGET",
+                    "Domain not found: Invalid ID provided",
+                    level="error",
+                )
             messages.add_message(request, messages.ERROR, "Domain not found.")
             response_data = {"status": "false"}
     else:
         valid_methods = ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"]
         if request.method in valid_methods:
-            logger.error("Invalid request method: %s", request.method)
+            logger.log_line(
+                PREFIX_TARGET,
+                "DELETE_TARGET",
+                "Invalid request method: %s" % (request.method,),
+                level="error",
+            )
         else:
-            logger.error("Invalid request method: Unknown method provided")
+            logger.log_line(
+                PREFIX_TARGET,
+                "DELETE_TARGET",
+                "Invalid request method: Unknown method provided",
+                level="error",
+            )
 
         response_data = {"status": "false"}
         messages.add_message(request, messages.ERROR, "Oops! Domain could not be deleted!")
@@ -1108,8 +1350,13 @@ def update_organization(request, slug, id):
             for domain_id in request.POST.getlist("domains"):
                 domain = Domain.objects.get(id=domain_id)
                 organization.domains.add(domain)
-            msg = f"Organization {organization.name} modified!"
-            logger.info(msg)
+            msg = "Organization %s modified!" % (organization.name,)
+            logger.log_line(
+                PREFIX_TARGET,
+                "ORGANIZATION",
+                msg,
+                level="info",
+            )
             messages.add_message(request, messages.INFO, msg)
             return http.HttpResponseRedirect(reverse("list_organization", kwargs={"slug": slug}))
     else:

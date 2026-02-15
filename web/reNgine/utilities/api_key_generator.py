@@ -3,16 +3,16 @@ API Key Generator utility for Secator workers.
 Generates system API keys that cannot be deleted through the UI.
 """
 
-import logging
 from typing import Tuple
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
 
 from dashboard.models import UserAPIKey
+from reNgine.utilities.logger import get_module_logger
 
-
-logger = logging.getLogger(__name__)
+PREFIX_API_KEY = "[API_KEY]"
+logger = get_module_logger(__name__)
 User = get_user_model()
 
 
@@ -54,21 +54,41 @@ def generate_secator_api_key(recreate: bool = False) -> Tuple[str, bool]:
                 # Set unusable password for system user (no login allowed)
                 user.set_unusable_password()
                 user.save()
-                logger.info(f"Created system user: {username}")
+                logger.log_line(
+                    PREFIX_API_KEY,
+                    "USER",
+                    "Created system user: %s" % (username,),
+                    level="info",
+                )
             else:
-                logger.info(f"System user already exists: {username}")
+                logger.log_line(
+                    PREFIX_API_KEY,
+                    "USER",
+                    "System user already exists: %s" % (username,),
+                    level="info",
+                )
 
             # Check for existing system API key
             existing_key = UserAPIKey.objects.filter(user=user, name=key_name, is_system=True).first()
 
             if existing_key and not recreate:
-                logger.info("System API key already exists, returning existing key")
+                logger.log_line(
+                    PREFIX_API_KEY,
+                    "KEY",
+                    "System API key already exists, returning existing key",
+                    level="info",
+                )
                 # Return the existing key (note: we can't retrieve the actual key value from the hash)
                 # So we need to inform the user to use the management command with --show-key option
                 return (None, False)
 
             if existing_key and recreate:
-                logger.warning("Deleting existing system API key for recreation")
+                logger.log_line(
+                    PREFIX_API_KEY,
+                    "KEY",
+                    "Deleting existing system API key for recreation",
+                    level="warning",
+                )
                 existing_key.delete()
 
             # Generate new API key
@@ -81,11 +101,21 @@ def generate_secator_api_key(recreate: bool = False) -> Tuple[str, bool]:
             api_key.is_system = True
             api_key.save(update_fields=["is_system"])
 
-            logger.info(f"Generated new system API key: {key_name}")
+            logger.log_line(
+                PREFIX_API_KEY,
+                "KEY",
+                "Generated new system API key: %s" % (key_name,),
+                level="info",
+            )
             return (key, True)
 
     except Exception as e:
-        logger.error(f"Failed to generate system API key: {e}")
+        logger.log_line(
+            PREFIX_API_KEY,
+            "KEY",
+            "Failed to generate system API key: %s" % (e,),
+            level="error",
+        )
         raise
 
 

@@ -397,17 +397,17 @@ LOGGING = {
         "django.server": {"handlers": ["console"], "propagate": False},
         "django.db.backends": {"handlers": ["db"], "level": "INFO", "propagate": False},
         "reNgine": {
-            "handlers": ["console"],
+            "handlers": ["default"],
             "level": "DEBUG" if UI_DEBUG else "INFO",
             "propagate": False,
         },
         "api": {
-            "handlers": ["console"],
+            "handlers": ["default"],
             "level": "DEBUG" if (UI_DEBUG or SECATOR_API_DEBUG) else "INFO",
             "propagate": False,
         },
         "websocket": {
-            "handlers": ["console"],
+            "handlers": ["default"],
             "level": "DEBUG" if (UI_DEBUG) else "INFO",
             "propagate": False,
         },

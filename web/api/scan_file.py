@@ -36,7 +36,6 @@ Expected relationships (startScan.models / targetApp.models):
     - Required: ScanHistory.domain, Domain.project
 """
 
-import logging
 import mimetypes
 from pathlib import Path
 from typing import NamedTuple
@@ -51,10 +50,11 @@ from rest_framework.views import APIView
 from dashboard.utils import get_user_projects
 from reNgine.core.path import is_safe_path, normalize_relative_path
 from reNgine.settings import RENGINE_RESULTS, SECATOR_REPORTS_PREFIX
+from reNgine.utilities.logger import get_module_logger
 from startScan.models import EndPoint, Subdomain, Technology
 
-
-logger = logging.getLogger(__name__)
+PREFIX_SCAN_FILE = "[SCAN_FILE]"
+logger = get_module_logger(__name__)
 
 # Route name for scan file serving; single source for URL building
 SERVE_SCAN_FILE_URL_NAME = "api:serve_scan_file"
@@ -179,19 +179,26 @@ class ServeScanFile(APIView):
         )
         if path_has_prefix and _secator_prefix_warning_count < _SECATOR_PREFIX_WARNING_LIMIT:
             _secator_prefix_warning_count += 1
-            logger.warning(
-                "ServeScanFile: stored path still starts with SECATOR_REPORTS_PREFIX (%r); "
-                "check web/worker prefix sync or legacy data. path=%r (occurrence=%d/%d)",
-                SECATOR_REPORTS_PREFIX,
-                relative_path[:200],
-                _secator_prefix_warning_count,
-                _SECATOR_PREFIX_WARNING_LIMIT,
+            logger.log_line(
+                PREFIX_SCAN_FILE,
+                "SERVE",
+                "ServeScanFile: stored path still starts with SECATOR_REPORTS_PREFIX (%s); "
+                "check web/worker prefix sync or legacy data. path=%s (occurrence=%s/%s)"
+                % (
+                    repr(SECATOR_REPORTS_PREFIX),
+                    repr(relative_path[:200]),
+                    _secator_prefix_warning_count,
+                    _SECATOR_PREFIX_WARNING_LIMIT,
+                ),
+                level="warning",
             )
             if _secator_prefix_warning_count == _SECATOR_PREFIX_WARNING_LIMIT:
-                logger.warning(
-                    "ServeScanFile: reached SECATOR_REPORTS_PREFIX warning limit (%d); "
-                    "suppressing further identical warnings in this process.",
-                    _SECATOR_PREFIX_WARNING_LIMIT,
+                logger.log_line(
+                    PREFIX_SCAN_FILE,
+                    "SERVE",
+                    "ServeScanFile: reached SECATOR_REPORTS_PREFIX warning limit (%s); "
+                    "suppressing further identical warnings in this process." % (_SECATOR_PREFIX_WARNING_LIMIT,),
+                    level="warning",
                 )
         base = Path(RENGINE_RESULTS).resolve()
         full_path = (base / normalized_path).resolve()

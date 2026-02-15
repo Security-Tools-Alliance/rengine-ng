@@ -17,11 +17,21 @@ in reNgine.settings applies as intended:
 Do not pass ad-hoc names (e.g. "mylogger" or "tasks"); that can bypass
 hierarchy and lead to missing or duplicate output. Use get_module_logger(__name__)
 once per module and reuse the returned logger instance.
+
+Section prefixes (for grep filtering)
+-------------------------------------
+[API], [TARGET], [STARTSCAN], [SECATOR BACKGROUND SYNC], [SECATOR_PROFILES],
+[SECATOR_FORM], [CRON], [SCHEDULED_SCANS], [SIGNALS], [SCANENGINE],
+[WORKER_SSH], [WORKER_CONFIG], [WORKER_DEPLOY], [WORKER_TUNNEL],
+[DASHBOARD], [RECON_NOTE], [STARTSCAN_APPS], [COMMON_VIEWS], [CONTEXT_PROCESSORS].
+Secator API (runner/findings) uses SecatorAPILogger with its own prefix.
 """
 
 from typing import Any
 
 from reNgine.utilities.logger.base import BaseLogger
+
+ALLOWED_LOG_LEVELS = frozenset({"debug", "info", "warning", "error"})
 
 
 class ModuleLogger(BaseLogger):
@@ -64,7 +74,15 @@ class ModuleLogger(BaseLogger):
             message: Message text
             level: "debug", "info", "warning", or "error"
             exc_info: If True, append exception traceback (honored for all levels).
+
+        Raises:
+            ValueError: If level is not one of the allowed values.
         """
+        if level not in ALLOWED_LOG_LEVELS:
+            raise ValueError(
+                "log_line level must be one of %s, got %r"
+                % (sorted(ALLOWED_LOG_LEVELS), level)
+            )
         action_colors = {
             "debug": self.COLOR_VIOLET,
             "info": self.COLOR_BRIGHT_BLUE,
@@ -72,7 +90,8 @@ class ModuleLogger(BaseLogger):
             "error": self.COLOR_RED,
         }
         color = action_colors.get(level, self.COLOR_BRIGHT_BLUE)
-        formatted = self._format_line(prefix, action, message, color)
+        line = self._format_line(prefix, action, message, color)
+        formatted = "%s" % (line)
         if level == "debug":
             self._logger.debug(formatted, exc_info=exc_info)
         elif level == "error":

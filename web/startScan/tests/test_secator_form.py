@@ -155,12 +155,16 @@ class TestSecatorFormHelpers(BaseTestCase):
         self.assertIn("profiles", kwargs["secator_config"])
 
     def test_parse_secator_config_malformed_json_warning(self):
-        """Malformed JSON in secator_config should log a warning."""
+        """Malformed JSON in secator_config should log via log_line with level warning."""
         post = self._make_post("{invalid json}", "secator_config", "5", "delay")
         with patch("startScan.secator.form.logger") as mock_logger:
             cfg = parse_secator_config(post)
-            mock_logger.warning.assert_called_once()
-            self.assertIn("Failed to decode", str(mock_logger.warning.call_args))
+            mock_logger.log_line.assert_called_once()
+            call_args = mock_logger.log_line.call_args
+            self.assertEqual(call_args[0][0], "[SECATOR_FORM]")
+            self.assertEqual(call_args[0][1], "FORM")
+            self.assertIn("Failed to decode", call_args[0][2])
+            self.assertEqual(call_args[1].get("level"), "warning")
             # Should fallback to top-level fields
             self.assertEqual(cfg["delay"], 5)
             self.assertIn("profiles", cfg)

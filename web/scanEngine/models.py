@@ -1,4 +1,3 @@
-import logging
 from urllib.parse import urlparse, urlunparse
 
 from django.conf import settings
@@ -7,8 +6,11 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import IntegrityError, models, transaction
 import yaml
 
+from reNgine.utilities.logger import get_module_logger
 
-logger = logging.getLogger(__name__)
+
+PREFIX_SCANENGINE = "[SCANENGINE]"
+logger = get_module_logger(__name__)
 
 
 class HybridProperty:
@@ -109,7 +111,13 @@ class EngineType(models.Model):
             config = yaml.safe_load(self.yaml_configuration)
             return config if isinstance(config, dict) else {}
         except yaml.YAMLError as e:
-            logger.warning("Failed to parse YAML configuration: %s", e, exc_info=True)
+            logger.log_line(
+                PREFIX_SCANENGINE,
+                "MODEL",
+                "Failed to parse YAML configuration: %s" % (e,),
+                level="warning",
+                exc_info=True,
+            )
             return {}
 
     @HybridProperty
@@ -348,7 +356,13 @@ class SecatorWorkflow(models.Model):
             config = yaml.safe_load(self.yaml_configuration)
             return config if isinstance(config, dict) else {}
         except yaml.YAMLError as e:
-            logger.warning("Failed to parse YAML configuration: %s", e, exc_info=True)
+            logger.log_line(
+                PREFIX_SCANENGINE,
+                "MODEL",
+                "Failed to parse YAML configuration: %s" % (e,),
+                level="warning",
+                exc_info=True,
+            )
             return {}
 
     def get_tasks(self):
@@ -427,9 +441,12 @@ class SecatorWorkflow(models.Model):
                 if orig.workflow_type == "builtin":
                     raise PermissionDenied("Built-in workflows cannot be modified!")
             except SecatorWorkflow.DoesNotExist as e:
-                logger.error(
-                    "SecatorWorkflow pk=%s no longer exists in database; cannot check built-in constraint on save.",
-                    self.pk,
+                logger.log_line(
+                    PREFIX_SCANENGINE,
+                    "MODEL",
+                    "SecatorWorkflow pk=%s no longer exists in database; cannot check built-in constraint on save."
+                    % (self.pk,),
+                    level="error",
                     exc_info=True,
                 )
                 raise e
@@ -498,17 +515,21 @@ class SecatorTask(models.Model):
                         raise PermissionDenied("Built-in tasks cannot be modified!")
                     else:
                         # For bulk operations, log the attempt but don't raise exception
-                        import logging
-
-                        logger = logging.getLogger(__name__)
-                        logger.warning(
-                            f"Attempted to modify built-in task '{self.name}' (ID: {self.pk}) - operation blocked"
+                        logger.log_line(
+                            PREFIX_SCANENGINE,
+                            "MODEL",
+                            "Attempted to modify built-in task '%s' (ID: %s) - operation blocked"
+                            % (self.name, self.pk),
+                            level="warning",
                         )
                         return  # Skip the save operation silently
             except SecatorTask.DoesNotExist as e:
-                logger.error(
-                    "SecatorTask pk=%s no longer exists in database; cannot check built-in constraint on save.",
-                    self.pk,
+                logger.log_line(
+                    PREFIX_SCANENGINE,
+                    "MODEL",
+                    "SecatorTask pk=%s no longer exists in database; cannot check built-in constraint on save."
+                    % (self.pk,),
+                    level="error",
                     exc_info=True,
                 )
                 raise e
@@ -604,7 +625,13 @@ class SecatorScan(models.Model):
             config = yaml.safe_load(self.yaml_configuration)
             return config if isinstance(config, dict) else {}
         except yaml.YAMLError as e:
-            logger.warning("Failed to parse YAML configuration: %s", e, exc_info=True)
+            logger.log_line(
+                PREFIX_SCANENGINE,
+                "MODEL",
+                "Failed to parse YAML configuration: %s" % (e,),
+                level="warning",
+                exc_info=True,
+            )
             return {}
 
     def get_workflows(self):
@@ -642,9 +669,12 @@ class SecatorScan(models.Model):
                 if orig.scan_config_type == "builtin":
                     raise PermissionDenied("Built-in scan configurations cannot be modified!")
             except SecatorScan.DoesNotExist as e:
-                logger.error(
-                    "SecatorScan pk=%s no longer exists in database; cannot check built-in constraint on save.",
-                    self.pk,
+                logger.log_line(
+                    PREFIX_SCANENGINE,
+                    "MODEL",
+                    "SecatorScan pk=%s no longer exists in database; cannot check built-in constraint on save."
+                    % (self.pk,),
+                    level="error",
                     exc_info=True,
                 )
                 raise e
@@ -727,11 +757,12 @@ class SecatorProfile(models.Model):
             parsed = yaml.safe_load(self.opts)
             return parsed if isinstance(parsed, dict) else {}
         except yaml.YAMLError as exc:
-            logger.warning(
-                "Failed to parse YAML opts for profile id=%s name=%s: %s",
-                getattr(self, "id", None),
-                getattr(self, "name", None),
-                exc,
+            logger.log_line(
+                PREFIX_SCANENGINE,
+                "MODEL",
+                "Failed to parse YAML opts for profile id=%s name=%s: %s"
+                % (getattr(self, "id", None), getattr(self, "name", None), exc),
+                level="warning",
             )
             return {}
 
@@ -753,9 +784,12 @@ class SecatorProfile(models.Model):
                 if orig.profile_type == "builtin":
                     raise PermissionDenied("Built-in profiles cannot be modified!")
             except SecatorProfile.DoesNotExist as e:
-                logger.error(
-                    "SecatorProfile pk=%s no longer exists in database; cannot check built-in constraint on save.",
-                    self.pk,
+                logger.log_line(
+                    PREFIX_SCANENGINE,
+                    "MODEL",
+                    "SecatorProfile pk=%s no longer exists in database; cannot check built-in constraint on save."
+                    % (self.pk,),
+                    level="error",
                     exc_info=True,
                 )
                 raise e

@@ -15,7 +15,7 @@ from reNgine.utilities.logger import get_module_logger
 from startScan.models import Email, Employee, EndPoint, ScanHistory, Subdomain
 from targetApp.models import Domain
 
-
+PREFIX_EMPLOYEE_REPO = "[EMPLOYEE_REPO]"
 logger = get_module_logger(__name__)
 
 
@@ -44,13 +44,28 @@ class EmployeeRepository:
         try:
             return self._process_secator_employee_item(item, scan_history_id, domain_id)
         except ObjectDoesNotExist as e:
-            logger.error(f"Object not found when saving employee: {e}")
+            logger.log_line(
+                PREFIX_EMPLOYEE_REPO,
+                "SAVE",
+                "Object not found when saving employee: %s" % (e,),
+                level="error",
+            )
             return None
         except IntegrityError as e:
-            logger.error(f"Integrity error saving employee: {e}")
+            logger.log_line(
+                PREFIX_EMPLOYEE_REPO,
+                "SAVE",
+                "Integrity error saving employee: %s" % (e,),
+                level="error",
+            )
             return None
         except Exception as e:
-            logger.error(f"Error saving employee from Secator: {e}")
+            logger.log_line(
+                PREFIX_EMPLOYEE_REPO,
+                "SAVE",
+                "Error saving employee from Secator: %s" % (e,),
+                level="error",
+            )
             return None
 
     def _process_secator_employee_item(
@@ -62,7 +77,12 @@ class EmployeeRepository:
         url = item.get("url")
 
         if not username and not email:
-            logger.warning("Employee item missing username and email fields")
+            logger.log_line(
+                PREFIX_EMPLOYEE_REPO,
+                "SAVE",
+                "Employee item missing username and email fields",
+                level="warning",
+            )
             return None
 
         scan_history = ScanHistory.objects.get(id=scan_history_id)
@@ -88,9 +108,19 @@ class EmployeeRepository:
             employee.emails.add(email_obj)
 
         if created:
-            logger.info(f"Created employee: {username or email}")
+            logger.log_line(
+                PREFIX_EMPLOYEE_REPO,
+                "SAVE",
+                "Created employee: %s" % (username or email,),
+                level="info",
+            )
         else:
-            logger.debug(f"Employee already exists: {username or email}")
+            logger.log_line(
+                PREFIX_EMPLOYEE_REPO,
+                "SAVE",
+                "Employee already exists: %s" % (username or email,),
+                level="debug",
+            )
 
         # Associate with subdomain/endpoint if URL is provided
         if url:
@@ -133,10 +163,20 @@ class EmployeeRepository:
             return employee, created
 
         except ObjectDoesNotExist as e:
-            logger.error(f"Object not found: {e}")
+            logger.log_line(
+                PREFIX_EMPLOYEE_REPO,
+                "GET_OR_CREATE",
+                "Object not found: %s" % (e,),
+                level="error",
+            )
             return None, False
         except Exception as e:
-            logger.error(f"Error in get_or_create employee: {e}")
+            logger.log_line(
+                PREFIX_EMPLOYEE_REPO,
+                "GET_OR_CREATE",
+                "Error in get_or_create employee: %s" % (e,),
+                level="error",
+            )
             return None, False
 
     def bulk_create(self, employees: List[Dict[str, Any]], scan_history_id: int, domain_id: int) -> List[Employee]:
@@ -154,10 +194,20 @@ class EmployeeRepository:
         try:
             return self._create_employees_in_bulk(scan_history_id, domain_id, employees)
         except ObjectDoesNotExist as e:
-            logger.error(f"Object not found: {e}")
+            logger.log_line(
+                PREFIX_EMPLOYEE_REPO,
+                "BULK_CREATE",
+                "Object not found: %s" % (e,),
+                level="error",
+            )
             return []
         except Exception as e:
-            logger.error(f"Error in bulk create employees: {e}")
+            logger.log_line(
+                PREFIX_EMPLOYEE_REPO,
+                "BULK_CREATE",
+                "Error in bulk create employees: %s" % (e,),
+                level="error",
+            )
             return []
 
     def _create_employees_in_bulk(
@@ -206,7 +256,12 @@ class EmployeeRepository:
                 if created:
                     created_employees.append(employee)
 
-        logger.info(f"Created {len(created_employees)} new employees")
+        logger.log_line(
+            PREFIX_EMPLOYEE_REPO,
+            "BULK_CREATE",
+            "Created %s new employees" % (len(created_employees),),
+            level="info",
+        )
         return created_employees
 
     def get_employees_for_domain(self, domain_id: int) -> List[Employee]:
@@ -224,10 +279,20 @@ class EmployeeRepository:
             return list(Employee.objects.filter(target_domain=domain))
 
         except ObjectDoesNotExist:
-            logger.error(f"Domain with ID {domain_id} not found")
+            logger.log_line(
+                PREFIX_EMPLOYEE_REPO,
+                "GET_FOR_DOMAIN",
+                "Domain with ID %s not found" % (domain_id,),
+                level="error",
+            )
             return []
         except Exception as e:
-            logger.error(f"Error getting employees for domain: {e}")
+            logger.log_line(
+                PREFIX_EMPLOYEE_REPO,
+                "GET_FOR_DOMAIN",
+                "Error getting employees for domain: %s" % (e,),
+                level="error",
+            )
             return []
 
     def get_employees_for_subdomain(self, subdomain_name: str, scan_history_id: int) -> List[Employee]:
@@ -244,11 +309,21 @@ class EmployeeRepository:
         try:
             if subdomain := Subdomain.objects.filter(name=subdomain_name, scan_history_id=scan_history_id).first():
                 return list(Employee.objects.filter(subdomain=subdomain))
-            logger.warning(f"Subdomain {subdomain_name} not found in scan {scan_history_id}")
+            logger.log_line(
+                PREFIX_EMPLOYEE_REPO,
+                "GET_FOR_SUBDOMAIN",
+                "Subdomain %s not found in scan %s" % (subdomain_name, scan_history_id),
+                level="warning",
+            )
             return []
 
         except Exception as e:
-            logger.error(f"Error getting employees for subdomain: {e}")
+            logger.log_line(
+                PREFIX_EMPLOYEE_REPO,
+                "GET_FOR_SUBDOMAIN",
+                "Error getting employees for subdomain: %s" % (e,),
+                level="error",
+            )
             return []
 
     def search_by_email(self, email: str) -> List[Employee]:
@@ -263,13 +338,23 @@ class EmployeeRepository:
         """
         try:
             if not is_valid_email(email):
-                logger.warning(f"Invalid email address: {email}")
+                logger.log_line(
+                    PREFIX_EMPLOYEE_REPO,
+                    "SEARCH_BY_EMAIL",
+                    "Invalid email address: %s" % (email,),
+                    level="warning",
+                )
                 return []
 
             return list(Employee.objects.filter(emails__address__icontains=email))
 
         except Exception as e:
-            logger.error(f"Error searching employees by email: {e}")
+            logger.log_line(
+                PREFIX_EMPLOYEE_REPO,
+                "SEARCH_BY_EMAIL",
+                "Error searching employees by email: %s" % (e,),
+                level="error",
+            )
             return []
 
     def search_by_username(self, username: str) -> List[Employee]:
@@ -284,13 +369,23 @@ class EmployeeRepository:
         """
         try:
             if not username or not username.strip():
-                logger.warning("Username is empty")
+                logger.log_line(
+                    PREFIX_EMPLOYEE_REPO,
+                    "SEARCH_BY_USERNAME",
+                    "Username is empty",
+                    level="warning",
+                )
                 return []
 
             return list(Employee.objects.filter(username__icontains=username.strip()))
 
         except Exception as e:
-            logger.error(f"Error searching employees by username: {e}")
+            logger.log_line(
+                PREFIX_EMPLOYEE_REPO,
+                "SEARCH_BY_USERNAME",
+                "Error searching employees by username: %s" % (e,),
+                level="error",
+            )
             return []
 
     def _associate_with_target(self, employee: Employee, url: str, scan_history_id: int) -> None:
@@ -304,13 +399,24 @@ class EmployeeRepository:
         """
         try:
             if not is_valid_url(url):
-                logger.warning(f"Invalid URL for employee association: {url}")
+                logger.log_line(
+                    PREFIX_EMPLOYEE_REPO,
+                    "ASSOCIATE",
+                    "Invalid URL for employee association: %s" % (url,),
+                    level="warning",
+                )
                 return
 
             if endpoint := EndPoint.objects.filter(http_url=url, scan_history_id=scan_history_id).first():
                 employee.endpoint = endpoint
                 employee.save(update_fields=["endpoint"])
-                logger.debug(f"Associated employee {employee.username or employee.email} with endpoint {url}")
+                logger.log_line(
+                    PREFIX_EMPLOYEE_REPO,
+                    "ASSOCIATE",
+                    "Associated employee %s with endpoint %s"
+                    % (employee.username or getattr(employee, "email", ""), url),
+                    level="debug",
+                )
                 return
 
             # If no endpoint found, try subdomain association
@@ -319,12 +425,28 @@ class EmployeeRepository:
                 if subdomain := Subdomain.objects.filter(name=hostname, scan_history_id=scan_history_id).first():
                     employee.subdomain = subdomain
                     employee.save(update_fields=["subdomain"])
-                    logger.debug(f"Associated employee {employee.username or employee.email} with subdomain {hostname}")
+                    logger.log_line(
+                        PREFIX_EMPLOYEE_REPO,
+                        "ASSOCIATE",
+                        "Associated employee %s with subdomain %s"
+                        % (employee.username or getattr(employee, "email", ""), hostname),
+                        level="debug",
+                    )
                 else:
-                    logger.debug(f"Subdomain {hostname} not found in scan {scan_history_id}")
+                    logger.log_line(
+                        PREFIX_EMPLOYEE_REPO,
+                        "ASSOCIATE",
+                        "Subdomain %s not found in scan %s" % (hostname, scan_history_id),
+                        level="debug",
+                    )
 
         except Exception as e:
-            logger.error(f"Error associating employee with target: {e}")
+            logger.log_line(
+                PREFIX_EMPLOYEE_REPO,
+                "ASSOCIATE",
+                "Error associating employee with target: %s" % (e,),
+                level="error",
+            )
 
     def validate_employee_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -348,7 +470,12 @@ class EmployeeRepository:
                 if is_valid_email(email):
                     validated_data["email"] = email
                 else:
-                    logger.warning(f"Invalid email address: {email}")
+                    logger.log_line(
+                        PREFIX_EMPLOYEE_REPO,
+                        "VALIDATE",
+                        "Invalid email address: %s" % (email,),
+                        level="warning",
+                    )
 
             if site_name := data.get("site_name", "").strip():
                 validated_data["site_name"] = site_name
@@ -357,7 +484,12 @@ class EmployeeRepository:
                 if is_valid_url(url):
                     validated_data["url"] = url
                 else:
-                    logger.warning(f"Invalid URL: {url}")
+                    logger.log_line(
+                        PREFIX_EMPLOYEE_REPO,
+                        "VALIDATE",
+                        "Invalid URL: %s" % (url,),
+                        level="warning",
+                    )
 
             # Validate extra data
             extra_data = data.get("extra_data")
@@ -367,5 +499,10 @@ class EmployeeRepository:
             return validated_data
 
         except Exception as e:
-            logger.error(f"Error validating employee data: {e}")
+            logger.log_line(
+                PREFIX_EMPLOYEE_REPO,
+                "VALIDATE",
+                "Error validating employee data: %s" % (e,),
+                level="error",
+            )
             return {}

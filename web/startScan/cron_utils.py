@@ -27,6 +27,7 @@ import subprocess
 from reNgine.utilities.logger import get_module_logger
 
 
+PREFIX_CRON = "[CRON]"
 logger = get_module_logger(__name__)
 
 # Marker comment to detect our cron line (stable even if script path changes)
@@ -61,7 +62,12 @@ def ensure_run_scheduled_scans_cron() -> bool:
         )
         current = (result.stdout or "") if result.returncode == 0 else ""
         if CRON_LINE_MARKER in current:
-            logger.debug("run_scheduled_scans cron job already present")
+            logger.log_line(
+                PREFIX_CRON,
+                "CRON",
+                "run_scheduled_scans cron job already present",
+                level="debug",
+            )
             return True
         new_crontab = current.rstrip()
         if new_crontab and not new_crontab.endswith("\n"):
@@ -75,16 +81,41 @@ def ensure_run_scheduled_scans_cron() -> bool:
             timeout=5,
         )
         if proc.returncode != 0:
-            logger.warning("Failed to install run_scheduled_scans cron: %s", proc.stderr)
+            logger.log_line(
+                PREFIX_CRON,
+                "CRON",
+                "Failed to install run_scheduled_scans cron: %s" % (proc.stderr,),
+                level="warning",
+            )
             return False
-        logger.info("Installed run_scheduled_scans cron job in web container")
+        logger.log_line(
+            PREFIX_CRON,
+            "CRON",
+            "Installed run_scheduled_scans cron job in web container",
+            level="info",
+        )
         return True
     except FileNotFoundError:
-        logger.debug("crontab not available (e.g. not in web container), skipping")
+        logger.log_line(
+            PREFIX_CRON,
+            "CRON",
+            "crontab not available (e.g. not in web container), skipping",
+            level="debug",
+        )
         return False
     except subprocess.TimeoutExpired:
-        logger.warning("crontab command timed out")
+        logger.log_line(
+            PREFIX_CRON,
+            "CRON",
+            "crontab command timed out",
+            level="warning",
+        )
         return False
     except Exception as e:
-        logger.warning("Could not ensure run_scheduled_scans cron: %s", e)
+        logger.log_line(
+            PREFIX_CRON,
+            "CRON",
+            "Could not ensure run_scheduled_scans cron: %s" % (e,),
+            level="warning",
+        )
         return False

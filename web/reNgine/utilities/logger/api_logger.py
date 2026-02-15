@@ -234,7 +234,7 @@ class SecatorAPILogger(BaseLogger):
             "scan_id": scan_history_id,
         }
         if additional_info:
-            details.update(additional_info)
+            details |= additional_info
 
         info_msg = self._format_info_line(
             self.PREFIX_SYNC,

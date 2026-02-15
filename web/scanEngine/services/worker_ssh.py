@@ -14,6 +14,7 @@ from reNgine.utilities.error import UserSafeError
 from reNgine.utilities.logger import get_module_logger
 
 
+PREFIX_WORKER_SSH = "[WORKER_SSH]"
 logger = get_module_logger(__name__)
 
 # Shared timeouts for remote commands (seconds) to avoid drift between call sites
@@ -227,7 +228,12 @@ def install_public_key_on_host(client: Any, public_key_content: str) -> None:
         finally:
             sftp.close()
     except Exception as e:
-        logger.warning("SFTP write failed when installing public key: %s", e)
+        logger.log_line(
+            PREFIX_WORKER_SSH,
+            "SSH",
+            "SFTP write failed when installing public key: %s" % (e,),
+            level="warning",
+        )
         raise UserSafeError("Could not write key to host.") from e
 
     cmd = (
@@ -243,5 +249,10 @@ def install_public_key_on_host(client: Any, public_key_content: str) -> None:
     )
     exit_code, out, err = run_remote_command(client, cmd, timeout=15)
     if exit_code != 0:
-        logger.warning("Failed to install key on host: exit_code=%s stderr=%s", exit_code, err)
+        logger.log_line(
+            PREFIX_WORKER_SSH,
+            "SSH",
+            "Failed to install key on host: exit_code=%s stderr=%s" % (exit_code, err),
+            level="warning",
+        )
         raise UserSafeError("Could not install key on host.")

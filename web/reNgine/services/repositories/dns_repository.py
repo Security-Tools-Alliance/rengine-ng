@@ -11,7 +11,7 @@ from django.db import IntegrityError, transaction
 from reNgine.utilities.logger import get_module_logger
 from targetApp.models import DNSRecord, Domain, DomainInfo
 
-
+PREFIX_DNS_REPO = "[DNS_REPO]"
 logger = get_module_logger(__name__)
 
 
@@ -59,13 +59,28 @@ class DnsRepository:
         try:
             return self._process_secator_dns_record_item(item, domain_id)
         except ObjectDoesNotExist as e:
-            logger.error(f"Object not found when saving DNS record: {e}")
+            logger.log_line(
+                PREFIX_DNS_REPO,
+                "SAVE",
+                "Object not found when saving DNS record: %s" % (e,),
+                level="error",
+            )
             return None
         except IntegrityError as e:
-            logger.error(f"Integrity error saving DNS record: {e}")
+            logger.log_line(
+                PREFIX_DNS_REPO,
+                "SAVE",
+                "Integrity error saving DNS record: %s" % (e,),
+                level="error",
+            )
             return None
         except Exception as e:
-            logger.error(f"Error saving DNS record from Secator: {e}")
+            logger.log_line(
+                PREFIX_DNS_REPO,
+                "SAVE",
+                "Error saving DNS record from Secator: %s" % (e,),
+                level="error",
+            )
             return None
 
     def _process_secator_dns_record_item(self, item: Dict[str, Any], domain_id: int) -> Optional[DNSRecord]:
@@ -74,20 +89,40 @@ class DnsRepository:
         host = item.get("host")
 
         if not record_name:
-            logger.warning("DNS record item missing name field")
+            logger.log_line(
+                PREFIX_DNS_REPO,
+                "SAVE",
+                "DNS record item missing name field",
+                level="warning",
+            )
             return None
 
         if not record_type:
-            logger.warning("DNS record item missing type field")
+            logger.log_line(
+                PREFIX_DNS_REPO,
+                "SAVE",
+                "DNS record item missing type field",
+                level="warning",
+            )
             return None
 
         if not host:
-            logger.warning("DNS record item missing host/value field")
+            logger.log_line(
+                PREFIX_DNS_REPO,
+                "SAVE",
+                "DNS record item missing host/value field",
+                level="warning",
+            )
             return None
 
         # Validate DNS record type
         if record_type not in self.VALID_DNS_TYPES:
-            logger.warning(f"Invalid DNS record type: {record_type}, skipping")
+            logger.log_line(
+                PREFIX_DNS_REPO,
+                "SAVE",
+                "Invalid DNS record type: %s, skipping" % (record_type,),
+                level="warning",
+            )
             return None
 
         # Extract data from item
@@ -104,7 +139,12 @@ class DnsRepository:
                 domain_info.save()
                 domain.domain_info = domain_info
                 domain.save()
-                logger.debug(f"Created domain info for domain {domain.name}")
+                logger.log_line(
+                    PREFIX_DNS_REPO,
+                    "SAVE",
+                    "Created domain info for domain %s" % (domain.name,),
+                    level="debug",
+                )
 
             if existing_record := (
                 domain_info.dns_records.filter(type=record_type, name=name_value).first()
@@ -112,15 +152,30 @@ class DnsRepository:
             ):
                 if existing_record.name != name_value:
                     existing_record.name = name_value
-                    logger.info(f"Updated DNS record name from {host} to {name_value} ({record_type})")
+                    logger.log_line(
+                        PREFIX_DNS_REPO,
+                        "SAVE",
+                        "Updated DNS record name from %s to %s (%s)" % (host, name_value, record_type),
+                        level="info",
+                    )
                 else:
-                    logger.debug(f"Updated DNS record: {name_value} ({record_type})")
+                    logger.log_line(
+                        PREFIX_DNS_REPO,
+                        "SAVE",
+                        "Updated DNS record: %s (%s)" % (name_value, record_type),
+                        level="debug",
+                    )
                 self._update_dns_record_extra_data(extra_data, existing_record)
                 return existing_record
 
             dns_record = DNSRecord.objects.create(name=name_value, type=record_type, extra_data=extra_data)
             domain_info.dns_records.add(dns_record)
-            logger.info(f"Created DNS record: {name_value} ({record_type})")
+            logger.log_line(
+                PREFIX_DNS_REPO,
+                "SAVE",
+                "Created DNS record: %s (%s)" % (name_value, record_type),
+                level="info",
+            )
             return dns_record
 
     def _update_dns_record_extra_data(self, extra_data: Dict[str, Any], dns_record: DNSRecord) -> None:
@@ -148,16 +203,31 @@ class DnsRepository:
         """
         try:
             if not name or not name.strip():
-                logger.warning("DNS record name is empty")
+                logger.log_line(
+                    PREFIX_DNS_REPO,
+                    "GET_OR_CREATE",
+                    "DNS record name is empty",
+                    level="warning",
+                )
                 return None, False
 
             if not record_type or not record_type.strip():
-                logger.warning("DNS record type is empty")
+                logger.log_line(
+                    PREFIX_DNS_REPO,
+                    "GET_OR_CREATE",
+                    "DNS record type is empty",
+                    level="warning",
+                )
                 return None, False
 
             record_type = record_type.upper().strip()
             if record_type not in self.VALID_DNS_TYPES:
-                logger.warning(f"Invalid DNS record type: {record_type}")
+                logger.log_line(
+                    PREFIX_DNS_REPO,
+                    "GET_OR_CREATE",
+                    "Invalid DNS record type: %s" % (record_type,),
+                    level="warning",
+                )
                 return None, False
 
             dns_record, created = DNSRecord.objects.get_or_create(name=name.strip(), type=record_type)
@@ -165,7 +235,12 @@ class DnsRepository:
             return dns_record, created
 
         except Exception as e:
-            logger.error(f"Error in get_or_create DNS record: {e}")
+            logger.log_line(
+                PREFIX_DNS_REPO,
+                "GET_OR_CREATE",
+                "Error in get_or_create DNS record: %s" % (e,),
+                level="error",
+            )
             return None, False
 
     def bulk_create(self, dns_records: List[Dict[str, str]]) -> List[DNSRecord]:
@@ -189,13 +264,23 @@ class DnsRepository:
 
             if record_objects:
                 created = DNSRecord.objects.bulk_create(record_objects, ignore_conflicts=True)
-                logger.info(f"Bulk created {len(created)} DNS records")
+                logger.log_line(
+                    PREFIX_DNS_REPO,
+                    "BULK_CREATE",
+                    "Bulk created %s DNS records" % (len(created),),
+                    level="info",
+                )
                 return created
 
             return []
 
         except Exception as e:
-            logger.error(f"Error in bulk create DNS records: {e}")
+            logger.log_line(
+                PREFIX_DNS_REPO,
+                "BULK_CREATE",
+                "Error in bulk create DNS records: %s" % (e,),
+                level="error",
+            )
             return []
 
     def get_records_for_domain(self, domain_id: int) -> List[DNSRecord]:
@@ -212,14 +297,29 @@ class DnsRepository:
             domain = Domain.objects.get(id=domain_id)
             if domain.domain_info:
                 return list(domain.domain_info.dns_records.all())
-            logger.warning(f"No domain info found for domain {domain.name}")
+            logger.log_line(
+                PREFIX_DNS_REPO,
+                "GET",
+                "No domain info found for domain %s" % (domain.name,),
+                level="warning",
+            )
             return []
 
         except ObjectDoesNotExist:
-            logger.error(f"Domain with ID {domain_id} not found")
+            logger.log_line(
+                PREFIX_DNS_REPO,
+                "GET",
+                "Domain with ID %s not found" % (domain_id,),
+                level="error",
+            )
             return []
         except Exception as e:
-            logger.error(f"Error getting DNS records for domain: {e}")
+            logger.log_line(
+                PREFIX_DNS_REPO,
+                "GET",
+                "Error getting DNS records for domain: %s" % (e,),
+                level="error",
+            )
             return []
 
     def get_records_by_type(self, record_type: str, domain_id: int = None) -> List[DNSRecord]:
@@ -236,7 +336,12 @@ class DnsRepository:
         try:
             record_type = record_type.upper().strip()
             if record_type not in self.VALID_DNS_TYPES:
-                logger.warning(f"Invalid DNS record type: {record_type}")
+                logger.log_line(
+                    PREFIX_DNS_REPO,
+                    "GET",
+                    "Invalid DNS record type: %s" % (record_type,),
+                    level="warning",
+                )
                 return []
 
             if domain_id:
@@ -245,7 +350,12 @@ class DnsRepository:
                     # Filter DNS records by type that are associated with this domain's domain_info
                     queryset = domain.domain_info.dns_records.filter(type=record_type)
                 else:
-                    logger.warning(f"No domain info found for domain {domain.name}")
+                    logger.log_line(
+                        PREFIX_DNS_REPO,
+                        "GET",
+                        "No domain info found for domain %s" % (domain.name,),
+                        level="warning",
+                    )
                     return []
             else:
                 queryset = DNSRecord.objects.filter(type=record_type)
@@ -253,10 +363,20 @@ class DnsRepository:
             return list(queryset)
 
         except ObjectDoesNotExist:
-            logger.error(f"Domain with ID {domain_id} not found")
+            logger.log_line(
+                PREFIX_DNS_REPO,
+                "GET",
+                "Domain with ID %s not found" % (domain_id,),
+                level="error",
+            )
             return []
         except Exception as e:
-            logger.error(f"Error getting DNS records by type: {e}")
+            logger.log_line(
+                PREFIX_DNS_REPO,
+                "GET",
+                "Error getting DNS records by type: %s" % (e,),
+                level="error",
+            )
             return []
 
     def validate_dns_record_type(self, record_type: str) -> bool:
@@ -310,5 +430,10 @@ class DnsRepository:
             return parsed_data
 
         except Exception as e:
-            logger.error(f"Error parsing DNS record extra data: {e}")
+            logger.log_line(
+                PREFIX_DNS_REPO,
+                "PARSE",
+                "Error parsing DNS record extra data: %s" % (e,),
+                level="error",
+            )
             return {}

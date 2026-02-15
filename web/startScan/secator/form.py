@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import logging
 from typing import Any, Literal, TypedDict
 
 from django.conf import settings
@@ -9,9 +8,11 @@ from django.http import QueryDict
 
 from reNgine.core.data import safe_bool_cast, safe_int_cast
 from reNgine.secator.selected_targets import resolve_selected_targets
+from reNgine.utilities.logger import get_module_logger
 
 
-logger = logging.getLogger(__name__)
+PREFIX_SECATOR_FORM = "[SECATOR_FORM]"
+logger = get_module_logger(__name__)
 
 
 class SecatorConfig(TypedDict):
@@ -58,10 +59,11 @@ def parse_secator_config(post: QueryDict) -> SecatorConfig:
                 if isinstance(parsed, dict):
                     parsed_dict = parsed
             except (json.JSONDecodeError, TypeError) as exc:
-                logger.warning(
-                    "Failed to decode 'secator_config' JSON from POST: %s (raw value=%r)",
-                    exc,
-                    secator_config_data,
+                logger.log_line(
+                    PREFIX_SECATOR_FORM,
+                    "FORM",
+                    "Failed to decode 'secator_config' JSON from POST: %s (raw value=%r)" % (exc, secator_config_data),
+                    level="warning",
                 )
                 if getattr(settings, "DEBUG", False):
                     raise ValueError("Invalid JSON in 'secator_config'; expected a JSON object.") from exc

@@ -24,6 +24,7 @@ from scanEngine.services.worker_ssh import (
 )
 
 
+PREFIX_WORKER_DEPLOY = "[WORKER_DEPLOY]"
 logger = get_module_logger(__name__)
 
 _COMPOSE_FILENAME = "docker-compose.worker.yml"
@@ -104,7 +105,12 @@ def deploy_worker(
 
     compose_path = _get_compose_path()
     if not compose_path.is_file():
-        logger.error("Compose file not found at %s", compose_path)
+        logger.log_line(
+            PREFIX_WORKER_DEPLOY,
+            "DEPLOY",
+            "Compose file not found at %s" % (compose_path,),
+            level="error",
+        )
         progress_callback("error", "Worker compose file not found. Check server configuration.")
         raise UserSafeError("Worker compose file not found. Check server configuration.")
     progress_callback("compose_check", "Compose file found.")
@@ -113,7 +119,12 @@ def deploy_worker(
     try:
         client = get_ssh_client(worker)
     except Exception as e:
-        logger.warning("SSH connection failed for worker %s: %s", worker.name, e)
+        logger.log_line(
+            PREFIX_WORKER_DEPLOY,
+            "DEPLOY",
+            "SSH connection failed for worker %s: %s" % (worker.name, e),
+            level="warning",
+        )
         progress_callback("error", "SSH connection failed. Check host, port, user and credentials.")
         raise UserSafeError("SSH connection failed. Check host, port, user and credentials.") from e
     progress_callback("ssh_connect", "SSH connection established.")
@@ -164,7 +175,12 @@ def deploy_worker(
                 run_remote_command(client, f"chmod +x {quote_for_shell(remote_entrypoint)}")
                 progress_callback("copy_entrypoint", "entrypoint.sh copied.")
             else:
-                logger.warning("Worker entrypoint not found at %s", entrypoint_path)
+                logger.log_line(
+                    PREFIX_WORKER_DEPLOY,
+                    "DEPLOY",
+                    "Worker entrypoint not found at %s" % (entrypoint_path,),
+                    level="warning",
+                )
 
             progress_callback("copy_env", "Preparing .env...")
             env_content = _build_worker_env_content(worker)
@@ -182,7 +198,12 @@ def deploy_worker(
             err_msg = normalize_remote_error(
                 exit_code, out, err, "Failed to start worker container on the remote host."
             )
-            logger.warning("Worker up command failed: %s", err_msg)
+            logger.log_line(
+                PREFIX_WORKER_DEPLOY,
+                "DEPLOY",
+                "Worker up command failed: %s" % (err_msg,),
+                level="warning",
+            )
             progress_callback(
                 "error",
                 f"Failed to start worker container on the remote host.\n\nDetails:\n{err_msg}",
@@ -192,7 +213,12 @@ def deploy_worker(
     except (UserSafeError, RuntimeError):
         raise
     except paramiko.SSHException as e:
-        logger.warning("SSH error during deploy: %s", e)
+        logger.log_line(
+            PREFIX_WORKER_DEPLOY,
+            "DEPLOY",
+            "SSH error during deploy: %s" % (e,),
+            level="warning",
+        )
         progress_callback("error", "SSH error during deployment.")
         raise UserSafeError("SSH error during deployment.") from e
     finally:
@@ -214,7 +240,12 @@ def restart_worker_container(worker: SecatorWorker) -> Tuple[bool, str]:
     try:
         client = get_ssh_client(worker)
     except Exception as e:
-        logger.warning("SSH failed for worker %s during restart: %s", worker.name, e)
+        logger.log_line(
+            PREFIX_WORKER_DEPLOY,
+            "RESTART",
+            "SSH failed for worker %s during restart: %s" % (worker.name, e),
+            level="warning",
+        )
         return False, "SSH connection failed"
 
     deploy_path = worker.deploy_path.rstrip("/")
@@ -260,12 +291,22 @@ def restart_worker_container(worker: SecatorWorker) -> Tuple[bool, str]:
             log_parts.append(err)
         if exit_code != 0:
             err_msg = normalize_remote_error(exit_code, out, err, "Worker up failed.")
-            logger.warning("Worker up failed for %s: %s", worker.name, err_msg)
+            logger.log_line(
+                PREFIX_WORKER_DEPLOY,
+                "RESTART",
+                "Worker up failed for %s: %s" % (worker.name, err_msg),
+                level="warning",
+            )
             log_parts.extend(("", err_msg))
         log_text = "\n".join(log_parts).strip() or "(no output)"
         return (False, log_text) if exit_code != 0 else (True, log_text)
     except paramiko.SSHException as e:
-        logger.warning("SSH error during restart for worker %s: %s", worker.name, e)
+        logger.log_line(
+            PREFIX_WORKER_DEPLOY,
+            "RESTART",
+            "SSH error during restart for worker %s: %s" % (worker.name, e),
+            level="warning",
+        )
         log_parts.append("SSH error during restart.")
         return False, "\n".join(log_parts).strip() or "SSH error during restart."
     finally:
@@ -282,7 +323,12 @@ def push_env_and_restart_worker(worker: SecatorWorker) -> tuple[bool, Optional[s
     try:
         client = get_ssh_client(worker)
     except Exception as e:
-        logger.warning("SSH failed for worker %s during env push: %s", worker.name, e)
+        logger.log_line(
+            PREFIX_WORKER_DEPLOY,
+            "ENV_PUSH",
+            "SSH failed for worker %s during env push: %s" % (worker.name, e),
+            level="warning",
+        )
         return False, "SSH connection failed"
 
     deploy_path = worker.deploy_path.rstrip("/")
@@ -291,7 +337,12 @@ def push_env_and_restart_worker(worker: SecatorWorker) -> tuple[bool, Optional[s
     try:
         return _write_env_and_restart_container(worker, client, remote_env, deploy_path, quoted_dp)
     except paramiko.SSHException as e:
-        logger.warning("SSH error during env push for worker %s: %s", worker.name, e)
+        logger.log_line(
+            PREFIX_WORKER_DEPLOY,
+            "ENV_PUSH",
+            "SSH error during env push for worker %s: %s" % (worker.name, e),
+            level="warning",
+        )
         return False, "SSH error during update"
     finally:
         client.close()
@@ -322,7 +373,12 @@ def _write_env_and_restart_container(worker, client, remote_env, deploy_path, qu
     )
     if exit_code != 0:
         err_msg = normalize_remote_error(exit_code, out, err, "Failed to start worker container on the remote host.")
-        logger.warning("Worker up failed for %s: %s", worker.name, err_msg)
+        logger.log_line(
+            PREFIX_WORKER_DEPLOY,
+            "ENV_PUSH",
+            "Worker up failed for %s: %s" % (worker.name, err_msg),
+            level="warning",
+        )
         return False, err_msg
     return True, None
 
@@ -350,7 +406,12 @@ def refresh_worker_status(
     try:
         client = get_ssh_client(worker)
     except Exception as e:
-        logger.debug("SSH failed for worker %s: %s", worker.name, e)
+        logger.log_line(
+            PREFIX_WORKER_DEPLOY,
+            "DEPLOY",
+            "SSH failed for worker %s: %s" % (worker.name, e),
+            level="debug",
+        )
         result["last_error"] = "SSH connection failed"
         progress_callback("error", "SSH connection failed.")
         return result
@@ -386,7 +447,12 @@ def refresh_worker_status(
         else:
             progress_callback("api_check", "No API URL configured; skipping.")
     except Exception as e:
-        logger.debug("Status check failed for worker %s: %s", worker.name, e)
+        logger.log_line(
+            PREFIX_WORKER_DEPLOY,
+            "STATUS",
+            "Status check failed for worker %s: %s" % (worker.name, e),
+            level="debug",
+        )
         result["last_error"] = result["last_error"] or "Could not check container status"
         progress_callback("error", "Could not check container status.")
     finally:
@@ -404,7 +470,12 @@ def teardown_worker_remote(worker: SecatorWorker) -> tuple[bool, Optional[str]]:
     try:
         client = get_ssh_client(worker)
     except Exception as e:
-        logger.warning("SSH failed for worker %s during teardown: %s", worker.name, e)
+        logger.log_line(
+            PREFIX_WORKER_DEPLOY,
+            "TEARDOWN",
+            "SSH failed for worker %s during teardown: %s" % (worker.name, e),
+            level="warning",
+        )
         return False, "SSH connection failed"
 
     deploy_path = worker.deploy_path.rstrip("/")
@@ -421,7 +492,12 @@ def teardown_worker_remote(worker: SecatorWorker) -> tuple[bool, Optional[str]]:
         run_remote_command(client, rm_cmd)
         return True, None
     except Exception as e:
-        logger.warning("Teardown failed for worker %s: %s", worker.name, e)
+        logger.log_line(
+            PREFIX_WORKER_DEPLOY,
+            "TEARDOWN",
+            "Teardown failed for worker %s: %s" % (worker.name, e),
+            level="warning",
+        )
         return False, "Teardown failed on the remote host."
     finally:
         client.close()

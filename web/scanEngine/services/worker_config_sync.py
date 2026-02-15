@@ -20,6 +20,7 @@ from scanEngine.services.worker_ssh import (
 )
 
 
+PREFIX_WORKER_CONFIG = "[WORKER_CONFIG]"
 logger = get_module_logger(__name__)
 
 SUBDIRS = ("workflows", "scans", "tasks", "profiles")
@@ -90,26 +91,51 @@ def sync_all_custom_configs_to_worker(worker: SecatorWorker) -> None:
             for name, content in _collect_custom_workflows():
                 path = f"{base}/workflows/{name}.yaml"
                 sftp_put_string(sftp, content, path)
-                logger.debug("Synced workflow %s to worker %s", name, worker.name)
+                logger.log_line(
+                    PREFIX_WORKER_CONFIG,
+                    "SYNC",
+                    "Synced workflow %s to worker %s" % (name, worker.name),
+                    level="debug",
+                )
 
             for name, content in _collect_custom_scans():
                 path = f"{base}/scans/{name}.yaml"
                 sftp_put_string(sftp, content, path)
-                logger.debug("Synced scan %s to worker %s", name, worker.name)
+                logger.log_line(
+                    PREFIX_WORKER_CONFIG,
+                    "SYNC",
+                    "Synced scan %s to worker %s" % (name, worker.name),
+                    level="debug",
+                )
 
             for name, content in _collect_custom_tasks():
                 path = f"{base}/tasks/{name}.yaml"
                 sftp_put_string(sftp, content, path)
-                logger.debug("Synced task %s to worker %s", name, worker.name)
+                logger.log_line(
+                    PREFIX_WORKER_CONFIG,
+                    "SYNC",
+                    "Synced task %s to worker %s" % (name, worker.name),
+                    level="debug",
+                )
 
             for name, content in _collect_custom_profiles():
                 path = f"{base}/profiles/{name}.yaml"
                 sftp_put_string(sftp, content, path)
-                logger.debug("Synced profile %s to worker %s", name, worker.name)
+                logger.log_line(
+                    PREFIX_WORKER_CONFIG,
+                    "SYNC",
+                    "Synced profile %s to worker %s" % (name, worker.name),
+                    level="debug",
+                )
         finally:
             sftp.close()
     except Exception as e:
-        logger.warning("Config sync failed for worker %s: %s", worker.name, e)
+        logger.log_line(
+            PREFIX_WORKER_CONFIG,
+            "SYNC",
+            "Config sync failed for worker %s: %s" % (worker.name, e),
+            level="warning",
+        )
         raise UserSafeError("Config sync failed. Check SSH and deploy path.") from e
     finally:
         client.close()
@@ -142,7 +168,12 @@ def sync_configs_for_run(
         finally:
             sftp.close()
     except Exception as e:
-        logger.warning("Config sync for run failed for worker %s: %s", worker.name, e)
+        logger.log_line(
+            PREFIX_WORKER_CONFIG,
+            "SYNC",
+            "Config sync for run failed for worker %s: %s" % (worker.name, e),
+            level="warning",
+        )
         raise UserSafeError("Config sync failed. Check SSH and deploy path.") from e
     finally:
         client.close()

@@ -67,6 +67,7 @@ from startScan.secator.profiles import build_secator_profiles_context
 from targetApp.models import Domain, Organization
 
 
+PREFIX_SCAN = "[STARTSCAN]"
 logger = get_module_logger(__name__)
 
 
@@ -119,10 +120,12 @@ def _run_secator_scan_or_per_task(
             worker_id=kwargs_copy.get("worker_id"),
         )
         if result["validation_errors"]:
-            logger.warning(
-                "Per-task validation errors for domain_id=%s: %s",
-                domain_id,
-                [e["task_type"] for e in result["validation_errors"]],
+            logger.log_line(
+                PREFIX_SCAN,
+                "PER_TASK_VALIDATION",
+                "Per-task validation errors for domain_id=%s: %s"
+                % (domain_id, [e["task_type"] for e in result["validation_errors"]]),
+                level="warning",
             )
         return result["success_count"], result["failed_count"]
 
@@ -913,36 +916,37 @@ def delete_scan(request, slug, id):
             result = safe_rmtree(RENGINE_RESULTS, resolved)
             cleanup_status = result
             if result == "refused":
-                logger.warning(
+                logger.log_line(
+                    PREFIX_SCAN,
+                    "DELETE_SCAN",
                     "Results dir cleanup refused for path %s; likely configuration or permission issue. "
-                    "scan_history_id=%s base_dir=%r",
-                    resolved,
-                    getattr(obj, "id", None),
-                    RENGINE_RESULTS,
+                    "scan_history_id=%s base_dir=%r" % (resolved, getattr(obj, "id", None), RENGINE_RESULTS),
+                    level="warning",
                 )
             elif result == "failed":
-                logger.warning(
+                logger.log_line(
+                    PREFIX_SCAN,
+                    "DELETE_SCAN",
                     "Results dir cleanup failed for path %s; transient or unexpected error. "
-                    "scan_history_id=%s base_dir=%r",
-                    resolved,
-                    getattr(obj, "id", None),
-                    RENGINE_RESULTS,
+                    "scan_history_id=%s base_dir=%r" % (resolved, getattr(obj, "id", None), RENGINE_RESULTS),
+                    level="warning",
                 )
             elif result != "removed":
-                logger.warning(
-                    "Results dir cleanup returned %s for path %s. scan_history_id=%s base_dir=%r",
-                    result,
-                    resolved,
-                    getattr(obj, "id", None),
-                    RENGINE_RESULTS,
+                logger.log_line(
+                    PREFIX_SCAN,
+                    "DELETE_SCAN",
+                    "Results dir cleanup returned %s for path %s. scan_history_id=%s base_dir=%r"
+                    % (result, resolved, getattr(obj, "id", None), RENGINE_RESULTS),
+                    level="warning",
                 )
         elif delete_dir:
             cleanup_status = "resolution_failed"
-            logger.warning(
-                "results_dir resolution failed; not deleting directory. scan_history_id=%s results_dir=%r base_dir=%r",
-                getattr(obj, "id", None),
-                delete_dir,
-                RENGINE_RESULTS,
+            logger.log_line(
+                PREFIX_SCAN,
+                "DELETE_SCAN",
+                "results_dir resolution failed; not deleting directory. scan_history_id=%s results_dir=%r base_dir=%r"
+                % (getattr(obj, "id", None), delete_dir, RENGINE_RESULTS),
+                level="warning",
             )
         obj.delete()
         message_data = {"status": "true"}
@@ -982,7 +986,13 @@ def stop_scan(request, slug, id):
                 response = {"status": False, "message": "Failed to stop scan"}
                 messages.add_message(request, messages.ERROR, "Failed to stop scan")
         except Exception as e:
-            logger.error(e)
+            logger.log_line(
+                PREFIX_SCAN,
+                "STOP_SCAN",
+                "Failed to stop scan: %s" % (e,),
+                level="error",
+                exc_info=True,
+            )
             response = {"status": False}
             messages.add_message(request, messages.ERROR, f"Scan failed to stop ! Error: {str(e)}")
         return JsonResponse(response)
@@ -1113,30 +1123,30 @@ def delete_all_screenshots(request, slug):
             if resolved is not None and resolved.is_dir():
                 result = safe_rmtree(RENGINE_RESULTS, resolved)
                 if result == "refused":
-                    logger.warning(
+                    logger.log_line(
+                        PREFIX_SCAN,
+                        "BULK_CLEANUP",
                         "Bulk results dir cleanup refused for domain %s at path %s; "
-                        "likely configuration or permission issue. project_slug=%s",
-                        domain.name,
-                        resolved,
-                        slug,
+                        "likely configuration or permission issue. project_slug=%s" % (domain.name, resolved, slug),
+                        level="warning",
                     )
                     cleanup_issues = True
                 elif result == "failed":
-                    logger.warning(
+                    logger.log_line(
+                        PREFIX_SCAN,
+                        "BULK_CLEANUP",
                         "Bulk results dir cleanup failed for domain %s at path %s; "
-                        "transient or unexpected error. project_slug=%s",
-                        domain.name,
-                        resolved,
-                        slug,
+                        "transient or unexpected error. project_slug=%s" % (domain.name, resolved, slug),
+                        level="warning",
                     )
                     cleanup_issues = True
                 elif result != "removed":
-                    logger.warning(
-                        "Bulk results dir cleanup returned %s for domain %s at path %s. project_slug=%s",
-                        result,
-                        domain.name,
-                        resolved,
-                        slug,
+                    logger.log_line(
+                        PREFIX_SCAN,
+                        "BULK_CLEANUP",
+                        "Bulk results dir cleanup returned %s for domain %s at path %s. project_slug=%s"
+                        % (result, domain.name, resolved, slug),
+                        level="warning",
                     )
                     cleanup_issues = True
         message_data = {"status": "true"}
@@ -1307,39 +1317,40 @@ def delete_scans(request, slug):
             if resolved is not None:
                 result = safe_rmtree(RENGINE_RESULTS, resolved)
                 if result == "refused":
-                    logger.warning(
+                    logger.log_line(
+                        PREFIX_SCAN,
+                        "DELETE_SCANS",
                         "Results dir cleanup refused for path %s; likely configuration or permission issue. "
-                        "scan_history_id=%s base_dir=%r",
-                        resolved,
-                        getattr(scan, "id", None),
-                        RENGINE_RESULTS,
+                        "scan_history_id=%s base_dir=%r" % (resolved, getattr(scan, "id", None), RENGINE_RESULTS),
+                        level="warning",
                     )
                     cleanup_issues = True
                 elif result == "failed":
-                    logger.warning(
+                    logger.log_line(
+                        PREFIX_SCAN,
+                        "DELETE_SCANS",
                         "Results dir cleanup failed for path %s; transient or unexpected error. "
-                        "scan_history_id=%s base_dir=%r",
-                        resolved,
-                        getattr(scan, "id", None),
-                        RENGINE_RESULTS,
+                        "scan_history_id=%s base_dir=%r" % (resolved, getattr(scan, "id", None), RENGINE_RESULTS),
+                        level="warning",
                     )
                     cleanup_issues = True
                 elif result != "removed":
-                    logger.warning(
-                        "Results dir cleanup returned %s for path %s. scan_history_id=%s base_dir=%r",
-                        result,
-                        resolved,
-                        getattr(scan, "id", None),
-                        RENGINE_RESULTS,
+                    logger.log_line(
+                        PREFIX_SCAN,
+                        "DELETE_SCANS",
+                        "Results dir cleanup returned %s for path %s. scan_history_id=%s base_dir=%r"
+                        % (result, resolved, getattr(scan, "id", None), RENGINE_RESULTS),
+                        level="warning",
                     )
                     cleanup_issues = True
             elif delete_dir:
-                logger.warning(
+                logger.log_line(
+                    PREFIX_SCAN,
+                    "DELETE_SCANS",
                     "results_dir resolution failed; not deleting directory. "
-                    "scan_history_id=%s results_dir=%r base_dir=%r",
-                    getattr(scan, "id", None),
-                    delete_dir,
-                    RENGINE_RESULTS,
+                    "scan_history_id=%s results_dir=%r base_dir=%r"
+                    % (getattr(scan, "id", None), delete_dir, RENGINE_RESULTS),
+                    level="warning",
                 )
                 cleanup_issues = True
             scan.delete()

@@ -39,9 +39,7 @@ class RunnerLogger(BaseLogger):
         Returns:
             str: Color code for the prefix
         """
-        if prefix == self.PREFIX:
-            return self.PREFIX_COLOR
-        return self.COLOR_RESET
+        return self.PREFIX_COLOR if prefix == self.PREFIX else self.COLOR_RESET
 
     def log_runner_creation(
         self,
@@ -145,9 +143,11 @@ class RunnerLogger(BaseLogger):
             else:
                 # Legacy dict format (should not happen but handle gracefully)
                 profile_list = []
-                for key in ["speed", "evasion", "general", "network"]:
-                    if key in profiles and profiles[key]:
-                        profile_list.append(f"{key}={profiles[key]}")
+                profile_list.extend(
+                    f"{key}={profiles[key]}"
+                    for key in ["speed", "evasion", "general", "network"]
+                    if key in profiles and profiles[key]
+                )
                 if profile_list:
                     details["profiles"] = ", ".join(profile_list)
 
@@ -334,7 +334,7 @@ class RunnerLogger(BaseLogger):
             "type": runner_type,
         }
         if context:
-            details.update({k: v for k, v in context.items() if k != "error"})
+            details |= {k: v for k, v in context.items() if k != "error"}
 
         error_msg = str(error)
         error_line = self._format_info_line(

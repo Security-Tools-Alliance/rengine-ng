@@ -16,7 +16,7 @@ from reNgine.utilities.time import ensure_timezone_aware, parse_datetime_iso
 from startScan.models import Certificate, IpAddress, ScanHistory, Subdomain
 from targetApp.models import Domain
 
-
+PREFIX_CERT_REPO = "[CERT_REPO]"
 logger = get_module_logger(__name__)
 
 
@@ -45,13 +45,29 @@ class CertificateRepository:
         try:
             return self._process_secator_certificate_item(item, scan_history_id, domain_id)
         except ObjectDoesNotExist as e:
-            logger.error(f"Object not found when saving certificate: {e}")
+            logger.log_line(
+                PREFIX_CERT_REPO,
+                "SAVE",
+                "Object not found when saving certificate: %s" % (e,),
+                level="error",
+            )
             return None
         except IntegrityError as e:
-            logger.error(f"Integrity error saving certificate: {e}")
+            logger.log_line(
+                PREFIX_CERT_REPO,
+                "SAVE",
+                "Integrity error saving certificate: %s" % (e,),
+                level="error",
+            )
             return None
         except Exception:
-            logger.exception("Error saving certificate from Secator")
+            logger.log_line(
+                PREFIX_CERT_REPO,
+                "SAVE",
+                "Error saving certificate from Secator",
+                level="error",
+                exc_info=True,
+            )
             raise
 
     def _process_secator_certificate_item(
@@ -61,7 +77,12 @@ class CertificateRepository:
         fingerprint_sha256 = item.get("fingerprint_sha256", "")
 
         if not host:
-            logger.warning("Certificate item missing host field")
+            logger.log_line(
+                PREFIX_CERT_REPO,
+                "SAVE",
+                "Certificate item missing host field",
+                level="warning",
+            )
             return None
 
         # Validate scan_history and domain exist
@@ -120,9 +141,19 @@ class CertificateRepository:
             certificate.save()
 
         if created:
-            logger.info(f"Created certificate: {host} - {certificate.subject_cn or 'N/A'}")
+            logger.log_line(
+                PREFIX_CERT_REPO,
+                "SAVE",
+                "Created certificate: %s - %s" % (host, certificate.subject_cn or "N/A"),
+                level="info",
+            )
         else:
-            logger.debug(f"Updated certificate: {host} - {certificate.subject_cn or 'N/A'}")
+            logger.log_line(
+                PREFIX_CERT_REPO,
+                "SAVE",
+                "Updated certificate: %s - %s" % (host, certificate.subject_cn or "N/A"),
+                level="debug",
+            )
 
         return certificate
 

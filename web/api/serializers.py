@@ -1,5 +1,4 @@
 from collections import defaultdict
-import logging
 
 from django.contrib.humanize.templatetags.humanize import naturalday, naturaltime
 from django.db.models import F, JSONField, Value
@@ -17,6 +16,7 @@ from recon_note.models import (
     TodoNote,
 )
 from reNgine.definitions import ENGINE_NAMES
+from reNgine.utilities.logger import get_module_logger
 from reNgine.utilities.subdomain import get_interesting_subdomains
 from scanEngine.models import (
     EngineType,
@@ -51,7 +51,8 @@ from targetApp.models import (
 # Sentinel to distinguish "annotated count missing" from "count present but None" in get_*_count.
 _CACHE_MISSING = object()
 
-logger = logging.getLogger(__name__)
+PREFIX_API_SERIALIZERS = "[API_SERIALIZERS]"
+logger = get_module_logger(__name__)
 
 
 class SearchHistorySerializer(serializers.ModelSerializer):
@@ -346,7 +347,12 @@ class CommandSerializer(serializers.ModelSerializer):
         except Exception as e:
             # Fallback to escaped raw output if formatting fails
             # We must escape here to prevent XSS since the client inserts this into innerHTML
-            logger.warning(f"Error formatting output for command {obj.id}: {e}")
+            logger.log_line(
+                PREFIX_API_SERIALIZERS,
+                "FORMAT_OUTPUT",
+                "Error formatting output for command %s: %s" % (obj.id, e),
+                level="warning",
+            )
             escaped_output = escape(obj.output)
             return {
                 "formatted": escaped_output,

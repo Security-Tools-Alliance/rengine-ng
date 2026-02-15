@@ -11,7 +11,7 @@ from reNgine.definitions import INITIATED_TASK
 from reNgine.utilities.logger import get_module_logger
 from startScan.models import Domain, ScanActivity, ScanHistory, SubScan
 
-
+PREFIX_SCAN_REPO = "[SCAN_REPO]"
 logger = get_module_logger(__name__)
 
 
@@ -31,7 +31,12 @@ class ScanRepository:
         try:
             return ScanHistory.objects.get(id=scan_history_id)
         except ObjectDoesNotExist:
-            logger.error(f"ScanHistory with ID {scan_history_id} not found")
+            logger.log_line(
+                PREFIX_SCAN_REPO,
+                "GET",
+                "ScanHistory with ID %s not found" % (scan_history_id,),
+                level="error",
+            )
             return None
 
     def update_status(self, scan_history_id, status):
@@ -48,17 +53,32 @@ class ScanRepository:
         try:
             return self._update_scan_status_and_notify(scan_history_id, status)
         except ObjectDoesNotExist:
-            logger.error(f"ScanHistory with ID {scan_history_id} not found")
+            logger.log_line(
+                PREFIX_SCAN_REPO,
+                "UPDATE",
+                "ScanHistory with ID %s not found" % (scan_history_id,),
+                level="error",
+            )
             return False
         except Exception as e:
-            logger.error(f"Error updating scan status: {e}")
+            logger.log_line(
+                PREFIX_SCAN_REPO,
+                "UPDATE",
+                "Error updating scan status: %s" % (e,),
+                level="error",
+            )
             return False
 
     def _update_scan_status_and_notify(self, scan_history_id: int, status: int) -> bool:
         scan = ScanHistory.objects.get(id=scan_history_id)
         scan.scan_status = status
         scan.save()
-        logger.info(f"Updated scan {scan_history_id} status to {status}")
+        logger.log_line(
+            PREFIX_SCAN_REPO,
+            "UPDATE",
+            "Updated scan %s status to %s" % (scan_history_id, status),
+            level="info",
+        )
         # Send WebSocket update
         from reNgine.utilities.websocket import send_scan_status_update
 
@@ -78,11 +98,21 @@ class ScanRepository:
         """
         # Validate progress range
         if not isinstance(progress, (int, float)):
-            logger.error(f"Progress must be a number, got: {type(progress).__name__}")
+            logger.log_line(
+                PREFIX_SCAN_REPO,
+                "UPDATE",
+                "Progress must be a number, got: %s" % (type(progress).__name__,),
+                level="error",
+            )
             return False
 
         if progress < 0 or progress > 100:
-            logger.error(f"Progress must be between 0 and 100, got: {progress}")
+            logger.log_line(
+                PREFIX_SCAN_REPO,
+                "UPDATE",
+                "Progress must be between 0 and 100, got: %s" % (progress,),
+                level="error",
+            )
             return False
 
         try:
@@ -90,15 +120,35 @@ class ScanRepository:
             if hasattr(scan, "progress"):
                 scan.progress = progress
                 scan.save(update_fields=["progress"])
-                logger.debug(f"Updated scan {scan_history_id} progress to {progress}%")
+                logger.log_line(
+                    PREFIX_SCAN_REPO,
+                    "UPDATE",
+                    "Updated scan %s progress to %s%%" % (scan_history_id, progress),
+                    level="debug",
+                )
             else:
-                logger.warning("ScanHistory model does not have a 'progress' field. Progress update ignored.")
+                logger.log_line(
+                    PREFIX_SCAN_REPO,
+                    "UPDATE",
+                    "ScanHistory model does not have a 'progress' field. Progress update ignored.",
+                    level="warning",
+                )
             return True
         except ObjectDoesNotExist:
-            logger.error(f"ScanHistory with ID {scan_history_id} not found")
+            logger.log_line(
+                PREFIX_SCAN_REPO,
+                "UPDATE",
+                "ScanHistory with ID %s not found" % (scan_history_id,),
+                level="error",
+            )
             return False
         except Exception as e:
-            logger.error(f"Error updating scan progress: {e}")
+            logger.log_line(
+                PREFIX_SCAN_REPO,
+                "UPDATE",
+                "Error updating scan progress: %s" % (e,),
+                level="error",
+            )
             return False
 
     def create_scan_activity(self, scan_history_id, message, status):
@@ -116,10 +166,20 @@ class ScanRepository:
         try:
             return self._create_scan_activity_entry(scan_history_id, message, status)
         except ObjectDoesNotExist:
-            logger.error(f"ScanHistory with ID {scan_history_id} not found")
+            logger.log_line(
+                PREFIX_SCAN_REPO,
+                "CREATE",
+                "ScanHistory with ID %s not found" % (scan_history_id,),
+                level="error",
+            )
             return None
         except Exception as e:
-            logger.error(f"Error creating scan activity: {e}")
+            logger.log_line(
+                PREFIX_SCAN_REPO,
+                "CREATE",
+                "Error creating scan activity: %s" % (e,),
+                level="error",
+            )
             return None
 
     def _create_scan_activity_entry(self, scan_history_id: int, message: str, status: int) -> int:
@@ -146,13 +206,28 @@ class ScanRepository:
             scan = ScanHistory.objects.get(id=scan_history_id)
             scan.error_message = error_message
             scan.save(update_fields=["error_message"])
-            logger.info(f"Updated scan {scan_history_id} error message")
+            logger.log_line(
+                PREFIX_SCAN_REPO,
+                "UPDATE",
+                "Updated scan %s error message" % (scan_history_id,),
+                level="info",
+            )
             return True
         except ObjectDoesNotExist:
-            logger.error(f"ScanHistory with ID {scan_history_id} not found")
+            logger.log_line(
+                PREFIX_SCAN_REPO,
+                "UPDATE",
+                "ScanHistory with ID %s not found" % (scan_history_id,),
+                level="error",
+            )
             return False
         except Exception as e:
-            logger.error(f"Error updating error message: {e}")
+            logger.log_line(
+                PREFIX_SCAN_REPO,
+                "UPDATE",
+                "Error updating error message: %s" % (e,),
+                level="error",
+            )
             return False
 
     def mark_scan_complete(self, scan_history_id):
@@ -172,14 +247,24 @@ class ScanRepository:
             scan.scan_status = SUCCESS_TASK
             scan.stop_scan_date = timezone.now()
             scan.save()
-            logger.info(f"Marked scan {scan_history_id} as complete")
+            logger.log_line(
+                PREFIX_SCAN_REPO,
+                "UPDATE",
+                "Marked scan %s as complete" % (scan_history_id,),
+                level="info",
+            )
             # Send WebSocket update
             from reNgine.utilities.websocket import send_scan_status_update
 
             send_scan_status_update(scan_history_id)
             return True
         except Exception as e:
-            logger.error(f"Error marking scan {scan_history_id} as complete: {e}")
+            logger.log_line(
+                PREFIX_SCAN_REPO,
+                "UPDATE",
+                "Error marking scan %s as complete: %s" % (scan_history_id, e),
+                level="error",
+            )
             return False
 
     def create_scan(self, host_id, engine_id, initiated_by_id=None):
@@ -197,10 +282,20 @@ class ScanRepository:
         try:
             return self._create_scan_history_entry(engine_id, host_id, initiated_by_id)
         except ObjectDoesNotExist as e:
-            logger.error(f"Object not found when creating scan: {e}")
+            logger.log_line(
+                PREFIX_SCAN_REPO,
+                "CREATE",
+                "Object not found when creating scan: %s" % (e,),
+                level="error",
+            )
             raise
         except Exception as e:
-            logger.error(f"Error creating scan: {e}")
+            logger.log_line(
+                PREFIX_SCAN_REPO,
+                "CREATE",
+                "Error creating scan: %s" % (e,),
+                level="error",
+            )
             raise
 
     def _create_scan_history_entry(self, engine_id: int, host_id: int, initiated_by_id: int = None) -> int:
@@ -226,7 +321,12 @@ class ScanRepository:
         domain.start_scan_date = current_scan_time
         domain.save()
 
-        logger.info(f"Created scan {scan.id} for domain {domain.name}")
+        logger.log_line(
+            PREFIX_SCAN_REPO,
+            "CREATE",
+            "Created scan %s for domain %s" % (scan.id, domain.name),
+            level="info",
+        )
         return scan.id
 
     def create_activity(self, scan_history_id, message, status):
@@ -244,10 +344,20 @@ class ScanRepository:
         try:
             return self._build_scan_activity_entry(scan_history_id, message, status)
         except ObjectDoesNotExist:
-            logger.error(f"ScanHistory with ID {scan_history_id} not found")
+            logger.log_line(
+                PREFIX_SCAN_REPO,
+                "CREATE",
+                "ScanHistory with ID %s not found" % (scan_history_id,),
+                level="error",
+            )
             raise
         except Exception as e:
-            logger.error(f"Error creating scan activity: {e}")
+            logger.log_line(
+                PREFIX_SCAN_REPO,
+                "CREATE",
+                "Error creating scan activity: %s" % (e,),
+                level="error",
+            )
             raise
 
     def _build_scan_activity_entry(self, scan_history_id: int, message: str, status: int) -> int:
@@ -260,7 +370,12 @@ class ScanRepository:
         scan_activity.status = status
         scan_activity.save()
 
-        logger.info(f"Created scan activity {scan_activity.id} for scan {scan_history_id}: {message}")
+        logger.log_line(
+            PREFIX_SCAN_REPO,
+            "CREATE",
+            "Created scan activity %s for scan %s: %s" % (scan_activity.id, scan_history_id, message),
+            level="info",
+        )
         return scan_activity.id
 
     def mark_scan_failed(self, scan_history_id, error_message=None):
@@ -277,10 +392,20 @@ class ScanRepository:
         try:
             return self._mark_scan_failed_and_notify(scan_history_id, error_message)
         except ObjectDoesNotExist:
-            logger.error(f"ScanHistory with ID {scan_history_id} not found")
+            logger.log_line(
+                PREFIX_SCAN_REPO,
+                "UPDATE",
+                "ScanHistory with ID %s not found" % (scan_history_id,),
+                level="error",
+            )
             return False
         except Exception as e:
-            logger.error(f"Error marking scan failed: {e}")
+            logger.log_line(
+                PREFIX_SCAN_REPO,
+                "UPDATE",
+                "Error marking scan failed: %s" % (e,),
+                level="error",
+            )
             return False
 
     def _mark_scan_failed_and_notify(self, scan_history_id: int, error_message: str = None) -> bool:
@@ -292,7 +417,12 @@ class ScanRepository:
         if error_message:
             scan.error_message = error_message
         scan.save()
-        logger.info(f"Marked scan {scan_history_id} as failed")
+        logger.log_line(
+            PREFIX_SCAN_REPO,
+            "UPDATE",
+            "Marked scan %s as failed" % (scan_history_id,),
+            level="info",
+        )
         # Send WebSocket update
         from reNgine.utilities.websocket import send_scan_status_update
 
@@ -311,4 +441,9 @@ class ScanRepository:
         """
         now = timezone.now()
         if updated := SubScan.objects.filter(secator_runner_id=runner_id).update(status=status, stop_scan_date=now):
-            logger.debug(f"Marked {updated} subscan(s) finished for runner {runner_id} (status={status})")
+            logger.log_line(
+                PREFIX_SCAN_REPO,
+                "UPDATE",
+                "Marked %s subscan(s) finished for runner %s (status=%s)" % (updated, runner_id, status),
+                level="debug",
+            )

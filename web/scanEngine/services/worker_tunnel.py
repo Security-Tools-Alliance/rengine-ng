@@ -22,6 +22,7 @@ from .worker_config import is_tunnel_api_access
 from .worker_ssh import default_ssh_key_path
 
 
+PREFIX_WORKER_TUNNEL = "[WORKER_TUNNEL]"
 logger = get_module_logger(__name__)
 
 
@@ -77,20 +78,29 @@ def start_worker_tunnel(worker: SecatorWorker) -> Optional[subprocess.Popen[byte
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
         )
-        logger.info(
-            "Started SSH reverse tunnel for worker %s (remote %s:%s -> %s:%s)",
-            worker.name,
-            bind_address,
-            remote_port,
-            target_host,
-            target_port,
+        logger.log_line(
+            PREFIX_WORKER_TUNNEL,
+            "TUNNEL",
+            "Started SSH reverse tunnel for worker %s (remote %s:%s -> %s:%s)"
+            % (worker.name, bind_address, remote_port, target_host, target_port),
+            level="info",
         )
         return process
     except FileNotFoundError:
-        logger.warning("ssh command not found")
+        logger.log_line(
+            PREFIX_WORKER_TUNNEL,
+            "TUNNEL",
+            "ssh command not found",
+            level="warning",
+        )
         raise ValueError("SSH client not available") from None
     except Exception as e:
-        logger.warning("Failed to start tunnel for worker %s: %s", worker.name, e)
+        logger.log_line(
+            PREFIX_WORKER_TUNNEL,
+            "TUNNEL",
+            "Failed to start tunnel for worker %s: %s" % (worker.name, e),
+            level="warning",
+        )
         raise
 
 
@@ -107,4 +117,9 @@ def stop_worker_tunnel(handle: Any) -> None:
         handle.kill()
         handle.wait()
     except Exception as e:
-        logger.debug("Error stopping tunnel process: %s", e)
+        logger.log_line(
+            PREFIX_WORKER_TUNNEL,
+            "STOP",
+            "Error stopping tunnel process: %s" % (e,),
+            level="debug",
+        )

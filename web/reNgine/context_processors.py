@@ -1,5 +1,4 @@
 import json
-import logging
 import re
 import threading
 import time
@@ -8,6 +7,8 @@ from urllib.parse import urlparse
 from django.core.cache import cache
 from django.core.cache.backends.dummy import DummyCache
 import requests
+
+from reNgine.utilities.logger import get_module_logger
 
 from . import settings
 from .definitions import (
@@ -21,7 +22,8 @@ from .definitions import (
 )
 
 
-logger = logging.getLogger(__name__)
+PREFIX_CONTEXT_PROCESSORS = "[CONTEXT_PROCESSORS]"
+logger = get_module_logger(__name__)
 
 EXTERNAL_IP_CACHE_KEY = "rengine_external_ip"
 EXTERNAL_IP_CACHE_TTL_SUCCESS = 3600
@@ -57,7 +59,12 @@ def _get_external_ip_with_fallback():
 
     for service_url in ip_services:
         try:
-            logger.debug("Attempting to retrieve IP from: %s", service_url)
+            logger.log_line(
+                PREFIX_CONTEXT_PROCESSORS,
+                "EXTERNAL_IP",
+                "Attempting to retrieve IP from: %s" % (service_url,),
+                level="debug",
+            )
             response = requests.get(service_url, timeout=settings.IP_SERVICE_TIMEOUT)
             response.raise_for_status()
 
@@ -71,19 +78,44 @@ def _get_external_ip_with_fallback():
 
             # Validate that we got a valid IP address
             if re.match(r"^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$", ip_text):
-                logger.info("Successfully retrieved external IP: %s from %s", ip_text, service_url)
+                logger.log_line(
+                    PREFIX_CONTEXT_PROCESSORS,
+                    "EXTERNAL_IP",
+                    "Successfully retrieved external IP: %s from %s" % (ip_text, service_url),
+                    level="info",
+                )
                 return ip_text
             else:
-                logger.warning(f"Invalid IP format received from {service_url}: {ip_text}")
+                logger.log_line(
+                    PREFIX_CONTEXT_PROCESSORS,
+                    "EXTERNAL_IP",
+                    "Invalid IP format received from %s: %s" % (service_url, ip_text),
+                    level="warning",
+                )
 
         except requests.RequestException as e:
-            logger.warning("Failed to retrieve IP from %s: %s", service_url, e)
+            logger.log_line(
+                PREFIX_CONTEXT_PROCESSORS,
+                "EXTERNAL_IP",
+                "Failed to retrieve IP from %s: %s" % (service_url, e),
+                level="warning",
+            )
             continue
         except Exception as e:
-            logger.warning("Unexpected error retrieving IP from %s: %s", service_url, e)
+            logger.log_line(
+                PREFIX_CONTEXT_PROCESSORS,
+                "EXTERNAL_IP",
+                "Unexpected error retrieving IP from %s: %s" % (service_url, e),
+                level="warning",
+            )
             continue
 
-    logger.error("All IP services failed to retrieve external IP")
+    logger.log_line(
+        PREFIX_CONTEXT_PROCESSORS,
+        "EXTERNAL_IP",
+        "All IP services failed to retrieve external IP",
+        level="error",
+    )
     return "Unable to retrieve IP"
 
 

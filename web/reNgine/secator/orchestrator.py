@@ -9,7 +9,7 @@ from reNgine.secator.runner import SecatorRunner
 from reNgine.services.repositories.scan_repository import ScanRepository
 from reNgine.utilities.logger import get_module_logger
 
-
+PREFIX_SECATOR_ORCH = "[SECATOR_ORCH]"
 logger = get_module_logger(__name__)
 
 
@@ -59,16 +59,32 @@ class ScanOrchestrator:
 
         except ValueError as e:
             # Configuration or validation errors - these are expected and should be handled gracefully
-            logger.error("Configuration error in scan execution: %s", e)
+            logger.log_line(
+                PREFIX_SECATOR_ORCH,
+                "EXEC",
+                "Configuration error in scan execution: %s" % (e,),
+                level="error",
+            )
             self.scan_repo.mark_scan_failed(scan_history_id, str(e))
             raise
         except Exception as e:
             # Unexpected errors - log with full context and re-raise
-            logger.exception(f"Unexpected error executing scan {scan_history_id}: {e}")
+            logger.log_line(
+                PREFIX_SECATOR_ORCH,
+                "EXEC",
+                "Unexpected error executing scan %s: %s" % (scan_history_id, e),
+                level="error",
+                exc_info=True,
+            )
             try:
                 self.scan_repo.mark_scan_failed(scan_history_id, str(e))
             except Exception as db_error:
-                logger.error(f"Failed to mark scan as failed in database: {db_error}")
+                logger.log_line(
+                    PREFIX_SECATOR_ORCH,
+                    "EXEC",
+                    "Failed to mark scan as failed in database: %s" % (db_error,),
+                    level="error",
+                )
             raise
 
     def _execute_workflow(
@@ -105,7 +121,12 @@ class ScanOrchestrator:
         if not tasks:
             raise ValueError("tasks list is required in config")
 
-        logger.info(f"Executing {len(tasks)} Secator tasks")
+        logger.log_line(
+            PREFIX_SECATOR_ORCH,
+            "EXEC",
+            "Executing %s Secator tasks" % (len(tasks),),
+            level="info",
+        )
 
         return self.secator_runner.run_tasks(
             task_names=tasks,
@@ -129,7 +150,12 @@ class ScanOrchestrator:
         if not scan_type:
             raise ValueError("scan_type is required in config")
 
-        logger.info(f"Executing Secator scan type: {scan_type}")
+        logger.log_line(
+            PREFIX_SECATOR_ORCH,
+            "EXEC",
+            "Executing Secator scan type: %s" % (scan_type,),
+            level="info",
+        )
         return self.secator_runner.run_scan(
             scan_type=scan_type,
             targets=targets,

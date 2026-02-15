@@ -22,7 +22,7 @@ from targetApp.models import (
     WhoisStatus,
 )
 
-
+PREFIX_DOMAIN_REPO = "[DOMAIN_REPO]"
 logger = get_module_logger(__name__)
 
 
@@ -51,13 +51,28 @@ class DomainRepository:
         try:
             return self._process_secator_domain_item(item, scan_history_id, domain_id)
         except ObjectDoesNotExist as e:
-            logger.error(f"Object not found when saving domain info: {e}")
+            logger.log_line(
+                PREFIX_DOMAIN_REPO,
+                "SAVE",
+                "Object not found when saving domain info: %s" % (e,),
+                level="error",
+            )
             return None
         except IntegrityError as e:
-            logger.error(f"Integrity error saving domain info: {e}")
+            logger.log_line(
+                PREFIX_DOMAIN_REPO,
+                "SAVE",
+                "Integrity error saving domain info: %s" % (e,),
+                level="error",
+            )
             return None
         except Exception as e:
-            logger.error(f"Error saving domain info from Secator: {e}")
+            logger.log_line(
+                PREFIX_DOMAIN_REPO,
+                "SAVE",
+                "Error saving domain info from Secator: %s" % (e,),
+                level="error",
+            )
             return None
 
     def _process_secator_domain_item(
@@ -65,20 +80,23 @@ class DomainRepository:
     ) -> Optional[DomainInfo]:
         domain_name, whois = self._validate_and_extract_domain_data(item)
         if not domain_name or not whois:
-            logger.warning(
-                "Domain item rejected: missing domain_name or whois data (domain_name=%s, has_whois=%s)",
-                domain_name,
-                whois is not None,
+            logger.log_line(
+                PREFIX_DOMAIN_REPO,
+                "SAVE",
+                "Domain item rejected: missing domain_name or whois data (domain_name=%s, has_whois=%s)"
+                % (domain_name, whois is not None),
+                level="warning",
             )
             return None
 
         domain = self._validate_domain_and_scan(scan_history_id, domain_id, domain_name)
         if not domain:
-            logger.warning(
-                "Domain item rejected: scan/domain validation failed (scan_history_id=%s, domain_id=%s, domain_name=%s)",
-                scan_history_id,
-                domain_id,
-                domain_name,
+            logger.log_line(
+                PREFIX_DOMAIN_REPO,
+                "SAVE",
+                "Domain item rejected: scan/domain validation failed (scan_history_id=%s, domain_id=%s, domain_name=%s)"
+                % (scan_history_id, domain_id, domain_name),
+                level="warning",
             )
             return None
 
@@ -98,7 +116,12 @@ class DomainRepository:
         """Validate and extract domain name and WHOIS data from item."""
         domain_name = item.get("domain")
         if not isinstance(domain_name, str) or not domain_name.strip():
-            logger.warning("Domain item missing or invalid domain field: %s", type(domain_name).__name__)
+            logger.log_line(
+                PREFIX_DOMAIN_REPO,
+                "VALIDATE",
+                "Domain item missing or invalid domain field: %s" % (type(domain_name).__name__,),
+                level="warning",
+            )
             return None, None
 
         whois = (item.get("extra_data", {}) or {}).get("whois")
@@ -106,12 +129,20 @@ class DomainRepository:
             return domain_name.strip(), whois
 
         if whois := self._build_whois_from_flat_item(item):
-            logger.debug("Using synthetic whois from flat whois-go style item for domain %s", domain_name.strip())
+            logger.log_line(
+                PREFIX_DOMAIN_REPO,
+                "VALIDATE",
+                "Using synthetic whois from flat whois-go style item for domain %s" % (domain_name.strip(),),
+                level="debug",
+            )
             return domain_name.strip(), whois
 
-        logger.warning(
-            "Domain item missing extra_data.whois and flat whois-go style fields for domain %s",
-            domain_name.strip(),
+        logger.log_line(
+            PREFIX_DOMAIN_REPO,
+            "VALIDATE",
+            "Domain item missing extra_data.whois and flat whois-go style fields for domain %s"
+            % (domain_name.strip(),),
+            level="warning",
         )
         return None, None
 
@@ -124,12 +155,22 @@ class DomainRepository:
             expected = (domain.name or "").strip().lower().rstrip(".")
             got = domain_name.strip().lower().rstrip(".")
             if expected != got:
-                logger.warning(f"Domain name mismatch: expected {domain.name}, got {domain_name}")
+                logger.log_line(
+                    PREFIX_DOMAIN_REPO,
+                    "VALIDATE",
+                    "Domain name mismatch: expected %s, got %s" % (domain.name, domain_name),
+                    level="warning",
+                )
                 return None
 
             return domain
         except ObjectDoesNotExist as e:
-            logger.error(f"Object not found: {e}")
+            logger.log_line(
+                PREFIX_DOMAIN_REPO,
+                "VALIDATE",
+                "Object not found: %s" % (e,),
+                level="error",
+            )
             return None
 
     def _get_or_create_domain_info(self, domain: Domain) -> Tuple[DomainInfo, bool]:
@@ -217,9 +258,19 @@ class DomainRepository:
         domain.save()
 
         if created:
-            logger.info(f"Created domain info for domain {domain_name}")
+            logger.log_line(
+                PREFIX_DOMAIN_REPO,
+                "SAVE",
+                "Created domain info for domain %s" % (domain_name,),
+                level="info",
+            )
         else:
-            logger.debug(f"Updated domain info for domain {domain_name}")
+            logger.log_line(
+                PREFIX_DOMAIN_REPO,
+                "SAVE",
+                "Updated domain info for domain %s" % (domain_name,),
+                level="debug",
+            )
 
     def _parse_datetime(self, value: Any) -> Optional[datetime]:
         """
@@ -286,7 +337,12 @@ class DomainRepository:
             return registrar
 
         except Exception as e:
-            logger.error(f"Error getting or creating registrar: {e}")
+            logger.log_line(
+                PREFIX_DOMAIN_REPO,
+                "REGISTRAR",
+                "Error getting or creating registrar: %s" % (e,),
+                level="error",
+            )
             return None
 
     def _parse_registrar_address(self, address: Any) -> str:
@@ -437,7 +493,12 @@ class DomainRepository:
             return registrant
 
         except Exception as e:
-            logger.error(f"Error getting or creating registrant: {e}")
+            logger.log_line(
+                PREFIX_DOMAIN_REPO,
+                "REGISTRANT",
+                "Error getting or creating registrant: %s" % (e,),
+                level="error",
+            )
             return None
 
     def _find_nic_hdl_in_extra_data(self, extra_data: Dict[str, Any], nic_hdl_id: str) -> Optional[Dict[str, Any]]:
@@ -511,7 +572,12 @@ class DomainRepository:
                 return DomainRegistration.objects.create(id_str=nic_hdl_id, **create_defaults)
             return DomainRegistration.objects.create(name=contact_name, **defaults)
         except IntegrityError as ie:
-            logger.warning(f"Integrity error creating {contact_type} contact, trying to get existing: {ie}")
+            logger.log_line(
+                PREFIX_DOMAIN_REPO,
+                "CONTACT",
+                "Integrity error creating %s contact, trying to get existing: %s" % (contact_type, ie),
+                level="warning",
+            )
             if nic_hdl_id and (contact_obj := DomainRegistration.objects.filter(id_str=nic_hdl_id).first()):
                 return contact_obj
             return DomainRegistration.objects.filter(name=contact_name).first()
@@ -536,8 +602,11 @@ class DomainRepository:
             nic_hdl = self._find_nic_hdl_in_extra_data(extra_data, nic_hdl_id)
 
             if not nic_hdl:
-                logger.warning(
-                    f"No nic-hdl found for {contact_type} contact ID: {nic_hdl_id}, creating minimal contact"
+                logger.log_line(
+                    PREFIX_DOMAIN_REPO,
+                    "CONTACT",
+                    "No nic-hdl found for %s contact ID: %s, creating minimal contact" % (contact_type, nic_hdl_id),
+                    level="warning",
                 )
                 nic_hdl = {"nic-hdl": nic_hdl_id, "contact": nic_hdl_id}
 
@@ -554,7 +623,13 @@ class DomainRepository:
             return contact_obj
 
         except Exception as e:
-            logger.error(f"Error getting or creating {contact_type} contact: {e}", exc_info=True)
+            logger.log_line(
+                PREFIX_DOMAIN_REPO,
+                "CONTACT",
+                "Error getting or creating %s contact: %s" % (contact_type, e),
+                level="error",
+                exc_info=True,
+            )
             return None
 
     def _process_extra_data(self, domain_info: DomainInfo, extra_data: Dict[str, Any]) -> None:
@@ -572,7 +647,12 @@ class DomainRepository:
             self._process_dnssec(domain_info, extra_data)
             self._store_remaining_data(domain_info, extra_data)
         except Exception as e:
-            logger.error(f"Error processing extra_data: {e}")
+            logger.log_line(
+                PREFIX_DOMAIN_REPO,
+                "EXTRA_DATA",
+                "Error processing extra_data: %s" % (e,),
+                level="error",
+            )
 
     def _process_basic_fields(self, domain_info: DomainInfo, extra_data: Dict[str, Any]) -> None:
         """Process basic fields like last_update and whois_server."""

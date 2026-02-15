@@ -7,7 +7,6 @@ API and UI layers for better reusability and testability.
 
 from __future__ import annotations
 
-import logging
 import threading
 from typing import TypedDict
 
@@ -20,13 +19,15 @@ from reNgine.secator.selected_targets import (
 )
 from reNgine.secator.tasks import initiate_secator_scan
 from reNgine.services.repositories.scan_repository import ScanRepository
+from reNgine.utilities.logger import get_module_logger
 from reNgine.utilities.websocket import send_scan_status_update
 from scanEngine.models import SecatorScan, SecatorTask
 from startScan.models import ScanHistory, Subdomain, SubScan
 from targetApp.models import Domain
 
 
-logger = logging.getLogger(__name__)
+PREFIX_SECATOR_SERVICE = "[SECATOR_SERVICE]"
+logger = get_module_logger(__name__)
 
 
 class PerTaskRunResult(TypedDict):
@@ -50,7 +51,13 @@ def handle_scan_error(scan: ScanHistory, error: Exception) -> None:
         scan: ScanHistory instance to update
         error: Exception that occurred during scan execution
     """
-    logger.exception("Error in scan thread: %s", error)
+    logger.log_line(
+        PREFIX_SECATOR_SERVICE,
+        "SCAN_THREAD",
+        "Error in scan thread: %s" % (error,),
+        level="error",
+        exc_info=True,
+    )
     # Refresh from DB to get current state before modifying
     scan.refresh_from_db()
     # Only mark as failed if scan is not already in a terminal state
@@ -60,7 +67,12 @@ def handle_scan_error(scan: ScanHistory, error: Exception) -> None:
         scan.scan_status = FAILED_TASK
         scan.save()
     else:
-        logger.debug(f"Scan {scan.id} already in terminal state {scan.scan_status}, skipping error status update")
+        logger.log_line(
+            PREFIX_SECATOR_SERVICE,
+            "SCAN_THREAD",
+            "Scan %s already in terminal state %s, skipping error status update" % (scan.id, scan.scan_status),
+            level="debug",
+        )
 
 
 def start_secator_scan(
@@ -329,7 +341,13 @@ def start_secator_scan(
             }
 
     except Exception:
-        logger.exception("Error starting scan")
+        logger.log_line(
+            PREFIX_SECATOR_SERVICE,
+            "START_SCAN",
+            "Error starting scan",
+            level="error",
+            exc_info=True,
+        )
         return {"status": False, "error": "Failed to start scan due to a server error.", "http_status": 500}
 
 
@@ -379,13 +397,23 @@ def _run_one_per_task_entry(
         if result.get("status"):
             return ({"task_type": task_type, "status": "success", "scan_id": shared_scan_id}, True)
         err_msg = result.get("error", "Unknown error")
-        logger.warning("Per-task scan failed for task_type=%s: %s", task_type, err_msg)
+        logger.log_line(
+            PREFIX_SECATOR_SERVICE,
+            "PER_TASK",
+            "Per-task scan failed for task_type=%s: %s" % (task_type, err_msg),
+            level="warning",
+        )
         return (
             {"task_type": task_type, "status": "error", "error": err_msg, "detail": err_msg},
             False,
         )
     except ValueError as exc:
-        logger.warning("Per-task start failed for task_type=%s: %s", task_type, exc)
+        logger.log_line(
+            PREFIX_SECATOR_SERVICE,
+            "PER_TASK",
+            "Per-task start failed for task_type=%s: %s" % (task_type, exc),
+            level="warning",
+        )
         return (
             {
                 "task_type": task_type,
@@ -396,7 +424,13 @@ def _run_one_per_task_entry(
             False,
         )
     except Exception as e:
-        logger.exception("Per-task error for task_type=%s: %s", task_type, e)
+        logger.log_line(
+            PREFIX_SECATOR_SERVICE,
+            "PER_TASK",
+            "Per-task error for task_type=%s: %s" % (task_type, e),
+            level="error",
+            exc_info=True,
+        )
         return (
             {
                 "task_type": task_type,
@@ -449,9 +483,12 @@ def run_per_task_secator_scans(
     secator_config = secator_config or {}
     subdomain_ids = subdomain_ids or []
     if len(subdomain_ids) > 1:
-        logger.warning(
-            "run_per_task_secator_scans: only the first subdomain_id is used for SubScan linkage; %d provided, rest ignored",
-            len(subdomain_ids),
+        logger.log_line(
+            PREFIX_SECATOR_SERVICE,
+            "PER_TASK",
+            "run_per_task_secator_scans: only the first subdomain_id is used for SubScan linkage; %s provided, rest ignored"
+            % (len(subdomain_ids),),
+            level="warning",
         )
     subdomain_ids_for_subscan = subdomain_ids[:1] if subdomain_ids else []
 

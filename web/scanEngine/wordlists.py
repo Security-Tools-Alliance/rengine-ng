@@ -17,7 +17,7 @@ from reNgine.settings import RENGINE_WORDLISTS
 from reNgine.utilities.logger import get_module_logger
 from scanEngine.models import Wordlist
 
-
+PREFIX_WORDLISTS = "[WORDLISTS]"
 logger = get_module_logger(__name__)
 
 _MAX_WORDLIST_SHORT_NAME_RETRIES = 1000
@@ -177,9 +177,11 @@ def save_one(
             temp_target.unlink(missing_ok=True)
             if not _is_short_name_unique_violation(e):
                 raise
-    logger.warning(
-        "Wordlist short_name uniqueness retries exhausted for base_short=%s, path=%s",
-        base_short,
-        wordlists_dir / f"{base_short}_*.txt",
+    logger.log_line(
+        PREFIX_WORDLISTS,
+        "UPLOAD",
+        "Wordlist short_name uniqueness retries exhausted for base_short=%s, path=%s"
+        % (base_short, wordlists_dir / ("%s_*.txt" % base_short)),
+        level="warning",
     )
     return (None, "max_retries")

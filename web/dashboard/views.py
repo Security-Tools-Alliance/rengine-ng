@@ -1,6 +1,5 @@
 from datetime import timedelta
 import json
-import logging
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model, update_session_auth_hash
@@ -19,6 +18,7 @@ from dashboard.forms import ProjectForm
 from dashboard.models import NetlasAPIKey, OpenAiAPIKey, Project, UserAPIKey
 from dashboard.utils import get_user_groups, get_user_projects
 from reNgine.definitions import FOUR_OH_FOUR_URL, PERM_MODIFY_SYSTEM_CONFIGURATIONS
+from reNgine.utilities.logger import get_module_logger
 from startScan.models import (
     CountryISO,
     EndPoint,
@@ -34,7 +34,8 @@ from startScan.models import (
 from targetApp.models import Domain
 
 
-logger = logging.getLogger(__name__)
+PREFIX_DASHBOARD = "[DASHBOARD]"
+logger = get_module_logger(__name__)
 
 
 def index(request, slug):
@@ -233,7 +234,12 @@ def handle_delete_user(request, user):
         messages.add_message(request, messages.INFO, f"User {user.username} successfully deleted.")
         return JsonResponse({"status": True})
     except (ValueError, KeyError) as e:
-        logger.error("Error deleting user: %s", e)
+        logger.log_line(
+            PREFIX_DASHBOARD,
+            "USER",
+            "Error deleting user: %s" % (e,),
+            level="error",
+        )
         return JsonResponse({"status": False, "error": "An error occurred while deleting the user"})
 
 
@@ -258,7 +264,12 @@ def handle_update_user(request, user):
         user.save()
         return JsonResponse({"status": True})
     except (ValueError, KeyError) as e:
-        logger.error("Error updating user: %s", e)
+        logger.log_line(
+            PREFIX_DASHBOARD,
+            "USER",
+            "Error updating user: %s" % (e,),
+            level="error",
+        )
         return JsonResponse({"status": False, "error": "An error occurred while updating the user"})
 
 
@@ -280,7 +291,12 @@ def handle_create_user(request):
 
         return JsonResponse({"status": True})
     except (ValueError, KeyError) as e:
-        logger.error("Error creating user: %s", e)
+        logger.log_line(
+            PREFIX_DASHBOARD,
+            "USER",
+            "Error creating user: %s" % (e,),
+            level="error",
+        )
         return JsonResponse({"status": False, "error": "An error occurred while creating the user"})
 
 
@@ -339,7 +355,12 @@ def onboarding(request):
         try:
             Project.objects.create(name=project_name, slug=slug, insert_date=insert_date)
         except Exception as e:
-            logger.error(f" Could not create project, Error: {e}")
+            logger.log_line(
+                PREFIX_DASHBOARD,
+                "PROJECT",
+                "Could not create project, Error: %s" % (e,),
+                level="error",
+            )
             error = "Could not create project, check logs for more details"
 
         try:
@@ -348,7 +369,12 @@ def onboarding(request):
                 user = User.objects.create_user(username=create_username, password=create_password)
                 assign_role(user, create_user_role)
         except Exception as e:
-            logger.error(f"Could not create User, Error: {e}")
+            logger.log_line(
+                PREFIX_DASHBOARD,
+                "USER",
+                "Could not create User, Error: %s" % (e,),
+                level="error",
+            )
             error = "Could not create User, check logs for more details"
 
         if key_openai:

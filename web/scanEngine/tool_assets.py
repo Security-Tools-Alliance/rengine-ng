@@ -11,7 +11,7 @@ from django.contrib import messages
 
 from reNgine.utilities.logger import get_module_logger
 
-
+PREFIX_TOOL_ASSETS = "[TOOL_ASSETS]"
 logger = get_module_logger(__name__)
 
 
@@ -114,7 +114,12 @@ def save_uploaded_assets(
             messages.info(request, f"{pattern_name} {target.name} uploaded.")
             saved_count += 1
         except OSError as e:
-            logger.warning("Failed to save %s: %s", target, e)
+            logger.log_line(
+                PREFIX_TOOL_ASSETS,
+                "SAVE",
+                "Failed to save %s: %s" % (target, e),
+                level="warning",
+            )
             messages.error(request, f"Failed to save {target.name}.")
             error_count += 1
     return UploadResult(saved=saved_count, errors=error_count)

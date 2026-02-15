@@ -19,7 +19,7 @@ from reNgine.services.repositories.scan_repository import ScanRepository
 from reNgine.utilities.logger import get_module_logger
 from startScan.models import ScanActivity, ScanHistory, SecatorRunner
 
-
+PREFIX_SECATOR_PROGRESS = "[SECATOR_PROGRESS]"
 logger = get_module_logger(__name__)
 
 TERMINAL_RUNNER_STATUSES = frozenset({"SUCCESS", "FAILURE", "FAILED", "REVOKED"})
@@ -55,10 +55,12 @@ class SecatorProgressSync:
             return UNKNOWN_SECATOR_STATUS_FALLBACK
         normalized = secator_status.upper()
         if normalized not in status_map:
-            logger.warning(
-                "Unknown Secator status %r, using fallback %s",
-                secator_status,
-                UNKNOWN_SECATOR_STATUS_FALLBACK,
+            logger.log_line(
+                PREFIX_SECATOR_PROGRESS,
+                "MAP_STATUS",
+                "Unknown Secator status %s, using fallback %s"
+                % (repr(secator_status), UNKNOWN_SECATOR_STATUS_FALLBACK),
+                level="warning",
             )
         return status_map.get(normalized, UNKNOWN_SECATOR_STATUS_FALLBACK)
 
@@ -128,7 +130,12 @@ class SecatorProgressSync:
             # If no main runner, calculate based on number of completed tasks vs total tasks
             return calculate_task_progress(task_runners) if task_runners else 0.0
         except Exception as e:
-            logger.error(f"Error calculating workflow progress for scan {scan_history_id}: {e}")
+            logger.log_line(
+                PREFIX_SECATOR_PROGRESS,
+                "CALC_PROGRESS",
+                "Error calculating workflow progress for scan %s: %s" % (scan_history_id, e),
+                level="error",
+            )
             return 0.0
 
     @staticmethod
@@ -162,7 +169,12 @@ class SecatorProgressSync:
             return None
 
         except Exception as e:
-            logger.error(f"Error getting current running runner for scan {scan_history_id}: {e}")
+            logger.log_line(
+                PREFIX_SECATOR_PROGRESS,
+                "GET_RUNNING_RUNNER",
+                "Error getting current running runner for scan %s: %s" % (scan_history_id, e),
+                level="error",
+            )
             return None
 
     @staticmethod
@@ -183,7 +195,12 @@ class SecatorProgressSync:
             runners = SecatorRunner.objects.filter(scan_history_id=scan_history_id)
 
             if not runners.exists():
-                logger.debug(f"No Secator runners found for scan {scan_history_id}")
+                logger.log_line(
+                    PREFIX_SECATOR_PROGRESS,
+                    "UPDATE_SCAN",
+                    "No Secator runners found for scan %s" % (scan_history_id,),
+                    level="debug",
+                )
                 return False
 
             # Get main workflow/scan runner
@@ -203,15 +220,30 @@ class SecatorProgressSync:
                     if runner_done and not scan_history.stop_scan_date:
                         scan_history.stop_scan_date = timezone.now()
                     scan_history.save(update_fields=["scan_status", "stop_scan_date"])
-                    logger.debug(f"Updated scan {scan_history_id} status to {rengine_status}")
+                    logger.log_line(
+                        PREFIX_SECATOR_PROGRESS,
+                        "UPDATE_SCAN",
+                        "Updated scan %s status to %s" % (scan_history_id, rengine_status),
+                        level="debug",
+                    )
 
             return True
 
         except ScanHistory.DoesNotExist:
-            logger.error(f"ScanHistory {scan_history_id} not found")
+            logger.log_line(
+                PREFIX_SECATOR_PROGRESS,
+                "UPDATE_SCAN",
+                "ScanHistory %s not found" % (scan_history_id,),
+                level="error",
+            )
             return False
         except Exception as e:
-            logger.error(f"Error updating scan history from runners for scan {scan_history_id}: {e}")
+            logger.log_line(
+                PREFIX_SECATOR_PROGRESS,
+                "UPDATE_SCAN",
+                "Error updating scan history from runners for scan %s: %s" % (scan_history_id, e),
+                level="error",
+            )
             return False
 
     @staticmethod
@@ -221,7 +253,12 @@ class SecatorProgressSync:
         try:
             return SecatorRunner.objects.get(id=runner_id)
         except SecatorRunner.DoesNotExist:
-            logger.warning(f"SecatorRunner {runner_id} not found when syncing progress")
+            logger.log_line(
+                PREFIX_SECATOR_PROGRESS,
+                "GET_RUNNER",
+                "SecatorRunner %s not found when syncing progress" % (runner_id,),
+                level="warning",
+            )
             return None
 
     @staticmethod
@@ -250,7 +287,12 @@ class SecatorProgressSync:
             existing_activity.title = f"{activity_title} - Aborted"
         existing_activity.save(update_fields=["status", "time", "title"])
         SecatorProgressSync._sync_subscans_if_terminal(runner_id, runner_status, rengine_status)
-        logger.debug(f"Updated ScanActivity {existing_activity.id} for runner {runner_name}")
+        logger.log_line(
+            PREFIX_SECATOR_PROGRESS,
+            "ACTIVITY",
+            "Updated ScanActivity %s for runner %s" % (existing_activity.id, runner_name),
+            level="debug",
+        )
         return existing_activity.id
 
     @staticmethod
@@ -275,9 +317,19 @@ class SecatorProgressSync:
                 new_activity.name = runner_name
                 new_activity.save(update_fields=["runner_id", "name"])
             except ScanActivity.DoesNotExist as e:
-                logger.warning(f"Could not link runner to activity: {e}")
+                logger.log_line(
+                    PREFIX_SECATOR_PROGRESS,
+                    "ACTIVITY",
+                    "Could not link runner to activity: %s" % (e,),
+                    level="warning",
+                )
         SecatorProgressSync._sync_subscans_if_terminal(runner_id, runner_status, rengine_status)
-        logger.debug(f"Created ScanActivity {activity_id} for runner {runner_name}")
+        logger.log_line(
+            PREFIX_SECATOR_PROGRESS,
+            "ACTIVITY",
+            "Created ScanActivity %s for runner %s" % (activity_id, runner_name),
+            level="debug",
+        )
         return activity_id
 
     @staticmethod
@@ -334,8 +386,18 @@ class SecatorProgressSync:
                 runner_id,
             )
         except ScanHistory.DoesNotExist:
-            logger.error(f"ScanHistory {scan_history_id} not found")
+            logger.log_line(
+                PREFIX_SECATOR_PROGRESS,
+                "CREATE_ACTIVITY",
+                "ScanHistory %s not found" % (scan_history_id,),
+                level="error",
+            )
             return None
         except Exception as e:
-            logger.error(f"Error creating/updating scan activity: {e}")
+            logger.log_line(
+                PREFIX_SECATOR_PROGRESS,
+                "CREATE_ACTIVITY",
+                "Error creating/updating scan activity: %s" % (e,),
+                level="error",
+            )
             return None

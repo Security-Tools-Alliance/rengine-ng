@@ -1,6 +1,10 @@
 from django.apps import AppConfig
 
-from reNgine.definitions import logger
+from reNgine.utilities.logger import get_module_logger
+
+
+PREFIX_STARTSCAN_APPS = "[STARTSCAN_APPS]"
+logger = get_module_logger(__name__)
 
 
 class StartscanConfig(AppConfig):
@@ -16,7 +20,12 @@ class StartscanConfig(AppConfig):
         """
         import startScan.signals  # noqa: F401
 
-        logger.info("StartScan app initialized - Signals registered")
+        logger.log_line(
+            PREFIX_STARTSCAN_APPS,
+            "INIT",
+            "StartScan app initialized - Signals registered",
+            level="info",
+        )
         # logger.info('Cancelling all the ongoing scans')
         # ScanHistory = self.get_model('ScanHistory')
         # ScanHistory.objects.filter(scan_status=1).update(scan_status=0)

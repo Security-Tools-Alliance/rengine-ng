@@ -20,9 +20,14 @@ from reNgine.definitions import (
     SCAN_STATUSES,
 )
 from reNgine.llm.utils import convert_markdown_to_html
+from reNgine.utilities.logger import get_module_logger
 from reNgine.utilities.time import date_to_aware_datetime
 from scanEngine.models import EngineType
 from targetApp.models import Domain
+
+
+PREFIX_SCAN = "[STARTSCAN]"
+logger = get_module_logger(__name__)
 
 
 class HybridProperty:
@@ -1521,11 +1526,8 @@ class Command(models.Model):
         Returns a dictionary with formatted output and metadata.
         """
         from html import escape
-        import logging
 
         from reNgine.utilities.output_formatter import format_output
-
-        logger = logging.getLogger(__name__)
 
         if not self.output:
             return {
@@ -1538,10 +1540,11 @@ class Command(models.Model):
         try:
             return format_output(self.output)
         except Exception as exc:
-            logger.warning(
-                "Output formatting failed for command %s: %s",
-                self.command,
-                exc,
+            logger.log_line(
+                PREFIX_SCAN,
+                "MODEL",
+                "Output formatting failed for command %s: %s" % (self.command, exc),
+                level="warning",
                 exc_info=True,
             )
             escaped_output = escape(self.output)

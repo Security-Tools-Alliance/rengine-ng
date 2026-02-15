@@ -33,7 +33,7 @@ from startScan.models import (
     Vulnerability,
 )
 
-
+PREFIX_WS = "[WS]"
 logger = get_module_logger(__name__)
 
 # Must match api.consumers.CHANNEL_NAME_PATTERN so group names align
@@ -87,10 +87,20 @@ def build_scan_status_message(scan_history_id: int) -> dict:
     try:
         return _build_scan_status_payload(scan_history_id)
     except ScanHistory.DoesNotExist:
-        logger.error(f"ScanHistory {scan_history_id} not found")
+        logger.log_line(
+            PREFIX_WS,
+            "BUILD_STATUS",
+            "ScanHistory %s not found" % (scan_history_id,),
+            level="error",
+        )
         return {}
     except Exception as e:
-        logger.error(f"Error building scan status message for scan {scan_history_id}: {e}")
+        logger.log_line(
+            PREFIX_WS,
+            "BUILD_STATUS",
+            "Error building scan status message for scan %s: %s" % (scan_history_id, e),
+            level="error",
+        )
         return {}
 
 
@@ -352,14 +362,23 @@ def send_scan_status_update(scan_history_id: int, scan_status=None, progress=Non
         scan = ScanHistory.objects.get(id=scan_history_id)
         channel_layer = get_channel_layer()
         if not channel_layer:
-            logger.debug(f"No channel layer available, skipping WebSocket update for scan {scan_history_id}")
+            logger.log_line(
+                PREFIX_WS,
+                "SEND_STATUS",
+                "No channel layer available, skipping WebSocket update for scan %s" % (scan_history_id,),
+                level="debug",
+            )
             return
 
-        # Build detailed message
         message = build_scan_status_message(scan_history_id)
 
         if not message:
-            logger.warning(f"Empty message for scan {scan_history_id}, skipping WebSocket update")
+            logger.log_line(
+                PREFIX_WS,
+                "SEND_STATUS",
+                "Empty message for scan %s, skipping WebSocket update" % (scan_history_id,),
+                level="warning",
+            )
             return
 
         # Override with provided values if any
@@ -370,16 +389,18 @@ def send_scan_status_update(scan_history_id: int, scan_status=None, progress=Non
         if current_task is not None:
             message["current_task"] = current_task
 
-        logger.debug(
-            "Sending WebSocket update for scan %s - status: %s, progress: %s, current_task: %s",
-            scan_history_id,
-            message.get("status"),
-            message.get("progress"),
-            message.get("current_task"),
+        logger.log_line(
+            PREFIX_WS,
+            "SEND_STATUS",
+            "Sending WebSocket update for scan %s - status: %s, progress: %s, current_task: %s"
+            % (scan_history_id, message.get("status"), message.get("progress"), message.get("current_task")),
+            level="debug",
         )
-        logger.info(
-            "WebSocket group_send for scan %s (scan-status and project group)",
-            scan_history_id,
+        logger.log_line(
+            PREFIX_WS,
+            "SEND_STATUS",
+            "WebSocket group_send for scan %s (scan-status and project group)" % (scan_history_id,),
+            level="info",
         )
 
         # Send to scan-specific group
@@ -388,24 +409,49 @@ def send_scan_status_update(scan_history_id: int, scan_status=None, progress=Non
             scan_group,
             {"type": "scan_status_update", "message": message},
         )
-        logger.debug("Sent WebSocket update to scan-specific group: %s", scan_group)
+        logger.log_line(
+            PREFIX_WS,
+            "SEND_STATUS",
+            "Sent WebSocket update to scan-specific group: %s" % (scan_group,),
+            level="debug",
+        )
 
-        # Send to project-level group (slug cleaned to match consumer)
         if scan.domain and scan.domain.project:
-            project_group = f"scan-status-project-{_clean_channel_name(scan.domain.project.slug)}"
+            project_group = "scan-status-project-%s" % (_clean_channel_name(scan.domain.project.slug),)
             async_to_sync(channel_layer.group_send)(
                 project_group,
                 {"type": "scan_status_update", "message": message},
             )
-            logger.debug(f"Sent WebSocket update to project-level group: {project_group}")
+            logger.log_line(
+                PREFIX_WS,
+                "SEND_STATUS",
+                "Sent WebSocket update to project-level group: %s" % (project_group,),
+                level="debug",
+            )
 
-        logger.debug(f"Successfully sent WebSocket update for scan {scan_history_id}")
+        logger.log_line(
+            PREFIX_WS,
+            "SEND_STATUS",
+            "Successfully sent WebSocket update for scan %s" % (scan_history_id,),
+            level="debug",
+        )
 
     except ScanHistory.DoesNotExist:
-        logger.error(f"ScanHistory {scan_history_id} not found for WebSocket update")
+        logger.log_line(
+            PREFIX_WS,
+            "SEND_STATUS",
+            "ScanHistory %s not found for WebSocket update" % (scan_history_id,),
+            level="error",
+        )
         raise
     except Exception as e:
-        logger.error(f"Error sending WebSocket update for scan {scan_history_id}: {e}", exc_info=True)
+        logger.log_line(
+            PREFIX_WS,
+            "SEND_STATUS",
+            "Error sending WebSocket update for scan %s: %s" % (scan_history_id, e),
+            level="error",
+            exc_info=True,
+        )
         raise
 
 
@@ -419,7 +465,12 @@ def send_worker_status_update(worker_id: int) -> None:
     """
     channel_layer = get_channel_layer()
     if not channel_layer:
-        logger.debug("No channel layer available, skipping worker status update for worker_id=%s", worker_id)
+        logger.log_line(
+            PREFIX_WS,
+            "WORKER_STATUS",
+            "No channel layer available, skipping worker status update for worker_id=%s" % (worker_id,),
+            level="debug",
+        )
         return
     try:
         async_to_sync(channel_layer.group_send)(
@@ -427,9 +478,12 @@ def send_worker_status_update(worker_id: int) -> None:
             {"type": "worker_status_update", "payload": {"worker_id": worker_id}},
         )
     except Exception:
-        logger.exception(
-            "Error sending worker status update for worker_id=%s",
-            worker_id,
+        logger.log_line(
+            PREFIX_WS,
+            "WORKER_STATUS",
+            "Error sending worker status update for worker_id=%s" % (worker_id,),
+            level="error",
+            exc_info=True,
         )
 
 
@@ -447,9 +501,11 @@ def send_worker_deploy_log(
     """
     channel_layer = get_channel_layer()
     if not channel_layer:
-        logger.debug(
-            "No channel layer available, skipping worker deploy log for worker_id=%s",
-            worker_id,
+        logger.log_line(
+            PREFIX_WS,
+            "WORKER_DEPLOY",
+            "No channel layer available, skipping worker deploy log for worker_id=%s" % (worker_id,),
+            level="debug",
         )
         return
     payload = {
@@ -465,9 +521,12 @@ def send_worker_deploy_log(
             {"type": "worker_deploy_log", "payload": payload},
         )
     except Exception:
-        logger.exception(
-            "Error sending worker deploy log for worker_id=%s",
-            worker_id,
+        logger.log_line(
+            PREFIX_WS,
+            "WORKER_DEPLOY",
+            "Error sending worker deploy log for worker_id=%s" % (worker_id,),
+            level="error",
+            exc_info=True,
         )
 
 
@@ -488,9 +547,11 @@ def send_worker_refresh_log(
     """
     channel_layer = get_channel_layer()
     if not channel_layer:
-        logger.debug(
-            "No channel layer available, skipping worker refresh log for worker_id=%s",
-            worker_id,
+        logger.log_line(
+            PREFIX_WS,
+            "WORKER_REFRESH",
+            "No channel layer available, skipping worker refresh log for worker_id=%s" % (worker_id,),
+            level="debug",
         )
         return
     payload = {
@@ -512,7 +573,10 @@ def send_worker_refresh_log(
             {"type": "worker_refresh_log", "payload": payload},
         )
     except Exception:
-        logger.exception(
-            "Error sending worker refresh log for worker_id=%s",
-            worker_id,
+        logger.log_line(
+            PREFIX_WS,
+            "WORKER_REFRESH",
+            "Error sending worker refresh log for worker_id=%s" % (worker_id,),
+            level="error",
+            exc_info=True,
         )
