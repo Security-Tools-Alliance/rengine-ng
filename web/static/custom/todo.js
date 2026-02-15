@@ -166,13 +166,13 @@ function get_recon_notes(endpoint, target_id, scan_id){
           subdomain_name = '<small class="text-success"> Subdomain: ' + note['subdomain_name'] + '</small></br>';
         }
         let strike_tag = 'span';
-        checked = '';
+        let checked = '';
         if (note['is_done']) {
           strike_tag = 'del';
           checked = 'checked';
         }
-        important_badge = '';
-        mark_important = ''
+        let important_badge = '';
+        let mark_important = '';
         if (note['is_important']) {
           important_badge = `<i class="fe-alert-triangle text-danger me-1"></i>&nbsp;`;
           mark_important = `<a class="dropdown-item" onclick="change_todo_priority(${note['id']}, 0)">Mark UnImportant</a>`;

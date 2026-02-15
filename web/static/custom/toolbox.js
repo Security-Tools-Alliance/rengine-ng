@@ -57,7 +57,7 @@ function cms_detector_api_call(cmsDetectorUrl, url){
 			$('#cmsDetectorResultModal .modal-title').text('CMS Details for ' + url);
 			$('#cmsDetectorResultModal .modal-body').empty();
 
-			content = `
+			let content = `
 				<div class="d-flex align-items-start mb-3">
 					<img class="d-flex me-3 rounded-circle avatar-lg" src="${response.cms_url}/favicon.ico" alt="${response.cms_name}">
 					<div class="w-100">

@@ -264,6 +264,25 @@ function htmlEncode(str) {
 		return '&#' + c.charCodeAt(0) + ';';
 	});
 }
+
+/**
+ * HTML-escape for safe insertion into the DOM. Uses htmlEncode when available,
+ * otherwise a minimal escape for &, <, >, ", ' to avoid XSS if htmlEncode is undefined.
+ * @param {*} s - Value to escape (stringified; null/undefined become '').
+ * @returns {string} Escaped string safe for HTML context.
+ */
+function safeHtmlEncode(s) {
+	if (s == null) return '';
+	const str = String(s);
+	if (typeof htmlEncode === 'function') return htmlEncode(str);
+	return str
+		.replace(/&/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;')
+		.replace(/"/g, '&quot;')
+		.replace(/'/g, '&#39;');
+}
+
 // Source: https://portswigger.net/web-security/cross-site-scripting/preventing#encode-data-on-output
 function jsEscape(str) {
 	return String(str).replace(/[^\w. ]/gi, function(c) {
@@ -1001,7 +1020,7 @@ function get_important_subdomains(endpoint_url, target_id, scan_history_id) {
 			for (let val in data['subdomains']) {
 				const subdomain = data['subdomains'][val];
 				const div_id = 'important_' + subdomain['id'];
-				const safeSubdomainName = htmlEncode(subdomain['name']);
+				const safeSubdomainName = safeHtmlEncode(subdomain['name']);
 				$("#important-subdomains-list").append(`
 					<div id="${div_id}">
 					<p>
@@ -2500,22 +2519,23 @@ function get_tech_details(endpoint_subdomain_url, tech, scan_id=null, domain_id=
 
 
 function get_http_badge(http_status){
+	let badge_color;
 	switch (true) {
 		case (http_status >= 400):
-		badge_color = 'danger'
-		break;
+			badge_color = 'danger';
+			break;
 		case (http_status >= 300):
-		badge_color = 'warning'
-		break;
+			badge_color = 'warning';
+			break;
 		case (http_status >= 200):
-		badge_color = 'success'
-		break;
+			badge_color = 'success';
+			break;
 		default:
-		badge_color = 'danger'
+			badge_color = 'danger';
 	}
 	if (http_status) {
-		badge = `<span class="badge badge-soft-${badge_color} me-1 ms-1 bs-tooltip" data-placement="top" title="HTTP Status">${http_status}</span>`;
-		return badge
+		const badge = `<span class="badge badge-soft-${badge_color} me-1 ms-1 bs-tooltip" data-placement="top" title="HTTP Status">${http_status}</span>`;
+		return badge;
 	}
 }
 

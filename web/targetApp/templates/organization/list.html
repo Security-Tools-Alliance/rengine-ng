@@ -84,7 +84,7 @@ Organizations
 <script src="{% static 'targetApp/js/custom_organization.js' %}"></script>
 <script>
 $(document).ready(function() {
-  list_organization_table = $('#list_organization_table').DataTable({
+  const list_organization_table = $('#list_organization_table').DataTable({
     "layout": window.RENGINE_DATATABLE_LAYOUT_WITH_SEARCH,
     "lengthMenu": [5, 10, 20, 30, 50, 100, 500, 1000],
     "pageLength": 10,
