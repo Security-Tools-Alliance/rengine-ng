@@ -1,6 +1,5 @@
 function get_ips_from_port(port_number, history_id){
 	document.getElementById("detailScanModalLabel").innerHTML='IPs with port ' + port_number + ' OPEN';
-	const ip_badge = '';
 	fetch('../port/ip/'+port_number+'/'+history_id+'/')
 	.then(response => response.json())
 	.then(data => render_ips(data));
@@ -8,7 +7,6 @@ function get_ips_from_port(port_number, history_id){
 
 function get_ports_for_ip(ip, history_id){
 	document.getElementById("detailScanModalLabel").innerHTML='Open Ports identified for ' + ip;
-	const port_badge = '';
 	fetch('../ip/ports/'+ip+'/'+history_id+'/')
 	.then(response => response.json())
 	.then(data => render_ports(data));
@@ -34,7 +32,7 @@ function render_ports(data)
 		if (value[7] && Array.isArray(value[7]) && value[7].length > 0) { // cpes
 			title += `\nCPEs: ${value[7].join(', ')}`;
 		}
-		port_badge += `<span class='m-1 badge  badge-soft-${badge_color} bs-tooltip' title='${title}'>${value[0]}/${value[1]}</span>`
+		port_badge += `<span class='m-1 badge  badge-soft-${badge_color} bs-tooltip' title='${title}'>${value[0]}/${value[1]}</span>`;
 	});
 	ip_address_content.innerHTML = port_badge;
 	$('.bs-tooltip').tooltip();
@@ -346,7 +344,6 @@ function get_subdomain_changes(endpoint, scan_history_id){
 				"render": function ( data, type, row ) {
 					let badges = '';
 					let cdn_badge = '';
-					let tech_badge = '';
 					let interesting_badge = '';
 					if (row['is_cdn'])
 					{
@@ -533,11 +530,11 @@ function get_screenshot(endpoint, scan_id){
 			const ips = data[subdomain]['ip_addresses'];
 			let ip_search_values = '';
 			for(let ip in ips){
-				ip_address = ips[ip]['address'];
+				const ip_address = ips[ip]['address'];
 				ip_search_values += ip_address + ' ';
 			}
 			let search_field = `${data[subdomain]['page_title']} ${data[subdomain]['name']} ${data[subdomain]['http_status']} ${ip_search_values} ${interesting_field}`;
-			link.setAttribute('data-lightbox', 'screenshot-gallery')
+			link.setAttribute('data-lightbox', 'screenshot-gallery');
 			const screenshotUrl = data[subdomain]['screenshot_url'] || '';
 			link.setAttribute('href', screenshotUrl);
 			link.setAttribute('data-title', `<a target='_blank' href='`+data[subdomain]['http_url']+`'><h3 style="color:white">`+data[subdomain]['name']+`</h3></a>`);
@@ -1296,7 +1293,10 @@ function create_log_element(log) {
 		</div>`;
 	}
 	
-	logElement.innerHTML = headerHTML + contentHTML;
+	const combinedHtml = headerHTML + contentHTML;
+	logElement.innerHTML = (typeof DOMPurify !== 'undefined' && DOMPurify.sanitize)
+		? DOMPurify.sanitize(combinedHtml, { ALLOWED_TAGS: ['div', 'span', 'strong', 'code', 'pre', 'ul', 'li', 'br'], ALLOWED_ATTR: ['class', 'id', 'style', 'data-bs-toggle', 'data-bs-target', 'aria-expanded'] })
+		: combinedHtml;
 	return logElement;
 }
 
@@ -1899,7 +1899,7 @@ function downloadSelectedSubdomains(domain_name){
 				$('#modal-dialog-body').append(`<textarea class="form-control clipboard copy-txt" id="selected_subdomains_text_area" rows="10" spellcheck="false"></textarea>`);
 				for (const subdomain in response['results']){
 					const subdomain_obj = response['results'][subdomain];
-					subdomains += subdomain_obj + '\n'
+					subdomains += subdomain_obj + '\n';
 				}
 				$('#selected_subdomains_text_area').append(subdomains);
 				$("#modal-dialog-footer").empty();

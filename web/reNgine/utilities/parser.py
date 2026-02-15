@@ -354,7 +354,6 @@ def cve_to_vuln(cve_id, vuln_type=""):
         vuln_type = ovals[0]["family"]
 
     # Set vulnerability severity based on CVSS score
-    vuln_severity = "info"
     if vuln_cvss < 4:
         vuln_severity = "low"
     elif vuln_cvss < 7:

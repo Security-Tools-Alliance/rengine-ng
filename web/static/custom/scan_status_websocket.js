@@ -337,16 +337,9 @@ const updateCommandOutputs = function(data) {
     const effectiveStatus = H.getEffectiveCommandStatus || function(cmd) {
         return (cmd.status_string != null && cmd.status_string !== '') ? cmd.status_string : cmd.status;
     };
-    const escapeHtml = H.escapeHtml || function(text) {
-        if (text == null || text === '') return '';
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-    };
     const formatRelativeTime = H.formatRelativeTime || function(iso) { return iso || ''; };
     const formatDuration = H.formatDuration || function(sec) { return sec != null ? sec.toFixed(1) + 's' : ''; };
     const getDurationSeconds = H.getDurationSeconds || function() { return null; };
-    const findDetailRow = H.findDetailRow || function() { return null; };
     const setDetailRow = H.setDetailRow || function() {};
     const setReturnCodeRow = H.setReturnCodeRow || function() {};
     const setDurationRow = H.setDurationRow || function() {};
@@ -537,9 +530,8 @@ const updateCommandOutputs = function(data) {
                 if (command.formatted_output && command.formatted_output.formatted) {
                     outputHtml = command.formatted_output.formatted;
                 } else if (command.output) {
-                    const div = document.createElement('div');
-                    div.textContent = command.output;
-                    outputHtml = div.innerHTML;
+                    const escapeHtml = (typeof window !== 'undefined' && window.CommandLogHelpers && window.CommandLogHelpers.escapeHtml) ? window.CommandLogHelpers.escapeHtml : (t) => { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; };
+                    outputHtml = escapeHtml(String(command.output));
                 }
                 if (typeof outputElement._lastRenderedHtml === 'undefined') {
                     outputElement._lastRenderedHtml = '';
@@ -1201,7 +1193,7 @@ const updateScanTimeline = function(data) {
                 '<span class="float-end badge ' + statusClass + ' mt-1">' + statusText + 
                 (item.status === 1 ? '<span class="active-dot dot"></span>' : '') +
                 '</span></h5>' +
-                '<p class="text-muted mb-0">' + timeText + 
+                '<p class="text-muted mb-0">' + escapeHtml(timeText) + 
                 (timeAbsoluteText ? '<br><small class="text-muted mb-0">' + escapeHtml(timeAbsoluteText) + '</small>' : '') +
                 '</p>' +
                 progressHtml +
@@ -1399,17 +1391,17 @@ const updateRightSidebar = function(data) {
                 if (data.subdomain_count !== undefined || data.endpoint_count !== undefined || data.vulnerability_count !== undefined) {
                     const subdomainBadge = scanCard.querySelector('.badge-subdomain-count');
                     if (subdomainBadge && data.subdomain_count !== undefined) {
-                        subdomainBadge.innerHTML = '&nbsp;&nbsp;' + formatNumber(data.subdomain_count) + '&nbsp;&nbsp;';
+                        subdomainBadge.textContent = '\u00A0\u00A0' + formatNumber(data.subdomain_count) + '\u00A0\u00A0';
                     }
                     
                     const endpointBadge = scanCard.querySelector('.badge-endpoint-count');
                     if (endpointBadge && data.endpoint_count !== undefined) {
-                        endpointBadge.innerHTML = '&nbsp;&nbsp;' + formatNumber(data.endpoint_count) + '&nbsp;&nbsp;';
+                        endpointBadge.textContent = '\u00A0\u00A0' + formatNumber(data.endpoint_count) + '\u00A0\u00A0';
                     }
                     
                     const vulnBadge = scanCard.querySelector('.badge-vuln-count');
                     if (vulnBadge && data.vulnerability_count !== undefined) {
-                        vulnBadge.innerHTML = '&nbsp;&nbsp;' + formatNumber(data.vulnerability_count) + '&nbsp;&nbsp;';
+                        vulnBadge.textContent = '\u00A0\u00A0' + formatNumber(Number(data.vulnerability_count)) + '\u00A0\u00A0';
                     }
                     
                     // Re-initialize tooltips for updated badges
@@ -1425,12 +1417,12 @@ const updateRightSidebar = function(data) {
                         // Check if current task element exists
                         const currentTaskElement = cardHeader.querySelector('small.text-muted.font-weight-bold');
                         if (currentTaskElement) {
-                            currentTaskElement.textContent = data.current_task;
+                            currentTaskElement.textContent = String(data.current_task);
                         } else {
                             // Add current task element if it doesn't exist
                             const taskElement = document.createElement('small');
                             taskElement.className = 'text-muted font-weight-bold';
-                            taskElement.textContent = data.current_task;
+                            taskElement.textContent = String(data.current_task);
                             taskElement.style.display = 'block';
                             cardHeader.appendChild(taskElement);
                         }

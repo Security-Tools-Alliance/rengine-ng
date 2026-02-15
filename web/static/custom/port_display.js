@@ -402,15 +402,15 @@ function showScreenshotPreview(element, screenshotUrl, httpUrl) {
         const modalContainer = $('#modal_content_subdomain');
         const modalContent = modalContainer.closest('.modal-content');
         parentContainer = modalContent;
-        
+
         // Make modal content relative if it's not already
         if (modalContent.css('position') === 'static') {
             modalContent.css('position', 'relative');
         }
-        
+
         preview = createScreenshotPreviewElement(screenshotUrl, httpUrl).css('position', 'absolute');
-        
-        modalContent.append(preview);
+
+        parentContainer.append(preview);
         
         // Calculate position relative to modal content
         const modalContentOffset = modalContent.offset();
@@ -549,9 +549,7 @@ function showScreenshotImageModal(screenshotUrl, httpUrl = '') {
 }
 
 function get_port_details(endpoint_ip_url, endpoint_subdomain_url, port, scan_id=null, domain_id=null) {
-    // Store settings for use in subdomain rendering
-    const settings = { scan_id: scan_id, domain_id: domain_id };
-    
+
     // Store modal data globally for tab click events
     window.currentModalData = { port: port, scan_id: scan_id, domain_id: domain_id };
     const uncommonPortsUrl = (window.RENGINE_API_URLS && window.RENGINE_API_URLS.uncommonWebPorts) || '/api/uncommon-web-ports/';
@@ -686,8 +684,6 @@ function get_port_details(endpoint_ip_url, endpoint_subdomain_url, port, scan_id
 }
 
 function get_ip_details(endpoint_ip_url, endpoint_subdomain_url, ip_address, scan_id=null, domain_id=null){
-    // Store settings for use in subdomain rendering
-    const settings = { scan_id: scan_id, domain_id: domain_id };
     
     // Store modal data globally for tab click events (no port for IP modals)
     window.currentModalData = { scan_id: scan_id, domain_id: domain_id };

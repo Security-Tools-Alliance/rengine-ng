@@ -159,13 +159,13 @@ function get_recon_notes(endpoint, target_id, scan_id){
     if (data['notes'].length > 0){
       $('#todo-list').append(`<li class="list-group-item border-0 ps-0" id="todo_list_${target_id}"></li>`);
       for (const val in data['notes']){
-        note = data['notes'][val];
-        div_id = 'todo_' + note['id'];
-        subdomain_name = '';
+        const note = data['notes'][val];
+        const div_id = 'todo_' + note['id'];
+        let subdomain_name = '';
         if (note['subdomain_name']) {
           subdomain_name = '<small class="text-success"> Subdomain: ' + note['subdomain_name'] + '</small></br>';
         }
-        strike_tag = 'span';
+        let strike_tag = 'span';
         checked = '';
         if (note['is_done']) {
           strike_tag = 'del';

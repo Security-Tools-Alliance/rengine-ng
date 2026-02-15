@@ -55,7 +55,7 @@ const addTaskBtnListener = function(project) {
     $('.add-tsk').show();
     $('.edit-tsk').hide();
     if (window.ModalManager) ModalManager.showById(ModalManager.MODAL_IDS.ADD_TASK);
-    const ps = new PerfectScrollbar('.todo-box-scroll', {
+    new PerfectScrollbar('.todo-box-scroll', {
       suppressScrollX: true
     });
 

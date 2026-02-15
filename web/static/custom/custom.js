@@ -303,6 +303,7 @@ function deleteScheduledScan(endpoint_url) {
 }
 
 function change_scheduled_task_status(endpoint_url, checkbox) {
+	let text_msg;
 	if (checkbox.checked) {
 		text_msg = 'Schedule Scan Started';
 	} else {
@@ -435,8 +436,7 @@ function deletingEffect(words, id, i) {
 
 function fullScreenDiv(id, btn) {
 	let fullscreen = document.querySelector(id);
-	let button = document.querySelector(btn);
-	document.fullscreenElement && document.exitFullscreen() || document.querySelector(id).requestFullscreen()
+	document.fullscreenElement && document.exitFullscreen() || document.querySelector(id).requestFullscreen();
 	fullscreen.setAttribute("style", "overflow:auto");
 }
 
@@ -507,7 +507,7 @@ function delete_all_screenshots(endpoint_url) {
 }
 
 function load_image_from_url(src, append_to_id) {
-	img = document.createElement('img');
+	const img = document.createElement('img');
 	img.src = src;
 	img.style.width = '100%';
 	document.getElementById(append_to_id).appendChild(img);
@@ -748,7 +748,7 @@ $("#bulk_delete_vulnerabilities").on('click', function () {
 });
 
 function report_hackerone(endpoint_url, vulnerability_id, severity) {
-	message = ""
+	let message;
 	if (severity == 'Info' || severity == 'Low' || severity == 'Medium') {
 		message = "We do not recommended sending this vulnerability report to hackerone due to the severity, do you still want to report this?"
 	} else {
@@ -823,7 +823,7 @@ function get_interesting_subdomains(endpoint_url, project, target_id, scan_histo
 		url = `${endpoint_url}?project=${project}&scan_id=${scan_history_id}&format=datatables`;
 		non_orderable_targets = [];
 	}
-	const interesting_subdomain_table = $('#interesting_subdomains').DataTable({
+	$('#interesting_subdomains').DataTable({
 		"drawCallback": function() {
 			const total = this.api().page.info().recordsTotal;
 			if (total === 0) {
@@ -999,12 +999,13 @@ function get_important_subdomains(endpoint_url, target_id, scan_history_id) {
 		if (data['subdomains'].length > 0) {
 			$('#important-count').html(`<span class="badge badge-soft-primary ms-1 me-1">${data['subdomains'].length}</span>`);
 			for (let val in data['subdomains']) {
-				subdomain = data['subdomains'][val];
-				div_id = 'important_' + subdomain['id'];
+				const subdomain = data['subdomains'][val];
+				const div_id = 'important_' + subdomain['id'];
+				const safeSubdomainName = htmlEncode(subdomain['name']);
 				$("#important-subdomains-list").append(`
 					<div id="${div_id}">
 					<p>
-					<span id="subdomain_${subdomain['id']}"> ${subdomain['name']}
+					<span id="subdomain_${subdomain['id']}"> ${safeSubdomainName}
 					<span class="">
 					<a href="javascript:;" data-clipboard-action="copy" class="m-1 float-end badge-link text-info copyable text-primary" data-toggle="tooltip" data-placement="top" title="Copy Subdomain!" data-clipboard-target="#subdomain_${subdomain['id']}">
 					<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-copy"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></span>
@@ -1025,7 +1026,7 @@ function get_important_subdomains(endpoint_url, target_id, scan_history_id) {
 
 function mark_important_subdomain(url, row, subdomain_id) {
 	if (row) {
-		parentNode = row.parentNode.parentNode.parentNode.parentNode;
+		const parentNode = row.parentNode.parentNode.parentNode.parentNode;
 		if (parentNode.classList.contains('table-danger')) {
 			parentNode.classList.remove('table-danger');
 		} else {
@@ -1457,7 +1458,6 @@ function render_endpoint_in_xl_modal(endpoint_count, subdomain_name, result) {
 			web_server = `<span class='m-1 badge badge-soft-info' data-toggle="tooltip" data-placement="top" title="Web Server">${endpoint['webserver']}</span>`;
 		}
 		const url = split_into_lines(endpoint['http_url'], 70);
-		const rand_id = get_randid();
 		tech_badge += web_server + '</div>';
 		const http_url_td = "<a href='" + endpoint['http_url'] + `' target='_blank' class='text-primary'>` + url + "</a>" + tech_badge;
 		$('#endpoint_tbody').append(`
@@ -1644,8 +1644,7 @@ function render_directories_in_xl_modal(directory_count, subdomain_name, result)
 			</tr>
 		`);
 	}
-	const interesting_keywords_array = [];
-	const dir_modal_table = $("#directory-modal-datatable").DataTable({
+	$("#directory-modal-datatable").DataTable({
 		"layout": window.RENGINE_DATATABLE_LAYOUT_WITH_SEARCH,
 		"order": [
 			[1, "asc"]
@@ -1741,7 +1740,8 @@ function get_and_render_subscan_history(endpoint, subdomain_id, subdomain_name) 
 			const safeEngine = typeof htmlEncode === 'function' ? htmlEncode(engine_label) : engine_label;
 			const safeTaskName = typeof htmlEncode === 'function' ? htmlEncode(task_name) : task_name;
 			const safeSubdomain = typeof htmlEncode === 'function' ? htmlEncode(subdomain_label) : subdomain_label;
-			cardsHtml += `<div class="card border-${color} border mini-card"><a href="#" class="text-reset item-hovered" onclick="show_subscan_results('${(endpoint || '').replace(/'/g, "\\'")}', ${result_obj.id})"><div class="card-header ${bg_color} text-${color} mini-card-header">${safeTaskName} on <b>${safeSubdomain}</b> using engine <b>${safeEngine}</b></div><div class="card-body mini-card-body"><p class="card-text">${status_badge}<span class="">${statusLine}</span>${errMsg}</p></div></a></div>`;
+			const safeEndpoint = (endpoint || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+			cardsHtml += `<div class="card border-${color} border mini-card"><a href="#" class="text-reset item-hovered" onclick="show_subscan_results('${safeEndpoint}', ${result_obj.id})"><div class="card-header ${bg_color} text-${color} mini-card-header">${safeTaskName} on <b>${safeSubdomain}</b> using engine <b>${safeEngine}</b></div><div class="card-body mini-card-body"><p class="card-text">${status_badge}<span class="">${statusLine}</span>${errMsg}</p></div></a></div>`;
 		}
 		const bodyHtml = `<div id="subscan_history_table">${cardsHtml}</div>`;
 		if (window.ModalManager) ModalManager.showDialog({ title, bodyHtml, footerHtml: '' });
@@ -1870,7 +1870,7 @@ function display_whois_on_modal(response, addTargetUrl, project_slug, show_add_t
 	$('#whoisLookupResultModal .modal-body').empty();
 	$("#whoisLookupResultModal .modal-footer").empty();
 
-	content = `
+	let content = `
 	<div class="row mt-3">
 		<div class="col-sm-3">
 			<div class="nav flex-column nav-pills nav-pills-tab" id="v-pills-tab" role="tablist" aria-orientation="vertical">
@@ -2428,7 +2428,7 @@ function get_technologies(endpoint_url, subdomain_endpoint_url, scan_id=null, do
 	$.getJSON(url, function(data) {
 		$('#technologies-count').empty();
 		for (let val in data['technologies']){
-			tech = data['technologies'][val]
+			const tech = data['technologies'][val]
 			if (scan_id) {
 				$("#technologies").append(`<span class='badge badge-soft-primary  m-1 badge-link' data-toggle="tooltip" title="${tech['count']} Subdomains use this technology." onclick="get_tech_details('${subdomain_endpoint_url}', '${tech['name']}', scan_id=${scan_id}, domain_id=null)">${tech['name']}</span>`);
 			}
@@ -2541,7 +2541,7 @@ function get_and_render_cve_details(endpoint_url, cve_id){
 			$('#xl-modal-footer').empty();
 			$('#xl-modal-title').text(`CVE Details of ${cve_id}`);
 
-			const cvss_score_badge = 'danger';
+			let cvss_score_badge = 'danger';
 
 			if (response.result.cvss > 0.1 && response.result.cvss <= 3.9) {
 				cvss_score_badge = 'info';
@@ -2550,7 +2550,7 @@ function get_and_render_cve_details(endpoint_url, cve_id){
 				cvss_score_badge = 'warning';
 			}
 
-			content = `<div class="row mt-3">
+			let content = `<div class="row mt-3">
 				<div class="col-sm-3">
 				<div class="nav flex-column nav-pills nav-pills-tab" id="v-pills-tab" role="tablist" aria-orientation="vertical">
 				<a class="nav-link active show mb-1" id="v-pills-cve-details-tab" data-bs-toggle="pill" href="#v-pills-cve-details" role="tab" aria-controls="v-pills-cve-details-tab" aria-selected="true">CVE Details</a>
@@ -2611,8 +2611,13 @@ function get_and_render_cve_details(endpoint_url, cve_id){
 
 				// Check if references is a string representation of an array
 				if (typeof references === 'string' && references.startsWith('[') && references.endsWith(']')) {
-					// Remove the brackets and split by comma
-					references = references.slice(1, -1).split(',').map(ref => ref.trim().replace(/^'|'$/g, ''));
+					// Remove the brackets and split by comma; strip leading/trailing single quotes from each ref
+					references = references.slice(1, -1).split(',').map(ref => {
+						let t = ref.trim();
+						while (t.startsWith("'")) t = t.slice(1);
+						while (t.endsWith("'")) t = t.slice(0, -1);
+						return t;
+					});
 				}
 				
 				// Generate HTML content
@@ -2781,7 +2786,7 @@ function get_most_common_vulnerability(endpoint_url, endpoint_vuln_url, slug=nul
 				</table>
 			`);
 
-			for (let res in response.result) {
+			for (const res in response.result) {
 				const vuln_obj = response.result[res];
 				let vuln_badge = '';
 				switch (vuln_obj.severity) {
@@ -2820,8 +2825,7 @@ function get_most_common_vulnerability(endpoint_url, endpoint_vuln_url, slug=nul
 					</tr>
 				`);
 			}
-		}
-		else{
+		} else {
 			$('#most_common_vuln_div').append(`
 				<div class="mt-4 alert alert-warning">
 				Could not find Most Common Vulnerabilities.
@@ -2985,7 +2989,7 @@ function render_vuln_offcanvas(vuln){
 	}
 
 	if (vuln.impact) {
-		impact = vuln.impact.replace(new RegExp('\r?\n','g'), '<br />');
+		const impact = vuln.impact.replace(new RegExp('\r?\n','g'), '<br />');
 		body += `<div class="accordion custom-accordion mt-2">
 		<h5 class="m-0 position-relative">
 		<a class="custom-accordion-title text-reset d-block"
@@ -3002,7 +3006,7 @@ function render_vuln_offcanvas(vuln){
 	}
 
 	if (vuln.remediation) {
-		remediation = vuln.remediation.replace(new RegExp('\r?\n','g'), '<br />');
+		const remediation = vuln.remediation.replace(new RegExp('\r?\n','g'), '<br />');
 		body += `<div class="accordion custom-accordion mt-2">
 		<h5 class="m-0 position-relative">
 		<a class="custom-accordion-title text-reset d-block"
@@ -3050,14 +3054,14 @@ function render_vuln_offcanvas(vuln){
 		<td class="col-width-30">
 		<b>CWE IDs</b>
 		</td>
-		<td>`
+		<td>`;
 
 		vuln.cwe_ids.forEach(cwe => {
 			body += `<a href="https://google.com/search?q=${cwe.name.toUpperCase()}" target="_blank" class="badge badge-outline-primary me-1 mt-1" data-toggle="tooltip" data-placement="top" title="CWE ID">${cwe.name.toUpperCase()}</a>`;
 		});
 
-	body += `</td>
-		</tr>`
+		body += `</td>
+		</tr>`;
 	}
 
 	if (vuln.cvss_score) {
@@ -3214,7 +3218,7 @@ function render_vuln_offcanvas(vuln){
 		});
 		referencesContent += '</ul>';
 	} else {
-		referenceText = references || 'N/A';
+		const referenceText = references || 'N/A';
 		referencesContent = `<p>${referenceText}</p>`;
 	}
 

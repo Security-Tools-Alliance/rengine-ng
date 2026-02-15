@@ -269,7 +269,6 @@ def get_scan_url(scan_id=None, subscan_id=None):
 def get_scan_fields(engine, scan, subscan=None, status="RUNNING", tasks=None):
     if tasks is None:
         tasks = []
-    scan_obj = subscan or scan
     if subscan:
         tasks_h = f"`{subscan.type}`"
         host = subscan.subdomain.name

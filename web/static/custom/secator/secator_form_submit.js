@@ -102,7 +102,6 @@
       const prefix = this.getSecatorIdPrefix($form);
       if (prefix) {
         const $targetsPreview = $form.find(`#${prefix}-targets-preview`);
-        const $tasksTargetsContainer = $form.find(`#${prefix}-tasks-targets-container`);
         if ($targetsPreview.length && (executionMode === 'workflow' || executionMode === 'scan')) {
           const selected = $targetsPreview.find('.secator-target-checkbox:checked').map(function() {
             return $(this).val();

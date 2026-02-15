@@ -174,9 +174,8 @@ $('#scanHistoryIDropdown').on('change', function() {
   $('#subdomainDropdown').find('option:not(:first)').remove();
   subdomain_dropdown = document.getElementById('subdomainDropdown');
   $.getJSON(`/api/querySubdomains?project={{current_project.slug}}&scan_id=${this.value}&no_lookup_interesting&format=json`, function(data) {
-    const domainPart = $("#scanHistoryIDropdown option:selected").text().split('-')[0];
-    const safeDomain = typeof htmlEncode === 'function' ? htmlEncode(domainPart.trim()) : domainPart;
-    document.querySelector("#selectedSubdomainCount").innerHTML = data['subdomains'].length + ' Subdomains in selected history for domain ' + safeDomain;
+    const domainPart = $("#scanHistoryIDropdown option:selected").text().split('-')[0].trim();
+    document.querySelector("#selectedSubdomainCount").textContent = data['subdomains'].length + ' Subdomains in selected history for domain ' + domainPart;
     for (var subdomain in data['subdomains']){
       var subdomain_obj = data['subdomains'][subdomain];
       var option = document.createElement('option');

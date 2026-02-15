@@ -124,7 +124,7 @@
                 parentContainer = modalContent;
                 if (modalContent.css('position') === 'static') modalContent.css('position', 'relative');
                 preview = this._createPreviewElement(screenshotUrl, httpUrl).css('position', 'absolute');
-                modalContent.append(preview);
+                parentContainer.append(preview);
                 const modalContentOffset = modalContent.offset();
                 let leftPos = elementOffset.left - modalContentOffset.left - previewWidth - 10;
                 let topPos = elementOffset.top - modalContentOffset.top - (previewHeight / 2) + (elementHeight / 2);

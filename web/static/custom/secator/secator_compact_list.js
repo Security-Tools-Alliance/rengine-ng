@@ -45,8 +45,11 @@
           const title = $tile.find('.workflow-tile-title').text().trim();
           const desc = $tile.find('.workflow-tile-description').text().trim();
           const icon = $tile.attr('data-secator-icon') || $tile.data('secatorIcon') || 'project-diagram';
+          const safeTitle = (typeof htmlEncode === 'function' ? htmlEncode(title) : title);
+          const safeDesc = (typeof htmlEncode === 'function' ? htmlEncode(desc || 'No description') : (desc || 'No description'));
+          const safeIcon = (typeof icon === 'string' && /^[a-z0-9-]+$/i.test(icon)) ? icon : 'project-diagram';
           const $item = $('<div>').addClass(listItemClass).attr({ 'data-item-id': workflowId, 'data-item-type': 'workflow' })
-            .html(`<div class="d-flex align-items-stretch"><div class="secator-list-item-icon"><i class="fas fa-${icon}"></i></div><div class="flex-grow-1 min-w-0"><h6 class="mb-1 small fw-bold">${title}</h6><p class="mb-0 small text-muted">${desc || 'No description'}</p></div><i class="fas fa-chevron-right text-muted ms-2 align-self-center"></i></div>`);
+            .html(`<div class="d-flex align-items-stretch"><div class="secator-list-item-icon"><i class="fas fa-${safeIcon}"></i></div><div class="flex-grow-1 min-w-0"><h6 class="mb-1 small fw-bold">${safeTitle}</h6><p class="mb-0 small text-muted">${safeDesc}</p></div><i class="fas fa-chevron-right text-muted ms-2 align-self-center"></i></div>`);
           $item.on('click', function() {
             $listContainer.find('.' + listItemClass).removeClass('active');
             $item.addClass('active');
@@ -68,8 +71,11 @@
           const title = $tile.find('.scan-type-tile-title').text().trim();
           const desc = $tile.find('.scan-type-tile-description').text().trim();
           const icon = $tile.attr('data-secator-icon') || $tile.data('secatorIcon') || 'search';
+          const safeTitle = (typeof htmlEncode === 'function' ? htmlEncode(title) : title);
+          const safeDesc = (typeof htmlEncode === 'function' ? htmlEncode(desc || 'No description') : (desc || 'No description'));
+          const safeIcon = (typeof icon === 'string' && /^[a-z0-9-]+$/i.test(icon)) ? icon : 'search';
           const $item = $('<div>').addClass(listItemClass).attr({ 'data-item-id': scanType, 'data-item-type': 'scan' })
-            .html(`<div class="d-flex align-items-stretch"><div class="secator-list-item-icon"><i class="fas fa-${icon}"></i></div><div class="flex-grow-1 min-w-0"><h6 class="mb-1 small fw-bold">${title}</h6><p class="mb-0 small text-muted">${desc || 'No description'}</p></div><i class="fas fa-chevron-right text-muted ms-2 align-self-center"></i></div>`);
+            .html(`<div class="d-flex align-items-stretch"><div class="secator-list-item-icon"><i class="fas fa-${safeIcon}"></i></div><div class="flex-grow-1 min-w-0"><h6 class="mb-1 small fw-bold">${safeTitle}</h6><p class="mb-0 small text-muted">${safeDesc}</p></div><i class="fas fa-chevron-right text-muted ms-2 align-self-center"></i></div>`);
           $item.on('click', function() {
             $listContainer.find('.' + listItemClass).removeClass('active');
             $item.addClass('active');
@@ -90,8 +96,9 @@
           const $row = $(this);
           const category = $row.attr('data-category');
           if (showTaskCategories && category) {
+            const catLabel = (typeof htmlEncode === 'function' ? htmlEncode(category) : category).replace(/^./, c => c.toUpperCase());
             const $header = $('<div>').addClass('subscan-list-category-header')
-              .html(`<strong class="small text-muted">${category.charAt(0).toUpperCase() + category.slice(1)}</strong>`);
+              .append($('<strong>').addClass('small text-muted').text(catLabel));
             $listContainer.append($header);
           }
           $row.find('.task-tile').each(function() {
@@ -103,7 +110,10 @@
             const tileHtml = $tile[0].outerHTML;
             const $item = $('<div>').addClass(listItemClass).attr({ 'data-item-id': taskId, 'data-item-type': 'task' });
             if (storeTaskTileHtml) $item.data('tile-html', tileHtml);
-            $item.html(`<div class="d-flex align-items-stretch"><div class="secator-list-item-icon"><i class="fas fa-${icon}"></i></div><div class="flex-grow-1 min-w-0"><h6 class="mb-1 small fw-bold">${title}</h6><p class="mb-0 small text-muted">${desc || 'No description'}</p></div><i class="fas fa-chevron-right text-muted ms-2 align-self-center"></i></div>`);
+            const safeTitle = typeof htmlEncode === 'function' ? htmlEncode(title) : title;
+            const safeDesc = typeof htmlEncode === 'function' ? htmlEncode(desc || 'No description') : (desc || 'No description');
+            const safeIcon = (typeof icon === 'string' && /^[a-z0-9-]+$/i.test(icon)) ? icon : 'folder';
+            $item.html(`<div class="d-flex align-items-stretch"><div class="secator-list-item-icon"><i class="fas fa-${safeIcon}"></i></div><div class="flex-grow-1 min-w-0"><h6 class="mb-1 small fw-bold">${safeTitle}</h6><p class="mb-0 small text-muted">${safeDesc}</p></div><i class="fas fa-chevron-right text-muted ms-2 align-self-center"></i></div>`);
             $item.on('click', function() {
               $item.toggleClass('active');
               if (typeof onTaskClick === 'function') onTaskClick($tile, taskId);

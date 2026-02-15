@@ -324,15 +324,15 @@ class SecatorAPILogger(BaseLogger):
             f"{prefix_colored} {action_colored} | Extracted {field_name}={field_value} for runner {runner_id}"
         )
 
-    def log_data_structure(self, data: Dict[str, Any], data_type: str) -> None:
+    def log_data_structure(self, data: Dict[str, Any], prefix: str, data_type: str) -> None:
         """
         Log complete data structure in DEBUG mode.
 
         Args:
             data: Data dictionary to log
+            prefix: Log prefix to use
             data_type: Type of data (runner, finding, etc.)
         """
-        prefix = self.PREFIX_RUNNER if data_type == "runner" else self.PREFIX_FINDING
         super().log_data_structure(data, prefix, data_type)
 
     def log_metadata_ignored(self, finding_type: str, finding_id: Optional[str] = None) -> None:

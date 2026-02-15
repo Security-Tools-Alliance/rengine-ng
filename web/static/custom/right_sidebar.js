@@ -180,7 +180,7 @@ function getScanStatusSidebar(endpoint_url, endpoint_stop_scan_url, endpoint_sto
             <div class="card border-${color} border mini-card" id="scan-card-${scan_object.id}">
             <a href="/scan/${finalProject}/${scan_object.id}" class="text-reset item-hovered float-end">
             <div class="card-header ${bg_color} text-${color} mini-card-header">
-            ${htmlEncode(completed_scan_name)} on ${scan_object.domain.name}
+            ${htmlEncode(completed_scan_name)} on ${htmlEncode(scan_object.domain.name)}
             </div>
             <div class="card-body mini-card-body">
             <p class="card-text">
@@ -219,7 +219,7 @@ function getScanStatusSidebar(endpoint_url, endpoint_stop_scan_url, endpoint_sto
             <div class="card border-primary border mini-card">
             <a href="/scan/${finalProject}/${task_object.scan_id}" class="text-reset item-hovered">
             <div class="card-header bg-soft-primary text-primary mini-card-header">
-            ${task_name} on <b>${domain_name}</b> using engine <b>${htmlEncode(engine_name)}</b>
+            ${htmlEncode(task_name)} on <b>${htmlEncode(domain_name)}</b> using engine <b>${htmlEncode(engine_name)}</b>
             </div>
             <div class="card-body mini-card-body">
             <p class="card-text">
@@ -258,7 +258,7 @@ function getScanStatusSidebar(endpoint_url, endpoint_stop_scan_url, endpoint_sto
             color = 'danger';
             status_badge = '<span class="float-end badge bg-danger">Failed</span>';
             if (task_object.error_message) {
-              error_message = `<small class="text-danger">${task_object.error_message}</small><br>`;
+              error_message = `<small class="text-danger">${htmlEncode(task_object.error_message)}</small><br>`;
             }
           }
           else if (task_object.status == 2) {
@@ -276,7 +276,7 @@ function getScanStatusSidebar(endpoint_url, endpoint_stop_scan_url, endpoint_sto
             <div class="card border-${color} border mini-card">
             <a href="/scan/${finalProject}/${task_object.scan_id}" class="text-reset item-hovered">
             <div class="card-header ${bg_color} text-${color} mini-card-header">
-            ${typeof htmlEncode === 'function' ? htmlEncode(task_name) : task_name} on <b>${typeof htmlEncode === 'function' ? htmlEncode(domain_name) : domain_name}</b>
+            ${htmlEncode(task_name)} on <b>${htmlEncode(domain_name)}</b>
             </div>
             <div class="card-body mini-card-body">
             <p class="card-text">
@@ -300,7 +300,7 @@ function getScanStatusSidebar(endpoint_url, endpoint_stop_scan_url, endpoint_sto
         for (var task in tasks.pending) {
           const task_object = tasks.pending[task];
           const task_name = task_object.formatted_task_name || 'Unknown Task';
-          $bar.find('#upcoming_tasks').append('<div class="alert alert-warning" role="alert">' + (typeof htmlEncode === 'function' ? htmlEncode(task_name) : task_name) + ' on ' + (task_object.subdomain_name || '') + '</div>');
+          $bar.find('#upcoming_tasks').append('<div class="alert alert-warning" role="alert">' + htmlEncode(task_name) + ' on ' + htmlEncode(task_object.subdomain_name || '') + '</div>');
         }
       }
       else{

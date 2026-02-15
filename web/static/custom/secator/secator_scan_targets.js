@@ -13,7 +13,6 @@
       const result = { selected_targets: [], selected_targets_per_task: {} };
       if (!prefix) return result;
       const $targetsPreview = $form.find('#' + prefix + '-targets-preview');
-      const $tasksTargetsContainer = $form.find('#' + prefix + '-tasks-targets-container');
       if ($targetsPreview.length && (executionMode === 'workflow' || executionMode === 'scan')) {
         result.selected_targets = $targetsPreview.find('.secator-target-checkbox:checked').map(function() {
           return $(this).val();

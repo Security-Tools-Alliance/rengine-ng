@@ -271,7 +271,11 @@
         $contentRow.removeClass('secator-view-grid').addClass('secator-view-list');
         $listCol.show();
         if ($gridNodes && $gridNodes.length) $gridNodes.detach();
-        if ($selectionContainer.length) $selectionContainer.html(listViewHtml || '');
+        if ($selectionContainer.length) {
+          const raw = listViewHtml || '';
+          const safe = (typeof DOMPurify !== 'undefined' && DOMPurify.sanitize) ? DOMPurify.sanitize(raw, { ALLOWED_TAGS: ['div', 'span', 'input', 'label', 'i', 'h6', 'p', 'button', 'a'], ALLOWED_ATTR: ['class', 'id', 'type', 'name', 'value', 'data-task-id', 'data-category', 'href'] }) : raw;
+          $selectionContainer.html(safe);
+        }
         if (listViewHtml) this.initializeSelectionListeners($form);
         $(document).trigger('secator:contentLoaded');
       }
@@ -334,7 +338,7 @@
      * @param {Object} context - { $root, prefix, getExecutionMode, getDomainId, getSubdomainIds, getWorkflowId, getScanName, getTaskIds, getSelectionContainer, checkboxClass?, itemWrapperClass?, onUpdateCount?, renderTasksInto? }
      */
     fetchInputTypesAndTargetsWithContext: function(context) {
-      const { $root, prefix, getExecutionMode, getSelectionContainer } = context || {};
+      const { $root, prefix, getExecutionMode } = context || {};
       if (!$root || !prefix || !window.SECATOR_INPUT_TYPES_TARGETS_URL) return;
       const executionMode = typeof getExecutionMode === 'function' ? getExecutionMode() : null;
       const $block = $root.find('#' + prefix + '-input-types-targets');
@@ -958,9 +962,11 @@
         const $parentRow = $taskTile.closest('.row[data-category]');
         const parentCategory = $parentRow.data('category');
         
+        const safeTaskName = (typeof htmlEncode === 'function' ? htmlEncode(taskName) : taskName);
+        const safeCategory = (typeof htmlEncode === 'function' ? htmlEncode(parentCategory) : parentCategory);
         const badge = $(`
-          <span class="badge selected-task-badge" data-task-id="${taskId}" data-category="${parentCategory}">
-            ${taskName}
+          <span class="badge selected-task-badge" data-task-id="${taskId}" data-category="${safeCategory}">
+            ${safeTaskName}
             <i class="fas fa-times remove-task" data-task-id="${taskId}"></i>
           </span>
         `);
