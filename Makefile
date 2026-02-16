@@ -32,6 +32,16 @@ export POSTGRES_USER
 export POSTGRES_PASSWORD
 export POSTGRES_DB
 
+# Direct DB host/port for migrate (bypass PgBouncer to avoid transaction-pool issues).
+export POSTGRES_DIRECT_HOST ?= db
+export POSTGRES_DIRECT_PORT ?= 5432
+
+# Database backup/restore (host path for postgres volume data).
+# Override with: make db-backup PG_VOLUME=/path/to/volume or export PG_VOLUME=...
+BACKUP_DIR     := backup
+PG_VOLUME      ?= /var/lib/docker/volumes/rengine_postgres_data
+PG_VOLUME_DATA := $(PG_VOLUME)/_data
+
 # Credits: https://github.com/sherifabdlnaby/elastdocker/
 
 # This for future release of Compose that will use Docker Buildkit, which is much efficient.
@@ -100,7 +110,7 @@ define gpu_config
 	$(eval export DOCKER_RUNTIME)
 endef
 
-.PHONY: certs up dev_up build_up build build-service pull superuser_create superuser_delete superuser_changepassword migrate down stop restart remove_images test test-app test-verbose test-app-verbose ruff-format ruff-check ruff-fix ruff-unsafe-fix logs images prune help
+.PHONY: certs up dev_up build_up build build-service pull superuser_create superuser_delete superuser_changepassword migrate down stop restart remove_images test test-app test-verbose test-app-verbose ruff-format ruff-check ruff-fix ruff-unsafe-fix logs images prune help db-backup db-restore db-list
 
 pull:			## Pull pre-built Docker images from repository.
 	${DOCKER_COMPOSE_FILE_CMD} pull
@@ -179,12 +189,61 @@ else
 	${DOCKER_COMPOSE_FILE_CMD} exec web poetry -C ${RENGINE_FOLDER} run python3 manage.py changepassword
 endif
 
-# Direct DB host/port for migrate (bypass PgBouncer to avoid transaction-pool issues).
-export POSTGRES_DIRECT_HOST ?= db
-export POSTGRES_DIRECT_PORT ?= 5432
-
 migrate:		## Apply Django migrations (connects to PostgreSQL directly, not via PgBouncer).
 	${DOCKER_COMPOSE_FILE_CMD} exec -e POSTGRES_HOST=$(POSTGRES_DIRECT_HOST) -e POSTGRES_PORT=$(POSTGRES_DIRECT_PORT) web poetry -C ${RENGINE_FOLDER} run python3 manage.py migrate
+
+db-list:		## List available database backups in $(BACKUP_DIR).
+	@mkdir -p $(BACKUP_DIR)
+	@list=$$(ls -1 $(BACKUP_DIR)/postgres_*.tar.gz 2>/dev/null | sort -r); \
+	if [ -z "$$list" ]; then \
+		echo "No backups in $(BACKUP_DIR)/"; \
+		exit 0; \
+	fi; \
+	echo "Available backups:"; \
+	n=1; for f in $$list; do echo "  $$n) $$(basename $$f .tar.gz)"; n=$$((n+1)); done
+
+db-backup:		## Create a timestamped database backup in $(BACKUP_DIR). Stops db briefly for consistency.
+	@mkdir -p $(BACKUP_DIR)
+	@backup_name="postgres_$$(date +%Y-%m-%d_%H%M%S)"; \
+	echo "Stopping db..."; ${DOCKER_COMPOSE_FILE_CMD} stop db; \
+	echo "Creating $$backup_name.tar.gz..."; \
+	if sudo tar czf $(BACKUP_DIR)/$$backup_name.tar.gz.tmp -C $(PG_VOLUME) _data; then \
+		mv $(BACKUP_DIR)/$$backup_name.tar.gz.tmp $(BACKUP_DIR)/$$backup_name.tar.gz; \
+	else \
+		rm -f $(BACKUP_DIR)/$$backup_name.tar.gz.tmp; \
+		echo "Backup failed (tar error)."; \
+		${DOCKER_COMPOSE_FILE_CMD} start db; \
+		exit 1; \
+	fi; \
+	echo "Starting db..."; ${DOCKER_COMPOSE_FILE_CMD} start db; \
+	echo "Done. Backup: $(BACKUP_DIR)/$$backup_name.tar.gz"
+
+db-restore:		## Restore database from backup. Use BACKUP=name (without .tar.gz) or run without BACKUP to choose by number.
+	@backup_arg="$(BACKUP)"; \
+	if [ -z "$$backup_arg" ]; then \
+		list=$$(ls -1 $(BACKUP_DIR)/postgres_*.tar.gz 2>/dev/null | sort -r); \
+		if [ -z "$$list" ]; then echo "No backups in $(BACKUP_DIR)/. Run make db-backup first."; exit 1; fi; \
+		echo "Available backups:"; \
+		n=1; for f in $$list; do echo "  $$n) $$(basename $$f .tar.gz)"; n=$$((n+1)); done; \
+		n_max=$$((n-1)); \
+		echo -n "Enter number (1-$$n_max): "; read choice; \
+		if [ -z "$$choice" ]; then echo "Invalid selection: empty choice."; exit 1; fi; \
+		case "$$choice" in *[!0-9]*) echo "Invalid selection: '$$choice' is not a positive integer."; exit 1 ;; esac; \
+		if [ "$$choice" -lt 1 ] || [ "$$choice" -gt "$$n_max" ]; then echo "Invalid selection: '$$choice' is out of range (1-$$n_max)."; exit 1; fi; \
+		backup_file=$$(echo "$$list" | sed -n "$${choice}p"); \
+		backup_arg=$$(basename $$backup_file .tar.gz); \
+	fi; \
+	if [ ! -f "$(BACKUP_DIR)/$$backup_arg.tar.gz" ]; then echo "Backup not found: $(BACKUP_DIR)/$$backup_arg.tar.gz"; exit 1; fi; \
+	echo "Stopping db..."; ${DOCKER_COMPOSE_FILE_CMD} stop db; \
+	pg_data="$(PG_VOLUME_DATA)"; \
+	if [ -z "$$pg_data" ]; then echo "Error: PG_VOLUME_DATA is empty. Aborting restore."; ${DOCKER_COMPOSE_FILE_CMD} start db; exit 1; fi; \
+	if [ "$$pg_data" = "/" ] || [ "$$pg_data" = "/_data" ]; then echo "Error: PG_VOLUME_DATA must not be / or /_data. Aborting restore."; ${DOCKER_COMPOSE_FILE_CMD} start db; exit 1; fi; \
+	if [ -d "$$pg_data" ] && [ -n "$$(ls -A $$pg_data 2>/dev/null)" ] && [ ! -f "$$pg_data/PG_VERSION" ] && [ ! -d "$$pg_data/base" ]; then echo "Error: $$pg_data does not look like a Postgres data directory (missing PG_VERSION or base/). Aborting restore."; ${DOCKER_COMPOSE_FILE_CMD} start db; exit 1; fi; \
+	echo "Restoring from $$backup_arg.tar.gz..."; \
+	sudo rm -rf $$pg_data/*; \
+	sudo tar xvzf $(BACKUP_DIR)/$$backup_arg.tar.gz -C $(PG_VOLUME); \
+	echo "Starting db..."; ${DOCKER_COMPOSE_FILE_CMD} start db; \
+	echo "Done."
 
 down:			## Down all services and remove containers.
 	${DOCKER_COMPOSE_FILE_CMD} down
@@ -332,6 +391,12 @@ help:			## Show this help.
 	@echo "  make build-service SERVICE=redis REBUILD=1 GPU=1		Build redis service after removing image with GPU support"
 	@echo "  make test-app APPS=api,scanEngine      				Run tests for api and scanEngine apps"
 	@echo "  make ruff-fix                           				Fix code quality issues automatically"
+	@echo ""
+	@echo "Database backup/restore (backups in $(BACKUP_DIR)/, requires sudo for volume access):"
+	@echo "  make db-backup [PG_VOLUME=/path]       				Create timestamped backup"
+	@echo "  make db-list                           				List available backups"
+	@echo "  make db-restore [BACKUP=name] [PG_VOLUME=/path]			Restore; BACKUP=name without .tar.gz"
+	@echo "  make db-restore                        				Restore: choose backup by number"
 
 %:
 	@:
