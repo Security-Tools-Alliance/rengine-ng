@@ -8,6 +8,7 @@ from pathlib import Path
 from django.core.management.base import BaseCommand
 import yaml
 
+from reNgine.core.path import is_safe_path
 from reNgine.core.validators import sanitize_path_component
 from scanEngine.models import SecatorWorkflow
 
@@ -52,8 +53,14 @@ class Command(BaseCommand):
                 sanitized_name = sanitize_path_component(workflow.name)
                 filename = f"{sanitized_name}.yaml"
 
-                # Write to Secator configs directory
-                configs_file = secator_configs_dir / filename
+                # Write to Secator configs directory (ensure path stays under base)
+                configs_file = (secator_configs_dir / filename).resolve()
+                base_str = str(secator_configs_dir.resolve())
+                if not is_safe_path(base_str, str(configs_file)):
+                    self.stdout.write(
+                        self.style.ERROR(f"Refused path outside configs dir: {workflow.name} -> {configs_file}")
+                    )
+                    continue
                 if not configs_file.exists() or force:
                     with open(configs_file, "w") as f:
                         yaml.dump(config, f, default_flow_style=False)
@@ -61,7 +68,12 @@ class Command(BaseCommand):
                     self.stdout.write(f"Synced workflow: {workflow.name} -> {configs_file}")
 
                 # Write to Secator templates directory (backup location)
-                templates_file = secator_templates_dir / filename
+                templates_file = (secator_templates_dir / filename).resolve()
+                if not is_safe_path(str(secator_templates_dir.resolve()), str(templates_file)):
+                    self.stdout.write(
+                        self.style.ERROR(f"Refused path outside templates dir: {workflow.name} -> {templates_file}")
+                    )
+                    continue
                 if not templates_file.exists() or force:
                     with open(templates_file, "w") as f:
                         yaml.dump(config, f, default_flow_style=False)

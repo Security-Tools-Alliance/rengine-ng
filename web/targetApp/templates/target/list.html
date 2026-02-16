@@ -264,11 +264,22 @@ $(document).ready(function(){
 		var a = document.getElementById('filterByOrganization');
 		a.addEventListener('click', function() {
 			table.search(this.value).draw();
-			document.getElementById('filteringText').innerHTML = `<span class="badge badge-soft-primary m-2">Organization: ${this.value}
-			<span id="clearFilterChip" class="badge-link" onclick="document.getElementById('resetFilters').click()">X</span>
-			</span>`;
+			var container = document.getElementById('filteringText');
+			if (!container) return;
+			container.innerHTML = '';
+			var wrap = document.createElement('span');
+			wrap.className = 'badge badge-soft-primary m-2';
+			wrap.appendChild(document.createTextNode('Organization: ' + this.value));
+			var clearChip = document.createElement('span');
+			clearChip.id = 'clearFilterChip';
+			clearChip.className = 'badge-link';
+			clearChip.onclick = function() { document.getElementById('resetFilters').click(); };
+			clearChip.appendChild(document.createTextNode('X'));
+			wrap.appendChild(document.createTextNode(' '));
+			wrap.appendChild(clearChip);
+			container.appendChild(wrap);
 			Snackbar.show({
-				text: `Filtering by organization ${this.value}`,
+				text: 'Filtering by organization ' + this.value,
 				pos: 'top-center'
 			});
 		}, false);

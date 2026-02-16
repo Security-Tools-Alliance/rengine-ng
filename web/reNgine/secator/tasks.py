@@ -1,5 +1,6 @@
 from django.core.exceptions import ObjectDoesNotExist
 
+from reNgine.core.path import is_safe_path
 from reNgine.core.validators import sanitize_path_component
 from reNgine.utilities.error import get_safe_user_message
 from reNgine.utilities.logger import get_module_logger
@@ -154,7 +155,11 @@ def initiate_secator_scan(
         targets = validated_targets
 
         domain_name_sanitized = sanitize_path_component(domain.name)
-        domain_results_dir = os.path.join(SECATOR_RESULTS, domain_name_sanitized)
+        domain_results_dir = os.path.abspath(os.path.join(SECATOR_RESULTS, domain_name_sanitized))
+        if not is_safe_path(SECATOR_RESULTS, domain_results_dir):
+            raise ValueError(
+                f"Domain results path would escape SECATOR_RESULTS base; domain.name may be invalid: {domain.name}"
+            )
         os.makedirs(domain_results_dir, exist_ok=True)
         logger.log_line(
             PREFIX_SECATOR_TASKS,

@@ -988,7 +988,8 @@ function get_interesting_endpoints(endpoint_url, project, target_id, scan_histor
 		}, 
 		{
 			"render": function(data, type, row) {
-				return htmlEncode(data);
+				const out = htmlEncode(data);
+				return out;
 			},
 			"targets": 1
 		},
@@ -2605,14 +2606,20 @@ function get_and_render_cve_details(endpoint_url, cve_id){
 				<div class="col-sm-9">
 				<div class="tab-content pt-0">`;
 
-				content += `
+				const esc = (v) => {
+				if (v === null || v === undefined) return '';
+				if (typeof v === 'string') return htmlEncode(v);
+				return v;
+			};
+			const r = response.result;
+			content += `
 				<div class="tab-pane fade active show tab-pane-600-scroll" id="v-pills-cve-details" role="tabpanel" aria-labelledby="v-pills-cve-details-tab" data-simplebar>
-					<h4 class="header-title">${cve_id}</h4>
+					<h4 class="header-title">${esc(cve_id)}</h4>
 					<div class="alert alert-warning" role="alert">
-						${response.result.summary}
+						${esc(r.summary)}
 					</div>
-					<span class="badge badge-soft-primary">Assigner: ${response.result.assigner}</span>
-					<span class="badge badge-outline-primary">CVSS Vector: ${response.result['cvss-vector']}</span>
+					<span class="badge badge-soft-primary">Assigner: ${esc(r.assigner)}</span>
+					<span class="badge badge-outline-primary">CVSS Vector: ${esc(r['cvss-vector'])}</span>
 					<table class="domain_details_table table table-hover table-borderless">
 						<tr style="display: none">
 							<th>&nbsp;</th>
@@ -2620,31 +2627,31 @@ function get_and_render_cve_details(endpoint_url, cve_id){
 						</tr>
 						<tr>
 							<td>CVSS Score</td>
-							<td><span class="badge badge-soft-${cvss_score_badge}">${response.result.cvss || "-"}</span></td>
+							<td><span class="badge badge-soft-${cvss_score_badge}">${esc(r.cvss || "-")}</span></td>
 						</tr>
 						<tr>
 							<td>Confidentiality Impact</td>
-							<td>${response.result.impact.confidentiality || "N/A"}</td>
+							<td>${(r.impact && r.impact.confidentiality) != null ? esc(r.impact.confidentiality) : "N/A"}</td>
 						</tr>
 						<tr>
 							<td>Integrity Impact</td>
-							<td>${response.result.impact.integrity || "N/A"}</td>
+							<td>${(r.impact && r.impact.integrity) != null ? esc(r.impact.integrity) : "N/A"}</td>
 						</tr>
 						<tr>
 							<td>Availability Impact</td>
-							<td>${response.result.impact.availability || "N/A"}</td>
+							<td>${(r.impact && r.impact.availability) != null ? esc(r.impact.availability) : "N/A"}</td>
 						</tr>
 						<tr>
 							<td>Access Complexity</td>
-							<td>${response.result.access.complexity || "N/A"}</td>
+							<td>${(r.access && r.access.complexity) != null ? esc(r.access.complexity) : "N/A"}</td>
 						</tr>
 						<tr>
 							<td>Authentication</td>
-							<td>${response.result.access.authentication || "N/A"}</td>
+							<td>${(r.access && r.access.authentication) != null ? esc(r.access.authentication) : "N/A"}</td>
 						</tr>
 						<tr>
 							<td>CWE ID</td>
-							<td><span class="badge badge-outline-danger">${response.result.cwe || "N/A"}</span></td>
+							<td><span class="badge badge-outline-danger">${(r.cwe != null && r.cwe !== '') ? esc(r.cwe) : "N/A"}</span></td>
 						</tr>
 					</table>
 				</div>
@@ -2663,16 +2670,22 @@ function get_and_render_cve_details(endpoint_url, cve_id){
 					});
 				}
 				
-				// Generate HTML content
+				// Generate HTML content (escape all API data for safe insertion)
 				let referencesContent = '';
+				const safeUrl = (url) => {
+					const s = String(url == null ? '' : url).trim();
+					if (/^https?:\/\//i.test(s)) return htmlEncode(s);
+					return '#';
+				};
 				if (Array.isArray(references)) {
 					referencesContent = '<ul>';
 					references.forEach(ref => {
-						referencesContent += `<li><a href="${ref}" target="_blank" rel="noopener noreferrer">${ref}</a></li>`;
+						const safeRef = esc(ref);
+						referencesContent += '<li><a href="' + safeUrl(ref) + '" target="_blank" rel="noopener noreferrer">' + safeRef + '</a></li>';
 					});
 					referencesContent += '</ul>';
 				} else {
-					referencesContent = `<p>${references}</p>`;
+					referencesContent = '<p>' + esc(references) + '</p>';
 				}
 				
 				content += `<div class="tab-pane fade tab-pane-600-scroll" id="v-pills-cve-references" role="tabpanel" aria-labelledby="v-pills-cve-references-tab" data-simplebar>
@@ -2682,8 +2695,10 @@ function get_and_render_cve_details(endpoint_url, cve_id){
 				content += `<div class="tab-pane fade tab-pane-600-scroll" id="v-pills-affected-products" role="tabpanel" aria-labelledby="v-pills-affected-products-tab" data-simplebar>
 				<ul>`;
 
-				for (let prod in response.result.vulnerable_product) {
-					content += `<li>${response.result.vulnerable_product[prod]}</li>`;
+				if (response.result.vulnerable_product) {
+					for (let prod in response.result.vulnerable_product) {
+						content += '<li>' + esc(response.result.vulnerable_product[prod]) + '</li>';
+					}
 				}
 
 				content += `</ul></div>`;
@@ -2691,8 +2706,12 @@ function get_and_render_cve_details(endpoint_url, cve_id){
 				content += `<div class="tab-pane fade tab-pane-600-scroll" id="v-pills-affected-versions" role="tabpanel" aria-labelledby="v-pills-affected-versions-tab" data-simplebar>
 				<ul>`;
 
-				for (let conf in response.result.vulnerable_configuration) {
-					content += `<li>${response.result.vulnerable_configuration[conf]['id']}</li>`;
+				if (response.result.vulnerable_configuration) {
+					for (let conf in response.result.vulnerable_configuration) {
+						const cfg = response.result.vulnerable_configuration[conf];
+						const cfgId = cfg && (cfg.id != null ? cfg.id : cfg['id']);
+						content += '<li>' + esc(cfgId) + '</li>';
+					}
 				}
 
 				content += `</ul></div>`;

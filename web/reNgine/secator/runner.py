@@ -16,6 +16,7 @@ from typing import Any, Dict, List
 from secator.runners import Scan, Task, Workflow
 from secator.template import TemplateLoader
 
+from reNgine.core.path import is_safe_path
 from reNgine.settings import SECATOR_RESULTS
 from reNgine.utilities.logger import get_runner_logger
 from startScan.models import ScanHistory
@@ -136,7 +137,11 @@ class SecatorRunner:
                     {"prefix": self.runner_logger.PREFIX, "action": "WORKSPACE", "domain": domain.name},
                 )
 
-            domain_results_dir = os.path.join(SECATOR_RESULTS, domain_name_sanitized)
+            domain_results_dir = os.path.abspath(os.path.join(SECATOR_RESULTS, domain_name_sanitized))
+            if not is_safe_path(SECATOR_RESULTS, domain_results_dir):
+                raise ValueError(
+                    f"Domain results path would escape SECATOR_RESULTS base; domain.name may be invalid: {domain.name}"
+                )
             os.makedirs(domain_results_dir, exist_ok=True)
 
             # Prepare configuration - only keep what orchestrator needs
