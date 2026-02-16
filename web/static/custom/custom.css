@@ -17,6 +17,23 @@ body[data-layout-mode=horizontal] .content-page {
   padding-bottom: 4rem !important;
 }
 
+/* Prevent last row from being clipped in DataTables Scroller */
+.dt-container.dts .dt-scroll-body {
+  padding-bottom: 1rem;
+}
+
+/* Remove striped background and bottom border from Scroller body */
+.dt-container.dts .dt-scroll-body,
+.dt-container.dts .dataTables_scrollBody {
+  background: transparent;
+  border-bottom: none;
+}
+
+.dt-container.dts .dt-scroll-body table,
+.dt-container.dts .dataTables_scrollBody table {
+  background-color: transparent;
+}
+
 /* Hide main page footer when any modal is open */
 body.modal-open .footer {
   display: none !important;

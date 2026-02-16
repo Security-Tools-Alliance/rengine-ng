@@ -1,10 +1,10 @@
 """
-Unit tests for api.query_helpers (get_scan_status_querysets, build_subdomain_datatable_queryset).
+Unit tests for api.helpers.query (get_scan_status_querysets, build_subdomain_datatable_queryset).
 """
 
 from django.utils import timezone
 
-from api.query_helpers import build_subdomain_datatable_queryset, get_scan_status_querysets
+from api.helpers.query import build_subdomain_datatable_queryset, get_scan_status_querysets
 from reNgine.definitions import (
     SCAN_STATUS_COMPLETED,
     SCAN_STATUS_FAILED,
@@ -105,6 +105,17 @@ class GetScanStatusQuerysetsTestCase(BaseTestCase):
         completed_ids = [s.id for s in result["recently_completed_scans"]]
         self.assertIn(scan.id, completed_ids)
 
+    def test_scan_querysets_have_count_annotations(self):
+        """Scans in returned querysets have subdomain_count, endpoint_count, vulnerability_count."""
+        slug = self.data_generator.project.slug
+        result = get_scan_status_querysets(slug)
+        for key in ("pending_scans", "current_scans", "recently_completed_scans"):
+            for scan in list(result[key])[:1]:
+                self.assertIsInstance(getattr(scan, "subdomain_count", None), int)
+                self.assertIsInstance(getattr(scan, "endpoint_count", None), int)
+                self.assertIsInstance(getattr(scan, "vulnerability_count", None), int)
+                break
+
 
 class BuildSubdomainDatatableQuerysetTestCase(BaseTestCase):
     """Tests for build_subdomain_datatable_queryset."""
@@ -122,3 +133,15 @@ class BuildSubdomainDatatableQuerysetTestCase(BaseTestCase):
         scan_id = self.data_generator.scan_history.id
         _, interesting_names = build_subdomain_datatable_queryset(slug, scan_id=scan_id)
         self.assertIsInstance(interesting_names, set)
+
+    def test_subdomain_queryset_has_count_annotations(self):
+        """Queryset rows have endpoint_count, vuln_count, subscan_count, todos_count, etc."""
+        slug = self.data_generator.project.slug
+        queryset, _ = build_subdomain_datatable_queryset(slug)
+        first = next(iter(queryset), None)
+        if first is None:
+            return
+        self.assertIsInstance(getattr(first, "endpoint_count", None), int)
+        self.assertIsInstance(getattr(first, "vuln_count", None), int)
+        self.assertIsInstance(getattr(first, "subscan_count", None), int)
+        self.assertIsInstance(getattr(first, "todos_count", None), int)

@@ -78,6 +78,8 @@ class TestListTodoNotes(BaseTestCase):
         url = reverse("api:listTodoNotes")
         response = self.client.get(url, {"project": self.data_generator.project.slug})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("total_count", response.data)
+        self.assertGreaterEqual(response.data["total_count"], 1)
         self.assertGreaterEqual(len(response.data["notes"]), 1)
         self.assertEqual(response.data["notes"][0]["id"], self.data_generator.todo_note.id)
         self.assertEqual(response.data["notes"][0]["title"], self.data_generator.todo_note.title)
@@ -97,3 +99,15 @@ class TestListTodoNotes(BaseTestCase):
             response.data["notes"][0]["scan_history"],
             self.data_generator.todo_note.scan_history.id,
         )
+
+    def test_list_todo_notes_limit_and_total_count(self):
+        """Test that limit truncates notes and total_count reflects full count."""
+        url = reverse("api:listTodoNotes")
+        response = self.client.get(
+            url,
+            {"project": self.data_generator.project.slug, "limit": 1},
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("total_count", response.data)
+        self.assertLessEqual(len(response.data["notes"]), 1)
+        self.assertGreaterEqual(response.data["total_count"], len(response.data["notes"]))

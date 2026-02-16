@@ -147,6 +147,22 @@ class TestSubdomainDatatableViewSet(BaseTestCase):
         self.assertGreaterEqual(len(response.data["results"]), 1)
         self.assertEqual(response.data["results"][0]["name"], self.data_generator.subdomain.name)
 
+    def test_list_subdomains_by_scan_id(self):
+        """Test listing subdomains by scan_id returns results with expected fields."""
+        api_url = reverse("api:subdomain-datatable-list")
+        response = self.client.get(
+            api_url,
+            {
+                "scan_id": self.data_generator.scan_history.id,
+                "project": self.data_generator.project.slug,
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("results", response.data)
+        self.assertGreaterEqual(len(response.data["results"]), 1)
+        self.assertIn("name", response.data["results"][0])
+        self.assertIn("is_interesting", response.data["results"][0])
+
 
 class TestInterestingSubdomainViewSet(BaseTestCase):
     """Test case for the Interesting Subdomain ViewSet API."""

@@ -1,0 +1,8 @@
+{% load permission_tags %}
+{% if user|can:'modify_scan_results' %}
+<td class="text-center">
+  <div class="d-flex flex-wrap gap-1 justify-content-center mb-2">
+    <a href="#" class="btn btn-sm btn-soft-danger btnDelTask" data-toggle="tooltip" data-placement="top" title="Delete Scheduled Task" onclick="deleteScheduledScan('{% url 'delete_scheduled_task' current_project.slug task.id %}'); return false;"><i class="fe-trash-2"></i></a>
+  </div>
+</td>
+{% endif %}

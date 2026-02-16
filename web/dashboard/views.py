@@ -3,6 +3,7 @@ import json
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model, update_session_auth_hash
+from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib.auth.signals import user_logged_in, user_logged_out
 from django.dispatch import receiver
@@ -14,8 +15,15 @@ from django.utils import timezone
 from rolepermissions.decorators import has_permission_decorator
 from rolepermissions.roles import assign_role, clear_roles
 
-from dashboard.forms import ProjectForm
+from dashboard.forms import InterfaceSettingsForm, ProjectForm
 from dashboard.models import NetlasAPIKey, OpenAiAPIKey, Project, UserAPIKey
+from dashboard.services.user_preferences import (
+    PREF_DATATABLES_DISPLAY,
+    PREF_DATATABLES_PAGE_LENGTH,
+    get_datatables_display,
+    get_datatables_page_length,
+    set_user_preference,
+)
 from dashboard.utils import get_user_groups, get_user_projects
 from reNgine.definitions import FOUR_OH_FOUR_URL, PERM_MODIFY_SYSTEM_CONFIGURATIONS
 from reNgine.utilities.logger import get_module_logger
@@ -142,6 +150,27 @@ def profile(request):
     else:
         form = PasswordChangeForm(request.user)
     return render(request, "dashboard/profile.html", {"form": form})
+
+
+@login_required
+def interface_settings(request):
+    """Display and save interface preferences (e.g. DataTables display mode)."""
+    if request.method == "POST":
+        form = InterfaceSettingsForm(request.POST)
+        if form.is_valid():
+            set_user_preference(request.user, PREF_DATATABLES_DISPLAY, form.cleaned_data["datatables_display"])
+            set_user_preference(request.user, PREF_DATATABLES_PAGE_LENGTH, form.cleaned_data["datatables_page_length"])
+            messages.success(request, "Interface settings saved.")
+            return redirect("interface_settings")
+        messages.error(request, "Please correct the error below.")
+    else:
+        form = InterfaceSettingsForm(
+            initial={
+                "datatables_display": get_datatables_display(request.user),
+                "datatables_page_length": get_datatables_page_length(request.user),
+            }
+        )
+    return render(request, "dashboard/interface_settings.html", {"form": form})
 
 
 @has_permission_decorator(PERM_MODIFY_SYSTEM_CONFIGURATIONS, redirect_url=FOUR_OH_FOUR_URL)

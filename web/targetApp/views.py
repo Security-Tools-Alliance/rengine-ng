@@ -16,6 +16,7 @@ from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.safestring import mark_safe
+from rolepermissions.checkers import has_role
 from rolepermissions.decorators import has_permission_decorator
 import validators
 
@@ -1051,6 +1052,7 @@ def list_target(request, slug):
         "update_target_url": reverse("update_target", args=[project.slug, 0]),
         "delete_target_url": reverse("delete_target", args=[project.slug, 0]),
         "target_summary_url": reverse("target_summary", args=[project.slug, 0]),
+        "show_full_target_actions": has_role(request.user, "penetration_tester") or has_role(request.user, "admin"),
     }
     return render(request, "target/list.html", context)
 

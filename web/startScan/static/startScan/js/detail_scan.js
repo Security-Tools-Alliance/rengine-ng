@@ -76,6 +76,28 @@ function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, s
 	if (gf_tags){
 		lookup_url += `&gf_tag=${gf_tags}`
 	}
+
+	// Restore Filter column checkboxes from localStorage before building the table
+	// so initComplete / endpoint_datatable_col_visibility see the correct state
+	const endpointFilterCheckboxIds = [
+		'end_http_status_filter_checkbox',
+		'end_page_title_filter_checkbox',
+		'end_tags_filter_checkbox',
+		'end_content_type_filter_checkbox',
+		'end_content_length_filter_checkbox',
+		'end_response_time_filter_checkbox',
+		'end_screenshot_filter_checkbox',
+	];
+	endpointFilterCheckboxIds.forEach(function (id) {
+		const stored = window.localStorage.getItem(id);
+		if (stored !== null) {
+			const $el = $('#' + id);
+			if ($el.length) {
+				$el.prop('checked', stored !== 'false');
+			}
+		}
+	});
+
     // Ensure columns count matches thead
     const endpoint_datatable_columns = [
         { 'data': 'id', 'title': 'ID', 'defaultContent': '', 'visible': false, 'searchable': false, 'className': 'endpoint-id-col dt-col-hidden' },
@@ -214,16 +236,20 @@ function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, s
         0
     );
 
-    const endpoint_table = $('#endpoint_results').DataTable({
+    const endpointScrollerOpts = window.getRengineDatatableScrollerOptions
+        ? window.getRengineDatatableScrollerOptions("60vh")
+        : {};
+    const endpointLayout = (window.getRengineDatatableLayoutFull && window.getRengineDatatableLayoutFull()) || window.RENGINE_DATATABLE_LAYOUT_FULL;
+    const endpoint_table = $('#endpoint_results').DataTable(Object.assign({
 		"destroy": true,
 		"processing": true,
         "autoWidth": false,
         "deferRender": true,
 		"language": { "processing": "Processing... Please wait..." },
-		"layout": window.RENGINE_DATATABLE_LAYOUT_FULL,
-		"lengthMenu": [100, 200, 300, 500, 1000],
+		"layout": endpointLayout,
+		"lengthMenu": window.getRengineDatatableLengthMenu ? window.getRengineDatatableLengthMenu() : [[30, 50, 100, 200, 500, 1000, -1], ["30", "50", "100", "200", "500", "1000", "All"]],
 		"responsive": true,
-		"pageLength": 100,
+		"pageLength": window.getRengineDatatablePageLength ? window.getRengineDatatablePageLength() : 30,
 		'serverSide': true,
 		"ajax": {
 				'url': lookup_url,
@@ -257,7 +283,7 @@ function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, s
 				$(".dtrg-group th:contains('No group')").remove();
 			}, 1);
 		}
-	});
+	}, endpointScrollerOpts));
 
     $('input[name=grouping_endpoint_row]').off('change').on('change', function() {
         if (this.checked) {
@@ -300,7 +326,11 @@ function get_endpoints(endpoint_endpoint_url, endpoint_subdomain_url, project, s
 }
 
 function get_subdomain_changes(endpoint, scan_history_id){
-	$('#table-subdomain-changes').DataTable({
+	const subdomainChangesScrollerOpts = window.getRengineDatatableScrollerOptions
+		? window.getRengineDatatableScrollerOptions("60vh")
+		: {};
+	const subdomainChangesLayout = (window.getRengineDatatableLayoutFull && window.getRengineDatatableLayoutFull()) || window.RENGINE_DATATABLE_LAYOUT_FULL;
+	$('#table-subdomain-changes').DataTable(Object.assign({
 		"drawCallback": function() {
 			const pageInfo = this.page && typeof this.page.info === 'function' ? this.page.info() : null;
 			const total = pageInfo ? pageInfo.recordsTotal : 0;
@@ -316,7 +346,7 @@ function get_subdomain_changes(endpoint, scan_history_id){
 			$("#subdomain-changes-loader").remove();
 		},
 		"processing": true,
-		"layout": window.RENGINE_DATATABLE_LAYOUT_FULL,
+		"layout": subdomainChangesLayout,
 		"destroy": true,
 		"responsive": true,
 		'serverSide': true,
@@ -415,11 +445,15 @@ function get_subdomain_changes(endpoint, scan_history_id){
 				"targets": 4,
 			},
 		],
-	});
+	}, subdomainChangesScrollerOpts));
 }
 
 function get_endpoint_changes(endpoint, scan_history_id){
-	$('#table-endpoint-changes').DataTable({
+	const endpointChangesScrollerOpts = window.getRengineDatatableScrollerOptions
+		? window.getRengineDatatableScrollerOptions("60vh")
+		: {};
+	const endpointChangesLayout = (window.getRengineDatatableLayoutFull && window.getRengineDatatableLayoutFull()) || window.RENGINE_DATATABLE_LAYOUT_FULL;
+	$('#table-endpoint-changes').DataTable(Object.assign({
 		"drawCallback": function() {
 			const pageInfo = this.page && typeof this.page.info === 'function' ? this.page.info() : null;
 			const total = pageInfo ? pageInfo.recordsTotal : 0;
@@ -434,7 +468,7 @@ function get_endpoint_changes(endpoint, scan_history_id){
 			$("#endpoint-changes-loader").remove();
 		},
 		"processing": true,
-		"layout": window.RENGINE_DATATABLE_LAYOUT_FULL,
+		"layout": endpointChangesLayout,
 		"destroy": true,
 		"responsive": true,
 		'serverSide': true,
@@ -487,7 +521,7 @@ function get_endpoint_changes(endpoint, scan_history_id){
 				"targets": 4,
 			},
 		],
-	});
+	}, endpointChangesScrollerOpts));
 }
 
 function get_osint_users(scan_id){

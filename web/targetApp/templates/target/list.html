@@ -85,9 +85,17 @@ Targets
 
 {% block page_level_script %}
 <script src="{% static 'targetApp/js/custom_domain.js' %}"></script>
+<script src="{% static 'startScan/js/datatables_action_renderers.js' %}"></script>
+<script>
+window.RENGINE_DATATABLE_ACTION_OPTIONS = window.RENGINE_DATATABLE_ACTION_OPTIONS || {};
+window.RENGINE_DATATABLE_ACTION_OPTIONS.showFullTargetActions = {{ show_full_target_actions|yesno:"true,false" }};
+</script>
 <script>
 $(document).ready(function(){
-	var table = $('#list_target_table').DataTable({
+	const targetListScrollerOpts = window.getRengineDatatableScrollerOptions
+		? window.getRengineDatatableScrollerOptions("60vh")
+		: {};
+	var table = $('#list_target_table').DataTable(Object.assign({
 		"headerCallback": function(e, a, t, n, s) {
 			e.getElementsByTagName("th")[0].innerHTML='<div class="form-check mb-2 form-check-primary"><input type="checkbox" class="float-start form-check-input chk-parent" id="head_checkbox" onclick=mainCheckBoxSelected()>\n<span class="new-control-indicator"></span><span style="visibility:hidden">c</span></div>\n'
 		},
@@ -98,8 +106,8 @@ $(document).ready(function(){
 			$(nRow).attr('id', 'target_row_' + aData['id']);
 		},
 		"stripeClasses": [],
-			"lengthMenu": [5, 10, 20, 30, 40, 50, 100, 500, 1000],
-			"pageLength": 20,
+			"lengthMenu": window.getRengineDatatableLengthMenu ? window.getRengineDatatableLengthMenu() : [[30, 50, 100, 200, 500, 1000, -1], ["30", "50", "100", "200", "500", "1000", "All"]],
+			"pageLength": window.getRengineDatatablePageLength ? window.getRengineDatatablePageLength() : 30,
 			'serverSide': true,
 			"ajax": '/api/listTargets/?format=datatables&slug={{current_project.slug}}',
 			"order": [
@@ -204,32 +212,10 @@ $(document).ready(function(){
 				},
 				{
 					"render": function(data, type, row) {
-						var content = '';
-						const startScanUrl = `{{ start_scan_url|slice:":-1" }}${row.id}`;
-						const scheduleScanUrl = `{{ schedule_scan_url|slice:":-1" }}${row.id}`;
-						const updateTargetUrl = `{{ update_target_url|slice:":-1" }}${row.id}`;
-						const targetSummaryUrl = `{{ target_summary_url|slice:":-1" }}${row.id}`;
-						const deleteTargetUrl = `{{ delete_target_url|slice:":-1" }}${row.id}`;
-
-						{% if user|has_role:'penetration_tester' or user|has_role:'admin'%}
-						content += `
-						<div class="d-flex flex-wrap gap-1 justify-content-end">
-						<a class="btn btn-sm btn-soft-info" href="${targetSummaryUrl}" data-toggle="tooltip" data-placement="top" title="Target Summary"><i class="fe-info"></i></a>
-						<a href="${startScanUrl}" class="btn btn-sm btn-soft-primary" data-toggle="tooltip" data-placement="top" title="Initiate Scan"><i class="fe-zap"></i></a>
-						<a class="btn btn-sm btn-soft-warning" href="${scheduleScanUrl}" data-toggle="tooltip" data-placement="top" title="Schedule Scan"><i class="fe-clock"></i></a>
-						<a class="btn btn-sm btn-soft-secondary" href="${updateTargetUrl}" data-toggle="tooltip" data-placement="top" title="Edit Target"><i class="fe-edit-2"></i></a>
-						<a class="btn btn-sm btn-soft-danger" href="#" data-toggle="tooltip" data-placement="top" title="Delete target" onclick="delete_target('${deleteTargetUrl}', '${row.name}'); return false;"><i class="fe-trash-2"></i></a>
-						</div>
-						`;
-						{% else %}
-						content += `
-						<div class="d-flex flex-wrap gap-1 justify-content-end">
-						<a class="btn btn-sm btn-soft-info" href="${targetSummaryUrl}" data-toggle="tooltip" data-placement="top" title="Target Summary"><i class="fe-info"></i></a>
-						</div>
-						`;
-						{% endif %}
-
-						return content;
+						return window.RengineDatatableActionRenderers.renderTargetActions(row, {
+							urls: window.RENGINE_DATATABLE_ACTION_URLS.target,
+							showFullActions: window.RENGINE_DATATABLE_ACTION_OPTIONS.showFullTargetActions
+						});
 					},
 					"targets": 6,
 				},
@@ -241,7 +227,7 @@ $(document).ready(function(){
 				$('.bs-tooltip').tooltip();
 				$('#list_target_table').find('[data-toggle="tooltip"]').tooltip();
 			},
-		});
+		}, targetListScrollerOpts));
 		multiCheck(table);
 		// Handle form submission event
 		$('#frm-example').on('submit', function(e){

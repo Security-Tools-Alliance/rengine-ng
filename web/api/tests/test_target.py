@@ -3,6 +3,7 @@ This file contains the test cases for the API views.
 """
 
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework import status
 
 from targetApp.models import Domain
@@ -61,3 +62,71 @@ class TestListTargetsDatatableViewSet(BaseTestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertGreaterEqual(len(response.data["results"]), 1)
         self.assertEqual(response.data["results"][0]["name"], self.data_generator.domain.name)
+
+    def test_list_targets_order_by_name_asc(self):
+        """List targets with order column 2 (name) ascending uses centralised map."""
+        project = self.data_generator.project
+        Domain.objects.filter(project=project).delete()
+        Domain.objects.create(project=project, name="zzz-target.local", insert_date=timezone.now())
+        Domain.objects.create(project=project, name="aaa-target.local", insert_date=timezone.now())
+        Domain.objects.create(project=project, name="mmm-target.local", insert_date=timezone.now())
+        api_url = reverse("api:targets-list")
+        response = self.client.get(
+            api_url,
+            {"slug": project.slug, "order[0][column]": "2", "order[0][dir]": "asc"},
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        names = [r["name"] for r in response.data["results"]]
+        self.assertEqual(names, ["aaa-target.local", "mmm-target.local", "zzz-target.local"])
+
+    def test_list_targets_order_by_start_scan_date_nulls_last(self):
+        """List targets with order column 5 (start_scan_date) uses nulls_last."""
+        project = self.data_generator.project
+        Domain.objects.filter(project=project).delete()
+        older = timezone.now() - timezone.timedelta(days=2)
+        newer = timezone.now() - timezone.timedelta(days=1)
+        Domain.objects.create(
+            project=project,
+            name="null-date.local",
+            insert_date=timezone.now(),
+            start_scan_date=None,
+        )
+        Domain.objects.create(
+            project=project,
+            name="old-scan.local",
+            insert_date=timezone.now(),
+            start_scan_date=older,
+        )
+        Domain.objects.create(
+            project=project,
+            name="new-scan.local",
+            insert_date=timezone.now(),
+            start_scan_date=newer,
+        )
+        api_url = reverse("api:targets-list")
+        response_asc = self.client.get(
+            api_url,
+            {"slug": project.slug, "order[0][column]": "5", "order[0][dir]": "asc"},
+        )
+        self.assertEqual(response_asc.status_code, status.HTTP_200_OK)
+        names_asc = [r["name"] for r in response_asc.data["results"]]
+        self.assertIn("null-date.local", names_asc)
+        self.assertIn("old-scan.local", names_asc)
+        self.assertIn("new-scan.local", names_asc)
+        idx_old = names_asc.index("old-scan.local")
+        idx_new = names_asc.index("new-scan.local")
+        idx_null = names_asc.index("null-date.local")
+        self.assertLess(idx_old, idx_new, "asc: older date before newer")
+        self.assertLess(idx_new, idx_null, "asc: nulls last")
+
+        response_desc = self.client.get(
+            api_url,
+            {"slug": project.slug, "order[0][column]": "5", "order[0][dir]": "desc"},
+        )
+        self.assertEqual(response_desc.status_code, status.HTTP_200_OK)
+        names_desc = [r["name"] for r in response_desc.data["results"]]
+        idx_null_d = names_desc.index("null-date.local")
+        idx_new_d = names_desc.index("new-scan.local")
+        idx_old_d = names_desc.index("old-scan.local")
+        self.assertLess(idx_new_d, idx_old_d, "desc: newer before older")
+        self.assertLess(idx_old_d, idx_null_d, "desc: nulls last")

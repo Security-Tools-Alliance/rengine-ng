@@ -64,6 +64,7 @@
       {# top nav begins #}
       {% include 'base/_items/top_nav.html' %}
       {# top nav ends #}
+      {% include 'base/_items/datatables_action_urls_script.html' %}
       <div class="content-page">
         <div class="content">
           <div class="container-fluid">
@@ -113,19 +114,44 @@
     <script src="{% static 'plugins/snackbar/snackbar.min.js' %}"></script>
     <script src="{% static 'plugins/sweetalert2/sweetalert2.all.min.js' %}"></script>
     <script src="{% static 'plugins/datatables/datatables.min.js' %}"></script>
+    {{ datatables_page_length_menu_values|json_script:"rengine-datatable-length-menu" }}
     <script type="text/javascript">
-      window.RENGINE_DATATABLE_LAYOUT_FULL = {
+      window.RENGINE_DATATABLE_USE_SCROLLER = {{ use_datatables_scroller|yesno:"true,false" }};
+      window.RENGINE_DATATABLE_PAGE_LENGTH = {{ datatables_page_length|default:30 }};
+      (function(){
+        var el = document.getElementById('rengine-datatable-length-menu');
+        window.RENGINE_DATATABLE_LENGTH_MENU_VALUES = el ? JSON.parse(el.textContent) : [30, 50, 100, 200, 500, 1000, -1];
+      })();
+      window.RENGINE_DATATABLE_LAYOUT_FULL_CLASSIC = {
         topStart: 'pageLength',
         topEnd: ['info', 'paging'],
         bottomStart: 'pageLength',
         bottomEnd: ['info', 'paging']
       };
-      window.RENGINE_DATATABLE_LAYOUT_WITH_SEARCH = {
+      window.RENGINE_DATATABLE_LAYOUT_FULL_SCROLLER = {
+        topStart: 'pageLength',
+        topEnd: 'paging',
+        bottomStart: 'pageLength',
+        bottomEnd: 'paging'
+      };
+      window.RENGINE_DATATABLE_LAYOUT_FULL = window.RENGINE_DATATABLE_USE_SCROLLER
+        ? window.RENGINE_DATATABLE_LAYOUT_FULL_SCROLLER
+        : window.RENGINE_DATATABLE_LAYOUT_FULL_CLASSIC;
+      window.RENGINE_DATATABLE_LAYOUT_WITH_SEARCH_CLASSIC = {
         topStart: 'search',
         topEnd: 'pageLength',
         bottomStart: 'info',
         bottomEnd: 'paging'
       };
+      window.RENGINE_DATATABLE_LAYOUT_WITH_SEARCH_SCROLLER = {
+        topStart: 'search',
+        topEnd: 'pageLength',
+        bottomStart: 'pageLength',
+        bottomEnd: 'paging'
+      };
+      window.RENGINE_DATATABLE_LAYOUT_WITH_SEARCH = window.RENGINE_DATATABLE_USE_SCROLLER
+        ? window.RENGINE_DATATABLE_LAYOUT_WITH_SEARCH_SCROLLER
+        : window.RENGINE_DATATABLE_LAYOUT_WITH_SEARCH_CLASSIC;
       if (typeof $.fn.DataTable !== "undefined") {
         $.fn.DataTable.defaults.language = {
           paginate: { previous: "←", next: "→" },
@@ -319,6 +345,7 @@
         content: 'Scan Activity',
       });
     </script>
+    <script src="{% static 'custom/datatable_helpers.js' %}"></script>
     {% if messages %}
       {% for message in messages %}
         <script type="text/javascript">

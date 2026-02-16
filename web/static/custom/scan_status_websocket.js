@@ -173,17 +173,7 @@ const connectScanStatusWebSocket = function(scanId, projectSlug, options) {
         socket.onopen = function(event) {
             scanStatusReconnectAttemptsMap.set(key, 0);
             scanStatusConnectingMap.set(key, false);
-            // Refresh sidebar once so status is current (e.g. if BACKGROUND SYNC completed while page was loading)
-            if (key.startsWith('project-') && typeof getScanStatusSidebar === 'function') {
-                const projectSlug = key.replace(/^project-/, '');
-                const endpointUrl = window.scanStatusApiUrls?.scanStatusUrl;
-                const stopScanUrl = window.scanStatusApiUrls?.stopScanUrl;
-                const stopActivityUrl = window.scanStatusApiUrls?.stopActivityUrl;
-                const fetchSubscanUrl = window.scanStatusApiUrls?.fetchSubscanUrl;
-                if (endpointUrl && stopScanUrl && stopActivityUrl && fetchSubscanUrl) {
-                    getScanStatusSidebar(endpointUrl, stopScanUrl, stopActivityUrl, fetchSubscanUrl, { project: projectSlug, reload: false });
-                }
-            }
+            // Initial load is done by base.html; do not call getScanStatusSidebar here to avoid duplicate API call.
         };
         
         socket.onmessage = function(event) {

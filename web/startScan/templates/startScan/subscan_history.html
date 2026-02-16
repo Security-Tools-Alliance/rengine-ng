@@ -164,19 +164,7 @@ SubScan History
             </div>
             {% endif %}
           </td>
-          <td class="text-center">
-            <div class="d-flex flex-wrap gap-1 justify-content-center mb-2">
-              <a href="#" class="btn btn-sm btn-soft-primary" data-toggle="tooltip" data-placement="top" title="View Results" onclick="show_subscan_results('{% url 'api:fetch_subscan_results' %}', {{subscan.id}}); return false;"><i class="fe-eye"></i></a>
-              {% if user|can:'initiate_scans_subscans' %}
-                {% if subscan.status_code == 1 %}
-              <a href="#" class="btn btn-sm btn-soft-danger" data-toggle="tooltip" data-placement="top" title="Stop Subscan" onclick="stop_scan('{% url 'api:stop_scan' %}', scan_id=null, subscan_id={{subscan.id}}, reload_scan_bar=false, reload_location=true); return false;"><i class="fe-alert-triangle"></i></a>
-                {% endif %}
-              {% endif %}
-              {% if user|can:'modify_scan_results' %}
-              <a href="#" class="btn btn-sm btn-soft-danger" data-toggle="tooltip" data-placement="top" title="Delete Subscan" onclick="delete_subscan('{% url 'api:delete_rows' %}', {{ subscan.id }}); return false;"><i class="fe-trash-2"></i></a>
-              {% endif %}
-            </div>
-          </td>
+          {% include 'base/_items/datatables_action_cells/subscan.html' %}
         </tr>
         {% endfor %}
       </tbody>
@@ -191,7 +179,10 @@ SubScan History
 {% block page_level_script %}
 <script>
 $(document).ready(function() {
-  var table = $('#subscan_history_table').DataTable({
+  const subscanScrollerOpts = window.getRengineDatatableScrollerOptions
+    ? window.getRengineDatatableScrollerOptions("60vh")
+    : {};
+  var table = $('#subscan_history_table').DataTable(Object.assign({
     headerCallback: function(e, a, t, n, s) {
       e.getElementsByTagName("th")[0].innerHTML='<div class="form-check mb-2 form-check-primary"><input type="checkbox" class="float-start form-check-input chk-parent" id="head_checkbox" onclick=mainCheckBoxSelected(this)>\n<span class="new-control-indicator"></span><span style="visibility:hidden">c</span></div>\n'
     },
@@ -206,8 +197,8 @@ $(document).ready(function() {
       }],
       "order": [[1, 'desc']],
       "layout": window.RENGINE_DATATABLE_LAYOUT_WITH_SEARCH,
-      "lengthMenu": [5, 10, 20, 30, 40, 50],
-      "pageLength": 20,
+      "lengthMenu": window.getRengineDatatableLengthMenu ? window.getRengineDatatableLengthMenu() : [[30, 50, 100, 200, 500, -1], ["30", "50", "100", "200", "500", "All"]],
+      "pageLength": window.getRengineDatatablePageLength ? window.getRengineDatatablePageLength() : 30,
       "responsive": true,
       "initComplete": function(settings, json) {
         $('[data-toggle="tooltip"]').tooltip();
@@ -250,7 +241,7 @@ $(document).ready(function() {
           select.appendChild(option);
         }
       }
-    });
+    }, subscanScrollerOpts));
     multiCheck(table);
 
     // filter organization populate

@@ -57,18 +57,7 @@ Organizations
             <td class="text-center">{% if organization.description %}{{organization.description}}{% endif %}</td>
             <td class="text-center"><span class="badge bg-primary badge-link" onclick="get_target_modal({{organization.id}})">{{organization.get_domains.count}}</span></td>
             <td class="text-center"><span data-toggle="tooltip" data-placement="top" title="{{organization.insert_date}}">{{organization.insert_date|naturaltime}}</span></td>
-            <td class="text-center">
-              <div class="d-flex flex-wrap gap-1 justify-content-center mb-2">
-                {% if user|can:'initiate_scans_subscans' %}
-                <a href="{% url 'start_organization_scan' current_project.slug organization.id %}" class="btn btn-sm btn-soft-success" data-toggle="tooltip" data-placement="top" title="Quick Scan Entire Organization"><i class="fe-zap"></i></a>
-                <a href="{% url 'schedule_organization_scan' current_project.slug organization.id %}" class="btn btn-sm btn-soft-info open-domain" data-toggle="tooltip" data-placement="top" title="Schedule Scan"><i class="fe-clock"></i></a>
-                {% endif %}
-                {% if user|can:'modify_targets' %}
-                <a href="{% url 'update_organization' current_project.slug organization.id %}" class="btn btn-sm btn-soft-primary open-domain" data-toggle="tooltip" data-placement="top" title="Update Organization"><i class="fe-edit-2"></i></a>
-                <a href="#" class="btn btn-sm btn-soft-danger" data-toggle="tooltip" data-placement="top" title="Delete Organization" onclick="delete_organization('{% url 'delete_organization' current_project.slug organization.id %}'); return false;"><i class="fe-trash-2"></i></a>
-                {% endif %}
-              </div>
-            </td>
+            {% include 'base/_items/datatables_action_cells/organization.html' %}
           </tr>
           {% endfor %}
         </tbody>
@@ -84,14 +73,17 @@ Organizations
 <script src="{% static 'targetApp/js/custom_organization.js' %}"></script>
 <script>
 $(document).ready(function() {
-  const list_organization_table = $('#list_organization_table').DataTable({
+  const listOrgScrollerOpts = window.getRengineDatatableScrollerOptions
+    ? window.getRengineDatatableScrollerOptions("60vh")
+    : {};
+  const list_organization_table = $('#list_organization_table').DataTable(Object.assign({
     "layout": window.RENGINE_DATATABLE_LAYOUT_WITH_SEARCH,
-    "lengthMenu": [5, 10, 20, 30, 50, 100, 500, 1000],
-    "pageLength": 10,
+    "lengthMenu": window.getRengineDatatableLengthMenu ? window.getRengineDatatableLengthMenu() : [[30, 50, 100, 200, 500, 1000, -1], ["30", "50", "100", "200", "500", "1000", "All"]],
+    "pageLength": window.getRengineDatatablePageLength ? window.getRengineDatatablePageLength() : 30,
     "initComplete": function(settings, json) {
       $('[data-toggle="tooltip"]').tooltip();
     }
-  });
+  }, listOrgScrollerOpts));
   multiCheck(list_organization_table);
 });
 

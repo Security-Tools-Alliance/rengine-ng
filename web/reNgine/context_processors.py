@@ -165,6 +165,23 @@ def _get_cached_external_ip() -> str:
         return external_ip
 
 
+def user_preferences(request):
+    """Expose user interface preferences (e.g. DataTables display mode, page length) for templates."""
+    from dashboard.models import DATATABLES_PAGE_LENGTH_MENU_VALUES
+    from dashboard.services.user_preferences import get_datatables_display, get_datatables_page_length
+
+    user = getattr(request, "user", None)
+    datatables_display = get_datatables_display(user)
+    use_datatables_scroller = datatables_display == "scroller"
+    datatables_page_length = get_datatables_page_length(user)
+    return {
+        "datatables_display": datatables_display,
+        "use_datatables_scroller": use_datatables_scroller,
+        "datatables_page_length": datatables_page_length,
+        "datatables_page_length_menu_values": DATATABLES_PAGE_LENGTH_MENU_VALUES,
+    }
+
+
 def misc(request):
     # Scan status constants from definitions (single source of truth for timeline sort in JS)
     scan_status = {

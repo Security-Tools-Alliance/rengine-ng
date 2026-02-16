@@ -374,8 +374,10 @@ class TestListSubScans(BaseTestCase):
         response = self.client.post(api_url, {"scan_history_id": self.data_generator.scan_history.id})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("results", response.data)
+        self.assertIn("total_count", response.data)
         self.assertTrue(response.data["status"])
         self.assertGreaterEqual(len(response.data["results"]), 1)
+        self.assertGreaterEqual(response.data["total_count"], len(response.data["results"]))
 
         found_subscan = next(
             (s for s in response.data["results"] if s["id"] == self.subscans[-1].id),
@@ -383,6 +385,18 @@ class TestListSubScans(BaseTestCase):
         )
         self.assertIsNotNone(found_subscan, "Created subscan not found in results")
         self.assertEqual(found_subscan["id"], self.subscans[-1].id)
+
+    def test_list_subscans_respects_limit_and_returns_total_count(self):
+        """Test that limit truncates results and total_count reflects full count."""
+        api_url = reverse("api:listSubScans")
+        response = self.client.post(
+            api_url,
+            {"scan_history_id": self.data_generator.scan_history.id, "limit": 1},
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("total_count", response.data)
+        self.assertLessEqual(len(response.data.get("results", [])), 1)
+        self.assertGreaterEqual(response.data["total_count"], len(response.data.get("results", [])))
 
 
 class TestFetchSubscanResults(BaseTestCase):

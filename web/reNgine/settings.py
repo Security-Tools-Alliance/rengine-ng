@@ -173,6 +173,7 @@ TEMPLATES = [
                 "django.contrib.messages.context_processors.messages",
                 "reNgine.context_processors.version",
                 "reNgine.context_processors.misc",
+                "reNgine.context_processors.user_preferences",
                 "dashboard.context_processors.project_context",
             ],
             # Disable template caching in development

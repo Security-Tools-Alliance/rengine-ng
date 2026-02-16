@@ -1,3 +1,4 @@
+from collections import defaultdict
 from datetime import datetime
 import json
 
@@ -34,6 +35,7 @@ from reNgine.definitions import (
 from reNgine.secator.service import run_per_task_secator_scans, start_secator_scan
 from reNgine.services.repositories import EndpointRepository
 from reNgine.settings import RENGINE_RESULTS
+from reNgine.utilities.db import count_subquery
 from reNgine.utilities.logger import get_module_logger
 from reNgine.utilities.subdomain import get_interesting_subdomains
 from reNgine.utilities.time import local_to_utc_aware
@@ -418,12 +420,13 @@ def scan_history(request, slug):
             "domain__domains",
         )
         .annotate(
-            subdomain_count=Count("subdomain", distinct=True),
-            endpoint_count=Count("endpoint", distinct=True),
-            vuln_count=Count("vulnerability", distinct=True),
-            vuln_critical_count=Count("vulnerability", filter=Q(vulnerability__severity=4), distinct=True),
-            vuln_high_count=Count("vulnerability", filter=Q(vulnerability__severity=3), distinct=True),
-            vuln_medium_count=Count("vulnerability", filter=Q(vulnerability__severity=2), distinct=True),
+            # Scalar count subqueries avoid cartesian products vs Count(distinct=...) over joins.
+            subdomain_count=count_subquery(Subdomain, "scan_history_id"),
+            endpoint_count=count_subquery(EndPoint, "scan_history_id"),
+            vuln_count=count_subquery(Vulnerability, "scan_history_id"),
+            vuln_critical_count=count_subquery(Vulnerability, "scan_history_id", filter_kwargs={"severity": 4}),
+            vuln_high_count=count_subquery(Vulnerability, "scan_history_id", filter_kwargs={"severity": 3}),
+            vuln_medium_count=count_subquery(Vulnerability, "scan_history_id", filter_kwargs={"severity": 2}),
         )
     )
 
@@ -546,8 +549,25 @@ def detail_scan(request, id, slug):
     )
 
     vulns_tags = VulnerabilityTags.objects.filter(vuln_tags__in=vulns)
-    ip_addresses = IpAddress.objects.filter(ip_addresses__in=subdomains).distinct("address")
-    ip_serializer = IpSerializer(ip_addresses.all(), many=True, context={"scan_id": id, "target_id": domain_id})
+    # Distinct by PK so we keep one row per IpAddress; distinct("address") can drop rows on some backends.
+    ip_addresses = IpAddress.objects.filter(ip_addresses__in=subdomains).distinct()
+    # Precompute subdomain count/names per IP to avoid N+1 in IpSerializer
+    through = Subdomain.ip_addresses.through
+    ip_subdomain_data = defaultdict(lambda: {"count": 0, "names": []})
+    for ip_id, name in (
+        through.objects.filter(subdomain__scan_history_id=id).values_list("ipaddress_id", "subdomain__name").distinct()
+    ):
+        ip_subdomain_data[ip_id]["count"] += 1
+        ip_subdomain_data[ip_id]["names"].append(name)
+    ip_serializer = IpSerializer(
+        ip_addresses.prefetch_related("ports").all(),
+        many=True,
+        context={
+            "scan_id": id,
+            "target_id": domain_id,
+            "ip_subdomain_data": dict(ip_subdomain_data),
+        },
+    )
     geo_isos = CountryISO.objects.filter(ipaddress__in=ip_addresses)
 
     # Order in DB: status priority (running first, then failed, success, etc.), then runner type
@@ -604,18 +624,29 @@ def detail_scan(request, id, slug):
         .count()
     )
 
-    # Vulnerabilities
+    # Vulnerabilities: single aggregation for severity counts
+    severity_counts = dict(vulns.values("severity").annotate(c=Count("id")).values_list("severity", "c"))
+
+    # Ensure we don't silently drop unexpected severities from level counts
+    allowed_severities = {-1, 0, 1, 2, 3, 4}
+    unexpected_severities = set(severity_counts.keys()) - allowed_severities
+    assert not unexpected_severities, (
+        f"Unexpected vulnerability severities encountered: {unexpected_severities}. "
+        f"Expected severities to be a subset of {allowed_severities}."
+    )
+
+    info_count = severity_counts.get(0, 0)
+    low_count = severity_counts.get(1, 0)
+    medium_count = severity_counts.get(2, 0)
+    high_count = severity_counts.get(3, 0)
+    critical_count = severity_counts.get(4, 0)
+    unknown_count = severity_counts.get(-1, 0)
+    total_count = sum(severity_counts.values())
+    total_count_ignore_info = total_count - info_count
+
     common_vulns = (
         vulns.exclude(severity=0).values("name", "severity").annotate(count=Count("name")).order_by("-count")[:10]
     )
-    info_count = vulns.filter(severity=0).count()
-    low_count = vulns.filter(severity=1).count()
-    medium_count = vulns.filter(severity=2).count()
-    high_count = vulns.filter(severity=3).count()
-    critical_count = vulns.filter(severity=4).count()
-    unknown_count = vulns.filter(severity=-1).count()
-    total_count = vulns.count()
-    total_count_ignore_info = vulns.exclude(severity=0).count()
 
     # Emails
     exposed_count = emails.exclude(password__isnull=True).count()
@@ -667,11 +698,18 @@ def detail_scan(request, id, slug):
         "has_screenshots": has_screenshots,
     }
 
-    # Find number of matched GF patterns
+    # Find number of matched GF patterns (one query then count in Python)
     if scan.used_gf_patterns:
-        count_gf = {}
-        for gf in scan.used_gf_patterns.split(","):
-            count_gf[gf] = endpoints.filter(matched_gf_patterns__icontains=gf).count()
+        gf_patterns = [p.strip() for p in scan.used_gf_patterns.split(",") if p.strip()]
+        if gf_patterns:
+            count_gf = {}
+            matched_values = list(
+                endpoints.values_list("matched_gf_patterns", flat=True)
+                .exclude(matched_gf_patterns__isnull=True)
+                .exclude(matched_gf_patterns="")
+            )
+            for gf in gf_patterns:
+                count_gf[gf] = sum(1 for m in matched_values if m and gf in m)
             ctx["matched_gf_count"] = count_gf
 
     # Find last scan for this domain

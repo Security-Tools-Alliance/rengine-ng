@@ -1364,9 +1364,15 @@ class IpSerializer(serializers.ModelSerializer):
         return query.distinct("name")
 
     def get_subdomain_count(self, obj):
+        precomputed = self.context.get("ip_subdomain_data")
+        if precomputed and obj.id in precomputed:
+            return precomputed[obj.id]["count"]
         return self.get_base_subdomain_query(obj).count()
 
     def get_subdomain_names(self, obj):
+        precomputed = self.context.get("ip_subdomain_data")
+        if precomputed and obj.id in precomputed:
+            return precomputed[obj.id]["names"]
         return list(self.get_base_subdomain_query(obj).values_list("name", flat=True))
 
 

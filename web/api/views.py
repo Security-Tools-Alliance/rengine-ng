@@ -9,7 +9,7 @@ from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.conf import settings as django_settings
 from django.core.cache import cache
-from django.db.models import Case, CharField, Count, F, IntegerField, Prefetch, Q, Value, When
+from django.db.models import Case, CharField, Count, F, IntegerField, Prefetch, Q, Subquery, Value, When
 from django.db.models.functions import Coalesce
 from django.shortcuts import get_object_or_404
 from django.template.defaultfilters import slugify
@@ -27,8 +27,23 @@ from rest_framework.status import HTTP_200_OK, HTTP_202_ACCEPTED, HTTP_400_BAD_R
 from rest_framework.views import APIView
 import validators
 
+from api.helpers.datatables import (
+    DATATABLE_COLUMN_MAP_ENDPOINT,
+    DATATABLE_COLUMN_MAP_ENDPOINT_CHANGES,
+    DATATABLE_COLUMN_MAP_INTERESTING_ENDPOINT,
+    DATATABLE_COLUMN_MAP_INTERESTING_SUBDOMAIN,
+    DATATABLE_COLUMN_MAP_SUBDOMAIN,
+    DATATABLE_COLUMN_MAP_SUBDOMAIN_CHANGES,
+    DATATABLE_COLUMN_MAP_TARGETS,
+    DATATABLE_COLUMN_MAP_VULNERABILITY,
+    DATATABLE_NULLS_LAST_FIELDS,
+    apply_datatables_order,
+    get_datatables_order_column,
+)
+from api.helpers.query import build_subdomain_datatable_queryset, get_ip_subdomain_data, get_scan_status_querysets
+from api.mixins import DatatableListMixin, DatatablePaginationMixin, build_datatables_list_response
+from api.pagination import parse_limit_from_request, parse_pagination_params
 from api.permissions import HasAPIKeyOrIsAuthenticated
-from api.query_helpers import build_subdomain_datatable_queryset, get_scan_status_querysets
 from api.scan_file import get_scan_file_urls
 from api.secator_api_base import SecatorAPIBase
 from dashboard.models import OllamaSettings, OpenAiAPIKey, Project, SearchHistory
@@ -60,6 +75,7 @@ from reNgine.tasks import (
     llm_vulnerability_report,
     send_hackerone_report,
 )
+from reNgine.utilities.db import count_subquery, count_subquery_related
 from reNgine.utilities.endpoint import get_interesting_endpoints
 from reNgine.utilities.error import get_safe_user_message
 from reNgine.utilities.external import get_open_ai_key
@@ -146,73 +162,6 @@ from .serializers import (
 
 PREFIX_API = "[API]"
 logger = get_module_logger(__name__)
-
-
-PAGINATION_MAX_LENGTH = 10000
-
-
-def parse_pagination_params(start=None, length=None, page=None, page_size=None):
-    """
-    Validate and parse pagination parameters from query string.
-
-    Supports two pagination modes:
-    - DataTables style: start (offset) and length (page size)
-    - REST style: page (page number, 1-indexed) and page_size
-
-    Args:
-        start: Starting offset for DataTables pagination
-        length: Number of items per page for DataTables pagination
-        page: Page number (1-indexed) for REST pagination
-        page_size: Number of items per page for REST pagination
-
-    Returns:
-        dict: Parsed pagination parameters with 'type', 'start', and 'length' keys
-
-    Raises:
-        rest_framework.exceptions.ValidationError: If parameters are invalid
-    """
-    from rest_framework.exceptions import ValidationError
-
-    try:
-        if start is not None and length is not None:
-            start_val = int(start)
-            length_val = int(length)
-
-            if start_val < 0:
-                raise ValueError("Start offset must be non-negative")
-            if length_val < -1 or length_val == 0:
-                raise ValueError("Length must be positive or -1 for all")
-            if length_val == -1:
-                length_val = PAGINATION_MAX_LENGTH
-            elif length_val > PAGINATION_MAX_LENGTH:
-                raise ValueError(f"Length exceeds maximum allowed value ({PAGINATION_MAX_LENGTH})")
-
-            return {"type": "datatables", "start": start_val, "length": length_val}
-
-        elif page is not None and page_size is not None:
-            page_val = int(page)
-            page_size_val = int(page_size)
-
-            if page_val < 1:
-                raise ValueError("Page number must be at least 1")
-            if page_size_val <= 0:
-                raise ValueError("Page size must be positive")
-            if page_size_val > PAGINATION_MAX_LENGTH:
-                raise ValueError(f"Page size exceeds maximum allowed value ({PAGINATION_MAX_LENGTH})")
-
-            start_val = (page_val - 1) * page_size_val
-            return {"type": "rest", "start": start_val, "length": page_size_val, "page": page_val}
-
-        return None
-
-    except ValueError as e:
-        logger.log_line(
-            PREFIX_API,
-            "PAGINATION",
-            "Pagination parameter validation error: %s" % (str(e),),
-            level="warning",
-        )
-        raise ValidationError("Invalid pagination parameters.")
 
 
 class AdvancedSearchMixin:
@@ -850,6 +799,7 @@ class QueryInterestingSubdomains(APIView):
 class ListTargetsDatatableViewSet(viewsets.ModelViewSet):
     queryset = Domain.objects.all()
     serializer_class = DomainSerializer
+    datatable_column_map = DATATABLE_COLUMN_MAP_TARGETS
 
     def get_queryset(self):
         if slug := self.request.GET.get("slug", None):
@@ -859,31 +809,21 @@ class ListTargetsDatatableViewSet(viewsets.ModelViewSet):
     def filter_queryset(self, qs):
         qs = self.queryset.filter()
         search_value = self.request.GET.get("search[value]", None)
-        _order_col = self.request.GET.get("order[0][column]", None)
-        _order_direction = self.request.GET.get("order[0][dir]", None)
-        if search_value or _order_col or _order_direction:
-            order_col = "id"
-            if _order_col == "2":
-                order_col = "name"
-            elif _order_col == "4":
-                order_col = "insert_date"
-            elif _order_col == "5":
-                order_col = "start_scan_date"
-                if _order_direction == "desc":
-                    return qs.order_by(F("start_scan_date").desc(nulls_last=True))
-                return qs.order_by(F("start_scan_date").asc(nulls_last=True))
-
-            if _order_direction == "desc":
-                order_col = f"-{order_col}"
-
-            qs = self.queryset.filter(
+        if search_value:
+            qs = qs.filter(
                 Q(name__icontains=search_value)
                 | Q(description__icontains=search_value)
                 | Q(domains__name__icontains=search_value)
             )
-            return qs.order_by(order_col)
-
-        return qs.order_by("-id")
+        # DATATABLE_NULLS_LAST_FIELDS includes start_scan_date so never-scanned targets appear last.
+        # No other DataTables view uses nulls_last; other column maps use name/content_length/severity etc.
+        return apply_datatables_order(
+            qs,
+            self.request,
+            self.datatable_column_map,
+            default_order="-id",
+            nulls_last_fields=DATATABLE_NULLS_LAST_FIELDS,
+        )
 
 
 class WafDetector(APIView):
@@ -1052,43 +992,37 @@ class FetchMostVulnerable(APIView):
 
         if scan_history_id:
             subdomain_query = subdomains.filter(scan_history__id=scan_history_id)
-            if is_ignore_info:
-                most_vulnerable_subdomains = (
-                    subdomain_query.annotate(
-                        vuln_count=Count("vulnerability__name", filter=~Q(vulnerability__severity=0))
-                    )
-                    .order_by("-vuln_count")
-                    .exclude(vuln_count=0)
-                    .prefetch_related(
-                        "ip_addresses",
-                        "ip_addresses__ports",
-                        "technologies",
-                        "waf",
-                        "directories",
-                        "scan_history",
-                        "target_domain",
-                    )[:limit]
-                )
-            else:
-                most_vulnerable_subdomains = (
-                    subdomain_query.annotate(vuln_count=Count("vulnerability__name"))
-                    .order_by("-vuln_count")
-                    .exclude(vuln_count=0)
-                    .prefetch_related(
-                        "ip_addresses",
-                        "ip_addresses__ports",
-                        "technologies",
-                        "waf",
-                        "directories",
-                        "scan_history",
-                        "target_domain",
-                        Prefetch(
-                            "endpoint_set",
-                            queryset=EndPoint.objects.filter(is_default=True),
-                            to_attr="default_endpoint_list",
-                        ),
-                    )[:limit]
-                )
+            # Scalar count subquery avoids cartesian products vs annotate(Count(..., distinct=True)).
+            vuln_annot = count_subquery(
+                Vulnerability,
+                "subdomain_id",
+                filter_kwargs={"severity__gt": 0} if is_ignore_info else None,
+            )
+            most_vulnerable_subdomains = (
+                subdomain_query.annotate(vuln_count=vuln_annot)
+                .order_by("-vuln_count")
+                .exclude(vuln_count=0)
+                .prefetch_related(
+                    "ip_addresses",
+                    "ip_addresses__ports",
+                    "technologies",
+                    "waf",
+                    "directories",
+                    "scan_history",
+                    "target_domain",
+                    *(
+                        []
+                        if is_ignore_info
+                        else [
+                            Prefetch(
+                                "endpoint_set",
+                                queryset=EndPoint.objects.filter(is_default=True),
+                                to_attr="default_endpoint_list",
+                            ),
+                        ]
+                    ),
+                )[:limit]
+            )
 
             if most_vulnerable_subdomains:
                 response["status"] = True
@@ -1100,38 +1034,26 @@ class FetchMostVulnerable(APIView):
 
         elif target_id:
             subdomain_query = subdomains.filter(target_domain__id=target_id)
-            if is_ignore_info:
-                most_vulnerable_subdomains = (
-                    subdomain_query.annotate(
-                        vuln_count=Count("vulnerability__name", filter=~Q(vulnerability__severity=0))
-                    )
-                    .order_by("-vuln_count")
-                    .exclude(vuln_count=0)
-                    .prefetch_related(
-                        "ip_addresses",
-                        "ip_addresses__ports",
-                        "technologies",
-                        "waf",
-                        "directories",
-                        "scan_history",
-                        "target_domain",
-                    )[:limit]
+            # Scalar count subquery avoids cartesian products vs annotate(Count(..., distinct=True)).
+            vuln_annot = count_subquery(
+                Vulnerability,
+                "subdomain_id",
+                filter_kwargs={"severity__gt": 0} if is_ignore_info else None,
+            )
+            most_vulnerable_subdomains = (
+                subdomain_query.annotate(vuln_count=vuln_annot)
+                .order_by("-vuln_count")
+                .exclude(vuln_count=0)
+                .prefetch_related(
+                    "ip_addresses",
+                    "ip_addresses__ports",
+                    "technologies",
+                    "waf",
+                    "directories",
+                    "scan_history",
+                    "target_domain",
                 )
-            else:
-                most_vulnerable_subdomains = (
-                    subdomain_query.annotate(vuln_count=Count("vulnerability__name"))
-                    .order_by("-vuln_count")
-                    .exclude(vuln_count=0)
-                    .prefetch_related(
-                        "ip_addresses",
-                        "ip_addresses__ports",
-                        "technologies",
-                        "waf",
-                        "directories",
-                        "scan_history",
-                        "target_domain",
-                    )[:limit]
-                )
+            )[:limit]
 
             if most_vulnerable_subdomains:
                 response["status"] = True
@@ -1141,22 +1063,16 @@ class FetchMostVulnerable(APIView):
                     ctx["datatable_interesting_names"] = set(interesting.values_list("name", flat=True))
                 response["result"] = SubdomainSerializer(most_vulnerable_subdomains, many=True, context=ctx).data
         else:
-            if is_ignore_info:
-                most_vulnerable_targets = (
-                    domains.annotate(
-                        vuln_count=Count(
-                            "subdomain__vulnerability__name", filter=~Q(subdomain__vulnerability__severity=0)
-                        )
-                    )
-                    .order_by("-vuln_count")
-                    .exclude(vuln_count=0)[:limit]
-                )
-            else:
-                most_vulnerable_targets = (
-                    domains.annotate(vuln_count=Count("subdomain__vulnerability__name"))
-                    .order_by("-vuln_count")
-                    .exclude(vuln_count=0)[:limit]
-                )
+            # Count Vulnerability rows per domain (each row has one subdomain_id, so same semantics as
+            # previous join-based count: one vuln on two subdomains = two Vulnerability rows = count 2).
+            domain_vuln_annot = count_subquery_related(
+                Vulnerability,
+                "subdomain__target_domain_id",
+                filter_kwargs={"severity__gt": 0} if is_ignore_info else None,
+            )
+            most_vulnerable_targets = (
+                domains.annotate(vuln_count=domain_vuln_annot).order_by("-vuln_count").exclude(vuln_count=0)[:limit]
+            )
 
             if most_vulnerable_targets:
                 response["status"] = True
@@ -1323,7 +1239,10 @@ class FetchSubscanResults(APIView):
 
         if task_name in port_scan_types:
             ips_in_subscan = IpAddress.objects.filter(ip_subscan_ids__in=subscan)
-            subscan_results = IpSerializer(ips_in_subscan, many=True).data
+            ip_subdomain_data = get_ip_subdomain_data(ips_in_subscan)
+            subscan_results = IpSerializer(
+                ips_in_subscan, many=True, context={"ip_subdomain_data": ip_subdomain_data}
+            ).data
 
         elif task_name in vuln_scan_types:
             vulns_in_subscan = Vulnerability.objects.filter(vuln_subscan_ids__in=subscan)
@@ -1377,33 +1296,34 @@ class ListSubScans(APIView):
         subdomain_id = safe_int_cast(data.get("subdomain_id", None))
         scan_history = safe_int_cast(data.get("scan_history_id", None))
         domain_id = safe_int_cast(data.get("domain_id", None))
-        response = {"status": False}
+        limit = parse_limit_from_request(request)
 
         subscan_base = SubScan.objects.select_related(
             "scan_history", "scan_history__domain", "subdomain", "engine", "secator_runner"
         )
         if subdomain_id:
-            subscans = subscan_base.filter(subdomain__id=subdomain_id).order_by("-stop_scan_date")
-            results = SubScanSerializer(subscans, many=True).data
-            if subscans:
-                response["status"] = True
-                response["results"] = results
-
+            qs = subscan_base.filter(subdomain__id=subdomain_id).order_by("-stop_scan_date")
         elif scan_history:
-            subscans = subscan_base.filter(scan_history__id=scan_history).order_by("-stop_scan_date")
-            results = SubScanSerializer(subscans, many=True).data
-            if subscans:
-                response["status"] = True
-                response["results"] = results
-
+            qs = subscan_base.filter(scan_history__id=scan_history).order_by("-stop_scan_date")
         elif domain_id:
             scan_history_qs = ScanHistory.objects.filter(domain__id=domain_id)
-            subscans = subscan_base.filter(scan_history__in=scan_history_qs).order_by("-stop_scan_date")
-            results = SubScanSerializer(subscans, many=True).data
-            if subscans:
-                response["status"] = True
-                response["results"] = results
+            qs = subscan_base.filter(scan_history__in=scan_history_qs).order_by("-stop_scan_date")
+        else:
+            return Response({"status": False})
 
+        # Ensure deterministic ordering when limiting results
+        qs = qs.order_by("-stop_scan_date", "-id")
+
+        total_count = qs.count()
+        subscans = list(qs[:limit])
+        results = SubScanSerializer(subscans, many=True).data
+        response = {
+            "status": bool(results),
+            "total_count": total_count,
+            "limit": limit,
+        }
+        if results:
+            response["results"] = results
         return Response(response)
 
 
@@ -2489,13 +2409,20 @@ class ListTodoNotes(APIView):
         if subdomain_id:
             notes = notes.filter(subdomain__id=subdomain_id)
 
-        # Optimize queries with select_related to avoid N+1 queries
         notes = notes.select_related(
             "scan_history", "scan_history__domain", "subdomain", "subdomain__target_domain", "project"
         )
-
-        notes = ReconNoteSerializer(notes, many=True)
-        return Response({"notes": notes.data})
+        limit = parse_limit_from_request(request)
+        total_count = notes.count()
+        notes_slice = list(notes[:limit])
+        serialized = ReconNoteSerializer(notes_slice, many=True)
+        return Response(
+            {
+                "notes": serialized.data,
+                "total_count": total_count,
+                "limit": limit,
+            }
+        )
 
 
 class ListScanHistory(APIView):
@@ -2611,7 +2538,7 @@ class ListTechnology(APIView):
         req = self.request
         scan_id = safe_int_cast(req.query_params.get("scan_id"))
 
-        # Determine the queryset based on the presence of target_id or scan_id
+        # Single subdomain filter reused for both count subquery and Technology filter to avoid drift.
         if target_id := safe_int_cast(req.query_params.get("target_id")):
             subdomain_filter = Subdomain.objects.filter(target_domain__id=target_id)
         elif scan_id:
@@ -2619,16 +2546,30 @@ class ListTechnology(APIView):
         else:
             subdomain_filter = Subdomain.objects.all()
 
-        # Use subquery so the IN clause is a single SQL subquery, not a large IN list
-        subdomain_ids = subdomain_filter.values_list("id", flat=True)
-        tech = (
-            Technology.objects.filter(technologies__in=subdomain_ids).annotate(count=Count("name")).order_by("-count")
+        through = Subdomain.technologies.through
+        subdomain_id_subquery = Subquery(subdomain_filter.values("id"))
+        # Scalar count subquery avoids cartesian products when counting tech usage per subdomain set.
+        tech_count_annot = count_subquery(
+            through,
+            "technology_id",
+            filter_kwargs={"subdomain_id__in": subdomain_id_subquery},
         )
-        tech = tech.prefetch_related("technologies", "techs")
-
+        tech_qs = (
+            Technology.objects.filter(technologies__in=subdomain_filter)
+            .annotate(count=tech_count_annot)
+            .order_by("-count")
+        )
+        limit = parse_limit_from_request(request)
+        total_count = tech_qs.count()
+        tech = list(tech_qs[:limit])
         serializer = TechnologyCountSerializer(tech, many=True)
-
-        return Response({"technologies": serializer.data})
+        return Response(
+            {
+                "technologies": serializer.data,
+                "total_count": total_count,
+                "limit": limit,
+            }
+        )
 
 
 class ListDorkTypes(APIView):
@@ -2828,14 +2769,17 @@ class ListSubdomains(AdvancedSearchMixin, APIView):
             else:
                 serializer = SubdomainSerializer(paginated_queryset, many=True, context=serializer_context)
 
-            return Response({"count": total_count, "results": serializer.data})
+            return Response(build_datatables_list_response(total_count, serializer.data))
 
-        # Default response (no pagination) - maintain backward compatibility
+        # Default response (no pagination) - use shared limit parsing and return total_count/limit
+        limit = parse_limit_from_request(req)
+        total_count = subdomain_query.count()
+        subdomain_slice = list(subdomain_query[:limit])
         if "no_lookup_interesting" in req.query_params:
-            serializer = OnlySubdomainNameSerializer(subdomain_query, many=True)
+            serializer = OnlySubdomainNameSerializer(subdomain_slice, many=True)
         else:
-            serializer = SubdomainSerializer(subdomain_query, many=True, context=serializer_context)
-        return Response({"subdomains": serializer.data})
+            serializer = SubdomainSerializer(subdomain_slice, many=True, context=serializer_context)
+        return Response({"subdomains": serializer.data, "total_count": total_count, "limit": limit})
 
     def post(self, req):
         req = self.request
@@ -2901,14 +2845,16 @@ class ListIPs(APIView):
         if port:
             ips = ips.filter(ports__in=Port.objects.filter(number=port)).distinct()
 
-        serializer = IpSerializer(ips, many=True)
+        ip_subdomain_data = get_ip_subdomain_data(ips)
+        serializer = IpSerializer(ips, many=True, context={"ip_subdomain_data": ip_subdomain_data})
         return Response({"ips": serializer.data})
 
 
-class IpAddressViewSet(viewsets.ModelViewSet):
+class IpAddressViewSet(DatatablePaginationMixin, viewsets.ModelViewSet):
     queryset = Subdomain.objects.none()
     serializer_class = IpSubdomainSerializer
     ordering = ("name",)
+    datatable_default_ordering = ("name",)
 
     def get_queryset(self):
         req = self.request
@@ -2923,16 +2869,27 @@ class IpAddressViewSet(viewsets.ModelViewSet):
             self.queryset = IpAddress.objects.all()
         return self.queryset
 
-    def paginate_queryset(self, queryset, view=None):
-        if "no_page" in self.request.query_params:
-            return None
-        return self.paginator.paginate_queryset(queryset.order_by(*self.ordering), self.request, view=self)
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(queryset)
+        objs = page if page is not None else queryset
+
+        context = self.get_serializer_context()
+        if self.get_serializer_class() == IpSerializer:
+            context["ip_subdomain_data"] = get_ip_subdomain_data(objs)
+
+        serializer = self.get_serializer(objs, many=True, context=context)
+
+        if page is not None:
+            return self.get_paginated_response(serializer.data)
+        return Response(serializer.data)
 
 
-class SubdomainsViewSet(viewsets.ModelViewSet):
+class SubdomainsViewSet(DatatablePaginationMixin, viewsets.ModelViewSet):
     queryset = Subdomain.objects.none()
     serializer_class = SubdomainSerializer
     ordering = ("name",)
+    datatable_default_ordering = ("name",)
 
     def get_queryset(self):
         req = self.request
@@ -2967,13 +2924,8 @@ class SubdomainsViewSet(viewsets.ModelViewSet):
             return queryset
         return Subdomain.objects.none()
 
-    def paginate_queryset(self, queryset, view=None):
-        if "no_page" in self.request.query_params:
-            return None
-        return self.paginator.paginate_queryset(queryset.order_by(*self.ordering), self.request, view=self)
 
-
-class SubdomainChangesViewSet(viewsets.ModelViewSet):
+class SubdomainChangesViewSet(DatatablePaginationMixin, viewsets.ModelViewSet):
     """
     This viewset will return the Subdomain changes
     To get the new subdomains, we will look for ScanHistory with
@@ -2984,6 +2936,23 @@ class SubdomainChangesViewSet(viewsets.ModelViewSet):
     queryset = Subdomain.objects.none()
     serializer_class = SubdomainChangesSerializer
     ordering = ("name",)
+    filter_backends = []
+
+    datatable_column_map = DATATABLE_COLUMN_MAP_SUBDOMAIN_CHANGES
+
+    def filter_queryset(self, qs):
+        if not hasattr(qs, "filter"):
+            return qs
+        search_value = self.request.GET.get("search[value]", None)
+        if search_value:
+            qs = qs.filter(
+                Q(name__icontains=search_value)
+                | Q(page_title__icontains=search_value)
+                | Q(http_status__icontains=search_value)
+            )
+        return apply_datatables_order(qs, self.request, self.datatable_column_map, default_order="content_length")
+
+    datatable_default_ordering = None
 
     def get_queryset(self):
         req = self.request
@@ -3030,27 +2999,30 @@ class SubdomainChangesViewSet(viewsets.ModelViewSet):
             else:
                 queryset = Subdomain.objects.none()
         elif target_id:
-            queryset = Subdomain.objects.filter(target_domain__id=target_id).annotate(
-                change=Value("unknown", output_field=CharField())
+            queryset = (
+                Subdomain.objects.filter(target_domain__id=target_id)
+                .select_related("target_domain")
+                .annotate(change=Value("unknown", output_field=CharField()))
             )
         elif project:
-            queryset = Subdomain.objects.filter(target_domain__project__slug=project).annotate(
-                change=Value("unknown", output_field=CharField())
+            queryset = (
+                Subdomain.objects.filter(target_domain__project__slug=project)
+                .select_related("target_domain")
+                .annotate(change=Value("unknown", output_field=CharField()))
             )
         else:
-            queryset = Subdomain.objects.all().annotate(change=Value("unknown", output_field=CharField()))
+            queryset = (
+                Subdomain.objects.all()
+                .select_related("target_domain")
+                .annotate(change=Value("unknown", output_field=CharField()))
+            )
 
-        # Optimize queries with prefetch_related to avoid N+1 queries
+        # target_domain is a FK: use select_related only (already applied above). Prefetch M2M and reverse relations.
         queryset = queryset.prefetch_related(
-            "ip_addresses", "ip_addresses__ports", "technologies", "waf", "directories", "scan_history", "target_domain"
+            "ip_addresses", "ip_addresses__ports", "technologies", "waf", "directories", "scan_history"
         )
 
         return queryset
-
-    def paginate_queryset(self, queryset, view=None):
-        if "no_page" in self.request.query_params:
-            return None
-        return self.paginator.paginate_queryset(queryset.order_by(*self.ordering), self.request, view=self)
 
 
 class EndPointChangesViewSet(viewsets.ModelViewSet):
@@ -3061,6 +3033,21 @@ class EndPointChangesViewSet(viewsets.ModelViewSet):
     queryset = EndPoint.objects.none()
     serializer_class = EndPointChangesSerializer
     ordering = ("http_url",)
+    filter_backends = []
+
+    datatable_column_map = DATATABLE_COLUMN_MAP_ENDPOINT_CHANGES
+
+    def filter_queryset(self, qs):
+        if not hasattr(qs, "filter"):
+            return qs
+        search_value = self.request.GET.get("search[value]", None)
+        if search_value:
+            qs = qs.filter(
+                Q(http_url__icontains=search_value)
+                | Q(page_title__icontains=search_value)
+                | Q(http_status__icontains=search_value)
+            )
+        return apply_datatables_order(qs, self.request, self.datatable_column_map, default_order="content_length")
 
     def get_queryset(self):
         req = self.request
@@ -3113,18 +3100,34 @@ class EndPointChangesViewSet(viewsets.ModelViewSet):
                 .filter(http_url__in=removed_endpoints)
                 .annotate(change=Value("removed", output_field=CharField()))
             )
-            return added_qs.union(removed_qs)
+            added_ids = list(added_qs.values_list("pk", flat=True))
+            removed_ids = list(removed_qs.values_list("pk", flat=True))
+            union_ids = added_ids + removed_ids
+            if not union_ids:
+                return EndPoint.objects.none()
+            ordering = getattr(self, "ordering", None) or ("http_url",)
+            return (
+                endpoint_base.filter(pk__in=union_ids)
+                .annotate(
+                    change=Case(
+                        When(pk__in=added_ids, then=Value("added", output_field=CharField())),
+                        When(pk__in=removed_ids, then=Value("removed", output_field=CharField())),
+                        default=Value("", output_field=CharField()),
+                        output_field=CharField(),
+                    )
+                )
+                .order_by(*ordering)
+            )
 
-    def paginate_queryset(self, queryset, view=None):
-        if "no_page" in self.request.query_params:
-            return None
-        return self.paginator.paginate_queryset(queryset.order_by(*self.ordering), self.request, view=self)
 
-
-class InterestingSubdomainViewSet(viewsets.ModelViewSet):
+class InterestingSubdomainViewSet(DatatablePaginationMixin, viewsets.ModelViewSet):
     queryset = Subdomain.objects.none()
     serializer_class = SubdomainSerializer
     ordering = ("name",)
+    filter_backends = []
+    datatable_default_ordering = None
+
+    datatable_column_map = DATATABLE_COLUMN_MAP_INTERESTING_SUBDOMAIN
 
     def get_queryset(self):
         req = self.request
@@ -3147,7 +3150,9 @@ class InterestingSubdomainViewSet(viewsets.ModelViewSet):
         else:
             self._datatable_interesting_names = None
 
-        # Optimize queries with prefetch_related to avoid N+1 queries
+        # target_domain is FK: use select_related. Then prefetch M2M/reverse relations.
+        if hasattr(queryset, "select_related"):
+            queryset = queryset.select_related("target_domain")
         if hasattr(queryset, "prefetch_related"):
             queryset = queryset.prefetch_related(
                 "ip_addresses",
@@ -3156,7 +3161,6 @@ class InterestingSubdomainViewSet(viewsets.ModelViewSet):
                 "waf",
                 "directories",
                 "scan_history",
-                "target_domain",
             )
 
         self.queryset = queryset
@@ -3170,41 +3174,38 @@ class InterestingSubdomainViewSet(viewsets.ModelViewSet):
         return context
 
     def filter_queryset(self, qs):
-        qs = self.queryset.filter()
+        if not hasattr(qs, "filter"):
+            return qs
         search_value = self.request.GET.get("search[value]", None)
-        _order_col = self.request.GET.get("order[0][column]", None)
-        _order_direction = self.request.GET.get("order[0][dir]", None)
-        order_col = "content_length"
-        if _order_col == "0":
-            order_col = "name"
-        elif _order_col == "1":
-            order_col = "page_title"
-        elif _order_col == "2":
-            order_col = "http_status"
-        elif _order_col == "3":
-            order_col = "content_length"
-
-        if _order_direction == "desc":
-            order_col = f"-{order_col}"
-
         if search_value:
-            qs = self.queryset.filter(
+            qs = qs.filter(
                 Q(name__icontains=search_value)
                 | Q(page_title__icontains=search_value)
                 | Q(http_status__icontains=search_value)
             )
-        return qs.order_by(order_col)
-
-    def paginate_queryset(self, queryset, view=None):
-        if "no_page" in self.request.query_params:
-            return None
-        return self.paginator.paginate_queryset(queryset.order_by(*self.ordering), self.request, view=self)
+        return apply_datatables_order(qs, self.request, self.datatable_column_map, default_order="content_length")
 
 
-class InterestingEndpointViewSet(viewsets.ModelViewSet):
+class InterestingEndpointViewSet(DatatablePaginationMixin, viewsets.ModelViewSet):
     queryset = EndPoint.objects.none()
     serializer_class = EndpointSerializer
     ordering = ("http_url",)
+    filter_backends = []
+    datatable_default_ordering = None
+
+    datatable_column_map = DATATABLE_COLUMN_MAP_INTERESTING_ENDPOINT
+
+    def filter_queryset(self, qs):
+        if not hasattr(qs, "filter"):
+            return qs
+        search_value = self.request.GET.get("search[value]", None)
+        if search_value:
+            qs = qs.filter(
+                Q(http_url__icontains=search_value)
+                | Q(page_title__icontains=search_value)
+                | Q(http_status__icontains=search_value)
+            )
+        return apply_datatables_order(qs, self.request, self.datatable_column_map, default_order="http_url")
 
     def get_queryset(self):
         req = self.request
@@ -3220,21 +3221,22 @@ class InterestingEndpointViewSet(viewsets.ModelViewSet):
         else:
             queryset = get_interesting_endpoints()
 
-        # Optimize queries with prefetch_related to avoid N+1 queries
+        # FKs: select_related. M2M: prefetch_related (techs, endpoint_subscan_ids).
+        if hasattr(queryset, "select_related"):
+            queryset = queryset.select_related("subdomain", "subdomain__target_domain", "target_domain", "scan_history")
         if hasattr(queryset, "prefetch_related"):
-            queryset = queryset.prefetch_related("subdomain", "target_domain", "scan_history", "techs")
+            queryset = queryset.prefetch_related("techs", "endpoint_subscan_ids")
 
         return queryset
 
-    def paginate_queryset(self, queryset, view=None):
-        if "no_page" in self.request.query_params:
-            return None
-        return self.paginator.paginate_queryset(queryset.order_by(*self.ordering), self.request, view=self)
 
-
-class SubdomainDatatableViewSet(AdvancedSearchMixin, viewsets.ModelViewSet):
+class SubdomainDatatableViewSet(
+    DatatableListMixin, DatatablePaginationMixin, AdvancedSearchMixin, viewsets.ModelViewSet
+):
     queryset = Subdomain.objects.none()
     serializer_class = SubdomainSerializer
+    filter_backends = []
+    datatable_default_ordering = ("id",)
 
     def _port_search_handler(self, queryset, operator, value):
         """Custom handler for port searches across multiple port fields."""
@@ -3317,31 +3319,15 @@ class SubdomainDatatableViewSet(AdvancedSearchMixin, viewsets.ModelViewSet):
             qs = qs | queryset.filter(Q(directories__directory_files__name__icontains=search_value))
         return qs
 
+    datatable_column_map = DATATABLE_COLUMN_MAP_SUBDOMAIN
+
     def filter_queryset(self, qs):
         qs = self.queryset.filter()
         search_value = self.request.GET.get("search[value]", None)
-        _order_col = self.request.GET.get("order[0][column]", None)
-        _order_direction = self.request.GET.get("order[0][dir]", None)
-        order_col = "content_length"
-        if _order_col == "0":
-            order_col = "checked"
-        elif _order_col == "1":
-            order_col = "name"
-        elif _order_col == "4":
-            order_col = "http_status"
-        elif _order_col == "5":
-            order_col = "page_title"
-        elif _order_col == "8":
-            order_col = "content_length"
-        elif _order_col == "10":
-            order_col = "response_time"
-        if _order_direction == "desc":
-            order_col = f"-{order_col}"
-
         if search_value:
             qs = self.apply_advanced_search(qs, search_value)
-
-        return qs.order_by(order_col)
+        order_str = get_datatables_order_column(self.request, self.datatable_column_map, default_order="content_length")
+        return qs.order_by(order_str)
 
     def get_serializer_context(self):
         context = super().get_serializer_context()
@@ -3447,9 +3433,10 @@ class ListEndpoints(APIView):
         return Response({"endpoints": endpoints_serializer.data})
 
 
-class EndPointViewSet(AdvancedSearchMixin, viewsets.ModelViewSet):
+class EndPointViewSet(DatatableListMixin, DatatablePaginationMixin, AdvancedSearchMixin, viewsets.ModelViewSet):
     queryset = EndPoint.objects.none()
     serializer_class = EndpointSerializer
+    datatable_default_ordering = ("id",)
     search_config = {
         "general_fields": [
             lambda sv: Q(http_url__icontains=sv),
@@ -3529,72 +3516,17 @@ class EndPointViewSet(AdvancedSearchMixin, viewsets.ModelViewSet):
 
         return self.queryset
 
+    datatable_column_map = DATATABLE_COLUMN_MAP_ENDPOINT
+
     def filter_queryset(self, qs):
         qs = self.queryset.filter()
         search_value = self.request.GET.get("search[value]", None)
-        _order_col = self.request.GET.get("order[0][column]", None)
-        _order_direction = self.request.GET.get("order[0][dir]", None)
-        if search_value or _order_col or _order_direction:
-            order_col = "content_length"
-            if _order_col == "1":
-                order_col = "http_url"
-            elif _order_col == "2":
-                order_col = "http_status"
-            elif _order_col == "3":
-                order_col = "page_title"
-            elif _order_col == "4":
-                order_col = "matched_gf_patterns"
-            elif _order_col == "5":
-                order_col = "content_type"
-            elif _order_col == "6":
-                order_col = "content_length"
-            elif _order_col == "7":
-                order_col = "techs"
-            elif _order_col == "8":
-                order_col = "webserver"
-            elif _order_col == "9":
-                order_col = "response_time"
-            if _order_direction == "desc":
-                order_col = f"-{order_col}"
-
-            # Use AdvancedSearchMixin for search functionality
-            if search_value:
-                qs = self.apply_advanced_search(qs, search_value)
-
-            return qs.order_by(order_col)
-        return qs
-
-    def paginate_queryset(self, queryset, view=None):
-        if "no_page" in self.request.query_params:
-            return None
-        return self.paginator.paginate_queryset(queryset.order_by("id"), self.request, view=self)
-
-    def list(self, request, *args, **kwargs):
-        queryset = self.filter_queryset(self.get_queryset())
-        context = {"request": request}
-
-        # Support manual pagination with start/length (DataTables) or page/page_size (REST)
-        pagination = parse_pagination_params(
-            start=request.query_params.get("start"),
-            length=request.query_params.get("length"),
-            page=request.query_params.get("page"),
-            page_size=request.query_params.get("page_size"),
-        )
-
-        if pagination:
-            total_count = queryset.count()
-            paginated_queryset = queryset[pagination["start"] : pagination["start"] + pagination["length"]]
-            serializer = self.get_serializer(paginated_queryset, many=True, context=context)
-            return Response({"count": total_count, "results": serializer.data})
-
-        # Fallback to normal pagination
-        page = self.paginate_queryset(queryset)
-        if page is not None:
-            serializer = self.get_serializer(page, many=True, context=context)
-            return self.get_paginated_response(serializer.data)
-
-        serializer = self.get_serializer(queryset, many=True, context=context)
-        return Response(serializer.data)
+        if search_value:
+            qs = self.apply_advanced_search(qs, search_value)
+        order_str = get_datatables_order_column(self.request, self.datatable_column_map, default_order="content_length")
+        if not (order_str and order_str.strip()):
+            order_str = "content_length"
+        return qs.order_by(order_str)
 
 
 class DirectoryViewSet(viewsets.ModelViewSet):
@@ -3633,9 +3565,10 @@ class ProjectViewSet(viewsets.ModelViewSet):
         serializer.save()
 
 
-class VulnerabilityViewSet(AdvancedSearchMixin, viewsets.ModelViewSet):
+class VulnerabilityViewSet(DatatableListMixin, DatatablePaginationMixin, AdvancedSearchMixin, viewsets.ModelViewSet):
     queryset = Vulnerability.objects.none()
     serializer_class = VulnerabilitySerializer
+    datatable_default_ordering = ("-severity",)
 
     def _handle_severity(self, queryset, operator, value):
         """Custom handler for severity field using NUCLEI_SEVERITY_MAP."""
@@ -3794,64 +3727,15 @@ class VulnerabilityViewSet(AdvancedSearchMixin, viewsets.ModelViewSet):
         self.queryset = qs
         return self.queryset
 
+    datatable_column_map = DATATABLE_COLUMN_MAP_VULNERABILITY
+
     def filter_queryset(self, qs):
         qs = self.queryset.filter()
         search_value = self.request.GET.get("search[value]", None)
-        _order_col = self.request.GET.get("order[0][column]", None)
-        _order_direction = self.request.GET.get("order[0][dir]", None)
-        if search_value or _order_col or _order_direction:
-            order_col = "severity"
-            if _order_col == "1":
-                order_col = "source"
-            elif _order_col == "3":
-                order_col = "name"
-            elif _order_col == "7":
-                order_col = "severity"
-            elif _order_col == "11":
-                order_col = "http_url"
-            elif _order_col == "15":
-                order_col = "open_status"
-
-            if _order_direction == "desc":
-                order_col = f"-{order_col}"
-
-            # Use AdvancedSearchMixin for search functionality
-            if search_value:
-                qs = self.apply_advanced_search(qs, search_value)
-
-            return qs.order_by(order_col)
-        return qs.order_by("-severity")
-
-    def paginate_queryset(self, queryset, view=None):
-        if "no_page" in self.request.query_params:
-            return None
-        return self.paginator.paginate_queryset(queryset.order_by("-severity"), self.request, view=self)
-
-    def list(self, request, *args, **kwargs):
-        queryset = self.filter_queryset(self.get_queryset())
-
-        # Support manual pagination with start/length (DataTables) or page/page_size (REST)
-        pagination = parse_pagination_params(
-            start=request.query_params.get("start"),
-            length=request.query_params.get("length"),
-            page=request.query_params.get("page"),
-            page_size=request.query_params.get("page_size"),
-        )
-
-        if pagination:
-            total_count = queryset.count()
-            paginated_queryset = queryset[pagination["start"] : pagination["start"] + pagination["length"]]
-            serializer = self.get_serializer(paginated_queryset, many=True)
-            return Response({"count": total_count, "results": serializer.data})
-
-        # Fallback to normal pagination
-        page = self.paginate_queryset(queryset)
-        if page is not None:
-            serializer = self.get_serializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
-
-        serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data)
+        if search_value:
+            qs = self.apply_advanced_search(qs, search_value)
+        order_str = get_datatables_order_column(self.request, self.datatable_column_map, default_order="-severity")
+        return qs.order_by(order_str)
 
 
 class GetIpDetails(APIView):

@@ -1,0 +1,60 @@
+{% extends 'base/base.html' %}
+{% load static %}
+
+{% block title %}
+Interface Settings
+{% endblock title %}
+
+{% block custom_js_css_link %}
+{% endblock custom_js_css_link %}
+
+{% block page_title %}
+Interface Settings
+{% endblock page_title %}
+
+{% block breadcrumb_title %}
+{% if current_project %}
+<li class="breadcrumb-item"><a href="{% url 'dashboardIndex' current_project.slug %}">Dashboard</a></li>
+{% endif %}
+<li class="breadcrumb-item active">Interface</li>
+{% endblock breadcrumb_title %}
+
+{% block main_content %}
+<div class="row">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-body">
+        <h4 class="card-title">DataTables display</h4>
+        <p class="text-muted">Choose how tables (subdomains, vulnerabilities, etc.) are displayed across the application.</p>
+        <form method="post" action="{% url 'interface_settings' %}">
+          {% csrf_token %}
+          <div class="mb-4">
+            {{ form.datatables_display }}
+            {% if form.datatables_display.errors %}
+              {% for error in form.datatables_display.errors %}
+                <p class="text-danger">{{ error }}</p>
+              {% endfor %}
+            {% endif %}
+          </div>
+          <div class="mb-4">
+            <label for="id_datatables_page_length" class="form-label">{{ form.datatables_page_length.label }}</label>
+            {{ form.datatables_page_length }}
+            {% if form.datatables_page_length.help_text %}
+              <p class="form-text text-muted">{{ form.datatables_page_length.help_text }}</p>
+            {% endif %}
+            {% if form.datatables_page_length.errors %}
+              {% for error in form.datatables_page_length.errors %}
+                <p class="text-danger">{{ error }}</p>
+              {% endfor %}
+            {% endif %}
+          </div>
+          <button type="submit" class="btn btn-soft-primary">Save</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock main_content %}
+
+{% block page_level_script %}
+{% endblock page_level_script %}

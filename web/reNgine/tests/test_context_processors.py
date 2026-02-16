@@ -4,6 +4,7 @@ Tests for context processors
 
 from unittest.mock import Mock, patch
 
+from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.test import RequestFactory, TestCase
 
@@ -15,6 +16,7 @@ from reNgine.context_processors import (
     _get_external_ip_with_fallback,
     clear_external_ip_in_process_cache,
     misc,
+    user_preferences,
     version,
 )
 
@@ -170,3 +172,71 @@ class TestContextProcessors(TestCase):
         context = misc(request)
 
         self.assertIn("external_ip", context)
+
+
+class TestUserPreferencesContextProcessor(TestCase):
+    """Test user_preferences context processor."""
+
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.user = get_user_model().objects.create_user(
+            username="ctxprefuser",
+            email="ctxpref@example.test",
+            password="testpass123",
+        )
+
+    def tearDown(self):
+        self.user.delete()
+
+    def test_user_preferences_anonymous_returns_classic(self):
+        """Anonymous user gets classic display and use_datatables_scroller False."""
+        from django.contrib.auth.models import AnonymousUser
+
+        from dashboard.models import DATATABLES_PAGE_LENGTH_DEFAULT, DATATABLES_PAGE_LENGTH_MENU_VALUES
+
+        request = self.factory.get("/")
+        request.user = AnonymousUser()
+        context = user_preferences(request)
+        self.assertEqual(context["datatables_display"], "classic")
+        self.assertFalse(context["use_datatables_scroller"])
+        self.assertEqual(context["datatables_page_length"], DATATABLES_PAGE_LENGTH_DEFAULT)
+        self.assertEqual(context["datatables_page_length_menu_values"], DATATABLES_PAGE_LENGTH_MENU_VALUES)
+
+    def test_user_preferences_authenticated_default_classic(self):
+        """Authenticated user with no preference gets classic and default page length."""
+        from dashboard.models import DATATABLES_PAGE_LENGTH_DEFAULT
+
+        request = self.factory.get("/")
+        request.user = self.user
+        context = user_preferences(request)
+        self.assertEqual(context["datatables_display"], "classic")
+        self.assertFalse(context["use_datatables_scroller"])
+        self.assertEqual(context["datatables_page_length"], DATATABLES_PAGE_LENGTH_DEFAULT)
+
+    def test_user_preferences_authenticated_scroller(self):
+        """Authenticated user with scroller preference gets scroller and use_datatables_scroller True."""
+        from dashboard.services.user_preferences import (
+            PREF_DATATABLES_DISPLAY,
+            set_user_preference,
+        )
+
+        set_user_preference(self.user, PREF_DATATABLES_DISPLAY, "scroller")
+        request = self.factory.get("/")
+        request.user = self.user
+        context = user_preferences(request)
+        self.assertEqual(context["datatables_display"], "scroller")
+        self.assertTrue(context["use_datatables_scroller"])
+
+    def test_user_preferences_authenticated_classic_explicit(self):
+        """Authenticated user with classic set explicitly gets classic."""
+        from dashboard.services.user_preferences import (
+            PREF_DATATABLES_DISPLAY,
+            set_user_preference,
+        )
+
+        set_user_preference(self.user, PREF_DATATABLES_DISPLAY, "classic")
+        request = self.factory.get("/")
+        request.user = self.user
+        context = user_preferences(request)
+        self.assertEqual(context["datatables_display"], "classic")
+        self.assertFalse(context["use_datatables_scroller"])

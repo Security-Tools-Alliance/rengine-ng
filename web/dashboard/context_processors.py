@@ -20,7 +20,12 @@ def project_context(request):
     if current_project is None and projects:
         current_project = projects[0]  # Get the first project from the projects list
 
-    return {
+    context = {
         "current_project": current_project,  # Add the current project to the context
         "projects": projects,  # Add user projects to the context if needed
     }
+    if current_project:
+        from api.helpers.datatables import get_datatable_action_urls
+
+        context["datatable_action_urls"] = get_datatable_action_urls(current_project.slug)
+    return context

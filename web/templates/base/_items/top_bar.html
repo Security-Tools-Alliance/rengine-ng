@@ -155,6 +155,10 @@
             <i class="mdi mdi-key-variant"></i>
             <span>API Keys</span>
           </a>
+          <a href="{% url 'interface_settings' %}" class="dropdown-item notify-item">
+            <i class="fe-sliders"></i>
+            <span>Interface</span>
+          </a>
           {% if user|can:'modify_system_configurations' %}
           <a href="{% url 'admin_interface' %}" class="dropdown-item notify-item">
             <i class="fe-settings"></i>

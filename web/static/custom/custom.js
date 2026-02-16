@@ -842,7 +842,10 @@ function get_interesting_subdomains(endpoint_url, project, target_id, scan_histo
 		url = `${endpoint_url}?project=${project}&scan_id=${scan_history_id}&format=datatables`;
 		non_orderable_targets = [];
 	}
-	$('#interesting_subdomains').DataTable({
+	const interestingSubdomainsScrollerOpts = window.getRengineDatatableScrollerOptions
+		? window.getRengineDatatableScrollerOptions("60vh")
+		: {};
+	$('#interesting_subdomains').DataTable(Object.assign({
 		"drawCallback": function() {
 			const total = this.api().page.info().recordsTotal;
 			if (total === 0) {
@@ -864,8 +867,8 @@ function get_interesting_subdomains(endpoint_url, project, target_id, scan_histo
 		"order": [
 			[3, "desc"]
 		],
-		"lengthMenu": [[50, 100, 200, 500, -1], [50, 100, 200, 500, 'All']],
-		"pageLength": 100,
+		"lengthMenu": window.getRengineDatatableLengthMenu ? window.getRengineDatatableLengthMenu() : [[30, 50, 100, 200, 500, -1], ["30", "50", "100", "200", "500", "All"]],
+		"pageLength": window.getRengineDatatablePageLength ? window.getRengineDatatablePageLength() : 30,
 		"columns": [{
 			'data': 'name'
 		}, {
@@ -921,7 +924,7 @@ function get_interesting_subdomains(endpoint_url, project, target_id, scan_histo
 			},
 			"targets": 2,
 		}, ],
-	});
+	}, interestingSubdomainsScrollerOpts));
 }
 
 function get_interesting_endpoints(endpoint_url, project, target_id, scan_history_id) {
@@ -934,7 +937,10 @@ function get_interesting_endpoints(endpoint_url, project, target_id, scan_histor
 		url = `${endpoint_url}/?project=${project}&scan_id=${scan_history_id}&format=datatables`;
 		// non_orderable_targets = [0, 1, 2, 3];
 	}
-	$('#interesting_endpoints').DataTable({
+	const interestingEndpointsScrollerOpts = window.getRengineDatatableScrollerOptions
+		? window.getRengineDatatableScrollerOptions("60vh")
+		: {};
+	$('#interesting_endpoints').DataTable(Object.assign({
 		"drawCallback": function() {
 			const total = this.api().page.info().recordsTotal;
 			if (total === 0) {
@@ -956,8 +962,8 @@ function get_interesting_endpoints(endpoint_url, project, target_id, scan_histor
 		"order": [
 			[3, "desc"]
 		],
-		"lengthMenu": [5, 10, 20, 50, 100],
-		"pageLength": 10,
+		"lengthMenu": window.getRengineDatatableLengthMenu ? window.getRengineDatatableLengthMenu() : [[30, 50, 100, 200, 500, 1000, -1], ["30", "50", "100", "200", "500", "1000", "All"]],
+		"pageLength": window.getRengineDatatablePageLength ? window.getRengineDatatablePageLength() : 30,
 		"columns": [{
 			'data': 'http_url'
 		}, {
@@ -1002,7 +1008,7 @@ function get_interesting_endpoints(endpoint_url, project, target_id, scan_histor
 			},
 			"targets": 2,
 		}, ],
-	});
+	}, interestingEndpointsScrollerOpts));
 }
 
 function get_important_subdomains(endpoint_url, target_id, scan_history_id) {
@@ -1045,11 +1051,13 @@ function get_important_subdomains(endpoint_url, target_id, scan_history_id) {
 
 function mark_important_subdomain(url, row, subdomain_id) {
 	if (row) {
-		const parentNode = row.parentNode.parentNode.parentNode.parentNode;
-		if (parentNode.classList.contains('table-danger')) {
-			parentNode.classList.remove('table-danger');
-		} else {
-			parentNode.className = "table-danger";
+		const tr = row.closest ? row.closest("tr") : (row.parentNode && row.parentNode.parentNode && row.parentNode.parentNode.parentNode) || null;
+		if (tr) {
+			if (tr.classList.contains("table-danger")) {
+				tr.classList.remove("table-danger");
+			} else {
+				tr.classList.add("table-danger");
+			}
 		}
 	}
 
@@ -1491,7 +1499,10 @@ function render_endpoint_in_xl_modal(endpoint_count, subdomain_name, result) {
 			</tr>
 		`);
 	}
-	$("#endpoint-modal-datatable").DataTable({
+	const endpointModalScrollerOpts = window.getRengineDatatableScrollerOptions
+		? window.getRengineDatatableScrollerOptions("60vh")
+		: {};
+	$("#endpoint-modal-datatable").DataTable(Object.assign({
 		"layout": window.RENGINE_DATATABLE_LAYOUT_WITH_SEARCH,
 		"order": [
 			[5, "desc"]
@@ -1500,7 +1511,7 @@ function render_endpoint_in_xl_modal(endpoint_count, subdomain_name, result) {
 		drawCallback: function() {
 			$(".dt-paging > .pagination").addClass("pagination-rounded")
 		}
-	});
+	}, endpointModalScrollerOpts));
 }
 
 function render_vulnerability_in_xl_modal(endpoint_url, vuln_count, subdomain_name, result) {
@@ -1615,7 +1626,10 @@ function render_vulnerability_in_xl_modal(endpoint_url, vuln_count, subdomain_na
 			</tr>
 		`);
 	}
-	$("#vulnerability-modal-datatable").DataTable({
+	const vulnModalScrollerOpts = window.getRengineDatatableScrollerOptions
+		? window.getRengineDatatableScrollerOptions("60vh")
+		: {};
+	$("#vulnerability-modal-datatable").DataTable(Object.assign({
 		"layout": window.RENGINE_DATATABLE_LAYOUT_WITH_SEARCH,
 		"order": [
 			[5, "desc"]
@@ -1624,7 +1638,7 @@ function render_vulnerability_in_xl_modal(endpoint_url, vuln_count, subdomain_na
 		drawCallback: function() {
 			$(".dt-paging > .pagination").addClass("pagination-rounded")
 		}
-	});
+	}, vulnModalScrollerOpts));
 }
 
 function render_directories_in_xl_modal(directory_count, subdomain_name, result) {
@@ -1663,7 +1677,10 @@ function render_directories_in_xl_modal(directory_count, subdomain_name, result)
 			</tr>
 		`);
 	}
-	$("#directory-modal-datatable").DataTable({
+	const dirModalScrollerOpts = window.getRengineDatatableScrollerOptions
+		? window.getRengineDatatableScrollerOptions("60vh")
+		: {};
+	$("#directory-modal-datatable").DataTable(Object.assign({
 		"layout": window.RENGINE_DATATABLE_LAYOUT_WITH_SEARCH,
 		"order": [
 			[1, "asc"]
@@ -1672,7 +1689,7 @@ function render_directories_in_xl_modal(directory_count, subdomain_name, result)
 		drawCallback: function() {
 			$(".dt-paging > .pagination").addClass("pagination-rounded");
 		}
-	});
+	}, dirModalScrollerOpts));
 	// TODO: Find interesting dirs
 	// fetch("/api/listInterestingKeywords")
 	// .then(response => {
@@ -2316,7 +2333,7 @@ function add_target(endpoint_url, current_slug, domain_name, h1_handle = null, d
 }
 
 
-function loadSubscanHistoryWidget(endpoint, scan_history_id = null, domain_id = null) {
+function loadSubscanHistoryWidget(endpoint, scan_history_id = null, domain_id = null, limit = null) {
 	// This function will load the subscan history widget
 	let data = {};
 	if (scan_history_id) {
@@ -2324,6 +2341,9 @@ function loadSubscanHistoryWidget(endpoint, scan_history_id = null, domain_id = 
 	}
 	if (domain_id) {
 		data = { 'domain_id': domain_id };
+	}
+	if (limit != null) {
+		data['limit'] = limit;
 	}
 
 	fetch(endpoint + '?format=json', {
@@ -2339,10 +2359,13 @@ function loadSubscanHistoryWidget(endpoint, scan_history_id = null, domain_id = 
 	}).then(function(data) {
 		$('#subscan_history_widget').empty();
 		$('#sub_scan_history_count').empty();
-		if (data['status'] && Array.isArray(data['results']) && data['results'].length > 0) {
+		const totalCount = data['total_count'] !== undefined ? data['total_count'] : (Array.isArray(data['results']) ? data['results'].length : 0);
+		if (data['total_count'] !== undefined || (data['status'] && Array.isArray(data['results']))) {
 			$('#sub_scan_history_count').append(
-				`<span class="badge badge-soft-primary me-1">${data['results'].length}</span>`
+				`<span class="badge badge-soft-primary me-1">${totalCount}</span>`
 			);
+		}
+		if (data['status'] && Array.isArray(data['results']) && data['results'].length > 0) {
 			for (let result in data['results']) {
 				const result_obj = data['results'][result];
 				const status = result_obj.effective_status !== undefined && result_obj.effective_status !== null

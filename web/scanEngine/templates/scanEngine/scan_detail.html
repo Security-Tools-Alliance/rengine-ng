@@ -103,7 +103,11 @@
                                         {% for history in recent_scans %}
                                         <tr>
                                             <td>
-                                                <a href="{% url 'detail_scan' history.domain.slug history.id %}">{{ history.domain.name }} #{{ history.id }}</a>
+                                                {% if history.domain.project and history.domain.project.slug %}
+                                                <a href="{% url 'detail_scan' history.domain.project.slug history.id %}">{{ history.domain.name }} #{{ history.id }}</a>
+                                                {% else %}
+                                                <span>{{ history.domain.name }} #{{ history.id }}</span>
+                                                {% endif %}
                                             </td>
                                             <td>{{ history.start_scan_date|date:"M d, Y H:i" }}</td>
                                             <td><span class="badge badge-soft-secondary">{{ history.secator_worker_name|default:"Local" }}</span></td>

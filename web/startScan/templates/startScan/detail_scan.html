@@ -1449,6 +1449,7 @@ Scan Findings
 <script src="{% static 'custom/secator/secator_input_types_tasks.js' %}"></script>
 <script src="{% static 'custom/secator_scan.js' %}"></script>
 <script src="{% static 'startScan/js/detail_scan.js' %}"></script>
+<script src="{% static 'startScan/js/datatables_action_renderers.js' %}"></script>
 <script src="{% static 'plugins/lightbox/js/lightbox.js' %}"></script>
 <script src="{% static 'plugins/perfect-scrollbar/perfect-scrollbar.min.js' %}"></script>
 <script src="{% static 'assets/js/clipboard.min.js' %}"></script>
@@ -1666,6 +1667,11 @@ $(document).ready(function() {
 				"responsive": true,
 				"pageLength": vuln_datatable_page_length,
 				'serverSide': true,
+				{% if use_datatables_scroller %}
+				"scrollY": "60vh",
+				"deferRender": true,
+				"scroller": true,
+				{% endif %}
 				"ajax": {
 						'url': vuln_ajax_url,
 				},
@@ -1846,16 +1852,10 @@ $(document).ready(function() {
 					},
 					{
 						"render": function ( data, type, row ) {
-							if (!data){
-								return `<div class="d-flex flex-wrap gap-1 justify-content-center mb-2">
-								<a href="javascript:fetch_llm_vuln_details('{% url 'api:llm_vulnerability_report_generator' %}', ${row['id']}, '${row['name']}');" class="btn btn-sm btn-soft-info" data-toggle="tooltip" data-placement="top" title="Fetch LLM Vulnerability Details"><i class="fe-zap"></i></a>
-								<a href="javascript:report_hackerone('{% url 'api:vulnerability_report' %}', ${row['id']}, '${row['severity']}');" class="btn btn-sm btn-soft-primary" data-toggle="tooltip" data-placement="top" title="Report to Hackerone"><i class="fe-share"></i></a>
-								<a href="#" class="btn btn-sm btn-soft-danger btn-delete-vulnerability" id="${row['id']}" data-url="{% url 'api:delete_vulnerability' %}" data-toggle="tooltip" data-placement="top" title="Delete Vulnerability"><i class="fe-trash-2"></i></a>
-								</div>`;
-							}
-							else{
-								return '';
-							}
+							return window.RengineDatatableActionRenderers.renderVulnerabilityActions(row, {
+								urls: window.RENGINE_DATATABLE_ACTION_URLS.vulnerability,
+								showActions: !data
+							});
 						},
 						"targets": get_datatable_col_index('action', vuln_datatable_columns),
 					},
@@ -2015,10 +2015,15 @@ $(document).ready(function() {
 				"destroy": true,
 				"processing": true,
 				"layout": window.RENGINE_DATATABLE_LAYOUT_FULL,
-				"lengthMenu": [20, 50, 100, 500, 1000],
+				"lengthMenu": window.getRengineDatatableLengthMenu ? window.getRengineDatatableLengthMenu() : [[30, 50, 100, 200, 500, 1000, -1], ["30", "50", "100", "200", "500", "1000", "All"]],
 				"responsive": true,
-				"pageLength": 100,
+				"pageLength": window.getRengineDatatablePageLength ? window.getRengineDatatablePageLength() : 30,
 				'serverSide': true,
+				{% if use_datatables_scroller %}
+				"scrollY": "50vh",
+				"deferRender": true,
+				"scroller": true,
+				{% endif %}
 				"ajax": '/api/listDatatableSubdomain/?project={{current_project.slug}}&scan_id={{scan_history_id}}&format=datatables&only_directory',
 				"order": [[ 5, "desc" ]],
 				"columns": [
@@ -2200,7 +2205,6 @@ $(document).ready(function() {
 
 	//populate widgets
 	get_important_subdomains('{% url "api:querySubdomains" %}', target_id=null, scan_history_id={{scan_history_id}});
-	get_recon_notes('{% url "api:listTodoNotes" %}', target_id=null, scan_history_id={{scan_history_id}});
 
 	get_ips('{{ ip_addresses|safe }}', '{% url "api:getIpDetails" %}', '{% url "api:querySubdomains" %}', scan_id={{scan_history_id}}, domain_id=null);
 	get_technologies('{% url "api:listTechnologies" %}', '{% url "api:querySubdomains" %}', scan_id={{scan_history_id}}, domain_id=null);
@@ -2212,9 +2216,18 @@ $(document).ready(function() {
 	get_interesting_subdomains('{% url "api:interesting-subdomains-list" %}', project='{{current_project.slug}}', null, {{scan_history_id}});
 	get_interesting_endpoints('{% url "api:interesting-endpoints-list" %}', project='{{current_project.slug}}', null, {{scan_history_id}});
 
-	loadSubscanHistoryWidget('{% url "api:listSubScans" %}', scan_history_id={{scan_history_id}}, domain_id=null);
+	function loadDeferredWidgets() {
+		get_recon_notes('{% url "api:listTodoNotes" %}', target_id=null, scan_history_id={{scan_history_id}});
+		loadSubscanHistoryWidget('{% url "api:listSubScans" %}', scan_history_id={{scan_history_id}}, domain_id=null, 50);
+		get_most_vulnerable_target('{% url "api:fetch_most_vulnerable" %}', '{% url "all_vulns" current_project.slug %}', slug='{{current_project.slug}}', scan_id={{scan_history_id}}, target_id=null, ignore_info=false);
+		get_most_common_vulnerability('{% url "api:fetch_most_common_vulnerability" %}', '{% url "all_vulns" current_project.slug %}', slug='{{current_project.slug}}', scan_id={{scan_history_id}}, target_id=null, ignore_info=false);
+	}
+	if (typeof requestIdleCallback !== 'undefined') {
+		requestIdleCallback(function() { loadDeferredWidgets(); }, { timeout: 500 });
+	} else {
+		setTimeout(loadDeferredWidgets, 0);
+	}
 
-	get_most_vulnerable_target('{% url "api:fetch_most_vulnerable" %}', '{% url "all_vulns" current_project.slug %}', slug='{{current_project.slug}}', scan_id={{scan_history_id}}, target_id=null, ignore_info=false);
 	// listener for info checkbox on most vulnerable target
 	$('#ignore_info_most_vuln_checkbox').change(function() {
 		if (this.checked) {
@@ -2231,8 +2244,7 @@ $(document).ready(function() {
 		});
 	});
 
-	get_most_common_vulnerability('{% url "api:fetch_most_common_vulnerability" %}', '{% url "all_vulns" current_project.slug %}', slug='{{current_project.slug}}', scan_id={{scan_history_id}}, target_id=null, ignore_info=false);
-	// listener for info checkbox on most vulnerable target
+	// listener for info checkbox on most common vulnerability
 	$('#ignore_info_most_common_vuln_checkbox').change(function() {
 		if (this.checked) {
 			var text_msg = 'Informational Vulnerabilities ignored for Most Common Vulnerabilities.';
@@ -2297,7 +2309,9 @@ $(document).ready(function() {
 		var subdomain_ajax_url = '/api/listDatatableSubdomain/?project={{current_project.slug}}&scan_id={{scan_history_id}}&format=datatables';
 		var is_subd_grouping = false;
 		var subd_grouping_col = 8;
-		var subdomain_datatables = $('#subdomain_scan_results').DataTable({
+		var subdomainScrollerOpts = window.getRengineDatatableScrollerOptions ? window.getRengineDatatableScrollerOptions("60vh") : {};
+		var subdomainLayout = window.getRengineDatatableLayoutFull ? window.getRengineDatatableLayoutFull() : window.RENGINE_DATATABLE_LAYOUT_FULL;
+		var subdomain_datatables = $('#subdomain_scan_results').DataTable(Object.assign({
 			"headerCallback": function(e, a, t, n, s) {
 				e.getElementsByTagName("th")[0].innerHTML='<div class="form-check ms-1 form-check-primary"><input type="checkbox" class="float-start form-check-input chk-parent" id="head_checkbox" onclick=mainCheckBoxSelected(this)>\n<span class="new-control-indicator"></span><span style="visibility:hidden">c</span></div>\n'
 			},
@@ -2307,7 +2321,7 @@ $(document).ready(function() {
 			"createdRow": function (nRow, aData, iDataIndex) {
 				$(nRow).attr('id', 'subdomain_row_' + aData['id']);
 			},
-			"layout": window.RENGINE_DATATABLE_LAYOUT_FULL,
+			"layout": subdomainLayout,
 			"lengthMenu": subdomain_datatable_length_menu,
 			"responsive": true,
 			"pageLength": subdomain_datatable_page_length,
@@ -2570,20 +2584,11 @@ $(document).ready(function() {
 					// Action
 					{
 						"render": function ( data, type, row ) {
-							const cms_detector_http_url = row['http_url'] ? row['http_url'] : 'https://' + row['name'];
-							return `
-							<div class="btn-group mt-2">
-							<button type="button" data-toggle="tooltip" data-placement="top" title="Show Attack Surface" class="btn btn-primary me-1 bs-tooltip" onclick="show_attack_surface_modal('{% url 'api:llm_get_possible_attacks' %}', ${row['id']})"><i class="fe-eye"></i></button>
-							<button type="button" data-toggle="tooltip" data-placement="top" title="Further Scan Subdomain" class="btn btn-primary btn-scan-subdomain me-1" id="${row['id']}"><i class="fe-zap"></i></button>
-							<button type="button" data-toggle="tooltip" data-placement="top" title="Add Recon To-do/Note" class="btn btn-primary me-1 js-add-note-subdomain" data-subdomain-id="${row['id']}" data-subdomain-name="${(row['name'] || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')}"><i class="fe-file-plus"></i></button>
-							<button class="btn btn-primary me-1 dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false"><i class="mdi mdi-dots-horizontal"></i></button>
-							<div class="dropdown-menu dropdown-menu-end">
-							<a class="dropdown-item" href="#" onclick="mark_important_subdomain('{% url 'api:toggle_subdomain' %}', this, ${row['id']})" id="${row['id']}"><i class="mdi mdi-alert-rhombus-outline me-2 text-muted font-18 vertical-middle"></i>Mark Important Subdomain</a>
-							<a class="dropdown-item detect_subdomain_cms_link" href="#" data-http-status="${row['http_status']}" data-cms-url="${cms_detector_http_url}" data-url="{% url 'api:cms_detector' %}"><i class="fe-grid me-2 text-muted font-18 vertical-middle"></i>Detect CMS</a>
-							<a class="text-danger dropdown-item btn-delete-subdomain" href="#" id="${row['id']}"><i class="text-danger mdi mdi-delete-forever-outline me-2 font-18 vertical-middle"></i>Delete Subdomain</a>
-							</div>
-							</div>
-							`;
+							return window.RengineDatatableActionRenderers.renderSubdomainActions(row, {
+							urls: window.RENGINE_DATATABLE_ACTION_URLS.subdomain,
+							projectSlug: '{{ current_project.slug|escapejs }}',
+							useInlineNote: true
+						});
 						},
 						"targets": get_datatable_col_index('action', subdomain_datatable_columns),
 					},
@@ -2627,7 +2632,7 @@ $(document).ready(function() {
 						$(row).addClass('table-danger');
 					}
 				},
-			});
+			}, subdomainScrollerOpts));
 
 			var radioGroup = document.getElementsByName('grouping_subd_row');
 			radioGroup.forEach(function(radioButton) {
@@ -2818,8 +2823,8 @@ $(document).ready(function() {
 	var s3_table = $('#s3-datatable').DataTable({
 		"order": [[0, 'asc']],
 		"layout": window.RENGINE_DATATABLE_LAYOUT_FULL,
-		"lengthMenu": [[50, 100, 200, 300, 400, -1], [50, 100, 200, 300, 400, 'All']],
-		"pageLength": 100,
+		"lengthMenu": window.getRengineDatatableLengthMenu ? window.getRengineDatatableLengthMenu() : [[30, 50, 100, 200, 500, 1000, -1], ["30", "50", "100", "200", "500", "1000", "All"]],
+		"pageLength": window.getRengineDatatablePageLength ? window.getRengineDatatablePageLength() : 30,
 		"responsive": true,
 	});
 

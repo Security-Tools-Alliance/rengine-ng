@@ -4,10 +4,10 @@
  *
  * To rebuild or modify this file with the latest versions of the included
  * software please visit:
- *   https://datatables.net/download/#bs5/dt-2.3.7/r-3.0.8/rg-1.6.0
+ *   https://datatables.net/download/#bs5/dt-2.3.7/fc-5.0.5/fh-4.0.6/r-3.0.8/rg-1.6.0/sc-2.4.3
  *
  * Included libraries:
- *   DataTables 2.3.7, Responsive 3.0.8, RowGroup 1.6.0
+ *   DataTables 2.3.7, FixedColumns 5.0.5, FixedHeader 4.0.6, Responsive 3.0.8, RowGroup 1.6.0, Scroller 2.4.3
  */
 
 :root {
@@ -623,6 +623,154 @@ div.table-responsive > div.dt-container > div.row > div[class^=col-]:last-child 
 }
 
 
+:root {
+  --dtfc_background: white;
+  --dtfc-thead-cell_background: var(--dtfc_background);
+  --dtfc-tbody-cell_background: var(--dtfc_background);
+}
+
+:root.dark {
+  --dtfc_background: rgb(33, 37, 41);
+}
+
+table.dataTable thead tr > .dtfc-fixed-start,
+table.dataTable thead tr > .dtfc-fixed-end,
+table.dataTable tfoot tr > .dtfc-fixed-start,
+table.dataTable tfoot tr > .dtfc-fixed-end {
+  top: 0;
+  bottom: 0;
+  z-index: 3;
+  background-color: var(--dtfc-thead-cell_background);
+}
+table.dataTable tbody tr > .dtfc-fixed-start,
+table.dataTable tbody tr > .dtfc-fixed-end {
+  z-index: 1;
+  background-color: var(--dtfc-tbody-cell_background);
+}
+table.dataTable tr > .dtfc-fixed-left::after,
+table.dataTable tr > .dtfc-fixed-right::after {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 10px;
+  transition: box-shadow 0.3s;
+  content: "";
+  pointer-events: none;
+}
+table.dataTable tr > .dtfc-fixed-left::after {
+  right: 0;
+  transform: translateX(100%);
+}
+table.dataTable tr > .dtfc-fixed-right::after {
+  left: 0;
+  transform: translateX(-80%);
+}
+table.dataTable.dtfc-scrolling-left tr > .dtfc-fixed-left::after {
+  box-shadow: inset 10px 0 8px -8px rgba(0, 0, 0, 0.2);
+}
+table.dataTable.dtfc-scrolling-right tr > .dtfc-fixed-right::after {
+  box-shadow: inset -10px 0 8px -8px rgba(0, 0, 0, 0.2);
+}
+table.dataTable.dtfc-scrolling-right tr > .dtfc-fixed-right + .dtfc-fixed-right::after {
+  box-shadow: none;
+}
+
+div.dt-scroll,
+div.dtfh-floatingparent {
+  position: relative;
+}
+div.dt-scroll div.dtfc-top-blocker,
+div.dt-scroll div.dtfc-bottom-blocker,
+div.dtfh-floatingparent div.dtfc-top-blocker,
+div.dtfh-floatingparent div.dtfc-bottom-blocker {
+  position: absolute;
+  background-color: var(--dtfc-thead-cell_background);
+}
+
+html.dark table.dataTable.dtfc-scrolling-left tbody > tr > .dtfc-fixed-left::after {
+  box-shadow: inset 10px 0 8px -8px rgba(0, 0, 0, 0.3);
+}
+html.dark table.dataTable.dtfc-scrolling-right tbody > tr > .dtfc-fixed-right::after {
+  box-shadow: inset -10px 0 8px -8px rgba(0, 0, 0, 0.3);
+}
+html.dark table.dataTable.dtfc-scrolling-right tbody > tr > .dtfc-fixed-right + .dtfc-fixed-right::after {
+  box-shadow: none;
+}
+
+div.dtfc-top-blocker,
+div.dtfc-top-blocker {
+  border-bottom: 0px solid #ddd !important;
+}
+
+table.dataTable {
+  border-collapse: separate;
+}
+table.dataTable.table-bordered {
+  border-left-width: 0;
+  border-right-width: 0;
+}
+table.dataTable.table-bordered th,
+table.dataTable.table-bordered td {
+  border-right-width: 0;
+  border-top-width: 0;
+}
+table.dataTable.table-bordered th:last-child,
+table.dataTable.table-bordered td:last-child {
+  border-right: 1px solid #dee2e6;
+}
+table.dataTable.table-bordered tr:last-child th,
+table.dataTable.table-bordered tr:last-child td {
+  border-bottom-width: 0;
+}
+
+table.dataTable thead tr > .dtfc-fixed-start,
+table.dataTable thead tr > .dtfc-fixed-end,
+table.dataTable tfoot tr > .dtfc-fixed-start,
+table.dataTable tfoot tr > .dtfc-fixed-end {
+  background-color: var(--bs-table-bg);
+}
+table.dataTable tbody tr > .dtfc-fixed-start,
+table.dataTable tbody tr > .dtfc-fixed-end {
+  background-color: var(--bs-table-bg);
+}
+
+div.dtfc-top-blocker,
+div.dtfc-bottom-blocker {
+  background-color: var(--bs-body-bg);
+}
+
+div.dt-scroll-body {
+  border-left-color: var(--bs-table-color) !important;
+}
+
+div.dt-scroll-headInner table.table-bordered tr th:first-child,
+div.dt-scroll-footInner table.table-bordered tr th:first-child {
+  border-left-color: var(--bs-border-color) !important;
+}
+
+
+table.dataTable.fixedHeader-floating,
+table.dataTable.fixedHeader-locked {
+  position: relative !important;
+  background-color: var(--bs-body-bg);
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+}
+
+div.dtfh-floatingparent-foot table {
+  border-top-color: var(--bs-border-color);
+  border-top-width: var(--bs-border-width);
+  border-top-style: solid;
+}
+
+@media print {
+  table.fixedHeader-floating,
+  table.fixedHeader-locked {
+    display: none;
+  }
+}
+
+
 table.dataTable.dtr-inline.collapsed > tbody > tr > td.child,
 table.dataTable.dtr-inline.collapsed > tbody > tr > th.child,
 table.dataTable.dtr-inline.collapsed > tbody > tr > td.dataTables_empty {
@@ -899,6 +1047,67 @@ table.dataTable.table-striped tr.dtrg-level-3 th,
 table.dataTable.table-striped tr.dtrg-level-4 th,
 table.dataTable.table-striped tr.dtrg-level-5 th {
   background-color: transparent;
+}
+
+
+div.dts {
+  display: block !important;
+}
+div.dts tbody th,
+div.dts tbody td {
+  white-space: nowrap;
+}
+div.dts div.dts_loading {
+  z-index: 1;
+}
+div.dts div.dts_label {
+  position: absolute;
+  right: 20px;
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+  box-shadow: 3px 3px 10px rgba(0, 0, 0, 0.5);
+  text-align: right;
+  border-radius: 3px;
+  padding: 0.4em;
+  z-index: 2;
+  display: none;
+}
+div.dts div.dt-scroll-body,
+div.dts div.dataTables_scrollBody {
+  background: repeating-linear-gradient(45deg, rgba(0, 0, 0, 0.025), rgba(0, 0, 0, 0.025) 10px, rgba(0, 0, 0, 0) 10px, rgba(0, 0, 0, 0) 20px);
+}
+div.dts div.dt-scroll-body table,
+div.dts div.dataTables_scrollBody table {
+  background-color: white;
+  z-index: 2;
+}
+div.dts div.dt-length,
+div.dts div.dt-paging,
+div.dts div.dataTables_paginate,
+div.dts div.dataTables_length {
+  display: none;
+}
+
+html.dark div.dts div.dts_label {
+  background: rgba(255, 255, 255, 0.8);
+  color: black;
+}
+html.dark div.dts div.dt-scroll-body,
+html.dark div.dts div.dataTables_scrollBody {
+  background: repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0.025) 10px, rgba(255, 255, 255, 0) 10px, rgba(255, 255, 255, 0) 20px);
+}
+html.dark div.dts div.dt-scroll-body table,
+html.dark div.dts div.dataTables_scrollBody table {
+  background-color: var(--dt-html-background);
+  z-index: 2;
+}
+
+div.DTS div.dataTables_scrollBody table {
+  background-color: white;
+}
+
+html[data-bs-theme=dark] div.DTS div.dataTables_scrollBody table {
+  background-color: var(--bs-body-bg);
 }
 
 

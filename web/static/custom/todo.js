@@ -200,10 +200,12 @@ function get_recon_notes(endpoint, target_id, scan_id){
         <hr/>
         `);
       }
-      $('#tasks-count').html(`<span class="badge badge-soft-primary">${data['notes'].length}</span>`);
+      const displayCount = data['total_count'] !== undefined ? data['total_count'] : data['notes'].length;
+      $('#tasks-count').html(`<span class="badge badge-soft-primary">${displayCount}</span>`);
     }
     else{
-      $('#tasks-count').html(`<span class="badge badge-soft-primary me-1">0</span>`);
+      const displayCount = data['total_count'] !== undefined ? data['total_count'] : 0;
+      $('#tasks-count').html(`<span class="badge badge-soft-primary me-1">${displayCount}</span>`);
       $('#todo-list').append(`<p>No todos or notes...</br>You can add todo for individual subdomains or you can also add using + symbol above.</p>`);
     }
     $('.bs-tooltip').tooltip();

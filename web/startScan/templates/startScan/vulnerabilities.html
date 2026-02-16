@@ -10,6 +10,14 @@ All Vulnerabilities
 <link href="{% static 'plugins/perfect-scrollbar/perfect-scrollbar.css' %}" rel="stylesheet" type="text/css" />
 {% endblock custom_js_css_link %}
 
+{% block breadcrumb_title %}
+<li class="breadcrumb-item active"><a href="{% url 'all_vulns' current_project.slug %}">Vulnerabilities</a></li>
+{% endblock breadcrumb_title %}
+
+{% block page_title %}
+Vulnerabilities
+{% endblock page_title %}
+
 {% block main_content %}
 <div class="row">
 	{% include 'base/_items/vulnerability_tab_content.html' %}
@@ -19,6 +27,7 @@ All Vulnerabilities
 
 {% block page_level_script %}
 <script src="{% static 'startScan/js/detail_scan.js' %}"></script>
+<script src="{% static 'startScan/js/datatables_action_renderers.js' %}"></script>
 <script src="{% static 'plugins/perfect-scrollbar/perfect-scrollbar.min.js' %}"></script>
 <script src="{% static 'startScan/js/vulnerability-datatables-suggestions.js' %}"></script>
 <script src="{% static 'custom/vuln_datatables.js' %}"></script>
@@ -40,6 +49,11 @@ $(document).ready(function() {
 		"destroy": true,
 		"processing": true,
 		"layout": window.RENGINE_DATATABLE_LAYOUT_FULL,
+		{% if use_datatables_scroller %}
+		"scrollY": "60vh",
+		"deferRender": true,
+		"scroller": true,
+		{% endif %}
 		"stripeClasses": [],
 		"lengthMenu": vuln_datatable_length_menu,
 		"pageLength": vuln_datatable_page_length,
@@ -215,16 +229,10 @@ $(document).ready(function() {
 			},
 			{
 				"render": function ( data, type, row ) {
-					if (!data){
-						return `<div class="d-flex flex-wrap gap-1 justify-content-center mb-2">
-						<a href="javascript:fetch_llm_vuln_details('{% url 'api:llm_vulnerability_report_generator' %}', ${row['id']}, '${row['name']}');" class="btn btn-sm btn-soft-info" data-toggle="tooltip" data-placement="top" title="Fetch LLM Vulnerability Details"><i class="fe-zap"></i></a>
-						<a href="javascript:report_hackerone('{% url 'api:vulnerability_report' %}', ${row['id']}, '${row['severity']}');" class="btn btn-sm btn-soft-primary" data-toggle="tooltip" data-placement="top" title="Report to Hackerone"><i class="fe-share"></i></a>
-						<a href="#" class="btn btn-sm btn-soft-danger btn-delete-vulnerability" id="${row['id']}" data-url="{% url 'api:delete_vulnerability' %}" data-toggle="tooltip" data-placement="top" title="Delete Vulnerability"><i class="fe-trash-2"></i></a>
-						</div>`;
-					}
-					else{
-						return '';
-					}
+					return window.RengineDatatableActionRenderers.renderVulnerabilityActions(row, {
+						urls: window.RENGINE_DATATABLE_ACTION_URLS.vulnerability,
+						showActions: !data
+					});
 				},
 				"targets": get_datatable_col_index('action', vuln_datatable_columns),
 			},

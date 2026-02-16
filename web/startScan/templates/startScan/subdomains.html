@@ -43,6 +43,7 @@ All subdomains
 <script src="{% static 'assets/js/clipboard.min.js' %}"></script>
 <script src="{% static 'startScan/js/subdomains-suggestions.js' %}"></script>
 <script src="{% static 'custom/subdomain.js' %}"></script>
+<script src="{% static 'startScan/js/datatables_action_renderers.js' %}"></script>
 <script src="{% static 'custom/subdomain_datatable.js' %}"></script>
 <script type="text/javascript">
 $(document).ready(function() {
@@ -57,7 +58,9 @@ $(document).ready(function() {
 	{% else %}
 	var url = '/api/listDatatableSubdomain/?project={{current_project.slug}}&format=datatables';
 	{% endif %}
-	var subdomain_datatables = $('#subdomain_scan_results').DataTable({
+	var subdomainScrollerOpts = window.getRengineDatatableScrollerOptions ? window.getRengineDatatableScrollerOptions("60vh") : {};
+	var subdomainLayout = window.getRengineDatatableLayoutFull ? window.getRengineDatatableLayoutFull() : window.RENGINE_DATATABLE_LAYOUT_FULL;
+	var subdomain_datatables = $('#subdomain_scan_results').DataTable(Object.assign({
 		"headerCallback": function(e, a, t, n, s) {
 			e.getElementsByTagName("th")[0].innerHTML='<div class="form-check ms-1 form-check-primary"><input type="checkbox" class="float-start form-check-input chk-parent" id="head_checkbox" onclick=mainCheckBoxSelected(this)>\n<span class="new-control-indicator"></span><span style="visibility:hidden">c</span></div>\n'
 		},
@@ -67,6 +70,7 @@ $(document).ready(function() {
 		"fnCreatedRow": function (nRow, aData, iDataIndex) {
 			$(nRow).attr('id', 'subdomain_row_' + aData['id']);
 		},
+		"layout": subdomainLayout,
 		"stripeClasses": [],
 		"lengthMenu": subdomain_datatable_length_menu,
 		"pageLength": subdomain_datatable_page_length,
@@ -318,20 +322,11 @@ $(document).ready(function() {
 				// Action
 				{
 					"render": function ( data, type, row ) {
-						const cms_detector_http_url = row['http_url'] ? row['http_url'] : 'https://' + row['name'];
-						return `
-						<div class="btn-group mt-2">
-							<button type="button" data-toggle="tooltip" data-placement="top" title="Show Attack Surface" class="btn btn-primary me-1 bs-tooltip" onclick="show_attack_surface_modal('{% url 'api:llm_get_possible_attacks' %}', ${row['id']})"><i class="fe-eye"></i></button>
-							<button type="button" data-toggle="tooltip" data-placement="top" title="Further Scan Subdomain" class="btn btn-primary btn-scan-subdomain me-1 bs-tooltip" id="${row['id']}"><i class="fe-zap"></i></button>
-							<button type="button" data-toggle="tooltip" data-placement="top" title="Add Recon To-do/Note" class="btn btn-primary me-1 bs-tooltip" id="${row['id']}" onclick="add_note_for_subdomain(${row['id']}, '${row['name']}', '{{current_project.slug}}')"><i class="fe-file-plus"></i></button>
-							<button class="btn btn-primary me-1 dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false"><i class="mdi mdi-dots-horizontal"></i></button>
-							<div class="dropdown-menu dropdown-menu-end">
-							<a class="dropdown-item" href="#" onclick="mark_important_subdomain('{% url 'api:toggle_subdomain' %}', this, ${row['id']})" id="${row['id']}"><i class="mdi mdi-alert-rhombus-outline me-2 text-muted font-18 vertical-middle"></i>Mark Important Subdomain</a>
-							<a class="dropdown-item detect_subdomain_cms_link" href="#" data-http-status="${row['http_status']}" data-cms-url="${cms_detector_http_url}" data-url="{% url 'api:cms_detector' %}"><i class="fe-grid me-2 text-muted font-18 vertical-middle"></i>Detect CMS</a>
-							<a class="text-danger dropdown-item btn-delete-subdomain" href="#" id="${row['id']}"><i class="text-danger mdi mdi-delete-forever-outline me-2 font-18 vertical-middle"></i>Delete Subdomain</a>
-							</div>
-						</div>
-						`;
+						return window.RengineDatatableActionRenderers.renderSubdomainActions(row, {
+							urls: window.RENGINE_DATATABLE_ACTION_URLS.subdomain,
+							projectSlug: '{{ current_project.slug|escapejs }}',
+							useInlineNote: false
+						});
 					},
 					"targets": get_datatable_col_index('action', subdomain_datatable_columns),
 				},
@@ -356,7 +351,6 @@ $(document).ready(function() {
 					"targets": get_datatable_col_index('sources', subdomain_datatable_columns),
 				},
 			],
-			"layout": window.RENGINE_DATATABLE_LAYOUT_FULL,
 			"initComplete": function(settings, json) {
 				api = this.api();
 				subdomain_datatable_col_visibility(subdomain_datatables);
@@ -376,7 +370,7 @@ $(document).ready(function() {
 					$(row).addClass('table-danger');
 				}
 			},
-		});
+		}, subdomainScrollerOpts));
 
 		var radioGroup = document.getElementsByName('grouping_subd_row');
 		radioGroup.forEach(function(radioButton) {

@@ -7,7 +7,7 @@ from django.contrib.auth.models import User
 from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import ValidationError
 from django.db import models
-from django.db.models import Count, Q
+from django.db.models import Count, Exists, OuterRef, Q
 from django.db.models.functions import TruncDay
 from django.utils import timezone
 
@@ -138,10 +138,20 @@ class ScanHistory(models.Model):
         from reNgine.definitions import SUCCESS_TASK
         from reNgine.secator import SecatorProgressSync
 
-        # Check if this is a Secator scan (has SecatorRunner)
-        secator_runners = SecatorRunner.objects.filter(scan_history=self)
-        if secator_runners.exists():
-            # Use Secator progress calculation
+        def _has_secator_runners(scan_history) -> bool:
+            """
+            Return True if this scan has any related SecatorRunner rows.
+
+            Uses the related manager's prefetch indicator when available and falls back
+            to an existence query otherwise, so any future Django API changes are handled
+            in one place.
+            """
+            manager = scan_history.secatorrunner_set
+            if getattr(manager, "_prefetch_done", False):
+                return bool(manager.all())
+            return SecatorRunner.objects.filter(scan_history=scan_history).exists()
+
+        if _has_secator_runners(self):
             return SecatorProgressSync.calculate_workflow_progress(self.id)
 
         # Legacy scan: calculate based on completed steps vs total steps
@@ -233,12 +243,15 @@ class ScanHistory(models.Model):
         from reNgine.definitions import RUNNING_TASK
         from reNgine.secator import SecatorProgressSync
 
-        # Check if this is a Secator scan (has SecatorRunner)
-        # Import here to avoid circular import
+        # Check if this is a Secator scan (has SecatorRunner); use prefetch when available
         from startScan.models import SecatorRunner
 
-        secator_runners = SecatorRunner.objects.filter(scan_history=self)
-        if secator_runners.exists():
+        prefetched = getattr(self, "_prefetched_objects_cache", None)
+        if prefetched and "secatorrunner_set" in prefetched:
+            has_secator = bool(list(self.secatorrunner_set.all()))
+        else:
+            has_secator = SecatorRunner.objects.filter(scan_history=self).exists()
+        if has_secator:
             if current_runner := SecatorProgressSync.get_current_running_runner(self.id):
                 runner_name = current_runner.runner_name or current_runner.runner_data.get("name", "Unknown")
                 runner_type = current_runner.runner_type or current_runner.runner_data.get("config", {}).get(
@@ -744,9 +757,12 @@ class Subdomain(models.Model):
                 "total_vuln_ignore_info_count": 0,
             }
 
-        base_counts = queryset.aggregate(
+        # Use Exists subquery for with_ip to avoid heavy M2M distinct count
+        through = cls.ip_addresses.through
+        has_ip = Exists(through.objects.filter(subdomain_id=OuterRef("pk")))
+        base_counts = queryset.annotate(_has_ip=has_ip).aggregate(
             total=Count("id"),
-            with_ip=Count("id", filter=Q(ip_addresses__isnull=False), distinct=True),
+            with_ip=Count("id", filter=Q(_has_ip=True)),
             alive=Count("id", filter=~Q(http_status=0)),
         )
 
@@ -846,6 +862,7 @@ class SubScan(models.Model):
     class Meta:
         indexes = [
             models.Index(fields=["scan_history_id", "status"]),
+            models.Index(fields=["scan_history_id", "stop_scan_date"], name="ss_subscan_scan_stop_idx"),
         ]
 
     def get_completed_ago(self):
@@ -1365,6 +1382,9 @@ class Vulnerability(models.Model):
         indexes = [
             models.Index(fields=["scan_history_id", "cvss_score"], name="ss_vuln_scan_cvss_idx"),
             models.Index(fields=["scan_history_id", "severity"], name="ss_vuln_scan_severity_idx"),
+            models.Index(fields=["scan_history_id", "name"], name="ss_vuln_scan_name_idx"),
+            models.Index(fields=["target_domain_id", "name"], name="ss_vuln_target_name_idx"),
+            models.Index(fields=["subdomain_id", "severity"], name="ss_vuln_subdomain_severity_idx"),
         ]
 
 

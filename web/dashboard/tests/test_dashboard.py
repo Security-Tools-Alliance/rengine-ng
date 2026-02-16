@@ -38,6 +38,25 @@ class TestDashboardViews(BaseTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "dashboard/profile.html")
 
+    def test_interface_settings_view_get(self):
+        """Test the interface settings view GET."""
+        response = self.client.get(reverse("interface_settings"))
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "dashboard/interface_settings.html")
+        self.assertIn("form", response.context)
+
+    def test_interface_settings_view_post_saves_preference(self):
+        """Test the interface settings view POST saves preference and redirects."""
+        from dashboard.services.user_preferences import get_datatables_display
+
+        response = self.client.post(
+            reverse("interface_settings"),
+            {"datatables_display": "scroller"},
+            follow=False,
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(get_datatables_display(self.user), "scroller")
+
     @patch("dashboard.views.get_user_model")
     def test_admin_interface_view(self, mock_get_user_model):
         """Test the admin interface view."""

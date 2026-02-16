@@ -13,3 +13,8 @@ class TodoNote(models.Model):
     is_done = models.BooleanField(default=False)
     is_important = models.BooleanField(default=False)
     project = models.ForeignKey(Project, on_delete=models.CASCADE)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["subdomain_id", "is_done"], name="recon_todonote_sub_done_idx"),
+        ]
