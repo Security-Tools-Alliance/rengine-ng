@@ -105,5 +105,10 @@ class TestGetDatatableActionUrls(BaseTestCase):
         self.assertIn("deleteTargetBase", target)
         for key, path in target.items():
             self.assertFalse(path.endswith("/0") or path.endswith("/0/"), msg=f"target.{key} must be base path")
+            self.assertTrue(path.startswith("/"), msg=f"target.{key} must be absolute path for href")
+            self.assertTrue(path.endswith("/"), msg=f"target.{key} must end with / so that base+id yields base/id")
         expected_summary = reverse("target_summary", args=[slug, 0])
-        self.assertEqual(target["targetSummaryBase"] + "/0", expected_summary.rstrip("/"))
+        expected_full = expected_summary.rstrip("/")
+        if not expected_full.startswith("/"):
+            expected_full = f"/{expected_full}"
+        self.assertEqual(target["targetSummaryBase"] + "0", expected_full)

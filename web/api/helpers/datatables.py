@@ -158,9 +158,14 @@ def apply_datatables_order(
 
 
 def _target_url_base(url: str) -> str:
-    """Strip trailing /0 or /0/ so the frontend can append row.id. No trailing slash."""
+    """Strip trailing /0 or /0/ so the frontend can append row.id.
+    Returns base with a trailing slash so that (base + id) yields the correct path (e.g. base/2).
+    Ensures a leading slash so that href values are absolute paths.
+    """
     u = url.rstrip("/")
-    return (u[:-1].rstrip("/")) if u.endswith("/0") else u
+    base = (u[:-1].rstrip("/")) if u.endswith("/0") else u
+    base = base if base.startswith("/") else f"/{base}"
+    return base if base.endswith("/") else f"{base}/"
 
 
 def get_datatable_action_urls(project_slug: str) -> dict:
