@@ -24,6 +24,7 @@ from reNgine.utilities.logger import get_module_logger
 from reNgine.utilities.worker_ws_groups import worker_deploy_group, worker_refresh_group
 from startScan.models import (
     Command,
+    Domain,
     EndPoint,
     ScanActivity,
     ScanHistory,
@@ -220,13 +221,15 @@ def _add_secator_runners_to_message(scan: ScanHistory, message: dict) -> None:
 
 
 def _get_scan_counts(scan_history_id: int) -> dict:
-    """Return subdomain, endpoint and vulnerability counts for a scan in one pass."""
+    """Return domain, subdomain, endpoint and vulnerability counts for a scan in one pass."""
+    domain_count = Domain.objects.filter(scan_history_id=scan_history_id).count()
     subdomain_count = Subdomain.objects.filter(scan_history__id=scan_history_id).count()
     alive_count = Subdomain.objects.filter(scan_history__id=scan_history_id, http_status__gt=0).count()
     endpoint_count = EndPoint.objects.filter(scan_history__id=scan_history_id).count()
     endpoint_alive_count = EndPoint.objects.filter(scan_history__id=scan_history_id, http_status__gt=0).count()
     vulnerability_count = Vulnerability.objects.filter(scan_history__id=scan_history_id).count()
     return {
+        "domain_count": domain_count,
         "subdomain_count": subdomain_count,
         "alive_count": alive_count,
         "endpoint_count": endpoint_count,
@@ -266,6 +269,7 @@ def _build_base_status_message(
         "status": scan.scan_status,
         "progress": scan.get_progress(),
         "current_task": scan.get_current_task(),
+        "domain_count": counts["domain_count"],
         "subdomain_count": counts["subdomain_count"],
         "endpoint_count": counts["endpoint_count"],
         "vulnerability_count": counts["vulnerability_count"],

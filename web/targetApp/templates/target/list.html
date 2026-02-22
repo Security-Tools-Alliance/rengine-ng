@@ -128,10 +128,11 @@ $(document).ready(function(){
 				{'data': 'insert_date'},
 				{'data': 'insert_date_humanized'},
 				{'data': 'start_scan_date_humanized'},
+				{'data': 'scope_names'},
 			],
 			"columnDefs":[
 				{ 'orderable': false, 'targets': [0, 3, 4, 7]},
-				{ 'visible': false, 'targets': [1, 8, 9, 10, 11, 12] },
+				{ 'visible': false, 'targets': [1, 8, 9, 10, 11, 12, 13] },
 				{
 					"targets":0, "width":"20px", "className":"", "orderable":!1, render:function(e, a, t, n) {
 					return'<div class="form-check mb-2 form-check-primary"><input type="checkbox" name="targets_checkbox['+ e + ']" class="float-start form-check-input targets_checkbox" value="' + e + '" onchange=toggleMultipleTargetButton()>\n<span class="new-control-indicator"></span><span style="visibility:hidden">c</span></div>'
@@ -140,11 +141,17 @@ $(document).ready(function(){
 				{
 					"render": function(data, type, row) {
 						var content = '';
-						content += `<b>${data}</b>&nbsp;&nbsp;<a href="#" onclick="get_target_whois('{% url 'api:whois' %}', '${data}')">(view whois)</a>`;
+						content += `<b>${data}</b>`;
 						if (row.organization) {
 							content += '<br>';
 							for (var org in row.organization) {
-								content += `<span class="badge badge-soft-primary me-1 mb-1" data-toggle="tooltip" data-placement="top" title="Domain ${data} belongs to organization ${row.organization[org]}">${row.organization[org]}</span>`;
+								content += `<span class="badge badge-soft-primary me-1 mb-1" data-toggle="tooltip" data-placement="top" title="Domain ${data} belongs to organization ${row.organization[org]}"><i class="fe-briefcase me-1"></i>${row.organization[org]}</span>`;
+							}
+						}
+						if (row.scope_names && row.scope_names.length) {
+							content += '<br>';
+							for (var si = 0; si < row.scope_names.length; si++) {
+								content += `<span class="badge badge-soft-info me-1 mb-1" data-toggle="tooltip" data-placement="top" title="Scope: ${htmlEncode(row.scope_names[si])}"><i class="fe-crosshair me-1"></i>${htmlEncode(row.scope_names[si])}</span>`;
 							}
 						}
 
@@ -159,14 +166,15 @@ $(document).ready(function(){
 				},
 				{
 					"render": function(data, type, row) {
-						var dc = row.domain_count != null ? row.domain_count : 0;
-						var sc = row.subdomain_count != null ? row.subdomain_count : 0;
-						var ec = row.endpoint_count != null ? row.endpoint_count : 0;
-						var vc = row.vulnerability_count != null ? row.vulnerability_count : 0;
-						return '<span class="badge badge-pills bg-secondary mt-1 me-1" data-toggle="tooltip" title="Domains">' + dc + '</span>' +
-							'<span class="badge badge-pills bg-info mt-1 me-1" data-toggle="tooltip" title="Subdomains">' + sc + '</span>' +
-							'<span class="badge badge-pills bg-warning mt-1 me-1" data-toggle="tooltip" title="Endpoints">' + ec + '</span>' +
-							'<span class="badge badge-pills bg-danger mt-1" data-toggle="tooltip" title="Vulnerabilities">' + vc + '</span>';
+						return typeof window.renderScanSummaryBadges === 'function'
+							? window.renderScanSummaryBadges({
+								domainCount: row.domain_count != null ? row.domain_count : 0,
+								subdomainCount: row.subdomain_count != null ? row.subdomain_count : 0,
+								endpointCount: row.endpoint_count != null ? row.endpoint_count : 0,
+								vulnerabilityCount: row.vulnerability_count != null ? row.vulnerability_count : 0,
+								vulnTooltip: 'Vulnerabilities'
+							})
+							: '';
 					},
 					"targets": 4,
 				},

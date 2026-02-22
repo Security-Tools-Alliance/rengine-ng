@@ -1,0 +1,102 @@
+{% extends 'base/base.html' %}
+{% load static %}
+{% load humanize %}
+{% load permission_tags %}
+
+{% block title %}
+Scopes
+{% endblock title %}
+
+{% block breadcrumb_title %}
+<li class="breadcrumb-item active"><a href="{% url 'list_scope' current_project.slug %}">Scopes</a></li>
+{% endblock breadcrumb_title %}
+
+{% block page_title %}
+Scopes
+{% endblock page_title %}
+
+{% block main_content %}
+<div class="row">
+  <div class="col-12">
+    <div class="card">
+      <div class="p-2">
+        <div class="row">
+          <div class="col-xl-6 col-lg-6 col-md-6 col-sm-12 col-12">
+          </div>
+          <div class="col-xl-6 col-lg-6 col-md-6 col-sm-12 col-12">
+            {% if user|can:'modify_targets' %}
+            <a class="btn btn-soft-primary float-end ms-1" href="{% url 'add_scope' current_project.slug %}" data-toggle="tooltip" data-placement="top" title="Add Scope">Add New Scope</a>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="row">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-body">
+        <table id="list_scope_table" class="table dt-responsive w-100">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th class="text-center">Organization</th>
+            <th class="text-center">Type</th>
+            <th class="text-center">Start</th>
+            <th class="text-center">End</th>
+            <th class="text-center">Targets</th>
+            <th class="text-center">Workers</th>
+            <th class="text-center">Added</th>
+            <th class="text-center">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for scope in scopes %}
+          <tr data-delete-url="{% url 'delete_scope' current_project.slug scope.id %}">
+            <td><a href="{% url 'scope_detail' current_project.slug scope.id %}">{{ scope.name }}</a></td>
+            <td class="text-center">{{ scope.organization.name }}</td>
+            <td class="text-center"><span class="badge bg-info">{{ scope.get_scope_type_display }}</span></td>
+            <td class="text-center">{% if scope.start_date %}{{ scope.start_date }}{% else %}-{% endif %}</td>
+            <td class="text-center">{% if scope.end_date %}{{ scope.end_date }}{% else %}-{% endif %}</td>
+            <td class="text-center"><span class="badge bg-primary">{{ scope.target_count }}</span></td>
+            <td class="text-center"><span class="badge bg-secondary">{{ scope.worker_count }}</span></td>
+            <td class="text-center"><span data-toggle="tooltip" data-placement="top" title="{{ scope.insert_date }}">{{ scope.insert_date|naturaltime }}</span></td>
+            <td class="text-center">
+              {% if user|can:'modify_targets' %}
+              <a href="{% url 'update_scope' current_project.slug scope.id %}" class="btn btn-soft-primary btn-sm" data-toggle="tooltip" title="Edit"><i class="fe-edit-2"></i></a>
+              <a href="#" onclick="delete_scope(this)" class="btn btn-soft-danger btn-sm" data-toggle="tooltip" title="Delete"><i class="fe-trash-2"></i></a>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock main_content %}
+
+
+{% block page_level_script %}
+{# DataTables: uses same global helper as target list (initClientSideDataTable from static/custom/datatable_helpers.js). If helpers or asset paths change, update here and in base. #}
+<script>
+$(document).ready(function() {
+  if (typeof window.initClientSideDataTable === 'function') {
+    window.initClientSideDataTable('#list_scope_table', {});
+  }
+});
+
+function delete_scope(btn) {
+  if (typeof window.confirmDeleteRow === 'function') {
+    window.confirmDeleteRow(btn, {
+      confirmTitle: 'Are you sure you want to delete this scope?',
+      confirmText: 'This action cannot be undone!',
+      successMessage: 'Deleted! Scope has been deleted.',
+      errorMessage: 'Could not delete scope.'
+    });
+  }
+}
+</script>
+{% endblock page_level_script %}

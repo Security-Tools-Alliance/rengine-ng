@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Organization, Target
+from .models import Organization, Scope, Target
 
 
 @admin.register(Target)
@@ -39,7 +39,7 @@ class TargetAdmin(admin.ModelAdmin):
         ),
         (
             "Advanced",
-            {"fields": ("request_headers",), "classes": ("collapse",)},
+            {"fields": ("request_headers", "scan_config_override"), "classes": ("collapse",)},
         ),
     )
 
@@ -74,5 +74,65 @@ class OrganizationAdmin(admin.ModelAdmin):
         (
             "Targets",
             {"fields": ("targets",)},
+        ),
+    )
+
+
+@admin.register(Scope)
+class ScopeAdmin(admin.ModelAdmin):
+    """Admin interface for Scope model."""
+
+    list_display = [
+        "name",
+        "organization",
+        "scope_type",
+        "start_date",
+        "end_date",
+        "insert_date",
+    ]
+    list_filter = [
+        "scope_type",
+        "organization",
+        "insert_date",
+    ]
+    search_fields = [
+        "name",
+        "description",
+    ]
+    readonly_fields = [
+        "insert_date",
+    ]
+    filter_horizontal = [
+        "targets",
+        "workers",
+    ]
+    fieldsets = (
+        (
+            "Basic Information",
+            {"fields": ("organization", "name", "scope_type", "description", "start_date", "end_date", "insert_date")},
+        ),
+        (
+            "Targets & Workers",
+            {"fields": ("targets", "workers")},
+        ),
+        (
+            "Scan Parameters",
+            {
+                "fields": (
+                    "threads",
+                    "rate_limit",
+                    "timeout",
+                    "retries",
+                    "delay",
+                    "proxy",
+                    "user_agent",
+                    "follow_redirect",
+                    "depth",
+                    "request_headers",
+                    "default_profiles",
+                    "extra_config",
+                ),
+                "classes": ("collapse",),
+            },
         ),
     )

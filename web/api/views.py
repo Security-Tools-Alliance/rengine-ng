@@ -806,10 +806,9 @@ class ListTargetsDatatableViewSet(viewsets.ModelViewSet):
     datatable_column_map = DATATABLE_COLUMN_MAP_TARGETS
 
     def get_queryset(self):
-        qs = self.queryset
-        if slug := self.request.GET.get("slug", None):
-            qs = qs.filter(project__slug=slug)
-        qs = qs.annotate(
+        slug = self.request.GET.get("slug", None)
+        qs = Target.objects.for_project(slug) if slug else self.queryset
+        qs = qs.prefetch_related("scopes").annotate(
             domain_count=Count("scan_histories__discovered_domains", distinct=True),
             subdomain_count=Count("scan_histories__subdomain", distinct=True),
             endpoint_count=Count("scan_histories__endpoint", distinct=True),
@@ -4565,8 +4564,6 @@ class SecatorRunnerCreate(SecatorAPIBase):
             runner_type = context.get("runner_type") or "unknown"
             runner_name = context.get("runner_name")
             scan_history_id = context.get("scan_history_id")
-            target_id = context.get("target_id")
-            domain_id = context.get("domain_id")
 
             # Create runner object in database
             secator_runner = SecatorRunner(

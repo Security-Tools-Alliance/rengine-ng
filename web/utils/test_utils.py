@@ -50,7 +50,7 @@ from startScan.models import (
     Vulnerability,
     WhoisStatus,
 )
-from targetApp.models import Organization, Target
+from targetApp.models import Organization, Scope, Target
 
 
 __all__ = ["TestDataGenerator"]
@@ -355,6 +355,26 @@ class TestDataGenerator:
         if created and getattr(self.domain, "scan_history_id", None) and self.domain.scan_history.target_id:
             self.organization.targets.add(self.domain.scan_history.target)
         return self.organization
+
+    def create_scope(self, scope_type="engagement_external", **kwargs):
+        """Create and return a test scope linked to an organization."""
+        import uuid
+
+        if not getattr(self, "organization", None):
+            self.create_organization()
+
+        unique_id = str(uuid.uuid4())[:8]
+        defaults = {
+            "organization": self.organization,
+            "name": f"Test Scope {unique_id}",
+            "scope_type": scope_type,
+            "description": "Test scope description",
+        }
+        defaults.update(kwargs)
+        self.scope = Scope.objects.create(**defaults)
+        if getattr(self, "target", None):
+            self.scope.targets.add(self.target)
+        return self.scope
 
     def create_employee(self, name=None, username=None, designation=None, **kwargs):
         """Create and return a test employee with customizable parameters."""

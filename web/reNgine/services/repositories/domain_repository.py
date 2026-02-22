@@ -95,8 +95,8 @@ class DomainRepository:
             logger.log_line(
                 PREFIX_DOMAIN_REPO,
                 "SAVE",
-                "Domain item rejected: no existing domain matches (scan_history_id=%s, domain_name=%s)"
-                % (scan_history_id, domain_name),
+                "Domain item rejected: no existing domain matches (scan_history_id=%s, target_id=%s, domain_name=%s)"
+                % (scan_history_id, target_id, domain_name),
                 level="warning",
             )
             return None

@@ -870,6 +870,24 @@ class SecatorProfile(models.Model):
         ]
 
 
+class SecatorWorkerQuerySet(models.QuerySet):
+    """QuerySet for SecatorWorker with active() filter."""
+
+    def active(self):
+        """Return workers that are active (is_active=True)."""
+        return self.filter(is_active=True)
+
+
+class SecatorWorkerManager(models.Manager):
+    """Manager that uses SecatorWorkerQuerySet and exposes active()."""
+
+    def get_queryset(self):
+        return SecatorWorkerQuerySet(self.model, using=self._db)
+
+    def active(self):
+        return self.get_queryset().active()
+
+
 class SecatorWorker(models.Model):
     """
     Remote Secator worker host. Used for deployment via SSH and to associate
@@ -921,6 +939,8 @@ class SecatorWorker(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    objects = SecatorWorkerManager()
 
     class Meta:
         ordering = ["name"]

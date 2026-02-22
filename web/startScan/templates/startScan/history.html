@@ -102,10 +102,10 @@ Quick Scan History
                 {% endfor %}
               </td>
               <td class="text-left scan-summary-cell">
-                <span class="badge badge-pills bg-secondary mt-1" data-toggle="tooltip" data-placement="top" title="Domains">{{scan_history.get_domain_count}}</span>
-                <span class="badge badge-pills bg-info mt-1" data-toggle="tooltip" data-placement="top" title="Subdomains">{{scan_history.get_subdomain_count}}</span>
-                <span class="badge badge-pills bg-warning mt-1" data-toggle="tooltip" data-placement="top" title="Endpoints">{{scan_history.get_endpoint_count}}</span>
-                <span class="badge badge-pills bg-danger mt-1" data-toggle="tooltip" data-placement="top" title="{{scan_history.get_critical_vulnerability_count}} Critical, {{scan_history.get_high_vulnerability_count}} High, {{scan_history.get_medium_vulnerability_count}} Medium Vulnerabilities">{{scan_history.get_vulnerability_count}}</span>
+                <span class="badge badge-pills bg-secondary mt-1 me-1" data-toggle="tooltip" data-placement="top" title="Domains"><i class="fe-globe me-1"></i>{{scan_history.get_domain_count}}</span>
+                <span class="badge badge-pills bg-info mt-1 me-1" data-toggle="tooltip" data-placement="top" title="Subdomains"><i class="fe-layers me-1"></i>{{scan_history.get_subdomain_count}}</span>
+                <span class="badge badge-pills bg-warning mt-1 me-1" data-toggle="tooltip" data-placement="top" title="Endpoints"><i class="fe-link me-1"></i>{{scan_history.get_endpoint_count}}</span>
+                <span class="badge badge-pills bg-danger mt-1 me-1" data-toggle="tooltip" data-placement="top" title="{{scan_history.get_critical_vulnerability_count}} Critical, {{scan_history.get_high_vulnerability_count}} High, {{scan_history.get_medium_vulnerability_count}} Medium Vulnerabilities"><i class="fe-alert-triangle me-1"></i>{{scan_history.get_vulnerability_count}}</span>
               </td>
               <td class="scan-engine-cell">
                 {% with full_text=scan_history.display_runner_type|default:""|add:": "|add:scan_history.display_scan_name|default:"" %}

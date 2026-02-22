@@ -3,9 +3,11 @@ from django.contrib.auth.models import User
 
 from dashboard.models import Project
 from reNgine.validators import validate_domain
+from scanEngine.models import SecatorWorker
 from startScan.models import Domain
 
-from .models import Organization, Target
+from .models import Organization, Scope, Target
+from .services.scan_param_definitions import parse_request_headers_value
 
 
 class AddTargetForm(forms.Form):
@@ -49,7 +51,7 @@ class AddOrganizationForm(forms.ModelForm):
         project = kwargs.pop("project")
         super(AddOrganizationForm, self).__init__(*args, **kwargs)
         self.fields["targets"] = forms.ModelMultipleChoiceField(
-            queryset=Target.objects.filter(project__slug=project),
+            queryset=Target.objects.for_project(project),
             widget=forms.SelectMultiple(
                 attrs={
                     "class": "form-control select2-multiple",
@@ -213,6 +215,113 @@ class UpdateOrganizationForm(forms.ModelForm):
         self.initial["description"] = description_value
         if target_list is not None and "targets" in self.fields:
             self.initial["targets"] = [int(t) for t in target_list if str(t).isdigit()]
+
+
+class ScopeForm(forms.ModelForm):
+    """Form for creating and updating a Scope."""
+
+    def __init__(self, *args, **kwargs):
+        project_slug = kwargs.pop("project_slug", None)
+        super().__init__(*args, **kwargs)
+
+        if project_slug:
+            self.fields["organization"].queryset = Organization.objects.for_project(project_slug)
+            self.fields["targets"].queryset = Target.objects.for_project(project_slug)
+        elif self.instance and self.instance.pk:
+            project = self.instance.organization.project
+            self.fields["organization"].queryset = Organization.objects.for_project(project)
+            self.fields["targets"].queryset = Target.objects.for_project(project)
+
+        self.fields["workers"].queryset = SecatorWorker.objects.active()
+
+    class Meta:
+        model = Scope
+        fields = [
+            "organization",
+            "name",
+            "scope_type",
+            "start_date",
+            "end_date",
+            "description",
+            "threads",
+            "rate_limit",
+            "timeout",
+            "retries",
+            "delay",
+            "proxy",
+            "user_agent",
+            "request_headers",
+            "follow_redirect",
+            "depth",
+            "extra_config",
+            "targets",
+            "workers",
+        ]
+        widgets = {
+            "organization": forms.Select(
+                attrs={"class": "form-control select2", "data-toggle": "select2", "data-width": "100%"}
+            ),
+            "name": forms.TextInput(attrs={"class": "form-control", "placeholder": "Scope name"}),
+            "scope_type": forms.Select(
+                attrs={"class": "form-control select2", "data-toggle": "select2", "data-width": "100%"}
+            ),
+            "start_date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
+            "end_date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
+            "description": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
+            "threads": forms.NumberInput(attrs={"class": "form-control", "placeholder": "Default: 30", "min": 1}),
+            "rate_limit": forms.NumberInput(
+                attrs={"class": "form-control", "placeholder": "Default: 150 req/s", "min": 1}
+            ),
+            "timeout": forms.NumberInput(attrs={"class": "form-control", "placeholder": "Default: 5s", "min": 1}),
+            "retries": forms.NumberInput(attrs={"class": "form-control", "placeholder": "Default: 1", "min": 0}),
+            "delay": forms.NumberInput(
+                attrs={"class": "form-control", "placeholder": "Default: 0s", "min": 0, "step": "0.1"}
+            ),
+            "proxy": forms.TextInput(
+                attrs={"class": "form-control", "placeholder": "socks5://host:port or http://host:port"}
+            ),
+            "user_agent": forms.TextInput(attrs={"class": "form-control", "placeholder": "Custom User-Agent"}),
+            "request_headers": forms.Textarea(
+                attrs={
+                    "class": "form-control",
+                    "rows": 3,
+                    "placeholder": '{"X-Api-Key": "secret", "Cookie": "session=abc"}',
+                }
+            ),
+            "follow_redirect": forms.NullBooleanSelect(attrs={"class": "form-control"}),
+            "depth": forms.NumberInput(attrs={"class": "form-control", "placeholder": "No limit", "min": 0}),
+            "targets": forms.SelectMultiple(
+                attrs={
+                    "class": "form-control select2-multiple",
+                    "data-toggle": "select2",
+                    "data-width": "100%",
+                    "data-placeholder": "Choose Targets",
+                }
+            ),
+            "workers": forms.SelectMultiple(
+                attrs={
+                    "class": "form-control select2-multiple",
+                    "data-toggle": "select2",
+                    "data-width": "100%",
+                    "data-placeholder": "Choose Workers (empty = local)",
+                }
+            ),
+        }
+
+    def clean_request_headers(self):
+        value = self.cleaned_data.get("request_headers")
+        parsed, err = parse_request_headers_value(value)
+        if err:
+            raise forms.ValidationError(err)
+        return parsed
+
+    def clean(self):
+        cleaned = super().clean()
+        start = cleaned.get("start_date")
+        end = cleaned.get("end_date")
+        if start and end and start > end:
+            raise forms.ValidationError("Start date must be before end date.")
+        return cleaned
 
 
 class ProjectForm(forms.ModelForm):

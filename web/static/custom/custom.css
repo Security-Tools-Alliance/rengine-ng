@@ -5,7 +5,6 @@ body[data-layout-mode=horizontal] .container-fluid {
 
 /* Main page footer: fixed at bottom of viewport so visible on all pages (e.g. scan detail, target summary) */
 body[data-layout-mode=horizontal] .footer {
-  position: fixed !important;
   bottom: 0 !important;
   left: 0 !important;
   right: 0 !important;

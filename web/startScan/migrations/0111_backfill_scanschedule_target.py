@@ -14,7 +14,6 @@ logger = logging.getLogger("rengine.migrations")
 
 def backfill_target(apps, schema_editor):
     """Set ScanSchedule.target_id from domain.scan_history.target."""
-    ScanSchedule = apps.get_model("startScan", "ScanSchedule")
     connection = schema_editor.connection
     with connection.cursor() as cursor:
         cursor.execute(

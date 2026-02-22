@@ -679,26 +679,30 @@ const updateScanRowInTable = function(table, data) {
             }
         }
         
-        // Update summary cell with findings counts
-        if (data.subdomain_count !== undefined || data.endpoint_count !== undefined || data.vulnerability_count !== undefined) {
+        // Update summary cell with findings counts (domain, subdomain, endpoint, vulnerability)
+        const hasCounts = data.domain_count !== undefined || data.subdomain_count !== undefined ||
+            data.endpoint_count !== undefined || data.vulnerability_count !== undefined;
+        if (hasCounts) {
             const summaryCell = $(rowNode).find('.scan-summary-cell');
             if (summaryCell.length) {
+                const domainCount = data.domain_count !== undefined ? data.domain_count : 0;
                 const subdomainCount = data.subdomain_count !== undefined ? data.subdomain_count : 0;
                 const endpointCount = data.endpoint_count !== undefined ? data.endpoint_count : 0;
                 const vulnerabilityCount = data.vulnerability_count !== undefined ? data.vulnerability_count : 0;
-                
-                // Build tooltip for vulnerabilities if we have severity counts
+
                 let vulnTooltip = 'Vulnerabilities';
                 if (data.critical_count !== undefined && data.high_count !== undefined && data.medium_count !== undefined) {
                     vulnTooltip = data.critical_count + ' Critical, ' + data.high_count + ' High, ' + data.medium_count + ' Medium Vulnerabilities';
                 }
-                
-                const summaryHtml = '<span class="badge badge-pills bg-info mt-1" data-toggle="tooltip" data-placement="top" title="Subdomains">' + 
+
+                const summaryHtml = '<span class="badge badge-pills bg-secondary mt-1 me-1" data-toggle="tooltip" data-placement="top" title="Domains"><i class="fe-globe me-1"></i>' +
+                    formatNumber(domainCount) + '</span> ' +
+                    '<span class="badge badge-pills bg-info mt-1 me-1" data-toggle="tooltip" data-placement="top" title="Subdomains"><i class="fe-layers me-1"></i>' +
                     formatNumber(subdomainCount) + '</span> ' +
-                    '<span class="badge badge-pills bg-warning mt-1" data-toggle="tooltip" data-placement="top" title="Endpoints">' + 
+                    '<span class="badge badge-pills bg-warning mt-1 me-1" data-toggle="tooltip" data-placement="top" title="Endpoints"><i class="fe-link me-1"></i>' +
                     formatNumber(endpointCount) + '</span> ' +
-                    '<span class="badge badge-pills bg-danger mt-1" data-toggle="tooltip" data-placement="top" title="' + 
-                    escapeHtml(vulnTooltip) + '">' + formatNumber(vulnerabilityCount) + '</span>';
+                    '<span class="badge badge-pills bg-danger mt-1 me-1" data-toggle="tooltip" data-placement="top" title="' +
+                    escapeHtml(vulnTooltip) + '"><i class="fe-alert-triangle me-1"></i>' + formatNumber(vulnerabilityCount) + '</span>';
                 summaryCell.html(summaryHtml);
             }
         }

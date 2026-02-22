@@ -15,10 +15,16 @@
               <i class="fe-folder me-1"></i> Projects
             </a>
           </li>
-          <li class="nav-item dropdown {{target_data_active}}">
-            <a class="nav-link arrow-none" href="{% url 'list_target' current_project.slug %}">
+          <li class="nav-item dropdown {{target_data_active}} {{scope_active}}">
+            <a class="nav-link dropdown-toggle arrow-none" href="#" id="topnav-targets" role="button"
+              data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
               <i class="fe-crosshair me-1"></i> Targets
+              <div class="arrow-down"></div>
             </a>
+            <div class="dropdown-menu" aria-labelledby="topnav-targets">
+              <a href="{% url 'list_target' current_project.slug %}" class="dropdown-item">Targets</a>
+              <a href="{% url 'list_scope' current_project.slug %}" class="dropdown-item">Scopes</a>
+            </div>
           </li>
           <li class="nav-item dropdown {{scan_history_active}} {{scheduled_scan_active}}">
             <a class="nav-link dropdown-toggle arrow-none" href="#" id="topnav-history" role="button"

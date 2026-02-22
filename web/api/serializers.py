@@ -131,8 +131,11 @@ class TargetSerializer(serializers.ModelSerializer):
 
     name = serializers.SerializerMethodField()
     organization = serializers.SerializerMethodField()
+    scope_names = serializers.SerializerMethodField()
     most_recent_scan = serializers.SerializerMethodField()
+    insert_date = serializers.SerializerMethodField()
     insert_date_humanized = serializers.SerializerMethodField()
+    start_scan_date = serializers.SerializerMethodField()
     start_scan_date_humanized = serializers.SerializerMethodField()
     domain_count = serializers.IntegerField(read_only=True, default=0)
     subdomain_count = serializers.IntegerField(read_only=True, default=0)
@@ -151,6 +154,7 @@ class TargetSerializer(serializers.ModelSerializer):
             "start_scan_date",
             "project",
             "organization",
+            "scope_names",
             "most_recent_scan",
             "insert_date_humanized",
             "start_scan_date_humanized",
@@ -166,14 +170,23 @@ class TargetSerializer(serializers.ModelSerializer):
     def get_organization(self, obj):
         return [org.name for org in obj.organizations.all()]
 
+    def get_scope_names(self, obj):
+        return [s.name for s in obj.scopes.all()]
+
     def get_most_recent_scan(self, obj):
         from startScan.models import ScanHistory
 
         sh = ScanHistory.objects.filter(target_id=obj.id).order_by("-id").first()
         return sh.id if sh else None
 
+    def get_insert_date(self, obj):
+        return naturalday(obj.insert_date).title() if obj.insert_date else None
+
     def get_insert_date_humanized(self, obj):
         return naturaltime(obj.insert_date).title() if obj.insert_date else None
+
+    def get_start_scan_date(self, obj):
+        return naturalday(obj.start_scan_date).title() if obj.start_scan_date else None
 
     def get_start_scan_date_humanized(self, obj):
         return naturaltime(obj.start_scan_date).title() if obj.start_scan_date else None

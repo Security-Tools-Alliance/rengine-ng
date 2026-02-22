@@ -141,6 +141,7 @@ def _run_secator_scan_or_per_task(
     kwargs_copy = dict(secator_kwargs)
     selected_targets_per_task = kwargs_copy.pop("selected_targets_per_task", None)
     scan_history_id = kwargs_copy.pop("scan_history_id", None)
+    kwargs_copy.pop("_worker_ids", None)  # internal; not passed to start_secator_scan
     if selected_targets_per_task and kwargs_copy.get("execution_mode") == "tasks":
         result = run_per_task_secator_scans(
             user_id=request.user.id,
@@ -776,7 +777,7 @@ def detail_scan(request, id, slug):
 
     # Secator profiles context for subscan modal (Advanced config > profiles)
     ctx.update(build_secator_profiles_context())
-    ctx["secator_workers"] = SecatorWorker.objects.filter(is_active=True).order_by("name")
+    ctx["secator_workers"] = SecatorWorker.objects.active().order_by("name")
     ctx["rengine_target_types"] = RENGINE_TARGET_TYPES_FOR_JS
 
     return render(request, "startScan/detail_scan.html", ctx)
@@ -796,7 +797,7 @@ def all_subdomains(request, slug):
         "important_count": important_subdomains,
     }
     context.update(build_secator_profiles_context())
-    context["secator_workers"] = SecatorWorker.objects.filter(is_active=True).order_by("name")
+    context["secator_workers"] = SecatorWorker.objects.active().order_by("name")
     return render(request, "startScan/subdomains.html", context)
 
 
@@ -883,7 +884,7 @@ def start_scan_ui(request, slug, target_id):
         "rengine_target_types": RENGINE_TARGET_TYPES_FOR_JS,
     }
     context.update(build_secator_profiles_context())
-    context["secator_workers"] = SecatorWorker.objects.filter(is_active=True).order_by("name")
+    context["secator_workers"] = SecatorWorker.objects.active().order_by("name")
     return render(request, "startScan/start_scan_ui.html", context)
 
 
@@ -940,7 +941,7 @@ def start_multiple_scan(request, slug):
         "scan_type": scan_type,
     }
     context.update(build_secator_profiles_context())
-    context["secator_workers"] = SecatorWorker.objects.filter(is_active=True).order_by("name")
+    context["secator_workers"] = SecatorWorker.objects.active().order_by("name")
     return render(request, "startScan/start_multiple_scan_ui.html", context)
 
 
@@ -1306,7 +1307,7 @@ def start_organization_scan(request, id, slug):
         "secator_scans": secator_scans,
     }
     context.update(build_secator_profiles_context())
-    context["secator_workers"] = SecatorWorker.objects.filter(is_active=True).order_by("name")
+    context["secator_workers"] = SecatorWorker.objects.active().order_by("name")
     return render(request, "organization/start_scan.html", context)
 
 

@@ -173,10 +173,20 @@ def initiate_secator_scan(
 
         config = {}
         if secator_config:
-            if "proxy" in secator_config:
-                config["proxy"] = secator_config["proxy"]
-            if "delay" in secator_config:
-                config["delay"] = secator_config["delay"]
+            for _key in (
+                "proxy",
+                "delay",
+                "threads",
+                "rate_limit",
+                "timeout",
+                "retries",
+                "user_agent",
+                "follow_redirect",
+                "depth",
+                "request_headers",
+            ):
+                if _key in secator_config and secator_config[_key] is not None and secator_config[_key] != "":
+                    config[_key] = secator_config[_key]
 
         profiles = []
         if secator_config and "profiles" in secator_config:

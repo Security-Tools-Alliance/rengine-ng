@@ -50,6 +50,7 @@ from startScan.models import (
     Vulnerability,
     VulnerabilityTags,
 )
+from startScan.secator.form import parse_secator_profiles_to_dict
 from startScan.secator.profiles import build_secator_profiles_context
 from targetApp.constants import (
     RENGINE_TARGET_TYPES_FOR_JS,
@@ -66,10 +67,16 @@ from targetApp.constants import (
 from targetApp.forms import (
     AddOrganizationForm,
     AddTargetForm,
+    ScopeForm,
     UpdateOrganizationForm,
     UpdateTargetModelForm,
 )
-from targetApp.models import TARGET_TYPE_CHOICES, Organization, Target
+from targetApp.models import TARGET_TYPE_CHOICES, Organization, Scope, Target
+from targetApp.services.scope_params import build_effective_params_display
+from targetApp.services.target_update import (
+    build_update_target_context,
+    process_target_scan_override_from_post,
+)
 
 
 PREFIX_TARGET = "[TARGET]"
@@ -854,13 +861,34 @@ def delete_targets(request, slug):
 def update_target(request, slug, id):
     target = get_object_or_404(Target, id=id)
     form = UpdateTargetModelForm(instance=target)
+    override_form_fallback = None
+    override_request_headers_initial = None
+
     if request.method == "POST":
         form = UpdateTargetModelForm(request.POST, instance=target)
         if form.is_valid():
-            form.save()
-            messages.add_message(request, messages.INFO, "Target %s modified!" % (target.value,))
-            return http.HttpResponseRedirect(reverse("list_target", kwargs={"slug": slug}))
-    context = {"list_target_li": "active", "target_data_active": "active", "target": target, "form": form}
+            (
+                scan_override,
+                override_errors,
+                override_form_fallback,
+                override_request_headers_initial,
+            ) = process_target_scan_override_from_post(request.POST)
+            if override_errors:
+                for msg in override_errors:
+                    messages.error(request, msg)
+            else:
+                updated_target = form.save(commit=False)
+                updated_target.scan_config_override = scan_override or None
+                updated_target.save()
+                messages.add_message(request, messages.INFO, "Target %s modified!" % (target.value,))
+                return http.HttpResponseRedirect(reverse("list_target", kwargs={"slug": slug}))
+
+    context = build_update_target_context(
+        target,
+        form,
+        override_form_fallback=override_form_fallback,
+        override_request_headers_initial=override_request_headers_initial,
+    )
     return render(request, "target/update.html", context)
 
 
@@ -1070,7 +1098,7 @@ def target_summary(request, slug, id):
     )
 
     context.update(build_secator_profiles_context())
-    context["secator_workers"] = SecatorWorker.objects.filter(is_active=True).order_by("name")
+    context["secator_workers"] = SecatorWorker.objects.active().order_by("name")
     return render(request, "target/summary.html", context)
 
 
@@ -1092,7 +1120,7 @@ def add_organization(request, slug):
 
 
 def list_organization(request, slug):
-    organizations = Organization.objects.filter(project__slug=slug).order_by("-insert_date")
+    organizations = Organization.objects.for_project(slug).order_by("-insert_date")
     context = {"organization_active": "active", "organizations": organizations}
     return render(request, "organization/list.html", context)
 
@@ -1159,3 +1187,103 @@ def update_organization(request, slug, id):
         "form": form,
     }
     return render(request, "organization/update.html", context)
+
+
+# ---------------------------------------------------------------------------
+# Scope views
+# ---------------------------------------------------------------------------
+
+
+@has_permission_decorator(PERM_MODIFY_TARGETS, redirect_url=FOUR_OH_FOUR_URL)
+def list_scope(request, slug):
+    scopes = (
+        Scope.objects.filter(organization__project__slug=slug)
+        .select_related("organization")
+        .annotate(
+            target_count=Count("targets", distinct=True),
+            worker_count=Count("workers", distinct=True),
+        )
+        .order_by("-insert_date")
+    )
+    context = {
+        "scope_active": "active",
+        "scopes": scopes,
+        "slug": slug,
+    }
+    return render(request, "scope/list.html", context)
+
+
+@has_permission_decorator(PERM_MODIFY_TARGETS, redirect_url=FOUR_OH_FOUR_URL)
+def add_scope(request, slug):
+    form = ScopeForm(request.POST or None, project_slug=slug)
+    if request.method == "POST" and form.is_valid():
+        scope = form.save(commit=False)
+        scope.default_profiles = parse_secator_profiles_to_dict(request.POST) or None
+        scope.save()
+        form.save_m2m()
+        messages.add_message(request, messages.INFO, "Scope %s added successfully" % (scope.name,))
+        return http.HttpResponseRedirect(reverse("list_scope", kwargs={"slug": slug}))
+    context = {
+        "scope_active": "active",
+        "form": form,
+        "slug": slug,
+    }
+    context.update(build_secator_profiles_context())
+    return render(request, "scope/add.html", context)
+
+
+@has_permission_decorator(PERM_MODIFY_TARGETS, redirect_url=FOUR_OH_FOUR_URL)
+def update_scope(request, slug, id):
+    scope = get_object_or_404(Scope, id=id, organization__project__slug=slug)
+    form = ScopeForm(request.POST or None, instance=scope, project_slug=slug)
+    if request.method == "POST" and form.is_valid():
+        updated_scope = form.save(commit=False)
+        updated_scope.default_profiles = parse_secator_profiles_to_dict(request.POST) or None
+        updated_scope.save()
+        form.save_m2m()
+        messages.add_message(request, messages.INFO, "Scope %s updated successfully" % (scope.name,))
+        return http.HttpResponseRedirect(reverse("list_scope", kwargs={"slug": slug}))
+    profiles_context = build_secator_profiles_context()
+    if scope.default_profiles and isinstance(scope.default_profiles, dict):
+        profiles_context["default_profiles"] = scope.default_profiles
+    context = {
+        "scope_active": "active",
+        "form": form,
+        "scope": scope,
+        "slug": slug,
+    }
+    context.update(profiles_context)
+    return render(request, "scope/update.html", context)
+
+
+@has_permission_decorator(PERM_MODIFY_TARGETS, redirect_url=FOUR_OH_FOUR_URL)
+def delete_scope(request, slug, id):
+    if request.method == "POST":
+        try:
+            scope = get_object_or_404(Scope, id=id, organization__project__slug=slug)
+            scope.delete()
+            messages.add_message(request, messages.INFO, "Scope successfully deleted!")
+            response_data = {"status": "true"}
+        except Http404:
+            messages.add_message(request, messages.ERROR, "Scope not found.")
+            response_data = {"status": "false"}
+    else:
+        response_data = {"status": "false"}
+        messages.add_message(request, messages.ERROR, "Scope could not be deleted!")
+    return http.JsonResponse(response_data)
+
+
+@has_permission_decorator(PERM_MODIFY_TARGETS, redirect_url=FOUR_OH_FOUR_URL)
+def scope_detail(request, slug, id):
+    scope = get_object_or_404(
+        Scope.objects.select_related("organization").prefetch_related("targets", "workers"),
+        id=id,
+        organization__project__slug=slug,
+    )
+    context = {
+        "scope_active": "active",
+        "scope": scope,
+        "slug": slug,
+        "effective_params": build_effective_params_display(scope=scope),
+    }
+    return render(request, "scope/detail.html", context)

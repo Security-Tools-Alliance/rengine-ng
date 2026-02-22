@@ -85,10 +85,152 @@
     return [arr, labels];
   };
 
+  /**
+   * Initialise a client-side DataTable with standard reNgine options (layout, lengthMenu,
+   * pageLength, scroller, initComplete tooltips). Use for list pages with server-rendered rows.
+   * @param {string} tableSelector - jQuery selector for the table (e.g. "#list_scope_table").
+   * @param {object} extraOptions - Optional options merged into the DataTable config. Use scrollY (e.g. "40vh") to override default scroll height.
+   * @returns {object} The DataTable instance.
+   */
+  const initClientSideDataTable = function (tableSelector, extraOptions) {
+    const opts = extraOptions || {};
+    const scrollY = opts.scrollY || "60vh";
+    const scrollerOpts =
+      typeof window.getRengineDatatableScrollerOptions === "function"
+        ? window.getRengineDatatableScrollerOptions(scrollY)
+        : {};
+    const baseOptions = {
+      layout: window.RENGINE_DATATABLE_LAYOUT_WITH_SEARCH,
+      lengthMenu:
+        typeof window.getRengineDatatableLengthMenu === "function"
+          ? window.getRengineDatatableLengthMenu()
+          : [[30, 50, 100, -1], ["30", "50", "100", "All"]],
+      pageLength:
+        typeof window.getRengineDatatablePageLength === "function"
+          ? window.getRengineDatatablePageLength()
+          : 30,
+      initComplete: function () {
+        if (
+          typeof window.jQuery !== "undefined" &&
+          window.jQuery("[data-toggle=\"tooltip\"]").length
+        ) {
+          window.jQuery("[data-toggle=\"tooltip\"]").tooltip();
+        }
+      }
+    };
+    const merged = Object.assign({}, baseOptions, scrollerOpts, opts);
+    return window.jQuery(tableSelector).DataTable(merged);
+  };
+
+  /**
+   * Confirm then POST to delete URL from row data attribute; on success remove row and show toast.
+   * Expects row to have an attribute (default data-delete-url) with the delete endpoint URL.
+   * Requires Swal and getCookie in global scope.
+   * @param {HTMLElement} btn - Button that triggered the action (row is btn's closest tr).
+   * @param {object} options - confirmTitle, confirmText, successMessage, errorMessage, deleteUrlAttr (default "data-delete-url").
+   */
+  const confirmDeleteRow = function (btn, options) {
+    const opts = options || {};
+    const deleteUrlAttr = opts.deleteUrlAttr || "data-delete-url";
+    const row = window.jQuery(btn).closest("tr");
+    const deleteUrl = row.attr(deleteUrlAttr);
+    if (!deleteUrl) return;
+    const confirmTitle = opts.confirmTitle || "Are you sure?";
+    const confirmText = opts.confirmText || "This action cannot be undone!";
+    const successMessage = opts.successMessage || "Deleted!";
+    const errorMessage = opts.errorMessage || "Could not delete.";
+
+    const swalFn = window.swal && typeof window.swal.fire === "function" ? window.swal.fire : (window.Swal && window.Swal.fire);
+    if (typeof swalFn !== "function") return;
+
+    swalFn({
+      title: confirmTitle,
+      text: confirmText,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Delete",
+      confirmButtonColor: "#d33",
+      cancelButtonText: "Cancel"
+    }).then(function (result) {
+      if (result && result.isConfirmed) {
+        const getCookie = window.getCookie;
+        const csrfToken = typeof getCookie === "function" ? getCookie("csrftoken") : "";
+        window
+          .fetch(deleteUrl, {
+            method: "POST",
+            headers: {
+              "X-CSRFToken": csrfToken,
+              "Content-Type": "application/json"
+            },
+            body: "{}"
+          })
+          .then(function (response) {
+            return response.json();
+          })
+          .then(function (data) {
+            if (data.status === "true") {
+              row.remove();
+              swalFn({ title: successMessage, icon: "success" });
+            } else {
+              swalFn({ title: "Error", text: errorMessage, icon: "error" });
+            }
+          })
+          .catch(function () {
+            swalFn({ title: "Error", text: errorMessage, icon: "error" });
+          });
+      }
+    });
+  };
+
+  /**
+   * Renders the four scan summary badges (Domains, Subdomains, Endpoints, Vulnerabilities)
+   * in the same order and style as target summary and scan history.
+   * @param {object} opts - domainCount, subdomainCount, endpointCount, vulnerabilityCount (numbers), vulnTooltip (string, optional)
+   * @returns {string} HTML for the badge row
+   */
+  const renderScanSummaryBadges = function (opts) {
+    const esc = function (s) {
+      const t = String(s == null ? "" : s);
+      return t
+        .replace(/&/g, "&amp;")
+        .replace(/"/g, "&quot;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+    };
+    const n = function (v) {
+      const num = Number(v);
+      return isNaN(num) ? 0 : num;
+    };
+    const d = n(opts.domainCount);
+    const s = n(opts.subdomainCount);
+    const e = n(opts.endpointCount);
+    const v = n(opts.vulnerabilityCount);
+    const vulnTitle = opts.vulnTooltip != null ? esc(opts.vulnTooltip) : "Vulnerabilities";
+    return (
+      '<span class="badge badge-pills bg-secondary mt-1 me-1" data-toggle="tooltip" data-placement="top" title="Domains"><i class="fe-globe me-1"></i>' +
+      d +
+      '</span> ' +
+      '<span class="badge badge-pills bg-info mt-1 me-1" data-toggle="tooltip" data-placement="top" title="Subdomains"><i class="fe-layers me-1"></i>' +
+      s +
+      '</span> ' +
+      '<span class="badge badge-pills bg-warning mt-1 me-1" data-toggle="tooltip" data-placement="top" title="Endpoints"><i class="fe-link me-1"></i>' +
+      e +
+      '</span> ' +
+      '<span class="badge badge-pills bg-danger mt-1 me-1" data-toggle="tooltip" data-placement="top" title="' +
+      vulnTitle +
+      '"><i class="fe-alert-triangle me-1"></i>' +
+      v +
+      "</span>"
+    );
+  };
+
   window.getRengineDatatableLayoutFull = getRengineDatatableLayoutFull;
   window.getRengineDatatableScrollerOptions = getRengineDatatableScrollerOptions;
   window.getRengineDatatablePageLength = getRengineDatatablePageLength;
   window.getRengineDatatableLengthMenu = getRengineDatatableLengthMenu;
+  window.initClientSideDataTable = initClientSideDataTable;
+  window.confirmDeleteRow = confirmDeleteRow;
+  window.renderScanSummaryBadges = renderScanSummaryBadges;
 
   if (window.RENGINE_DATATABLE_USE_SCROLLER && !hasScrollerPlugin()) {
     if (window.console && typeof window.console.warn === "function") {
