@@ -100,7 +100,10 @@ SubScan History
             </br>
             <b><span data-toggle="tooltip" data-placement="top" title="Domain">{{ subscan.scan_history.target.value|default:"" }}</span></b>
             {% for organization in subscan.scan_history.target.get_organization %}
-              <span class="badge badge-soft-dark mt-1 me-1" data-toggle="tooltip" data-placement="top" title="Domain {{domain.name}} belongs to organization {{organization.name}}">{{ organization.name }}</span>
+              <span class="badge badge-soft-dark mt-1 me-1" data-toggle="tooltip" data-placement="top" title="Target {{ subscan.scan_history.target.value }} belongs to organization {{ organization.name }}"><i class="fe-briefcase me-1"></i>{{ organization.name }}</span>
+            {% endfor %}
+            {% for scope in subscan.scan_history.target.scopes.all %}
+              <span class="badge badge-soft-info mt-1 me-1" data-toggle="tooltip" data-placement="top" title="Scope: {{ scope.name|escape }}"><i class="fe-crosshair me-1"></i>{{ scope.name }}</span>
             {% endfor %}
           </br>
           <a href="{% url 'detail_scan' current_project.slug subscan.scan_history.id %}" class="text-info">Recent Scan&nbsp;<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="feather feather-external-link"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg></a>
@@ -111,26 +114,26 @@ SubScan History
             {% endwith %}
           </td>
           <td class="text-center d-none d-md-table-cell">
-            <span class="badge badge-soft-secondary">{{ subscan.secator_worker_name|default:"Local" }}</span>
+            <span class="badge badge-soft-secondary"><i class="fe-cpu me-1"></i>{{ subscan.secator_worker_name|default:"Local" }}</span>
           </td>
           <td class="">
             <span data-toggle="tooltip" data-placement="top" title="{{subscan.start_scan_date}}">{{subscan.start_scan_date|naturaltime}}</br><small>({{subscan.start_scan_date}})</small></span>
           </td>
           <td class="text-center scan-status-cell">
             {% if subscan.status_code == -1 %}
-            <span class="badge badge-soft-warning" data-toggle="tooltip" data-placement="top" title="Waiting for other scans to complete"><span class="spinner-border spinner-border-sm"></span> Pending</span>
+            <span class="badge badge-soft-warning" data-toggle="tooltip" data-placement="top" title="Waiting for other scans to complete"><i class="fe-clock me-1"></i><span class="spinner-border spinner-border-sm"></span> Pending</span>
             {% elif subscan.status_code == 0 %}
-            <span class="badge badge-soft-danger">Failed</span>
+            <span class="badge badge-soft-danger"><i class="fe-x-circle me-1"></i>Failed</span>
             {% elif subscan.status_code == 1 %}
-            <span class="badge badge-soft-info"><span class="spinner-border spinner-border-sm"></span> In Progress</span>
+            <span class="badge badge-soft-info"><i class="fe-activity me-1"></i><span class="spinner-border spinner-border-sm"></span> In Progress</span>
             {% elif subscan.status_code == 2 %}
-            <span class="badge badge-soft-success">Successful</span>
+            <span class="badge badge-soft-success"><i class="fe-check-circle me-1"></i>Successful</span>
             {% elif subscan.status_code == 3 %}
-            <span class="badge badge-soft-danger">Aborted</span>
+            <span class="badge badge-soft-danger"><i class="fe-slash me-1"></i>Aborted</span>
             {% elif subscan.status_code == 4 %}
-            <span class="badge badge-soft-info">Finalizing</span>
+            <span class="badge badge-soft-info"><i class="fe-loader me-1"></i>Finalizing</span>
             {% else %}
-            <span class="badge badge-soft-danger">Unknown</span>
+            <span class="badge badge-soft-danger"><i class="fe-help-circle me-1"></i>Unknown</span>
             {% endif %}
           </td>
           <td class="text-center scan-progress-cell">

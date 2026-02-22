@@ -98,7 +98,10 @@ Quick Scan History
                 {{ scan_history.target.value|default:"" }}
                 <br>
                 {% for organization in scan_history.target.get_organization %}
-                <span class="badge badge-soft-dark mt-1 me-1" data-toggle="tooltip" data-placement="top" title="Domain {{domain.name}} belongs to organization {{organization.name}}">{{ organization.name }}</span>
+                <span class="badge badge-soft-dark mt-1 me-1" data-toggle="tooltip" data-placement="top" title="Target {{ scan_history.target.value }} belongs to organization {{ organization.name }}"><i class="fe-briefcase me-1"></i>{{ organization.name }}</span>
+                {% endfor %}
+                {% for scope in scan_history.target.scopes.all %}
+                <span class="badge badge-soft-info mt-1 me-1" data-toggle="tooltip" data-placement="top" title="Scope: {{ scope.name|escape }}"><i class="fe-crosshair me-1"></i>{{ scope.name }}</span>
                 {% endfor %}
               </td>
               <td class="text-left scan-summary-cell">
@@ -113,38 +116,38 @@ Quick Scan History
                 {% endwith %}
               </td>
               <td class="d-none d-md-table-cell">
-                <span class="badge badge-soft-secondary">{{ scan_history.secator_worker_name|default:"Local" }}</span>
+                <span class="badge badge-soft-secondary"><i class="fe-cpu me-1"></i>{{ scan_history.secator_worker_name|default:"Local" }}</span>
               </td>
               <td>
                 <span data-toggle="tooltip" data-placement="top" title="{{scan_history.start_scan_date}}">{{scan_history.start_scan_date|naturaltime}}</span>
               </td>
               <td>
-                <span class="badge badge-soft-secondary">{{scan_history.initiated_by.username}}</span>
+                <span class="badge badge-soft-secondary"><i class="fe-user me-1"></i>{{ scan_history.initiated_by.username }}</span>
               </td>
               <td class="text-center scan-status-cell">
                 {% if scan_history.scan_status == -1 %}
-                <span class="badge badge-soft-warning" data-toggle="tooltip" data-placement="top" title="Waiting for other scans to complete"><span class="spinner-border spinner-border-sm"></span> Pending</span>
+                <span class="badge badge-soft-warning" data-toggle="tooltip" data-placement="top" title="Waiting for other scans to complete"><i class="fe-clock me-1"></i><span class="spinner-border spinner-border-sm"></span> Pending</span>
                 {% elif scan_history.scan_status == 0 %}
-                <span class="badge badge-soft-danger">Failed</span>
-                {% if scan_history.error_message %}</br><p class="text-danger">Scan Failed due to: {{scan_history.error_message}}</p>{% endif %}
+                <span class="badge badge-soft-danger"><i class="fe-x-circle me-1"></i>Failed</span>
+                {% if scan_history.error_message %}</br><p class="text-danger">Scan Failed due to: {{ scan_history.error_message }}</p>{% endif %}
                 {% elif scan_history.scan_status == 1 %}
-                <span class="badge badge-soft-info"><span class="spinner-border spinner-border-sm"></span> In Progress</span>
+                <span class="badge badge-soft-info"><i class="fe-activity me-1"></i><span class="spinner-border spinner-border-sm"></span> In Progress</span>
                 {% if scan_history.get_current_task %}
                 <br><small class="text-muted font-weight-bold">{{ scan_history.get_current_task }}</small>
                 {% endif %}
                 {% elif scan_history.scan_status == 2 %}
-                <span class="badge badge-soft-success">Successful</span>
+                <span class="badge badge-soft-success"><i class="fe-check-circle me-1"></i>Successful</span>
                 {% elif scan_history.scan_status == 3 %}
-                <span class="badge badge-soft-danger">Aborted</span>
+                <span class="badge badge-soft-danger"><i class="fe-slash me-1"></i>Aborted</span>
                 <br>
-                <small class="text-muted">Aborted by: {{scan_history.aborted_by}}</small>
+                <small class="text-muted">Aborted by: {{ scan_history.aborted_by }}</small>
                 {% elif scan_history.scan_status == 4 %}
-                <span class="badge badge-soft-primary"><span class="spinner-border spinner-border-sm"></span> Finalizing</span>
+                <span class="badge badge-soft-primary"><i class="fe-loader me-1"></i><span class="spinner-border spinner-border-sm"></span> Finalizing</span>
                 {% if scan_history.get_current_task %}
                 <br><small class="text-muted font-weight-bold">{{ scan_history.get_current_task }}</small>
                 {% endif %}
                 {% else %}
-                <span class="badge badge-soft-danger">Unknown</span>
+                <span class="badge badge-soft-danger"><i class="fe-help-circle me-1"></i>Unknown</span>
                 {% endif %}
               </td>
               <td class="text-center scan-progress-cell">

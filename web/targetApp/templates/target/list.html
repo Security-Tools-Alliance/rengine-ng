@@ -145,7 +145,7 @@ $(document).ready(function(){
 						if (row.organization) {
 							content += '<br>';
 							for (var org in row.organization) {
-								content += `<span class="badge badge-soft-primary me-1 mb-1" data-toggle="tooltip" data-placement="top" title="Domain ${data} belongs to organization ${row.organization[org]}"><i class="fe-briefcase me-1"></i>${row.organization[org]}</span>`;
+								content += `<span class="badge badge-soft-primary me-1 mb-1" data-toggle="tooltip" data-placement="top" title="Target ${data} belongs to organization ${row.organization[org]}"><i class="fe-briefcase me-1"></i>${row.organization[org]}</span>`;
 							}
 						}
 						if (row.scope_names && row.scope_names.length) {

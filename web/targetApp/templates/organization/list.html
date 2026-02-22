@@ -45,6 +45,7 @@ Organizations
           <tr>
             <th class="">Organization</th>
             <th class="text-center">Description</th>
+            <th class="text-center">Scopes</th>
             <th class="text-center">Total Targets</th>
             <th class="text-center">Added</th>
             <th class="text-center">Action</th>
@@ -53,10 +54,11 @@ Organizations
         <tbody>
           {% for organization in organizations.all %}
           <tr>
-            <td class="">{{ organization.name|capfirst }}</td>
-            <td class="text-center">{% if organization.description %}{{organization.description}}{% endif %}</td>
-            <td class="text-center"><span class="badge bg-primary badge-link" onclick="get_target_modal({{organization.id}})">{{organization.get_domains.count}}</span></td>
-            <td class="text-center"><span data-toggle="tooltip" data-placement="top" title="{{organization.insert_date}}">{{organization.insert_date|naturaltime}}</span></td>
+            <td class=""><span class="badge badge-soft-dark"><i class="fe-briefcase me-1"></i>{{ organization.name|capfirst }}</span></td>
+            <td class="text-center">{% if organization.description %}<span class="badge badge-soft-secondary"><i class="fe-file-text me-1"></i>{{ organization.description }}</span>{% endif %}</td>
+            <td class="text-center"><span class="badge badge-soft-info" data-toggle="tooltip" data-placement="top" title="Scopes"><i class="fe-crosshair me-1"></i>{{ organization.scopes.count }}</span></td>
+            <td class="text-center"><span class="badge bg-primary badge-link" onclick="get_target_modal({{ organization.id }})" data-toggle="tooltip" data-placement="top" title="Targets"><i class="fe-crosshair me-1"></i>{{ organization.get_domains.count }}</span></td>
+            <td class="text-center"><span class="badge badge-soft-secondary" data-toggle="tooltip" data-placement="top" title="{{ organization.insert_date }}"><i class="fe-clock me-1"></i>{{ organization.insert_date|naturaltime }}</span></td>
             {% include 'base/_items/datatables_action_cells/organization.html' %}
           </tr>
           {% endfor %}

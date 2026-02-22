@@ -54,14 +54,14 @@ Scopes
         <tbody>
           {% for scope in scopes %}
           <tr data-delete-url="{% url 'delete_scope' current_project.slug scope.id %}">
-            <td><a href="{% url 'scope_detail' current_project.slug scope.id %}">{{ scope.name }}</a></td>
-            <td class="text-center">{{ scope.organization.name }}</td>
-            <td class="text-center"><span class="badge bg-info">{{ scope.get_scope_type_display }}</span></td>
+            <td><a href="{% url 'scope_detail' current_project.slug scope.id %}"><i class="fe-crosshair me-1"></i>{{ scope.name }}</a></td>
+            <td class="text-center"><span class="badge badge-soft-dark"><i class="fe-briefcase me-1"></i>{{ scope.organization.name }}</span></td>
+            <td class="text-center"><span class="badge bg-info"><i class="fe-tag me-1"></i>{{ scope.get_scope_type_display }}</span></td>
             <td class="text-center">{% if scope.start_date %}{{ scope.start_date }}{% else %}-{% endif %}</td>
             <td class="text-center">{% if scope.end_date %}{{ scope.end_date }}{% else %}-{% endif %}</td>
-            <td class="text-center"><span class="badge bg-primary">{{ scope.target_count }}</span></td>
-            <td class="text-center"><span class="badge bg-secondary">{{ scope.worker_count }}</span></td>
-            <td class="text-center"><span data-toggle="tooltip" data-placement="top" title="{{ scope.insert_date }}">{{ scope.insert_date|naturaltime }}</span></td>
+            <td class="text-center"><span class="badge bg-primary"><i class="fe-crosshair me-1"></i>{{ scope.target_count }}</span></td>
+            <td class="text-center"><span class="badge bg-secondary"><i class="fe-cpu me-1"></i>{{ scope.worker_count }}</span></td>
+            <td class="text-center"><span class="badge badge-soft-secondary" data-toggle="tooltip" data-placement="top" title="{{ scope.insert_date }}"><i class="fe-clock me-1"></i>{{ scope.insert_date|naturaltime }}</span></td>
             <td class="text-center">
               {% if user|can:'modify_targets' %}
               <a href="{% url 'update_scope' current_project.slug scope.id %}" class="btn btn-soft-primary btn-sm" data-toggle="tooltip" title="Edit"><i class="fe-edit-2"></i></a>
