@@ -2,7 +2,9 @@
 Unit tests for SecatorWorker model, worker deploy service, and worker views.
 """
 
+from io import BytesIO
 from unittest.mock import MagicMock, patch
+import zipfile
 
 from django.urls import reverse
 
@@ -17,6 +19,7 @@ from scanEngine.services.worker_config import (
 from scanEngine.services.worker_config_sync import sync_configs_for_run
 from scanEngine.services.worker_deploy import (
     _build_worker_env_content,
+    build_worker_bundle_zip,
     deploy_worker,
     push_env_and_restart_worker,
     refresh_worker_status,
@@ -943,3 +946,113 @@ class TestRemoteRunnerContainerPython(BaseTestCase):
         )
         self.assertIn(f"{container_base}/scripts/job_99.json", cmd)
         self.assertNotIn("/home/rengine/secator-worker", cmd)
+
+
+class TestBuildWorkerBundleZip(BaseTestCase):
+    """Tests for build_worker_bundle_zip (manual deploy ZIP)."""
+
+    @patch("scanEngine.services.worker_deploy._get_entrypoint_path")
+    @patch("scanEngine.services.worker_deploy._get_compose_path")
+    def test_build_worker_bundle_zip_contains_required_files(self, mock_compose_path, mock_entrypoint_path):
+        """ZIP contains docker-compose.worker.yml, .env and README.txt."""
+        mock_compose = MagicMock()
+        mock_compose.is_file.return_value = True
+        mock_compose.read_bytes.return_value = b'version: "3"\nservices:\n  worker:\n    image: secator\n'
+        mock_compose_path.return_value = mock_compose
+        mock_ep = MagicMock()
+        mock_ep.is_file.return_value = False
+        mock_entrypoint_path.return_value = mock_ep
+
+        worker = SecatorWorker.objects.create(
+            name="bundle-worker",
+            ssh_host="192.0.2.1",
+            ssh_port=22,
+            ssh_user="u",
+            ssh_auth_type=SecatorWorker.AUTH_KEY,
+            deploy_path="/opt/bundle",
+            api_access_type=SecatorWorker.API_ACCESS_CLASSIC,
+            api_url="https://rengine.example.com",
+        )
+        zip_bytes = build_worker_bundle_zip(worker)
+        self.assertIsInstance(zip_bytes, bytes)
+        self.assertGreater(len(zip_bytes), 0)
+
+        with zipfile.ZipFile(BytesIO(zip_bytes), "r") as zf:
+            names = zf.namelist()
+        self.assertIn("docker-compose.worker.yml", names)
+        self.assertIn(".env", names)
+        self.assertIn("README.txt", names)
+        # templates/ entries are added only when custom configs exist; both cases are valid
+
+    @patch("scanEngine.services.worker_deploy._get_compose_path")
+    def test_build_worker_bundle_zip_missing_compose_raises(self, mock_compose_path):
+        """When compose file is missing, UserSafeError is raised."""
+        mock_compose = MagicMock()
+        mock_compose.is_file.return_value = False
+        mock_compose_path.return_value = mock_compose
+
+        worker = SecatorWorker.objects.create(
+            name="bundle-missing",
+            ssh_host="192.0.2.1",
+            ssh_port=22,
+            ssh_user="u",
+            ssh_auth_type=SecatorWorker.AUTH_KEY,
+            deploy_path="/opt/w",
+        )
+        with self.assertRaises(UserSafeError) as ctx:
+            build_worker_bundle_zip(worker)
+        self.assertIn("compose", str(ctx.exception).lower())
+
+
+class TestWorkerDownloadBundleView(BaseTestCase):
+    """Tests for worker_download_bundle view."""
+
+    @patch("scanEngine.services.worker_deploy._get_entrypoint_path")
+    @patch("scanEngine.services.worker_deploy._get_compose_path")
+    def test_worker_download_bundle_returns_zip(self, mock_compose_path, mock_entrypoint_path):
+        """GET download-bundle returns 200 and application/zip."""
+        mock_compose = MagicMock()
+        mock_compose.is_file.return_value = True
+        mock_compose.read_bytes.return_value = b'version: "3"\n'
+        mock_compose_path.return_value = mock_compose
+        mock_ep = MagicMock()
+        mock_ep.is_file.return_value = False
+        mock_entrypoint_path.return_value = mock_ep
+
+        worker = SecatorWorker.objects.create(
+            name="download-test",
+            ssh_host="192.0.2.1",
+            ssh_port=22,
+            ssh_user="u",
+            ssh_auth_type=SecatorWorker.AUTH_KEY,
+            deploy_path="/opt/w",
+        )
+        url = reverse("worker_download_bundle", kwargs={"worker_id": worker.id})
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/zip")
+        self.assertIn("attachment", response["Content-Disposition"])
+        self.assertIn("worker-", response["Content-Disposition"])
+        self.assertIn(".zip", response["Content-Disposition"])
+
+    def test_worker_download_bundle_404_for_invalid_id(self):
+        """GET download-bundle with invalid worker_id returns 404."""
+        url = reverse("worker_download_bundle", kwargs={"worker_id": 999999})
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 404)
+
+    @patch("scanEngine.services.worker_deploy.build_worker_bundle_zip")
+    def test_worker_download_bundle_redirects_on_user_safe_error(self, mock_build_zip):
+        """When build_worker_bundle_zip raises UserSafeError, redirect to worker_list with message."""
+        mock_build_zip.side_effect = UserSafeError("Compose file not found.")
+        worker = SecatorWorker.objects.create(
+            name="error-worker",
+            ssh_host="192.0.2.1",
+            ssh_port=22,
+            ssh_user="u",
+            ssh_auth_type=SecatorWorker.AUTH_KEY,
+            deploy_path="/opt/w",
+        )
+        url = reverse("worker_download_bundle", kwargs={"worker_id": worker.id})
+        response = self.client.get(url)
+        self.assertRedirects(response, reverse("worker_list"))

@@ -1,10 +1,13 @@
 """
 SSH-based deployment of Secator workers to remote hosts.
 Uses worker_ssh for SSH/SFTP and remote commands; tries docker compose (v2) then docker-compose (standalone).
+Also provides build_worker_bundle_zip for manual deploy (download ZIP with compose, .env, templates).
 """
 
+import io
 from pathlib import Path
 from typing import Callable, Optional, Tuple
+import zipfile
 
 from django.conf import settings
 import paramiko
@@ -89,6 +92,68 @@ def _build_worker_env_content(worker: SecatorWorker) -> str:
     if worker.container_name:
         lines.append(f"SECATOR_WORKER_CONTAINER_NAME={worker.container_name}")
     return "\n".join(lines) + "\n"
+
+
+def _build_worker_env_content_for_bundle(worker: SecatorWorker) -> str:
+    """Build .env content for the download bundle (no API key validation; placeholder allowed)."""
+    env_dict = get_worker_api_env_dict(worker)
+    lines = [
+        "# Broker/backend not used in CLI-only worker mode",
+        *[f"{k}={v}" for k, v in env_dict.items()],
+    ]
+    if worker.container_name:
+        lines.append(f"SECATOR_WORKER_CONTAINER_NAME={worker.container_name}")
+    return "\n".join(lines) + "\n"
+
+
+def build_worker_bundle_zip(worker: SecatorWorker) -> bytes:
+    """
+    Build a ZIP archive for manual worker deployment (same content as deploy + sync config).
+    Contains: docker-compose.worker.yml, .env, entrypoint.sh (if present), templates/*, README.txt.
+    Raises UserSafeError if compose file is missing (safe message only).
+    """
+    validate_deploy_path(worker.deploy_path)
+    compose_path = _get_compose_path()
+    if not compose_path.is_file():
+        logger.log_line(
+            PREFIX_WORKER_DEPLOY,
+            "BUNDLE",
+            "Compose file not found at %s" % (compose_path,),
+            level="error",
+        )
+        raise UserSafeError("Worker compose file not found. Check server configuration.")
+
+    from scanEngine.services.worker_config_sync import (
+        _collect_custom_profiles,
+        _collect_custom_scans,
+        _collect_custom_tasks,
+        _collect_custom_workflows,
+    )
+
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(_COMPOSE_FILENAME, compose_path.read_bytes())
+        zf.writestr(_ENV_FILENAME, _build_worker_env_content_for_bundle(worker).encode("utf-8"))
+        entrypoint_path = _get_entrypoint_path()
+        if entrypoint_path.is_file():
+            zf.writestr(_ENTRYPOINT_FILENAME, entrypoint_path.read_bytes())
+        for name, content in _collect_custom_workflows():
+            zf.writestr(f"templates/workflows/{name}.yaml", content)
+        for name, content in _collect_custom_scans():
+            zf.writestr(f"templates/scans/{name}.yaml", content)
+        for name, content in _collect_custom_tasks():
+            zf.writestr(f"templates/tasks/{name}.yaml", content)
+        for name, content in _collect_custom_profiles():
+            zf.writestr(f"templates/profiles/{name}.yaml", content)
+        readme = (
+            "Manual Secator worker deployment bundle.\n\n"
+            "1. Extract this archive on the target server (e.g. into /opt/secator-worker).\n"
+            "2. If needed, edit .env and set SECATOR_ADDONS_API_KEY to your API key.\n"
+            "3. Run: docker compose up -d\n\n"
+            "See WORKER_DEPLOYMENT.md for full documentation.\n"
+        )
+        zf.writestr("README.txt", readme.encode("utf-8"))
+    return buffer.getvalue()
 
 
 def deploy_worker(

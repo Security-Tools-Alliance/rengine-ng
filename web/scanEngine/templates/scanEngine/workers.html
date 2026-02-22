@@ -96,6 +96,9 @@
                                             <button type="button" class="btn btn-outline-primary btn-sm btn-worker-sync-configs" data-worker-id="{{ worker.id }}" data-worker-name="{{ worker.name|escape }}" title="Sync configs">
                                                 <i class="fas fa-cloud-upload-alt"></i>
                                             </button>
+                                            <a href="{% url 'worker_download_bundle' worker.id %}" class="btn btn-outline-secondary btn-sm" title="Download bundle (manual deploy)" download>
+                                                <i class="fas fa-download"></i><span class="sr-only">Download bundle</span>
+                                            </a>
                                             {% if worker.is_active %}
                                             <button type="button" class="btn btn-warning btn-sm btn-worker-disable" data-worker-id="{{ worker.id }}" data-worker-name="{{ worker.name|escape }}" title="Disable">
                                                 <i class="fas fa-pause-circle"></i>

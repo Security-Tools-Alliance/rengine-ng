@@ -17,6 +17,7 @@ from rolepermissions.decorators import has_permission_decorator
 from api.views import LLMModelsManager
 from dashboard.models import NetlasAPIKey, OpenAiAPIKey
 from reNgine.core.path import safe_unlink
+from reNgine.core.validators import sanitize_path_component
 from reNgine.definitions import (
     FOUR_OH_FOUR_URL,
     PERM_MODIFY_INTERESTING_LOOKUP,
@@ -31,7 +32,7 @@ from reNgine.settings import (
     RENGINE_NUCLEI_TEMPLATES_DIR,
     RENGINE_WORDLISTS,
 )
-from reNgine.utilities.error import get_safe_user_message
+from reNgine.utilities.error import UserSafeError, get_safe_user_message
 from reNgine.utilities.logger import get_module_logger
 from reNgine.utilities.notification import (
     send_discord_message,
@@ -1299,3 +1300,21 @@ def worker_update(request, worker_id):
         "worker_install_public_key_url": worker_install_public_key_url,
     }
     return render(request, "scanEngine/worker_form.html", context)
+
+
+@login_required
+def worker_download_bundle(request, worker_id):
+    """Return a ZIP bundle for manual worker deployment (compose, .env, templates, README)."""
+    worker = get_object_or_404(SecatorWorker, id=worker_id)
+    try:
+        from scanEngine.services.worker_deploy import build_worker_bundle_zip
+
+        zip_bytes = build_worker_bundle_zip(worker)
+    except UserSafeError as e:
+        messages.add_message(request, messages.ERROR, get_safe_user_message(e, logger))
+        return http.HttpResponseRedirect(reverse("worker_list"))
+    safe_name = sanitize_path_component(worker.name) or "worker"
+    filename = f"worker-{safe_name}-{worker.id}.zip"
+    response = http.HttpResponse(zip_bytes, content_type="application/zip")
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response

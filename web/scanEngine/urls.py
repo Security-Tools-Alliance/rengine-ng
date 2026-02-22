@@ -49,4 +49,5 @@ urlpatterns = [
     path("workers/", views.worker_list, name="worker_list"),
     path("workers/add/", views.worker_add, name="worker_add"),
     path("workers/<int:worker_id>/update/", views.worker_update, name="worker_update"),
+    path("workers/<int:worker_id>/download-bundle/", views.worker_download_bundle, name="worker_download_bundle"),
 ]
