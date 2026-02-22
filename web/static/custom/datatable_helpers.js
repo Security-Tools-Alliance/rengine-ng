@@ -152,33 +152,87 @@
       confirmButtonColor: "#d33",
       cancelButtonText: "Cancel"
     }).then(function (result) {
-      if (result && result.isConfirmed) {
-        const getCookie = window.getCookie;
-        const csrfToken = typeof getCookie === "function" ? getCookie("csrftoken") : "";
-        window
-          .fetch(deleteUrl, {
-            method: "POST",
-            headers: {
-              "X-CSRFToken": csrfToken,
-              "Content-Type": "application/json"
-            },
-            body: "{}"
-          })
-          .then(function (response) {
-            return response.json();
-          })
-          .then(function (data) {
-            if (data.status === "true") {
-              row.remove();
-              swalFn({ title: successMessage, icon: "success" });
-            } else {
-              swalFn({ title: "Error", text: errorMessage, icon: "error" });
+      if (!result || !result.isConfirmed) return;
+
+      const getCookie = window.getCookie;
+      const csrfToken = typeof getCookie === "function" ? getCookie("csrftoken") : "";
+      window
+        .fetch(deleteUrl, {
+          method: "POST",
+          headers: {
+            "X-CSRFToken": csrfToken,
+            "Content-Type": "application/json"
+          },
+          body: "{}"
+        })
+        .then(function (response) {
+          const contentType = response.headers.get("content-type") || "";
+
+          if (!response.ok) {
+            if (contentType.indexOf("application/json") !== -1) {
+              return response
+                .json()
+                .then(function (data) {
+                  const serverMessage =
+                    (data && (data.error || data.detail || data.message)) || null;
+                  swalFn({
+                    title: "Error",
+                    text: serverMessage || errorMessage,
+                    icon: "error"
+                  });
+                  return Promise.reject(new Error("Delete request failed with status " + response.status));
+                })
+                .catch(function (parseErr) {
+                  if (window.console && typeof window.console.error === "function") {
+                    window.console.error("Failed to parse error JSON from delete response:", parseErr);
+                  }
+                  swalFn({ title: "Error", text: errorMessage, icon: "error" });
+                  return Promise.reject(new Error("Delete request failed with non-parseable JSON error body, status " + response.status));
+                });
             }
-          })
-          .catch(function () {
+            if (window.console && typeof window.console.warn === "function") {
+              window.console.warn("Delete request failed with non-JSON response", {
+                status: response.status,
+                statusText: response.statusText,
+                contentType: contentType
+              });
+            }
             swalFn({ title: "Error", text: errorMessage, icon: "error" });
-          });
-      }
+            return Promise.reject(new Error("Delete request failed with status " + response.status));
+          }
+
+          if (contentType.indexOf("application/json") !== -1) {
+            return response.json().catch(function (parseErr) {
+              if (window.console && typeof window.console.warn === "function") {
+                window.console.warn("Delete response JSON parse failed; treating as generic success.", parseErr);
+              }
+              return {};
+            });
+          }
+          return null;
+        })
+        .then(function (data) {
+          if (data !== null && typeof data === "object" && data.status !== undefined && data.status !== "true") {
+            swalFn({ title: "Error", text: errorMessage, icon: "error" });
+            return;
+          }
+          const table = row.closest("table");
+          if (table.length && typeof table.DataTable === "function") {
+            try {
+              table.DataTable().row(row).remove().draw();
+            } catch (e) {
+              row.remove();
+            }
+          } else {
+            row.remove();
+          }
+          swalFn({ title: successMessage, icon: "success" });
+        })
+        .catch(function (err) {
+          if (window.console && typeof window.console.error === "function") {
+            window.console.error("Error during delete request:", err);
+          }
+        });
     });
   };
 

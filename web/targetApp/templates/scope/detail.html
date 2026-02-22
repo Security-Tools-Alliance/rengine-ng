@@ -90,7 +90,22 @@ Scope: {{ scope.name }}
                   <td>
                     {% if info.value is not None %}
                       {% if param == "request_headers" %}
-                        <code class="small">{{ info.value }}</code>
+                        {% with "request_headers_json_"|add:forloop.counter as request_headers_id %}
+                        {{ info.value|json_script:request_headers_id }}
+                        <code class="small" id="{{ request_headers_id }}_display"></code>
+                        <script>
+                          (function() {
+                            var script = document.getElementById("{{ request_headers_id }}");
+                            if (!script) return;
+                            try {
+                              var data = JSON.parse(script.textContent);
+                              document.getElementById("{{ request_headers_id }}_display").textContent = JSON.stringify(data, null, 2);
+                            } catch (e) {
+                              document.getElementById("{{ request_headers_id }}_display").textContent = script.textContent;
+                            }
+                          })();
+                        </script>
+                        {% endwith %}
                       {% elif param == "follow_redirect" %}
                         {{ info.value|yesno:"Yes,No" }}
                       {% else %}

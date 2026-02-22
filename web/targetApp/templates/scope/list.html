@@ -54,7 +54,7 @@ Scopes
         <tbody>
           {% for scope in scopes %}
           <tr data-delete-url="{% url 'delete_scope' current_project.slug scope.id %}">
-            <td><a href="{% url 'scope_detail' current_project.slug scope.id %}"><i class="fe-crosshair me-1"></i>{{ scope.name }}</a></td>
+            <td><a href="{% url 'scope_detail' current_project.slug scope.id %}">{{ scope.name }}</a></td>
             <td class="text-center"><span class="badge badge-soft-dark"><i class="fe-briefcase me-1"></i>{{ scope.organization.name }}</span></td>
             <td class="text-center"><span class="badge bg-info"><i class="fe-tag me-1"></i>{{ scope.get_scope_type_display }}</span></td>
             <td class="text-center">{% if scope.start_date %}{{ scope.start_date }}{% else %}-{% endif %}</td>
@@ -65,7 +65,7 @@ Scopes
             <td class="text-center">
               {% if user|can:'modify_targets' %}
               <a href="{% url 'update_scope' current_project.slug scope.id %}" class="btn btn-soft-primary btn-sm" data-toggle="tooltip" title="Edit"><i class="fe-edit-2"></i></a>
-              <a href="#" onclick="delete_scope(this)" class="btn btn-soft-danger btn-sm" data-toggle="tooltip" title="Delete"><i class="fe-trash-2"></i></a>
+              <button type="button" class="btn btn-soft-danger btn-sm js-delete-scope-row" data-toggle="tooltip" title="Delete" aria-label="Delete scope"><i class="fe-trash-2"></i></button>
               {% endif %}
             </td>
           </tr>
@@ -86,17 +86,18 @@ $(document).ready(function() {
   if (typeof window.initClientSideDataTable === 'function') {
     window.initClientSideDataTable('#list_scope_table', {});
   }
-});
 
-function delete_scope(btn) {
-  if (typeof window.confirmDeleteRow === 'function') {
-    window.confirmDeleteRow(btn, {
-      confirmTitle: 'Are you sure you want to delete this scope?',
-      confirmText: 'This action cannot be undone!',
-      successMessage: 'Deleted! Scope has been deleted.',
-      errorMessage: 'Could not delete scope.'
-    });
-  }
-}
+  $(document).on('click', '.js-delete-scope-row', function(e) {
+    e.preventDefault();
+    if (typeof window.confirmDeleteRow === 'function') {
+      window.confirmDeleteRow(this, {
+        confirmTitle: 'Are you sure you want to delete this scope?',
+        confirmText: 'This action cannot be undone!',
+        successMessage: 'Deleted! Scope has been deleted.',
+        errorMessage: 'Could not delete scope.'
+      });
+    }
+  });
+});
 </script>
 {% endblock page_level_script %}
