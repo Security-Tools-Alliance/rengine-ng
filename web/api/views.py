@@ -811,9 +811,9 @@ class ListTargetsDatatableViewSet(viewsets.ModelViewSet):
             qs = qs.filter(project__slug=slug)
         qs = qs.annotate(
             domain_count=Count("scan_histories__discovered_domains", distinct=True),
-            subdomain_count=Count("scan_histories__subdomain_set", distinct=True),
-            endpoint_count=Count("scan_histories__endpoint_set", distinct=True),
-            vulnerability_count=Count("scan_histories__vulnerability_set", distinct=True),
+            subdomain_count=Count("scan_histories__subdomain", distinct=True),
+            endpoint_count=Count("scan_histories__endpoint", distinct=True),
+            vulnerability_count=Count("scan_histories__vulnerability", distinct=True),
         )
         return qs
 

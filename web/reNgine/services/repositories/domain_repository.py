@@ -10,7 +10,7 @@ from typing import Any, Dict, Optional, Tuple
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError
 
-from reNgine.utilities.domain import get_or_create_domain_for_target
+from reNgine.utilities.domain import get_domain_for_scan_by_name
 from reNgine.utilities.logger import get_module_logger
 from reNgine.utilities.time import ensure_timezone_aware, parse_datetime_iso
 from startScan.models import (
@@ -19,7 +19,6 @@ from startScan.models import (
     DomainRegistration,
     NameServer,
     Registrar,
-    ScanHistory,
     WhoisStatus,
 )
 
@@ -91,23 +90,13 @@ class DomainRepository:
             )
             return None
 
-        domain = get_or_create_domain_for_target(scan_history_id, domain_name)
+        domain = get_domain_for_scan_by_name(scan_history_id, domain_name)
         if not domain:
             logger.log_line(
                 PREFIX_DOMAIN_REPO,
                 "SAVE",
-                "Domain item rejected: could not resolve or create domain (target_id=%s, domain_name=%s)"
-                % (target_id, domain_name),
-                level="warning",
-            )
-            return None
-
-        if not self._validate_scan_and_domain(scan_history_id, domain, domain_name):
-            logger.log_line(
-                PREFIX_DOMAIN_REPO,
-                "SAVE",
-                "Domain item rejected: scan/domain validation failed (scan_history_id=%s, target_id=%s, domain_name=%s)"
-                % (scan_history_id, target_id, domain_name),
+                "Domain item rejected: no existing domain matches (scan_history_id=%s, domain_name=%s)"
+                % (scan_history_id, domain_name),
                 level="warning",
             )
             return None
@@ -171,30 +160,6 @@ class DomainRepository:
             level="warning",
         )
         return None, None
-
-    def _validate_scan_and_domain(self, scan_history_id: int, domain: Domain, domain_name: str) -> bool:
-        """Validate scan history exists and domain name matches."""
-        try:
-            ScanHistory.objects.get(id=scan_history_id)
-            expected = (domain.name or "").strip().lower().rstrip(".")
-            got = (domain_name or "").strip().lower().rstrip(".")
-            if expected != got:
-                logger.log_line(
-                    PREFIX_DOMAIN_REPO,
-                    "VALIDATE",
-                    "Domain name mismatch: expected %s, got %s" % (domain.name, domain_name),
-                    level="warning",
-                )
-                return False
-            return True
-        except ObjectDoesNotExist as e:
-            logger.log_line(
-                PREFIX_DOMAIN_REPO,
-                "VALIDATE",
-                "Object not found: %s" % (e,),
-                level="error",
-            )
-            return False
 
     def _get_or_create_domain_info(self, domain: Domain) -> Tuple[DomainInfo, bool]:
         """Get or create DomainInfo for domain."""
